@@ -173,7 +173,7 @@
     async function postDiagnostic(info) {
         const frame     = document.getElementById('jl-frame');
         const setupID   = frame && frame.dataset ? frame.dataset.setupId : null;
-        const csrfToken = (typeof getCsrfToken === 'function') ? getCsrfToken() : '';
+        const csrfToken = (typeof ChickadeeUI !== 'undefined') ? ChickadeeUI.getCsrfToken() : '';
 
         const body = { kind: info.kind };
         if (info.failedChecks && info.failedChecks.length) body.failedChecks = info.failedChecks;

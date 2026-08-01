@@ -10,7 +10,7 @@
 // UI. Here the agent sees which check failed and why (shortResult / longResult),
 // so it can fix the suite or solution on the instructor's behalf.
 //
-// Hard guardrails (see docs/mcp-validation-access.md):
+// Hard guardrails (see docs/archive/mcp-validation-access.md):
 //   * Validation submissions ONLY. The submission is resolved from the
 //     assignment (linked validation submission, else the most recent
 //     `kind == .validation` for the setup) and filtered to `.validation`; a

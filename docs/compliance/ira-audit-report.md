@@ -1,5 +1,11 @@
 # Chickadee MCP Server — Pre-Approval Security & Privacy Audit
 
+> **Superseded.** This is the Phase-1 audit at v0.4.435, with counts frozen at
+> 36 tools; superseded by
+> [`mcp-student-data-audit-2026-07.md`](mcp-student-data-audit-2026-07.md)
+> (51 content + 19 admin tools at v0.4.667). The body below is intentionally
+> unmodified.
+
 Prepared for the UW Information Risk Assessment (IRA) and Information Steward
 review. **Phase 1 (read-only) audit.** No code was modified; this report and the
 five companion documents in `docs/compliance/` are the deliverables.

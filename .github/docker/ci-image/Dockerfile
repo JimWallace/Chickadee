@@ -22,6 +22,13 @@ FROM ${BASE_IMAGE}
 #             (APITests, nightly); noble, unlike jammy, does not bundle it
 # zip/unzip — test-setup and course-bundle fixtures (APITests, nightly)
 # curl      — nightly coverage tooling
+# r-base    — Rscript for the R execution-path suites (PatternFamilyRendererR,
+#             NotebookCheckRendererR, PersonalizationEvaluatorR, WorkerTests R
+#             normalization); without it every hasRscript guard skips silently
+#             and a shipped feature's grading path has zero CI coverage
+# python3-pandas / python3-matplotlib — NotebookCheckRuntimeState tests that
+#             exercise dataframe/plot check kinds against a real interpreter
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
+        r-base python3-pandas python3-matplotlib \
     && rm -rf /var/lib/apt/lists/*

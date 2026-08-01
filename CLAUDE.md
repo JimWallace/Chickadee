@@ -7,8 +7,9 @@ system originally built in Java at the University of Maryland. The rewrite is
 in Swift using Vapor, targeting both macOS and Linux. No interoperability with
 the original Java system is required.
 
-The original Java codebase is available for reference in `/reference/` if
-needed, but the architecture has been redesigned from scratch.
+The architecture has been redesigned from scratch; the original Java source is
+not in this repository. (A couple of code comments cite Marmoset behaviours —
+e.g. `chickadee.py`'s exit-code 3 — and are self-contained.)
 
 ---
 
@@ -650,8 +651,9 @@ css-vars + design-token guards too — same as the CI `format-lint` job).
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** All ~276 Swift test files (plus a
-  dozen `.mjs` frontend tests) are on Swift Testing as of the migration
+- **Framework: Swift Testing only.** All ~340 Swift test files / ~3,000
+  tests (plus the 13 `.mjs` frontend test files in
+  `Tests/BrowserRunnerJSTests/`) are on Swift Testing as of the migration
   completion (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
@@ -681,10 +683,11 @@ css-vars + design-token guards too — same as the CI `format-lint` job).
   `withAsyncEnvLock { ... }` in `Tests/APITests/EnvTestLock.swift` or
   `withMockURLProtocolLock { ... }` in
   `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
-- **Force unwraps in new tests.** `Tests/.swiftlint.yml` still
-  permits `!` / `try!` / `as!` while the test corpus is being cleaned
-  up. New code should use `try #require(value)` instead — the
-  idiomatic Swift Testing replacement for `XCTUnwrap`.
+- **No force unwraps in tests.** The corpus cleanup finished in the 0.5
+  pass — `Tests/.swiftlint.yml` no longer exempts `!` / `try!` / `as!`
+  (its only remaining relaxation is `type_body_length`). Use
+  `try #require(value)` — the idiomatic Swift Testing replacement for
+  `XCTUnwrap`.
 - **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
   records a failure. Either `guard condition else { return }` (silent)
   or `throw IssueRecorded("...")` (fails with a clear message) — pick
@@ -723,6 +726,14 @@ concurrent PR conflict). Instead:
    version, folds the fragments into `CHANGELOG.md`, bumps `VERSION` +
    `ChickadeeVersion`, commits `chore(release): vX.Y.Z`, and pushes the tag —
    which triggers `release.yml` + the tag build in `docker-build.yml`.
+
+**Auto-release is patch-only by construction** — fragment categories carry no
+bump semantics, so no merge can ever produce a minor/major bump. Cutting one
+(e.g. 0.5.0) is a deliberate manual step: `scripts/assemble-release.sh
+--version X.Y.0` committed as `chore(release): vX.Y.0` (that prefix suppresses
+the redundant auto-release) and tagged from a human account. See "Cutting a
+minor (or major) release" in
+[docs/release-process.md](docs/release-process.md).
 
 Full details, plus how to enable the optional merge queue, are in
 [docs/release-process.md](docs/release-process.md).
@@ -771,470 +782,60 @@ Full design, runbook, and host steps:
 
 ## Current State
 
-All phases through 8 are complete:
+**The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
+course offering run on Chickadee and the pivot to next year's feature work.
+The system is a working client–server autograder: Python and R assignments;
+browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
+implementation; per-student personalization; pattern-generated test families
+(8 kinds) and notebook checks (10 kinds); achievements; student slip days;
+per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
+an MCP authoring surface of 51 tools plus a read-only admin-diagnostics MCP
+of 19 (`MCPToolCatalog.live` in
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
+source of truth); OIDC SSO; and zero-downtime auto-deploys.
 
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 1 | Core models, basic runner loop, single result endpoint | ✓ |
-| 2 | Full REST API, test setup upload, runner pull loop, shell-script runner | ✓ |
-| 3 | Submission result retrieval API, student-facing endpoints | ✓ |
-| 4 | Sandboxing (`SandboxedScriptRunner` — macOS `sandbox-exec`, Linux `unshare`) | ✓ |
-| 5 | Browser-based notebook grading (Pyodide in-browser, inline feedback) | ✓ |
-| 6 | Username/password auth, three roles, class management | ✓ |
-| 7 | Instructor assignment management UI, grade export, submission summaries | ✓ |
-| 8 | Instructor notebook editor (in-browser edit/save/validate via JupyterLite) | ✓ |
+Per-release history for 0.1.0–0.4.x lives in `CHANGELOG-0.4.md` (split out of
+`CHANGELOG.md` at the 0.5.0 cut). The 0.4 arc, one line per theme:
 
-Post-8 work also complete:
-- Worker HMAC auth, runner secret hardening
-- Local runner autostart
-- Short assignment IDs, retest actions
-- AODA accessibility pass
-- v0.1.0 schema hardening (canonical migrations, FK enforcement, WAL, performance indexes)
-- HTTPS/SSO scaffolding (`AuthMode`, `AppSecurityConfiguration`, `HTTPSRedirectMiddleware`,
-  `AddUserSSOFields` migration)
-- v0.2.0 schema consolidation (all patch migrations folded into canonical `Create*` files;
-  `course_id` NOT NULL with FK on `test_setups` and `assignments`)
-- v0.3.0 admin course management UI (course detail, bulk CSV enroll, unenroll, archive)
-- v0.3.0 course bundle export/import (`.chickadee` zip)
-- v0.3.0 admin courses section rework (create/edit page consolidation)
-- SSO/OIDC implementation (Authorization Code + PKCE, dual mode, role assignment via
-  allowlists, tested against UWaterloo DUO)
-- v0.4.0 test dependency trees (`dependsOn` in manifest, tree UI, runner pre-check)
-- v0.4.0 Docker Compose deployment (`Dockerfile`, `docker-compose.yml`, entrypoint,
-  nginx config, updated `deploy/README.md`)
-- v0.4.1 zip-slip guard, security headers, CSRF integration test infrastructure
-- v0.4.2 browser-runner enrollment gate, submission error message hardening
-- v0.4.5 test coverage expansion (334 tests total); `WebRoutes.swift` split into
-  `WebContextTypes`, `WebRoutes+Notebook`, `WebRoutes+Submission`
-- v0.4.7–0.4.11 notebook/assignment edit round-trip fixes; multipart save hardening;
-  Linux worker timeout hardening; browser/WASM runner CI coverage
-- v0.4.12–0.4.16 submission result display polish (test names, traceback extraction,
-  JSON blob cleanup); notebook cache busting; assignment editor display-name persistence
-- v0.4.17–0.4.18 concurrent worker claim race fixed (`WorkerClaimQueue` eager init);
-  Marmoset import missing-notebook and `starterNotebook` overwrite bugs fixed
-- v0.4.19 `WorkerClaimQueue` converted to Swift actor; admin dashboard queries parallelized
-- v0.4.20 `ScriptRunner` timeout converted to structured `Task`; `ZipArchiver` drops
-  `DispatchQueue` bridge; domain-specific error types (`NotebookLookupError`, `WorkerJobError`)
-- v0.4.22 `ExponentialBackoff` zero-delay fix; `Reporter.report()` retry logic added
-- v0.4.23 runner advertises its version on every poll (`runnerVersion` field)
-- v0.4.24 Safari autofill bypass for admin credential inputs
-- v0.4.25 admin runner dashboard: version, load, avg run/wait columns; runner advertises
-  `maxConcurrentJobs`; `submission_diagnostics` table now populated
-- v0.4.26 admin runner table JS poll fixed (columns were reverting after 5-second refresh)
-- v0.4.30 runner-side Python submission normalization (MIME detection, notebook extraction,
-  submission warnings surfaced in results)
-- v0.4.32 unique Docker runner IDs; compact sparkline charts; reconnect hardening;
-  HTTP retry classification improved (408, 425, 429, 500 now retryable)
-- v0.4.33 poll-loop retry backoff now honors `RUNNER_RETRY_*` env settings
-- v0.4.34 instructor student submission drilldown; course-scoped student submissions page
-- v0.4.36 submission IDs on runner detail page are clickable; UI consistency pass
-- v0.4.37 architecture docs (`docs/architecture.md`); SSO token revocation on logout
-  (RFC 7009 + `end_session_endpoint` redirect); configurable OIDC claim names
-  (`OIDC_USERNAME_CLAIM`, `OIDC_EMAIL_CLAIM`, flexible `extraClaims`); large source
-  splits (`RunnerDaemon.swift`, `AdminRoutes.swift`, `AssignmentRoutes.swift`)
-- v0.4.38 Python test bootstrap now sets `sys.argv[0]` correctly; `chickadee.py`
-  exit 3 maps to `fail`; `NotebookExtractor` wraps bare module-level code in
-  `if __name__ == "__main__":` and strips IPython `%`/`!` lines to prevent
-  import-time failures
-- v0.4.39–v0.4.44 OIDC claim generalization follow-ups (compile fixes, test
-  coverage for custom-claim first-login, stale-username repair, `user_id` not
-  clobbered by username claim, Docker Compose env forwarding)
-- v0.4.41 runner-side LRU test setup cache (`TestSetupCache` actor, content-hashed
-  cache key, shared in-flight population)
-- v0.4.45 re-test wait time measured from retest click (`retested_at` column,
-  `queueWaitMs`/`turnaroundMs` baseline switched)
-- v0.4.46 Fluent-backed sessions (survive restarts, multi-process safe);
-  automatic cache-buster from `ChickadeeVersion.current`; runner stage timing
-  metrics (`job_execution_metrics`) persisted and surfaced on runner detail
-- v0.4.47 poll-time 401/403 treated as retryable so long-lived runners recover
-  from transient auth windows
-- v0.4.48 instructor dashboard activity cards (recent logins, submissions,
-  active assignments, queued attempts, no-submission students); assignment
-  summary cards; drag thumb beside assignment name
-- v0.4.49 browser-mode guard: `runner-submit` rejects browser-graded setups
-  server-side; instructor queue card counts only worker-eligible submissions
-- v0.4.50 draft-backed notebook authoring on new-assignment page (hidden
-  drafts, JupyterLite launch, reopen-for-edit, finalize); runner requirements
-  auto-detected and pre-filled during creation
-- v0.4.51 First-Try Perfect badge (100% first submission); submission output
-  table redesigned (pass-only collapsible, diagnostics in full-width rows)
-- v0.4.52 automated deadline auto-close (startup sweep + periodic runtime
-  sweep, late-submission guard across web/browser endpoints, instructor
-  manual-reopen override); GitHub release workflow
-- v0.4.56 worker backstop for browser-graded submissions (native `python3`
-  grades stuck browser-mode jobs, matching Pyodide semantics)
-- v0.4.57 JSON footer stripped from student-visible test output;
-  `:latest` Docker tag now pushed on version tag releases
-- v0.4.58 create-assignment page redesigned to match edit page
-  (compact `results-table` layout, editable display names, CodeMirror 6
-  modal, inline runner requirements)
-- v0.4.60 notebook sync preserves unsaved edits; submit button disabled until
-  notebook loaded; worker queue depth excludes browser-graded submissions
-- v0.4.61 syntax errors in student submissions now surfaced in `longResult`
-  with full traceback
-- v0.4.63 notebook upload draft endpoint wiring fixed for Safari; admin user
-  Delete button
-- v0.4.67 raw submission filenames sanitized before storage/runner staging;
-  empty draft-only notebook upload parts ignored on validation
-- v0.4.69–v0.4.70 student action icons (edit/upload); submit page uses
-  assignment title
-- v0.4.71 stable per-course assignment slugs; student dashboard links prefer
-  `/:courseCode/:assignmentSlug` routes
-- v0.4.72 new-script validation uses active manifest-backed suite; setup
-  download version includes manifest+zip metadata hash
-- v0.4.73 generated/uploaded tests persist from visible suite list;
-  extensionless Python scripts with shebang dispatched as Python
-- v0.4.75 pattern-generated test families (#375): `PatternFamily`,
-  `PatternCase`, `PatternKind` in Core; `.boundaryEquality` v1 template;
-  deterministic filenames + `spec_hash` header; raw-script endpoints return
-  409 on generated entries
-- v0.4.76 pattern family editor UX redesign (rows inside Test Suite table,
-  function dropdown from scanned notebook, auto-generated case keys,
-  typed per-parameter columns)
-- v0.4.77 pattern families survive assignment Save (manifest rebuild forwards
-  `patternFamilies` and re-runs `applyPatternFamilies`); each generated case
-  produces a distinct `TestOutcome`
-- v0.4.78 pattern family cells accept bare-typed values (numbers, booleans,
-  null, arrays/objects, bare strings); family rows stay visible during
-  client-side suite-list rebuild
-- v0.4.79 assignment suite editor unified around server-authoritative model:
-  `PUT /instructor/:assignmentID/suite`, `GET /instructor/:assignmentID/suite`,
-  `family:<id>` dependency tokens, authored-graph cycle detection.
-  `#suite-config-field` hidden input and `/edit/save` suite-rebuild path removed
-- v0.4.80 `.approximateEquality` pattern kind (float tolerance, default 1e-6,
-  failure messages include delta); editable Pts on family rows; authored
-  order preserved through `topologicallySorted`
-- v0.4.81 pattern family row visual polish (matches script rows); Visibility
-  column is an inline `<select>`; family row position survives modal save
-  (legacy `applyPatternFamilies` now reconstructs authored ordering); suite
-  edits re-trigger validation (debounced by pending-submission check)
-- v0.4.82 due-date timezone fix across five display sites (all now use
-  `waterlooDateTimeFormatter()` / `America/Toronto`, matching the edit form);
-  `.form--wide` modifier so the assignment edit, new-assignment, and submit
-  pages use the full 900px `.main` width instead of the 620px `.form` cap;
-  `TestProperties.runnerSanitized()` strips `patternFamilies` from the `Job`
-  payload so older runners don't crash decoding new `PatternKind` cases;
-  `StuckSubmissionReaperMonitor` reclaims `assigned` submissions whose
-  `assigned_at` is older than 10 minutes (startup sweep + 60 s periodic,
-  registered via `StuckSubmissionReaperLifecycleHandler`)
-- v0.4.83 pattern family editor auto-computes the Expected column by
-  evaluating the solution notebook's function against the instructor's
-  entered args in-browser via Pyodide (lazy-loaded on first row edit;
-  debounced 400 ms; respects `data-manual` overrides; surfaces solution
-  exceptions in the cell's tooltip); suite-editor inline rename preserves
-  focus + caret across the debounced `PUT /suite` re-render
-  (`captureFocus()` / `restoreFocus()` in `renderTree()`); "New Script"
-  modal drops the tier/points inputs, matching the New Family modal —
-  both default to public/1 and let the instructor tune from the inline
-  row afterwards
-- v0.4.84 `.variableEquality` pattern kind for module-level variables
-  (e.g. `beats = 5`) — case args hold the variable name, Expected holds
-  the value, renderer emits a `getattr(..., _MISSING)` sentinel check;
-  family editor hides the function dropdown and uses a single "variable"
-  column when this kind is selected.  Also: "Variable Equality" New Script
-  template; all Python templates now start with `#!/usr/bin/env python3`
-  so extensionless filenames don't fall through to `/bin/sh`; guard tests
-  (`testAllPythonTemplateTypes_startWithPythonShebang`,
-  `testAllPythonTemplateTypes_doNotImportChickadee`)
-- v0.4.92 assignment editor bug-fix pass for pattern families: (1) Create
-  publish preserves each family's draft position instead of dumping every
-  family at the bottom of the suite — `saveNewAssignment` now reconstructs
-  `[AuthoredSuiteItem]` from the draft's manifest and passes it to
-  `applyPatternFamilies` (new helper `authoredSuiteItemsFromDraftManifest`);
-  (2) the family modal no longer substitutes `null` for bare-string cell
-  values on reopen (`readCasesFromTableRaw` now uses the same type-aware
-  `coerceByType` as the strict save path); (3) `readFamilyFromEditor`
-  carries forward the family's `dependsOn` so family-level prerequisites
-  survive a modal save
-- v0.4.93 assignment-revision retest loop.  When the instructor Saves an
-  edited assignment whose manifest bytes changed, every student submission
-  on that setup is re-queued for the worker so it regrades against the
-  new test suite (`retestAllSubmissionsForSetup`).  Gated on a manifest-hash
-  compare (`test_setups.last_retested_manifest_hash`) so cosmetic saves
-  don't fan out.  Excludes `kind = validation`; browser-graded submissions
-  flip to pending and get picked up by the v0.4.56 worker backstop.  New
-  manual `POST /instructor/:assignmentID/retest` endpoint + refresh-arrow
-  toolbar button on every open/closed assignment row (`Resources/Views/assignments.leaf`).
-  New columns: `submissions.retested_by_user_id` (who triggered the retest)
-  and `test_setups.last_retested_manifest_hash` (dedup key)
-- v0.4.94 pattern family editor follow-through: (1) scan-notebook DTO now
-  forwards `paramTypes`/`returnType`/`isShadowed`/`paramHasDefault` so the
-  editor coerces cells by type (fixes the "bare `20260422` in a `str`
-  column becomes `int`" bug); (2) defaulted params treated as optional —
-  parallel `argsProvided: [Bool]` on `PatternCase` + kwarg-after-gap
-  rendering lets cases omit defaulted args and rely on Python's own
-  default at test time; (3) family-scoped Variables table for shared
-  values (dicts, lists, scalars) referenced from arg cells via `$name`
-  — new `PatternFamily.variables: [FamilyVariable]` + parallel
-  `PatternCase.argVarRefs: [String?]`, validated for identifier safety
-  and name uniqueness; (4) Hint field removed from the modal (underlying
-  `PatternCase.hint` / `PatternDefaults.hint` stay for manifest back-compat);
-  (5) instructor assignments list Status column tightened to 5.5rem
-- v0.4.96 Sections for test suites.  Instructors group tests into named
-  sections on the assignment edit page (each section is its own
-  `.section-block` + `.results-table`, drag/drop works within and across
-  sections, "+ Section" button creates new ones).  Student submission
-  view renders one table per section with an `<h3>` heading so students
-  can tell which tests belong to which question.  New Core types:
-  `TestSuiteSection`, optional `sectionID` on `TestSuiteEntry`,
-  `sections: [TestSuiteSection]` on `TestProperties`.  Sections are
-  display-only — the runner still walks `testSuites[]` in order and the
-  dependency graph is unchanged.  `applyPatternFamilies` takes a
-  `sections:` parameter, normalises stale `sectionID` refs to nil, and
-  enforces that items sharing a `sectionID` form a contiguous block.
-  Pattern families inherit their section from the authored-item
-  position.  Items not in any section appear in a trailing "Ungrouped"
-  block (hidden when empty).  Legacy manifests with no `sections` key
-  decode with `decodeIfPresent` defaults so older runners stay compatible.
+- **Grading core.** Shell-script contract → sandboxing → browser grading →
+  the RunnerCore extraction (#764–#775): one Swift grading core compiled
+  natively and to wasm, pinned by `Tests/Fixtures/output-contract.json`;
+  R became first-class in #1207.
+- **Authoring.** Instructor editor → server-authoritative suite editor →
+  pattern families + notebook checks → suite sections, hints, datasets,
+  per-student personalization (the #461 arc) → assignment versioning with
+  restore (#1223–#1225) → the MCP authoring surface with per-course
+  authoring-voice guides.
+- **Course management.** Courses/enrollment/archival → `.chickadee` course
+  bundles → per-course enrollment roles (#417 arc: `student` < `ta` <
+  `instructor` per course; deployment roles collapsed to `user`/`admin`) →
+  course sections, content items, activity timeline (#1227), slip days
+  (#1228).
+- **Identity & compliance.** Local auth → OIDC/PKCE SSO (UWaterloo DUO) →
+  lockout/rate-limit/audit hardening → the UW approval package under
+  `docs/compliance/` (student-data audits of both MCP surfaces, tool and
+  data-flow inventories).
+- **Operations.** Docker Compose → HMAC runner auth → capability profiles,
+  runner-side LRU setup cache, health alerts, diagnostics tables →
+  blue-green zero-downtime auto-deploy (`chickadee-deployer`) → CI
+  hardening (the #1139 fork/exec postmortem, the #1233 pool-saturation
+  wedge fix, the prebuilt swift-ci test image #1238/#1239, a
+  real-Postgres test lane).
+- **Editor reliability.** Embedded JupyterLite → kernel-boot telemetry +
+  watchdog → the exec_hang root cause (v0.4.526 chdir patch) → JupyterLite
+  0.8, service-worker-free/SAB-only isolation, the xeus-r kernel for R
+  notebooks, the parselmouth CSP stub (#1241/#1243).
 
-### v0.4.97 – v0.4.170 highlights (themed digest)
-
-The per-version log above stops at v0.4.96.  For the ~70 versions that
-followed, the full per-release detail lives in `CHANGELOG.md`; what
-follows is grouped by subsystem so a fresh session can build a mental
-model quickly.
-
-- **Notebook checks (v0.4.149–v0.4.155).**  In-browser editor preflight
-  + watchdog, `JupyterLite 0.7.6` upgrade, browser-error dashboard,
-  kernel-probe inversion to fire on failure evidence only, Safari
-  phase-1 timeout hotfix, JupyterLite SW manager disabled to fix
-  "Kernel Unknown".  IndexedDB cache-bust no longer wipes in-progress
-  work on first post-deploy visit (v0.4.154).  Instructor reset-notebook
-  action on the submissions page (v0.4.153).  `variableExists` check
-  type (defined, optional type) (v0.4.155).
-
-- **Personalization & generalized inputs (issue #461 slices, v0.4.156–v0.4.162).**
-  Per-student assignment seed plumbing (v0.4.156); generalized inputs
-  with a Global panel, raw-script inlining, and notebook substitution
-  (v0.4.157); per-student expressions on Global Inputs (v0.4.158);
-  suite-editor drag-and-drop fix for notebook-check rows (v0.4.159);
-  unified "enrolled students" count and tidied Global Inputs UI plus
-  section variables carrying `=` expressions (v0.4.160); retest queue
-  priority and 404 fix for non-student submission view (v0.4.162a);
-  personalization expressions can import support files, with auto-
-  extracted `solution.py` (v0.4.162b — issue #461 Slice 5).  See
-  [docs/inputs.md](docs/inputs.md) and
-  [docs/personalization-phase1.md](docs/personalization-phase1.md).
-
-- **BrightSpace grade sync (v0.4.145–v0.4.146).**  Debounced per-
-  submission grade push via the D2L REST API, then auth switched to
-  D2L Valence key signing (App+User key model, not OAuth2).  Currently
-  waiting on UWaterloo IST for credentials before enabling in prod.
-
-- **Worker / runner ops (v0.4.147, v0.4.164).**  Health-alert "error
-  rate spike" excludes student-code errors (v0.4.147).  Worker test
-  coverage expanded, disk-usage telemetry added, retest-metric fixes
-  (v0.4.164).  Tests run against real Postgres in parallel with
-  `TestSetupCache` hit-rate telemetry surfacing in CI (v0.4.165-ish,
-  commit `b615235`).
-
-- **Closed-assignment behaviour (v0.4.166).**  Closed assignments now
-  load read-only in the instructor editor instead of editable.
-
-- **AppScan / security hardening (v0.4.167–v0.4.168).**  `SCAN_MODE`
-  env flag, rate-limit middleware, session reaper, CSP, audit log;
-  v0.4.168 hotfix loosened CSP to allow `cdn.jsdelivr.net` (Pyodide)
-  and `esm.sh` (CodeMirror).
-
-- **Test/format/CI tooling.**  `makeTestApp()` helper plus drift fix
-  and Swift session hook (commit `8b88585`).  `swift-format` strict CI
-  gate + bulk format pass (commit `2bbebf9`).  WorkerTests restored to
-  the per-PR gate and the 3-job split collapsed to one (commit
-  `a5a6f61`).
-
-- **AppConfig centralization (v0.4.169).**  Every server env var now
-  flows through a single `AppConfig` struct read once at startup —
-  already documented in detail at lines 92–100 above.
-
-- **v0.4.170 maintenance pass (#495, #496, #497, #499).**  Shared
-  `escapeForPythonStringLiteral` / `tierFilenamePrefix` helpers
-  (`Sources/APIServer/Utilities/PythonScriptHelpers.swift`); submission
-  output-formatting helpers split into
-  `Sources/APIServer/Helpers/SubmissionOutputFormatting.swift`;
-  `APIServerApp.configure(_:)` decomposed into
-  `Sources/APIServer/Bootstrap/AppDirectories.swift`,
-  `AppMiddleware.swift`, and `AppServices.swift`; `makeTestApp()`
-  now seeds the worker secret + autostart paths inside the per-test
-  temp dir.  No behaviour changes; generated test-script bytes
-  unchanged so `spec_hash` / `TestSetupCache` keys stay stable.
-
-- **v0.5.0 / v0.6.0 runway (PR #505).**  Migration consolidation (#502):
-  the 13 historical `Add*` migrations except `AddSessionsCreatedAt`
-  were folded into the corresponding `Create*` files; their no-op
-  stubs and `registerMigrations(...)` entries have now been deleted
-  (v0.5.0 cleanup).  Production DBs that already have those names
-  marked applied in `_fluent_migrations` are unaffected — Fluent
-  ignores history rows whose struct names are no longer registered.
-  Fresh deploys produce the same final schema from the `Create*`
-  files alone.  Separately (#501), the inline enrollment-mode
-  fallback in `CourseBundleRoutes.swift` was extracted to a Core
-  helper `bundledCourseEnrollmentMode(_:)` so the v0.6.0 cleanup
-  had a single resolver to update.  The two DEPRECATED back-compat
-  sites — `NotebookFunctionScanner.isShadowed` decode fallback and
-  `CourseBundleManifest.openEnrollment` — have now been removed
-  (v0.6.0 cleanup).  Browser clients on v0.4.94+ already send
-  `isShadowed` unconditionally; `.chickadee` bundle exports have
-  only emitted `enrollmentMode` (never `openEnrollment`) since the
-  helper extraction in #501.
-
-### v0.4.171 – v0.4.350 highlights (themed digest)
-
-The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
-
-- **Swift→WASM grading core (RunnerCore, #764–#775).**  A staged migration
-  hoisted suite execution, output interpretation, script classification, and
-  the `TestOutcome` / `TestTier` / `TestStatus` types out of the worker into
-  the new Vapor-free, Embedded-Swift `RunnerCore` target, which compiles both
-  natively and to WebAssembly.  The browser runner now drives the *same*
-  `executeSuites` loop via the wasm bridge (Stage 4), so the in-browser and
-  native graders share one implementation.  Embedded-safe JSON (`JSONLite`, no
-  `strtod`).  The wasm is `wasm-opt -Oz`'d, content-hashed
-  (`RunnerWasm.<hash>.wasm`), immutably cached (`RunnerWasmCacheMiddleware`),
-  and size-guarded in CI.  Parity is pinned by `Tests/Fixtures/output-contract.json`,
-  asserted against the native build *and* the real vendored wasm.  This is the
-  "first use of Swift WASM in prod" path.
-
-- **MCP server + OAuth 2.1 authorization server (`Sources/APIServer/MCP/`).**
-  Chickadee exposes course-management tools to agents over MCP, gated by
-  `MCP_MODE`, with its own Authorization Code + PKCE OAuth server, rotating
-  refresh tokens, ES256 access JWTs, dynamic client registration, an hourly
-  reaper, and an admin "connected agents" view.  Recent fixes (#776, #778) made
-  the consent flow cookie-independent so it works in Safari/cross-site-cookie
-  contexts.  See the "MCP server" design decision above.
-
-- **Per-student personalization (issue #461, Slices 1–5+).**  Per-assignment
-  seeds (`AssignmentSeedStore`, deterministic per student), Global Inputs +
-  section variables, per-student expressions evaluated by a server-side
-  `python3` subprocess (`PersonalizationEvaluator`), `{{name}}` notebook
-  substitution at student first-open, and support-file/`solution.py` imports.
-  Docs: `docs/inputs.md`, `docs/personalization-phase1.md`.  Remaining UI work
-  tracked in #664.  This is the "first personalized assignments" path.
-
-- **Per-student pattern families (issue #461, v0.4.343–347).**  Pattern-family
-  cases can now personalize: a case's `$name` arg (`argVarRefs`) or its Expected
-  (`expectedVarRef`) may point at a per-student `=` expression instead of a
-  baked literal.  The expression is resolved **server-side** for the
-  submission's seed (`PersonalizationSubstitution.gradingInputs`, shared by the
-  worker job payload and the browser seed endpoint) and delivered to grading as
-  a `_ck_inputs.py` preamble the generated script loads — so a per-student
-  `expected = solution.foo(...)` stays server-side on the worker path.  The
-  generated script is byte-identical across students (cache + `spec_hash`
-  unchanged); only the resolved-values map differs.  Authorable via the browser
-  editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
-  `expectedVarRef`); `preview_personalization` audits the refs.  Supported in
-  the equality kinds (`boundary_equality`, `approximate_equality`,
-  `unordered_equality` — the `kindSupportsPerStudentRefs` allowlist in
-  `PatternFamilyValidator.swift`).  Doc:
-  `docs/personalization-pattern-families.md`.
-
-- **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
-  assignment-revision retest loop, sections** — see the per-version `CHANGELOG.md`.
-
-- **v0.4.x "tock" audit hardening (this pass).**  Ahead of the first prod
-  deployments of the three subsystems above: MCP single-use token consumption
-  made atomic (conditional-`UPDATE` compare-and-set, closing a code-replay
-  TOCTOU); the personalization expression subprocess no longer inherits the
-  server environment (was leaking `RUNNER_SHARED_SECRET` / DB / OIDC secrets to
-  instructor expressions — now an explicit allowlist); browser-graded results
-  reconcile their attempt number / `isFirstPassSuccess` server-side (was always
-  stamped `1`, corrupting the First-Try-Perfect badge); pattern-family arg cells
-  may reference Global Inputs via `$name` (validator was rejecting the documented
-  worked example).  Plus OAuth `no-store` headers, reaper consumed-row cleanup,
-  an `oauth_grants.previous_refresh_token_hash` index, a `timedOut`
-  output-contract case, and `@unchecked Sendable` justification comments.
-
-- **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
-  from twelve to thirty-four content tools in this window — it stands at
-  **51** today (`MCPToolCatalog.live` in `MCPServerRegistration.swift` is the
-  source of truth; census re-taken in
-  `docs/compliance/mcp-student-data-audit-2026-07.md`): `get_server_info`
-  (version/capability probe), `get_solution` / `update_solution` (read + replace
-  the reference solution, re-validating), `author_script` (create/replace a
-  hand-written test or support file through the same `applySuiteEdit` path the
-  web editor uses), and the personalization tools (`get_global_inputs`,
-  `update_global_inputs`, `update_section_variables`, `preview_personalization`).
-  `get_suite` now returns the full source of truth (script bodies + complete
-  pattern-family/notebook-check specs + on-disk filenames), and pattern-family
-  cases gained a per-student `expectedVarRef` (the worker/browser materialize
-  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Pattern-family
-  authoring also sets instructor **hints**: `create_pattern_family` /
-  `update_pattern_family` take a family-wide `defaultHint` and a per-case `hint`
-  (on update an empty string clears it, nil leaves it untouched), and `get_suite`
-  returns both in the `family` spec.  A hint surfaces to the student as a
-  "💡 Hint" only on a *failing* case — `buildHintByFilename` joins each case's
-  `resolvedHint(defaults:)` (per-case overriding the family default) by generated
-  filename at results-display time, so nothing is baked into the test script.
-  `PatternCase.hint` / `PatternDefaults.hint` have been manifest-authorable since
-  v0.4.94 but had no agent surface until now.  Agent-facing
-  copy lives in two places that must stay in sync with the catalog: each tool's
-  `description`/`inputSchema` and the server-level `MCPServerInstructions.text`
-  (the `initialize` handshake's `instructions`); the tool table in
-  `docs/mcp-authoring-roadmap.md` is the human index.  MCP content edits
-  (suite/family/script/notebook/solution) close a currently-open assignment and
-  re-validate — matching the web Save button (`saveEditedAssignment`), since the
-  student gate keys off `isOpen`, not `validationStatus` — so students can't
-  submit against a not-yet-revalidated suite; each write tool's response reports
-  it as `assignmentClosed`, and the human re-opens with
-  `update_assignment(isOpen:true)` once validation passes
-  (`closeOpenAssignmentForContentEdit`).
-
-- **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
-  thirty-four tools at this point (51 today): test-suite section management (`create_suite_section` /
-  `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
-  script/family/check into a section); course-section management
-  (`list_course_sections`, `create_course_section`, `rename_course_section`,
-  `delete_course_section`, `reorder_course_sections`, and `set_assignment_course_section`,
-  which adopts the section's default grading mode); `create_pattern_family` /
-  `delete_suite_item`; `author_notebook_check` (create-or-replace a notebook check
-  — all ten `NotebookCheckKind`s, validated through `applySuiteEdit`); and
-  `set_grading_mode` (worker/browser, no regrade/close).  `get_assignment` now
-  reports `gradingMode` + the course section.  All the content-edit tools —
-  including the two that initially slipped (`create_pattern_family`,
-  `delete_suite_item`) — close a currently-open assignment on edit and report
-  `assignmentClosed`; metadata-only tools (`set_grading_mode`, section
-  organization) do not.  Content edits that change the graded suite also
-  **auto-re-grade** every existing student submission against the new suite
-  (`retestSubmissionsAfterContentEdit`, gated on a real manifest change), the
-  automatic equivalent of the instructor "Retest all" button; `move_suite_item`
-  (placement-only) and metadata edits do not.  (The suite-section tools were
-  renamed `create_section`→`create_suite_section` etc., and
-  `set_assignment_section`→`set_assignment_course_section`, so the two "section"
-  families read unambiguously — a breaking change to the not-yet-public MCP
-  surface.)
-
-### v0.4.351 – v0.4.583 highlights (themed digest)
-
-Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
-
-- **#417 multi-course roles (Slices A–G2, complete).**  Teaching authority
-  moved from the global role to a per-course `CourseRole` on the enrollment
-  row: `ta` rung added (Slice E), per-course write gates on every mutating
-  route and MCP tool (Slices C/D/D-MCP), self-serve staff invites (F),
-  per-course staff view gates (G), deployment role collapsed to
-  `user`/`admin` and the legacy global roles physically removed (G2 +
-  cleanup).  See the Roles decision above and `docs/multi-course-roles.md`.
-- **BrightSpace / LEARN sync arc.**  Per-instructor Valence identity
-  (connect / designate / bind-org-unit on the LEARN tab), assignment→
-  grade-item mapping with auto-map and a "Do not sync" option, debounced
-  grade push with retry classification + a grade-sync health alert, grade
-  scaling to the item's own max with 2-decimal rounding, grade *clears* when
-  a Chickadee source disappears, LEARN roster-readiness reconciliation
-  (per-student deliverability), and D2L group→section sync.  Runbook:
-  `docs/brightspace-setup.md`; awaiting UW IST prod credentials.
-- **Per-student datasets (#1083, `docs/datasets.md`).**  A `DatasetSpec` marks
-  a bundled support file as per-student; the server materializes a
-  deterministic per-seed slice delivered under the same filename to grading
-  and the editor.
-- **Zero-downtime deploys.**  Blue-green cutover (`scripts/bluegreen-deploy.sh`),
-  the `chickadee-deployer` daemon (auto-deploys green merges, SemVer-gated,
-  snapshot + rollback), deploy oversight on the admin MCP surface, and image
-  garbage collection.  `docs/zero-downtime-deploy.md`.
-- **Notebook editor kernel-boot reliability.**  Boot-funnel telemetry,
-  watchdog threshold tuning against real-user data, the exec-hang root cause
-  fixed (`docs/exec-hang-investigation.md`), service-worker-free JupyterLite
-  configuration hardened.
-- **Ops/scale.**  Runner disk-fill guard, test corpus at ~2,400 tests / ~276
-  files, Swift 6.3, top-nav dropdown rework (#1102).
+The 0.5-boundary cleanup pass additionally: put R execution and
+pandas/matplotlib on the CI image (their suites were silently skipped
+everywhere); deduplicated the browser grading semantics into
+`Public/grading-shared.js` (one copy for the grading worker and the
+main-thread fallback — the bespoke drift test is gone); ran the second
+migration consolidation (post-#502 increments folded into `Create*` files,
+removing the #1077 boot-order hazard class); retired the pre-0.5 shims
+(`WORKER_SHARED_SECRET` alias, `/admin/workers` alias, the two per-boot
+legacy sweeps, the bundle `isOpen` write side, the scanner realignment
+shim); and archived finished-era docs under `docs/archive/`.
 
 **Near-term roadmap:**
 
@@ -1294,10 +895,14 @@ Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
-- `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface (answers `docs/language-handling-review-brief.md`, PR #1234): verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
-- `docs/mcp-validation-access.md` — planned MCP read tool for validation-run results only (per-test outcomes, never student data)
+- `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
+- `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
+- `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
+- `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
+- `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
+- `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
+- `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
-- `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (2026-07 snapshot; start here before chasing a red check on an unrelated PR)
-- `reference/` — original Java source for behavioural reference only
-- `CHANGELOG.md` — release history
+- `docs/archive/` — finished-era investigations, superseded plans, and point-in-time audits (kept for the record; nothing in there describes current behaviour)
+- `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the archived 0.1.0–0.4.x history

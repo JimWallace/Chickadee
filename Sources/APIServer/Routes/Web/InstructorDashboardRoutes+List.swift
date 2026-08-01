@@ -220,7 +220,7 @@ extension InstructorDashboardRoutes {
             guard let id = u.id else { return nil }
             // Skip rows that somehow lack a urlToken instead of failing
             // the whole roster render — the invariant says every user has
-            // one (init default + AddUrlTokenToUsers backfill), so this
+            // one (init default + the historical backfill), so this
             // branch is unreachable in practice but kept for safety.
             guard let token = u.urlToken, !token.isEmpty else { return nil }
             return EnrolledStudentRow(

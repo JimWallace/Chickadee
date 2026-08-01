@@ -22,6 +22,16 @@ struct CreateResults: ChickadeeMigration {
             .field("brightspace_pending_since", .datetime)
             .field("brightspace_synced_at", .datetime)
             .field("brightspace_sync_error", .string)
+            // Folded from AddResultGradeColumns (June 2026 audit, P1.1): the
+            // grade denormalized out of the collection blob so list pages, the
+            // CSV export, and the sweeps read columns instead of decoding JSON
+            // per row. New rows are stamped by APIResult.populateGradeFields()
+            // at write time; the historical migration's one-time blob backfill
+            // is a no-op on an empty fresh table and was dropped in the fold.
+            .field("earned_points", .double)
+            .field("total_points", .double)
+            .field("pass_count", .int)
+            .field("total_tests", .int)
             .create()
     }
 

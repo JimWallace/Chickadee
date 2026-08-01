@@ -5,11 +5,11 @@
 //
 // Each enrollment carries a per-course `role` (CourseRole) — the foundation
 // for course-scoped capability, i.e. instructor in one course and student in
-// another (see docs/multi-course-roles.md). Phase 1 only *stores* this role:
-// the `AddCourseEnrollmentRole` migration adds it and seeds it
-// behaviour-preservingly from each user's global role, but nothing reads it
-// yet — the global `APIUser.role` still governs what a user can do. Later
-// phases move the nav, access checks, and roster UI onto the per-course role.
+// another (see docs/multi-course-roles.md). The `role` column is part of
+// CreateCourseEnrollments (folded there by the second consolidation round;
+// the historical migration seeded pre-existing rows behaviour-preservingly
+// from each user's then-global role). The nav, access checks, and roster UI
+// all read the per-course role.
 
 import Core
 import Fluent
@@ -35,13 +35,13 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     var enrolledAt: Date?
 
     /// The user's role *within this course* (`CourseRole`, stored as its raw
-    /// string).  Declared optional only because Fluent + SQLite can't add a
-    /// NOT NULL column to an existing table post-hoc — the same constraint
-    /// that keeps `APIUser.url_token` nullable.  Every row carries a value in
-    /// practice: fresh enrollments get one from `init` (defaulting to
-    /// `.student`) and the `AddCourseEnrollmentRole` migration backfills
-    /// pre-existing rows.  Read it through the typed `role` accessor below,
-    /// never this raw column.
+    /// string).  Declared optional because the column originally shipped as a
+    /// nullable ALTER (Fluent + SQLite can't add a NOT NULL column to an
+    /// existing table post-hoc — the same constraint that keeps
+    /// `APIUser.url_token` nullable).  Every row carries a value in practice:
+    /// fresh enrollments get one from `init` (defaulting to `.student`) and
+    /// the historical role migration backfilled pre-existing rows.  Read it
+    /// through the typed `role` accessor below, never this raw column.
     @OptionalField(key: "role")
     var roleRaw: String?
 
@@ -113,7 +113,8 @@ extension APICourseEnrollment {
 extension APICourseEnrollment {
     /// The enrollment's typed per-course role.  Falls back to `.student` for a
     /// missing or unrecognised stored value — defensive, since every row is
-    /// expected to carry a valid role once `AddCourseEnrollmentRole` has run.
+    /// expected to carry a valid role (seeded at insert, backfilled
+    /// historically).
     var role: CourseRole {
         get { roleRaw.flatMap(CourseRole.init(rawValue:)) ?? .student }
         set { roleRaw = newValue.rawValue }

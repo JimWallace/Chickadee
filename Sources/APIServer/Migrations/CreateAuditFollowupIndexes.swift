@@ -3,7 +3,7 @@ import SQLKit
 
 /// Indexes for hot-path filters the June 2026 audit found uncovered. Each
 /// backs a query that runs on a timer or on every dashboard refresh against a
-/// table that grows without bound across terms (see `docs/audit-2026-06.md`,
+/// table that grows without bound across terms (see `docs/archive/audit-2026-06.md`,
 /// finding P1.7).
 struct CreateAuditFollowupIndexes: ChickadeeMigration {
     func prepare(on database: Database) async throws {

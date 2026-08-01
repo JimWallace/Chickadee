@@ -13,6 +13,11 @@ struct CreateBrightSpaceCredentials: ChickadeeMigration {
             .field("valence_user_key", .string, .required)
             .field("identity_name", .string)
             .field("captured_by_user_id", .uuid)
+            // Folded from AddBrightSpaceCredentialUserID: the instructor a
+            // stored Valence user key belongs to. NULL = the deployment-wide
+            // (admin/env) service identity. Bare uuid (no FK), matching
+            // captured_by_user_id.
+            .field("user_id", .uuid)
             .field("captured_at", .datetime)
             .create()
     }

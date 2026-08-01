@@ -214,8 +214,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": "env-secret",
-            "WORKER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": "env-secret"
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -239,8 +238,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": nil,
-            "WORKER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": nil
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -261,8 +259,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": nil,
-            "WORKER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": nil
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -322,7 +319,7 @@ struct APIServerAppTests {
         }
     }
 
-    @Test func runnerSharedSecretFromEnvironmentPrefersPrimaryOverLegacy() async throws {
+    @Test func runnerSharedSecretFromEnvironmentIgnoresRetiredLegacyAlias() async throws {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "primary-secret",
             "WORKER_SHARED_SECRET": "legacy-secret",
@@ -333,7 +330,7 @@ struct APIServerAppTests {
             "RUNNER_SHARED_SECRET": "   ",
             "WORKER_SHARED_SECRET": "legacy-secret",
         ]) {
-            #expect(runnerSharedSecretFromEnvironment() == "legacy-secret")
+            #expect(runnerSharedSecretFromEnvironment() == nil)
         }
     }
 
@@ -348,8 +345,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": "cli-arg-secret",
-            "WORKER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": "cli-arg-secret"
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: "cli-arg-secret",

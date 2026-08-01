@@ -253,8 +253,6 @@ actor LocalRunnerManager {
             ]
         var childEnvironment = ProcessInfo.processInfo.environment
         childEnvironment["RUNNER_SHARED_SECRET"] = secret
-        // Keep legacy name for older runners until all environments migrate.
-        childEnvironment["WORKER_SHARED_SECRET"] = secret
         proc.environment = childEnvironment
         proc.currentDirectoryURL = URL(fileURLWithPath: workDir)
 
@@ -327,7 +325,7 @@ func normalizedHost(_ raw: String) -> String {
 /// because `WorkerSecretStore` is an actor without an `Application` handle and
 /// needs a fresh read after admin-panel clears so the env fallback still wins.
 func runnerSharedSecretFromEnvironment() -> String? {
-    trimmedEnv("RUNNER_SHARED_SECRET") ?? trimmedEnv("WORKER_SHARED_SECRET")
+    trimmedEnv("RUNNER_SHARED_SECRET")
 }
 
 // `environmentBool` and `parseSSOIdentityAllowlist` live in

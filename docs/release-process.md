@@ -64,6 +64,45 @@ follow-up step.
 `scripts/check-version.sh` still enforces `VERSION == ChickadeeVersion.current`;
 the release script writes both together, so they never drift.
 
+## Cutting a minor (or major) release — manual by design
+
+Auto-release is **patch-only by construction**: `assemble-release.sh` computes
+`major.minor.(patch + 1)` whenever it is invoked without `--version`, and
+`auto-release.yml` never passes one. Fragment categories (`### Added`,
+`### Removed`, …) are folded into the changelog verbatim — they carry **no**
+bump semantics — and there is no marker, label, or commit-prefix scan. No
+sequence of merges can ever produce `0.5.0` on its own; that is a deliberate
+human decision, made like this:
+
+1. Make sure at least one fragment exists in `changelog.d/` — usually a short
+   milestone note written for the occasion. (The script refuses to release an
+   empty fragment set, `--version` or not.)
+2. On an up-to-date local `main`:
+
+```bash
+scripts/assemble-release.sh --version 0.5.0
+```
+
+   This folds the fragments in under a `## [0.5.0]` heading, writes `VERSION`,
+   regenerates `ChickadeeVersion.swift`, and deletes the consumed fragments.
+3. Commit with the exact prefix the workflow guard looks for, then tag:
+
+```bash
+git commit -am "chore(release): v0.5.0"
+git tag -a v0.5.0 -m "Chickadee v0.5.0"
+git push origin main v0.5.0
+```
+
+   The `chore(release):` prefix is what stops `auto-release.yml` from firing on
+   the push and immediately cutting a redundant 0.5.1.
+4. Push from your own account (or any PAT-authenticated remote): a
+   human-pushed tag triggers `release.yml` and the `docker-build.yml` tag build
+   normally. (Only tags pushed with the workflow `GITHUB_TOKEN` are suppressed
+   by GitHub's loop prevention.)
+5. Done — the deployer treats a minor bump as auto-deployable (only **major**
+   bumps are held for approval), and auto-release resumes at `0.5.1` on the
+   next merged fragment.
+
 ## Merge queue (optional, requires repo settings)
 
 A merge queue serializes merges and **re-tests each PR against the real

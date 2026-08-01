@@ -55,6 +55,10 @@ import pathlib
 import sys
 import zipfile
 
+# Historical name: the block was born to activate nb_mypy; its only live
+# content today is the exec_hang chdir fix. DO NOT rename — the marker text is
+# embedded in the patched wheel, so a rename changes wheel bytes and forces the
+# full sha cascade + a Public/jupyterlite rebuild for zero behaviour change.
 MARKER = "CHICKADEE_NB_MYPY_ACTIVATION"
 TARGET_MEMBER = "pyodide_kernel/__init__.py"
 

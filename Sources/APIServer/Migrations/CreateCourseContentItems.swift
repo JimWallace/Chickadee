@@ -33,6 +33,10 @@ struct CreateCourseContentItems: ChickadeeMigration {
             .field("links_json", .string, .required)
             .field("updated_label", .string)
             .field("is_published", .bool, .required)
+            // Folded from AddContentItemAttachments: JSON-encoded
+            // `[ContentAttachment]` for hosted files served via the gated
+            // /content-files route. NULL reads as `[]` through the model.
+            .field("attachments_json", .string)
             .field("created_at", .datetime)
             .create()
     }

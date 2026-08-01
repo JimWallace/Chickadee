@@ -1,9 +1,10 @@
 # Design review: how Chickadee decides and applies "Python or R"
 
-**What this is.** The second-opinion review requested by
-[docs/language-handling-review-brief.md](language-handling-review-brief.md)
-(PR #1234). It answers the brief's five questions (§6 there) and records what
-the review found that the brief did not anticipate.
+**What this is.** The second-opinion review requested by the
+language-handling review brief (circulated as draft PR #1234; the brief was
+superseded by this merged review and its file never landed). It answers the
+brief's five questions (§6 there) and records what the review found that the
+brief did not anticipate.
 
 **Code reviewed:** `main` @ `d9c9777` (v0.4.660, 2026-07-29). Every claim below
 was checked against source, not against the brief or `CLAUDE.md`; file:line
@@ -86,6 +87,13 @@ mechanisms is past the point where "each reasonable alone" holds up, and the
 fenced-region pattern in `grading-worker-drift` turns out to be the seed of
 the right general answer.
 
+> **[Update, 0.5 cleanup.]** The fenced-region guard was retired: the shared
+> Python snippets (plus exit-code derivation, the MEMFS writer, and the
+> package preloader) moved into `Public/grading-shared.js`, one copy consumed
+> by both graders, and `grading-worker-drift.test.mjs` was deleted. That is
+> the "single source instead of guarded copies" end-state this review's §2
+> hierarchy prefers; the mechanism inventory is back to four.
+
 ---
 
 ## 1. Should R extraction live in RunnerCore? (brief §3.1)
@@ -162,7 +170,7 @@ The corrected inventory, by kind of invariant:
 | Kind | Instances | Mechanism |
 |---|---|---|
 | Shared *behaviour*, one implementation | suite execution, output interpretation, Python extraction | RunnerCore compiled twice; `output-contract.json` asserts the two builds agree (native + real vendored wasm) |
-| Mirrored *source*, two copies required | `test_runtime.py` / `.R` / `sitecustomize.py` embeds (Swift + JS); shared Python snippets between `browser-runner.js` and `grading-worker.js` | normalized-source comparison (`RuntimeSourceDriftTests.swift`, `runtime-drift.test.mjs`); fenced `CHICKADEE_DRIFT` regions (`grading-worker-drift.test.mjs`) |
+| Mirrored *source*, two copies required | `test_runtime.py` / `.R` / `sitecustomize.py` embeds (Swift + JS) | normalized-source comparison (`RuntimeSourceDriftTests.swift`, `runtime-drift.test.mjs`). *(The browser graders' shared Python snippets left this row in the 0.5 cleanup: they became one module, `Public/grading-shared.js`, and their fenced-region guard was deleted.)* |
 | Mirrored *value / constant* | `rKernelNames` ↔ `R_KERNEL_NAMES`; cell marker ↔ runtime regex | textual parse of both sources (`r-kernel-names-drift.test.mjs`); writer↔reader pin (`NotebookExtractorRCellMarkerTests`) |
 
 Read as a hierarchy, best to worst:

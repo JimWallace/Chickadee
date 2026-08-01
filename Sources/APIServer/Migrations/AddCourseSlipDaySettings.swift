@@ -6,8 +6,11 @@
 // as "never configured" — `SlipDayPolicy.resolve` treats that as disabled
 // with the 2 × 24 h defaults pre-filled for when the feature is switched on.
 //
-// One column per ALTER — SQLite can't add multiple columns in one statement,
-// the same constraint that shapes AddEnrollmentBrightSpaceSyncStatus.
+// One column per ALTER — SQLite can't add multiple columns in one statement.
+//
+// Deliberately left out of the second (0.5.0) consolidation round (only days
+// old at v0.4.669); fold into CreateCourses in the next round once every
+// deployment has verifiably applied it.
 
 import Fluent
 

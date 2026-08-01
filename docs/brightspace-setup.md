@@ -302,7 +302,7 @@ student-free).
   for that app. Either have IST grant the instructor role permission to authorize
   the app (per-instructor model), or enroll the service account in the course
   **with grade-write** and use the deployment-wide fallback. See
-  [brightspace-per-instructor-status.md](brightspace-per-instructor-status.md).
+  [brightspace-per-instructor-status.md](archive/brightspace-per-instructor-status.md).
 - **"x_target does not match the allowed values" (Step 1):** the app's
   registered Trusted URL doesn't cover the localhost callback. Have your D2L
   admin add `http://localhost` to the application's allowed-redirect list (see

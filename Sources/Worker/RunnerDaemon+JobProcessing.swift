@@ -541,7 +541,7 @@ extension WorkerDaemon {
                     forcedLanguage: targetsR ? .r : nil)
                 return (
                     [],
-                    legacyPreferredStudentModuleFilename(
+                    preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
                         language: targetsR ? .r : .python)
                 )

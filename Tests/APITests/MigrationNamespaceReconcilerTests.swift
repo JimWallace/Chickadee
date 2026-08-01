@@ -101,17 +101,20 @@ struct MigrationNamespaceReconcilerTests {
     /// recent migration) and recorded under a legacy namespace must, after
     /// reconciliation, have its already-applied migrations recognized AND the
     /// missing one applied forward by `autoMigrate` — the 0.4.172→latest restore
-    /// scenario in miniature.
+    /// scenario in miniature. The "missing" migration is CreateSweepLeases: a
+    /// standalone table nothing else references, so it reverts and re-applies
+    /// cleanly (and, unlike the folded Add* migrations this test used to
+    /// borrow, it is a permanent registration).
     @Test func appliesNewMigrationsForwardAfterReconcile() async throws {
         let app = try await Application.make(.testing)
         try await withApp(app) { app in
             try await configureTestDatabase(app)
 
-            // Simulate a DB from before AddUrlTokenToUsers existed: undo its
+            // Simulate a DB from before CreateSweepLeases existed: undo its
             // schema and drop its history row so it looks unapplied.
-            try await AddUrlTokenToUsers().revert(on: app.db)
+            try await CreateSweepLeases().revert(on: app.db)
             for log in try await MigrationLog.query(on: app.db)
-                .filter(\.$name == "chickadee.AddUrlTokenToUsers").all()
+                .filter(\.$name == "chickadee.CreateSweepLeases").all()
             {
                 try await log.delete(force: true, on: app.db)
             }
@@ -126,13 +129,13 @@ struct MigrationNamespaceReconcilerTests {
             try reconcileLegacyMigrationNamespace(on: app)
 
             // Must skip the (now-canonical) already-applied migrations and run
-            // only the missing AddUrlTokenToUsers forward — no 42P07 collision.
+            // only the missing CreateSweepLeases forward — no 42P07 collision.
             try await app.autoMigrate()
 
-            // The reverted column is back: a query that selects it succeeds.
-            _ = try await APIUser.query(on: app.db).all()
+            // The reverted table is back: a query against it succeeds.
+            _ = try await SweepLease.query(on: app.db).all()
             let names = try await migrationNames(app.db)
-            #expect(names.contains("chickadee.AddUrlTokenToUsers"))
+            #expect(names.contains("chickadee.CreateSweepLeases"))
             #expect(!names.contains { $0.hasPrefix("chickadee_server.") })
         }
     }

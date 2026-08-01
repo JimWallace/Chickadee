@@ -621,22 +621,22 @@ import Testing
     /// behaviour) pointed at a path that was never written.
     @Test func preferredStudentModuleFilenameIsLanguageAware() {
         #expect(
-            legacyPreferredStudentModuleFilename(submissionFilename: "analysis.ipynb")
+            preferredStudentModuleFilename(submissionFilename: "analysis.ipynb")
                 == "analysis.py")
         #expect(
-            legacyPreferredStudentModuleFilename(
+            preferredStudentModuleFilename(
                 submissionFilename: "analysis.ipynb", language: .python) == "analysis.py")
         #expect(
-            legacyPreferredStudentModuleFilename(submissionFilename: "analysis.ipynb", language: .r)
+            preferredStudentModuleFilename(submissionFilename: "analysis.ipynb", language: .r)
                 == "analysis.R")
         // A source upload is already the module, whatever the assignment's language.
         #expect(
-            legacyPreferredStudentModuleFilename(submissionFilename: "warmup.py") == "warmup.py")
+            preferredStudentModuleFilename(submissionFilename: "warmup.py") == "warmup.py")
         #expect(
-            legacyPreferredStudentModuleFilename(submissionFilename: "warmup.R", language: .r)
+            preferredStudentModuleFilename(submissionFilename: "warmup.R", language: .r)
                 == "warmup.R")
-        #expect(legacyPreferredStudentModuleFilename(submissionFilename: "data.csv") == nil)
-        #expect(legacyPreferredStudentModuleFilename(submissionFilename: nil) == nil)
+        #expect(preferredStudentModuleFilename(submissionFilename: "data.csv") == nil)
+        #expect(preferredStudentModuleFilename(submissionFilename: nil) == nil)
     }
 
     // MARK: - ExponentialBackoff

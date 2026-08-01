@@ -30,6 +30,17 @@
     const statusEl = document.getElementById('browser-runner-status');
     if (statusEl) statusEl.hidden = false;
 
+    // Grading semantics shared with the grading worker — the Python snippets,
+    // exit-code derivation, MEMFS writer, and package preloader come from
+    // Public/grading-shared.js (a <script> tag before this file on the
+    // notebook page), so the worker grader and this main-thread fallback
+    // cannot drift.  Throws loudly here if the tag is missing.
+    const {
+        envConfigPython, assignmentSeedPython, STDOUT_REDIRECT_PY,
+        runScriptPython, CAPTURE_OUTPUT_PY, RESTORE_STREAMS_PY,
+        deriveExitCode, writeFilesToPyFS, preloadPackagesForFiles,
+    } = ChickadeeGradingShared;
+
     // Kernelspec names that mark an R notebook. The browser cannot import
     // Swift, so this is a GENERATED copy of AssignmentLanguage.rKernelNames
     // (Sources/Core/AssignmentLanguage.swift), written by
@@ -79,7 +90,7 @@
                 if (m && m.content) body.appVersion = String(m.content).slice(0, 32);
             } catch (_) { /* meta absent — fine */ }
             let csrf = '';
-            try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            try { csrf = ChickadeeUI.getCsrfToken(); } catch (_) { /* no token */ }
             fetch('/api/v1/client-diagnostics', {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -393,12 +404,20 @@
     // A grading worker can be used when the environment exposes the Worker
     // constructor OR a test/embed override factory is present. The factory seam
     // lets the Node harness inject a fake Worker (no real Pyodide); production
-    // uses the default `new Worker('/grading-worker.js')`.
+    // spawns `/grading-worker.js` with the page's ?v= cache-buster so the
+    // worker (and the grading-shared.js it importScripts with the same query)
+    // pin to this release's bytes.
     function gradingWorkerFactory() {
         const override = globalThis.__CHICKADEE_GRADING_WORKER_FACTORY__
             || (typeof window !== 'undefined' ? window.__CHICKADEE_GRADING_WORKER_FACTORY__ : undefined);
         if (typeof override === 'function') return override;
-        if (typeof Worker !== 'undefined') return () => new Worker('/grading-worker.js');
+        if (typeof Worker !== 'undefined') {
+            return () => {
+                const meta = document.querySelector('meta[name="app-version"]');
+                const v = meta && meta.content ? '?v=' + encodeURIComponent(meta.content) : '';
+                return new Worker('/grading-worker.js' + v);
+            };
+        }
         return null;
     }
 
@@ -761,22 +780,7 @@
         }
     }
 
-    // Materialize a plain file map { <relativePath>: <string|Uint8Array> } into a
-    // Pyodide MEMFS under workDir, creating parent directories as needed. Shared
-    // by the main-thread fallback; the worker has its own copy (drift-guarded).
-    function writeFilesToPyFS(py, workDir, files) {
-        for (const [relPath, value] of Object.entries(files)) {
-            const parts = relPath.split('/');
-            if (parts.length > 1) {
-                let cur = workDir;
-                for (const part of parts.slice(0, -1)) {
-                    cur += '/' + part;
-                    try { py.FS.mkdir(cur); } catch (_) { /* already exists */ }
-                }
-            }
-            py.FS.writeFile(`${workDir}/${relPath}`, value);
-        }
-    }
+    // writeFilesToPyFS comes from grading-shared.js (shared with the worker).
 
     // Decode a file-map value (UTF-8 string or byte array) to text — used to
     // classify a script on the main thread without round-tripping the worker.
@@ -786,27 +790,8 @@
         catch (_) { return ''; }
     }
 
-    // Preload the Pyodide packages every bundled .py file imports.
-    //
-    // loadPackagesFromImports only scans the one source string it is handed, and
-    // does NOT follow imports into local modules.  A test script that imports a
-    // bundled helper which in turn imports numpy would therefore run with numpy
-    // unloaded and die on ModuleNotFoundError — green on the native validation
-    // run (where numpy is installed system-wide) and broken for every student.
-    // Scanning the whole setup up front closes that gap.
-    //
-    // Per-file rather than one concatenated blob, so a single unparseable file
-    // (a student's half-finished submission) cannot suppress every other file's
-    // imports.  Non-fatal throughout: a name Pyodide doesn't ship must never
-    // block the run.
-    async function preloadPackagesForFiles(py, files) {
-        for (const [relPath, value] of Object.entries(files || {})) {
-            if (!relPath.endsWith('.py')) continue;
-            const text = fileAsText(value);
-            if (!text) continue;
-            try { await py.loadPackagesFromImports(text); } catch (_) { /* non-fatal */ }
-        }
-    }
+    // preloadPackagesForFiles comes from grading-shared.js (shared with the
+    // worker) — see its docstring for why every bundled .py is scanned.
 
     // -------------------------------------------------------------------------
     // Status display
@@ -1041,31 +1026,7 @@
         return { exitCode: derived.exitCode, stdout, stderr: derived.stderr, executionTimeMs, timedOut: false };
     }
 
-    // Derive the script's exit code from the captured SystemExit code (preferred)
-    // or — when none was captured — from the raised JS error, mirroring a
-    // `python3 script` subprocess: 0 on clean completion, 1 on an uncaught
-    // exception (with the traceback on stderr so RunnerCore puts it in
-    // longResult). Returns the (possibly augmented) stderr too, since an
-    // uncaught-exception message is folded into stderr when stderr is empty.
-    // Shared verbatim by grading-worker.js — see the drift guard.
-    function deriveExitCode(brExitCode, pyErr, stderr) {
-        let exitCode;
-        if (brExitCode !== null && brExitCode !== undefined) {
-            exitCode = typeof brExitCode === 'number' ? brExitCode : (parseInt(brExitCode) || 1);
-        } else if (pyErr) {
-            const msg = pyErr.message || String(pyErr);
-            const match = msg.match(/SystemExit:\s*(-?\d+)/);
-            if (match) {
-                exitCode = parseInt(match[1]);
-            } else {
-                exitCode = 1;
-                if (!stderr.trim()) stderr = msg;
-            }
-        } else {
-            exitCode = 0;
-        }
-        return { exitCode, stderr };
-    }
+    // deriveExitCode comes from grading-shared.js (shared with the worker).
 
     // -------------------------------------------------------------------------
     // Outcome / collection builders
@@ -1121,7 +1082,7 @@
 
         const res = await fetch('/api/v1/submissions/browser-result', {
             method:  'POST',
-            headers: { 'x-csrf-token': getCsrfToken() },
+            headers: { 'x-csrf-token': ChickadeeUI.getCsrfToken() },
             body:    formData,
         });
         if (!res.ok) {
@@ -1216,110 +1177,10 @@
     }
 
     // -------------------------------------------------------------------------
-    // Shared Python snippets (env config + per-script exec)
-    //
-    // These are run by BOTH the main-thread fallback (above) and the grading
-    // worker (Public/grading-worker.js), so they MUST stay byte-identical. The
-    // worker keeps its own copies; Tests/BrowserRunnerJSTests/grading-worker-drift.test.mjs
-    // asserts the two stay in sync (normalized whitespace). Edit both together.
+    // Shared Python snippets (env config + per-script exec) live in
+    // Public/grading-shared.js — one copy run by BOTH this main-thread
+    // fallback and the grading worker, destructured at the top of the IIFE.
     // -------------------------------------------------------------------------
-
-    // CHICKADEE_DRIFT:envConfigPython:BEGIN
-    // Add workDir to sys.path, chdir, flush stale helper/student modules, import
-    // test_runtime, wire builtins, and load student modules into globals+builtins.
-    function envConfigPython(workDir) {
-        return `
-import sys, os, builtins
-
-# Replace any stale chickadee work-directory on the path.
-sys.path = [p for p in sys.path if not p.startswith('/chickadee_work_')]
-sys.path.insert(0, '${workDir}')
-os.chdir('${workDir}')
-
-# Flush stale helper + student modules so fresh files are picked up.
-for _key in list(sys.modules.keys()):
-    if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
-        del sys.modules[_key]
-
-# Import test_runtime — set functions in BOTH __main__ globals and builtins.
-# Pyodide may not resolve builtins the same way CPython does, so we need
-# them as __main__ globals too (runPythonAsync runs in __main__).
-from test_runtime import passed, failed, errored, require_function
-from test_runtime import load_student_modules, load_student_module
-from test_runtime import student_module_names_in_load_order
-
-builtins.passed           = passed
-builtins.failed           = failed
-builtins.errored          = errored
-builtins.require_function = require_function
-
-# Load student code and expose in both globals and builtins.
-_student_modules = load_student_modules()
-student_modules  = _student_modules
-builtins.student_modules = _student_modules
-_student_module  = load_student_module()
-student_module   = _student_module
-builtins.student_module  = _student_module
-for _module_name in student_module_names_in_load_order():
-    _module = _student_modules.get(_module_name)
-    if _module is None:
-        continue
-    for _name, _value in vars(_module).items():
-        if _name.startswith('_'):
-            continue
-        if callable(_value) and not hasattr(builtins, _name):
-            setattr(builtins, _name, _value)
-            globals()[_name] = _value
-`;
-    }
-    // CHICKADEE_DRIFT:envConfigPython:END
-
-    // CHICKADEE_DRIFT:assignmentSeedPython:BEGIN
-    function assignmentSeedPython(seed) {
-        return `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(seed)}`;
-    }
-    // CHICKADEE_DRIFT:assignmentSeedPython:END
-
-    // CHICKADEE_DRIFT:STDOUT_REDIRECT_PY:BEGIN
-    const STDOUT_REDIRECT_PY = `
-import sys, io
-_br_stdout = io.StringIO()
-_br_stderr = io.StringIO()
-sys.stdout = _br_stdout
-sys.stderr = _br_stderr
-`;
-    // CHICKADEE_DRIFT:STDOUT_REDIRECT_PY:END
-
-    // CHICKADEE_DRIFT:runScriptPython:BEGIN
-    // compile(source, scriptName) gives inspect.stack() the real filename so
-    // test_runtime reads the correct test label; `except SystemExit` catches the
-    // exit that passed()/failed()/errored() raise (a clean subprocess exit on the
-    // native side); imports + exec share one globals dict.
-    function runScriptPython(scriptName) {
-        return `
-from test_runtime import passed, failed, errored, require_function
-_br_exit_code = None
-try:
-    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
-    exec(_br_code, globals())
-except SystemExit as _e:
-    _br_exit_code = _e.code
-`;
-    }
-    // CHICKADEE_DRIFT:runScriptPython:END
-
-    // CHICKADEE_DRIFT:CAPTURE_OUTPUT_PY:BEGIN
-    const CAPTURE_OUTPUT_PY = `
-(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
-`;
-    // CHICKADEE_DRIFT:CAPTURE_OUTPUT_PY:END
-
-    // CHICKADEE_DRIFT:RESTORE_STREAMS_PY:BEGIN
-    const RESTORE_STREAMS_PY = `
-sys.stdout = sys.__stdout__
-sys.stderr = sys.__stderr__
-`;
-    // CHICKADEE_DRIFT:RESTORE_STREAMS_PY:END
 
     // -------------------------------------------------------------------------
     // Embedded runtime helpers (kept in sync with Sources/Worker/RunnerDaemon.swift)
@@ -1713,8 +1574,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             // they stay in sync with Tools/runner-support/*.py.
             TEST_RUNTIME_PY,
             SITECUSTOMIZE_PY,
-            // Shared Python snippets — exposed so the grading-worker drift guard
-            // can assert grading-worker.js keeps byte-identical copies.
+            // Shared grading semantics (re-exported from grading-shared.js).
             envConfigPython,
             assignmentSeedPython,
             STDOUT_REDIRECT_PY,

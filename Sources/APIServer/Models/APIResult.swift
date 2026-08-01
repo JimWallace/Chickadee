@@ -26,11 +26,11 @@ final class APIResult: Model, Content, @unchecked Sendable {
 
     // MARK: - Denormalized grade fields
     //
-    // Copied out of `collection_json` at write time (and backfilled by
-    // `AddResultGradeColumns`) so list pages, the CSV export, and the
-    // periodic sweeps can read a grade without decoding the full result
-    // blob per row. `collection_json` stays the source of truth for
-    // everything else.
+    // Copied out of `collection_json` at write time (and, historically,
+    // backfilled by the grade-columns migration — since folded into
+    // CreateResults) so list pages, the CSV export, and the periodic
+    // sweeps can read a grade without decoding the full result blob per
+    // row. `collection_json` stays the source of truth for everything else.
 
     @OptionalField(key: "earned_points")
     var earnedPoints: Double?
@@ -95,8 +95,8 @@ final class APIResult: Model, Content, @unchecked Sendable {
 // the denormalized columns. Since #1173 the blob is not on this row, so there
 // is no synchronous fallback: rows whose four columns are all nil report no
 // grade — which matches the old fallback in every reachable state, because
-// `AddResultGradeColumns` backfilled every parseable blob and a blob the
-// backfill couldn't parse yielded nil from the fallback too. Loaders that
+// the historical grade-columns backfill covered every parseable blob and a
+// blob it couldn't parse yielded nil from the fallback too. Loaders that
 // must hydrate such rows anyway (gradeSummariesBySubmissionID's legacy path)
 // fetch the blob from the side table explicitly.
 extension APIResult {

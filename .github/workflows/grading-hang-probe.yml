@@ -112,7 +112,7 @@ jobs:
           echo "GRADING-HANG PROBE RESULT — hangs=${hangs}/${runs} engine=${SMOKE_BROWSER}"
           # Gate policy (docs/ci-flakiness.md, Family 2): chromium is hard-zero
           # everywhere. webkit carries a known, tracked ambient exec-hang rate
-          # under CI load (docs/exec-hang-investigation.md), so on PR runs a
+          # under CI load (docs/archive/exec-hang-investigation.md), so on PR runs a
           # SINGLE webkit hang warns loudly instead of failing an unrelated PR.
           # workflow_dispatch / scheduled runs keep the hard zero — the probe
           # remains the regression guard a real fix must turn green, and the
@@ -126,5 +126,5 @@ jobs:
             exit 1
           fi
           if [ "$hangs" -gt 0 ]; then
-            echo "::warning::AMBIENT FLAKE TOLERATED on PR run: hangs=${hangs}/${runs} on ${SMOKE_BROWSER} (allowed<=${allowed}). The webkit exec-hang is real and tracked — docs/ci-flakiness.md Family 2, docs/exec-hang-investigation.md. Do not treat this warning as noise: if you see it often, the ambient rate is rising."
+            echo "::warning::AMBIENT FLAKE TOLERATED on PR run: hangs=${hangs}/${runs} on ${SMOKE_BROWSER} (allowed<=${allowed}). The webkit exec-hang is real and tracked — docs/ci-flakiness.md Family 2, docs/archive/exec-hang-investigation.md. Do not treat this warning as noise: if you see it often, the ambient rate is rising."
           fi

@@ -58,7 +58,7 @@
         try {
             freezeWorker = new Worker('/freeze-watchdog-worker.js');
             let freezeCsrf = '';
-            try { freezeCsrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            try { freezeCsrf = ChickadeeUI.getCsrfToken(); } catch (_) { /* no token */ }
             let freezeAppVersion = '';
             try {
                 const vm = document.querySelector('meta[name="app-version"]');
@@ -95,7 +95,7 @@
     function armGradingFailover(testSetupID, notebookString) {
         if (!freezeWorker) return;
         let csrf = '';
-        try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+        try { csrf = ChickadeeUI.getCsrfToken(); } catch (_) { /* no token */ }
         try {
             freezeWorker.postMessage({
                 type: 'grading-armed',
@@ -122,7 +122,7 @@
             const res = await fetch('/api/v1/submissions/browser-failover', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'content-type': 'application/json', 'x-csrf-token': getCsrfToken() },
+                headers: { 'content-type': 'application/json', 'x-csrf-token': ChickadeeUI.getCsrfToken() },
                 body: JSON.stringify({ testSetupID: testSetupID, notebook: notebookString }),
             });
             if (!res.ok) return null;
@@ -2033,7 +2033,7 @@
 
         const res = await fetch('/api/v1/submissions/runner-submit', {
             method:  'POST',
-            headers: { 'x-csrf-token': getCsrfToken() },
+            headers: { 'x-csrf-token': ChickadeeUI.getCsrfToken() },
             body:    formData,
         });
         if (!res.ok) {

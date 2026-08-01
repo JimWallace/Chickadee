@@ -3,7 +3,7 @@
 How the Embedded-Swift wasm runner is optimized, cached, and kept small. This is
 the "ship it once per term, serve from cache thereafter, and don't let it
 silently balloon" pass. Companion to [runner-wasm-migration.md](runner-wasm-migration.md)
-and [runner-wasm-review.md](runner-wasm-review.md).
+and [runner-wasm-review.md](archive/runner-wasm-review.md).
 
 ## 1. Sizes
 

@@ -64,7 +64,7 @@ import Testing
     }
 }
 
-@Suite(.serialized) struct PersonalizationEvaluatorREvalTests {
+@Suite(.serialized, .timeLimit(.minutes(3))) struct PersonalizationEvaluatorREvalTests {
 
     /// True when `Rscript` is on PATH. The evaluator spawns via `/usr/bin/env`,
     /// so this probe uses the same resolution.

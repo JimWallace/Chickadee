@@ -28,8 +28,8 @@ chickadee-runner \
 
 Environment variables:
 
-- `RUNNER_SHARED_SECRET` (preferred) — shared secret used when `--worker-secret` is omitted.
-- `WORKER_SHARED_SECRET` (legacy fallback) — still accepted for compatibility.
+- `RUNNER_SHARED_SECRET` — shared secret used when `--worker-secret` is omitted.
+  (The legacy `WORKER_SHARED_SECRET` alias was retired in 0.5 and is ignored.)
 
 When neither CLI nor environment provides a secret, the runner falls back to a
 local `.worker-secret` file. In Docker Compose, this comes from the shared

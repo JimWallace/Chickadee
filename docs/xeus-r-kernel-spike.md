@@ -1,6 +1,9 @@
 # In-browser R notebook kernel — spike findings (2026-07)
 
-Status: **spike complete, validated end-to-end.** No production wiring yet.
+Status: **spike complete, validated end-to-end; the production wiring has
+since shipped** (`Public/jupyterlite/xeus/kernels.json`;
+`jupyterLiteRKernelName = "xr"` in
+`Sources/APIServer/Helpers/NotebookContentHelpers.swift`).
 This note records what was tested, what works, what does not, the reproducible
 recipe, and the phased plan to ship R notebook support.
 

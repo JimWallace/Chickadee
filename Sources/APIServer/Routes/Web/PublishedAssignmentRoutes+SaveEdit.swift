@@ -34,11 +34,10 @@ extension PublishedAssignmentRoutes {
 
         // As of v0.4.79, the assignment Save button is for notebook +
         // metadata + (re-)validation only.  The test suite itself is
-        // edited live via the per-script and PUT /suite endpoints, so we
-        // intentionally ignore `suiteFiles`/`suiteConfig` if they arrive
-        // and refuse to rebuild the zip from them.  That lets legacy
-        // clients roundtrip safely while clients built against the new
-        // endpoint skip the fields entirely.
+        // edited live via the per-script and PUT /suite endpoints; the
+        // save form carries no suite fields (a stale client that still
+        // posts `suiteFiles`/`suiteConfig` parts is harmless — the form
+        // decoder ignores parts it isn't asked for).
 
         let hasUploadedAssignmentNotebook = form.assignmentNotebookFile?.data.readableBytes ?? 0 > 0
         let assignmentNotebookRaw = resolvedAssignmentNotebookRaw(
@@ -127,8 +126,6 @@ extension PublishedAssignmentRoutes {
     // MARK: - saveEditedAssignment helpers
 
     /// Parsed form payload for `POST /instructor/:assignmentID/edit/save`.
-    /// Resolves both the array-typed (`suiteFiles[]`) and single-typed
-    /// (`suiteFiles`) Vapor decode paths into one shape.
     fileprivate struct SaveEditedAssignmentForm {
         let assignmentName: String?
         let dueAtRaw: String?
@@ -145,59 +142,29 @@ extension PublishedAssignmentRoutes {
     }
 
     fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {
-        struct SaveBodyMany: Content {
+        struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
             var startsAt: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var gradeObjectID: String?
-        }
-        struct SaveBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var startsAt: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
-            var suiteConfig: String?
             var gradeObjectID: String?
         }
 
-        let bodyMany = try? req.content.decode(SaveBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
+        guard let body = try? req.content.decode(SaveBody.self) else {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
         }
 
-        let assignmentName =
-            try multipartTextField(named: ["assignmentName"], from: req)
-            ?? bodyMany?.assignmentName
-            ?? bodySingle?.assignmentName
-        let dueAtRaw =
-            try multipartTextField(named: ["dueAt"], from: req)
-            ?? bodyMany?.dueAt
-            ?? bodySingle?.dueAt
-        let startsAtRaw =
-            try multipartTextField(named: ["startsAt"], from: req)
-            ?? bodyMany?.startsAt
-            ?? bodySingle?.startsAt
-        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
-        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let gradeObjectID =
-            try multipartTextField(named: ["gradeObjectID"], from: req)
-            ?? bodyMany?.gradeObjectID
-            ?? bodySingle?.gradeObjectID
-
+        // The multipartTextField fallbacks cover Safari's mixed-encoding
+        // multipart bodies, where Vapor's content decode drops text fields
+        // that ride alongside file parts (the v0.4.8 save hardening).
         return SaveEditedAssignmentForm(
-            assignmentName: assignmentName,
-            dueAtRaw: dueAtRaw,
-            startsAtRaw: startsAtRaw,
-            assignmentNotebookFile: assignmentNotebookFile,
-            solutionNotebookFile: solutionNotebookFile,
-            gradeObjectID: gradeObjectID
+            assignmentName: try multipartTextField(named: ["assignmentName"], from: req) ?? body.assignmentName,
+            dueAtRaw: try multipartTextField(named: ["dueAt"], from: req) ?? body.dueAt,
+            startsAtRaw: try multipartTextField(named: ["startsAt"], from: req) ?? body.startsAt,
+            assignmentNotebookFile: body.assignmentNotebookFile,
+            solutionNotebookFile: body.solutionNotebookFile,
+            gradeObjectID: try multipartTextField(named: ["gradeObjectID"], from: req) ?? body.gradeObjectID
         )
     }
 

@@ -9,7 +9,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite final class ZipUploadValidationTests {
+@Suite(.timeLimit(.minutes(3))) final class ZipUploadValidationTests {
 
     private let tmpDir: URL
 

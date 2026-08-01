@@ -33,6 +33,14 @@ struct CreateGradeOverrides: ChickadeeMigration {
             )
             .field("granted_at", .datetime)
             .field("updated_at", .datetime)
+            // Folded from AddGradeOverrideBrightSpaceSync: grade-sync
+            // bookkeeping mirroring the four columns on `results`, so an
+            // override on a student with no submissions (hence no results row)
+            // can still carry the pending flag the sync sweep scans.
+            .field("brightspace_sync_pending", .bool)
+            .field("brightspace_pending_since", .datetime)
+            .field("brightspace_synced_at", .datetime)
+            .field("brightspace_sync_error", .string)
             .unique(on: "test_setup_id", "user_id")
             .create()
 

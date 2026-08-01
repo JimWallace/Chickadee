@@ -135,7 +135,7 @@ func resolveWorkerSharedSecret(
     let cliSecret = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !cliSecret.isEmpty { return cliSecret }
 
-    let envSecret = (environment["RUNNER_SHARED_SECRET"] ?? environment["WORKER_SHARED_SECRET"] ?? "")
+    let envSecret = (environment["RUNNER_SHARED_SECRET"] ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !envSecret.isEmpty { return envSecret }
 

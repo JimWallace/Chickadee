@@ -25,6 +25,12 @@ struct CreateUsers: ChickadeeMigration {
             .field("last_seen_at", .datetime)
             // Folded from AddBrightSpaceSyncFields.
             .field("brightspace_user_id", .string)
+            // Folded from AddUrlTokenToUsers (#556): the opaque per-user token
+            // that replaced `:username` URL segments. Nullable column — the
+            // model invariant (every row carries a token) is enforced by the
+            // init default; the historical migration's backfill of pre-token
+            // rows is a no-op on an empty fresh table and was dropped.
+            .field("url_token", .string)
             .field("created_at", .datetime)
             .create()
 
@@ -37,11 +43,21 @@ struct CreateUsers: ChickadeeMigration {
                 WHERE auth_provider IS NOT NULL AND external_subject IS NOT NULL
                 """
             ).run()
+            // Folded from AddUrlTokenToUsers: uniqueness for the URL tokens.
+            // Partial so a NULL (never expected in practice) can't collide.
+            try await sql.raw(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_url_token
+                ON users(url_token)
+                WHERE url_token IS NOT NULL
+                """
+            ).run()
         }
     }
 
     func revert(on database: Database) async throws {
         if let sql = database as? SQLDatabase {
+            try await sql.raw("DROP INDEX IF EXISTS idx_users_url_token").run()
             try await sql.raw(
                 "DROP INDEX IF EXISTS idx_users_auth_provider_external_subject"
             ).run()

@@ -277,35 +277,26 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
 }
 
 func registerMigrations(on app: Application) {
-    // Note: 13 historical `Add*` migrations were consolidated into the
-    // corresponding `Create*` files in PR #502 (v0.4.171), and their
-    // no-op stubs were removed in v0.5.0.  Production DBs that already
-    // applied those migrations still carry the names in
-    // `_fluent_migrations`; Fluent ignores history rows whose struct
-    // names are no longer registered, so this is harmless.  Fresh
-    // deploys produce the same final schema from the `Create*` files
-    // alone.  `AddSessionsCreatedAt` is NOT consolidated — it's a real
-    // migration against Vapor's `_fluent_sessions` table (not one of
-    // our own).
+    // Note: incremental `Add*` migrations are periodically consolidated into
+    // the canonical `Create*` files and the `Add*` structs deleted outright.
+    // Production DBs that already applied them still carry the names in
+    // `_fluent_migrations`; Fluent ignores history rows whose struct names
+    // are no longer registered, so this is harmless.  Fresh deploys produce
+    // the same final schema from the `Create*` files alone.  Two rounds so
+    // far:
+    //   - the #502/#505 round: 13 historical `Add*` migrations folded in
+    //     PR #502 (v0.4.171); their remaining no-op stubs were deleted in
+    //     PR #505 (VERSION was still 0.4.x when that shipped).
+    //   - the second (0.5.0) round: 24 more folded, which also retired the
+    //     "column must exist before a later migration full-queries the
+    //     model" boot-order hazard class (#1077) — columns no longer
+    //     arrive after their table does.
+    // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
+    // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
-    // Must precede any migration that queries the APICourse *model* (e.g.
-    // AddCourseArchivedAt's backfill). Fluent's model query SELECTs every
-    // declared column, so the column has to exist before those run on a
-    // fresh DB. Existing prod is unaffected — only this new migration runs.
-    app.migrations.add(AddBrightSpaceOrgUnitName())
-    // Same ordering constraint as AddBrightSpaceOrgUnitName: a courses column
-    // that must exist before AddCourseArchivedAt queries the APICourse model.
-    app.migrations.add(AddCourseBrightSpaceSyncUserID())
-    // Same ordering constraint: brightspace_section_category_id must exist
-    // before AddCourseArchivedAt (or any migration) queries the APICourse model.
-    app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
-    // Same ordering constraint: mcp_instructions must exist before any later
-    // migration queries the APICourse model.
-    app.migrations.add(AddCourseMCPInstructions())
-    // Same ordering constraint: the three slip-day policy columns (#1228)
-    // must exist before AddCourseArchivedAt (or any migration) queries the
-    // APICourse model.
+    // Deliberately left out of the second consolidation round (#1228 columns
+    // only days old at v0.4.669) — fold in the next consolidation round.
     app.migrations.add(AddCourseSlipDaySettings())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
@@ -329,108 +320,54 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateAuditLog())
     app.migrations.add(CreateAssignmentExtensions())
     app.migrations.add(CreateAssignmentParticipations())
-    app.migrations.add(AddUrlTokenToUsers())
+    // Deliberately left out of the second consolidation round: folding would
+    // newly enforce these FKs on dev/test SQLite and interacts with
+    // AdminRoutes.deleteUser's hand-rolled cleanup.
     app.migrations.add(AddUserFKConstraints())
-    app.migrations.add(AddCourseArchivedAt())
     // MCP OAuth authorization-server tables (Phase 2). FKs reference `users`.
     app.migrations.add(CreateMCPOAuthClients())
     app.migrations.add(CreateMCPAuthorizationCodes())
     app.migrations.add(CreateMCPGrants())
-    app.migrations.add(AddPreviousRefreshTokenHashToGrants())
-    app.migrations.add(AddAssignmentStartsAt())
     app.migrations.add(CreateBrightSpaceSyncLog())
     // Single-row store for the admin-authorized BrightSpace Valence user key
     // (durable alternative to BRIGHTSPACE_USER_ID/KEY in env).
     app.migrations.add(CreateBrightSpaceCredentials())
-    // Per-instructor scope on the captured Valence key (NULL = deployment-wide).
-    app.migrations.add(AddBrightSpaceCredentialUserID())
     // Single-use consent requests for the browser OAuth flow (cookie-less
     // POST /oauth/authorize). FK references `users`.
     app.migrations.add(CreateMCPConsentRequests())
     // Per-student grade overrides. FKs reference `users` and `test_setups`.
     app.migrations.add(CreateGradeOverrides())
+    // Explicit LEARN grade-clear queue rows. FKs reference `users` and
+    // `test_setups`. (Nearly lost in the second consolidation: the two folded
+    // registrations around it were deleted and took this line with them —
+    // caught by GradeOverridesTests before it shipped.)
+    app.migrations.add(CreateBrightSpaceGradeClears())
     // Per-user activity pings behind the admin dashboard's "active users over
     // time" chart. FK references `users`.
     app.migrations.add(CreateUserActivityEvents())
     // Append-only assignment content-snapshot history. FK references `courses`
     // and `users`; deliberately none on `test_setups` (see the migration).
     app.migrations.add(CreateAssignmentVersions())
-    // First-class course scoping for audit events, backfilled from the
-    // metadata JSON (#421). Must follow CreateAuditLog.
-    app.migrations.add(AddAuditLogCourseID())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())
-    app.migrations.add(AddGrantPreviousRefreshTokenHashIndex())
-    // Replaces assignments.is_open (bool) with assignments.visibility (enum
-    // string). Runs after CreateAssignments on every deploy.
-    app.migrations.add(ChangeAssignmentIsOpenToVisibility())
-
-    // Adds submissions.materialization_json — cached once-at-enqueue
-    // personalization for validation submissions, so worker poll + download
-    // stay eval-free.
-    app.migrations.add(AddSubmissionMaterialization())
 
     // Audit-followup indexes (June 2026): request_metrics(finished_at) and
     // other uncovered hot-path filters. Index-only, runs last.
     app.migrations.add(CreateAuditFollowupIndexes())
 
-    // Denormalized grade columns on results + one-time backfill from the
-    // collection_json blob (June 2026 audit, P1.1).
-    app.migrations.add(AddResultGradeColumns())
-
-    // Error-detail columns on client_diagnostics (message/stack/source) so
-    // browser-side failures carry diagnosable signal.
-    app.migrations.add(AddClientDiagnosticErrorDetail())
-
-    // app_version column on client_diagnostics: the page build that emitted each
-    // report, so a diagnostic can be attributed to a build (an old value flags a
-    // stale browser tab / cached bundle, not a live regression).
-    app.migrations.add(AddClientDiagnosticAppVersion())
-    app.migrations.add(AddSubmissionDiagnosticsRunnerVersion())
-
-    // Per-(student, course) LEARN sync readiness on course_enrollments:
-    // unconfirmed (default) → confirmed / unreachable, maintained by the
-    // roster-readiness sweep. MUST run before AddCourseEnrollmentRole: that
-    // migration's backfill does a full-model `APICourseEnrollment.query().all()`,
-    // which on a fresh DB selects every column the model declares — including
-    // these — so the columns have to exist by the time it runs.
-    app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
-    // Same ordering constraint: brightspace_section must exist before
-    // AddCourseEnrollmentRole queries the full APICourseEnrollment model.
-    app.migrations.add(AddEnrollmentBrightSpaceSection())
-    // Same ordering constraint: slip_days_adjustment (#1228) must exist
-    // before AddCourseEnrollmentRole's backfill full-queries the
-    // APICourseEnrollment model.
+    // Per-student slip-day budget adjustment (#1228, only days old at
+    // v0.4.669) — fold in the next consolidation round.
     app.migrations.add(AddEnrollmentSlipDaysAdjustment())
 
-    // Per-course role on each enrollment (Phase 1 of
-    // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
-    // each user's current global role; nothing reads it yet. Runs after
-    // CreateCourseEnrollments (the table) and CreateUsers (the backfill reads
-    // users).
-    app.migrations.add(AddCourseEnrollmentRole())
-
-    // BrightSpace grade-sync bookkeeping on grade_overrides, mirroring the
-    // columns on results. Lets an override on a student with no submissions
-    // (e.g. a manually-registered pre-enrolled student) enqueue a grade push.
-    app.migrations.add(AddGradeOverrideBrightSpaceSync())
-
-    // Queue of pending BrightSpace grade removals (override cleared on a
-    // no-submission student Chickadee had pushed a grade for). FK to
-    // test_setups + users.
-    app.migrations.add(CreateBrightSpaceGradeClears())
-
-    // Explicit "do not sync this assignment to LEARN" flag on assignments,
-    // distinct from an unmapped grade item. Column-only; no migration
-    // full-queries APIAssignment, so ordering is unconstrained.
-    app.migrations.add(AddAssignmentBrightSpaceSyncExcluded())
-
     // Collapse the deployment-global role to user|admin (#417 Slice G2):
-    // rewrite every legacy student/instructor row to `user`. MUST run after
-    // AddCourseEnrollmentRole, which has already seeded each enrollment's
-    // per-course role from the user's then-current global role — so normalising
-    // the now-meaningless global label here loses no teaching authority.
+    // rewrite every legacy student/instructor row to `user`. A pure data
+    // rewrite — on a fresh DB it runs against zero rows. On the historical
+    // DBs where it did real work, the enrollment-role backfill (since folded
+    // into CreateCourseEnrollments by the second consolidation round) had
+    // already seeded each enrollment's per-course role from the user's
+    // then-current global role, so normalising the now-meaningless global
+    // label here loses no teaching authority.
     app.migrations.add(CollapseUserRoles())
 
     // Multi-process security state (#1154): worker-HMAC replay nonces and
@@ -446,14 +383,13 @@ func registerMigrations(on app: Application) {
 
     // Relocates results.collection_json to the result_collections side table
     // (#1173) so hot result-row queries never carry the blob. MUST run after
-    // AddResultGradeColumns — its backfill reads the column this migration
-    // drops.
+    // CreateResults, whose `collection_json` this migration backfills from
+    // and then drops. Deliberately left standalone in the second
+    // consolidation round — the side-table partial fold is out of scope.
     app.migrations.add(CreateResultCollections())
 
-    // Secret reveal tokens: per-assignment instructor toggle plus one
-    // spent-token row per (student, assignment). Column-only + new table;
-    // no migration full-queries APIAssignment, so ordering is unconstrained.
-    app.migrations.add(AddAssignmentSecretRevealEnabled())
+    // Spent secret-reveal tokens: one row per (student, assignment). The
+    // per-assignment toggle column lives on `assignments` (CreateAssignments).
     app.migrations.add(CreateSecretRevealUnlocks())
 
     // Personal-data export tracking (#557): one row per user, doubling as
@@ -466,9 +402,6 @@ func registerMigrations(on app: Application) {
     // `course_sections`, both created by CreateCourses above, so no additional
     // ordering constraint.
     app.migrations.add(CreateCourseContentItems())
-    // Hosted file attachments on content items (served via the gated
-    // /content-files route). Additive column on the table created above.
-    app.migrations.add(AddContentItemAttachments())
 
     // Slip-day ledger (#1228): one row per spent slip day, refunds stamped
     // in place. New table; FKs reference `users`, `courses`, `assignments`,

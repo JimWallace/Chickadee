@@ -131,7 +131,7 @@
 // (admin / instructor bulk-enroll, etc.).  v0.4.119+.
 (function () {
     // Surface an upload failure as an inline banner at the top of the form
-    // (reusing the global .form-error styling) instead of a native alert().
+    // (reusing the global .form-error styling) instead of a native dialog.
     function showUploadError(form, msg) {
         if (!form) return;
         var banner = form.querySelector('.upload-error-banner');

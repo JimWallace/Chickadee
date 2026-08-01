@@ -10,8 +10,8 @@
 // Shipped standalone (not folded into CreateResults) because production
 // databases already applied CreateResults with the column. Fresh deploys run
 // CreateResults (which still creates `collection_json`) and then this
-// migration relocates it — the same convention as
-// ChangeAssignmentIsOpenToVisibility.
+// migration relocates it. Deliberately left standalone by the second (0.5.0)
+// consolidation round — the side-table partial fold is out of scope there.
 //
 // The backfill is chunked raw SQL (`INSERT … SELECT … LIMIT`): the copy
 // happens entirely inside the database, so a production table with tens of

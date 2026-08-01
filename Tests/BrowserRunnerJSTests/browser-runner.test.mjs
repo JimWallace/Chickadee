@@ -8,6 +8,10 @@ const runnerSource = await fs.readFile(
   path.resolve('Public/browser-runner.js'),
   'utf8',
 );
+const sharedSource = await fs.readFile(
+  path.resolve('Public/grading-shared.js'),
+  'utf8',
+);
 
 // Shared producer/parser contract for the dependency-skip wording; the worker
 // side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
@@ -570,7 +574,7 @@ async function loadRunnerHarness(options = {}) {
     JSON,
     Error,
     fetch: fetchImpl,
-    getCsrfToken: () => options.csrfToken ?? 'csrf-test-token',
+    ChickadeeUI: { getCsrfToken: () => options.csrfToken ?? 'csrf-test-token' },
     document,
     // Test seam: preset the RunnerCore extractors so the runner never loads
     // the real wasm bundle. The actual extraction logic is covered by the
@@ -635,7 +639,11 @@ async function loadRunnerHarness(options = {}) {
   };
   context.globalThis = context;
 
-  vm.runInNewContext(runnerSource, context, { filename: 'browser-runner.js' });
+  // grading-shared.js first (defines ChickadeeGradingShared, which the runner
+  // destructures at IIFE start), then the runner — same order as the page.
+  const vmContext = vm.createContext(context);
+  vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
+  vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
 
   return {
     context,

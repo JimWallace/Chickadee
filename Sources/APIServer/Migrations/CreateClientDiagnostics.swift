@@ -19,6 +19,17 @@ struct CreateClientDiagnostics: ChickadeeMigration {
             .field("kind", .string, .required)
             .field("failed_checks", .string)
             .field("user_agent", .string)
+            // Folded from AddClientDiagnosticErrorDetail: error message, JS
+            // stack trace, and origin ("onerror" | "unhandledrejection" |
+            // "kernel") for browser-side failures. Editor-infrastructure
+            // errors only — never student-code execution.
+            .field("message", .string)
+            .field("stack", .string)
+            .field("source", .string)
+            // Folded from AddClientDiagnosticAppVersion: the ChickadeeVersion
+            // of the page build that emitted the report (stale value = stale
+            // browser tab, not a live regression). Nullable for old clients.
+            .field("app_version", .string)
             .field("created_at", .datetime, .required)
             .create()
 

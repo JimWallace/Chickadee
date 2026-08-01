@@ -1,6 +1,7 @@
 # Admin Diagnostic MCP Surface — Design
 
-Status: **proposed / design record**. This document captures the architecture
+Status: **shipped** (admin diagnostics MCP is live; this document is the
+design record). This document captures the architecture
 for a second, admin-scoped MCP service whose purpose is *operational
 diagnosis* — letting an authorized agent inspect server health, telemetry, and
 error reports to help diagnose bugs. It is deliberately **read-only** and
@@ -11,7 +12,7 @@ Decisions locked with the maintainer:
 1. **Separate MCP service**, not more tools on the existing `/mcp` endpoint.
 2. **Read-only.** Diagnosis only; "fixing bugs" happens through code changes and
    PRs, never through a live mutation surface.
-3. **Design doc first** — this file. No code until it's reviewed.
+3. **Design doc first** — this file.
 4. **Auth: reuse the OAuth flow** (same as the content endpoint), gated on
    `isAdmin` — see §3.3.
 5. **PII wall: code allowlist (revised — no new DB role).** The guarantee is

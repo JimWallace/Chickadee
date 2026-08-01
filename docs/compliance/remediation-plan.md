@@ -64,7 +64,8 @@ filters `kind == .validation`. It is not demonstrable from configuration.
 ### P0-2 — Lock in per-resource ownership coverage *(verify-only)*
 **Finding:** AUDIT-4b (Pass). Every resource-accepting handler already routes
 through `authorizeCourseAccess` / `authorizedAssignment*`
-(`ToolContext.swift:67-115`), confirmed across all 36 tools. The risk is
+(`ToolContext.swift:67-115`), confirmed across all 36 tools (the tool count at
+the time; 51 as of the 2026-07 re-audit). The risk is
 **regression**: a future tool could forget the check.
 
 **Change:** add a guard test that, for every tool in `MCPToolCatalog.live`,
