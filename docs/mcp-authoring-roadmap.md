@@ -21,7 +21,7 @@ The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships
-thirty-six tools, all `content:read` / `content:write` scoped and
+fifty-one tools, all `content:read` / `content:write` scoped and
 course-scoped. `MCPToolCatalog.live` is the source of truth for the count —
 prefer it over any prose figure, which can drift.
 
@@ -59,7 +59,9 @@ The catalog:
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
-| `create_suite_section` / `rename_suite_section` / `delete_suite_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
+| `create_suite_section` | `content:write` | Create a new, empty test-suite section (named display group) on an assignment; display-only, no regrade/close |
+| `rename_suite_section` | `content:write` | Rename an existing test-suite section (by section id from `get_suite`); display-only, no regrade/close |
+| `delete_suite_section` | `content:write` | Delete a test-suite section — tests in it are ungrouped (moved to the trailing Ungrouped block), not deleted; idempotent, no regrade/close |
 | `move_suite_item` | `content:write` | Move a script/family/check into a suite section, or ungroup it |
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable, append new cases (`addCases`), replace prerequisites (`dependsOn`) |

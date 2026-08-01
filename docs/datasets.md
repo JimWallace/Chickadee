@@ -5,8 +5,7 @@ HLTH 230 (Introduction to Health Informatics) and the desire to build
 assignments where students **query data to solve a problem** rather than
 just write standalone functions.
 
-Status: **design / not yet built.** This doc proposes the shape; the
-issues and PRs that implement it should link back here.
+Status: **shipped** (all three waves; this document is the design record).
 
 ---
 

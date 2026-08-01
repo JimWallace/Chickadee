@@ -111,7 +111,7 @@ same runs. Failures observed on unrelated branches 2026-06-26 (×3) and
 2026-07-02 — a low, persistent background rate that predates that week.
 
 **Context.** The probe *exists* to monitor a real historical bug — see
-`docs/exec-hang-investigation.md` and the boot-funnel telemetry work. The
+`docs/archive/exec-hang-investigation.md` and the boot-funnel telemetry work. The
 hang still exists at low frequency on webkit under CI load.
 
 **Gate policy (decided & shipped).** Chromium: hard zero everywhere.
@@ -159,7 +159,7 @@ chromium failure is treated as real, first time.
 ## Remaining attack order
 
 1. **Exec-hang root cause** (Families 2+3 share it) — continue from
-   `docs/exec-hang-investigation.md` with the probe breadcrumbs. The
+   `docs/archive/exec-hang-investigation.md` with the probe breadcrumbs. The
    dispatch/scheduled hard-zero runs of `grading-hang-probe.yml` are the
    fix's acceptance test.
 
@@ -327,7 +327,7 @@ chromium failure is treated as real, first time.
 - PR #1138 — the four byte-identical runs (28586988643, 28588059980,
   28588705591, 28589351648).
 - Stress repro (this doc, Family 1) — old 8/200 vs fixed 0/3000.
-- `docs/exec-hang-investigation.md` — the webkit exec-hang root-cause work.
+- `docs/archive/exec-hang-investigation.md` — the webkit exec-hang root-cause work.
 - `grading-hang-probe.yml` run history — background failure rate on
   unrelated branches (2026-06-26 ×3).
 - `editor-smoke.yml` run history — 24/25 green over the trailing window.

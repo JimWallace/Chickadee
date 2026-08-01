@@ -1924,7 +1924,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Responsive design  —  see docs/responsive-design-plan.md
+   Responsive design  —  see docs/archive/responsive-design-plan.md
    --------------------------------------------------------------------
    Hard constraint: the desktop (>1024px) rendering is unchanged.  Every
    rule below is either width-agnostic intrinsic CSS that is identical at

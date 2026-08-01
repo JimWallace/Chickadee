@@ -7,13 +7,17 @@ A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student co
 
 ## Key features
 
-- **Shell-script test suites.** Any language, any framework — the runner executes scripts and maps the exit code to `pass / fail / error / timeout`. Helper libraries are bundled in the test-setup zip by the instructor.
+- **Shell-script test suites.** Any language, any framework — the runner executes scripts and maps the exit code to `pass / fail / error / timeout`. Helper libraries are bundled in the test-setup zip by the instructor. Instructors can also define pattern-generated test families and notebook checks, which expand into ordinary scripts at save time.
+- **Python and R assignments.** Language is first-class: notebooks extract to `.py` or `.R`, personalization expressions evaluate through the matching interpreter, and the grading contract is identical for both.
+- **One grading core, two paths.** The same Swift grading core (`RunnerCore`) is compiled natively for the worker daemon and to WebAssembly for fully in-browser grading (Pyodide), pinned to identical behaviour by a shared output contract.
 - **Test dependency trees.** Tests can declare prerequisites (`dependsOn`). If a prerequisite doesn't pass, dependent tests are automatically skipped rather than run against broken code.
-- **Three test tiers.** `public` results are shown immediately; `release` results are hidden until the assignment deadline; `secret` results are never shown.
+- **Four test tiers.** `public` results are shown immediately; `release` results are hidden until the assignment deadline; `secret` results are never shown; `student` holds student-written tests.
+- **Per-student personalization.** Assignments can carry per-student inputs and datasets derived from a deterministic seed, so each student grades against their own values.
 - **In-browser notebook grading.** A full JupyterLite instance is embedded for both student submission and instructor assignment creation — no separate tooling required.
+- **Course machinery for a real term.** Per-course roles (`student` < `ta` < `instructor` on the enrollment), course sections and content items, assignment version history with restore, achievements, student-managed slip days, and BrightSpace (D2L) grade sync.
 - **Local and SSO auth.** Local username/password for development and self-hosting; full OIDC/SSO (Authorization Code + PKCE) for institutional deployments (Duo, Okta, Entra, etc.). Dual mode runs both simultaneously. Controlled by the `AUTH_MODE` environment variable; the admin role is auto-assigned from the `SSO_ADMIN_USERS` allowlist on every login (instructor authority is per-course, assigned from the course roster).
 - **HMAC-signed runner protocol.** All runner↔server requests are signed with a shared secret. The server auto-generates a diceware passphrase if none is provided.
-- **Content-authoring MCP server.** An opt-in [Model Context Protocol](https://modelcontextprotocol.io) endpoint (`/mcp`) lets AI agents author course content (assignments, etc.) over OAuth 2.1 bearer tokens. Deliberately scoped to authoring — it exposes no student data, grades, enrolment, or submissions. See [MCP content-authoring server](#mcp-content-authoring-server).
+- **Content-authoring MCP server.** An opt-in [Model Context Protocol](https://modelcontextprotocol.io) endpoint (`/mcp`) lets AI agents author course content (assignments, etc.) over OAuth 2.1 bearer tokens. Deliberately scoped to authoring — it exposes no student data, grades, enrolment, or submissions. A separate read-only admin diagnostics MCP surface serves operational triage. See [MCP content-authoring server](#mcp-content-authoring-server).
 
 ---
 
@@ -117,7 +121,7 @@ scripts/build-jupyterlite.sh
 
 Chickadee ships an optional [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-11-25) server at `POST /mcp` (Streamable HTTP, JSON-RPC 2.0) so AI agents can author course content. It is **off by default** and **scoped to authoring only** — the tools touch no student data, grades, enrolment, submissions, or administration, and the bearer gate rejects any token lacking a `content:*` scope. It has three modes: `off` (not mounted), `read_only` (agents can read content but never write — `content:write` is stripped from every request), and `read_write` (full authoring).
 
-For Phase 1, Chickadee acts as its own OAuth 2.1 authorization server: an admin provisions a service account and mints a short-lived bearer token. (Browser-based OAuth is a future phase.)
+Chickadee acts as its own OAuth 2.1 authorization server: connecting clients register via Dynamic Client Registration and complete a browser-based Authorization Code + PKCE flow with an explicit consent step, receiving short-lived bearer tokens (with rotating refresh tokens). An admin can also provision a service account and mint a token directly.
 
 ### Enable it
 
