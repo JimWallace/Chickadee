@@ -214,7 +214,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": "env-secret",
+            "RUNNER_SHARED_SECRET": "env-secret"
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -238,7 +238,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": nil
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -259,7 +259,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": nil,
+            "RUNNER_SHARED_SECRET": nil
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
@@ -345,7 +345,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
         try await withTestEnvironment([
-            "RUNNER_SHARED_SECRET": "cli-arg-secret",
+            "RUNNER_SHARED_SECRET": "cli-arg-secret"
         ]) {
             let resolved = resolveStartupWorkerSecret(
                 cliWorkerSecret: "cli-arg-secret",
