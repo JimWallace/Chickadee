@@ -53,6 +53,7 @@ enum MCPToolCatalog {
             UpdateNotebookTool().erased(),
             UpdateSolutionTool().erased(),
             AuthorScriptTool().erased(),
+            DeleteSupportFileTool().erased(),
             CreateCourseSectionTool().erased(),
             RenameCourseSectionTool().erased(),
             DeleteCourseSectionTool().erased(),

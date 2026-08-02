@@ -158,7 +158,10 @@ enum MCPServerInstructions {
         with update_solution (which stores it as the validation submission and re-runs validation).
         - Support files — non-graded helper/data files bundled in the setup zip (e.g. a CSV a check \
         loads, a helper module tests import). List or read them with get_support_files (byte-capped \
-        reads, so big datasets return a useful head); write one with author_script(tier:"support") — \
+        reads, so big datasets return a useful head); remove one with delete_support_file (support \
+        files only — a graded row belongs to delete_suite_item or its family/check, and the reserved \
+        setup members are refused; any graderOnly / dataset mark naming the file is cleared with it); \
+        write one with author_script(tier:"support") — \
         passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
         big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
         no private/loopback/metadata hosts, no redirects, 8 MB cap, UTF-8 body). \
@@ -225,7 +228,8 @@ enum MCPServerInstructions {
         family, or check into a section, or ungroup it), delete_suite_item (remove a script, family, \
         or check). Notebook/solution: update_notebook (replace the starter notebook), update_solution \
         (replace the reference solution and re-validate). Escape hatch: author_script (create/replace \
-        a hand-written test — only when no native kind fits — or a non-graded support/helper file). \
+        a hand-written test — only when no native kind fits — or a non-graded support/helper file), \
+        and delete_support_file to remove a support file outright rather than blanking it. \
         To create a new assignment, either clone_assignment from a known-good one and then edit the \
         copy (the safest path) or create_assignment to start a fresh notebook-based assignment from a \
         starter .ipynb.

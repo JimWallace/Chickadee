@@ -13,7 +13,8 @@ import Testing
         #expect(AssignmentLanguage.python.literal(.bool(true)) == "True")
         #expect(AssignmentLanguage.r.literal(.bool(true)) == "TRUE")
         #expect(AssignmentLanguage.python.literal(.null) == "None")
-        #expect(AssignmentLanguage.r.literal(.null) == "NULL")
+        // R's missing value is NA; NULL is zero-length and would drop out of c().
+        #expect(AssignmentLanguage.r.literal(.null) == "NA")
         #expect(AssignmentLanguage.r.literal(.array([.string("a"), .string("b")])) == "c(\"a\", \"b\")")
     }
 

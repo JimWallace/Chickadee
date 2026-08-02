@@ -58,6 +58,25 @@ import Testing
         #expect(!source.contains("['a', 'b']"), "must not emit a Python list")
     }
 
+    /// Nulls in a case must reach the generated script as `NA` inside an atomic
+    /// `c(...)`, never as `NULL` or a `list(...)`. Asserted on the rendered
+    /// source so it holds on machines without Rscript, where the execution
+    /// suite skips.
+    @Test func rRendersNullsAsNAInsideAtomicVectors() throws {
+        let fam = family(
+            kind: .boundaryEquality,
+            cases: [
+                onlyCase(
+                    [.array([.double(60), .null, .double(20)])],
+                    expected: .array([.string("G2"), .null, .string("G4")]))
+            ])
+        let source = try #require(renderPatternFamily(fam, language: .r).first).source
+        #expect(source.contains("c(60.0, NA, 20.0)"))
+        #expect(source.contains("expected <- c(\"G2\", NA, \"G4\")"))
+        #expect(!source.contains("NULL"), "NULL would drop out of c() and shorten the vector")
+        #expect(!source.contains("list(60"), "must stay an atomic vector, not a list")
+    }
+
     @Test func rExistenceGuardUsesRAndFailsNotErrors() throws {
         let fam = family(
             kind: .boundaryEquality, cases: [onlyCase([.int(1)], expected: .int(1))])
@@ -228,6 +247,44 @@ import Testing
                 submission: "letters_of <- function(s) strsplit(s, \"\")[[1]]\n") == 0)
         #expect(
             try run(script: script, submission: "letters_of <- function(s) c(\"b\", \"a\")\n") == 1)
+    }
+
+    /// An authored `null` is R's `NA`, so a case may cover the "NA in, NA out"
+    /// half of a function's contract. Regression: nulls used to render as
+    /// `NULL`, which demoted the whole arg to `list(...)` and blew up with
+    /// "'list' object cannot be coerced to type 'double'" before the student's
+    /// function was ever really exercised.
+    @Test func nullArgsAndExpectationsBecomeRNAs() throws {
+        guard Self.hasRscript else { return }
+        let stage =
+            "egfr_stage <- function(e) ifelse(e >= 60, \"G2\", \"G4\")\n"
+        let script = single(
+            kind: .boundaryEquality, functionName: "egfr_stage", paramNames: ["e"],
+            args: [.array([.double(60), .null, .double(20)])],
+            expected: .array([.string("G2"), .null, .string("G4")]))
+        // ifelse() propagates NA on its own, so the contract holds and it passes.
+        #expect(try run(script: script, submission: stage) == 0)
+        // Dropping the NA (length 2, not 3) must fail rather than error.
+        #expect(
+            try run(
+                script: script,
+                submission: "egfr_stage <- function(e) { e <- e[!is.na(e)]; "
+                    + "ifelse(e >= 60, \"G2\", \"G4\") }\n") == 1)
+        // Substituting a string for the NA must fail too.
+        #expect(
+            try run(
+                script: script,
+                submission: "egfr_stage <- function(e) ifelse(is.na(e), \"unknown\", "
+                    + "ifelse(e >= 60, \"G2\", \"G4\"))\n") == 1)
+    }
+
+    /// A lone NA argument is still an atomic vector, not a list.
+    @Test func aLoneNullArgIsAnAtomicNA() throws {
+        guard Self.hasRscript else { return }
+        let script = single(
+            kind: .boundaryEquality, functionName: "is_missing", paramNames: ["x"],
+            args: [.array([.null])], expected: .array([.bool(true)]))
+        #expect(try run(script: script, submission: "is_missing <- function(x) is.na(x)\n") == 0)
     }
 
     /// An integer return against a JSON-decoded double expectation must pass —
