@@ -77,14 +77,20 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
     /// Deterministic R literal representation, suitable for embedding inside
     /// generated R test scripts and the `_ck_inputs.R` inputs file. Mirrors
     /// `pythonLiteral` but emits R syntax:
-    ///   - null → NULL; true/false → TRUE/FALSE
+    ///   - null → NA; true/false → TRUE/FALSE
     ///   - an array whose elements are all the same scalar kind (all logical,
-    ///     all numeric, or all character) → `c(...)`; anything else (mixed,
-    ///     nested, containing null/objects, or empty) → `list(...)`
+    ///     all numeric, or all character), optionally interleaved with nulls
+    ///     → `c(...)`; anything else (mixed kinds, nested, containing objects,
+    ///     or empty) → `list(...)`
     ///   - object → named `list(...)` with keys in sorted order
+    ///
+    /// A JSON null is a *missing value*, which in R is `NA` — not `NULL`.
+    /// `NULL` is a zero-length object that silently vanishes inside `c()`, so
+    /// rendering it here would shorten the vector and break the alignment an
+    /// authored case depends on (`[60, null, 20]` must stay length 3).
     public var rLiteral: String {
         switch self {
-        case .null: return "NULL"
+        case .null: return "NA"
         case .bool(let b): return b ? "TRUE" : "FALSE"
         case .int(let i): return String(i)
         case .double(let d):
@@ -130,20 +136,36 @@ private func encodePythonString(_ s: String) -> String {
 /// True when every element is a scalar of the *same* R atomic kind (all
 /// logical, all numeric — int/double mix is fine — or all character), so the
 /// array renders as a homogeneous `c(...)` vector. Empty arrays and anything
-/// containing null / arrays / objects fall through to `list(...)` (base R's
-/// `c()` would silently drop NULLs or flatten nested vectors).
+/// containing arrays / objects fall through to `list(...)` (base R's `c()`
+/// would flatten nested vectors).
+///
+/// Nulls are *wildcards*: they render as `NA`, which R admits into an atomic
+/// vector of any type, so `[60, null, 20]` is still a numeric vector and
+/// `["G2", null, "G4"]` is still a character one. An all-null array is
+/// homogeneous too — `c(NA, NA)` is a logical NA vector, which is what R's own
+/// JSON readers produce. Without this, a single authored null would demote the
+/// whole case to `list(...)` and the student's function would be handed a list
+/// where it expects an atomic vector.
 private func isHomogeneousScalarArray(_ items: [JSONValue]) -> Bool {
     guard !items.isEmpty else { return false }
-    func kind(_ v: JSONValue) -> Int? {
+    // nil = null (compatible with every kind); .some(nil) = not a scalar at all.
+    func kind(_ v: JSONValue) -> Int?? {
         switch v {
+        case .null: return Int??.some(nil)
         case .bool: return 0
         case .int, .double: return 1  // numeric
         case .string: return 2
-        case .null, .array, .object: return nil
+        case .array, .object: return Int??.none
         }
     }
-    guard let first = kind(items[0]) else { return false }
-    return items.allSatisfy { kind($0) == first }
+    var seen: Int?
+    for item in items {
+        guard let scalar = kind(item) else { return false }  // array / object
+        guard let k = scalar else { continue }  // null: compatible with anything
+        if let s = seen, s != k { return false }
+        seen = k
+    }
+    return true
 }
 
 private func encodeRString(_ s: String) -> String {
