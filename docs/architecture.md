@@ -590,7 +590,7 @@ refresh; an hourly reaper drops dead OAuth rows.
 
 Lets an agent author course content on an instructor's behalf. Gated by
 `MCP_MODE` (`off` / `read_only` / `read_write`); scopes are clamped to the
-mode ceiling. The catalog holds **51 tools** — `MCPToolCatalog.live` in
+mode ceiling. The catalog holds **52 tools** — `MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source
 of truth — covering course/assignment/suite/notebook/solution reads, suite +
 pattern-family + notebook-check + script authoring, course sections and

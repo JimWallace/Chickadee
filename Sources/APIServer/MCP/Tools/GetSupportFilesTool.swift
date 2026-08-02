@@ -109,7 +109,9 @@ struct GetSupportFilesTool: ContentTool {
 
     /// Zip entries that are never support files: the canonical notebooks have
     /// dedicated read tools. Matches `extractSupportFilesToSharedDirectory`.
-    private static let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    /// `DeleteSupportFileTool` reuses this so its remaining-count agrees with
+    /// what this tool lists, instead of the two filters drifting apart.
+    static let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(

@@ -8,8 +8,8 @@ end and `mcp-student-data-audit-2026-07.md` for the full re-audit).
 This is a complete, one-row-per-tool inventory of the MCP capability surface,
 walked from the live registry (`MCPToolCatalog.live`,
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) down to each
-tool's handler. As of the 2026-07 refresh the content catalog registers
-**51 tools** (the table below plus the six-tool addendum), and a second,
+tool's handler. As of the 2026-07 refresh (plus `delete_support_file`) the content catalog
+registers **52 tools** (the table below plus the six-tool addendum), and a second,
 admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registers
 **19 read-only tools** — inventoried in the addendum. The registries are the
 source of truth; a census re-count is required whenever either changes
@@ -50,7 +50,7 @@ source of truth; a census re-count is required whenever either changes
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 
-## Write tools (`content:write`) — 25
+## Write tools (`content:write`) — 26
 
 | Tool | Handler (`file`) | Resource arg | Authz | Writes / touches |
 |------|------------------|--------------|-------|------------------|
@@ -61,6 +61,7 @@ source of truth; a census re-count is required whenever either changes
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |
+| `delete_support_file` | `DeleteSupportFileTool.swift:49` | `assignmentPublicID` + `filename` | course-enrol (`:110`) | `APITestSetup` manifest + zip |
 | `move_suite_item` | `MoveSuiteItemTool.swift:53` | `assignmentPublicID` + item | course-enrol (`:111`) | `APITestSetup` manifest (placement only) |
 | `create_pattern_family` | `CreatePatternFamilyTool.swift:131` | `assignmentPublicID` | course-enrol (`:312`) | `APITestSetup` manifest + generated scripts |
 | `update_pattern_family` | `UpdatePatternFamilyTool.swift:123` | `assignmentPublicID` | course-enrol (`:329`) | `APITestSetup` manifest + generated scripts |
