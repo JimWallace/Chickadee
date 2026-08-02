@@ -9,6 +9,35 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-02
+
+### Added
+
+- **`delete_support_file` MCP tool.** Removes one non-graded support/data file from
+  an assignment's test setup. `author_script(tier: "support")` could create and
+  replace support files but never remove one, so retiring a helper module or a stale
+  fixture meant overwriting it with a stub — leaving a dead entry in the setup zip
+  that students could still download. The tool refuses graded rows (pointing at
+  `delete_suite_item` or the owning family/check) and the reserved setup members
+  (`test.properties.json`, `assignment.ipynb`, `solution.ipynb`), clears any
+  `graderOnlyFiles` / `datasets` mark naming the file, re-syncs the shared support
+  directory so student symlinks disappear, and re-runs validation — so a remaining
+  test that still sources the file fails loudly instead of at submission time.
+  Content catalog is now 52 tools.
+
+### Fixed
+
+- **R pattern-family and notebook-check cases can express `NA`.** An authored JSON
+  `null` now renders as R's `NA` rather than `NULL`, and a null interleaved among
+  scalars no longer demotes the whole array to `list(...)` — `[60, null, 20]` renders
+  as `c(60, NA, 20)`, `["G2", null, "G4"]` as `c("G2", NA, "G4")`. Previously `NULL`
+  silently vanished inside `c()`, so an NA-bearing case handed the student's function
+  a list and failed with `'list' object cannot be coerced to type 'double'` before the
+  function was meaningfully exercised. This made the "NA in, NA out" half of a
+  function's contract unauthorable as a pattern family, forcing hand-written scripts.
+  Mixed-kind arrays still render as `list(...)`; a null does not rescue them.
+
+
 ## [0.5.0] - 2026-08-01
 
 ### Changed
