@@ -66,6 +66,7 @@ The catalog:
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable, append new cases (`addCases`), replace prerequisites (`dependsOn`) |
 | `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
+| `delete_support_file` | `content:write` | Remove a non-graded support/data file from the setup zip (graded rows and reserved members refused; clears any graderOnly / dataset mark) |
 | `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
 | `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |

@@ -34,6 +34,9 @@ import Testing
         "AuthorScriptTool.swift",
         "CreatePatternFamilyTool.swift",
         "DeleteSuiteItemTool.swift",
+        // Removing a support file can break a test that sources it, so the
+        // suite's behaviour changes even though no graded row is touched.
+        "DeleteSupportFileTool.swift",
         "MoveSuiteItemTool.swift",  // placement-only: finalize with retest: false
         // Puts back a recorded version of the manifest + setup files: the graded
         // suite changes wholesale, so it closes and re-grades like any other edit.
