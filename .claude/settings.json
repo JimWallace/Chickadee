@@ -10,5 +10,45 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "mcp__Chickadee__list_courses",
+      "mcp__Chickadee__list_assignments",
+      "mcp__Chickadee__get_assignment",
+      "mcp__Chickadee__get_suite",
+      "mcp__Chickadee__get_notebook",
+      "mcp__Chickadee__get_solution",
+      "mcp__Chickadee__get_support_files",
+      "mcp__Chickadee__get_global_inputs",
+      "mcp__Chickadee__list_course_sections",
+      "mcp__Chickadee__list_content_items",
+      "mcp__Chickadee__get_achievements",
+      "mcp__Chickadee__get_server_info",
+      "mcp__Chickadee__validate_assignment",
+      "mcp__Chickadee__get_validation_result",
+      "mcp__Chickadee__preview_personalization",
+      "mcp__Chickadee__list_assignment_versions",
+      "mcp__Chickadee__get_assignment_version",
+      "mcp__Chickadee_Admin__get_deployment_info",
+      "mcp__Chickadee_Admin__get_deploy_status",
+      "mcp__Chickadee_Admin__get_deploy_history",
+      "mcp__Chickadee_Admin__get_health_alerts",
+      "mcp__Chickadee_Admin__get_queue_state",
+      "mcp__Chickadee_Admin__list_runners",
+      "mcp__Chickadee_Admin__get_runner_detail",
+      "mcp__Chickadee_Admin__query_logs",
+      "mcp__Chickadee_Admin__get_browser_diagnostics",
+      "mcp__Chickadee_Admin__query_audit_log",
+      "mcp__Chickadee_Admin__get_metrics_snapshot",
+      "mcp__Chickadee_Admin__get_metrics_timeseries",
+      "mcp__Chickadee_Admin__get_metrics_card_series",
+      "mcp__Chickadee_Admin__get_instructor_card_series",
+      "mcp__Chickadee_Admin__get_active_users_series",
+      "mcp__Chickadee_Admin__get_request_metrics",
+      "mcp__Chickadee_Admin__get_storage_usage",
+      "mcp__Chickadee_Admin__get_brightspace_sync_status",
+      "mcp__Chickadee_Admin__list_connected_agents"
+    ]
   }
 }
