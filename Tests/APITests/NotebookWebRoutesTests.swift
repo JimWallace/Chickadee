@@ -222,6 +222,80 @@ import VaporTesting
         }
     }
 
+    // MARK: - Embedded mode (assignment workbench panes)
+
+    /// `?embedded=1` renders the same page without the site chrome, so the
+    /// notebook can be composed into a workbench pane without three stacked
+    /// copies of the nav.  Asserted against the *same* setup in both modes so
+    /// the only difference under test is the flag.
+    @Test func notebookPageEmbeddedDropsSiteChromeButKeepsEditor() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_embedded"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Embedded seed"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Embedded Lab")
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("<nav class=\"nav\""), "Standalone page keeps the site nav")
+                    #expect(html.contains("/idle-logout.js"))
+                    #expect(!html.contains("jl-frame-embedded"))
+                })
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?embedded=1",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Chrome gone …
+                    #expect(!html.contains("<nav class=\"nav\""), "Embedded pane must not render the site nav")
+                    #expect(!html.contains("skip-link"))
+                    // … watchdog swapped for the forwarder (the shell owns the
+                    // idle timer; the pane only reports activity to it) …
+                    #expect(!html.contains("/idle-logout.js"))
+                    #expect(html.contains("/embedded-activity.js"))
+                    // … and the editor itself is untouched, now pane-height.
+                    #expect(html.contains("data-setup-id=\"\(setupID)\""))
+                    #expect(html.contains("jl-frame-embedded"))
+                })
+        }
+    }
+
+    /// `embedded` is a rendering hint, never a permission.  A student who
+    /// appends it to a solution URL gets the same 403 as without it — the
+    /// staff-only guard runs before the flag is ever consulted.
+    @Test func embeddedFlagGrantsNoAccessToTheSolution() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_embedded_sol"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Seed"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Embedded Solution Guard")
+
+            for path in [
+                "/testsetups/\(setupID)/notebook?file=solution&embedded=1",
+                "/testsetups/\(setupID)/notebook/source?file=solution&embedded=1",
+            ] {
+                try await app.asyncTest(
+                    .GET, path,
+                    beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                    afterResponse: { res in
+                        #expect(res.status == .forbidden, "Expected 403 for \(path)")
+                    })
+            }
+        }
+    }
+
     @Test func notebookPageSeedsWorkingCopyAndRendersEditorFrame() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent()

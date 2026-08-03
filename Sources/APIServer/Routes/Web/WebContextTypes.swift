@@ -244,6 +244,12 @@ struct NotebookContext: Encodable {
     /// copy could not be stat'd.
     let workingCopyMtime: Int
     let currentUser: CurrentUserContext?
+    /// True when this page is being rendered into a pane of the assignment
+    /// workbench rather than as a top-level document.  `base.leaf` reads it to
+    /// suppress the site chrome (nav, colour bar, course tabs); the notebook
+    /// page reads it to let the editor iframe fill the pane.  `nil` on every
+    /// standalone render, which is what keeps the existing page byte-identical.
+    let embedded: Bool?
 }
 
 // MARK: - Submission history page

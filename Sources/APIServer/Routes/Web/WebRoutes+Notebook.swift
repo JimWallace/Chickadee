@@ -27,6 +27,10 @@ extension WebRoutes {
             var submissionID: String?
             var file: String?
             var view: String?
+            /// `?embedded=1` from the workbench shell.  Decoded as `Bool` —
+            /// Vapor's form decoder already accepts `1` / `true` — so there is
+            /// no truthiness helper to keep in sync.
+            var embedded: Bool?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -109,7 +113,13 @@ extension WebRoutes {
             assignmentTitle: assignmentTitle,
             isClosed: isClosed,
             isStaff: isStaff,
-            viewMode: viewMode
+            viewMode: viewMode,
+            // `?embedded=1` is a rendering hint from the workbench shell, not a
+            // permission: every gate above (solution-is-staff-only, the closed
+            // gate, `canSaveToAssignment`) has already been decided without
+            // reference to it, so a student appending it to the URL gains
+            // nothing beyond a page with no nav bar.
+            embedded: query.embedded == true ? true : nil
         )
         if !requestedSubmissionID.isEmpty {
             return try await renderSubmissionNotebookView(
@@ -236,7 +246,8 @@ extension WebRoutes {
                 isTemplateView: false,
                 viewToggleURL: nil,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
-                currentUser: req.currentUserContext
+                currentUser: req.currentUserContext,
+                embedded: args.embedded
             ))
     }
 
@@ -357,7 +368,8 @@ extension WebRoutes {
                 isTemplateView: viewMode == .template,
                 viewToggleURL: viewToggleURL,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
-                currentUser: req.currentUserContext
+                currentUser: req.currentUserContext,
+                embedded: args.embedded
             ))
     }
 
@@ -380,6 +392,11 @@ extension WebRoutes {
         /// template or a per-viewer rendering.  Always `.personalized` for
         /// students and for the submission-history view.
         let viewMode: NotebookViewMode
+        /// True when this render is a pane of the assignment workbench.
+        /// Purely presentational — it suppresses the site chrome and lets the
+        /// editor iframe fill the pane.  `nil` (not `false`) when absent, so
+        /// the standalone page's HTML is unchanged.
+        let embedded: Bool?
     }
 
     /// Which reading of the notebook this request gets.

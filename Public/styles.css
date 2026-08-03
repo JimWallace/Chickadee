@@ -832,6 +832,12 @@ code { font-family: var(--font-mono); font-size: .9em; }
     display: block;
 }
 
+/* The notebook page rendered into an assignment-workbench pane.  `100vh` here
+   is the *pane iframe's* height, not the window's, and the pane has no site nav
+   above it — so only the notebook's own toolbar row has to be subtracted, where
+   the standalone page also pays for the nav and course tabs. */
+.jl-frame-embedded { height: calc(100vh - 3rem); }
+
 /* ── Auth pages ──────────────────────────────────────── */
 
 .auth-box {

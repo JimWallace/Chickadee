@@ -152,4 +152,11 @@ struct EditAssignmentContext: Encodable {
     let timeLimitSeconds: Int
     let notice: String?
     let error: String?
+    /// True when this page is being rendered into the left pane of the
+    /// assignment workbench (`GET /instructor/:assignmentID/workbench/panel`)
+    /// rather than as the standalone edit page.  `base.leaf` reads it to
+    /// suppress the site chrome, and the template reads it to drop the
+    /// "Open workbench" link (the workbench must not link to itself).
+    /// `nil` on the standalone `/edit` render.
+    let embedded: Bool?
 }

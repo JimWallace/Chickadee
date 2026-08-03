@@ -645,7 +645,8 @@ struct InstructorDashboardRoutes: RouteCollection {
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
-            error: q?.error
+            error: q?.error,
+            embedded: nil
         )
         return try await req.view.render("assignment-edit", ctx)
     }

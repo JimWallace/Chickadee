@@ -24,6 +24,15 @@
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
 </head>
 <body>
+<!-- Site chrome — the nav, the colour bar, and the course tabs.  Suppressed
+     when `embedded` is set, i.e. when this page is being rendered *into a pane*
+     of the assignment workbench (`workbench.leaf`) rather than as a top-level
+     document.  The workbench composes two existing pages as same-origin
+     iframes, and three stacked copies of the nav inside one viewport is both
+     noise and a duplicate set of landmarks for a screen reader.  `embedded` is
+     absent from every other page context, and a missing Leaf variable is
+     falsy, so those pages render exactly as before. -->
+#if(!embedded):
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <nav class="nav">
     <a class="nav-brand" href="/">
@@ -110,12 +119,22 @@
     #endfor
 </nav>
 #endif
+#endif
 <main class="main" id="main-content">
     #import("content")
 </main>
 <script src="/app.js?v=#appVersion()"></script>
 #if(currentUser):
+#if(embedded):
+<!-- An embedded pane has no nav, so it has no logout form and `idle-logout.js`
+     would bail out on its own.  Load the forwarder instead: the idle watchdog
+     lives on the workbench shell, but every keystroke happens down here in a
+     pane, so without this the shell would sit "idle" and sign the author out
+     mid-edit. -->
+<script src="/embedded-activity.js?v=#appVersion()"></script>
+#else:
 <script src="/idle-logout.js?v=#appVersion()"></script>
+#endif
 #endif
 <script>
 // All multipart/form-data uploads bypass the hidden _csrf body field because
