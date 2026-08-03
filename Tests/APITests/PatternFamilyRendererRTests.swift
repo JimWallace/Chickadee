@@ -439,4 +439,53 @@ import Testing
         proc.waitUntilExit()
         #expect(proc.terminationStatus == 0, "expected 7 delivered via _ck_inputs.R")
     }
+
+    /// The same end-to-end path for variable_equality: a per-student expected
+    /// against a module-level variable, with no function involved. This is the
+    /// shape a recap exercise takes ("your sd_systolic equals your value"), and
+    /// it was rejected outright before.
+    @Test func variableEqualityPerStudentExpectedRunsForReal() throws {
+        guard Self.hasRscript else { return }
+        let c = PatternCase(
+            key: "01", label: "sd_systolic", args: [.string("sd_systolic")], expected: .null,
+            expectedVarRef: "sd_expected")
+        let fam = PatternFamily(
+            id: "sd", name: "SD", kind: .variableEquality, functionName: "",
+            paramNames: [], cases: [c])
+        let script = try #require(
+            renderPatternFamily(fam, perStudentNames: ["sd_expected"], language: .r).first)
+        #expect(script.source.contains("_ck_inputs.R"), "must bind the per-student value")
+
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("ck-rvar-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        try Self.canonicalRuntime().write(
+            to: dir.appendingPathComponent("test_runtime.R"), atomically: true, encoding: .utf8)
+        try AssignmentLanguage.r.renderInputsFile(["sd_expected": "9.5"]).write(
+            to: dir.appendingPathComponent("_ck_inputs.R"), atomically: true, encoding: .utf8)
+        let scriptURL = dir.appendingPathComponent(script.filename)
+        try script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        func runWith(_ submission: String) throws -> Int32 {
+            try submission.write(
+                to: dir.appendingPathComponent("solution.R"), atomically: true, encoding: .utf8)
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["Rscript", scriptURL.path]
+            proc.currentDirectoryURL = dir
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus
+        }
+
+        // Matches this student's personalized value.
+        #expect(try runWith("sd_systolic <- 9.5\n") == 0)
+        // Another student's answer must not pass.
+        #expect(try runWith("sd_systolic <- 8.1\n") == 1)
+        // Undefined is a clean failure, not an error.
+        #expect(try runWith("other <- 9.5\n") == 1)
+    }
 }

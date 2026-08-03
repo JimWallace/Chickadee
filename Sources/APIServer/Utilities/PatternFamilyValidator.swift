@@ -101,11 +101,11 @@ private func validateFamilyVariablesAndArgRefs(
             }
             // Per-student arg refs are bound by the generated case's
             // personalization preamble, which only the equality kinds emit.
-            if isPerStudent, !kindSupportsPerStudentRefs(family.kind) {
+            if isPerStudent, !kindSupportsPerStudentArgRefs(family.kind) {
                 throw Abort(
                     .unprocessableEntity,
                     reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in \(perStudentCapableKindsDescription) families for now."
+                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in \(perStudentArgCapableKindsDescription) families for now."
                 )
             }
         }
@@ -119,23 +119,26 @@ private func validateFamilyVariablesAndArgRefs(
                         "Pattern family '\(family.id)': case '\(c.key)' expected reference '$\(eref)' must name a per-student input (a global or section `=` expression)."
                 )
             }
-            guard kindSupportsPerStudentRefs(family.kind) else {
+            guard kindSupportsPerStudentExpected(family.kind) else {
                 throw Abort(
                     .unprocessableEntity,
                     reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in \(perStudentCapableKindsDescription) families for now."
+                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in \(perStudentExpectedCapableKindsDescription) families for now."
                 )
             }
         }
     }
 }
 
-/// Whether a kind's generated cases bind per-student `_ck_inputs` (so `$name`
-/// arg refs and `expectedVarRef` resolve at grading time).  Extend as renderers
-/// gain the personalization preamble (`personalizationPreambleForCase`).  An
-/// exhaustive switch — a new `PatternKind` must opt in or out here explicitly,
-/// and `perStudentCapableKindsDescription` below must name the same set.
-private func kindSupportsPerStudentRefs(_ kind: PatternKind) -> Bool {
+/// Whether a kind's generated cases can bind a per-student `$name` ARG ref.
+/// Only the function-calling equality kinds can: they build a call from
+/// `args`, so a bound name reaches the student's function.  `variableEquality`
+/// cannot — its `args[0]` is the *name* of the variable to inspect, baked into
+/// the script as a literal, so an arg ref there would be silently ignored
+/// rather than personalizing anything.  An exhaustive switch — a new
+/// `PatternKind` must opt in or out explicitly, and
+/// `perStudentArgCapableKindsDescription` must name the same set.
+private func kindSupportsPerStudentArgRefs(_ kind: PatternKind) -> Bool {
     switch kind {
     case .boundaryEquality, .approximateEquality, .unorderedEquality: return true
     case .variableEquality, .returnTypeCheck, .exceptionExpected,
@@ -144,10 +147,31 @@ private func kindSupportsPerStudentRefs(_ kind: PatternKind) -> Bool {
     }
 }
 
+/// Whether a kind's generated cases can bind a per-student EXPECTED value.
+/// This is a strictly weaker requirement than an arg ref: the case only needs
+/// to emit the personalization preamble and read `expected` from it, which
+/// every equality-shaped kind does.  `variableEquality` qualifies — "this
+/// student's `sd_systolic` equals this student's expected value" is the
+/// simplest personalization there is, and withholding it forced authors to
+/// reshape a variable exercise into a function purely to get a per-student
+/// answer.  Extend as renderers gain the preamble
+/// (`personalizationPreambleForCase` / `rPersonalizationPreambleForCase`).
+private func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
+    switch kind {
+    case .boundaryEquality, .approximateEquality, .unorderedEquality, .variableEquality:
+        return true
+    case .returnTypeCheck, .exceptionExpected, .performanceThreshold, .stdoutEquality:
+        return false
+    }
+}
+
 /// Human-readable list of the kinds `kindSupportsPerStudentRefs` allows, for
 /// validation error messages.  Keep in lockstep with the switch above.
-private let perStudentCapableKindsDescription =
+private let perStudentArgCapableKindsDescription =
     "boundary_equality, approximate_equality, and unordered_equality"
+
+private let perStudentExpectedCapableKindsDescription =
+    "boundary_equality, approximate_equality, unordered_equality, and variable_equality"
 
 /// Validates the family `id`, `functionName`, and `paramNames` fields
 /// — the structural header of one `PatternFamily` before its cases are

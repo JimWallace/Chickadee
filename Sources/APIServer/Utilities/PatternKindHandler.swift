@@ -137,7 +137,9 @@ struct VariableEqualityKind: PatternKindHandler {
         sectionVariables: [FamilyVariable], specHash: String,
         perStudentNames: Set<String>
     ) -> String {
-        renderVariableEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+        renderVariableEquality(
+            family: family, case: c, sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
     }
 
     func validateCase(family: PatternFamily, case c: PatternCase) throws {

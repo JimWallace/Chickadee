@@ -556,6 +556,100 @@ import Vapor
         }
     }
 
+    // MARK: - Personalization for variableEquality
+
+    private func perStudentVariableFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "sd_systolic", args: [.string("sd_systolic")], expected: .null,
+            expectedVarRef: "sd_expected")
+        return PatternFamily(
+            id: "sd", name: "Standard deviation", kind: .variableEquality,
+            functionName: "", paramNames: [], cases: [c])
+    }
+
+    /// The simplest personalization there is — "this student's variable equals
+    /// this student's value". Previously rejected, which forced an author to
+    /// reshape a variable exercise into a function purely to get a per-student
+    /// answer.
+    @Test func variableEqualityEmitsPerStudentPreambleAndExpectedRef() throws {
+        let scripts = renderPatternFamily(
+            perStudentVariableFamily(), perStudentNames: ["sd_expected"])
+        let src = try #require(scripts.first).source
+        try pfAssertValidPythonSyntax(src, label: "sd_01")
+        #expect(src.contains("_ck_inputs.py"))
+        #expect(src.contains(#"sd_expected = _ck["sd_expected"]"#))
+        #expect(src.contains("Personalization input"))  // fails closed when missing
+        // Expected is the bare per-student ref; the variable NAME stays literal.
+        #expect(src.contains("expected      = sd_expected"))
+        #expect(src.contains(#"variable_name = "sd_systolic""#))
+        #expect(!src.contains("expected      = None"))
+    }
+
+    /// A family with no per-student refs must render exactly as before — the
+    /// preamble is "" and the expected is the same baked literal. Generated
+    /// bytes feed spec_hash / TestSetupCache keys, so any drift here would
+    /// invalidate every existing variable_equality family's cache.
+    @Test func variableEqualityWithoutRefsIsByteIdentical() throws {
+        let c = PatternCase(
+            key: "01", label: "answer", args: [.string("answer")], expected: .int(42))
+        let family = PatternFamily(
+            id: "ans", name: "Answer", kind: .variableEquality,
+            functionName: "", paramNames: [], cases: [c])
+        // Rendered with and without a per-student name in scope: neither case
+        // references one, so both must be identical, and neither may carry a
+        // preamble.
+        let bare = try #require(renderPatternFamily(family).first).source
+        let withNames = try #require(
+            renderPatternFamily(family, perStudentNames: ["unrelated"]).first
+        ).source
+        #expect(bare == withNames)
+        #expect(!bare.contains("_ck_inputs.py"))
+        #expect(bare.contains("expected      = 42"))
+    }
+
+    /// An arg ref stays rejected for this kind: args[0] is the *name* of the
+    /// variable to inspect and is baked in as a literal, so a bound value
+    /// would be silently ignored rather than personalizing anything.
+    @Test func variableEqualityStillRejectsPerStudentArgRefs() throws {
+        // args[0] is a valid literal name, so the kind's own structural check
+        // passes and the per-student arg-ref gate is what rejects this.
+        let c = PatternCase(
+            key: "01", label: "X", args: [.string("sd_systolic")], expected: .int(1),
+            argVarRefs: ["which_var"])
+        let family = PatternFamily(
+            id: "v", name: "V", kind: .variableEquality,
+            functionName: "", paramNames: ["name"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["which_var"])
+        } throws: { error in
+            #expect(
+                "\(error)".contains(
+                    "only supported in boundary_equality, approximate_equality, and unordered_equality"
+                ))
+            return true
+        }
+    }
+
+    /// A kind with no preamble at all still refuses a per-student expected,
+    /// and the message names the wider expected-capable set.
+    @Test func unsupportedKindStillRejectsPerStudentExpected() throws {
+        let c = PatternCase(
+            key: "01", label: "X", args: [.null], expected: .string("int"),
+            expectedVarRef: "t_expected")
+        let family = PatternFamily(
+            id: "rt", name: "RT", kind: .returnTypeCheck,
+            functionName: "f", paramNames: ["x"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["t_expected"])
+        } throws: { error in
+            #expect("\(error)".contains("uses a per-student expected"))
+            #expect("\(error)".contains("and variable_equality"))
+            return true
+        }
+    }
+
     // MARK: - Personalization for approximateEquality (Slice E)
 
     private func perStudentApproxFamily() -> PatternFamily {
