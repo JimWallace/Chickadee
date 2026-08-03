@@ -712,7 +712,11 @@ css-vars + design-token guards too — same as the CI `format-lint` job).
 ## Versioning
 
 Follows Semantic Versioning in the `0.y.z` phase. The version lives in the
-`VERSION` file + `ChickadeeVersion.current` in Core.
+`VERSION` file + `ChickadeeVersion.current` in Core. What each slot means
+here — patches never remove compatibility surface; minors are deliberate
+era/removal boundaries; majors are deployer-gated — is documented in
+"What the numbers mean while we are 0.y.z" in
+[docs/release-process.md](docs/release-process.md).
 
 **Versions are assigned at merge time — do NOT bump them in a PR.** A PR must
 not touch `VERSION`, `Sources/Core/ChickadeeVersion.swift`, or `CHANGELOG.md`

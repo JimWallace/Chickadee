@@ -64,6 +64,34 @@ follow-up step.
 `scripts/check-version.sh` still enforces `VERSION == ChickadeeVersion.current`;
 the release script writes both together, so they never drift.
 
+## What the numbers mean while we are 0.y.z
+
+SemVer's major-version-zero rule is that nothing is promised yet ("anything
+MAY change at any time"), so the slots below are this project's own policy —
+adopted at the 0.5.0 cut — with the enforceable parts wired into tooling
+rather than left to convention:
+
+- **Patch — auto-cut on every merged fragment.** Routine change. A patch must
+  never remove or break a compatibility surface: an env var, a route, a wire
+  field, a bundle key, a stored format. Auto-release can only produce
+  patches, so "a merge never breaks an operator" is structural, not a review
+  item — if a PR retires something, it is not a patch (see the next bullet)
+  and must wait.
+- **Minor — deliberate and manual.** An era boundary, a batch of
+  compatibility removals, or both. 0.5.0 was both: the capstone on the first
+  full course offering *and* the retirement of the pre-0.5 shims
+  (`WORKER_SHARED_SECRET`, `/admin/workers`, the bundle `isOpen` write side,
+  …). Removals accumulate behind deprecation warnings on patches and land
+  together at the next minor, where the changelog announces them in one
+  place.
+- **Major — manual, and deployer-gated.** Reserved. The deploy daemon holds
+  major bumps for human approval, so 1.0.0 will be the first release that
+  cannot reach production without an explicit operator sign-off. 1.0 is also
+  the point where external contracts — the `.chickadee` bundle format, the
+  MCP surfaces, the runner wire protocol — would become promises to parties
+  other than ourselves; until some other institution consumes one of those,
+  0.y.z's freedom is doing no harm.
+
 ## Cutting a minor (or major) release — manual by design
 
 Auto-release is **patch-only by construction**: `assemble-release.sh` computes
