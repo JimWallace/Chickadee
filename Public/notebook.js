@@ -20,6 +20,8 @@
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
+    // Course-staff authoring control; absent for students (see notebook.leaf).
+    const saveAssignmentBtn = document.getElementById('nb-save-assignment');
     const setupID     = frame ? frame.dataset.setupId : null;
     const gradingMode = frame ? frame.dataset.gradingMode : null;
     // Closed-assignment read-only mode.  Plumbed from the server via
@@ -1245,6 +1247,56 @@
         if (!nbRes.ok) return null;
         const notebook = await nbRes.json();
         return looksLikeNotebook(notebook) ? notebook : null;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2b. "Save to assignment" — course staff authoring
+    // -------------------------------------------------------------------------
+    // JupyterLite keeps the live document in the browser, so authoring edits
+    // reach the server only when something POSTs them. The button is rendered
+    // server-side for course staff only (NotebookContext.canSaveToAssignment);
+    // the endpoint re-checks the same permission, so this is convenience, not
+    // the control.
+    if (saveAssignmentBtn) {
+        const saveFileKind = saveAssignmentBtn.dataset.fileKind === 'solution' ? 'solution' : 'assignment';
+        const saveLabel = saveAssignmentBtn.textContent;
+        saveAssignmentBtn.addEventListener('click', async () => {
+            saveAssignmentBtn.disabled = true;
+            saveAssignmentBtn.textContent = 'Saving…';
+            clearResults();
+            setStatus('loading', 'Capturing notebook…');
+            try {
+                // Same capture chain the Submit button uses (live frame →
+                // server snapshot → visible DOM → contents API), so a save
+                // never silently stores stale bytes when the editor is slow.
+                const notebook = await loadNotebookForSubmit();
+                setStatus('loading', 'Saving to the assignment…');
+                const res = await fetch(
+                    `/testsetups/${encodeURIComponent(setupID)}/notebook/save?file=${saveFileKind}`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'content-type': 'application/json',
+                            'x-csrf-token': ChickadeeUI.getCsrfToken()
+                        },
+                        body: JSON.stringify(notebook)
+                    });
+                if (!res.ok) {
+                    let reason = '';
+                    try { reason = (await res.json()).reason || ''; } catch (_) { /* non-JSON error */ }
+                    throw new Error(reason || `Save failed (${res.status})`);
+                }
+                const payload = await res.json();
+                setStatus('ok', payload.message || 'Saved to the assignment.');
+            } catch (err) {
+                const msg = (err instanceof Error && err.message) ? err.message : String(err);
+                console.error('[notebook] Save-to-assignment error:', err);
+                setStatus('error', `Could not save: ${msg}`);
+            } finally {
+                saveAssignmentBtn.disabled = false;
+                saveAssignmentBtn.textContent = saveLabel;
+            }
+        });
     }
 
     // ── Editor command bridge (jupyter-iframe-commands) ──────────────

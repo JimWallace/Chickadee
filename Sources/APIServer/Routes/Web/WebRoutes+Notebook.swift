@@ -39,17 +39,17 @@ extension WebRoutes {
 
         let query = try req.query.decode(NotebookQuery.self)
         let fileKind = notebookFileKind(from: query.file)
+        // Staff-ness is per-course (#417 Slice G — was the global
+        // `user.isInstructor`). It gates two things here: who may see the
+        // reference solution at all, and who keeps an editable editor on a
+        // closed assignment.
+        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
         // The reference solution is staff-only. The student notebook route is
         // reachable by any enrolled student (and now, read-only, for closed
         // assignments), so guard the solution view here rather than relying on
         // the absence of a UI link — never serve the answer key to a student.
-        if fileKind == .solution {
-            // The reference solution is staff-only, scoped to this setup's
-            // course (#417 Slice G — was the global `user.isInstructor`).
-            let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
-            if !isStaff {
-                throw Abort(.forbidden, reason: "The solution is only available to course staff.")
-            }
+        if fileKind == .solution, !isStaff {
+            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
         }
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
@@ -103,7 +103,8 @@ extension WebRoutes {
             userID: userID,
             assignment: assignment,
             assignmentTitle: assignmentTitle,
-            isClosed: isClosed
+            isClosed: isClosed,
+            isStaff: isStaff
         )
         if !requestedSubmissionID.isEmpty {
             return try await renderSubmissionNotebookView(
@@ -217,6 +218,14 @@ extension WebRoutes {
                 browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
                 showSubmit: false,  // read-only view
                 isClosed: args.isClosed,
+                // A past submission is a record, not a working document: it
+                // stays locked on exactly the same terms as before the staff
+                // authoring bypass below (which is scoped to the assignment /
+                // solution notebooks), and it is never savable back to the
+                // assignment.
+                isReadOnly: args.isClosed,
+                canSaveToAssignment: false,
+                fileKind: NotebookFileKind.assignment.rawValue,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                 currentUser: req.currentUserContext
             ))
@@ -274,6 +283,24 @@ extension WebRoutes {
         let workingCopyAbsPath =
             req.application.directory.publicDirectory
             + "jupyterlite/files/" + jupyterLiteNotebookPath
+        // Course staff are the authors of these two notebooks, so the closed
+        // state never locks their editor.  Saving an assignment returns it to
+        // `.closed` (the close-on-save contract) and a freshly created or
+        // cloned assignment starts closed, so the old blanket lock made the
+        // starter and solution notebooks uneditable for exactly the window in
+        // which they are being written.  Submission stays gated separately —
+        // `showSubmit` still follows `isClosed` for everyone.
+        let isReadOnly = args.isClosed && !args.isStaff
+        // Staff can write the open notebook back to the assignment
+        // (`POST /testsetups/:id/notebook/save`).  Mirrors that endpoint's own
+        // gate — TA+ on a course that isn't archived — so the button is absent
+        // rather than failing when the course is read-only.
+        var canSaveToAssignment = false
+        if args.isStaff {
+            let denial = try await evaluateCourseWrite(
+                user: args.user, courseID: setup.courseID, atLeast: .ta, db: req.db)
+            canSaveToAssignment = denial == nil
+        }
         return try await req.view.render(
             "notebook",
             NotebookContext(
@@ -286,6 +313,9 @@ extension WebRoutes {
                 browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
                 showSubmit: fileKind == .assignment && !args.isClosed,
                 isClosed: args.isClosed,
+                isReadOnly: isReadOnly,
+                canSaveToAssignment: canSaveToAssignment,
+                fileKind: fileKind.rawValue,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
@@ -302,6 +332,10 @@ extension WebRoutes {
         let assignment: APIAssignment?
         let assignmentTitle: String
         let isClosed: Bool
+        /// Whether the viewer is staff (TA+ or admin) of this setup's course.
+        /// Staff author content in this editor, so they are never locked out
+        /// of the assignment / solution notebook by the closed state.
+        let isStaff: Bool
     }
 
     /// Decodes the manifest's `gradingMode` for the notebook template;

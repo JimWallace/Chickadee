@@ -221,6 +221,20 @@ name, due date, notebook uploads, and the validation enqueue. Dependencies
 accept `family:<id>` tokens which the server expands to concrete filenames
 before persistence; cycle detection runs on the authored graph.
 
+**The embedded editor writes back (`POST /testsetups/:id/notebook/save`).**
+JupyterLite keeps the live document in the browser, so authoring edits used to
+reach the server only via an upload on the new-assignment page or the MCP
+`update_notebook` / `update_solution` tools. Course staff (TA+) now get a
+"Save to assignment" button on the notebook page that POSTs the open notebook
+back through the same server-side steps those tools use —
+`AssignmentAuthoringService.writeAssignmentNotebook` for the starter, a fresh
+`kind == .validation` submission for the solution — plus the author's working
+copy so a reload shows the save, and the version snapshot every authoring write
+gets. It is a **live-edit** endpoint: like `PUT /suite` and unlike the MCP
+tools, it never changes visibility, so fixing a typo mid-lab does not close the
+assignment out from under students. Re-validation still runs (debounced for the
+starter, always for a solution, since the new solution *is* what validates).
+
 **Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
 unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
 the canonical `/testsetups/:id/submit` handlers remain active for
@@ -394,6 +408,11 @@ GET  /results/:id                       — Browser-rendered result view
 GET  /instructor/:assignmentID/suite    — Author-facing view of the ordered suite list
 PUT  /instructor/:assignmentID/suite    — Persist drag-reorder, tier/points/displayName edits
 PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/delete)
+
+# Notebook authoring from the embedded editor (course staff, TA+)
+POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLite
+                                          back to the assignment
+                                          (?file=assignment|solution)
 ```
 
 Web routes (Leaf-rendered, session auth required) live under `/` and handle
