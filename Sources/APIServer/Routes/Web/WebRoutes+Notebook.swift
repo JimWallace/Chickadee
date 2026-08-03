@@ -26,6 +26,7 @@ extension WebRoutes {
             var title: String?
             var submissionID: String?
             var file: String?
+            var view: String?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -55,6 +56,9 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        let viewMode = try await resolveNotebookViewMode(
+            req: req, setup: setup, assignment: assignment,
+            fileKind: fileKind, isStaff: isStaff, requested: query.view)
         // Treat an assignment as closed for read-only display whenever it is
         // not effectively open *for this user* — the per-user check honors a
         // deadline extension granted to the current student, so an extended
@@ -104,7 +108,8 @@ extension WebRoutes {
             assignment: assignment,
             assignmentTitle: assignmentTitle,
             isClosed: isClosed,
-            isStaff: isStaff
+            isStaff: isStaff,
+            viewMode: viewMode
         )
         if !requestedSubmissionID.isEmpty {
             return try await renderSubmissionNotebookView(
@@ -226,6 +231,10 @@ extension WebRoutes {
                 isReadOnly: args.isClosed,
                 canSaveToAssignment: false,
                 fileKind: NotebookFileKind.assignment.rawValue,
+                // A submission is a rendering by construction — it is the
+                // bytes a student ran — and has no template to switch to.
+                isTemplateView: false,
+                viewToggleURL: nil,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                 currentUser: req.currentUserContext
             ))
@@ -242,6 +251,9 @@ extension WebRoutes {
         let userID = args.userID
         let assignment = args.assignment
         let userSlug = userID.uuidString.lowercased()
+        let viewMode = args.viewMode
+        let workingCopyPath = userNotebookWorkingCopyRelativePath(
+            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
         if fileKind == .solution {
             let solutionData = try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
@@ -249,29 +261,32 @@ extension WebRoutes {
                 setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
-                relativePath: userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind),
-                defaultData: solutionData
+                relativePath: workingCopyPath,
+                defaultData: solutionData,
+                viewMode: viewMode
             )
         } else {
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
                 setupID: setupID,
                 userID: userID,
-                fallbackSetup: setup
+                fallbackSetup: setup,
+                relativePath: workingCopyPath,
+                viewMode: viewMode
             )
         }
-        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(
-            setupID: setupID, userID: userID, fileKind: fileKind)
+        let jupyterLiteNotebookPath = workingCopyPath
         let encodedPath =
             jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
             ?? jupyterLiteNotebookPath
-        let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)"
+        // The workspace id carries the view mode so JupyterLite keeps a
+        // separate layout (and IndexedDB copy) per view — switching to the
+        // template must not surface the rendered copy from cache.
+        let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)-\(viewMode.rawValue)"
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
         let notebookURL =
-            switch fileKind {
-            case .assignment: "/testsetups/\(setupID)/notebook/source"
-            case .solution: "/testsetups/\(setupID)/notebook/source?file=solution"
-            }
+            "/testsetups/\(setupID)/notebook/source"
+            + "?file=\(fileKind.rawValue)&view=\(viewMode.rawValue)"
         let downloadURL: String? = {
             guard let assignment else { return nil }
             return switch fileKind {
@@ -301,6 +316,26 @@ extension WebRoutes {
                 user: args.user, courseID: setup.courseID, atLeast: .ta, db: req.db)
             canSaveToAssignment = denial == nil
         }
+        // Staff-only view switch, offered only where the two views differ — an
+        // assignment with no personalization reads identically in both, so the
+        // control would be noise.  Being *in* the template view already proves
+        // that (`resolveNotebookViewMode` only returns it for staff on a
+        // notebook with placeholders), so the short-circuit spares the common
+        // case a second read of the notebook.
+        let canSwitchViews: Bool
+        if viewMode == .template {
+            canSwitchViews = true
+        } else if args.isStaff {
+            canSwitchViews = await notebookHasPlaceholders(
+                req: req, setup: setup, assignment: assignment, fileKind: fileKind)
+        } else {
+            canSwitchViews = false
+        }
+        let otherView: NotebookViewMode = viewMode == .template ? .personalized : .template
+        let viewToggleURL: String? =
+            canSwitchViews
+            ? "/testsetups/\(setupID)/notebook?file=\(fileKind.rawValue)&view=\(otherView.rawValue)"
+            : nil
         return try await req.view.render(
             "notebook",
             NotebookContext(
@@ -311,11 +346,16 @@ extension WebRoutes {
                 downloadURL: downloadURL,
                 gradingMode: decodeManifestGradingMode(setup),
                 browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
-                showSubmit: fileKind == .assignment && !args.isClosed,
+                // A template still holds `{{name}}`, which does not run and
+                // would fail every test, so Submit belongs to the rendered
+                // view only.  Staff who want to test-submit switch views.
+                showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized,
                 isClosed: args.isClosed,
                 isReadOnly: isReadOnly,
                 canSaveToAssignment: canSaveToAssignment,
                 fileKind: fileKind.rawValue,
+                isTemplateView: viewMode == .template,
+                viewToggleURL: viewToggleURL,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
@@ -336,6 +376,64 @@ extension WebRoutes {
         /// Staff author content in this editor, so they are never locked out
         /// of the assignment / solution notebook by the closed state.
         let isStaff: Bool
+        /// Which reading of the notebook to put in the editor — the author's
+        /// template or a per-viewer rendering.  Always `.personalized` for
+        /// students and for the submission-history view.
+        let viewMode: NotebookViewMode
+    }
+
+    /// Which reading of the notebook this request gets.
+    ///
+    /// Staff author these notebooks, so when there is a template to author —
+    /// the stored notebook still carries `{{name}}` — that is their default
+    /// view, and `?view=personalized` switches to the rendering for running
+    /// and test-submitting.
+    ///
+    /// Everything else resolves to `.personalized`, which is what keeps this
+    /// change confined to the case it is for:
+    /// - **Students**, always. A raw `{{name}}` cell is not valid Python or R;
+    ///   serving one would break the notebook and leak the class template.
+    ///   The requested view is ignored rather than honoured, so the template
+    ///   is not reachable by URL.
+    /// - **An assignment with no personalization**, for staff too. The two
+    ///   views are byte-identical there, so `.personalized` keeps the page
+    ///   exactly as it was — Submit included.
+    private func resolveNotebookViewMode(
+        req: Request,
+        setup: APITestSetup,
+        assignment: APIAssignment?,
+        fileKind: NotebookFileKind,
+        isStaff: Bool,
+        requested: String?
+    ) async throws -> NotebookViewMode {
+        guard isStaff else { return .personalized }
+        guard
+            await notebookHasPlaceholders(
+                req: req, setup: setup, assignment: assignment, fileKind: fileKind)
+        else {
+            return .personalized
+        }
+        return notebookViewMode(from: requested) ?? .template
+    }
+
+    /// Whether the stored notebook still carries `{{name}}` placeholders —
+    /// i.e. whether the template and rendered views of it actually differ.
+    /// Drives the staff view switch, which is pointless on an assignment
+    /// without personalization.  Unreadable bytes answer `false`: the switch
+    /// is an affordance, and a missing notebook has bigger problems.
+    private func notebookHasPlaceholders(
+        req: Request,
+        setup: APITestSetup,
+        assignment: APIAssignment?,
+        fileKind: NotebookFileKind
+    ) async -> Bool {
+        let data: Data? =
+            switch fileKind {
+            case .assignment: try? notebookData(for: setup)
+            case .solution: try? await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            }
+        guard let data else { return false }
+        return !NotebookSubstitution.placeholderNames(in: data).isEmpty
     }
 
     /// Decodes the manifest's `gradingMode` for the notebook template;
@@ -354,6 +452,7 @@ extension WebRoutes {
     func notebookSource(req: Request) async throws -> Response {
         struct NotebookSourceQuery: Content {
             var file: String?
+            var view: String?
             var submissionID: String?
         }
         let user = try req.auth.require(APIUser.self)
@@ -403,9 +502,23 @@ extension WebRoutes {
         }
 
         let fileKind = notebookFileKind(from: query.file)
+        // The reference solution is staff-only.  `notebookPage` has always
+        // guarded this, but the raw content endpoint did not, so any enrolled
+        // student could fetch the answer key as JSON by asking for
+        // `?file=solution` directly — the exact bypass the page's own comment
+        // warns about ("never serve the answer key to a student").
+        if fileKind == .solution, !isStaff {
+            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
+        }
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        // Same resolution as the page, so the editor's frame and its content
+        // fetch never disagree about which copy is open — and so a student
+        // asking for `?view=template` by hand still gets their rendering.
+        let viewMode = try await resolveNotebookViewMode(
+            req: req, setup: setup, assignment: assignment,
+            fileKind: fileKind, isStaff: isStaff, requested: query.view)
         let defaultData: Data? =
             if fileKind == .solution {
                 try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
@@ -418,8 +531,10 @@ extension WebRoutes {
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
-            relativePath: userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind),
-            defaultData: defaultData
+            relativePath: userNotebookWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
+            defaultData: defaultData,
+            viewMode: viewMode
         )
 
         var headers = HTTPHeaders()

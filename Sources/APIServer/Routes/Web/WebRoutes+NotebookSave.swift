@@ -59,6 +59,7 @@ extension WebRoutes {
     func saveNotebookFromEditor(req: Request) async throws -> NotebookSaveResult {
         struct SaveQuery: Content {
             var file: String?
+            var view: String?
         }
 
         let user = try req.auth.require(APIUser.self)
@@ -77,7 +78,15 @@ extension WebRoutes {
         try await requireCourseWriteAccess(
             caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
 
-        let fileKind = notebookFileKind(from: (try? req.query.decode(SaveQuery.self))?.file)
+        let saveQuery = try? req.query.decode(SaveQuery.self)
+        let fileKind = notebookFileKind(from: saveQuery?.file)
+        // Which of the caller's two working copies this save came from.  The
+        // page sends it explicitly, and only ever sends `template` when it is
+        // actually showing one, so the historic behaviour is the right default
+        // for a request that omits it.  Nothing security-relevant rides on
+        // this: it picks which working copy to refresh, while what gets
+        // *stored* is decided by the cell tags in the body.
+        let viewMode = notebookViewMode(from: saveQuery?.view) ?? .personalized
 
         guard let buffer = req.body.data, buffer.readableBytes > 0 else {
             throw Abort(.badRequest, reason: "The request body must be the notebook JSON.")
@@ -94,12 +103,19 @@ extension WebRoutes {
             .filter(\.$testSetupID == setupID)
             .first()
 
-        // The copy in the author's editor is a *rendering*: the server
-        // substituted their own values into every `{{name}}` placeholder before
+        // A save from the `.template` view is already template text — the
+        // author typed the `{{name}}` themselves — and its cells carry no
+        // personalization tag, so the restoration below is a no-op and their
+        // placeholders store verbatim. That is the whole point of that view.
+        //
+        // A save from the `.personalized` view is a *rendering*: the server
+        // substituted the author's own values into every placeholder before
         // handing it over. Storing that verbatim would replace the class's
-        // template with one person's data, so the personalized cells are
-        // restored from the notebook currently stored before anything is
-        // written. A no-op on an assignment without personalization.
+        // template with one person's data, so its tagged cells are restored
+        // from the notebook currently stored before anything is written.
+        //
+        // Running both through one path means neither view needs to be trusted
+        // to declare what it is holding: the cell tags are the evidence.
         let canonical = try await canonicalNotebookData(
             req: req, setup: setup, assignment: assignment, fileKind: fileKind)
         let toStore: Data
@@ -126,18 +142,25 @@ extension WebRoutes {
         // id, so it registers by hand (as `update_solution` does over MCP).
         await req.beginAssignmentContentEdit(setup: setup)
 
-        // The author's working copy keeps the *rendered* bytes they were
-        // editing — the same personalized view they had a second ago, and the
-        // one that actually runs — while the assignment stores the template.
+        // The author's working copy keeps exactly the bytes they were editing,
+        // in whichever view they were editing them: a template save leaves the
+        // placeholders they typed on screen, a personalized save leaves the
+        // rendering that actually runs.
         _ = try await ensureUserNotebookWorkingCopy(
             req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
-                setupID: setupID, userID: userID, fileKind: fileKind),
-            overwriteWith: asEdited
+                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
+            overwriteWith: asEdited,
+            viewMode: viewMode
         )
+        // The counterpart view is now a rendering of superseded bytes, so drop
+        // it: switching views after a save must show the save, not the notebook
+        // as it stood before it.
+        await discardOtherNotebookViewCopy(
+            req: req, setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
 
         let outcome =
             switch fileKind {

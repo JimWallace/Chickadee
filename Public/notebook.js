@@ -1259,6 +1259,10 @@
     // the control.
     if (saveAssignmentBtn) {
         const saveFileKind = saveAssignmentBtn.dataset.fileKind === 'solution' ? 'solution' : 'assignment';
+        // Which working copy the editor is showing. The endpoint writes the
+        // save back to this view's copy and discards the other, so a wrong
+        // value here would leave the author looking at stale bytes.
+        const saveViewMode = saveAssignmentBtn.dataset.viewMode === 'personalized' ? 'personalized' : 'template';
         const saveLabel = saveAssignmentBtn.textContent;
         saveAssignmentBtn.addEventListener('click', async () => {
             saveAssignmentBtn.disabled = true;
@@ -1272,7 +1276,7 @@
                 const notebook = await loadNotebookForSubmit();
                 setStatus('loading', 'Saving to the assignment…');
                 const res = await fetch(
-                    `/testsetups/${encodeURIComponent(setupID)}/notebook/save?file=${saveFileKind}`,
+                    `/testsetups/${encodeURIComponent(setupID)}/notebook/save?file=${saveFileKind}&view=${saveViewMode}`,
                     {
                         method: 'POST',
                         headers: {

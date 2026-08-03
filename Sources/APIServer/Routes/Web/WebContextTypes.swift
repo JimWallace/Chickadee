@@ -226,6 +226,15 @@ struct NotebookContext: Encodable {
     /// Which notebook is open — `"assignment"` or `"solution"`.  Labels the
     /// save button and rides along as the endpoint's `?file=` argument.
     let fileKind: String
+    /// True when the editor holds the author's *template* — `{{name}}` left
+    /// standing — rather than a rendering of it.  Staff default on an
+    /// assignment with personalization; never true for a student.  Drives the
+    /// header notice and the absence of Submit (a template does not run).
+    let isTemplateView: Bool
+    /// Link to the same notebook in the other view, or nil when there is
+    /// nothing to switch between (no placeholders, or the viewer is not
+    /// staff).  Rides `?view=` on the notebook page.
+    let viewToggleURL: String?
     /// Unix-epoch mtime (seconds) of the user's working-copy notebook file
     /// on disk at render time.  Embedded in the iframe as
     /// `data-working-copy-mtime`; `notebook.js` compares it against a
