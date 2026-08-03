@@ -528,6 +528,91 @@ import VaporTesting
         }
     }
 
+    @Test func notebookPageClosedAssignmentStaysEditableForCourseStaff() async throws {
+        try await withApp(app) { _ in
+            // Course staff author the starter notebook in this editor, and an
+            // assignment is closed for the whole window in which it is being
+            // written (creation, cloning, and every save return it to closed).
+            // The closed state must therefore never lock the editor for staff:
+            // the iframe stays editable and the "view only" notice is replaced
+            // by the staff-editable one.  Submission stays closed for everyone.
+            let cookie = try await loginUser(
+                username: "notebook_staff_closed", password: "testpassword", role: "instructor", on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_closed").first())
+            try await enroll(instructor)
+
+            let setupID = "setup_nb_closed_staff"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Authoring"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Draft Lab",
+                dueAt: nil,  // never published — a freshly created assignment
+                isOpen: false
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"data-read-only="false""#),
+                        "Course staff must keep an EDITABLE notebook on a closed assignment")
+                    #expect(
+                        html.contains("This assignment is closed &mdash; view only.") == false,
+                        "Staff must not see the student view-only notice")
+                    #expect(
+                        html.contains("editable as course staff"),
+                        "Staff must see the staff-editable notice instead")
+                    #expect(
+                        html.contains(#"id="nb-submit""#) == false,
+                        "Submission stays gated by the closed state, for staff too")
+                })
+        }
+    }
+
+    @Test func notebookPageClosedAssignmentSolutionStaysEditableForCourseStaff() async throws {
+        try await withApp(app) { _ in
+            // Same contract for the reference solution: it is authored on a
+            // closed assignment, so ?file=solution must render editable too.
+            let cookie = try await loginUser(
+                username: "notebook_staff_solution", password: "testpassword", role: "instructor", on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_solution").first())
+            try await enroll(instructor)
+
+            let setupID = "setup_nb_closed_staff_solution"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Assignment"),
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
+                    ("solution.ipynb", notebookJSON(markdown: "Reference solution")),
+                ]
+            )
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Closed Solution Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),  // deadline passed
+                isOpen: false
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?file=solution",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains(#"data-read-only="false""#))
+                })
+        }
+    }
+
     @Test func notebookPageNotYetOpenAssignmentRedirectsToDashboard() async throws {
         try await withApp(app) { _ in
             // A student following a pre-posted link to an assignment whose open
