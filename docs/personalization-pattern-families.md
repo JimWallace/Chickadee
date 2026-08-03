@@ -203,9 +203,27 @@ So the feature's strongest wins are for **worker-graded** assignments and for
   family case), not just the notebook.
 
 Since the initial `.boundaryEquality`-only MVP, per-student refs have expanded
-to `.approximateEquality` and `.unorderedEquality` — the supported set is the
-`kindSupportsPerStudentRefs` allowlist in `PatternFamilyValidator.swift`
-(the equality kinds; the remaining kinds are future work).
+to `.approximateEquality` and `.unorderedEquality`. The gate is now **two**
+allowlists in `PatternFamilyValidator.swift`, because arg refs and expected
+refs are different requirements:
+
+- `kindSupportsPerStudentArgRefs` — `.boundaryEquality`,
+  `.approximateEquality`, `.unorderedEquality`. A bound `$name` has to reach
+  the student's function, so only the function-calling kinds qualify.
+- `kindSupportsPerStudentExpected` — those three **plus
+  `.variableEquality`**. A per-student *expected* is strictly weaker: the case
+  only needs the personalization preamble and to read `expected` from it.
+  `.variableEquality` gets this because "this student's `sd_systolic` equals
+  this student's value" is the simplest personalization there is; withholding
+  it forced authors to reshape a variable exercise into a function purely to
+  obtain a per-student answer.
+
+`.variableEquality` deliberately stays out of the *arg* list: its `args[0]` is
+the **name** of the variable to inspect, baked into the generated script as a
+literal, so an arg ref there would be silently ignored rather than
+personalizing anything. The remaining kinds (`returnTypeCheck`,
+`exceptionExpected`, `performanceThreshold`, `stdoutEquality`) emit no
+preamble and remain future work.
 
 ## Open questions
 

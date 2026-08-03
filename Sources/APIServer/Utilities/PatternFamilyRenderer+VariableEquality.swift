@@ -17,7 +17,8 @@ func renderVariableEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
-    specHash: String
+    specHash: String,
+    perStudentNames: Set<String> = []
 ) -> String {
     // Section + family variables are declared as module-level globals in
     // the generated test.  `variableEquality` is checking a STUDENT-module
@@ -37,11 +38,21 @@ func renderVariableEquality(
     }()
     let nameLiteral = "\"" + escapeForPythonStringLiteral(variableName) + "\""
 
+    // A per-student `expectedVarRef` is bound at grading time from
+    // `_ck_inputs.py`; see personalizationPreambleForCase.  Note the variable
+    // NAME (args[0]) stays a baked literal — only the expected VALUE
+    // personalizes, which is why the validator still rejects arg refs here.
+    // With no per-student refs the preamble is "" and `expectedExpression`
+    // returns the same literal as before, so existing families render
+    // byte-identically and their spec_hash / TestSetupCache keys don't churn.
+    let preamble = personalizationPreambleForCase(c, perStudentNames: perStudentNames)
+    let preambleBlock = preamble.isEmpty ? "" : preamble + "\n\n"
+
     return """
         \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
-        variable_name = \(nameLiteral)
-        expected      = \(c.expected.pythonLiteral)
+        \(preambleBlock)variable_name = \(nameLiteral)
+        expected      = \(expectedExpression(for: c))
 
         _MISSING = object()
         actual = getattr(student_module, variable_name, _MISSING)
