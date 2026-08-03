@@ -242,7 +242,8 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("data-setup-id=\"\(setupID)\""))
-                    #expect(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
+                    #expect(
+                        html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source?file=assignment"))
                     #expect(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
                     #expect(html.contains("&amp;path=users/"))
                     // v0.4.153 cache-bust: the iframe is stamped with the
@@ -622,11 +623,13 @@ import VaporTesting
         setupID: String,
         cookie: String,
         file: String? = nil,
+        view: String? = nil,
         body: String,
         afterResponse: (TestingHTTPResponse) throws -> Void
     ) async throws {
         let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
-        let query = file.map { "?file=\($0)" } ?? ""
+        let params = [file.map { "file=\($0)" }, view.map { "view=\($0)" }].compactMap { $0 }
+        let query = params.isEmpty ? "" : "?" + params.joined(separator: "&")
         try await app.asyncTest(
             .POST, "/testsetups/\(setupID)/notebook/save\(query)",
             beforeRequest: { req in
@@ -912,6 +915,259 @@ import VaporTesting
             let storedPath = try #require(
                 try await APITestSetup.find(setupID, on: app.db)?.notebookPath)
             #expect(try String(contentsOfFile: storedPath, encoding: .utf8).contains("{{patients}}"))
+        }
+    }
+
+    // MARK: - Template vs rendered view (staff authoring)
+
+    /// Manifest with one personalized global, and the matching one-code-cell
+    /// template — the smallest fixture in which the two views differ.
+    private var personalizedManifest: String {
+        """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"globalVariables":[{"name":"patients","value":[{"name":"Maria","age":42}]}]}
+        """
+    }
+
+    @Test func notebookSourceServesTheTemplateToStaffAndTheRenderingToStudents() async throws {
+        try await withApp(app) { _ in
+            // The author's default view is the template: `{{patients}}` reaches
+            // the editor intact, which is what makes it editable. A student
+            // asking for the same notebook still gets their own rendering —
+            // a raw placeholder is not valid Python and would not run.
+            let setupID = "setup_nb_view_template"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Template Lab", isOpen: true)
+
+            let staffLogin = try await staffCookie(username: "notebook_view_staff")
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{patients}}"))
+                })
+
+            let studentLogin = try await loginAsStudent()
+            try await enroll(try await studentUser())
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{patients}}") == false)
+                    #expect(res.body.string.contains("Maria"))
+                })
+        }
+    }
+
+    @Test func notebookSourceRefusesATemplateViewToStudents() async throws {
+        try await withApp(app) { _ in
+            // The view is resolved from the caller's role, not from the URL:
+            // asking for `?view=template` as a student must not hand over the
+            // un-substituted notebook.
+            let setupID = "setup_nb_view_student_template"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Forced Lab", isOpen: true)
+
+            let studentLogin = try await loginAsStudent(username: "notebook_view_forcer")
+            try await enroll(
+                try #require(
+                    try await APIUser.query(on: app.db)
+                        .filter(\.$username == "notebook_view_forcer").first()))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=template",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{patients}}") == false)
+                })
+        }
+    }
+
+    @Test func notebookSourceRejectsSolutionFileForStudent() async throws {
+        try await withApp(app) { _ in
+            // The page route has always guarded the reference solution; the raw
+            // content endpoint did not, so `?file=solution` handed any enrolled
+            // student the answer key as JSON.
+            let setupID = "setup_nb_source_solution"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Starter"),
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Starter")),
+                    ("solution.ipynb", notebookJSON(code: "answer = 42")),
+                ])
+            _ = try await insertAssignment(testSetupID: setupID, title: "Guarded Lab", isOpen: true)
+
+            let studentLogin = try await loginAsStudent(username: "notebook_source_peeker")
+            try await enroll(
+                try #require(
+                    try await APIUser.query(on: app.db)
+                        .filter(\.$username == "notebook_source_peeker").first()))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                    #expect(res.body.string.contains("answer = 42") == false)
+                })
+
+            let staffLogin = try await staffCookie(username: "notebook_source_owner")
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in #expect(res.status == .ok) })
+        }
+    }
+
+    @Test func notebookPageOffersTheViewSwitchOnlyWhenPlaceholdersExist() async throws {
+        try await withApp(app) { _ in
+            // The switch is an affordance for a real difference: without
+            // placeholders the two views are the same bytes, so offering it
+            // would be noise.
+            let staffLogin = try await staffCookie(username: "notebook_view_switch_staff")
+
+            let personalizedID = "setup_nb_switch_yes"
+            _ = try await insertSetup(
+                id: personalizedID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(
+                testSetupID: personalizedID, title: "Switch Lab", isOpen: true)
+
+            // The switch is a link to the same notebook in the other view; the
+            // `?view=` on the content-fetch URL is not it, so match the href.
+            func toggleHref(_ setupID: String, to view: String) -> String {
+                #"href="/testsetups/\#(setupID)/notebook?file=assignment&amp;view=\#(view)""#
+            }
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(personalizedID)/notebook",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains(toggleHref(personalizedID, to: "personalized")))
+                    // Submit belongs to the rendered view — a template does not run.
+                    #expect(res.body.string.contains(#"id="nb-submit""#) == false)
+                })
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(personalizedID)/notebook?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains(toggleHref(personalizedID, to: "template")))
+                    #expect(res.body.string.contains(#"id="nb-submit""#))
+                })
+
+            let plainID = "setup_nb_switch_no"
+            _ = try await insertSetup(id: plainID, notebookJSON: notebookJSON(markdown: "Plain"))
+            _ = try await insertAssignment(testSetupID: plainID, title: "Plain Lab", isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(plainID)/notebook",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains(toggleHref(plainID, to: "template")) == false)
+                    #expect(res.body.string.contains(toggleHref(plainID, to: "personalized")) == false)
+                    // Nothing about a plain assignment changes for staff.
+                    #expect(res.body.string.contains(#"id="nb-submit""#))
+                })
+        }
+    }
+
+    @Test func saveNotebookFromEditorStoresHandAuthoredPlaceholders() async throws {
+        try await withApp(app) { _ in
+            // The point of the template view: an author types `{{name}}` into a
+            // cell and it is stored as written, rather than being treated as a
+            // rendering and reverted.
+            let cookie = try await staffCookie(username: "notebook_author_placeholder")
+
+            let setupID = "setup_nb_author_placeholder"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Authoring Lab", isOpen: false)
+
+            // Untagged, because a template copy is never substituted — this is
+            // exactly what the editor holds after the author edits it.
+            let authored = """
+                {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[\
+                {"cell_type":"code","id":"cell-one","execution_count":null,"metadata":{},"outputs":[],\
+                "source":["patients = {{patients}}\\nfirst = {{patients}}[0]"]}]}
+                """
+
+            try await postNotebookSave(
+                setupID: setupID, cookie: cookie, view: "template", body: authored
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            let storedPath = try #require(
+                try await APITestSetup.find(setupID, on: app.db)?.notebookPath)
+            let stored = try String(contentsOfFile: storedPath, encoding: .utf8)
+            #expect(stored.contains("first = {{patients}}[0]"), "The authored placeholder must survive the save")
+        }
+    }
+
+    @Test func savingTheTemplateRefreshesTheRenderedView() async throws {
+        try await withApp(app) { _ in
+            // The two views are separate files and an existing working copy is
+            // returned untouched, so a template save has to invalidate the
+            // rendered copy — otherwise switching views after a save shows the
+            // notebook as it stood before it.
+            let cookie = try await staffCookie(username: "notebook_view_refresh")
+            let staff = try #require(
+                try await APIUser.query(on: app.db)
+                    .filter(\.$username == "notebook_view_refresh").first())
+            let staffID = try staff.requireID()
+
+            let setupID = "setup_nb_view_refresh"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Refresh Lab", isOpen: false)
+
+            // Seed the rendered copy, so there is a stale file to invalidate.
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Maria")) })
+
+            let authored = """
+                {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[\
+                {"cell_type":"code","id":"cell-one","execution_count":null,"metadata":{},"outputs":[],\
+                "source":["cohort = {{patients}}"]}]}
+                """
+            try await postNotebookSave(
+                setupID: setupID, cookie: cookie, view: "template", body: authored
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            let renderedPath =
+                publicDir + "jupyterlite/files/"
+                + userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: staffID, fileKind: .assignment, viewMode: .personalized)
+            #expect(
+                FileManager.default.fileExists(atPath: renderedPath) == false,
+                "The stale rendered copy must be dropped so it reseeds from the saved template")
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains("cohort = "))
+                    #expect(res.body.string.contains("Maria"))
+                })
         }
     }
 

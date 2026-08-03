@@ -158,15 +158,23 @@ func draftNotebookData(
     fileKind: NotebookFileKind,
     fallbackPath: String?
 ) -> Data? {
-    let workingCopyPath =
-        req.application.directory.publicDirectory
-        + "jupyterlite/files/"
-        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
-    if let data = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
-        !data.isEmpty,
-        (try? JSONSerialization.jsonObject(with: data)) != nil
-    {
-        return data
+    // The template copy first: on a personalized assignment it is the view the
+    // author is actually working in, and it is the one holding `{{name}}`
+    // rather than one person's values — which is what a draft must carry
+    // forward.  On an assignment without personalization it simply does not
+    // exist, and this falls through to the copy it always read.
+    let candidatePaths = [NotebookViewMode.template, .personalized].map { viewMode in
+        req.application.directory.publicDirectory + "jupyterlite/files/"
+            + userNotebookWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+    }
+    for path in candidatePaths {
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+            !data.isEmpty,
+            (try? JSONSerialization.jsonObject(with: data)) != nil
+        {
+            return data
+        }
     }
     guard let fallbackPath,
         let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackPath)),

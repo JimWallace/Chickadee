@@ -15,6 +15,34 @@ import Fluent
 import Foundation
 import Vapor
 
+/// Which of the two readings of a notebook a working copy holds.
+///
+/// A notebook with personalization is two documents at once: the *template*
+/// the author writes (`patients = {{patients}}`) and the per-viewer
+/// *rendering* the server produces from it (`patients = [61, 47, ...]`).
+/// Both are legitimate views of the same file, and which one a request wants
+/// depends on what the viewer is doing rather than on who they are:
+///
+/// - `.personalized` — running and submitting.  This is what every student
+///   gets, always, and what staff get when they want to see the notebook as a
+///   student does.  Placeholders are replaced at seed time and the rewritten
+///   cells carry `NotebookSubstitution.fencedCellMetadataKey`.
+/// - `.template` — authoring.  Placeholders are left standing, so an author
+///   can read, edit, and write `{{name}}` directly.  Cells carry no
+///   personalization tag, which is what makes a save store the author's own
+///   text (`PersonalizedCellRestoration` has nothing to restore).
+///
+/// The two live in separate working-copy files, so switching between them
+/// costs nothing and neither view can clobber the other's edits.
+enum NotebookViewMode: String, Sendable {
+    case personalized
+    case template
+}
+
+func notebookViewMode(from rawValue: String?) -> NotebookViewMode? {
+    NotebookViewMode(rawValue: (rawValue ?? "").lowercased())
+}
+
 func userNotebookWorkingCopyRelativePath(setupID: String, userID: UUID) -> String {
     userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: .assignment)
 }
@@ -23,19 +51,28 @@ func notebookFileKind(from rawValue: String?) -> NotebookFileKind {
     NotebookFileKind(rawValue: (rawValue ?? "").lowercased()) ?? .assignment
 }
 
-private func userNotebookFilename(fileKind: NotebookFileKind) -> String {
-    switch fileKind {
-    case .assignment: return "assignment.ipynb"
-    case .solution: return "solution.ipynb"
+private func userNotebookFilename(fileKind: NotebookFileKind, viewMode: NotebookViewMode) -> String {
+    let stem =
+        switch fileKind {
+        case .assignment: "assignment"
+        case .solution: "solution"
+        }
+    switch viewMode {
+    // The rendered copy keeps the historical filename: every existing working
+    // copy on disk is one of these, and a student's path must not move.
+    case .personalized: return "\(stem).ipynb"
+    case .template: return "\(stem)-template.ipynb"
     }
 }
 
 func userNotebookWorkingCopyRelativePath(
     setupID: String,
     userID: UUID,
-    fileKind: NotebookFileKind
+    fileKind: NotebookFileKind,
+    viewMode: NotebookViewMode = .personalized
 ) -> String {
-    "users/\(userID.uuidString.lowercased())/\(setupID)/\(userNotebookFilename(fileKind: fileKind))"
+    "users/\(userID.uuidString.lowercased())/\(setupID)/"
+        + userNotebookFilename(fileKind: fileKind, viewMode: viewMode)
 }
 
 /// Whether `userID` has previously engaged with `assignment`: a durable
@@ -130,7 +167,8 @@ func ensureUserNotebookWorkingCopy(
     fallbackSetup: APITestSetup,
     relativePath: String? = nil,
     defaultData: Data? = nil,
-    overwriteWith: Data? = nil
+    overwriteWith: Data? = nil,
+    viewMode: NotebookViewMode = .personalized
 ) async throws -> Data {
     let fileManager = FileManager.default
     let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
@@ -169,17 +207,23 @@ func ensureUserNotebookWorkingCopy(
         return existingData
     }
 
-    let seedData =
-        if let defaultData {
-            defaultData
-        } else {
-            try await latestNotebookSubmissionData(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: fallbackSetup
-            ).data
-        }
+    let seedData: Data
+    if let defaultData {
+        seedData = defaultData
+    } else if viewMode == .template, let starter = try? notebookData(for: fallbackSetup) {
+        // A template copy is a view of the *assignment*, not of this viewer's
+        // work, so it seeds from the stored starter.  Without this an author
+        // who had also submitted would open their own submission and save it
+        // over the class's starter.
+        seedData = starter
+    } else {
+        seedData = try await latestNotebookSubmissionData(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: fallbackSetup
+        ).data
+    }
 
     // Slice 1 + Slice 2 + Slice 4: substitute `{{name}}` placeholders in
     // the starter notebook.  Slice 5: the evaluator can now import
@@ -187,14 +231,24 @@ func ensureUserNotebookWorkingCopy(
     // `solution.py` from solution.ipynb).  Failures fall back to
     // un-substituted seedData; the editor's save-time check is the
     // primary gate.
-    let processedData = await applyNotebookSubstitutionsIfNeeded(
-        seedData: seedData,
-        setup: fallbackSetup,
-        userID: userID,
-        db: req.db,
-        supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
-        logger: req.logger
-    )
+    //
+    // A `.template` copy skips this by definition: leaving the placeholders
+    // standing is the whole point of that view, and it is what lets an author
+    // edit them (see `NotebookViewMode`).
+    let processedData =
+        switch viewMode {
+        case .personalized:
+            await applyNotebookSubstitutionsIfNeeded(
+                seedData: seedData,
+                setup: fallbackSetup,
+                userID: userID,
+                db: req.db,
+                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
+                logger: req.logger
+            )
+        case .template:
+            seedData
+        }
 
     try await runBlocking(on: req) {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
@@ -204,6 +258,45 @@ func ensureUserNotebookWorkingCopy(
     await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
 
     return processedData
+}
+
+/// Discards `userID`'s working copy of `fileKind` in the view *other* than
+/// `viewMode`, so it is re-seeded from the stored notebook the next time it is
+/// opened.
+///
+/// The two views are separate files, and `ensureUserNotebookWorkingCopy`
+/// returns an existing copy untouched — which is what keeps an author's edits
+/// across visits, and also what would otherwise leave the counterpart showing
+/// pre-edit bytes forever. After a save, the counterpart is by definition
+/// stale: the stored notebook it was rendered from has just changed. Dropping
+/// it is safe because it holds no unsaved work that the save did not just
+/// supersede, and cheap because re-seeding is one read plus (for the rendered
+/// view) a substitution pass.
+///
+/// Best-effort: a copy that cannot be removed is a stale editor tab, not a
+/// failed save, so this never throws into the save path.
+func discardOtherNotebookViewCopy(
+    req: Request,
+    setupID: String,
+    userID: UUID,
+    fileKind: NotebookFileKind,
+    viewMode: NotebookViewMode
+) async {
+    let other: NotebookViewMode = viewMode == .template ? .personalized : .template
+    let path =
+        req.application.directory.publicDirectory + "jupyterlite/files/"
+        + userNotebookWorkingCopyRelativePath(
+            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: other)
+    let fileManager = FileManager.default
+    guard fileManager.fileExists(atPath: path) else { return }
+    do {
+        try await runBlocking(on: req) {
+            try fileManager.removeItem(atPath: path)
+        }
+    } catch {
+        req.logger.warning(
+            "Could not discard the \(other.rawValue) working copy for setup \(setupID): \(error)")
+    }
 }
 
 /// Overwrites `userID`'s working copy with `starter` after applying the same
