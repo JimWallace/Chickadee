@@ -217,6 +217,15 @@ struct NotebookContext: Encodable {
     /// whole time it is being written (creation, cloning, and every save return
     /// it to `.closed`).  Submission stays gated by `isClosed` for everyone.
     let isReadOnly: Bool
+    /// True when the viewer may write what they are editing back to the
+    /// assignment — course staff (TA+) on a non-archived course, viewing the
+    /// starter or solution notebook (never a past submission).  Renders the
+    /// "Save to assignment" button, which POSTs to
+    /// `/testsetups/:id/notebook/save`.
+    let canSaveToAssignment: Bool
+    /// Which notebook is open — `"assignment"` or `"solution"`.  Labels the
+    /// save button and rides along as the endpoint's `?file=` argument.
+    let fileKind: String
     /// Unix-epoch mtime (seconds) of the user's working-copy notebook file
     /// on disk at render time.  Embedded in the iframe as
     /// `data-working-copy-mtime`; `notebook.js` compares it against a

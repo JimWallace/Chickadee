@@ -24,6 +24,9 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
+        // Course-staff-only: persist what the author is editing in JupyterLite
+        // back to the assignment (WebRoutes+NotebookSave.swift).
+        routes.post("testsetups", ":testSetupID", "notebook", "save", use: saveNotebookFromEditor)
         routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.post("testsetups", ":testSetupID", "reveal-secret", use: spendSecretRevealToken)
         // Slip days (#1228): explicit confirmation page + the spend POST.

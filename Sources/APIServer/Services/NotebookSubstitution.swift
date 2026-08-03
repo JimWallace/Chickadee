@@ -124,15 +124,24 @@ enum NotebookSubstitution {
             guard let cellType = cell["cell_type"] as? String, cellType == "code" else {
                 continue
             }
-            let source = readCellSource(cell)
-            let nsSource = source as NSString
-            let range = NSRange(location: 0, length: nsSource.length)
-            placeholderRegex.enumerateMatches(in: source, options: [], range: range) { match, _, _ in
-                guard let match, match.numberOfRanges >= 2 else { return }
-                let nameRange = match.range(at: 1)
-                if nameRange.location != NSNotFound {
-                    found.insert(nsSource.substring(with: nameRange))
-                }
+            found.formUnion(placeholderNames(inSource: readCellSource(cell)))
+        }
+        return found.sorted()
+    }
+
+    /// Returns the placeholder names appearing in one cell's source text.
+    /// Same scan as `placeholderNames(in:)`, one cell at a time — used by
+    /// `PersonalizedCellRestoration` to confirm a canonical cell really is the
+    /// template a rendered cell came from.  Deduplicated and sorted.
+    static func placeholderNames(inSource source: String) -> [String] {
+        let nsSource = source as NSString
+        let range = NSRange(location: 0, length: nsSource.length)
+        var found = Set<String>()
+        placeholderRegex.enumerateMatches(in: source, options: [], range: range) { match, _, _ in
+            guard let match, match.numberOfRanges >= 2 else { return }
+            let nameRange = match.range(at: 1)
+            if nameRange.location != NSNotFound {
+                found.insert(nsSource.substring(with: nameRange))
             }
         }
         return found.sorted()

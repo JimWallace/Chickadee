@@ -221,8 +221,11 @@ extension WebRoutes {
                 // A past submission is a record, not a working document: it
                 // stays locked on exactly the same terms as before the staff
                 // authoring bypass below (which is scoped to the assignment /
-                // solution notebooks).
+                // solution notebooks), and it is never savable back to the
+                // assignment.
                 isReadOnly: args.isClosed,
+                canSaveToAssignment: false,
+                fileKind: NotebookFileKind.assignment.rawValue,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                 currentUser: req.currentUserContext
             ))
@@ -288,6 +291,16 @@ extension WebRoutes {
         // which they are being written.  Submission stays gated separately —
         // `showSubmit` still follows `isClosed` for everyone.
         let isReadOnly = args.isClosed && !args.isStaff
+        // Staff can write the open notebook back to the assignment
+        // (`POST /testsetups/:id/notebook/save`).  Mirrors that endpoint's own
+        // gate — TA+ on a course that isn't archived — so the button is absent
+        // rather than failing when the course is read-only.
+        var canSaveToAssignment = false
+        if args.isStaff {
+            let denial = try await evaluateCourseWrite(
+                user: args.user, courseID: setup.courseID, atLeast: .ta, db: req.db)
+            canSaveToAssignment = denial == nil
+        }
         return try await req.view.render(
             "notebook",
             NotebookContext(
@@ -301,6 +314,8 @@ extension WebRoutes {
                 showSubmit: fileKind == .assignment && !args.isClosed,
                 isClosed: args.isClosed,
                 isReadOnly: isReadOnly,
+                canSaveToAssignment: canSaveToAssignment,
+                fileKind: fileKind.rawValue,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
