@@ -41,13 +41,30 @@ runs:
       shell: bash
       run: swift build --product chickadee-server
 
+    # apt against archive.ubuntu.com is the least reliable thing in this action:
+    # it is an unauthenticated plain-HTTP fetch of ~40 packages from a mirror we
+    # do not control, and when it is unreachable the step fails with exit 100 and
+    # takes the whole probe with it — a red required gate caused by an Ubuntu
+    # mirror. Retry the network-bound half a few times with a short backoff.
+    # `npm ci` stays outside the loop: it hits a different registry, and a
+    # genuine lockfile problem should fail once and clearly, not three times.
     - name: Install Node and npm dependencies
       shell: bash
       working-directory: ${{ inputs.node-project }}
       run: |
-        set -eux
-        apt-get update -qq
-        apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
+        set -eu
+        for attempt in 1 2 3; do
+          if apt-get update -qq \
+            && apt-get install -y --no-install-recommends nodejs npm curl ca-certificates; then
+            break
+          fi
+          if [ "$attempt" = 3 ]; then
+            echo "::error::apt-get failed 3 times — archive.ubuntu.com is likely unreachable."
+            exit 1
+          fi
+          echo "::warning::apt-get attempt ${attempt} failed; retrying in $((attempt * 15))s"
+          sleep $((attempt * 15))
+        done
         npm ci
 
     # The engine download (~150 MB) is the slow, network-dependent part of
