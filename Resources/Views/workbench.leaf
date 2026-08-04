@@ -105,10 +105,19 @@
     color: var(--gray-700);
 }
 
-/* Collapsed edit pane: the notebook takes the full width.  The splitter stays
-   put so the pane can be dragged back out, and the toolbar button is the
-   primary way back. */
-.wb-shell[data-wb-collapsed="edit"] .wb-pane-edit { display: none; }
+/* Collapsed edit pane: the notebook takes the full width.
+   The grid must be re-declared to a single column, not just have the edit pane
+   hidden.  `display: none` removes an item from the grid entirely, so with the
+   three-column template still in force the splitter would take column 1 and the
+   notebook column 2 — which is `auto`, i.e. sized to content, leaving the
+   notebook pane narrow enough that the embedded notebook page renders its
+   "Open on a larger screen" notice instead of the editor.  That is the exact
+   failure the 720px floor exists to prevent, arriving by a different route.
+   Hiding the splitter too means the toolbar toggle is the way back, which is
+   what the button is for. */
+.wb-shell[data-wb-collapsed="edit"] .wb-body { grid-template-columns: 1fr; }
+.wb-shell[data-wb-collapsed="edit"] .wb-pane-edit,
+.wb-shell[data-wb-collapsed="edit"] .wb-splitter { display: none; }
 
 /* Below the point where an honest split is possible (720px notebook floor +
    380px edit floor + the splitter), collapse to one pane at a time.  The

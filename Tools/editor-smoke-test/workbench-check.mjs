@@ -448,6 +448,46 @@ async function main() {
       }
     }
 
+    // 7. Collapsing the editor must give the notebook the FULL width.
+    //
+    //    This is a regression guard for a real bug, found by screenshotting
+    //    rather than by any test: hiding the edit pane with `display: none`
+    //    removes it from the grid, so with a three-column template still in
+    //    force the notebook landed in the `auto` column and sized to content.
+    //    It ended up ~380px wide, and the embedded notebook page — which hides
+    //    its editor below 640px — rendered "Open on a larger screen" instead of
+    //    the notebook. Collapsing to see MORE notebook showed none of it.
+    //
+    //    Unit tests could not see this; `toggleCollapse` was correct, the CSS
+    //    was not. So the assertion is on the rendered geometry.
+    await page.click("#wb-collapse-edit");
+    await page.waitForTimeout(800);
+    const collapsed = await page.evaluate(() => {
+      const pane = document.querySelector(".wb-pane-notebook");
+      const edit = document.querySelector(".wb-pane-edit");
+      return {
+        notebookWidth: pane ? pane.getBoundingClientRect().width : 0,
+        editVisible: edit ? edit.getBoundingClientRect().width > 0 : false,
+        viewport: window.innerWidth,
+      };
+    });
+    console.log(
+      `collapsed: notebook=${Math.round(collapsed.notebookWidth)}px of ${collapsed.viewport}px ` +
+      `viewport, editVisible=${collapsed.editVisible}`);
+    if (collapsed.editVisible) {
+      return fail("collapsing the editor left it visible");
+    }
+    // Full width, allowing for scrollbars/rounding — not merely "wider than the
+    // 720px floor", because the point of collapsing is to get everything.
+    if (collapsed.notebookWidth < collapsed.viewport - 40) {
+      return fail(
+        `collapsing the editor left the notebook only ${Math.round(collapsed.notebookWidth)}px ` +
+        `of a ${collapsed.viewport}px viewport. The edit pane is hidden but the grid still ` +
+        `reserves its columns, so the notebook is being sized to content — below 640px it ` +
+        `will render "Open on a larger screen" instead of the editor.`
+      );
+    }
+
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");
     process.exit(0);
   } catch (e) {

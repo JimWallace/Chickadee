@@ -88,9 +88,15 @@ Notebook
             <span class="nb-closed-notice">This assignment is closed to students &mdash; editable as course staff.</span>
             #endif
             #if(viewToggleURL):
+            #if(!embedded):
+            <!-- Suppressed in a workbench pane: the workbench has its own
+                 template/values control, so this would be a second one for the
+                 same thing — and `viewToggleURL` carries no `embedded=1`, so
+                 following it would load the fully-chromed page into the pane. -->
             <a class="btn" href="#(viewToggleURL)">
                 #if(isTemplateView):View with values#else:Edit the template#endif
             </a>
+            #endif
             #endif
             #if(canSaveToAssignment):
             <button class="btn btn-primary" id="nb-save-assignment" data-file-kind="#(fileKind)"
