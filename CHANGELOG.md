@@ -9,6 +9,65 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-08-04
+
+### Security
+
+- **The workbench validates a notebook destination before pointing a frame at
+  it.** The tab destinations reach the page as DOM text and the sink is an
+  iframe `src`, where a `javascript:` URL would be script execution in
+  Chickadee's own origin. The server builds that map from its own test-setup
+  identifiers, so nothing hostile could reach it — but the page did not enforce
+  that, and the gap between "is not attacker-controlled" and "cannot be" is the
+  whole bug class. Destinations are now accepted only if they match the
+  same-origin notebook-page path shape, checked both where a click is resolved
+  and again at the assignment itself. Flagged by CodeQL.
+
+### Added
+
+- **The workbench can switch between a notebook's template and its rendering.**
+  On an assignment whose notebook carries `{{placeholders}}`, the notebook pane
+  gains a Template / With values control beside the Assignment / Solution tabs,
+  so an author can compare what they wrote against what a student sees without
+  leaving the page. The control is rendered per file and only where the two
+  readings actually differ — on a notebook without placeholders they are
+  byte-identical, and switching would be a kernel reboot for no change.
+
+  Pane URLs now always carry an explicit `view=`. The server defaults staff to
+  the template on a personalized notebook, so omitting it made the "Assignment"
+  tab mean the template on one assignment and the rendering on another.
+
+### Changed
+
+- **The workbench holds one notebook document, not one per destination.** The
+  tabs and the view switch repoint a single iframe. Previously each notebook got
+  its own live iframe so switching was instant; with the view axis that would
+  have been up to four simultaneous Pyodide kernels and an eviction policy to
+  bound them — a lot of machinery for a secondary interaction. The workbench
+  exists to put the edit page and *a* notebook on screen together, which holds
+  with one. The accepted cost: switching notebooks re-boots the kernel.
+
+  The browser check now asserts the iframe count directly, so reintroducing a
+  frame per destination fails rather than passing quietly.
+
+### Fixed
+
+- **Collapsing the workbench editor now actually gives the notebook the window.**
+  Hiding the edit pane removed it from the grid without re-declaring the
+  columns, so the notebook landed in the content-sized column and shrank to
+  roughly 300px — narrow enough that the embedded notebook page rendered its
+  "Open on a larger screen" notice. Collapsing the editor to see more of the
+  notebook showed none of it. Found by screenshotting the real page; the
+  collapse unit tests were correct and could not see it, so the browser check
+  now asserts the rendered width.
+
+- **The workbench no longer shows two template/values controls.** The embedded
+  notebook page rendered its own view-toggle link beside the workbench's, and
+  that link carries no `embedded=1` — following it would have loaded the fully
+  chromed page inside the pane. The page's own toggle is suppressed when it is
+  a workbench pane; the workbench's control is the one that works there.
+
+
 ## [0.5.7] - 2026-08-04
 
 ### Added
