@@ -573,6 +573,23 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
+        let ctx = try await makeEditAssignmentContext(req: req, embedded: false)
+        return try await req.view.render("assignment-edit", ctx)
+    }
+
+    /// Builds the edit page's context.
+    ///
+    /// Factored out of `editPage` so the assignment workbench's left pane
+    /// (`GET /instructor/:assignmentID/workbench/panel`,
+    /// `InstructorWorkbenchRoutes`) renders the *same* page from the *same*
+    /// 26-field construction rather than a copy of it that would drift.  The
+    /// only difference between the two callers is `embedded`, which suppresses
+    /// the site chrome — the staff gate, the query overrides, and every
+    /// derived field are identical.
+    func makeEditAssignmentContext(
+        req: Request,
+        embedded: Bool
+    ) async throws -> EditAssignmentContext {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let idStr = assignment.publicID
 
@@ -614,7 +631,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             let checkData = (try? enc.encode(props.notebookChecks)) ?? Data("[]".utf8)
             return String(data: checkData, encoding: .utf8) ?? "[]"
         }()
-        let ctx = EditAssignmentContext(
+        return EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
             testSetupID: assignment.testSetupID,
@@ -646,8 +663,9 @@ struct InstructorDashboardRoutes: RouteCollection {
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error,
-            embedded: nil
+            // nil rather than `false` on the standalone page so its rendered
+            // HTML is byte-identical to before the workbench existed.
+            embedded: embedded ? true : nil
         )
-        return try await req.view.render("assignment-edit", ctx)
     }
 }

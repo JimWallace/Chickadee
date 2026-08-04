@@ -73,13 +73,46 @@ struct COEPMiddleware: AsyncMiddleware {
         let last = parts.last ?? ""
 
         // Instructor validate page — loads assignment-validate.js (Pyodide).
-        // Matched by last path component to avoid affecting /instructor/:id/edit
-        // and other instructor pages that load CDN resources.
+        // Matched by last path component rather than a prefix so it does not
+        // sweep in the rest of /instructor/*, which has no need of isolation.
+        // (The historic reason given here — that those pages load CDN
+        // resources — no longer holds: the CSP is `'self'`-only and every
+        // browser library is vendored same-origin.  The narrow match is still
+        // right, just not for that reason.)
         if last == "validate" { return true }
 
         // Student notebook editor page (/testsetups/:id/notebook), gated.
         if isolateNotebook, parts.count == 3, parts[0] == "testsetups", last == "notebook" {
             return true
+        }
+
+        // Assignment workbench (/instructor/:assignmentID/workbench) and its
+        // left pane (…/workbench/panel).
+        //
+        // Both need the headers, and the reason is the whole point of this
+        // block: cross-origin isolation is a property of the *entire ancestor
+        // chain*.  The workbench nests the notebook page one level deeper than
+        // it has ever been nested, so
+        //
+        //   • without isolation on the shell, the notebook iframe cannot be
+        //     isolated either, `crossOriginIsolated` goes false inside it, and
+        //     every Chrome/Firefox author silently drops off the
+        //     SharedArrayBuffer path onto the service-worker comlink transport
+        //     (docs/notebook-editor-kernel-boot.md) — a performance and
+        //     reliability regression with no error message; and
+        //   • under `require-corp` a nested document must itself send
+        //     `require-corp` or the browser refuses to load it outright
+        //     (`ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader`), so
+        //     the *left* pane needs them too even though it runs no Python.
+        //
+        // Gated on the same flag as the notebook page: the panes and their
+        // shell must agree, and the unit-test seam has to be able to turn the
+        // whole thing off in one place.  WebKit is exempted by the caller, which
+        // is what keeps Safari's comlink path working — there it is simply
+        // "no isolation anywhere in the chain", which is equally consistent.
+        if isolateNotebook, parts.count >= 3, parts[0] == "instructor" {
+            if parts.count == 3, last == "workbench" { return true }
+            if parts.count == 4, parts[2] == "workbench", last == "panel" { return true }
         }
 
         return false

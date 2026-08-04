@@ -62,6 +62,10 @@ func routes(_ app: Application) throws {
     let instructor = app.grouped(
         sessionAuth, ActiveCourseStaffMiddleware(), NavCourseContextMiddleware(), csrf)
     try instructor.register(collection: InstructorDashboardRoutes())
+    // Side-by-side authoring surface: the edit page and the notebook editor as
+    // two panes.  Composes the pages registered above and below rather than
+    // adding content of its own.
+    try instructor.register(collection: InstructorWorkbenchRoutes())
     try instructor.register(collection: DraftAssignmentRoutes())
     try instructor.register(collection: PublishedAssignmentRoutes())
     try instructor.register(collection: CourseAdminRoutes())
