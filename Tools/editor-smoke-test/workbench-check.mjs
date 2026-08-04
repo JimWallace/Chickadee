@@ -179,6 +179,20 @@ async function seed() {
   const assignmentID = (pubLoc.match(/\/instructor\/([^/]+)\/edit/) || [])[1];
   if (!assignmentID) throw new Error(`could not parse assignmentID from redirect: "${pubLoc}"`);
 
+  // Give the assignment a reference solution, so the workbench actually renders
+  // the Solution tab and the switching assertions are live rather than skipped.
+  // This is the same button the edit page's Files table offers.
+  csrf = await csrfFrom(instr, `/instructor/${assignmentID}/edit`);
+  await expectOK(
+    "create solution",
+    instr.post(`/instructor/${assignmentID}/create-solution`, {
+      form: { _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+
   const storageState = await instr.storageState();
   await instr.dispose();
   return { setupID, assignmentID, storageState };
@@ -325,6 +339,75 @@ async function main() {
         `about:blank until its tab is selected, so a second Pyodide is only paid ` +
         `for by an author who asks for it.`
       );
+    }
+
+    // 5. Activity forwarding — the guard against being signed out mid-edit.
+    //
+    // `idle-logout.js` measures interaction with its OWN document, and it lives
+    // on the shell; every keystroke an author makes lands in a pane. Without the
+    // forwarder the shell sits apparently idle and signs the author out ~30
+    // minutes into a session. That is a bug you cannot notice in a smoke test
+    // that only checks the first minute, so assert the mechanism directly:
+    // a keystroke in a pane must raise `chickadee:activity` on the shell.
+    const sawActivity = await page.evaluate(async () => {
+      let seen = false;
+      const onActivity = () => { seen = true; };
+      window.addEventListener("chickadee:activity", onActivity);
+      const frame = document.getElementById("wb-edit-frame");
+      frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+      await new Promise((r) => setTimeout(r, 500));
+      window.removeEventListener("chickadee:activity", onActivity);
+      return seen;
+    });
+    console.log(`pane keystroke reached the shell as chickadee:activity = ${sawActivity}`);
+    if (!sawActivity) {
+      return fail(
+        "a keystroke in a pane did not reach the shell. embedded-activity.js is not " +
+        "forwarding, or workbench.js is not re-raising it — which means idle-logout.js " +
+        "on the shell will sign an author out while they are actively typing."
+      );
+    }
+
+    // 6. Lazy mount, then keep. Selecting the solution tab must mount it AND
+    //    leave the assignment mounted, so switching back is a CSS toggle rather
+    //    than a second cold kernel boot. This is the contract behind the
+    //    kernel-count decision; without it the feature's whole point is lost.
+    if (mounts.solutionPresent) {
+      await page.click("#wb-tab-solution");
+      await page.waitForTimeout(1500);
+      const afterSwitch = await page.evaluate(() => {
+        const a = document.getElementById("wb-notebook-assignment");
+        const s = document.getElementById("wb-notebook-solution");
+        return {
+          assignment: a.getAttribute("src"),
+          solution: s.getAttribute("src"),
+          assignmentHidden: a.hidden,
+          solutionHidden: s.hidden,
+        };
+      });
+      console.log(`after switch: solution=${afterSwitch.solution} assignmentStillMounted=${afterSwitch.assignment !== "about:blank"}`);
+      if (!afterSwitch.solution || !afterSwitch.solution.includes("file=solution")) {
+        return fail(`selecting the Solution tab did not mount it (src=${afterSwitch.solution})`);
+      }
+      if (afterSwitch.solutionHidden || !afterSwitch.assignmentHidden) {
+        return fail("tab switch did not swap which pane is visible");
+      }
+      // On a CI runner deviceMemory is usually unreported, so the keep-mounted
+      // branch is the one under test. Skip the assertion if the shell chose the
+      // low-memory path — that is a legitimate outcome, not a failure.
+      const twoKernels = await page.evaluate(
+        () => !window.ChickadeeWorkbench || window.ChickadeeWorkbench.allowsTwoKernels(navigator)
+      );
+      if (twoKernels && afterSwitch.assignment === "about:blank") {
+        return fail(
+          "switching tabs unmounted the assignment notebook on a device that can hold " +
+          "two kernels — switching back will pay a full cold boot, which is the cost " +
+          "this feature exists to remove."
+        );
+      }
+      if (!twoKernels) {
+        console.log("(low-memory device: unmount-on-switch is the expected branch)");
+      }
     }
 
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");
