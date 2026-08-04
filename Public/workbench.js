@@ -17,8 +17,9 @@
 //     clamps the notebook pane at 720px and the edit pane at 380px, and below a
 //     viewport that can hold both the layout drops to one pane at a time.
 //
-//   * **One notebook document, always.** The tabs and the view switch change
-//     the single iframe's src; they are destinations, not panes. An iframe per
+//   * **One notebook document, always.** The Files table and the view switch
+//     change the single iframe's src; they are destinations, not panes. An
+//     iframe per
 //     (file, view) would mean a Pyodide kernel per combination — up to four —
 //     and bounding that needs an eviction policy, which is a lot of machinery
 //     for a secondary interaction. The workbench exists to put the edit page
@@ -100,29 +101,11 @@
         return null;
     }
 
-    /// Toggle the edit pane between collapsed and its last expanded width.
-    ///
-    /// Kept as a pure transition on an explicit state object because the bug
-    /// this shape prevents is a real one: collapsing while already collapsed
-    /// must not overwrite the remembered width with 0, or the pane can never be
-    /// restored and the author is left with no way back to the editor short of
-    /// dragging the splitter out from the edge.
-    ///
-    /// `state` is `{ collapsed, width, restoreWidth }`; the return is the same
-    /// shape.
-    function toggleCollapse(state) {
-        if (state.collapsed) {
-            return { collapsed: false, width: state.restoreWidth, restoreWidth: state.restoreWidth };
-        }
-        return { collapsed: true, width: 0, restoreWidth: state.width };
-    }
-
     // Exported for the unit tests, which exercise the arithmetic and the
     // policy without a DOM.
     var api = {
         clampLeftWidth: clampLeftWidth,
-        resolvePane: resolvePane,
-        toggleCollapse: toggleCollapse
+        resolvePane: resolvePane
     };
     if (typeof window !== 'undefined') window.ChickadeeWorkbench = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -139,13 +122,15 @@
     var assignmentID = shell.getAttribute('data-assignment-id') || '';
     var storageKey = 'chickadee-workbench-split:' + assignmentID;
 
-    var tabs = Array.prototype.slice.call(shell.querySelectorAll('.wb-tab'));
+    // Which notebook is open is a label here, not a control: the choosing
+    // happens in the left pane's Files table, which already lists the files.
+    var openFileLabel = document.getElementById('wb-openfile');
     var viewButtons = Array.prototype.slice.call(shell.querySelectorAll('.wb-view'));
     var viewSwitch = document.getElementById('wb-viewswitch');
 
-    // The single notebook document, and the destinations its tabs can send it
-    // to. There is one iframe, so there is one kernel — switching notebooks
-    // costs a boot, and nothing here has to manage a pool.
+    // The single notebook document, and every destination it can be sent to.
+    // There is one iframe, so there is one kernel — switching notebooks costs a
+    // boot, and nothing here has to manage a pool.
     var notebookFrame = document.getElementById('wb-notebook');
     // Carried on a data-attribute rather than a <script> island: it is a small
     // map the shell reads once, and the style guard ratchets inline script
@@ -194,34 +179,6 @@
         if (!isNaN(px) && px > 0) applyLeftWidth(px);
     }
 
-    // ── Collapse ──────────────────────────────────────────────────────────
-
-    var collapseState = { collapsed: false, width: 0, restoreWidth: 0 };
-
-    function applyCollapse() {
-        shell.setAttribute('data-wb-collapsed', collapseState.collapsed ? 'edit' : '');
-        if (collapseBtn) {
-            collapseBtn.setAttribute('aria-expanded', collapseState.collapsed ? 'false' : 'true');
-            collapseBtn.textContent = collapseState.collapsed ? 'Show editor' : 'Hide editor';
-        }
-        if (collapseState.collapsed) {
-            shell.style.setProperty('--wb-left-width', '0px');
-            if (splitter) splitter.setAttribute('aria-valuenow', '0');
-        } else {
-            applyLeftWidth(collapseState.restoreWidth || EDIT_MIN);
-        }
-    }
-
-    function doToggleCollapse() {
-        collapseState.width = collapseState.collapsed ? collapseState.width : currentLeftWidth();
-        collapseState = toggleCollapse(collapseState);
-        applyCollapse();
-        if (!collapseState.collapsed) persist(currentLeftWidth());
-    }
-
-    var collapseBtn = document.getElementById('wb-collapse-edit');
-    if (collapseBtn) collapseBtn.addEventListener('click', doToggleCollapse);
-
     if (splitter && body) {
         var dragging = false;
 
@@ -248,11 +205,6 @@
         splitter.addEventListener('keydown', function (e) {
             var width = currentLeftWidth();
             var total = body.clientWidth;
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                doToggleCollapse();
-                return;
-            }
             var next = null;
             if (e.key === 'ArrowLeft') next = width - KEY_STEP_PX;
             else if (e.key === 'ArrowRight') next = width + KEY_STEP_PX;
@@ -260,9 +212,6 @@
             else if (e.key === 'End') next = total - SPLITTER_PX - NOTEBOOK_MIN;
             if (next === null) return;
             e.preventDefault();
-            // Any explicit sizing means the pane is no longer collapsed.
-            collapseState.collapsed = false;
-            shell.setAttribute('data-wb-collapsed', '');
             persist(applyLeftWidth(next));
         });
 
@@ -283,12 +232,9 @@
         activeFile = pane.file;
         activeView = pane.view;
 
-        tabs.forEach(function (tab) {
-            var isActive = tab.getAttribute('data-wb-file') === pane.file;
-            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            // Roving tabindex: one stop for the whole strip.
-            tab.setAttribute('tabindex', isActive ? '0' : '-1');
-        });
+        if (openFileLabel) {
+            openFileLabel.textContent = pane.file === 'solution' ? 'Solution' : 'Assignment';
+        }
         viewButtons.forEach(function (btn) {
             btn.setAttribute(
                 'aria-pressed',
@@ -317,20 +263,6 @@
         // looking at; a fresh load is current by construction.
         if (staleChip) staleChip.hidden = true;
     }
-
-    tabs.forEach(function (tab, index) {
-        tab.addEventListener('click', function () {
-            selectPane(tab.getAttribute('data-wb-file'), activeView);
-        });
-        tab.addEventListener('keydown', function (e) {
-            var delta = e.key === 'ArrowRight' ? 1 : (e.key === 'ArrowLeft' ? -1 : 0);
-            if (!delta) return;
-            e.preventDefault();
-            var next = tabs[(index + delta + tabs.length) % tabs.length];
-            next.focus();
-            selectPane(next.getAttribute('data-wb-file'), activeView);
-        });
-    });
 
     viewButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -392,6 +324,72 @@
                 staleChip.textContent = 'Inputs changed — reload the notebook to see new values';
                 staleChip.hidden = false;
             }
+            return;
+        }
+
+        if (data.type === 'open-notebook') {
+            // The left pane's Files table is the only place that chooses which
+            // notebook is open.  `data.file` selects a destination from a
+            // server-rendered table, never a URL, so an unrecognised value
+            // resolves to nothing rather than navigating anywhere.
+            selectPane(data.file === 'solution' ? 'solution' : 'assignment', activeView);
+            return;
+        }
+
+        if (data.type === 'save-result') {
+            pendingSaves -= 1;
+            if (!data.ok) saveFailed = true;
+            if (pendingSaves <= 0) finishSave();
         }
     });
+
+    // ── Save ──────────────────────────────────────────────────────────────
+    //
+    // One button for what used to be two: it saves the notebook that is open
+    // and the assignment's details, then re-validates.
+    //
+    // It deliberately does NOT close the assignment.  The workbench is a
+    // live-edit surface — `PUT /suite`, `PUT /families` and
+    // `POST /notebook/save` all write without touching visibility — and
+    // closing on save would mean fixing a typo pulls a lab out from under the
+    // students sitting in it.  The standalone `/edit` page keeps
+    // close-on-save; the difference rides on the `liveEdit` field only the
+    // embedded form sends.
+
+    var saveBtn = document.getElementById('wb-save');
+    var saveStatus = document.getElementById('wb-save-status');
+    var pendingSaves = 0;
+    var saveFailed = false;
+
+    function finishSave() {
+        pendingSaves = 0;
+        if (saveBtn) saveBtn.disabled = false;
+        if (saveStatus) {
+            saveStatus.textContent = saveFailed ? 'Save failed — see the pane for details' : 'Saved';
+        }
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            saveFailed = false;
+            saveBtn.disabled = true;
+            if (saveStatus) saveStatus.textContent = 'Saving…';
+            // Both panes are asked, and each replies. A pane with nothing to
+            // save still replies, so the button always comes back — silence
+            // would leave it disabled forever.
+            pendingSaves = 0;
+            [notebookFrame, editFrame].forEach(function (frame) {
+                if (!frame || !frame.contentWindow) return;
+                pendingSaves += 1;
+                try {
+                    frame.contentWindow.postMessage(
+                        { source: 'chickadee', type: 'save' }, window.location.origin);
+                } catch (_) {
+                    pendingSaves -= 1;
+                    saveFailed = true;
+                }
+            });
+            if (pendingSaves <= 0) finishSave();
+        });
+    }
 }());

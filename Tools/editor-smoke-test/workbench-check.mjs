@@ -349,7 +349,12 @@ async function main() {
       return {
         count: frames.length,
         src: f ? f.getAttribute("src") : null,
-        solutionPresent: !!document.getElementById("wb-tab-solution"),
+        // Deliberately NOT a lookup in this document. The solution is now
+        // reached from the left pane's Files table, so its presence is a fact
+        // about that pane — and keying off a shell element that no longer
+        // exists is exactly how the assertion below would skip silently while
+        // looking like it passed.
+        solutionPresent: null,
       };
     });
     console.log(`notebook frames=${mounts.count} src=${mounts.src}`);
@@ -426,66 +431,46 @@ async function main() {
       return fail(`the view switch did not repoint the notebook (src=${afterView.src})`);
     }
 
-    // 6b. Tab and view switching drive the ONE notebook iframe.
+    // 6b. The left pane's Files table drives the notebook pane.
     //
-    //    There is a single notebook document, so what is asserted is that the
-    //    controls change where it points — not that a pool of frames is being
-    //    managed. Selecting Solution must repoint it at the solution; the view
-    //    switch must repoint it at the template of whatever file is selected.
-    if (mounts.solutionPresent) {
-      await page.click("#wb-tab-solution");
-      await page.waitForTimeout(1000);
-      const afterTab = await page.evaluate(() => {
+    //     Two things are asserted, and the second is the one that was a live
+    //     bug: those Edit links carry no `embedded=1`, so before this wiring a
+    //     click navigated the LEFT pane into a fully-chromed notebook page and
+    //     the assignment editor vanished from the workbench.
+    const panelFrame = page.frames().find((f) => f.url().includes("/workbench/panel"));
+    const hasSolutionEdit = await panelFrame.evaluate(
+      () => !!document.getElementById("solution-notebook-edit-btn"));
+    // Asserted, not assumed: the seed creates a solution, so a missing button
+    // means the wiring or the seed broke — not that this case does not apply.
+    if (!hasSolutionEdit) {
+      return fail(
+        "the left pane has no solution Edit button, so the Files-table switching " +
+        "assertion below would silently skip. The seed creates a solution.");
+    }
+    {
+      await panelFrame.click("#solution-notebook-edit-btn");
+      await page.waitForTimeout(1200);
+
+      const afterOpen = await page.evaluate(() => {
         const f = document.getElementById("wb-notebook");
         return { src: f.getAttribute("src"), file: f.getAttribute("data-wb-file") };
       });
-      console.log(`after tab switch: src=${afterTab.src}`);
-      if (!afterTab.src || !afterTab.src.includes("file=solution")) {
-        return fail(`selecting the Solution tab did not repoint the notebook (src=${afterTab.src})`);
+      console.log(`after Files-table open: src=${afterOpen.src}`);
+      if (!afterOpen.src || !afterOpen.src.includes("file=solution")) {
+        return fail(
+          `clicking the Files table's solution Edit did not repoint the notebook ` +
+          `(src=${afterOpen.src})`);
       }
-      if (afterTab.file !== "solution") {
-        return fail(`notebook frame still reports file=${afterTab.file} after selecting Solution`);
-      }
-    }
 
-    // 7. Collapsing the editor must give the notebook the FULL width.
-    //
-    //    This is a regression guard for a real bug, found by screenshotting
-    //    rather than by any test: hiding the edit pane with `display: none`
-    //    removes it from the grid, so with a three-column template still in
-    //    force the notebook landed in the `auto` column and sized to content.
-    //    It ended up ~380px wide, and the embedded notebook page — which hides
-    //    its editor below 640px — rendered "Open on a larger screen" instead of
-    //    the notebook. Collapsing to see MORE notebook showed none of it.
-    //
-    //    Unit tests could not see this; `toggleCollapse` was correct, the CSS
-    //    was not. So the assertion is on the rendered geometry.
-    await page.click("#wb-collapse-edit");
-    await page.waitForTimeout(800);
-    const collapsed = await page.evaluate(() => {
-      const pane = document.querySelector(".wb-pane-notebook");
-      const edit = document.querySelector(".wb-pane-edit");
-      return {
-        notebookWidth: pane ? pane.getBoundingClientRect().width : 0,
-        editVisible: edit ? edit.getBoundingClientRect().width > 0 : false,
-        viewport: window.innerWidth,
-      };
-    });
-    console.log(
-      `collapsed: notebook=${Math.round(collapsed.notebookWidth)}px of ${collapsed.viewport}px ` +
-      `viewport, editVisible=${collapsed.editVisible}`);
-    if (collapsed.editVisible) {
-      return fail("collapsing the editor left it visible");
-    }
-    // Full width, allowing for scrollbars/rounding — not merely "wider than the
-    // 720px floor", because the point of collapsing is to get everything.
-    if (collapsed.notebookWidth < collapsed.viewport - 40) {
-      return fail(
-        `collapsing the editor left the notebook only ${Math.round(collapsed.notebookWidth)}px ` +
-        `of a ${collapsed.viewport}px viewport. The edit pane is hidden but the grid still ` +
-        `reserves its columns, so the notebook is being sized to content — below 640px it ` +
-        `will render "Open on a larger screen" instead of the editor.`
-      );
+      const leftStillEditor = await page
+        .frames()
+        .find((f) => f.url().includes("/workbench/panel"))
+        ?.evaluate(() => !!document.getElementById("suite-sections"));
+      if (!leftStillEditor) {
+        return fail(
+          "the left pane is no longer the assignment editor — the Edit link " +
+          "navigated the pane instead of opening into the notebook pane.");
+      }
     }
 
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");

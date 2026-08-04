@@ -28,7 +28,16 @@ FROM ${BASE_IMAGE}
 #             and a shipped feature's grading path has zero CI coverage
 # python3-pandas / python3-matplotlib — NotebookCheckRuntimeState tests that
 #             exercise dataframe/plot check kinds against a real interpreter
+# nodejs/npm/ca-certificates — the browser probe jobs (editor smoke, exec-hang,
+#             grading-hang, lifecycle, reset, bridge, visual) run the
+#             Playwright harness in Tools/editor-smoke-test. They used to
+#             apt-get these at job start, which is the same 20-40 s per job the
+#             rest of this image exists to remove — and on 2026-08-04 it was
+#             worse than slow: archive.ubuntu.com was unreachable, the step
+#             exited 100, every probe skipped its tests, and the required
+#             editor-smoke gate went red because of an Ubuntu mirror.
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
         r-base python3-pandas python3-matplotlib \
+        nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*

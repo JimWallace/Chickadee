@@ -50,7 +50,14 @@ concurrency:
 jobs:
   grading-probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # 75, not 50: this job pays the same cold `browser-probe-setup` build as the
+    # other probes (23-29 min when the shared cache misses, which it does on any
+    # PR touching Sources/** or Tests/**) and THEN runs 12 grading iterations per
+    # engine on top.  On PR #1264 the webkit leg ran the full 50 min and was
+    # killed before finishing, while chromium — which happened to get a warm
+    # cache — completed the same 12 iterations comfortably.  The old budget was
+    # sized for the warm path only.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -58,7 +65,11 @@ jobs:
     # Same Swift image as the other editor jobs so the cached server binary runs
     # and the vended Public/pyodide it serves is the exact build CI ships.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

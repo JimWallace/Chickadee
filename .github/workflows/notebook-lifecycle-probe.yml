@@ -35,13 +35,27 @@ concurrency:
 jobs:
   lifecycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, webkit]
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

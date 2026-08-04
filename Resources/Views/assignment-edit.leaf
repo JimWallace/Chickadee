@@ -68,10 +68,21 @@
         </div>
 
         <div class="editor-actions">
+            #if(embedded):
+            <!-- The workbench has one Save in its top bar which submits this
+                 form for us, so a second button here would be the same action
+                 twice.  `liveEdit` is what makes that Save leave the
+                 assignment's visibility alone: the workbench is a live-edit
+                 surface, and closing on save would pull a lab out from under
+                 the students in it.  This page standalone keeps close-on-save,
+                 because it does not send the field. -->
+            <input type="hidden" name="liveEdit" value="1">
+            #else:
             <button class="btn btn-primary" type="submit"
                     title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
                 Save &amp; Validate
             </button>
+            #endif
             #if(!embedded):
             <!-- Absent when this page IS the workbench's left pane: the pane
                  must not offer a link to the surface containing it. -->
@@ -107,7 +118,8 @@
                         <a href="#(currentAssignmentURL)"><code id="assignment-notebook-name">#(currentAssignmentFile)</code></a>
                     </td>
                     <td class="time">
-                        <a class="btn action-btn" id="assignment-notebook-edit-btn" href="#(assignmentNotebookEditURL)">Edit</a>
+                        <a class="btn action-btn" id="assignment-notebook-edit-btn"
+                           data-wb-file="assignment" href="#(assignmentNotebookEditURL)">Edit</a>
                     </td>
                 </tr>
                 <tr>
@@ -121,7 +133,8 @@
                     </td>
                     <td class="time">
                         #if(solutionNotebookEditURL):
-                        <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
+                        <a class="btn action-btn" id="solution-notebook-edit-btn"
+                           data-wb-file="solution" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
                         <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form">
                             #csrfFormField()
