@@ -80,7 +80,7 @@ jobs:
           # the assets the editor actually loads and the middlewares that isolate
           # them. Over-matching is safe (it just runs the smoke); under-matching
           # is the dangerous direction.
-          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/grading-worker\.js|Public/pyodide-worker\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
+          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/grading-worker\.js|Public/pyodide-worker\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/embedded-activity\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Resources/Views/workbench\.leaf|Resources/Views/notebook\.leaf|Resources/Views/base\.leaf|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
           # Use a here-string, NOT `echo "$changed" | grep -qE`: with a large
           # changed-file list (e.g. a full JupyterLite bundle re-vendor) grep -q
           # matches early and closes the pipe, echo takes SIGPIPE, and the
@@ -187,6 +187,30 @@ jobs:
           fi
           echo "::warning::FLAKE RETRY: webkit notebook-page e2e failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Families 2+3). Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+      # The assignment workbench nests the notebook page one frame deeper than
+      # anything else, and cross-origin isolation is a property of the WHOLE
+      # ancestor chain. COEPMiddlewareTests pins the headers; only a real browser
+      # can confirm the isolation those headers are meant to produce survives two
+      # levels of framing. Without this, a broken chain is silent: the kernel
+      # still boots, just on the service-worker comlink transport instead of
+      # SharedArrayBuffer. Cheaper than the notebook-page e2e — it asserts the
+      # frames and their isolation, and does not wait for a kernel or a submit.
+      - name: Run workbench isolation-chain e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit workbench e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so
