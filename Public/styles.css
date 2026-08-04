@@ -832,6 +832,26 @@ code { font-family: var(--font-mono); font-size: .9em; }
     display: block;
 }
 
+/* Width of the assignment workbench's left (edit) pane.  Declared here rather
+   than in the page block because every custom property must resolve from the
+   global sheet.  Layout only — no dark-mode mirror needed.  workbench.js
+   overwrites it on the shell element as the splitter is dragged; this value is
+   the pre-JS default, biased toward the notebook. */
+:root { --wb-left-width: 42%; }
+
+/* Full-bleed page body: drops the 900px cap and the gutters `.main` applies, for
+   pages that own the whole viewport rather than sitting in the reading column.
+   Set from base.leaf via the `fullBleed` context flag.  Lives here rather than
+   in a page <style> block because more than one page needs it, and `.main`
+   itself may only be overridden by a single page. */
+.main-fullbleed { max-width: 100%; padding: 0; margin: 0; }
+
+/* The notebook page rendered into an assignment-workbench pane.  `100vh` here
+   is the *pane iframe's* height, not the window's, and the pane has no site nav
+   above it — so only the notebook's own toolbar row has to be subtracted, where
+   the standalone page also pays for the nav and course tabs. */
+.jl-frame-embedded { height: calc(100vh - 3rem); }
+
 /* ── Auth pages ──────────────────────────────────────── */
 
 .auth-box {

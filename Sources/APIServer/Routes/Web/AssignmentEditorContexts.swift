@@ -82,6 +82,30 @@ struct NewAssignmentNotebookContext: Encodable {
     let editURL: String
 }
 
+/// The assignment workbench shell (`workbench.leaf`).  Deliberately thin: the
+/// shell renders no assignment content, only the frame around two iframes that
+/// each load an existing page.  Everything here is either an identifier the
+/// page JS keys on or a URL for one of those iframes.
+struct AssignmentWorkbenchContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let assignmentID: String
+    let testSetupID: String
+    let assignmentTitle: String
+    /// Left pane — the edit page in embedded mode.
+    let editPanelURL: String
+    /// Right pane, "Assignment" tab.
+    let assignmentNotebookURL: String
+    /// Right pane, "Solution" tab.  `nil` when the assignment has no reference
+    /// solution yet, in which case the tab is absent rather than disabled —
+    /// matching how the edit page omits `solutionNotebookEditURL`.
+    let solutionNotebookURL: String?
+    /// Escape hatch back to the full-width single-page editor.
+    let standaloneEditURL: String
+    /// Drops `.main`'s reading-column cap and gutters — the workbench sizes
+    /// itself to the viewport and scrolls inside its panes.
+    let fullBleed: Bool = true
+}
+
 struct EditAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
@@ -152,4 +176,11 @@ struct EditAssignmentContext: Encodable {
     let timeLimitSeconds: Int
     let notice: String?
     let error: String?
+    /// True when this page is being rendered into the left pane of the
+    /// assignment workbench (`GET /instructor/:assignmentID/workbench/panel`)
+    /// rather than as the standalone edit page.  `base.leaf` reads it to
+    /// suppress the site chrome, and the template reads it to drop the
+    /// "Open workbench" link (the workbench must not link to itself).
+    /// `nil` on the standalone `/edit` render.
+    let embedded: Bool?
 }

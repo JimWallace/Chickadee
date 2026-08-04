@@ -15,6 +15,9 @@ import VaporTesting
 
         app.get("testsetups", ":testSetupID", "notebook") { _ in "notebook" }
         app.get("instructor", ":assignmentID", "validate") { _ in "validate" }
+        app.get("instructor", ":assignmentID", "workbench") { _ in "workbench" }
+        app.get("instructor", ":assignmentID", "workbench", "panel") { _ in "panel" }
+        app.get("instructor", ":assignmentID", "edit") { _ in "edit" }
         app.get("jupyterlite", "notebooks", "index.html") { _ in "iframe" }
         app.get("grading-worker.js") { _ in "// grading worker" }
         app.get("freeze-watchdog-worker.js") { _ in "// freeze worker" }
@@ -208,6 +211,67 @@ import VaporTesting
                 headers: ["User-Agent": Self.safariUA]
             ) { res async in
                 #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
+
+    // MARK: - Assignment workbench: the whole ancestor chain must be isolated
+
+    // Cross-origin isolation is a property of the entire frame chain, and the
+    // workbench nests the notebook page one level deeper than it has ever been
+    // nested.  If the shell is not isolated, the notebook iframe cannot be
+    // either — `crossOriginIsolated` goes false inside it and the kernel
+    // silently drops off SharedArrayBuffer onto the service-worker transport,
+    // with no error anywhere.  And under `require-corp` a nested document that
+    // does not itself send `require-corp` is refused outright, so the left pane
+    // needs the headers even though it runs no Python.
+    //
+    // These two tests are the guard on that: they are the only place the
+    // requirement is stated executably.
+
+    @Test(arguments: [
+        "/instructor/assignment_123/workbench",
+        "/instructor/assignment_123/workbench/panel",
+    ])
+    func workbenchChainIsIsolatedForChrome(path: String) async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, path, headers: ["User-Agent": Self.chromeUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
+                #expect(variesOnUserAgent(res), "Isolation varies by engine, so the response must Vary")
+            }
+        }
+    }
+
+    @Test(arguments: [
+        "/instructor/assignment_123/workbench",
+        "/instructor/assignment_123/workbench/panel",
+    ])
+    func workbenchChainIsNotIsolatedForWebKit(path: String) async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, path, headers: ["User-Agent": Self.safariUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
+
+    /// The regression that matters most: the workbench rule must not widen to
+    /// the rest of `/instructor/*`.  The standalone edit page is reached by
+    /// every instructor on every assignment and has no business being isolated.
+    @Test func plainEditPageStaysUnisolated() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, "/instructor/assignment_123/edit", headers: ["User-Agent": Self.chromeUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
         }

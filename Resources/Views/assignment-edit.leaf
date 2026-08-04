@@ -72,7 +72,13 @@
                     title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
                 Save &amp; Validate
             </button>
+            #if(!embedded):
+            <!-- Absent when this page IS the workbench's left pane: the pane
+                 must not offer a link to the surface containing it. -->
+            <a class="btn" href="/instructor/#(assignmentID)/workbench"
+               title="Edit this assignment beside the notebook editor">Workbench</a>
             <a class="btn" href="/instructor">Cancel</a>
+            #endif
         </div>
     </div>
 

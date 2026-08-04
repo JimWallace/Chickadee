@@ -1257,6 +1257,16 @@
     // server-side for course staff only (NotebookContext.canSaveToAssignment);
     // the endpoint re-checks the same permission, so this is convenience, not
     // the control.
+    // Post a same-origin note to the assignment-workbench shell when this page
+    // is one of its panes.  Silent no-op when the page is top-level, which is
+    // every other way it is reached.
+    function notifyWorkbench(type) {
+        if (window.parent === window) return;
+        try {
+            window.parent.postMessage({ source: 'chickadee', type: type }, window.location.origin);
+        } catch (_) { /* cross-origin or vanished parent */ }
+    }
+
     if (saveAssignmentBtn) {
         const saveFileKind = saveAssignmentBtn.dataset.fileKind === 'solution' ? 'solution' : 'assignment';
         // Which working copy the editor is showing. The endpoint writes the
@@ -1292,6 +1302,11 @@
                 }
                 const payload = await res.json();
                 setStatus('ok', payload.message || 'Saved to the assignment.');
+                // In an assignment-workbench pane, tell the shell: the save
+                // changed the files list and validation status that the edit
+                // pane beside us is rendering, so it is now stale.  No-op on
+                // the standalone page, which has no parent.
+                notifyWorkbench('notebook-saved');
             } catch (err) {
                 const msg = (err instanceof Error && err.message) ? err.message : String(err);
                 console.error('[notebook] Save-to-assignment error:', err);

@@ -10,6 +10,13 @@ Notebook
    hairline top margin and no bottom margin. */
 .main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
 
+#if(embedded):
+/* Rendered into a workbench pane: no site nav above us and no page scroll, so
+   trim the gutter to match.  The editor's own height comes from the
+   `.jl-frame-embedded` modifier in styles.css. */
+.main { padding: 0 .5rem; margin: 0 auto; }
+#endif
+
 /* Closed-assignment "view only" notice + fallback/small-screen text. */
 .nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
 .nb-notice-title { margin: .2rem 0 .5rem; }
@@ -134,7 +141,7 @@ Notebook
      notebook.js skips the mount entirely, so the iframe stays about:blank. -->
 <iframe
     id="jl-frame"
-    class="jl-frame"
+    class="jl-frame#if(embedded): jl-frame-embedded#endif"
     title="Notebook editor"
     data-setup-id="#(testSetupID)"
     data-grading-mode="#(gradingMode)"
