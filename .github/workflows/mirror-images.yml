@@ -50,7 +50,15 @@ concurrency:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60, not 30: the derived-image build apt-installs a heavy set (r-base,
+    # python3-pandas, python3-matplotlib, and now nodejs/npm's ~40-package
+    # tree) from archive.ubuntu.com, behind a 5-attempt retry loop. On
+    # 2026-08-04, with that mirror flaking, the build step alone ran 29.3 min
+    # of the 30 and was killed — mirroring the base took 0.5 min, so the whole
+    # budget goes to the build. This job is weekly/on-demand, not a per-PR hot
+    # path, so a longer ceiling costs little; a timeout costs a stale CI image
+    # for everyone until someone notices.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v6
