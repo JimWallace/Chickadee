@@ -71,10 +71,14 @@ test('clampLeftWidth: a viewport narrower than the notebook floor clamps to zero
 // The server publishes a `template` destination only for a notebook that
 // actually carries {{placeholders}}. These fixtures model an assignment that
 // has one and a solution that does not.
+// Real-shaped paths, not placeholders: resolvePane only accepts URLs matching
+// the embedded notebook-page shape, so a toy path here would be rejected and
+// the tests would be exercising the reject path by accident.
+const NB = '/testsetups/setup_abc123/notebook';
 const URLS = {
-  'assignment:personalized': '/n?file=assignment&view=personalized',
-  'assignment:template': '/n?file=assignment&view=template',
-  'solution:personalized': '/n?file=solution&view=personalized',
+  'assignment:personalized': NB + '?file=assignment&view=personalized&embedded=1',
+  'assignment:template': NB + '?file=assignment&view=template&embedded=1',
+  'solution:personalized': NB + '?file=solution&view=personalized&embedded=1',
 };
 
 test('resolvePane: returns the exact destination when it exists', () => {
@@ -91,6 +95,32 @@ test('resolvePane: falls back to the rendered view rather than doing nothing', (
   const p = Workbench.resolvePane(URLS, 'solution', 'template');
   assert.equal(p.view, 'personalized');
   assert.equal(p.key, 'solution:personalized');
+});
+
+test('resolvePane: refuses a destination that is not a notebook-page path', () => {
+  // The destination map arrives as DOM text and the sink is an iframe src, so a
+  // javascript: URL there would be script execution in this origin. The server
+  // never produces one — the point is that this file no longer depends on that.
+  const hostile = {
+    'assignment:personalized': 'javascript:alert(1)',
+    'assignment:template': '//evil.example/steal',
+    'solution:personalized': 'https://evil.example/steal',
+  };
+  assert.equal(Workbench.resolvePane(hostile, 'assignment', 'personalized'), null);
+  assert.equal(Workbench.resolvePane(hostile, 'assignment', 'template'), null);
+  assert.equal(Workbench.resolvePane(hostile, 'solution', 'personalized'), null);
+});
+
+test('resolvePane: a bad entry falls through rather than being served', () => {
+  // A malformed template entry must degrade to the rendered view, not hand the
+  // caller a pane whose URL will be rejected later and leave the frame blank.
+  const mixed = {
+    'assignment:personalized': '/testsetups/setup_1/notebook?file=assignment&view=personalized',
+    'assignment:template': 'javascript:alert(1)',
+  };
+  const p = Workbench.resolvePane(mixed, 'assignment', 'template');
+  assert.equal(p.view, 'personalized');
+  assert.equal(p.url, mixed['assignment:personalized']);
 });
 
 test('resolvePane: reports nothing for a file that has no destinations', () => {

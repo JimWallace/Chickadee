@@ -60,6 +60,23 @@
         return desiredPx;
     }
 
+    /// The only URL shape this shell is ever allowed to point a notebook frame
+    /// at: a same-origin absolute path to the embedded notebook page.
+    ///
+    /// The destinations arrive as DOM text (a data-attribute the server
+    /// rendered), and the sink is an iframe `src` — a `javascript:` URL there
+    /// is script execution in this page's origin. Today the server builds that
+    /// map from its own `setup_…` identifiers so nothing hostile can reach it,
+    /// but nothing in *this* file enforced that, and the distance between "is
+    /// not attacker-controlled" and "cannot be" is the whole bug class.
+    /// Anchored at both ends, scheme-relative `//host` excluded by the second
+    /// character check.
+    var SAFE_PANE_URL = /^\/testsetups\/[A-Za-z0-9_.-]+\/notebook\?[A-Za-z0-9_=&%.-]*$/;
+
+    function safePaneURL(url) {
+        return (typeof url === 'string' && SAFE_PANE_URL.test(url)) ? url : null;
+    }
+
     /// Resolve which notebook URL a (file, view) selection should load.
     ///
     /// Falls back to the rendered view when the requested reading does not
@@ -70,12 +87,15 @@
     /// silently ignored.
     ///
     /// Pure, so the fallback is testable without a DOM.
+    /// A destination that does not match `SAFE_PANE_URL` is treated as absent,
+    /// not as a pane with a bad URL — so a malformed entry falls through to the
+    /// rendered view or to nothing, and never reaches an iframe.
     function resolvePane(urls, file, view) {
-        var key = file + ':' + view;
-        if (urls[key]) return { key: key, file: file, view: view, url: urls[key] };
-        var fallback = file + ':personalized';
-        if (urls[fallback]) {
-            return { key: fallback, file: file, view: 'personalized', url: urls[fallback] };
+        var exact = safePaneURL(urls[file + ':' + view]);
+        if (exact) return { key: file + ':' + view, file: file, view: view, url: exact };
+        var fallback = safePaneURL(urls[file + ':personalized']);
+        if (fallback) {
+            return { key: file + ':personalized', file: file, view: 'personalized', url: fallback };
         }
         return null;
     }
@@ -279,11 +299,18 @@
 
         notebookFrame.setAttribute('data-wb-file', pane.file);
         notebookFrame.setAttribute('data-wb-view', pane.view);
-        // Guarded: re-setting src to the value it already holds is a reload in
-        // some browsers, which would throw away a kernel that is already
-        // booting just because the author clicked the tab they are on.
-        if (notebookFrame.getAttribute('src') !== pane.url) {
-            notebookFrame.setAttribute('src', pane.url);
+        // Re-validated at the sink rather than trusting that resolvePane already
+        // did it: this is the line where a `javascript:` URL would become script
+        // execution in this origin, so the check belongs where the damage would
+        // happen, not one call up.
+        //
+        // Also guarded on inequality: re-setting src to the value it already
+        // holds is a reload in some browsers, which would throw away a kernel
+        // that is already booting just because the author clicked the tab they
+        // are already on.
+        var nextURL = safePaneURL(pane.url);
+        if (nextURL && notebookFrame.getAttribute('src') !== nextURL) {
+            notebookFrame.setAttribute('src', nextURL);
         }
 
         // Whatever made the chip appear applied to the notebook the author was
