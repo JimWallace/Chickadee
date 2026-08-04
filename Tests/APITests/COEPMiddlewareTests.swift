@@ -16,7 +16,6 @@ import VaporTesting
         app.get("testsetups", ":testSetupID", "notebook") { _ in "notebook" }
         app.get("instructor", ":assignmentID", "validate") { _ in "validate" }
         app.get("instructor", ":assignmentID", "workbench") { _ in "workbench" }
-        app.get("instructor", ":assignmentID", "workbench", "panel") { _ in "panel" }
         app.get("instructor", ":assignmentID", "edit") { _ in "edit" }
         app.get("jupyterlite", "notebooks", "index.html") { _ in "iframe" }
         app.get("grading-worker.js") { _ in "// grading worker" }
@@ -218,21 +217,19 @@ import VaporTesting
 
     // MARK: - Assignment workbench: the whole ancestor chain must be isolated
 
-    // Cross-origin isolation is a property of the entire frame chain, and the
-    // workbench nests the notebook page one level deeper than it has ever been
-    // nested.  If the shell is not isolated, the notebook iframe cannot be
-    // either — `crossOriginIsolated` goes false inside it and the kernel
-    // silently drops off SharedArrayBuffer onto the service-worker transport,
-    // with no error anywhere.  And under `require-corp` a nested document that
-    // does not itself send `require-corp` is refused outright, so the left pane
-    // needs the headers even though it runs no Python.
+    // Cross-origin isolation is a property of the entire frame chain.  If the
+    // workbench is not isolated, the JupyterLite editor iframe cannot be either
+    // — `crossOriginIsolated` goes false inside it and the kernel silently
+    // drops off SharedArrayBuffer onto the service-worker transport, with no
+    // error anywhere.
     //
-    // These two tests are the guard on that: they are the only place the
-    // requirement is stated executably.
+    // #1266 merged the workbench into one document, so the chain is one link
+    // shorter: there is no `…/workbench/panel` wrapper to isolate any more.
+    // The requirement on the workbench itself is unchanged, and these two tests
+    // are the only place it is stated executably.
 
     @Test(arguments: [
-        "/instructor/assignment_123/workbench",
-        "/instructor/assignment_123/workbench/panel",
+        "/instructor/assignment_123/workbench"
     ])
     func workbenchChainIsIsolatedForChrome(path: String) async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
@@ -248,8 +245,7 @@ import VaporTesting
     }
 
     @Test(arguments: [
-        "/instructor/assignment_123/workbench",
-        "/instructor/assignment_123/workbench/panel",
+        "/instructor/assignment_123/workbench"
     ])
     func workbenchChainIsNotIsolatedForWebKit(path: String) async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in

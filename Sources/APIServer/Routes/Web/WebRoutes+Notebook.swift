@@ -257,6 +257,24 @@ extension WebRoutes {
         args: NotebookPageRenderArgs,
         fileKind: NotebookFileKind
     ) async throws -> View {
+        try await req.view.render(
+            "notebook",
+            makeAssignmentNotebookContext(req: req, args: args, fileKind: fileKind))
+    }
+
+    /// The `NotebookContext` for the assignment / solution branch — everything
+    /// `renderAssignmentNotebookView` used to build inline, minus the render.
+    ///
+    /// Split out so the merged workbench can put the *same* notebook body in
+    /// its right-hand pane without a second document.  Before #1266 the
+    /// workbench composed this page as an iframe, so the context was built by
+    /// a second request; now both callers go through one builder and the pane
+    /// cannot drift from the standalone page.
+    private func makeAssignmentNotebookContext(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        fileKind: NotebookFileKind
+    ) async throws -> NotebookContext {
         let setup = args.setup
         let setupID = args.setupID
         let userID = args.userID
@@ -349,30 +367,85 @@ extension WebRoutes {
             canSwitchViews
             ? "/testsetups/\(setupID)/notebook?file=\(fileKind.rawValue)&view=\(otherView.rawValue)"
             : nil
-        return try await req.view.render(
-            "notebook",
-            NotebookContext(
-                testSetupID: setupID,
-                assignmentTitle: args.assignmentTitle,
-                notebookURL: notebookURL,
-                jupyterLiteEditorURL: editorURL,
-                downloadURL: downloadURL,
-                gradingMode: decodeManifestGradingMode(setup),
-                browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
-                // A template still holds `{{name}}`, which does not run and
-                // would fail every test, so Submit belongs to the rendered
-                // view only.  Staff who want to test-submit switch views.
-                showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized,
-                isClosed: args.isClosed,
-                isReadOnly: isReadOnly,
-                canSaveToAssignment: canSaveToAssignment,
-                fileKind: fileKind.rawValue,
-                isTemplateView: viewMode == .template,
-                viewToggleURL: viewToggleURL,
-                workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
-                currentUser: req.currentUserContext,
-                embedded: args.embedded
-            ))
+        return NotebookContext(
+            testSetupID: setupID,
+            assignmentTitle: args.assignmentTitle,
+            notebookURL: notebookURL,
+            jupyterLiteEditorURL: editorURL,
+            downloadURL: downloadURL,
+            gradingMode: decodeManifestGradingMode(setup),
+            browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
+            // A template still holds `{{name}}`, which does not run and
+            // would fail every test, so Submit belongs to the rendered
+            // view only.  Staff who want to test-submit switch views.
+            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized,
+            isClosed: args.isClosed,
+            isReadOnly: isReadOnly,
+            canSaveToAssignment: canSaveToAssignment,
+            fileKind: fileKind.rawValue,
+            isTemplateView: viewMode == .template,
+            viewToggleURL: viewToggleURL,
+            workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
+            currentUser: req.currentUserContext,
+            embedded: args.embedded
+        )
+    }
+
+    /// The notebook context for the **merged workbench's** right-hand pane.
+    ///
+    /// The workbench used to get this by loading `/testsetups/:id/notebook`
+    /// into an iframe, which meant a second request re-deriving every gate.
+    /// Now it asks here, so the pane and the standalone page are the same
+    /// bytes by construction.
+    ///
+    /// Resolution mirrors `notebookPage` deliberately, with two differences,
+    /// both because the caller is `/instructor/...` and already staff-gated by
+    /// `ActiveCourseStaffMiddleware` + `loadAssignmentAndSetupForStaffRead`:
+    ///
+    /// - There is no `closedAssignmentGate` call. That gate exists to stop a
+    ///   student reaching a lab they never engaged with; staff always may.
+    /// - `isStaff` is still *computed*, not assumed. The workbench is reachable
+    ///   by an admin who is not enrolled in the course, and `canSaveToAssignment`
+    ///   must stay false for them rather than inheriting the route's gate.
+    ///
+    /// `embedded: true` is passed for the same presentational reason the iframe
+    /// used to carry `?embedded=1`: it suppresses the notebook body's own
+    /// duplicate Save / Download / view-toggle controls, which the workbench
+    /// bar provides once.
+    func workbenchNotebookContext(
+        req: Request,
+        user: APIUser,
+        setup: APITestSetup,
+        assignment: APIAssignment?,
+        fileKind: NotebookFileKind,
+        requestedView: String?
+    ) async throws -> NotebookContext {
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        let setupID = setup.id ?? ""
+        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        let viewMode = try await resolveNotebookViewMode(
+            req: req, setup: setup, assignment: assignment,
+            fileKind: fileKind, isStaff: isStaff, requested: requestedView)
+        let isClosed: Bool
+        if let assignment {
+            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+        } else {
+            isClosed = false
+        }
+        let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let args = NotebookPageRenderArgs(
+            user: user,
+            setup: setup,
+            setupID: setupID,
+            userID: userID,
+            assignment: assignment,
+            assignmentTitle: dbTitle.isEmpty ? "Assignment" : dbTitle,
+            isClosed: isClosed,
+            isStaff: isStaff,
+            viewMode: viewMode,
+            embedded: true
+        )
+        return try await makeAssignmentNotebookContext(req: req, args: args, fileKind: fileKind)
     }
 
     /// Bundles the common state passed to both `notebookPage` render

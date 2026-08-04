@@ -580,7 +580,7 @@ struct InstructorDashboardRoutes: RouteCollection {
     /// Builds the edit page's context.
     ///
     /// Factored out of `editPage` so the assignment workbench's left pane
-    /// (`GET /instructor/:assignmentID/workbench/panel`,
+    /// (`GET /instructor/:assignmentID/workbench`,
     /// `InstructorWorkbenchRoutes`) renders the *same* page from the *same*
     /// 26-field construction rather than a copy of it that would drift.  The
     /// only difference between the two callers is `embedded`, which suppresses
@@ -669,7 +669,6 @@ struct InstructorDashboardRoutes: RouteCollection {
             // Where a write inside the pane sends the pane afterwards.  Must
             // match the route `InstructorWorkbenchRoutes` registers, since the
             // pane is already showing it.
-            panelURL: embedded ? "/instructor/\(idStr)/workbench/panel" : nil
         )
     }
 }

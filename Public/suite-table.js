@@ -96,6 +96,12 @@
             .catch(function () { return classify(file.name, '', file.size); });
     }
 
+    // Module-level, deliberately outside initSuiteTable: these gate listeners
+    // that live on `document`/`window` rather than on the swapped subtree, so
+    // they must survive re-initialisation rather than be reset by it.
+    var boundDocumentDragover = false;
+    var boundPageshow = false;
+
     function initSuiteTable(config) {
         config = config || {};
         var csrfToken = config.csrfToken || '';
@@ -867,9 +873,18 @@
         // page header/footer) and still drive the scroll near the edges.  Only
         // acts while one of our drags is in flight; never calls preventDefault
         // so the container's own dragover keeps owning the drop indicators.
-        document.addEventListener('dragover', function (e) {
-            if (dragID || dragSectionID) updateAutoScroll(e.clientY);
-        });
+        //
+        // Bound once per document, not once per init.  #1266 re-runs
+        // `initSuiteTable` after every in-place write (the merged workbench
+        // swaps the edit half's DOM instead of reloading, so the kernel in the
+        // other half survives), and a document-level listener added on each of
+        // those would accumulate one auto-scroll driver per save.
+        if (!boundDocumentDragover) {
+            boundDocumentDragover = true;
+            document.addEventListener('dragover', function (e) {
+                if (dragID || dragSectionID) updateAutoScroll(e.clientY);
+            });
+        }
 
         container.addEventListener('dragstart', function (e) {
             var t = e.target;
@@ -1639,9 +1654,16 @@
         })();
 
         // Reload on bfcache restore so the page always reflects server state.
-        window.addEventListener('pageshow', function (e) {
-            if (e.persisted) window.location.reload();
-        });
+        // Same once-per-document guard as the dragover above, and for the same
+        // reason: re-init must not stack another reload handler.  A bfcache
+        // restore has already torn any kernel down, so reloading is still the
+        // right response on the merged workbench.
+        if (!boundPageshow) {
+            boundPageshow = true;
+            window.addEventListener('pageshow', function (e) {
+                if (e.persisted) window.location.reload();
+            });
+        }
 
         renderTree();
 

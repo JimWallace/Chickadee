@@ -1,35 +1,36 @@
 // Public/workbench.js
 //
-// The assignment workbench shell: the instructor edit page in a left pane, the
-// notebook editor in a right pane, a draggable splitter between them, and a tab
-// strip that switches the right pane between the starter notebook and the
-// reference solution.
+// The assignment workbench: the instructor edit page on the left, the notebook
+// editor on the right, a draggable splitter between them.
 //
-// The shell owns no assignment content — each pane is an iframe onto a page
-// that already existed.  What lives here is the composition: pane sizing, which
-// notebook is loaded, and the messages the panes send each other.
+// **One document** since #1266.  Both halves are rendered inline by
+// `workbench.leaf` (`_assignment-edit-body` and `_notebook-body`, each bound to
+// its own sub-context), so this file owns layout and coordination, not
+// composition.  The cross-frame protocol it used to carry — postMessage, origin
+// checks, an activity forwarder — is gone with the frames.
 //
 // Three things are load-bearing and easy to get wrong:
 //
-//   * **Pane floors.** The notebook page hides its own editor below 640px and
+//   * **Pane floors.** The notebook body hides its own editor below 640px and
 //     shows "open on a larger screen".  A too-narrow notebook pane would
 //     therefore render that notice instead of the editor — so the splitter
 //     clamps the notebook pane at 720px and the edit pane at 380px, and below a
 //     viewport that can hold both the layout drops to one pane at a time.
 //
-//   * **One notebook document, always.** The Files table and the view switch
-//     change the single iframe's src; they are destinations, not panes. An
-//     iframe per
-//     (file, view) would mean a Pyodide kernel per combination — up to four —
-//     and bounding that needs an eviction policy, which is a lot of machinery
-//     for a secondary interaction. The workbench exists to put the edit page
-//     and *a* notebook on screen together, and that holds with one. The cost is
-//     honest and accepted: switching notebooks re-boots the kernel.
+//   * **One notebook open, always.** Four (file, view) combinations exist, and
+//     a live document per combination would mean a Pyodide kernel per
+//     combination; bounding that needs an eviction policy, a lot of machinery
+//     for a secondary interaction.  So switching costs a kernel boot — and
+//     since it does, switching is an ordinary navigation to this same route
+//     with different arguments rather than an in-place swap.
 //
-//   * **Idle logout.** The watchdog runs in this document, but every keystroke
-//     lands in a pane.  `embedded-activity.js` forwards activity up; this file
-//     re-raises it as `chickadee:activity`, which idle-logout.js listens for.
-//     Without that an author gets signed out mid-edit.
+//   * **Nothing here may navigate casually.** The edit form and a live kernel
+//     share this document.  Every write goes through `inplace-forms.js` and the
+//     refresh is a DOM swap of the edit half only (`refreshEditSurface`), never
+//     a reload — a reload costs a 10-30s kernel boot and any unsaved cells,
+//     which is the failure this page was merged to prevent.  The one deliberate
+//     navigation, switching notebooks, is guarded by `beforeunload` when the
+//     form is dirty.
 
 (function () {
     'use strict';
@@ -61,18 +62,21 @@
         return desiredPx;
     }
 
-    /// The only URL shape this shell is ever allowed to point a notebook frame
-    /// at: a same-origin absolute path to the embedded notebook page.
+    /// The only URL shape this page is ever allowed to send itself to: a
+    /// same-origin absolute path to this same workbench route.
     ///
-    /// The destinations arrive as DOM text (a data-attribute the server
-    /// rendered), and the sink is an iframe `src` — a `javascript:` URL there
-    /// is script execution in this page's origin. Today the server builds that
-    /// map from its own `setup_…` identifiers so nothing hostile can reach it,
-    /// but nothing in *this* file enforced that, and the distance between "is
-    /// not attacker-controlled" and "cannot be" is the whole bug class.
+    /// **Kept, not dropped, after the #1266 merge.** The sink moved rather than
+    /// disappearing — it used to be an iframe `src`, it is now
+    /// `location.assign`, and a `javascript:` URL is script execution in this
+    /// origin either way. The destinations still arrive as DOM text (a
+    /// data-attribute the server rendered), which is exactly the CodeQL
+    /// DOM-text-as-sink shape this guard was added for. Today the server builds
+    /// that map from its own identifiers so nothing hostile can reach it, but
+    /// nothing in *this* file enforces that, and the distance between "is not
+    /// attacker-controlled" and "cannot be" is the whole bug class.
     /// Anchored at both ends, scheme-relative `//host` excluded by the second
     /// character check.
-    var SAFE_PANE_URL = /^\/testsetups\/[A-Za-z0-9_.-]+\/notebook\?[A-Za-z0-9_=&%.-]*$/;
+    var SAFE_PANE_URL = /^\/instructor\/[A-Za-z0-9_.-]+\/workbench\?[A-Za-z0-9_=&%.-]*$/;
 
     function safePaneURL(url) {
         return (typeof url === 'string' && SAFE_PANE_URL.test(url)) ? url : null;
@@ -116,22 +120,17 @@
 
     var body = shell.querySelector('.wb-body');
     var splitter = document.getElementById('wb-splitter');
-    var editFrame = document.getElementById('wb-edit-frame');
     var staleChip = document.getElementById('wb-stale-chip');
     var singleEditBtn = document.getElementById('wb-single-edit');
     var assignmentID = shell.getAttribute('data-assignment-id') || '';
     var storageKey = 'chickadee-workbench-split:' + assignmentID;
 
-    // Which notebook is open is a label here, not a control: the choosing
-    // happens in the left pane's Files table, which already lists the files.
-    var openFileLabel = document.getElementById('wb-openfile');
     var viewButtons = Array.prototype.slice.call(shell.querySelectorAll('.wb-view'));
     var viewSwitch = document.getElementById('wb-viewswitch');
 
-    // The single notebook document, and every destination it can be sent to.
-    // There is one iframe, so there is one kernel — switching notebooks costs a
-    // boot, and nothing here has to manage a pool.
-    var notebookFrame = document.getElementById('wb-notebook');
+    // Every destination the notebook half can be sent to.  There is one
+    // notebook open at a time, so there is one kernel — switching costs a boot,
+    // and nothing here has to manage a pool.
     // Carried on a data-attribute rather than a <script> island: it is a small
     // map the shell reads once, and the style guard ratchets inline script
     // down, not up.
@@ -226,42 +225,29 @@
 
     // ── Notebook selection: which file, and which reading of it ────────────
 
+    /// Switch which notebook the right half holds.
+    ///
+    /// A **full navigation**, deliberately. Before the merge this repointed an
+    /// iframe; in one document there is no inner frame to repoint, and either
+    /// way the Pyodide kernel restarts — it is bound to the notebook that is
+    /// open. Since the cost is unavoidable, the honest form is an ordinary
+    /// navigation to this route with different arguments, which also brings the
+    /// edit half back consistent with what the notebook now shows.
+    ///
+    /// Guarded by `beforeunload` when the edit form is dirty (see below), so
+    /// unsaved metadata is not silently lost on the way out.
     function selectPane(file, view) {
         var pane = resolvePane(paneURLs, file, view);
-        if (!pane || !notebookFrame) return;
-        activeFile = pane.file;
-        activeView = pane.view;
-
-        if (openFileLabel) {
-            openFileLabel.textContent = pane.file === 'solution' ? 'Solution' : 'Assignment';
-        }
-        viewButtons.forEach(function (btn) {
-            btn.setAttribute(
-                'aria-pressed',
-                btn.getAttribute('data-wb-view') === pane.view ? 'true' : 'false');
-        });
-        // The control only makes sense where the two readings differ.
-        if (viewSwitch) viewSwitch.hidden = !hasTemplate(pane.file);
-
-        notebookFrame.setAttribute('data-wb-file', pane.file);
-        notebookFrame.setAttribute('data-wb-view', pane.view);
-        // Re-validated at the sink rather than trusting that resolvePane already
-        // did it: this is the line where a `javascript:` URL would become script
-        // execution in this origin, so the check belongs where the damage would
-        // happen, not one call up.
-        //
-        // Also guarded on inequality: re-setting src to the value it already
-        // holds is a reload in some browsers, which would throw away a kernel
-        // that is already booting just because the author clicked the tab they
-        // are already on.
+        if (!pane) return;
+        // Already here — a click on the reading you are already looking at
+        // must not cost a kernel boot.
+        if (pane.file === activeFile && pane.view === activeView) return;
+        // Re-validated at the sink rather than trusting that resolvePane
+        // already did it: this is the line where a `javascript:` URL would
+        // become script execution in this origin, so the check belongs where
+        // the damage would happen, not one call up.
         var nextURL = safePaneURL(pane.url);
-        if (nextURL && notebookFrame.getAttribute('src') !== nextURL) {
-            notebookFrame.setAttribute('src', nextURL);
-        }
-
-        // Whatever made the chip appear applied to the notebook the author was
-        // looking at; a fresh load is current by construction.
-        if (staleChip) staleChip.hidden = true;
+        if (nextURL) window.location.assign(nextURL);
     }
 
     viewButtons.forEach(function (btn) {
@@ -292,34 +278,25 @@
     window.addEventListener('resize', syncSinglePane);
     syncSinglePane();
 
-    // ── Pane messaging ────────────────────────────────────────────────────
+    // ── Cross-half notes ──────────────────────────────────────────────────
+    //
+    // Was a `message` listener with an origin check, back when the halves were
+    // separate documents.  One document means one event bus: `notifyWorkbench`
+    // in chickadee-ui.js dispatches `chickadee:workbench` here directly, and
+    // there is no boundary left for a third party to forge across.
+    //
+    // Idle-logout needs nothing now either — the watchdog and the keystrokes
+    // are in the same document, so `idle-logout.js` sees them without a
+    // forwarder.
 
-    window.addEventListener('message', function (event) {
-        // Same-origin only.  These messages move session-liveness and reload
-        // signals; a framed third party must not be able to forge them.
-        if (event.origin !== window.location.origin) return;
-        var data = event.data;
-        if (!data || data.source !== 'chickadee') return;
+    window.addEventListener('chickadee:workbench', function (event) {
+        var type = event && event.detail && event.detail.type;
 
-        if (data.type === 'activity') {
-            // Re-raise for idle-logout.js, which is listening on this window.
-            try { window.dispatchEvent(new CustomEvent('chickadee:activity')); } catch (_) { /* ignore */ }
-            return;
-        }
-
-        if (data.type === 'notebook-saved') {
-            // The save changed the assignment's files and validation status,
-            // both of which the left pane renders.  Reloading it is safe — it
-            // holds no kernel and no unsaved state that is not already POSTed.
-            if (editFrame) editFrame.contentWindow.location.reload();
-            return;
-        }
-
-        if (data.type === 'inputs-changed') {
+        if (type === 'inputs-changed') {
             // Personalization changed, so what the notebook is showing is now a
-            // rendering of stale values.  Deliberately advisory: reloading the
-            // pane restarts the kernel and drops the author's live state, so
-            // the author decides when to pay that.
+            // rendering of stale values.  Deliberately advisory: re-rendering
+            // restarts the kernel and drops the author's live state, so the
+            // author decides when to pay that.
             if (staleChip) {
                 staleChip.textContent = 'Inputs changed — reload the notebook to see new values';
                 staleChip.hidden = false;
@@ -327,20 +304,24 @@
             return;
         }
 
-        if (data.type === 'open-notebook') {
-            // The left pane's Files table is the only place that chooses which
-            // notebook is open.  `data.file` selects a destination from a
-            // server-rendered table, never a URL, so an unrecognised value
-            // resolves to nothing rather than navigating anywhere.
-            selectPane(data.file === 'solution' ? 'solution' : 'assignment', activeView);
-            return;
+        if (type === 'notebook-saved') {
+            // The save changed the assignment's files and validation status,
+            // both of which the edit half renders.  Refresh that half in place
+            // — a page reload here would take the kernel with it.
+            if (typeof window.chickadeeRefreshEditSurface === 'function') {
+                window.chickadeeRefreshEditSurface();
+            }
         }
+    });
 
-        if (data.type === 'save-result') {
-            pendingSaves -= 1;
-            if (!data.ok) saveFailed = true;
-            if (pendingSaves <= 0) finishSave();
-        }
+    // The Files table's Edit buttons choose which notebook is open.  They are
+    // ordinary links to the workbench URL, so they work with no JS at all; this
+    // only routes them through `selectPane` for the dirty-form guard.
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest && e.target.closest('[data-wb-file]');
+        if (!el || !el.getAttribute('data-wb-file')) return;
+        e.preventDefault();
+        selectPane(el.getAttribute('data-wb-file') === 'solution' ? 'solution' : 'assignment', activeView);
     });
 
     // ── Save ──────────────────────────────────────────────────────────────
@@ -358,38 +339,73 @@
 
     var saveBtn = document.getElementById('wb-save');
     var saveStatus = document.getElementById('wb-save-status');
-    var pendingSaves = 0;
-    var saveFailed = false;
 
-    function finishSave() {
-        pendingSaves = 0;
-        if (saveBtn) saveBtn.disabled = false;
-        if (saveStatus) {
-            saveStatus.textContent = saveFailed ? 'Save failed — see the pane for details' : 'Saved';
+    /// Save the open notebook, if there is one to save.
+    ///
+    /// `chickadeeSaveToAssignment` is the POST to /notebook/save. Deliberately
+    /// NOT `chickadeeSaveNotebook`, which despite the name only flushes cells
+    /// to JupyterLite's local storage and would report a save that never
+    /// reached the server. Absent (no notebook on this assignment yet) counts
+    /// as success — nothing to save is not a failure.
+    function saveNotebookHalf() {
+        if (typeof window.chickadeeSaveToAssignment !== 'function') {
+            return Promise.resolve(true);
         }
+        return Promise.resolve()
+            .then(function () { return window.chickadeeSaveToAssignment(); })
+            .then(function (ok) { return ok !== false; })
+            .catch(function () { return false; });
+    }
+
+    /// Save the edit half's form through the same in-place path a click on its
+    /// own submit button takes, so the two cannot diverge.
+    ///
+    /// Waits for the real outcome. An earlier version replied optimistically
+    /// and then submitted natively — because the pane was about to navigate
+    /// away and a later reply would never arrive — which reported success on a
+    /// 500. Nothing navigates now, so the honest answer is available.
+    function saveEditHalf() {
+        var form = document.querySelector('form[action$="/edit/save"]');
+        if (!form) return Promise.resolve(true);
+        if (typeof window.chickadeeSubmitInPlace !== 'function') return Promise.resolve(false);
+        return window.chickadeeSubmitInPlace(form).then(function (ok) { return ok !== false; });
     }
 
     if (saveBtn) {
         saveBtn.addEventListener('click', function () {
-            saveFailed = false;
             saveBtn.disabled = true;
             if (saveStatus) saveStatus.textContent = 'Saving…';
-            // Both panes are asked, and each replies. A pane with nothing to
-            // save still replies, so the button always comes back — silence
-            // would leave it disabled forever.
-            pendingSaves = 0;
-            [notebookFrame, editFrame].forEach(function (frame) {
-                if (!frame || !frame.contentWindow) return;
-                pendingSaves += 1;
-                try {
-                    frame.contentWindow.postMessage(
-                        { source: 'chickadee', type: 'save' }, window.location.origin);
-                } catch (_) {
-                    pendingSaves -= 1;
-                    saveFailed = true;
+            // Both halves are saved concurrently and both outcomes are waited
+            // for, so the button always comes back and a failure in either is
+            // reported rather than swallowed.
+            Promise.all([saveNotebookHalf(), saveEditHalf()]).then(function (results) {
+                var ok = results[0] !== false && results[1] !== false;
+                saveBtn.disabled = false;
+                if (saveStatus) {
+                    saveStatus.textContent = ok ? 'Saved' : 'Save failed — see the form for details';
                 }
+                if (ok) formDirty = false;
             });
-            if (pendingSaves <= 0) finishSave();
         });
     }
+
+    // ── Unsaved-work guard ────────────────────────────────────────────────
+    //
+    // Switching notebooks is a navigation now, so metadata typed into the edit
+    // half and not yet saved would leave with the page. Track dirtiness from
+    // the form's own input events and let the browser ask.
+
+    var formDirty = false;
+    document.addEventListener('input', function (e) {
+        if (e.target && e.target.closest && e.target.closest('form[action$="/edit/save"]')) {
+            formDirty = true;
+        }
+    });
+    window.addEventListener('beforeunload', function (e) {
+        if (!formDirty) return;
+        e.preventDefault();
+        // Modern browsers show their own wording; returnValue is the legacy
+        // opt-in that still gates the prompt in some of them.
+        e.returnValue = '';
+    });
 }());

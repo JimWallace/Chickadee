@@ -28,9 +28,11 @@
 (function () {
     'use strict';
 
-    // Same marker `ChickadeeUI.reloadEditSurface` keys off: no panel URL means
-    // this page is not in a pane, and its forms should submit natively.
-    if (!document.body || !document.body.getAttribute('data-ck-panel-url')) return;
+    // The merged workbench is the only surface that wants this: its forms sit
+    // in the same document as a live kernel, so a native submit-and-redirect
+    // would tear the kernel down. The standalone `/edit` page has no
+    // `#wb-shell` and keeps its native behaviour exactly.
+    if (!document.getElementById('wb-shell')) return;
 
     // ── Error surface ────────────────────────────────────────────────────────
     // Same inline banner base.leaf uses for a failed multipart upload, for the
@@ -111,7 +113,7 @@
                 // to the shell), and a `.then` is a microtask. Reloading here
                 // would start tearing this document down in the same turn the
                 // caller is still queued behind.
-                setTimeout(function () { ChickadeeUI.reloadEditSurface(); }, 0);
+                setTimeout(function () { ChickadeeUI.refreshEditSurface(); }, 0);
                 return true;
             }
             return res.text().then(function (text) {
@@ -143,6 +145,6 @@
     });
 
     // Exposed for the one caller that reaches this write without a form
-    // submit: `embedded-pane.js`, answering the workbench's Save button.
+    // submit: the workbench's single Save button, in workbench.js.
     window.chickadeeSubmitInPlace = submitInPlace;
 }());

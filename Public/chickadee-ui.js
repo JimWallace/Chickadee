@@ -281,93 +281,107 @@
     //                       notebook pane is rendering is a substitution of
     //                       stale values.
     function notifyWorkbench(type) {
-        if (typeof window === 'undefined' || window.parent === window) return;
+        if (typeof window === 'undefined') return;
         try {
-            // An explicit target origin, never '*': these are same-origin notes
-            // to our own shell, and '*' would hand them to any document that
-            // managed to frame this page.
-            window.parent.postMessage(
-                { source: 'chickadee', type: type },
-                window.location.origin
+            // A same-document event, not a postMessage.  #1266 merged the
+            // workbench into one document, so the listener is a sibling rather
+            // than a parent frame — there is no window to post to, and the
+            // origin checks that used to guard the channel are moot because
+            // nothing crosses a boundary any more.
+            //
+            // Fired unconditionally: on a page with no workbench listening,
+            // dispatching an event nobody handles costs nothing, and that is
+            // simpler than each caller knowing which surface it is on.
+            window.dispatchEvent(
+                new CustomEvent('chickadee:workbench', { detail: { type: type } })
             );
         } catch (_) {
-            // Cross-origin parent, or one that went away mid-navigation. The
-            // panes stay correct on their own; only the cross-pane hint is lost.
+            // CustomEvent unavailable (very old browser). The surface stays
+            // correct on its own; only the cross-half hint is lost.
         }
     }
 
     // ── Re-rendering the surface you are on ──────────────────────────────────
     //
     // `location.reload()` is the obvious way to pick up a server-side change,
-    // and it is wrong inside a workbench pane: the pane's URL is the panel
-    // route, but a page that got there by following a handler's redirect is
-    // sitting on the chromed standalone editor, and reloading pins it there.
-    // Pages that are rendered into a pane carry `data-ck-panel-url` on <body>
-    // (emitted by base.leaf), which names the URL that re-renders them
-    // correctly.
+    // and on the merged workbench (#1266) it is destructive: the edit form and
+    // a live Pyodide kernel share one document, so reloading to show a renamed
+    // suite section costs a 10-30s kernel boot and any unsaved cells. That is
+    // the exact failure the merge exists to prevent, so the refresh re-renders
+    // the *edit half only*, by fetching this same URL and swapping that half's
+    // subtree.
     //
-    // Scroll position rides across, because every caller is re-rendering after
-    // a small edit — uploading one support file, renaming one section — and
-    // landing back at the top of a long assignment each time is its own kind
-    // of lost work.
-    var PANEL_SCROLL_KEY = 'chickadee:panel-scroll';
-
-    // The exact shape `InstructorDashboardRoutes` emits, and nothing else.
+    // On the standalone `/edit` page there is no kernel and no `#wb-shell`, so
+    // it stays a plain reload — same behaviour as before.
     //
-    // `panelURL()` reads an attribute out of the DOM and `reloadEditSurface`
-    // hands the result to `location.replace` — a navigation sink. The attribute
-    // is server-written today, so nothing reaches it that the server did not
-    // put there; the pattern exists so that stays true if some future page ever
-    // sets it from data it did not author. Unvalidated, a `javascript:` value in
-    // that attribute would execute. Same guard, same reasoning as
-    // `SAFE_PANE_URL` in workbench.js, which pins the notebook iframe's src.
-    var SAFE_PANEL_URL = /^\/instructor\/[A-Za-z0-9_-]+\/workbench\/panel$/;
+    // Scroll position is preserved across the swap, because every caller is
+    // re-rendering after a small edit — uploading one support file, renaming
+    // one section — and landing back at the top of a long assignment each time
+    // is its own kind of lost work.
 
-    // Defensive about `document` for the same reason this file carries a
-    // `module.exports` branch: the .mjs unit tests evaluate it in a vm context
-    // with a hand-built `window`, not a DOM.
-    function panelURL() {
-        if (typeof document === 'undefined' || !document.body) return null;
-        var url = document.body.getAttribute('data-ck-panel-url');
-        return (typeof url === 'string' && SAFE_PANEL_URL.test(url)) ? url : null;
+    var EDIT_HALF_SELECTOR = '.wb-pane-edit';
+
+    /// Re-execute the inline `<script>` blocks in a freshly swapped subtree.
+    ///
+    /// `innerHTML` never executes scripts, so without this the new markup is
+    /// inert — no suite table, no editors. Only inline blocks are re-run:
+    /// `src=` modules are already loaded and merely *define* the globals the
+    /// inline blocks call, so re-fetching them would re-run their IIFEs and
+    /// double-bind. The inline blocks bind nothing to `document`/`window`
+    /// themselves; the two module-level listeners that do (suite-table's
+    /// dragover and pageshow) carry their own once-per-document guards.
+    function runInlineScripts(root) {
+        var scripts = root.querySelectorAll('script:not([src])');
+        Array.prototype.forEach.call(scripts, function (old) {
+            // JSON seed blocks are data, not code — re-running them is
+            // meaningless and `type` must be preserved for the ones that are.
+            if (old.type && old.type !== 'text/javascript') return;
+            var s = document.createElement('script');
+            s.textContent = old.textContent;
+            old.parentNode.replaceChild(s, old);
+        });
     }
 
-    function reloadEditSurface() {
-        var url = panelURL();
-        // A rejected or absent URL falls back to a plain reload rather than
-        // failing: the surface still re-renders, which is what the caller asked
-        // for. Only the pane-aware destination is lost.
-        if (!url) {
+    function refreshEditSurface() {
+        if (typeof document === 'undefined') return Promise.resolve(false);
+        var half = document.querySelector(EDIT_HALF_SELECTOR);
+        // Not the merged workbench — the standalone editor. Reload as before.
+        if (!half || !document.getElementById('wb-shell')) {
             window.location.reload();
-            return;
+            return Promise.resolve(true);
         }
-        try {
-            window.sessionStorage.setItem(PANEL_SCROLL_KEY + ':' + url, String(window.scrollY));
-        } catch (_) {
-            // Private mode. Losing the scroll offset is not worth failing a save.
-        }
-        window.location.replace(url);
+        var scrollTop = half.scrollTop;
+        // `window.location.href`, not a stored panel URL: the merged page's own
+        // URL already names exactly what to re-render, including which notebook
+        // is open, so there is no second URL to keep in sync (and no
+        // DOM-sourced navigation target to validate).
+        return fetch(window.location.href, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'fetch' }
+        }).then(function (res) {
+            if (!res.ok) throw new Error('refresh failed: ' + res.status);
+            return res.text();
+        }).then(function (html) {
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var fresh = doc.querySelector(EDIT_HALF_SELECTOR);
+            if (!fresh) throw new Error('refresh failed: edit half not in response');
+            half.innerHTML = fresh.innerHTML;
+            runInlineScripts(half);
+            half.scrollTop = scrollTop;
+            return true;
+        }).catch(function () {
+            // A failed refresh must not leave a half-swapped page. The write
+            // itself already succeeded, so a full reload is correct — it costs
+            // the kernel, but showing stale state after a save is worse.
+            window.location.reload();
+            return false;
+        });
     }
 
-    // On `load`, not at parse: the suite table's rows are written by JS after
-    // this file runs, so restoring against the not-yet-populated page would
-    // clamp to a height that is about to triple.
-    function restorePanelScroll() {
-        var url = panelURL();
-        if (!url) return;
-        var saved;
-        try {
-            saved = window.sessionStorage.getItem(PANEL_SCROLL_KEY + ':' + url);
-            window.sessionStorage.removeItem(PANEL_SCROLL_KEY + ':' + url);
-        } catch (_) { return; }
-        if (saved == null) return;
-        var y = parseInt(saved, 10);
-        if (!isNaN(y) && y > 0) window.scrollTo(0, y);
-    }
-
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-        window.addEventListener('load', restorePanelScroll);
-    }
+    // The sessionStorage round-trip that used to restore scroll after the
+    // pane's `location.replace` is gone with the navigation itself: the swap
+    // never unloads the document, so `refreshEditSurface` just reads
+    // `half.scrollTop` before and writes it back after.
 
     var root = typeof window !== 'undefined' ? window : globalThis;
     root.ChickadeeUI = {
@@ -378,7 +392,7 @@
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
         notifyWorkbench: notifyWorkbench,
-        reloadEditSurface: reloadEditSurface,
+        refreshEditSurface: refreshEditSurface,
         renderSparkline: renderSparkline,
         accordion: {
             CARET_HTML: CARET_HTML,

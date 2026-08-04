@@ -862,26 +862,28 @@ shim); and archived finished-era docs under `docs/archive/`.
 
 **Near-term roadmap:**
 
-- **Leaf partial decomposition — PARTIALLY BLOCKED on the big editor pages
-  (re-verified 2026-06, supersedes the earlier "UNBLOCKED" note).** A LeafKit
-  `1.14.2` parser bug makes **two or more inline `#extend("_partial")` includes
-  in the same template** fail at render with
-  `LeafError.500: extend only supports one or two parameters []` (the second
-  include's params come through `nil` — `Extend.init` in
-  `LeafSyntax.swift:213`). It is **template-wide**, not partial-specific:
-  on `assignment-new.leaf` / `assignment-edit.leaf` (~900–1000 lines, already
-  carrying one `#extend("_family-editor-body")`) *any* second inline `#extend`
-  500s the page. Confirmed by bisection against the real render tests
-  (`AssignmentRoutesPublishTests.newAssignmentPage*`) — section-shells+family,
-  support-rows+family, and section-shells+support-rows (no family) all fail;
-  the bodied form `#extend(x):#endextend` and wrapping in a parent `#if` do
-  **not** help. `index.leaf` has two inline `#extend`s and renders fine *only
-  because it is small* (~36 lines), so "it works in index.leaf" is misleading.
-  There is **no** leaf-kit 2.x / Leaf 5 to upgrade to. **Practical rule:** at
-  most **one** inline partial `#extend` per template until the parser bug is
-  fixed (fork/patch leaf-kit) — the multi-`#extend` editor decomposition is on
-  hold. Single-`#extend` decompositions and small templates are still fine.
-  (Render tests catch this — they prove templates *resolve*; they don't
+- **Leaf partial decomposition — UNBLOCKED (2026-08, #1266). The long-standing
+  "multi-`#extend` parser bug" was a misdiagnosis.** Multiple inline
+  `#extend("_partial")` includes work fine on LeafKit 1.14.3. What actually
+  produces `LeafError.500: extend only supports one or two parameters []` is
+  **the literal text `#extend` appearing anywhere in a template, including
+  inside an HTML comment**. Leaf's lexer has no notion of HTML comments, so
+  `<!-- see #extend above -->` is lexed as a real tag with no parameters.
+  Demonstrated both ways: adding that one comment line to `notebook.leaf` (7
+  lines, one extend) reproduces the 500 exactly; removing only the `#extend`
+  text from prose comments in a merged template — changing nothing else — makes
+  it render. The historical bisection was almost certainly toggling
+  heavily-commented blocks whose prose mentioned the tag, which is why it
+  looked template-wide and size-dependent.
+  **Practical rule:** never write a bare `#tagname` in template prose or
+  comments. Say "the extend" or "an `extend(...)` include" instead. Inline
+  partial `#extend`s themselves are unrestricted, and the sub-context form
+  `#extend("_partial", subObject)` works too — that is what lets one partial
+  serve both a standalone page (flat context) and a composite page (nested),
+  as `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
+  syntax: a bare second parameter, **not** the labelled `with:` form, which
+  does not lex.
+  (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond the three
