@@ -99,16 +99,26 @@ Notebook
             #endif
             #endif
             #if(canSaveToAssignment):
-            <button class="btn btn-primary" id="nb-save-assignment" data-file-kind="#(fileKind)"
+            <!-- Present but hidden in a workbench pane: the workbench's single
+                 Save calls the function notebook.js binds here, so the element
+                 must exist — but a second visible Save button would be the same
+                 action twice. -->
+            <button class="btn btn-primary" id="nb-save-assignment" #if(embedded):hidden#endif data-file-kind="#(fileKind)"
                     data-view-mode="#if(isTemplateView):template#else:personalized#endif"
                     title="Write what is in this editor back to the assignment for every student">
                 #if(fileKind == "solution"):Save solution#else:Save to assignment#endif
             </button>
             #endif
             #if(downloadURL):
+            #if(!embedded):
+            <!-- Suppressed in a workbench pane: the left pane's Files table
+                 already links the file, so this is a second route to the same
+                 download.  Kept on the standalone page, where it is the only
+                 one. -->
             <a class="btn"
                href="#(downloadURL)"
                download>Download</a>
+            #endif
             #endif
         </div>
     </div>

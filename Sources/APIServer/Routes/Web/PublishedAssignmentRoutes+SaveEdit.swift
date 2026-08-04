@@ -102,7 +102,18 @@ extension PublishedAssignmentRoutes {
         }
         // Editing returns the assignment to closed (re-validation gates the
         // re-open / re-preview), matching the close-on-save contract.
-        assignment.visibility = .closed
+        //
+        // Except from the assignment workbench, which sets `liveEdit`.  That
+        // surface writes live — `PUT /suite`, `PUT /families` and
+        // `POST /notebook/save` all change content without touching visibility
+        // — and closing there would mean fixing a typo pulls a lab out from
+        // under the students sitting in it.  Re-validation still runs either
+        // way; the only difference is whether students lose access while it
+        // does.  This is a contract, not a permission: the caller already holds
+        // TA+ write access to this course, checked above.
+        if !form.liveEdit {
+            assignment.visibility = .closed
+        }
 
         // Only when it actually moved: the Save button posts the whole form on
         // every content edit, so auditing unconditionally would bury the real
@@ -133,6 +144,9 @@ extension PublishedAssignmentRoutes {
         let assignmentNotebookFile: File?
         let solutionNotebookFile: File?
         let gradeObjectID: String?
+        /// Set by the assignment workbench's embedded form.  Suppresses the
+        /// close-on-save below; see the comment at that call site.
+        let liveEdit: Bool
     }
 
     fileprivate struct ResolvedSolution {
@@ -149,6 +163,7 @@ extension PublishedAssignmentRoutes {
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var gradeObjectID: String?
+            var liveEdit: String?
         }
 
         guard let body = try? req.content.decode(SaveBody.self) else {
@@ -164,7 +179,8 @@ extension PublishedAssignmentRoutes {
             startsAtRaw: try multipartTextField(named: ["startsAt"], from: req) ?? body.startsAt,
             assignmentNotebookFile: body.assignmentNotebookFile,
             solutionNotebookFile: body.solutionNotebookFile,
-            gradeObjectID: try multipartTextField(named: ["gradeObjectID"], from: req) ?? body.gradeObjectID
+            gradeObjectID: try multipartTextField(named: ["gradeObjectID"], from: req) ?? body.gradeObjectID,
+            liveEdit: (try multipartTextField(named: ["liveEdit"], from: req) ?? body.liveEdit) != nil
         )
     }
 

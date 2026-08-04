@@ -132,6 +132,9 @@
      pane, so without this the shell would sit "idle" and sign the author out
      mid-edit. -->
 <script src="/embedded-activity.js?v=#appVersion()"></script>
+<!-- Cross-pane wiring: Files-table Edit opens into the notebook pane, and the
+     workbench's single Save is answered here. -->
+<script src="/embedded-pane.js?v=#appVersion()"></script>
 #else:
 <script src="/idle-logout.js?v=#appVersion()"></script>
 #endif

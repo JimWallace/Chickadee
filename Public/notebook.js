@@ -1264,7 +1264,13 @@
         // value here would leave the author looking at stale bytes.
         const saveViewMode = saveAssignmentBtn.dataset.viewMode === 'personalized' ? 'personalized' : 'template';
         const saveLabel = saveAssignmentBtn.textContent;
-        saveAssignmentBtn.addEventListener('click', async () => {
+
+        // Named, and exposed below, so the assignment workbench's single Save
+        // button can run exactly this — the same request, status line and
+        // error handling — instead of synthesising a click on a hidden button.
+        // Resolves true on success, false on failure; never throws, because the
+        // shell is waiting on it to re-enable its button.
+        async function saveToAssignment() {
             saveAssignmentBtn.disabled = true;
             saveAssignmentBtn.textContent = 'Saving…';
             clearResults();
@@ -1297,15 +1303,20 @@
                 // pane beside us is rendering, so it is now stale.  No-op on
                 // the standalone page, which has no parent.
                 ChickadeeUI.notifyWorkbench('notebook-saved');
+                return true;
             } catch (err) {
                 const msg = (err instanceof Error && err.message) ? err.message : String(err);
                 console.error('[notebook] Save-to-assignment error:', err);
                 setStatus('error', `Could not save: ${msg}`);
+                return false;
             } finally {
                 saveAssignmentBtn.disabled = false;
                 saveAssignmentBtn.textContent = saveLabel;
             }
-        });
+        }
+
+        saveAssignmentBtn.addEventListener('click', saveToAssignment);
+        window.chickadeeSaveToAssignment = saveToAssignment;
     }
 
     // ── Editor command bridge (jupyter-iframe-commands) ──────────────

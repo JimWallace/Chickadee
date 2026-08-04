@@ -1,5 +1,5 @@
 // Unit tests for the assignment workbench shell's pure logic: the splitter
-// clamp, which notebook a tab click resolves to, and the collapse toggle.
+// clamp, and which notebook a Files-table click resolves to.
 //
 // The clamp is the load-bearing piece. The notebook page hides its own editor
 // below 640px and shows "open on a larger screen" instead — so a splitter that
@@ -129,32 +129,4 @@ test('resolvePane: reports nothing for a file that has no destinations', () => {
   // what keeps it that way if the markup and the table ever disagree.
   assert.equal(Workbench.resolvePane(URLS, 'nosuchfile', 'personalized'), null);
   assert.equal(Workbench.resolvePane({}, 'assignment', 'personalized'), null);
-});
-
-test('toggleCollapse: collapsing remembers the width to come back to', () => {
-  const collapsed = Workbench.toggleCollapse({ collapsed: false, width: 640, restoreWidth: 0 });
-  assert.deepEqual(collapsed, { collapsed: true, width: 0, restoreWidth: 640 });
-
-  const expanded = Workbench.toggleCollapse(collapsed);
-  assert.deepEqual(expanded, { collapsed: false, width: 640, restoreWidth: 640 });
-});
-
-test('toggleCollapse: collapsing twice does not lose the restore width', () => {
-  // The failure this guards: a second collapse capturing the already-collapsed
-  // width of 0 would leave the pane unrestorable, with no way back to the
-  // editor short of dragging the splitter off the edge.
-  let state = { collapsed: false, width: 500, restoreWidth: 0 };
-  state = Workbench.toggleCollapse(state);
-  state = Workbench.toggleCollapse(state); // expand
-  state = Workbench.toggleCollapse(state); // collapse again
-  assert.equal(state.collapsed, true);
-  assert.equal(state.restoreWidth, 500);
-
-  state = Workbench.toggleCollapse(state);
-  assert.equal(state.width, 500, 'restoring must return the original width, not 0');
-});
-
-test('toggleCollapse: round-trips back to the starting state', () => {
-  const start = { collapsed: false, width: 420, restoreWidth: 420 };
-  assert.deepEqual(Workbench.toggleCollapse(Workbench.toggleCollapse(start)), start);
 });
