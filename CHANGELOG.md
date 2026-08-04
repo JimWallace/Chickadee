@@ -9,6 +9,87 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-08-04
+
+### Fixed
+
+- **Browser probe setup retries the Ubuntu package fetch.** Installing Node and
+  npm is an unauthenticated plain-HTTP fetch of ~40 packages from
+  `archive.ubuntu.com`; when that mirror is unreachable the step exits 100 and
+  takes the whole probe — and the required editor-smoke gate — down with it.
+  Observed on PR #1264: `Unable to connect to archive.ubuntu.com`. The
+  network-bound half now retries three times with a short backoff. `npm ci` is
+  deliberately left outside the loop, so a genuine lockfile failure still fails
+  once and clearly.
+
+### Fixed
+
+- **The CI image rebuild no longer times out.** `mirror-images.yml` builds the
+  derived `swift-ci` image by apt-installing a heavy package set from
+  `archive.ubuntu.com` behind a retry loop; with that mirror flaking the build
+  step alone consumed 29.3 of its 30-minute budget and was killed, leaving the
+  image unpublished. Since the job runs weekly, a silent timeout means a stale
+  CI image for everyone. Budget raised to 60 minutes.
+
+### Changed
+
+- **Browser probe jobs run in the `swift-ci` image and own a build cache.** They
+  previously used the plain Swift mirror and `apt-get`-installed Node and npm at
+  job start — the same per-job cost the `swift-ci` image already exists to
+  remove, and a hard failure whenever `archive.ubuntu.com` is unreachable.
+  `nodejs`/`npm` are now baked into that image and the probes use it; the apt
+  path remains as a guarded fallback so a caller on the plain mirror, or a run
+  that beats the image rebuild, still works.
+
+  They also now save and restore a probe-owned build cache when the shared
+  swift-tests key misses. That key is written by a job in another workflow, so
+  nothing could order the probes after it; a miss meant a cold Swift build, and
+  re-running a probe on the same commit paid for it again every time because
+  nothing the probes did ever populated a key they could read back. The shared
+  key is deliberately left alone — a probe winning that race would publish a
+  `.build` holding only `chickadee-server` for the swift-tests jobs to restore.
+
+### Fixed
+
+- **Browser probe jobs no longer time out on a cold build.** `browser-probe-setup`
+  builds `chickadee-server`, and the shared build cache it restores is keyed on
+  `hashFiles('Sources/**', 'Tests/**')` — so the key is new on any PR touching
+  either, and the job that populates it lives in a different workflow, which
+  `needs:` cannot order against. The probes therefore cold-build, and the setup
+  step alone measured 23.2 min on a passing run and 29.0 min on a killed one,
+  against a 30 min ceiling. The budget only ever fit the cache-hit path; on a
+  miss the job died in setup with every test step `skipped`, and GitHub reports
+  a timeout-kill as `cancelled`, which reads as an unrelated concurrency cancel.
+  Budgets raised to 50 min (75 for the grading probe, which runs 12 iterations
+  per engine on top of the same setup).
+
+### Changed
+
+- **The workbench is now the assignment editor.** The `/instructor` dashboard's
+  Edit buttons open it, and its chrome has been cut back to what the panes do
+  not already provide: no Assignment/Solution tab strip, no Hide-editor or
+  Full-width-editor buttons, no repeated assignment title, and no Download in
+  the notebook pane. The left pane already names the assignment, lists its
+  files with links, and offers Edit for each.
+
+- **One Save, in the top-right corner.** "Save & Validate" and "Save to
+  assignment" were two buttons for what an author thinks of as one action.
+  The single Save writes the open notebook and the assignment's details and
+  re-validates.
+
+  It deliberately does **not** close the assignment. The standalone edit page
+  still does, unchanged — but the workbench is a live-edit surface, where the
+  suite, families and notebook endpoints all already write without changing
+  visibility, and closing on save there would pull a lab out from under the
+  students sitting in it.
+
+- **Clicking Edit in the Files table opens that notebook in the workbench's
+  notebook pane.** Previously those links carried no `embedded=1`, so inside
+  the workbench they navigated the *left* pane into a fully chromed notebook
+  page and the assignment editor disappeared. They are still ordinary links on
+  the standalone page.
+
+
 ## [0.5.8] - 2026-08-04
 
 ### Security
