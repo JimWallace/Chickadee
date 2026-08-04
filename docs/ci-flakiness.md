@@ -120,6 +120,23 @@ Webkit: `hangs<=1/12` tolerated on `pull_request` runs with a loud
 zero, so the probe remains the regression guard a real fix must turn green
 and the ambient rate stays measured rather than silently absorbed.
 
+**First chromium sighting (2026-08-04, PR #1261, run 30867456697).**
+`grading-probe (chromium)` reported `hangs=1/12` while
+`grading-probe (webkit)` passed in the same run — the inverse of the
+pattern above, and the first time chromium has shown this. It did not
+reproduce: a rerun of the same commit passed 12/12 on both engines. The
+PR's diff could not reach the grading path (its only notebook.js change
+sits inside `if (saveAssignmentBtn)`, a staff-only button the probe's
+student session never renders), so this reads as the same ambient rate
+rather than a regression.
+
+Recorded because the sentence above — chromium passes 12/12 — is what
+makes a chromium hang look like a real regression to the next person who
+hits one. It is rarer than webkit's, not impossible. The gate policy is
+deliberately unchanged: chromium stays at hard zero, so a second sighting
+is loud rather than absorbed. If it recurs, that is the signal to treat
+chromium as in-family and go after the shared root cause.
+
 **Root cause** remains the exec-hang investigation's to close — continue
 from the probe's `grading breadcrumbs:` per-phase timings on a hung
 iteration.
