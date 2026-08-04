@@ -160,12 +160,20 @@ async function seed() {
   // from the student dashboard once the assignment is open.)
   const instrDash = await instr.get("/instructor");
   const instrHtml = await instrDash.text();
-  const publicID = (instrHtml.match(/\/instructor\/([A-Za-z0-9]+)\/edit/) || [])[1];
+  // The dashboard's per-assignment link is the only place the publicID appears
+  // in this markup, so this scrape is load-bearing. It accepts both targets
+  // because that link has moved once already — it pointed at `/edit` until the
+  // workbench became the authoring surface — and a probe that hard-codes one
+  // spelling fails with "could not find publicID" rather than anything that
+  // points at the rename.
+  const publicID =
+    (instrHtml.match(/\/instructor\/([A-Za-z0-9]+)\/(?:workbench|edit)/) || [])[1];
   if (!publicID) {
     const markers = {
       finalURL: instrDash.url(),
       hasNoAssignments: instrHtml.includes("No assignments"),
       hasEditLink: instrHtml.includes("/edit"),
+      hasWorkbenchLink: instrHtml.includes("/workbench"),
       len: instrHtml.length,
     };
     throw new Error(`could not find publicID on /instructor markers=${JSON.stringify(markers)}:\n` + instrHtml.slice(0, 3500));
