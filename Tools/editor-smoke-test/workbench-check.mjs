@@ -27,9 +27,13 @@
 //   2. the LEFT pane loaded a real edit page — i.e. was not COEP-refused;
 //   3. the NESTED notebook iframe is cross-origin isolated and has
 //      SharedArrayBuffer — the property the whole chain exists to preserve;
-//   4. the notebook pane mounts the assignment notebook and leaves the solution
-//      pane unmounted until asked (the lazy-mount contract that keeps a second
-//      Pyodide off the page until an author actually wants it).
+//   4. there is exactly ONE notebook iframe — the tabs and the view switch
+//      repoint it rather than each owning a live document, so there is one
+//      Pyodide kernel however many notebooks the assignment has;
+//   5. a keystroke in a pane reaches the shell as `chickadee:activity`, the
+//      chain that stops the idle watchdog signing an author out mid-edit;
+//   6. the view switch appears on a notebook that carries placeholders and
+//      repoints to `view=template`, and the tabs repoint to the other file.
 //
 // WebKit is expected NON-isolated at every level — it needs the comlink path —
 // so there the assertion is inverted, exactly as in notebook-page-check.mjs.
@@ -100,6 +104,20 @@ async function buildSetupZip() {
       metadata: { kernelspec: { name: "python", display_name: "Python" } },
       cells: [
         { cell_type: "code", source: ["x = 1\n"], metadata: {}, outputs: [], execution_count: null },
+        // A personalization placeholder, deliberately: without one the server
+        // reports no template view, the switch is (correctly) not rendered, and
+        // the assertion below would be skipped — passing while testing nothing.
+        //
+        // It must be a CODE cell. `NotebookSubstitution.placeholderNames(in:)`
+        // scans `cell_type == "code"` only, so a `{{name}}` in markdown is
+        // invisible to the whole personalization pipeline.
+        {
+          cell_type: "code",
+          source: ["dataset_name = '{{dataset_name}}'\n"],
+          metadata: {},
+          outputs: [],
+          execution_count: null,
+        },
       ],
     })
   );
@@ -279,7 +297,7 @@ async function main() {
     await page.waitForFunction(
       () => {
         const l = document.getElementById("wb-edit-frame");
-        const n = document.getElementById("wb-notebook-assignment");
+        const n = document.getElementById("wb-notebook");
         return l && n && l.contentWindow && n.contentWindow;
       },
       { timeout: FRAME_SETTLE_MS }
@@ -319,26 +337,31 @@ async function main() {
       return fail("nested notebook pane is isolated but has no SharedArrayBuffer");
     }
 
-    // 4. Lazy mount: the assignment notebook is mounted, the solution is not.
+    // 4. Exactly one notebook document.
+    //
+    //    The tabs and the view switch repoint a single iframe. Asserting the
+    //    count — not just that the right one is loaded — is what keeps a future
+    //    change from quietly reintroducing an iframe per destination, which is
+    //    an iframe per Pyodide kernel.
     const mounts = await page.evaluate(() => {
-      const a = document.getElementById("wb-notebook-assignment");
-      const s = document.getElementById("wb-notebook-solution");
+      const frames = document.querySelectorAll("#wb-notebook, .wb-notebook-pane");
+      const f = document.getElementById("wb-notebook");
       return {
-        assignment: a ? a.getAttribute("src") : null,
-        solutionPresent: !!s,
-        solution: s ? s.getAttribute("src") : null,
+        count: frames.length,
+        src: f ? f.getAttribute("src") : null,
+        solutionPresent: !!document.getElementById("wb-tab-solution"),
       };
     });
-    console.log(`mounts: assignment=${mounts.assignment} solution=${mounts.solution}`);
-    if (!mounts.assignment || !mounts.assignment.includes("file=assignment")) {
-      return fail(`assignment notebook pane is not mounted (src=${mounts.assignment})`);
-    }
-    if (mounts.solutionPresent && mounts.solution !== "about:blank") {
+    console.log(`notebook frames=${mounts.count} src=${mounts.src}`);
+    if (mounts.count !== 1) {
       return fail(
-        `solution pane mounted eagerly (src=${mounts.solution}); it must stay at ` +
-        `about:blank until its tab is selected, so a second Pyodide is only paid ` +
-        `for by an author who asks for it.`
+        `expected exactly one notebook iframe, found ${mounts.count}. Each live ` +
+        `notebook document holds a Pyodide kernel, so one per destination is one ` +
+        `kernel per destination.`
       );
+    }
+    if (!mounts.src || !mounts.src.includes("file=assignment")) {
+      return fail(`the notebook iframe is not showing the assignment (src=${mounts.src})`);
     }
 
     // 5. Activity forwarding — the guard against being signed out mid-edit.
@@ -368,45 +391,60 @@ async function main() {
       );
     }
 
-    // 6. Lazy mount, then keep. Selecting the solution tab must mount it AND
-    //    leave the assignment mounted, so switching back is a CSS toggle rather
-    //    than a second cold kernel boot. This is the contract behind the
-    //    kernel-count decision; without it the feature's whole point is lost.
+    // 6a. The view switch, asserted while the ASSIGNMENT is selected.
+    //
+    //     Order matters and cost me a run: the seeded solution has no
+    //     placeholders, so checking this after selecting Solution finds the
+    //     control correctly hidden and proves nothing. The seeded assignment
+    //     carries `{{dataset_name}}` precisely so this path is live.
+    const viewSwitchVisible = await page.evaluate(() => {
+      const v = document.getElementById("wb-viewswitch");
+      return {
+        present: !!v,
+        visible: !!v && !v.hidden,
+        flag: v ? v.getAttribute("data-assignment-has-template") : null,
+      };
+    });
+    console.log(
+      `view switch: present=${viewSwitchVisible.present} visible=${viewSwitchVisible.visible} ` +
+      `assignmentHasTemplate=${viewSwitchVisible.flag}`);
+    if (!viewSwitchVisible.visible) {
+      return fail(
+        "the view switch is not showing on an assignment whose notebook carries " +
+        "{{dataset_name}}. Either the server did not detect the placeholder " +
+        "(assignmentHasTemplateView) or workbench.js is not un-hiding the control."
+      );
+    }
+    await page.click('#wb-viewswitch .wb-view[data-wb-view="template"]');
+    await page.waitForTimeout(1000);
+    const afterView = await page.evaluate(() => {
+      const f = document.getElementById("wb-notebook");
+      return { src: f.getAttribute("src"), view: f.getAttribute("data-wb-view") };
+    });
+    console.log(`after view switch: src=${afterView.src}`);
+    if (!afterView.src || !afterView.src.includes("view=template")) {
+      return fail(`the view switch did not repoint the notebook (src=${afterView.src})`);
+    }
+
+    // 6b. Tab and view switching drive the ONE notebook iframe.
+    //
+    //    There is a single notebook document, so what is asserted is that the
+    //    controls change where it points — not that a pool of frames is being
+    //    managed. Selecting Solution must repoint it at the solution; the view
+    //    switch must repoint it at the template of whatever file is selected.
     if (mounts.solutionPresent) {
       await page.click("#wb-tab-solution");
-      await page.waitForTimeout(1500);
-      const afterSwitch = await page.evaluate(() => {
-        const a = document.getElementById("wb-notebook-assignment");
-        const s = document.getElementById("wb-notebook-solution");
-        return {
-          assignment: a.getAttribute("src"),
-          solution: s.getAttribute("src"),
-          assignmentHidden: a.hidden,
-          solutionHidden: s.hidden,
-        };
+      await page.waitForTimeout(1000);
+      const afterTab = await page.evaluate(() => {
+        const f = document.getElementById("wb-notebook");
+        return { src: f.getAttribute("src"), file: f.getAttribute("data-wb-file") };
       });
-      console.log(`after switch: solution=${afterSwitch.solution} assignmentStillMounted=${afterSwitch.assignment !== "about:blank"}`);
-      if (!afterSwitch.solution || !afterSwitch.solution.includes("file=solution")) {
-        return fail(`selecting the Solution tab did not mount it (src=${afterSwitch.solution})`);
+      console.log(`after tab switch: src=${afterTab.src}`);
+      if (!afterTab.src || !afterTab.src.includes("file=solution")) {
+        return fail(`selecting the Solution tab did not repoint the notebook (src=${afterTab.src})`);
       }
-      if (afterSwitch.solutionHidden || !afterSwitch.assignmentHidden) {
-        return fail("tab switch did not swap which pane is visible");
-      }
-      // On a CI runner deviceMemory is usually unreported, so the keep-mounted
-      // branch is the one under test. Skip the assertion if the shell chose the
-      // low-memory path — that is a legitimate outcome, not a failure.
-      const twoKernels = await page.evaluate(
-        () => !window.ChickadeeWorkbench || window.ChickadeeWorkbench.allowsTwoKernels(navigator)
-      );
-      if (twoKernels && afterSwitch.assignment === "about:blank") {
-        return fail(
-          "switching tabs unmounted the assignment notebook on a device that can hold " +
-          "two kernels — switching back will pay a full cold boot, which is the cost " +
-          "this feature exists to remove."
-        );
-      }
-      if (!twoKernels) {
-        console.log("(low-memory device: unmount-on-switch is the expected branch)");
+      if (afterTab.file !== "solution") {
+        return fail(`notebook frame still reports file=${afterTab.file} after selecting Solution`);
       }
     }
 

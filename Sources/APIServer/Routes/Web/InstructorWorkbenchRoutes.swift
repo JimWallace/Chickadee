@@ -71,6 +71,42 @@ struct InstructorWorkbenchRoutes: RouteCollection {
             || assignment.validationSubmissionID != nil
             || hasDraftSolution
 
+        // Whether each notebook still carries `{{name}}` — i.e. whether its
+        // template and its rendering are actually different documents. When
+        // they are not, offering a view switch would just be two tabs onto
+        // identical bytes, so the control is omitted per file.
+        let assignmentHasTemplate = hasPlaceholders(try? notebookData(for: setup))
+        // Not folded into an `&&`: the right-hand side of `&&` is a
+        // non-async autoclosure, so the await has to stand on its own.
+        var solutionHasTemplate = false
+        if hasSolution {
+            let solutionData = try? await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            solutionHasTemplate = hasPlaceholders(solutionData)
+        }
+
+        // Every (file, view) the tabs can reach.  A `template` entry exists only
+        // where the notebook actually carries placeholders — otherwise the two
+        // readings are byte-identical and switching between them is a kernel
+        // reboot for no change.
+        var urls: [String: String] = [
+            "assignment:personalized": notebookPaneURL(setupID: setupID, file: "assignment", view: "personalized")
+        ]
+        if assignmentHasTemplate {
+            urls["assignment:template"] = notebookPaneURL(
+                setupID: setupID, file: "assignment", view: "template")
+        }
+        if hasSolution {
+            urls["solution:personalized"] = notebookPaneURL(
+                setupID: setupID, file: "solution", view: "personalized")
+            if solutionHasTemplate {
+                urls["solution:template"] = notebookPaneURL(
+                    setupID: setupID, file: "solution", view: "template")
+            }
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let urlsJSON = String(data: (try? encoder.encode(urls)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}"
+
         let title = assignment.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let ctx = AssignmentWorkbenchContext(
             currentUser: req.currentUserContext,
@@ -78,14 +114,22 @@ struct InstructorWorkbenchRoutes: RouteCollection {
             testSetupID: setupID,
             assignmentTitle: title.isEmpty ? "Assignment" : title,
             editPanelURL: "/instructor/\(assignment.publicID)/workbench/panel",
-            assignmentNotebookURL: notebookPaneURL(setupID: setupID, file: "assignment"),
-            solutionNotebookURL: hasSolution
-                ? notebookPaneURL(setupID: setupID, file: "solution")
-                : nil,
+            initialNotebookURL: urls["assignment:personalized"] ?? "",
+            notebookPaneURLsJSON: urlsJSON,
+            hasSolution: hasSolution,
+            assignmentHasTemplateView: assignmentHasTemplate,
+            solutionHasTemplateView: solutionHasTemplate,
             standaloneEditURL: "/instructor/\(assignment.publicID)/edit"
         )
-        _ = setup  // loaded for the staff gate; the shell needs nothing from it
         return try await req.view.render("workbench", ctx)
+    }
+
+    /// True when the notebook still holds `{{name}}` placeholders.  Unreadable
+    /// bytes answer `false`: the view switch is an affordance, and a missing
+    /// notebook has bigger problems — the same reading `notebookPage` takes.
+    private func hasPlaceholders(_ data: Data?) -> Bool {
+        guard let data else { return false }
+        return !NotebookSubstitution.placeholderNames(in: data).isEmpty
     }
 
     // MARK: - GET /instructor/:assignmentID/workbench/panel
@@ -105,7 +149,14 @@ struct InstructorWorkbenchRoutes: RouteCollection {
     /// URL of one notebook pane.  `embedded=1` drops the site chrome; every
     /// access decision on that page (the staff-only solution guard, the closed
     /// gate, `canSaveToAssignment`) is made without reference to it.
-    private func notebookPaneURL(setupID: String, file: String) -> String {
-        "/testsetups/\(setupID)/notebook?file=\(file)&embedded=1"
+    ///
+    /// `view=` is always sent explicitly.  `resolveNotebookViewMode` defaults
+    /// staff to `.template` on a notebook that carries placeholders, so leaving
+    /// it off would silently make a pane's identity depend on the assignment's
+    /// content — the "Assignment" tab would show the template on a personalized
+    /// lab and the rendering on every other one.  It is still resolved
+    /// server-side, so a student who forges one gets their own rendering.
+    private func notebookPaneURL(setupID: String, file: String, view: String) -> String {
+        "/testsetups/\(setupID)/notebook?file=\(file)&view=\(view)&embedded=1"
     }
 }

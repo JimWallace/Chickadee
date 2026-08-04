@@ -5,9 +5,9 @@
 // strip that switches the right pane between the starter notebook and the
 // reference solution.
 //
-// The shell owns no assignment content — every pane is an iframe onto a page
+// The shell owns no assignment content — each pane is an iframe onto a page
 // that already existed.  What lives here is the composition: pane sizing, which
-// notebook is mounted, and the messages the panes send each other.
+// notebook is loaded, and the messages the panes send each other.
 //
 // Three things are load-bearing and easy to get wrong:
 //
@@ -17,10 +17,13 @@
 //     clamps the notebook pane at 720px and the edit pane at 380px, and below a
 //     viewport that can hold both the layout drops to one pane at a time.
 //
-//   * **Kernel count.** The solution iframe stays at about:blank until its tab
-//     is first selected, then stays mounted, so switching is instant after one
-//     boot.  On a device that reports low memory it is unmounted on switch
-//     instead — one kernel at a time, at the cost of a reboot per switch.
+//   * **One notebook document, always.** The tabs and the view switch change
+//     the single iframe's src; they are destinations, not panes. An iframe per
+//     (file, view) would mean a Pyodide kernel per combination — up to four —
+//     and bounding that needs an eviction policy, which is a lot of machinery
+//     for a secondary interaction. The workbench exists to put the edit page
+//     and *a* notebook on screen together, and that holds with one. The cost is
+//     honest and accepted: switching notebooks re-boots the kernel.
 //
 //   * **Idle logout.** The watchdog runs in this document, but every keystroke
 //     lands in a pane.  `embedded-activity.js` forwards activity up; this file
@@ -57,14 +60,24 @@
         return desiredPx;
     }
 
-    /// Whether this device should hold two Pyodide kernels at once.
-    /// `navigator.deviceMemory` is GB rounded to a power of two and is absent
-    /// on Firefox/Safari — absent means "no evidence of a problem", so we keep
-    /// both mounted, matching notebook-preflight.js's own conservative read.
-    function allowsTwoKernels(nav) {
-        var dm = (nav && typeof nav.deviceMemory === 'number') ? nav.deviceMemory : null;
-        if (dm === null) return true;
-        return dm > 4;
+    /// Resolve which notebook URL a (file, view) selection should load.
+    ///
+    /// Falls back to the rendered view when the requested reading does not
+    /// exist for that file — the server only publishes a `template` entry for a
+    /// notebook that actually carries placeholders, so switching to Solution
+    /// while viewing the Assignment's template lands exactly there. Returning
+    /// the fallback (rather than nothing) is what keeps a tab click from being
+    /// silently ignored.
+    ///
+    /// Pure, so the fallback is testable without a DOM.
+    function resolvePane(urls, file, view) {
+        var key = file + ':' + view;
+        if (urls[key]) return { key: key, file: file, view: view, url: urls[key] };
+        var fallback = file + ':personalized';
+        if (urls[fallback]) {
+            return { key: fallback, file: file, view: 'personalized', url: urls[fallback] };
+        }
+        return null;
     }
 
     /// Toggle the edit pane between collapsed and its last expanded width.
@@ -88,7 +101,7 @@
     // policy without a DOM.
     var api = {
         clampLeftWidth: clampLeftWidth,
-        allowsTwoKernels: allowsTwoKernels,
+        resolvePane: resolvePane,
         toggleCollapse: toggleCollapse
     };
     if (typeof window !== 'undefined') window.ChickadeeWorkbench = api;
@@ -107,12 +120,30 @@
     var storageKey = 'chickadee-workbench-split:' + assignmentID;
 
     var tabs = Array.prototype.slice.call(shell.querySelectorAll('.wb-tab'));
-    var panes = {};
-    tabs.forEach(function (tab) {
-        var name = tab.getAttribute('data-wb-pane');
-        panes[name] = document.getElementById(tab.getAttribute('aria-controls'));
-    });
-    var activePane = 'assignment';
+    var viewButtons = Array.prototype.slice.call(shell.querySelectorAll('.wb-view'));
+    var viewSwitch = document.getElementById('wb-viewswitch');
+
+    // The single notebook document, and the destinations its tabs can send it
+    // to. There is one iframe, so there is one kernel — switching notebooks
+    // costs a boot, and nothing here has to manage a pool.
+    var notebookFrame = document.getElementById('wb-notebook');
+    // Carried on a data-attribute rather than a <script> island: it is a small
+    // map the shell reads once, and the style guard ratchets inline script
+    // down, not up.
+    var paneURLs = {};
+    try {
+        paneURLs = JSON.parse(shell.getAttribute('data-wb-pane-urls') || '{}');
+    } catch (_) {
+        paneURLs = {};
+    }
+
+    var activeFile = 'assignment';
+    var activeView = 'personalized';
+
+    function hasTemplate(file) {
+        if (!viewSwitch) return false;
+        return viewSwitch.getAttribute('data-' + file + '-has-template') === '1';
+    }
 
     // ── Splitter ──────────────────────────────────────────────────────────
 
@@ -224,48 +255,45 @@
         restore();
     }
 
-    // ── Notebook tabs ─────────────────────────────────────────────────────
+    // ── Notebook selection: which file, and which reading of it ────────────
 
-    function mount(pane) {
-        var frame = panes[pane];
-        if (!frame) return;
-        var wanted = frame.getAttribute('data-wb-src');
-        if (wanted && frame.getAttribute('src') !== wanted) frame.setAttribute('src', wanted);
-    }
-
-    function unmount(pane) {
-        var frame = panes[pane];
-        if (frame) frame.setAttribute('src', 'about:blank');
-    }
-
-    function selectPane(name) {
-        if (!panes[name]) return;
-        var previous = activePane;
-        activePane = name;
+    function selectPane(file, view) {
+        var pane = resolvePane(paneURLs, file, view);
+        if (!pane || !notebookFrame) return;
+        activeFile = pane.file;
+        activeView = pane.view;
 
         tabs.forEach(function (tab) {
-            var isActive = tab.getAttribute('data-wb-pane') === name;
+            var isActive = tab.getAttribute('data-wb-file') === pane.file;
             tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
             // Roving tabindex: one stop for the whole strip.
             tab.setAttribute('tabindex', isActive ? '0' : '-1');
         });
-        Object.keys(panes).forEach(function (key) {
-            if (panes[key]) panes[key].hidden = (key !== name);
+        viewButtons.forEach(function (btn) {
+            btn.setAttribute(
+                'aria-pressed',
+                btn.getAttribute('data-wb-view') === pane.view ? 'true' : 'false');
         });
+        // The control only makes sense where the two readings differ.
+        if (viewSwitch) viewSwitch.hidden = !hasTemplate(pane.file);
 
-        mount(name);
-        // Reclaim the hidden pane's kernel only where memory is tight; the
-        // default is to keep it warm so the next switch costs nothing.
-        if (previous !== name && !allowsTwoKernels(navigator)) unmount(previous);
+        notebookFrame.setAttribute('data-wb-file', pane.file);
+        notebookFrame.setAttribute('data-wb-view', pane.view);
+        // Guarded: re-setting src to the value it already holds is a reload in
+        // some browsers, which would throw away a kernel that is already
+        // booting just because the author clicked the tab they are on.
+        if (notebookFrame.getAttribute('src') !== pane.url) {
+            notebookFrame.setAttribute('src', pane.url);
+        }
 
         // Whatever made the chip appear applied to the notebook the author was
-        // looking at; a fresh mount is current by construction.
+        // looking at; a fresh load is current by construction.
         if (staleChip) staleChip.hidden = true;
     }
 
     tabs.forEach(function (tab, index) {
         tab.addEventListener('click', function () {
-            selectPane(tab.getAttribute('data-wb-pane'));
+            selectPane(tab.getAttribute('data-wb-file'), activeView);
         });
         tab.addEventListener('keydown', function (e) {
             var delta = e.key === 'ArrowRight' ? 1 : (e.key === 'ArrowLeft' ? -1 : 0);
@@ -273,9 +301,20 @@
             e.preventDefault();
             var next = tabs[(index + delta + tabs.length) % tabs.length];
             next.focus();
-            selectPane(next.getAttribute('data-wb-pane'));
+            selectPane(next.getAttribute('data-wb-file'), activeView);
         });
     });
+
+    viewButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            selectPane(activeFile, btn.getAttribute('data-wb-view'));
+        });
+    });
+
+    // The template already loaded the assignment's rendered view, so only the
+    // view control needs syncing — show it when this notebook has a template
+    // worth switching to.
+    if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
 
     // ── Single-pane fallback (narrow desktop windows) ──────────────────────
 
