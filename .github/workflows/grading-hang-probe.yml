@@ -65,7 +65,11 @@ jobs:
     # Same Swift image as the other editor jobs so the cached server binary runs
     # and the vended Public/pyodide it serves is the exact build CI ships.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

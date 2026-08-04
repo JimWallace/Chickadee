@@ -32,39 +32,73 @@ runs:
     # the mangled-symbol reason documented in swift-tests.yml. On a hit,
     # building the server product is near-no-op; on a miss it builds cold.
     - name: Restore build artifacts
+      id: shared-build-cache
       uses: actions/cache/restore@v5
       with:
         path: .build
         key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
+    # Fallback cache, owned by the probes, used only when the shared key missed.
+    #
+    # The shared key is written by `build` in swift-tests.yml — a different
+    # workflow, so `needs:` cannot order a probe after it. On any PR touching
+    # Sources/** or Tests/** the key is new, and whether a probe hits it is a
+    # race against that build finishing. Losing the race means a cold Swift
+    # build (~16 min of a 50 min budget), and losing it *repeatedly* is what
+    # made re-running a probe on the same commit cost the same 16 minutes every
+    # time — nothing the probes did ever populated a key they could read back.
+    #
+    # This one they own: same exact-match discipline (no restore-keys prefix
+    # fallback, which would build incrementally over a mismatched tree), same
+    # source hash, different namespace. Deliberately NOT the shared key: a probe
+    # that won that race would publish a `.build` holding only
+    # chickadee-server, and the swift-tests jobs restoring it would have to
+    # rebuild the test targets — trading their time for ours.
+    - name: Restore/save probe build cache
+      if: steps.shared-build-cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v5
+      with:
+        path: .build
+        key: ${{ runner.os }}-probebuild-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
     - name: Build chickadee-server
       shell: bash
       run: swift build --product chickadee-server
 
-    # apt against archive.ubuntu.com is the least reliable thing in this action:
-    # it is an unauthenticated plain-HTTP fetch of ~40 packages from a mirror we
-    # do not control, and when it is unreachable the step fails with exit 100 and
-    # takes the whole probe with it — a red required gate caused by an Ubuntu
-    # mirror. Retry the network-bound half a few times with a short backoff.
-    # `npm ci` stays outside the loop: it hits a different registry, and a
-    # genuine lockfile problem should fail once and clearly, not three times.
+    # Node and npm are baked into the swift-ci image, so the normal path here is
+    # to install nothing. The apt fallback stays for two cases that are real:
+    # a caller still on the plain mirror, and the window where this action runs
+    # before mirror-images.yml has republished swift-ci with a Dockerfile change.
+    # Deleting it outright would make those a hard failure instead of a slow path.
+    #
+    # apt against archive.ubuntu.com is the least reliable thing in this action —
+    # an unauthenticated plain-HTTP fetch of ~40 packages from a mirror we do not
+    # control — so when it does run it retries. On 2026-08-04 it was unreachable,
+    # the step exited 100, and the required editor-smoke gate went red because of
+    # an Ubuntu mirror. `npm ci` stays outside the loop: it hits a different
+    # registry, and a genuine lockfile problem should fail once and clearly.
     - name: Install Node and npm dependencies
       shell: bash
       working-directory: ${{ inputs.node-project }}
       run: |
         set -eu
-        for attempt in 1 2 3; do
-          if apt-get update -qq \
-            && apt-get install -y --no-install-recommends nodejs npm curl ca-certificates; then
-            break
-          fi
-          if [ "$attempt" = 3 ]; then
-            echo "::error::apt-get failed 3 times — archive.ubuntu.com is likely unreachable."
-            exit 1
-          fi
-          echo "::warning::apt-get attempt ${attempt} failed; retrying in $((attempt * 15))s"
-          sleep $((attempt * 15))
-        done
+        if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+          echo "node $(node --version) and npm $(npm --version) already present — skipping apt"
+        else
+          echo "::warning::node/npm missing from the image; falling back to apt-get"
+          for attempt in 1 2 3; do
+            if apt-get update -qq \
+              && apt-get install -y --no-install-recommends nodejs npm curl ca-certificates; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt-get failed 3 times — archive.ubuntu.com is likely unreachable."
+              exit 1
+            fi
+            echo "::warning::apt-get attempt ${attempt} failed; retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          done
+        fi
         npm ci
 
     # The engine download (~150 MB) is the slow, network-dependent part of
