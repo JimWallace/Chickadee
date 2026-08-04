@@ -863,26 +863,45 @@ shim); and archived finished-era docs under `docs/archive/`.
 **Near-term roadmap:**
 
 - **Leaf partial decomposition — UNBLOCKED (2026-08, #1266). The long-standing
-  "multi-`#extend` parser bug" was a misdiagnosis.** Multiple inline
-  `#extend("_partial")` includes work fine on LeafKit 1.14.3. What actually
-  produces `LeafError.500: extend only supports one or two parameters []` is
-  **the literal text `#extend` appearing anywhere in a template, including
-  inside an HTML comment**. Leaf's lexer has no notion of HTML comments, so
-  `<!-- see #extend above -->` is lexed as a real tag with no parameters.
-  Demonstrated both ways: adding that one comment line to `notebook.leaf` (7
-  lines, one extend) reproduces the 500 exactly; removing only the `#extend`
-  text from prose comments in a merged template — changing nothing else — makes
-  it render. The historical bisection was almost certainly toggling
-  heavily-commented blocks whose prose mentioned the tag, which is why it
-  looked template-wide and size-dependent.
-  **Practical rule:** never write a bare `#tagname` in template prose or
-  comments. Say "the extend" or "an `extend(...)` include" instead. Inline
-  partial `#extend`s themselves are unrestricted, and the sub-context form
-  `#extend("_partial", subObject)` works too — that is what lets one partial
-  serve both a standalone page (flat context) and a composite page (nested),
-  as `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
+  "multi-extend parser bug" was a misdiagnosis.** Multiple inline partial
+  includes work fine on LeafKit 1.14.3. The real cause of
+  `LeafError.500: extend only supports one or two parameters []` is that
+  **Leaf's lexer has no notion of an HTML comment.** `<!-- ... -->` is raw text
+  to it, so tag syntax written inside one is lexed exactly as if it stood in
+  the markup. A bare structural tag name lexes to a tag with *no* parameter
+  list, and `Extend.init` rejects that — hence the empty `[]` in the message.
+
+  Verified against a control (a probe comment inserted into an otherwise
+  untouched `notebook.leaf` — 7 lines, one include — with a no-probe baseline
+  proving the harness measured anything at all):
+
+  | In a comment | Result |
+  |---|---|
+  | bare `extend` / `if` / `else` / `elseif` / `endif` / `for` / `endfor` / `import` / `export` / `endextend` | **500 at render** |
+  | `#(someField)` | **silently interpolated** — the real context value lands in the served HTML |
+  | `#someTag()` | parens consumed, name left as literal text |
+  | a *complete* `extend("_partial")` | **resolves the partial**, exactly as if uncommented |
+  | unknown `#word` (`#wb-single-edit`, `#jl-frame`), `C#`, `id="#main"` | genuinely inert |
+
+  That last row is why existing comments naming CSS ids are safe, and why the
+  rule is narrower than "never write `#` in prose".
+
+  **Practical rule:** never write Leaf *tag* syntax in template prose or
+  comments — not a bare structural tag name, not `#(field)`, not a complete
+  include. Say "the extend" or "an `extend(...)` include" instead. Commenting a
+  tag out does not disable it.
+
+  The historical bisection was almost certainly toggling heavily-commented
+  blocks whose prose named a tag, which is why the failure looked template-wide
+  and size-dependent rather than like a one-line typo.
+
+  Inline partial includes themselves are unrestricted, and the **sub-context
+  form** `extend("_partial", subObject)` works — that is what lets one partial
+  serve both a standalone page (flat context) and a composite page (nested), as
+  `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
   syntax: a bare second parameter, **not** the labelled `with:` form, which
-  does not lex.
+  does not lex (`invalidParameterToken(":")`).
+
   (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
