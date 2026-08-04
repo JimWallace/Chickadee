@@ -665,7 +665,11 @@ struct InstructorDashboardRoutes: RouteCollection {
             error: q?.error,
             // nil rather than `false` on the standalone page so its rendered
             // HTML is byte-identical to before the workbench existed.
-            embedded: embedded ? true : nil
+            embedded: embedded ? true : nil,
+            // Where a write inside the pane sends the pane afterwards.  Must
+            // match the route `InstructorWorkbenchRoutes` registers, since the
+            // pane is already showing it.
+            panelURL: embedded ? "/instructor/\(idStr)/workbench/panel" : nil
         )
     }
 }

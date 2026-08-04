@@ -67,10 +67,19 @@
 
         var form = document.querySelector('form[action$="/edit/save"]');
         if (form) {
-            // The form posts and the pane navigates to the redirect target,
-            // which re-renders this same page. Reply before submitting: once
-            // the navigation starts this document is going away, and a reply
-            // sent after that never arrives.
+            // `chickadeeSubmitInPlace` is what this pane's own submit handler
+            // uses, so Save and a click on the form's submit button take the
+            // identical path. It resolves with the real outcome and never
+            // rejects, which is why the reply can wait for it — this used to
+            // reply `ok` optimistically and then submit natively, because the
+            // pane was about to navigate away and a later reply would never
+            // arrive. It reported success on a 500.
+            if (typeof window.chickadeeSubmitInPlace === 'function') {
+                window.chickadeeSubmitInPlace(form).then(function (ok) {
+                    post('save-result', { ok: ok !== false });
+                });
+                return;
+            }
             post('save-result', { ok: true });
             form.requestSubmit ? form.requestSubmit() : form.submit();
             return;

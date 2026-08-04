@@ -128,6 +128,105 @@ import VaporTesting
                     // closing the assignment.
                     #expect(!html.contains("Save &amp; Validate"))
                     #expect(html.contains("name=\"liveEdit\""))
+                    // Every write on this page redirects to the chromed
+                    // standalone editor.  Inside a pane that redirect lands
+                    // *in the pane*, which is what made the workbench confusing
+                    // to use: adding a suite section replaced the editor with a
+                    // second copy of itself.  These two attributes are the whole
+                    // fix — the marker on each such form, and the URL the pane
+                    // returns to instead.
+                    #expect(
+                        html.contains(
+                            "data-ck-panel-url=\"/instructor/\(assignment.publicID)/workbench/panel\""))
+                    #expect(html.contains("/inplace-forms.js"))
+                    #expect(html.contains("data-ck-inplace"))
+                })
+        }
+    }
+
+    /// Each navigating write is marked individually, so this counts them rather
+    /// than asserting the attribute appears at all.  A form that loses its
+    /// marker keeps working on the standalone page and silently goes back to
+    /// navigating the pane — a regression with no error and no failing test
+    /// unless the count is pinned.
+    @Test func everyNavigatingWriteFormIsMarkedForInPlaceSubmission() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await arInsertSetup(
+                id: "setup_wb7",
+                manifest: """
+                    {"schemaVersion":1,"requiredFiles":[],"testSuites":[],\
+                    "sections":[{"id":"sec1","name":"Question 1","variables":[],"expressions":[]}],\
+                    "timeLimitSeconds":10,"makefile":null}
+                    """,
+                on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_wb7", title: "Marked Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/workbench/panel",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Compare the marked set to the expected set rather than
+                    // counting occurrences of the attribute: counting passes if
+                    // the marker lands on the wrong form, and it also matches
+                    // the word where it appears in a template comment.
+                    let base = "/instructor/\(assignment.publicID)"
+                    let expected: Set<String> = [
+                        "\(base)/edit/save",
+                        "\(base)/create-solution",
+                        "\(base)/secret-reveal",
+                        "\(base)/suite-sections",
+                        "\(base)/suite-sections/sec1/rename",
+                    ]
+                    #expect(
+                        markedFormActions(in: html) == expected,
+                        "a write form lost its in-place marker, or one gained it")
+                })
+        }
+    }
+
+    /// The `action` of every `<form>` in `html` that carries `data-ck-inplace`.
+    /// Deliberately parses the open tags rather than searching the whole
+    /// document, so prose in a template comment cannot be mistaken for markup.
+    private func markedFormActions(in html: String) -> Set<String> {
+        var actions: Set<String> = []
+        for chunk in html.components(separatedBy: "<form ").dropFirst() {
+            guard let end = chunk.firstIndex(of: ">") else { continue }
+            let tag = String(chunk[chunk.startIndex..<end])
+            guard tag.contains("data-ck-inplace") else { continue }
+            guard let actionStart = tag.range(of: "action=\"") else { continue }
+            let rest = tag[actionStart.upperBound...]
+            guard let quote = rest.firstIndex(of: "\"") else { continue }
+            actions.insert(String(rest[rest.startIndex..<quote]))
+        }
+        return actions
+    }
+
+    /// Standalone, the markers are inert: the script that acts on them is not
+    /// loaded and there is no panel URL to return to.  Pinned as its own test
+    /// because the whole safety of marking the forms unconditionally rests on
+    /// it.
+    @Test func standaloneEditPageCarriesTheMarkersButNotTheInterceptor() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await arInsertSetup(id: "setup_wb8", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_wb8", title: "Inert Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/edit",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        markedFormActions(in: html).contains(
+                            "/instructor/\(assignment.publicID)/edit/save"))
+                    #expect(!html.contains("/inplace-forms.js"))
+                    #expect(!html.contains("data-ck-panel-url=\""))
                 })
         }
     }

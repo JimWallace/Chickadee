@@ -266,7 +266,9 @@ extension WebRoutes {
         let workingCopyPath = userNotebookWorkingCopyRelativePath(
             setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
         if fileKind == .solution {
-            let solutionData = try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            let solutionData = try await solutionNotebookData(
+                for: assignment, setup: setup, db: req.db,
+                testSetupsDirectory: req.application.testSetupsDirectory)
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
                 setupID: setupID,
@@ -447,7 +449,10 @@ extension WebRoutes {
         let data: Data? =
             switch fileKind {
             case .assignment: try? notebookData(for: setup)
-            case .solution: try? await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            case .solution:
+                try? await solutionNotebookData(
+                    for: assignment, setup: setup, db: req.db,
+                    testSetupsDirectory: req.application.testSetupsDirectory)
             }
         guard let data else { return false }
         return !NotebookSubstitution.placeholderNames(in: data).isEmpty
@@ -538,7 +543,9 @@ extension WebRoutes {
             fileKind: fileKind, isStaff: isStaff, requested: query.view)
         let defaultData: Data? =
             if fileKind == .solution {
-                try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+                try await solutionNotebookData(
+                    for: assignment, setup: setup, db: req.db,
+                    testSetupsDirectory: req.application.testSetupsDirectory)
             } else {
                 nil
             }

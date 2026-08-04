@@ -16,7 +16,13 @@
 </div>
 #endif
 
-<form class="form form--wide" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
+<!-- `data-ck-inplace` marks every form on this page whose handler answers with
+     a redirect to the chromed standalone editor.  That is right standalone and
+     wrong inside a workbench pane, where the redirect lands *in the pane*; when
+     `inplace-forms.js` is loaded (embedded renders only) it fetches the POST
+     and re-renders the pane instead.  Unconditional in the markup: the script
+     is not loaded on the standalone page, so the attribute is inert there. -->
+<form class="form form--wide" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate data-ck-inplace>
     #csrfFormField()
     <div class="editor-titlebar">
         <div class="editor-title-col">
@@ -136,7 +142,7 @@
                         <a class="btn action-btn" id="solution-notebook-edit-btn"
                            data-wb-file="solution" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
-                        <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form">
+                        <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form" data-ck-inplace>
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
                                     title="Copy the assignment notebook as a starting point for the solution">Create solution</button>
@@ -173,7 +179,7 @@
     <div class="editor-block-head">
         <h2>Student Options</h2>
     </div>
-    <form method="post" action="/instructor/#(assignmentID)/secret-reveal">
+    <form method="post" action="/instructor/#(assignmentID)/secret-reveal" data-ck-inplace>
         #csrfFormField()
         <label class="form-label">
             <input type="checkbox" name="enabled" #if(secretRevealEnabled):checked#endif>
@@ -273,7 +279,7 @@
             <details class="add-section-details popup-anchor" id="add-suite-section-details">
                 <summary class="btn action-btn summary-btn">+ Section</summary>
                 <div class="add-section-popup card suite-section-popup">
-                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form popup-form">
+                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form popup-form" data-ck-inplace>
                         #csrfFormField()
                         <label class="form-label">
                             Section name
@@ -325,7 +331,8 @@
                 <!-- Edit mode (hidden by default) -->
                 <div class="section-edit" style="display:none">
                     <form class="section-rename-form" method="post"
-                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename">
+                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename"
+                          data-ck-inplace>
                         #csrfFormField()
                         <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
                         <button class="btn btn-primary btn-tiny" type="submit">Save</button>
@@ -774,7 +781,7 @@ function checkUWDates(dateTimeValue, warningEl) {
      The top file table lists `supportFileRows`; this wires the
      "+ Upload file" button (FileReader → POST /scripts with tier=support
      and isTest=false) and per-row Remove buttons (DELETE /scripts/:name).
-     Reload on success to pick up the rendered changes.  -->
+     Re-render on success to pick up the changed file rows.  -->
 <script>
 (function () {
     var assignmentID = '#(assignmentID)';
@@ -829,7 +836,7 @@ function checkUWDates(dateTimeValue, warningEl) {
                     await uploadSupportFile(input.files[i]);
                 }
                 setStatus('Uploaded.', false);
-                window.location.reload();
+                ChickadeeUI.reloadEditSurface();
             } catch (e) {
                 setStatus('Upload failed — ' + e.message, true);
             } finally {
@@ -858,7 +865,7 @@ function checkUWDates(dateTimeValue, warningEl) {
                 alert('Remove failed: ' + resp.status + ' ' + errText);
                 return;
             }
-            window.location.reload();
+            ChickadeeUI.reloadEditSurface();
         } catch (e) {
             alert('Remove failed: ' + e.message);
         }
