@@ -82,3 +82,31 @@ test('allowsTwoKernels: low-memory devices hold one kernel at a time', () => {
   assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 8 }), true);
   assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 16 }), true);
 });
+
+test('toggleCollapse: collapsing remembers the width to come back to', () => {
+  const collapsed = Workbench.toggleCollapse({ collapsed: false, width: 640, restoreWidth: 0 });
+  assert.deepEqual(collapsed, { collapsed: true, width: 0, restoreWidth: 640 });
+
+  const expanded = Workbench.toggleCollapse(collapsed);
+  assert.deepEqual(expanded, { collapsed: false, width: 640, restoreWidth: 640 });
+});
+
+test('toggleCollapse: collapsing twice does not lose the restore width', () => {
+  // The failure this guards: a second collapse capturing the already-collapsed
+  // width of 0 would leave the pane unrestorable, with no way back to the
+  // editor short of dragging the splitter off the edge.
+  let state = { collapsed: false, width: 500, restoreWidth: 0 };
+  state = Workbench.toggleCollapse(state);
+  state = Workbench.toggleCollapse(state); // expand
+  state = Workbench.toggleCollapse(state); // collapse again
+  assert.equal(state.collapsed, true);
+  assert.equal(state.restoreWidth, 500);
+
+  state = Workbench.toggleCollapse(state);
+  assert.equal(state.width, 500, 'restoring must return the original width, not 0');
+});
+
+test('toggleCollapse: round-trips back to the starting state', () => {
+  const start = { collapsed: false, width: 420, restoreWidth: 420 };
+  assert.deepEqual(Workbench.toggleCollapse(Workbench.toggleCollapse(start)), start);
+});
