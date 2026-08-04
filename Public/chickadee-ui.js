@@ -262,6 +262,40 @@
         return finish;
     }
 
+    // Tell the assignment-workbench shell that something on this page changed
+    // in a way the *other* pane cares about.
+    //
+    // The workbench composes the edit page and the notebook editor as two
+    // same-origin iframes; neither pane can see the other, so a save in one has
+    // to be announced. Lives here rather than in each pane's own script because
+    // three pages need the identical guard, and getting the guard wrong is what
+    // would leak these notes to a hostile framer.
+    //
+    // A no-op on a standalone page — every one of these pages is reachable
+    // directly, and there `window.parent === window`.
+    //
+    // Recognised types:
+    //   'notebook-saved'  — a notebook was written back to the assignment, so
+    //                       the edit pane's files list / validation state is stale.
+    //   'inputs-changed'  — global or section inputs changed, so what the
+    //                       notebook pane is rendering is a substitution of
+    //                       stale values.
+    function notifyWorkbench(type) {
+        if (typeof window === 'undefined' || window.parent === window) return;
+        try {
+            // An explicit target origin, never '*': these are same-origin notes
+            // to our own shell, and '*' would hand them to any document that
+            // managed to frame this page.
+            window.parent.postMessage(
+                { source: 'chickadee', type: type },
+                window.location.origin
+            );
+        } catch (_) {
+            // Cross-origin parent, or one that went away mid-navigation. The
+            // panes stay correct on their own; only the cross-pane hint is lost.
+        }
+    }
+
     var root = typeof window !== 'undefined' ? window : globalThis;
     root.ChickadeeUI = {
         escapeHtml: escapeHtml,
@@ -270,6 +304,7 @@
         setStatus: setStatus,
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
+        notifyWorkbench: notifyWorkbench,
         renderSparkline: renderSparkline,
         accordion: {
             CARET_HTML: CARET_HTML,

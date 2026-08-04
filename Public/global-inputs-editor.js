@@ -50,6 +50,11 @@
                 body: JSON.stringify(payload)
             }).then(function (r) {
                 if (r.ok) {
+                    // Global inputs feed personalization, so a notebook open in
+                    // the workbench's other pane is now a rendering of stale
+                    // values.  The shell raises an advisory chip rather than
+                    // reloading that pane, which would restart the kernel.
+                    ChickadeeUI.notifyWorkbench('inputs-changed');
                     return r.json().then(function (body) {
                         var warns = body && body.warnings;
                         if (warns && warns.length) {

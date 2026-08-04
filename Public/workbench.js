@@ -67,9 +67,30 @@
         return dm > 4;
     }
 
+    /// Toggle the edit pane between collapsed and its last expanded width.
+    ///
+    /// Kept as a pure transition on an explicit state object because the bug
+    /// this shape prevents is a real one: collapsing while already collapsed
+    /// must not overwrite the remembered width with 0, or the pane can never be
+    /// restored and the author is left with no way back to the editor short of
+    /// dragging the splitter out from the edge.
+    ///
+    /// `state` is `{ collapsed, width, restoreWidth }`; the return is the same
+    /// shape.
+    function toggleCollapse(state) {
+        if (state.collapsed) {
+            return { collapsed: false, width: state.restoreWidth, restoreWidth: state.restoreWidth };
+        }
+        return { collapsed: true, width: 0, restoreWidth: state.width };
+    }
+
     // Exported for the unit tests, which exercise the arithmetic and the
     // policy without a DOM.
-    var api = { clampLeftWidth: clampLeftWidth, allowsTwoKernels: allowsTwoKernels };
+    var api = {
+        clampLeftWidth: clampLeftWidth,
+        allowsTwoKernels: allowsTwoKernels,
+        toggleCollapse: toggleCollapse
+    };
     if (typeof window !== 'undefined') window.ChickadeeWorkbench = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
@@ -122,6 +143,34 @@
         if (!isNaN(px) && px > 0) applyLeftWidth(px);
     }
 
+    // ── Collapse ──────────────────────────────────────────────────────────
+
+    var collapseState = { collapsed: false, width: 0, restoreWidth: 0 };
+
+    function applyCollapse() {
+        shell.setAttribute('data-wb-collapsed', collapseState.collapsed ? 'edit' : '');
+        if (collapseBtn) {
+            collapseBtn.setAttribute('aria-expanded', collapseState.collapsed ? 'false' : 'true');
+            collapseBtn.textContent = collapseState.collapsed ? 'Show editor' : 'Hide editor';
+        }
+        if (collapseState.collapsed) {
+            shell.style.setProperty('--wb-left-width', '0px');
+            if (splitter) splitter.setAttribute('aria-valuenow', '0');
+        } else {
+            applyLeftWidth(collapseState.restoreWidth || EDIT_MIN);
+        }
+    }
+
+    function doToggleCollapse() {
+        collapseState.width = collapseState.collapsed ? collapseState.width : currentLeftWidth();
+        collapseState = toggleCollapse(collapseState);
+        applyCollapse();
+        if (!collapseState.collapsed) persist(currentLeftWidth());
+    }
+
+    var collapseBtn = document.getElementById('wb-collapse-edit');
+    if (collapseBtn) collapseBtn.addEventListener('click', doToggleCollapse);
+
     if (splitter && body) {
         var dragging = false;
 
@@ -148,6 +197,11 @@
         splitter.addEventListener('keydown', function (e) {
             var width = currentLeftWidth();
             var total = body.clientWidth;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                doToggleCollapse();
+                return;
+            }
             var next = null;
             if (e.key === 'ArrowLeft') next = width - KEY_STEP_PX;
             else if (e.key === 'ArrowRight') next = width + KEY_STEP_PX;
@@ -155,6 +209,9 @@
             else if (e.key === 'End') next = total - SPLITTER_PX - NOTEBOOK_MIN;
             if (next === null) return;
             e.preventDefault();
+            // Any explicit sizing means the pane is no longer collapsed.
+            collapseState.collapsed = false;
+            shell.setAttribute('data-wb-collapsed', '');
             persist(applyLeftWidth(next));
         });
 

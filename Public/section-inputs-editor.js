@@ -44,6 +44,10 @@
                         throw new Error('section-vars save failed: HTTP ' + r.status + ' ' + t.slice(0, 200));
                     });
                 }
+                // Section variables feed personalization the same way global
+                // inputs do, so a notebook open in the workbench's other pane is
+                // now rendering stale values.  Advisory only — see the shell.
+                ChickadeeUI.notifyWorkbench('inputs-changed');
             }).catch(function (err) {
                 console.error('section-vars auto-save failed:', err);
             });

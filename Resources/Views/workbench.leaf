@@ -90,6 +90,11 @@
     color: var(--gray-700);
 }
 
+/* Collapsed edit pane: the notebook takes the full width.  The splitter stays
+   put so the pane can be dragged back out, and the toolbar button is the
+   primary way back. */
+.wb-shell[data-wb-collapsed="edit"] .wb-pane-edit { display: none; }
+
 /* Below the point where an honest split is possible (720px notebook floor +
    380px edit floor + the splitter), collapse to one pane at a time.  The
    notebook page hides its own editor under 640px, so a too-narrow pane would
@@ -110,6 +115,9 @@
     <div class="wb-bar">
         <h1 class="wb-title">#(assignmentTitle)</h1>
         <span class="wb-bar-spacer"></span>
+        <button class="btn action-btn" type="button" id="wb-collapse-edit"
+                aria-controls="wb-edit-frame" aria-expanded="true"
+                title="Give the notebook the full width">Hide editor</button>
         <button class="btn action-btn" type="button" id="wb-single-edit" hidden>Editor</button>
         <a class="btn action-btn" href="#(standaloneEditURL)">Full-width editor</a>
     </div>
