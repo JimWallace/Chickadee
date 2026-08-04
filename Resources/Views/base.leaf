@@ -23,7 +23,13 @@
          (e.g. csrf-token captures). -->
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
 </head>
-<body>
+<!-- `data-ck-panel-url` marks a page that is rendered *into* a workbench pane
+     and names the URL that re-renders it.  `inplace-forms.js` keys off it: a
+     form POST from inside a pane must come back to this URL, not follow the
+     handler's redirect to the fully-chromed standalone editor.  Absent on every
+     other page, where a missing Leaf variable is falsy and the attribute is
+     simply not emitted. -->
+<body#if(panelURL): data-ck-panel-url="#(panelURL)"#endif>
 <!-- Site chrome — the nav, the colour bar, and the course tabs.  Suppressed
      when `embedded` is set, i.e. when this page is being rendered *into a pane*
      of the assignment workbench (`workbench.leaf`) rather than as a top-level
@@ -132,6 +138,12 @@
      pane, so without this the shell would sit "idle" and sign the author out
      mid-edit. -->
 <script src="/embedded-activity.js?v=#appVersion()"></script>
+<!-- Keeps a pane's form POSTs from navigating it: each is fetched and the pane
+     re-renders itself, instead of following the handler's redirect to the
+     chromed standalone page.  Loaded before the multipart interceptor at the
+     foot of this file, which bails on `e.defaultPrevented` — so the two never
+     both fire on the same submit. -->
+<script src="/inplace-forms.js?v=#appVersion()"></script>
 <!-- Cross-pane wiring: Files-table Edit opens into the notebook pane, and the
      workbench's single Save is answered here. -->
 <script src="/embedded-pane.js?v=#appVersion()"></script>

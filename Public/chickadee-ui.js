@@ -296,6 +296,79 @@
         }
     }
 
+    // ── Re-rendering the surface you are on ──────────────────────────────────
+    //
+    // `location.reload()` is the obvious way to pick up a server-side change,
+    // and it is wrong inside a workbench pane: the pane's URL is the panel
+    // route, but a page that got there by following a handler's redirect is
+    // sitting on the chromed standalone editor, and reloading pins it there.
+    // Pages that are rendered into a pane carry `data-ck-panel-url` on <body>
+    // (emitted by base.leaf), which names the URL that re-renders them
+    // correctly.
+    //
+    // Scroll position rides across, because every caller is re-rendering after
+    // a small edit — uploading one support file, renaming one section — and
+    // landing back at the top of a long assignment each time is its own kind
+    // of lost work.
+    var PANEL_SCROLL_KEY = 'chickadee:panel-scroll';
+
+    // The exact shape `InstructorDashboardRoutes` emits, and nothing else.
+    //
+    // `panelURL()` reads an attribute out of the DOM and `reloadEditSurface`
+    // hands the result to `location.replace` — a navigation sink. The attribute
+    // is server-written today, so nothing reaches it that the server did not
+    // put there; the pattern exists so that stays true if some future page ever
+    // sets it from data it did not author. Unvalidated, a `javascript:` value in
+    // that attribute would execute. Same guard, same reasoning as
+    // `SAFE_PANE_URL` in workbench.js, which pins the notebook iframe's src.
+    var SAFE_PANEL_URL = /^\/instructor\/[A-Za-z0-9_-]+\/workbench\/panel$/;
+
+    // Defensive about `document` for the same reason this file carries a
+    // `module.exports` branch: the .mjs unit tests evaluate it in a vm context
+    // with a hand-built `window`, not a DOM.
+    function panelURL() {
+        if (typeof document === 'undefined' || !document.body) return null;
+        var url = document.body.getAttribute('data-ck-panel-url');
+        return (typeof url === 'string' && SAFE_PANEL_URL.test(url)) ? url : null;
+    }
+
+    function reloadEditSurface() {
+        var url = panelURL();
+        // A rejected or absent URL falls back to a plain reload rather than
+        // failing: the surface still re-renders, which is what the caller asked
+        // for. Only the pane-aware destination is lost.
+        if (!url) {
+            window.location.reload();
+            return;
+        }
+        try {
+            window.sessionStorage.setItem(PANEL_SCROLL_KEY + ':' + url, String(window.scrollY));
+        } catch (_) {
+            // Private mode. Losing the scroll offset is not worth failing a save.
+        }
+        window.location.replace(url);
+    }
+
+    // On `load`, not at parse: the suite table's rows are written by JS after
+    // this file runs, so restoring against the not-yet-populated page would
+    // clamp to a height that is about to triple.
+    function restorePanelScroll() {
+        var url = panelURL();
+        if (!url) return;
+        var saved;
+        try {
+            saved = window.sessionStorage.getItem(PANEL_SCROLL_KEY + ':' + url);
+            window.sessionStorage.removeItem(PANEL_SCROLL_KEY + ':' + url);
+        } catch (_) { return; }
+        if (saved == null) return;
+        var y = parseInt(saved, 10);
+        if (!isNaN(y) && y > 0) window.scrollTo(0, y);
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('load', restorePanelScroll);
+    }
+
     var root = typeof window !== 'undefined' ? window : globalThis;
     root.ChickadeeUI = {
         escapeHtml: escapeHtml,
@@ -305,6 +378,7 @@
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
         notifyWorkbench: notifyWorkbench,
+        reloadEditSurface: reloadEditSurface,
         renderSparkline: renderSparkline,
         accordion: {
             CARET_HTML: CARET_HTML,

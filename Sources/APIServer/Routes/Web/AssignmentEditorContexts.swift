@@ -200,4 +200,11 @@ struct EditAssignmentContext: Encodable {
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
+    /// The URL that re-renders this page in place — set only on the embedded
+    /// render, where it is the panel route itself.  `base.leaf` emits it as
+    /// `data-ck-panel-url` and `inplace-forms.js` sends the pane back here
+    /// after a write, instead of letting the handler's redirect to the chromed
+    /// `/edit` page land inside the pane.  `nil` standalone, where following
+    /// that redirect is the correct behaviour.
+    let panelURL: String?
 }

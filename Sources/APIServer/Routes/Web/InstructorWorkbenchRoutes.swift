@@ -80,7 +80,9 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         // non-async autoclosure, so the await has to stand on its own.
         var solutionHasTemplate = false
         if hasSolution {
-            let solutionData = try? await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            let solutionData = try? await solutionNotebookData(
+                for: assignment, setup: setup, db: req.db,
+                testSetupsDirectory: req.application.testSetupsDirectory)
             solutionHasTemplate = hasPlaceholders(solutionData)
         }
 

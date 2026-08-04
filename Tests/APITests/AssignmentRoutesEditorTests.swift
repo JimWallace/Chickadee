@@ -385,6 +385,36 @@ import VaporTesting
         }
     }
 
+    /// `create-solution` writes exactly one thing — the draft notebook — and
+    /// then redirects to `/testsetups/:id/notebook?file=solution`.  For a while
+    /// that redirect 404'd: `solutionNotebookData` resolved a solution from the
+    /// setup zip or a validation submission but never from the draft, so the
+    /// button's own destination reported the solution did not exist.  Every
+    /// other place that asks "is there a solution?" counts the draft, which is
+    /// why the Files table happily rendered an Edit button beside the dead link.
+    ///
+    /// Asserted through the page rather than the function so it pins the
+    /// user-visible behaviour: click Create solution, land on an editor.
+    @Test func solutionNotebookPageResolvesADraftOnlySolution() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsInstructor()
+            let setup = try await insertSetup(id: "ed_draftonly_sol", notebookOnDisk: sampleNotebookData())
+            _ = try await insertAssignment(testSetupID: "ed_draftonly_sol", title: "Draft Only")
+            try writeDraftSolutionNotebook(
+                setupID: setup.id ?? "",
+                data: sampleNotebookData(marker: "draft-only-solution-marker"))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setup.id ?? "")/notebook?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .ok,
+                        "create-solution's own redirect target 404s for a draft-only solution")
+                })
+        }
+    }
+
     // MARK: - GET /instructor/new/draft/solution-notebook
     //
     // The draft solution endpoint reads from one of two locations: a

@@ -33,7 +33,10 @@
 //   5. a keystroke in a pane reaches the shell as `chickadee:activity`, the
 //      chain that stops the idle watchdog signing an author out mid-edit;
 //   6. the view switch appears on a notebook that carries placeholders and
-//      repoints to `view=template`, and the tabs repoint to the other file.
+//      repoints to `view=template`, and the tabs repoint to the other file;
+//   7. a write from the pane (creating a suite section) leaves the pane on the
+//      panel URL rather than following the handler's redirect into the chromed
+//      standalone editor, and does not disturb the notebook document.
 //
 // WebKit is expected NON-isolated at every level — it needs the comlink path —
 // so there the assertion is inverted, exactly as in notebook-page-check.mjs.
@@ -471,6 +474,102 @@ async function main() {
           "the left pane is no longer the assignment editor — the Edit link " +
           "navigated the pane instead of opening into the notebook pane.");
       }
+
+      // Repointing the `src` attribute is not the same as loading a document,
+      // and the difference is not cosmetic: this assertion passed for a build
+      // where the solution notebook 404'd and the pane held a
+      // `chrome-error://` page. The author saw an error where the editor should
+      // be and the check said OK.
+      const solutionCommitted = page
+        .frames()
+        .some((f) => f.url().includes("/notebook?") && f.url().includes("file=solution"));
+      if (!solutionCommitted) {
+        return fail(
+          "the notebook pane's src says file=solution but no such document committed — " +
+          "the solution page failed to load (a 404 leaves a chrome-error frame here).",
+          page.frames().map((f) => f.url() || "(blank)").join("\n  "));
+      }
+    }
+
+    // 7. A write from the pane keeps the pane — and keeps the notebook alive.
+    //
+    //    Every write on the edit page answers with a redirect to
+    //    `/instructor/:id/edit`, the fully-chromed standalone editor. Inside the
+    //    workbench that redirect lands IN THE PANE: the author adds a suite
+    //    section and the editor is replaced by a second copy of itself, nav bar
+    //    and all, under the workbench's own Save button. Adding a section is
+    //    not an edge case, so neither was the broken state.
+    //
+    //    The second assertion is forward-looking. Today a pane re-render cannot
+    //    touch the notebook, because they are separate documents — so the probe
+    //    below is nearly free. It stops being free the moment the panes become
+    //    one document, where the same write would tear down the live Pyodide
+    //    kernel and the author's unsaved cells with it. Writing it now means the
+    //    merge has a test that already knows what it must not break.
+    {
+      // Marked from inside the frame, via Playwright, rather than by reaching
+      // through `contentWindow` from the shell: the shell cannot touch the
+      // notebook frame's window (the browser reports it cross-origin under the
+      // isolation headers this page depends on, even though both documents are
+      // same-origin). Playwright evaluates per-frame and is not subject to that,
+      // and a Frame handle survives navigation — which is precisely what makes
+      // it a document-identity probe. If the document is replaced, the property
+      // is gone from the new one.
+      const notebookFrame = page.frames().find((f) => f.url().includes("/notebook?"));
+      if (!notebookFrame) {
+        return fail(
+          "no notebook frame to probe — the workbench is not showing a notebook.",
+          page.frames().map((f) => f.url() || "(blank)").join("\n  "));
+      }
+      await notebookFrame.evaluate(() => { window.__ckWorkbenchProbe = "alive"; });
+      // Read it back before relying on it. An unsettable probe would make the
+      // survival assertion below pass while testing nothing.
+      const probeStuck = await notebookFrame.evaluate(
+        () => window.__ckWorkbenchProbe === "alive");
+      if (!probeStuck) {
+        return fail(
+          "could not mark the notebook document, so the survival assertion below " +
+          "would prove nothing. The notebook frame is probably still navigating.");
+      }
+
+      const panel = page.frames().find((f) => f.url().includes("/workbench/panel"));
+      const sectionName = "Probe Section";
+      await panel.evaluate(() => {
+        document.getElementById("add-suite-section-details").open = true;
+      });
+      await panel.fill('#add-suite-section-details input[name="name"]', sectionName);
+      await panel.click('#add-suite-section-details button[type="submit"]');
+      await page.waitForTimeout(2500);
+
+      const panelAfter = page.frames().find((f) => f.url().includes("/workbench/panel"));
+      if (!panelAfter) {
+        return fail(
+          "after creating a suite section the left pane left /workbench/panel — the " +
+          "handler's redirect to the chromed /edit page navigated the pane. This is " +
+          "exactly what inplace-forms.js exists to prevent.",
+          page.frames().map((f) => f.url()).join("\n"));
+      }
+
+      const sectionLanded = await panelAfter.evaluate(
+        (name) => Array.from(document.querySelectorAll(".section-header strong"))
+          .some((el) => el.textContent.trim() === name),
+        sectionName);
+      if (!sectionLanded) {
+        return fail(
+          `the pane re-rendered but "${sectionName}" is not in it — the POST did not ` +
+          `land, so staying on the panel URL proved nothing.`);
+      }
+
+      const notebookSurvived = await notebookFrame
+        .evaluate(() => window.__ckWorkbenchProbe === "alive")
+        .catch(() => false);
+      if (!notebookSurvived) {
+        return fail(
+          "a write in the left pane replaced the notebook document. Today that is a " +
+          "kernel reboot; once the panes are one document it is the author's unsaved " +
+          "cells.");
+      }
+      console.log("suite-section write: pane stayed on the panel, notebook document intact");
     }
 
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");

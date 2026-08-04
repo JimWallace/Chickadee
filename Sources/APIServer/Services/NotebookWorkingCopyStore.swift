@@ -413,10 +413,26 @@ private func applySubstitutions(
     }
 }
 
+/// The bytes of an assignment's reference solution, from whichever of the four
+/// places one can live.
+///
+/// The order is oldest-authority-first and deliberately unchanged from the
+/// three original sources; the draft is checked last so nothing that resolved
+/// before resolves differently now.
+///
+/// The draft branch closes a gap between this function and every *other* place
+/// that decides whether a solution exists.  `hasSolution` on the edit page and
+/// the workbench counts four sources including the draft, but this counted
+/// three — so `POST /create-solution`, which writes exactly and only the draft,
+/// redirected to `/notebook?file=solution` and got a 404 from its own redirect
+/// target.  The Files table then showed a solution with an Edit button that
+/// led nowhere, for any assignment whose solution was created that way and
+/// never validated.
 func solutionNotebookData(
     for assignment: APIAssignment?,
     setup: APITestSetup,
-    db: Database
+    db: Database,
+    testSetupsDirectory: String
 ) async throws -> Data {
     if let entryName = listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
         let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
@@ -443,6 +459,14 @@ func solutionNotebookData(
         !data.isEmpty
     {
         return normalizeNotebookForJupyterLite(data)
+    }
+
+    if let setupID = assignment?.testSetupID ?? setup.id {
+        let draftPath = draftSolutionNotebookPath(
+            testSetupsDirectory: testSetupsDirectory, setupID: setupID)
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: draftPath)), !data.isEmpty {
+            return normalizeNotebookForJupyterLite(data)
+        }
     }
 
     throw AppError.notFound(resource: "Solution notebook (not yet available for this assignment)")

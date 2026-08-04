@@ -1253,11 +1253,19 @@
                 var f = document.createElement('form');
                 f.method = 'POST';
                 f.action = action;
+                // Marked and submitted the same way the template's own section
+                // forms are, so that inside a workbench pane `inplace-forms.js`
+                // intercepts this too.  `requestSubmit()` rather than
+                // `submit()`: `submit()` deliberately skips submit listeners,
+                // which would send the pane to the chromed standalone editor —
+                // the same trap v0.4.133 hit with the multipart CSRF intercept.
+                f.setAttribute('data-ck-inplace', '');
                 var t = document.createElement('input');
                 t.type = 'hidden'; t.name = '_csrf'; t.value = csrfToken;
                 f.appendChild(t);
                 document.body.appendChild(f);
-                f.submit();
+                if (typeof f.requestSubmit === 'function') f.requestSubmit();
+                else f.submit();
             }
         });
 

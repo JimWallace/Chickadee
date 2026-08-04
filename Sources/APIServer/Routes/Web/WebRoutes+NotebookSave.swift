@@ -202,7 +202,9 @@ extension WebRoutes {
         case .assignment:
             return try? notebookData(for: setup)
         case .solution:
-            return try? await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            return try? await solutionNotebookData(
+                for: assignment, setup: setup, db: req.db,
+                testSetupsDirectory: req.application.testSetupsDirectory)
         }
     }
 
