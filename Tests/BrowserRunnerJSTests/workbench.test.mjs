@@ -1,5 +1,5 @@
-// Unit tests for the assignment workbench shell's pane arithmetic and
-// kernel-count policy.
+// Unit tests for the assignment workbench shell's pure logic: the splitter
+// clamp, which notebook a tab click resolves to, and the collapse toggle.
 //
 // The clamp is the load-bearing piece. The notebook page hides its own editor
 // below 640px and shows "open on a larger screen" instead — so a splitter that
@@ -68,19 +68,67 @@ test('clampLeftWidth: a viewport narrower than the notebook floor clamps to zero
   assert.equal(Workbench.clampLeftWidth(0, 100), 0);
 });
 
-test('allowsTwoKernels: an unknown deviceMemory is not treated as low', () => {
-  // Firefox and Safari do not expose deviceMemory. Absent evidence must not
-  // downgrade those authors to a kernel reboot on every tab switch.
-  assert.equal(Workbench.allowsTwoKernels({}), true);
-  assert.equal(Workbench.allowsTwoKernels({ deviceMemory: undefined }), true);
-  assert.equal(Workbench.allowsTwoKernels(null), true);
+// The server publishes a `template` destination only for a notebook that
+// actually carries {{placeholders}}. These fixtures model an assignment that
+// has one and a solution that does not.
+// Real-shaped paths, not placeholders: resolvePane only accepts URLs matching
+// the embedded notebook-page shape, so a toy path here would be rejected and
+// the tests would be exercising the reject path by accident.
+const NB = '/testsetups/setup_abc123/notebook';
+const URLS = {
+  'assignment:personalized': NB + '?file=assignment&view=personalized&embedded=1',
+  'assignment:template': NB + '?file=assignment&view=template&embedded=1',
+  'solution:personalized': NB + '?file=solution&view=personalized&embedded=1',
+};
+
+test('resolvePane: returns the exact destination when it exists', () => {
+  const p = Workbench.resolvePane(URLS, 'assignment', 'template');
+  assert.equal(p.key, 'assignment:template');
+  assert.equal(p.view, 'template');
+  assert.equal(p.url, URLS['assignment:template']);
 });
 
-test('allowsTwoKernels: low-memory devices hold one kernel at a time', () => {
-  assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 2 }), false);
-  assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 4 }), false);
-  assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 8 }), true);
-  assert.equal(Workbench.allowsTwoKernels({ deviceMemory: 16 }), true);
+test('resolvePane: falls back to the rendered view rather than doing nothing', () => {
+  // Reachable by a normal click: view the assignment's template, then hit the
+  // Solution tab. The solution has no template, and silently ignoring the click
+  // would leave the author on the wrong notebook with the wrong tab lit.
+  const p = Workbench.resolvePane(URLS, 'solution', 'template');
+  assert.equal(p.view, 'personalized');
+  assert.equal(p.key, 'solution:personalized');
+});
+
+test('resolvePane: refuses a destination that is not a notebook-page path', () => {
+  // The destination map arrives as DOM text and the sink is an iframe src, so a
+  // javascript: URL there would be script execution in this origin. The server
+  // never produces one — the point is that this file no longer depends on that.
+  const hostile = {
+    'assignment:personalized': 'javascript:alert(1)',
+    'assignment:template': '//evil.example/steal',
+    'solution:personalized': 'https://evil.example/steal',
+  };
+  assert.equal(Workbench.resolvePane(hostile, 'assignment', 'personalized'), null);
+  assert.equal(Workbench.resolvePane(hostile, 'assignment', 'template'), null);
+  assert.equal(Workbench.resolvePane(hostile, 'solution', 'personalized'), null);
+});
+
+test('resolvePane: a bad entry falls through rather than being served', () => {
+  // A malformed template entry must degrade to the rendered view, not hand the
+  // caller a pane whose URL will be rejected later and leave the frame blank.
+  const mixed = {
+    'assignment:personalized': '/testsetups/setup_1/notebook?file=assignment&view=personalized',
+    'assignment:template': 'javascript:alert(1)',
+  };
+  const p = Workbench.resolvePane(mixed, 'assignment', 'template');
+  assert.equal(p.view, 'personalized');
+  assert.equal(p.url, mixed['assignment:personalized']);
+});
+
+test('resolvePane: reports nothing for a file that has no destinations', () => {
+  // An assignment with no reference solution renders no Solution tab, so this
+  // is unreachable by clicking — but returning null rather than a broken URL is
+  // what keeps it that way if the markup and the table ever disagree.
+  assert.equal(Workbench.resolvePane(URLS, 'nosuchfile', 'personalized'), null);
+  assert.equal(Workbench.resolvePane({}, 'assignment', 'personalized'), null);
 });
 
 test('toggleCollapse: collapsing remembers the width to come back to', () => {

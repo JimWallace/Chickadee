@@ -83,7 +83,7 @@ struct NewAssignmentNotebookContext: Encodable {
 }
 
 /// The assignment workbench shell (`workbench.leaf`).  Deliberately thin: the
-/// shell renders no assignment content, only the frame around two iframes that
+/// shell renders no assignment content, only the frame around iframes that
 /// each load an existing page.  Everything here is either an identifier the
 /// page JS keys on or a URL for one of those iframes.
 struct AssignmentWorkbenchContext: Encodable {
@@ -93,12 +93,29 @@ struct AssignmentWorkbenchContext: Encodable {
     let assignmentTitle: String
     /// Left pane — the edit page in embedded mode.
     let editPanelURL: String
-    /// Right pane, "Assignment" tab.
-    let assignmentNotebookURL: String
-    /// Right pane, "Solution" tab.  `nil` when the assignment has no reference
-    /// solution yet, in which case the tab is absent rather than disabled —
-    /// matching how the edit page omits `solutionNotebookEditURL`.
-    let solutionNotebookURL: String?
+    /// The notebook the single right-hand iframe loads at page load: the
+    /// assignment, rendered.
+    let initialNotebookURL: String
+    /// `{"<file>:<view>": "<url>"}` for every combination that exists, as a
+    /// JSON object the page embeds and the tab handlers look up.  A lookup
+    /// table rather than one iframe per entry: there is only ever one notebook
+    /// document alive, so these are destinations, not panes.
+    ///
+    /// `view=` is always explicit in each URL — `resolveNotebookViewMode`
+    /// defaults staff to the template on a notebook that carries placeholders,
+    /// so omitting it would make "Assignment" mean the template on a
+    /// personalized lab and the rendering on every other one.
+    let notebookPaneURLsJSON: String
+    /// True when the assignment has a reference solution.  `false` omits the
+    /// Solution tab rather than disabling it — matching how the edit page
+    /// omits `solutionNotebookEditURL`.
+    let hasSolution: Bool
+    /// Per-file: whether the stored notebook still carries `{{name}}`, i.e.
+    /// whether its template and rendered views actually differ.  When they do
+    /// not, the two panes would be byte-identical and the view control is
+    /// noise, so it is not rendered.
+    let assignmentHasTemplateView: Bool
+    let solutionHasTemplateView: Bool
     /// Escape hatch back to the full-width single-page editor.
     let standaloneEditURL: String
     /// Drops `.main`'s reading-column cap and gutters — the workbench sizes

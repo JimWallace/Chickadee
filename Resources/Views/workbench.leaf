@@ -78,7 +78,22 @@
     padding: .3rem .5rem;
     border-bottom: 1px solid var(--border);
 }
-.wb-tab[aria-selected="true"] {
+.wb-tabstrip,
+.wb-viewswitch {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+}
+/* A visible seam between the two axes: which notebook (tabs) and which reading
+   of it (view switch) are independent choices, and reading them as one strip of
+   four buttons would misrepresent that. */
+.wb-viewswitch {
+    margin-left: .5rem;
+    padding-left: .5rem;
+    border-left: 1px solid var(--border);
+}
+.wb-tab[aria-selected="true"],
+.wb-view[aria-pressed="true"] {
     background: var(--health-teal);
     color: var(--surface);
 }
@@ -90,10 +105,19 @@
     color: var(--gray-700);
 }
 
-/* Collapsed edit pane: the notebook takes the full width.  The splitter stays
-   put so the pane can be dragged back out, and the toolbar button is the
-   primary way back. */
-.wb-shell[data-wb-collapsed="edit"] .wb-pane-edit { display: none; }
+/* Collapsed edit pane: the notebook takes the full width.
+   The grid must be re-declared to a single column, not just have the edit pane
+   hidden.  `display: none` removes an item from the grid entirely, so with the
+   three-column template still in force the splitter would take column 1 and the
+   notebook column 2 — which is `auto`, i.e. sized to content, leaving the
+   notebook pane narrow enough that the embedded notebook page renders its
+   "Open on a larger screen" notice instead of the editor.  That is the exact
+   failure the 720px floor exists to prevent, arriving by a different route.
+   Hiding the splitter too means the toolbar toggle is the way back, which is
+   what the button is for. */
+.wb-shell[data-wb-collapsed="edit"] .wb-body { grid-template-columns: 1fr; }
+.wb-shell[data-wb-collapsed="edit"] .wb-pane-edit,
+.wb-shell[data-wb-collapsed="edit"] .wb-splitter { display: none; }
 
 /* Below the point where an honest split is possible (720px notebook floor +
    380px edit floor + the splitter), collapse to one pane at a time.  The
@@ -111,7 +135,8 @@
      id="wb-shell"
      data-assignment-id="#(assignmentID)"
      data-setup-id="#(testSetupID)"
-     data-wb-single="notebook">
+     data-wb-single="notebook"
+     data-wb-pane-urls="#(notebookPaneURLsJSON)">
     <div class="wb-bar">
         <h1 class="wb-title">#(assignmentTitle)</h1>
         <span class="wb-bar-spacer"></span>
@@ -138,38 +163,54 @@
                 aria-valuemax="100"
                 aria-valuenow="42"></button>
         <section class="wb-pane wb-pane-notebook" aria-label="Notebook editor">
-            <div class="wb-panehead" role="tablist" aria-label="Notebook">
-                <button class="btn action-btn wb-tab" type="button" role="tab"
-                        id="wb-tab-assignment" data-wb-pane="assignment"
-                        aria-selected="true" aria-controls="wb-notebook-assignment">Assignment</button>
-                #if(solutionNotebookURL):
-                <button class="btn action-btn wb-tab" type="button" role="tab"
-                        id="wb-tab-solution" data-wb-pane="solution" tabindex="-1"
-                        aria-selected="false" aria-controls="wb-notebook-solution">Solution</button>
-                #endif
+            <div class="wb-panehead">
+                <div class="wb-tabstrip" role="tablist" aria-label="Notebook">
+                    <button class="btn action-btn wb-tab" type="button" role="tab"
+                            id="wb-tab-assignment" data-wb-file="assignment"
+                            aria-selected="true">Assignment</button>
+                    #if(hasSolution):
+                    <button class="btn action-btn wb-tab" type="button" role="tab"
+                            id="wb-tab-solution" data-wb-file="solution" tabindex="-1"
+                            aria-selected="false">Solution</button>
+                    #endif
+                </div>
+                <!-- The view control is a second, independent axis: which reading
+                     of the selected notebook to show.  Rendered only when the
+                     active file actually has placeholders — otherwise the two
+                     readings are byte-identical and the control is noise.
+                     workbench.js hides it when the selected file has no template. -->
+                <div class="wb-viewswitch" id="wb-viewswitch" role="group"
+                     aria-label="Notebook view"
+                     data-assignment-has-template="#if(assignmentHasTemplateView):1#else:0#endif"
+                     data-solution-has-template="#if(solutionHasTemplateView):1#else:0#endif"
+                     hidden>
+                    <button class="btn action-btn wb-view" type="button"
+                            data-wb-view="personalized" aria-pressed="true"
+                            title="The notebook as a student sees it, with values substituted">With values</button>
+                    <button class="btn action-btn wb-view" type="button"
+                            data-wb-view="template" aria-pressed="false"
+                            title="The authored template, with placeholders left standing">Template</button>
+                </div>
                 <span class="wb-bar-spacer"></span>
                 <span class="wb-stale-chip" id="wb-stale-chip" role="status" hidden></span>
             </div>
-            <!-- Both notebook panes are real iframes, but only the assignment one
-                 carries a src at load.  The solution's stays about:blank until the
-                 tab is first selected, so the second Pyodide kernel is only paid
-                 for by an author who actually asks for it; after that both stay
-                 mounted and switching is a CSS toggle rather than a cold boot.
-                 workbench.js unmounts on switch instead when the device reports
-                 low memory. -->
+            <!-- ONE notebook iframe.  The tabs and the view switch change its
+                 src; they do not each get their own live document.
+                 Two files times two views is four combinations, and a live
+                 iframe per combination means a live Pyodide kernel per
+                 combination — so keeping them all mounted would need an
+                 eviction policy to bound memory, which is a lot of machinery
+                 for a secondary interaction.  The workbench's actual purpose is
+                 having the edit page and *a* notebook on screen together, and
+                 that holds however many notebooks are mounted.  So: one kernel,
+                 always, and switching notebooks costs a boot.
+                 The URL for each (file, view) is in the lookup table below. -->
             <iframe class="wb-pane-frame"
-                    id="wb-notebook-assignment"
-                    title="Assignment notebook"
-                    data-wb-src="#(assignmentNotebookURL)"
-                    src="#(assignmentNotebookURL)"></iframe>
-            #if(solutionNotebookURL):
-            <iframe class="wb-pane-frame"
-                    id="wb-notebook-solution"
-                    title="Solution notebook"
-                    data-wb-src="#(solutionNotebookURL)"
-                    src="about:blank"
-                    hidden></iframe>
-            #endif
+                    id="wb-notebook"
+                    title="Notebook"
+                    data-wb-file="assignment"
+                    data-wb-view="personalized"
+                    src="#(initialNotebookURL)"></iframe>
         </section>
     </div>
 </div>

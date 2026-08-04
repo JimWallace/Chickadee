@@ -39,10 +39,20 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("/instructor/\(assignment.publicID)/workbench/panel"))
-                    #expect(html.contains("/testsetups/setup_wb1/notebook?file=assignment&amp;embedded=1"))
+                    // `view=` is always explicit: the server defaults staff to
+                    // the template on a notebook with placeholders, so an
+                    // omitted `view=` would make the Assignment tab mean
+                    // different things on different assignments.
+                    #expect(html.contains("file=assignment&amp;view=personalized&amp;embedded=1"))
                     // `validationStatus == "passed"` means a reference solution
                     // exists, so the solution tab is offered.
-                    #expect(html.contains("/testsetups/setup_wb1/notebook?file=solution&amp;embedded=1"))
+                    // The destination table rides a data-attribute, so Leaf
+                    // HTML-escapes it: quotes become &quot; and & becomes &amp;.
+                    #expect(html.contains("solution:personalized"))
+                    #expect(html.contains("file=solution&amp;view=personalized&amp;embedded=1"))
+                    // One notebook document, not one per destination: the tabs
+                    // repoint a single iframe, so exactly one is rendered.
+                    #expect(html.contains("id=\"wb-notebook\""))
                     #expect(html.contains("Workbench Lab"))
                 })
         }
