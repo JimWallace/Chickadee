@@ -95,13 +95,26 @@ Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
 **Browser grading has two substrates, routed per script (#1271).**
-`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to Pyodide
-(`/grading-worker.js`) and a `.R` test to the vendored **xeus-r** kernel
-(`/r-grading-worker.js`), choosing with the same `RunnerCore.classifyScript`
-the native worker uses to pick a subprocess command — and booting only the
-runtimes an assignment actually contains, so an R lab never loads Pyodide.
-`RunnerCore` still owns the suite loop and output interpretation for both; a
-substrate supplies only "run this script, report its exit code and streams".
+`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to the
+vendored **xeus-python** kernel (`/python-grading-worker.js`) and a `.R` test to
+**xeus-r** (`/r-grading-worker.js`), choosing with the same
+`RunnerCore.classifyScript` the native worker uses to pick a subprocess command
+— and booting only the runtimes an assignment actually contains, so an R lab
+never fetches the Python env. `RunnerCore` still owns the suite loop and output
+interpretation for both; a substrate supplies only "run this script, report its
+exit code and streams".
+
+**Every worker the notebook page spawns must be in
+`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
+cross-origin isolated on Chromium/Firefox, and a worker created by a
+`require-corp` document must ITSELF be served `require-corp` or the browser
+refuses the script (`ERR_BLOCKED_BY_RESPONSE`) — at which point `ensureReady`
+throws and the submission silently fails over to the native worker: right marks,
+none of the speed. The allowlist is per-path, so "same directory, same
+middleware" proves nothing about a worker not on it; that reasoning is how #1274
+shipped browser-graded R that no isolated engine ever ran.
+`IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
+and fails on drift in either direction.
 xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
 `jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
 contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global

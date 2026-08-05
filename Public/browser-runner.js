@@ -542,13 +542,11 @@
             return this.python;
         }
 
-        // The R substrate is worker-only: booting the xeus-r kernel needs
-        // importScripts, which exists only inside a worker. There is no
-        // main-thread fallback to degrade to, so a Worker-less environment gets
-        // an executor whose ensureReady throws — which routes the whole grade to
-        // the server-side failover rather than recording every R test as an
-        // error. (Python keeps its main-thread fallback; an assignment is one
-        // language, so the two cases never collide in practice.)
+        // Same shape as the Python substrate, and worker-only for the same
+        // reason: booting a xeus kernel needs importScripts, which exists only
+        // inside a worker. A Worker-less environment therefore gets an executor
+        // whose ensureReady throws, routing the whole grade to the server-side
+        // failover rather than recording every R test as an error.
         rExecutor() {
             if (!this.r) {
                 const factory = gradingWorkerFactory('/r-grading-worker.js');

@@ -8,7 +8,7 @@
 // `COEPMiddleware` isolates the parent notebook page.
 //
 // It ALSO stamps COEP on the app's own Web Worker scripts that an isolated page
-// spawns (`/grading-worker.js`, `/freeze-watchdog-worker.js`) — see
+// spawns (the per-language grading workers, `/freeze-watchdog-worker.js`) — see
 // `isolatedWorkerScripts`. Without COEP on the worker script, a `require-corp`
 // page cannot spawn the worker at all (Chrome `ERR_BLOCKED_BY_RESPONSE`), which
 // would break browser grading + the freeze failover on the notebook page.
@@ -54,8 +54,18 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
     /// assignment-editor pages, which are NOT cross-origin isolated, so it must
     /// not be forced `require-corp`. If an isolated page is ever made to spawn it,
     /// add it here — the editor-smoke worker-spawn probe will flag the regression.
+    ///
+    /// This list is a hand-maintained mirror of what the isolated page actually
+    /// spawns, so it drifts silently when a worker is renamed or split.  It has
+    /// twice: #1274 added `/r-grading-worker.js` without adding it here (browser
+    /// grading of R fell back to the native worker on every isolated engine), and
+    /// #1271 replaced `/grading-worker.js` with a per-language pair.  Neither was
+    /// caught by a unit test, because the block only exists in a real browser.
+    /// `IsolatedWorkerScriptDriftTests` now reads the spawn sites out of the page
+    /// scripts and fails on both directions of drift.
     static let isolatedWorkerScripts: Set<String> = [
-        "/grading-worker.js",  // browser submission grader (browser-runner.js)
+        "/python-grading-worker.js",  // browser submission grader, Python (browser-runner.js)
+        "/r-grading-worker.js",  // browser submission grader, R (browser-runner.js)
         "/freeze-watchdog-worker.js",  // main-thread freeze failover (notebook.js)
     ]
 

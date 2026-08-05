@@ -410,7 +410,7 @@ async function main() {
     console.log(`grading result rendered: "${resultText}"`);
     // The fixture's one public test (`print(...)`, exit 0) must PASS — a
     // result of "1 / 1 passed" proves the grading worker spawned under isolation,
-    // loaded Pyodide, ran the test, and posted a correct outcome end-to-end.
+    // booted its kernel, ran the test, and posted a correct outcome end-to-end.
     if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
       return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
     }
