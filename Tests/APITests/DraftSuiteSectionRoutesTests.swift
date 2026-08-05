@@ -327,6 +327,71 @@ import VaporTesting
         }
     }
 
+    /// The draft endpoint has always accepted per-student `=` expressions —
+    /// it decodes an optional `expressions` list alongside `variables` — but
+    /// nothing exercised that path, and until v0.5.x the create page's inline
+    /// editor never sent the key. A payload without it is coalesced to `[]`,
+    /// so an expression authored on that page was silently downgraded to a
+    /// literal string. This pins the server half of the contract the page's
+    /// shared editor module now relies on.
+    @Test func updateDraftSuiteSectionVariables_roundTripsPerStudentExpressions() async throws {
+        try await withApp(app) { _ in
+            let sid = UUID().uuidString
+            let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
+            let cookie = try await loginUser(username: "dssrt_inst8", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst8", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            struct MixedBody: Content {
+                var variables: [FamilyVariable]
+                var expressions: [PersonalizationExpression]
+            }
+            let body = MixedBody(
+                variables: [FamilyVariable(name: "max_bmi", value: .int(30))],
+                expressions: [PersonalizationExpression(name: "shift", expression: "seed % 26")]
+            )
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(body, as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // The expression survives as an expression, not as a literal whose
+            // value happens to be the text "= seed % 26".
+            let dict = try await loadManifestDict(setupID: draftID)
+            let sections = try #require(dict["sections"] as? [[String: Any]])
+            #expect(sections.count == 1)
+
+            let vars = sections[0]["variables"] as? [[String: Any]] ?? []
+            #expect(vars.count == 1)
+            #expect(vars.first?["name"] as? String == "max_bmi")
+            #expect(
+                vars.contains { ($0["name"] as? String) == "shift" } == false,
+                "The expression must not land in `variables`")
+
+            let exprs = try #require(sections[0]["expressions"] as? [[String: Any]])
+            #expect(exprs.count == 1)
+            #expect(exprs.first?["name"] as? String == "shift")
+            #expect(exprs.first?["expression"] as? String == "seed % 26")
+
+            // And it renders back into the editor with the `=` prefix the
+            // shared value parser classifies on load — the same helper the
+            // create and edit templates both loop over.
+            let setup = try await APITestSetup.find(draftID, on: app.db)
+            let manifest = try #require(setup?.manifest)
+            let rows = suiteSectionShellRows(fromManifest: manifest)
+            let shiftRow = try #require(
+                rows.first?.variables.first { $0.name == "shift" },
+                "The expression should render as a section-input row")
+            #expect(shiftRow.valueJSON == "= seed % 26")
+        }
+    }
+
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
     @Test func reorderDraftSuiteSections_updatesOrder() async throws {
