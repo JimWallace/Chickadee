@@ -179,6 +179,39 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
+      # Same editor probe, but against the kernel students actually get.
+      #
+      # The selftest above runs `?kernel=python` — the Pyodide kernel, which is
+      # still vendored but is NO LONGER the editor default (defaultKernelName is
+      # `xpython`, and notebooks normalize to it). So every stdin/freeze result
+      # that step produces describes a kernel no student boots.
+      #
+      # This matters most on WebKit. `COEPMiddleware` serves WebKit
+      # non-isolated on purpose, so there is no SharedArrayBuffer, and we also
+      # disable the service worker — upstream's two synchronous-stdin transports
+      # (jupyterlite/xeus#217 and #212 respectively). Whether `input()` works
+      # for xeus under those conditions is genuinely unknown: it cannot be
+      # answered by simulating non-isolation on Chromium, because stripping the
+      # document's COOP/COEP while subresources still carry COEP/CORP produces a
+      # half-isolated state that does not occur in reality (it fails xeus before
+      # the kernel executes at all). Only a real non-isolated engine settles it.
+      #
+      # Non-blocking for now: this is a measurement we do not yet have an
+      # expected value for. Promote to a hard failure once the answer is known
+      # and documented. See #1271.
+      - name: Probe xeus-python stdin on the real kernel (${{ matrix.browser }}, informational)
+        continue-on-error: true
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_KERNEL=xpython Tools/editor-smoke-test/run-smoke.sh; then
+            echo "::notice::xeus-python (xpython) editor probe PASSED on ${ENGINE} — input() resolves on this engine."
+          else
+            echo "::warning::xeus-python (xpython) editor probe FAILED on ${ENGINE}. On webkit this is the expected-unknown non-isolated stdin case (#1271); on chromium it is a real regression."
+          fi
+
       # Full authenticated end-to-end against the REAL student notebook page:
       # seed a browser-graded assignment over the HTTP API, log in as a student,
       # open /testsetups/:id/notebook (the isolated parent that embeds the editor

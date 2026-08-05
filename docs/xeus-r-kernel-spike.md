@@ -55,9 +55,9 @@ deferred part 2 — an **in-browser R kernel** for the JupyterLite editor.
   protocol edges are untested. **Real Python unification waits for an upstream
   xeus-6 xeus-python.** Meanwhile ship R on xeus (fully supported — below) and
   keep Python on Pyodide.
-- **One open risk: Safari / iPad.** xeus (R *and* Python) hard-requires
-  SharedArrayBuffer with no fallback; we currently serve WebKit non-isolated on
-  purpose. Needs a real-device test.
+- **One open risk: Safari / iPad.** ~~xeus (R *and* Python) hard-requires
+  SharedArrayBuffer with no fallback~~ — **this was wrong**; see the 2026-08
+  correction below.
 
 ---
 
@@ -364,3 +364,47 @@ WebKit exemption so every engine is isolated. That needs a real device.
 3.13; browser grading and `/validate` run Pyodide 3.14. The native worker is
 still the authoritative grader, so this does not affect marks — but "it ran in
 the editor" no longer implies "it runs in the browser runner".
+
+---
+
+## Correction: the SharedArrayBuffer claim (2026-08)
+
+The TL;DR above originally asserted that xeus "hard-requires SharedArrayBuffer
+with no fallback". That is not true, and it was load-bearing: it is why we
+believed moving Python to xeus would break Safari, and why the #1270 PR
+description and changelog initially claimed a Safari regression that does not
+exist.
+
+**What upstream actually ships** (all closed):
+
+| upstream | what |
+|---|---|
+| [jupyterlite/xeus#108](https://github.com/jupyterlite/xeus/issues/108), [#102](https://github.com/jupyterlite/xeus/issues/102) | `coincident` if `crossOriginIsolated`, **`comlink` otherwise** |
+| [#217](https://github.com/jupyterlite/xeus/issues/217) | stdin via SharedArrayBuffer |
+| [#212](https://github.com/jupyterlite/xeus/issues/212) | stdin via **service worker** |
+| [#87](https://github.com/jupyterlite/xeus/issues/87) | filesystem over `Atomics.wait` instead of the service worker |
+
+**What we measured** (#1270 CI, v0.5.14): every WebKit probe passes with
+`xpython` and `xr` on the notebook page, served non-isolated. The kernels boot
+and run without SAB.
+
+**What is still unknown.** Those probes exercise edit/save/reset, never
+`input()`. Our configuration disables the service worker, so a non-isolated
+engine has neither of upstream's two stdin transports. Whether `input()` works
+for xeus under that combination has not been measured. It cannot be settled by
+simulating non-isolation on Chromium: `SMOKE_SIMULATE_NO_SYNC` strips COOP/COEP
+from the document while subresources still carry COEP/CORP, and that
+half-isolated state fails xeus *before the kernel executes at all* — a
+simulation artifact, not the WebKit condition. The simulation was built and
+validated for the Pyodide kernel and does not transfer.
+
+An informational probe (`SMOKE_KERNEL=xpython`) now runs the real `input()`
+check on real WebKit in `editor-smoke.yml`. Record the answer here and promote
+the probe to blocking once it is known. Tracked in #1271.
+
+**Process note.** This claim survived because a spike finding was written as
+fact and then inherited. Two other stale claims sat alongside it: this document
+routes builds through `emscripten-forge-dev`, a channel frozen since
+2026-04-09, and `docs/notebook-editor-kernel-boot.md` describes isolation as
+"unconditional" when `COEPMiddleware` exempts WebKit. Prefer recording *what was
+measured, when, and against what version* over stating a general property.
