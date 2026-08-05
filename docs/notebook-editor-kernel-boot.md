@@ -185,6 +185,19 @@ Prefer plan C; this is a per-browser safety net only.
 
 ### Service worker disabled (no safety net)
 
+> **Stale as written (corrected 2026-08).** Two claims below no longer hold.
+> Cross-origin isolation is **not** unconditional — `COEPMiddleware` exempts
+> WebKit deliberately — Safari-class engines have no SAB and instead keep the
+> service worker, which `JupyterLiteConfigFlagMiddleware` re-enables per request
+> for that engine (so "the SW is disabled" is true of Chromium only). And the paragraph
+> describes the **Pyodide** kernel, which as of v0.5.14 is no longer the
+> editor's Python kernel: `defaultKernelName` is `xpython` (xeus-python) and
+> notebooks normalize to it. Every stdin result recorded here was measured
+> against a kernel students no longer boot. What `input()` does under
+> xeus-python does on each engine is now **measured**: `input()` round-trips on
+> both, over SAB on Chromium and over the service worker on WebKit. A blocking
+> probe (`SMOKE_KERNEL=xpython`) keeps it that way in `editor-smoke.yml`.
+
 Now that cross-origin isolation is unconditional and `SharedArrayBuffer` carries
 the kernel's synchronous stdin/Drive, the JupyterLite **service worker is
 redundant and has been disabled** (`@jupyterlite/application-extension:service-worker-manager`

@@ -179,6 +179,33 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
+      # Same editor probe, but against the kernel students actually get.
+      #
+      # The selftest above runs `?kernel=python` — the Pyodide kernel, which
+      # since v0.5.14 is no longer the editor default (`defaultKernelName` is
+      # `xpython`, and notebooks normalize to it). Without this step every
+      # stdin/freeze result we have describes a kernel no student boots.
+      #
+      # Both engines have a synchronous-stdin transport, and they are different
+      # ones — which is exactly why this must run on both:
+      #
+      #   Chromium — cross-origin isolated, stdin over SharedArrayBuffer
+      #              (jupyterlite/xeus#217); the SW is disabled as redundant.
+      #   WebKit   — served NON-isolated by COEPMiddleware, so no SAB; stdin
+      #              goes over the service worker (jupyterlite/xeus#212), which
+      #              JupyterLiteConfigFlagMiddleware re-enables per request for
+      #              this engine specifically.
+      #
+      # Measured PASS on both (2026-08). Blocking, because a regression here is
+      # a student-visible `input()` hang and the two transports fail
+      # independently — a change that breaks only the WebKit path would
+      # otherwise ship green.
+      - name: Probe xeus-python stdin on the real kernel (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: SMOKE_BROWSER="$ENGINE" SMOKE_KERNEL=xpython Tools/editor-smoke-test/run-smoke.sh
+
       # Full authenticated end-to-end against the REAL student notebook page:
       # seed a browser-graded assignment over the HTTP API, log in as a student,
       # open /testsetups/:id/notebook (the isolated parent that embeds the editor

@@ -495,6 +495,32 @@ committed `Public/jupyterlite/xeus/` bytes are authoritative
 (`scripts/check-xeus-vendored.sh` guards their integrity; the reproducibility
 check excludes that path). Re-vendor on a machine that can reach the channel.
 
+**The vendored `pyodide-http` is patched, and must stay patched.**
+`xeus-python → xeus-python-shell-lite → pyodide-http` is an unavoidable
+dependency chain, and `pyodide-http` selects a Pyodide-specific streaming
+implementation whenever `crossOriginIsolated` is true. It is not pyjs-compatible,
+so un-patched the kernel never leaves `kernel_starting` on an isolated engine and
+the editor sits on "Kernel Connecting" forever.
+`scripts/patch-xeus-python-http.py` (run from `build-jupyterlite.sh`, asserted by
+`check-xeus-vendored.sh`) forces the library's own XHR fallback on every engine.
+The guard matters more than usual because this failure is invisible in the
+JupyterLite REPL (no Drive-backed file, so no HTTP call) *and* on WebKit (not
+isolated, so it takes the fallback anyway) — only isolated engines hit it.
+
+**Synchronous stdin uses a different transport per engine — check the
+middleware, not the static config.** `input()` works on both, but not the same
+way, and reading `Tools/jupyterlite/jupyter-lite.json` alone gives the wrong
+answer:
+
+| engine | isolation | stdin transport |
+|---|---|---|
+| Chromium / Firefox | isolated (`COEPMiddleware`) | `SharedArrayBuffer`; service worker disabled as redundant |
+| WebKit (Safari) | **non-isolated on purpose** | **service worker**, which `JupyterLiteConfigFlagMiddleware` re-enables *per request* for this engine |
+
+So "the service worker is disabled" is true of Chromium only. Both paths are
+covered by a blocking `SMOKE_KERNEL=xpython` probe in `editor-smoke.yml`, run on
+both engines because the transports fail independently.
+
 ---
 
 ## Vendored browser libraries
