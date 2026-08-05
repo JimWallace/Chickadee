@@ -862,9 +862,9 @@ shim); and archived finished-era docs under `docs/archive/`.
 
 **Near-term roadmap:**
 
-- **Leaf partial decomposition — UNBLOCKED (2026-08, #1266). The long-standing
-  "multi-extend parser bug" was a misdiagnosis.** Multiple inline partial
-  includes work fine on LeafKit 1.14.3. The real cause of
+- **Leaf partial decomposition — DONE (2026-08, #1266 + #1269). The
+  long-standing "multi-extend parser bug" was a misdiagnosis.** Multiple inline
+  partial includes work fine on LeafKit 1.14.3. The real cause of
   `LeafError.500: extend only supports one or two parameters []` is that
   **Leaf's lexer has no notion of an HTML comment.** `<!-- ... -->` is raw text
   to it, so tag syntax written inside one is lexed exactly as if it stood in
@@ -901,6 +901,32 @@ shim); and archived finished-era docs under `docs/archive/`.
   `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
   syntax: a bare second parameter, **not** the labelled `with:` form, which
   does not lex (`invalidParameterToken(":")`).
+
+  **What the corrected rule actually unblocked, measured (#1269).** Less than
+  the old rule appeared to be holding up. Diffing the two authoring templates
+  rather than counting marker strings, the shared-markup opportunity was **one
+  block of ~70 lines**, now `_suite-sections.leaf` — parameterized on a
+  per-page endpoint base, a trailing query string, and whether its forms carry
+  `data-ck-inplace`. The files table only *looks* shared and stays in two
+  honest copies: its notebook rows differ structurally (optional-notebook
+  draft actions vs. a guaranteed notebook plus workbench hooks).
+
+  The duplication that was actually costing correctness was **JavaScript**,
+  which the Leaf rule never blocked, and in every case the create page was the
+  stale fork. Fixing it removed three live defects: per-student `=` expressions
+  degrading to literal strings in section inputs, section drag-reorder
+  persisting nothing while showing a failure alert, and a double confirmation
+  dialog on section delete. `assignment-new.leaf` went 1,059 → 711 lines,
+  `_assignment-edit-body.leaf` 918 → 811. Full analysis and the slice plan:
+  [docs/leaf-decomposition-review.md](docs/leaf-decomposition-review.md).
+
+  A corollary of the comment finding, learned twice more while doing it: the
+  same blindness applies to *any* scanner that cannot tell markup from prose
+  about markup. Two new drift guards matched their own documentation — one
+  quoting the pattern it forbade, one naming an attribute it asserted absent.
+  Prefer parsing structure (as `InstructorWorkbenchRoutesTests` does with form
+  open tags) over searching the document, and describe forbidden syntax rather
+  than quoting it.
 
   (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
