@@ -139,6 +139,12 @@ async function main() {
     browserName === "chromium"
       ? { headless: true, args: ["--no-sandbox"], chromiumSandbox: false }
       : { headless: true };
+  // Escape hatch for running this locally against a pre-installed browser whose
+  // build number does not match the pinned Playwright's expectation. CI installs
+  // the matching build and leaves this unset.
+  if (process.env.SMOKE_BROWSER_PATH) {
+    launchOptions.executablePath = process.env.SMOKE_BROWSER_PATH;
+  }
   const browser = await browserType.launch(launchOptions);
   const context = await browser.newContext();
 

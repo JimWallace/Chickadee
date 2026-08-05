@@ -398,6 +398,12 @@ async function main() {
     // upstream WebKit crash rate far above a real student's one-kernel-per-
     // session experience. Relaunching isolates each run so the measured rate
     // reflects a single session (chromium is unaffected either way).
+    // Escape hatch for running this locally against a pre-installed browser whose
+    // build number does not match the pinned Playwright's expectation. CI installs
+    // the matching build and leaves this unset.
+    if (process.env.SMOKE_BROWSER_PATH) {
+      launchOptions.executablePath = process.env.SMOKE_BROWSER_PATH;
+    }
     const browser = await browserType.launch(launchOptions);
     let r;
     try { r = await probeOnce(browser, seeded.storageState, notebookURL); }
