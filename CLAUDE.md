@@ -1030,7 +1030,16 @@ shim); and archived finished-era docs under `docs/archive/`.
   time with no escape hatch under `connect-src 'self'` — forgiving for an author
   who can ask for a package, unforgiving for a student whose submission imports
   something unanticipated at grade time. R had none of this risk: its env is
-  bare `xeus-r` and is already the editor's. Two other consumers would have to
+  bare `xeus-r` and is already the editor's. **Spiked 2026-08 —
+  `docs/xeus-python-grading-spike.md`:** xpython boots on the same standalone
+  path (one extra `bootstrapPython` export), and R's ~180ms-per-expression
+  yield does NOT generalise — xeus-python's floor is 5ms per cell vs Pyodide's
+  ~0ms, and boot is a wash once Pyodide's on-demand numpy/pandas fetch is
+  counted. The gate is purely the package set: the env has numpy/pandas/
+  matplotlib/PIL, while the vendored Pyodide resolves scipy/sklearn/sympy/
+  statsmodels/networkx/requests at run time. Chickadee's generated tests import
+  none of those, and students are already held to the env by the editor, so the
+  residual risk is hand-authored scripts. Two other consumers would have to
   move before `Public/pyodide` could go — `pyodide-worker.js` (the
   pattern-family editor's auto-compute) and the vendored
   `jupyterlite-pyodide-kernel` that anchors `check-pyodide-parity.sh`. NOT
@@ -1073,6 +1082,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
+- `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
 - `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
