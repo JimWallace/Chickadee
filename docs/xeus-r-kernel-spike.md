@@ -388,19 +388,24 @@ exist.
 `xpython` and `xr` on the notebook page, served non-isolated. The kernels boot
 and run without SAB.
 
-**What is still unknown.** Those probes exercise edit/save/reset, never
-`input()`. Our configuration disables the service worker, so a non-isolated
-engine has neither of upstream's two stdin transports. Whether `input()` works
-for xeus under that combination has not been measured. It cannot be settled by
-simulating non-isolation on Chromium: `SMOKE_SIMULATE_NO_SYNC` strips COOP/COEP
-from the document while subresources still carry COEP/CORP, and that
-half-isolated state fails xeus *before the kernel executes at all* — a
-simulation artifact, not the WebKit condition. The simulation was built and
-validated for the Pyodide kernel and does not transfer.
+**`input()` works on both engines — measured, not assumed (2026-08).** The
+editor smoke matrix now runs the real stdin probe against `xpython`
+(`SMOKE_KERNEL=xpython`) on Chromium and WebKit, and both pass. The two engines
+use *different* transports, which is why both must be exercised:
 
-An informational probe (`SMOKE_KERNEL=xpython`) now runs the real `input()`
-check on real WebKit in `editor-smoke.yml`. Record the answer here and promote
-the probe to blocking once it is known. Tracked in #1271.
+| engine | isolation | synchronous stdin transport |
+|---|---|---|
+| Chromium | isolated | `SharedArrayBuffer` ([xeus#217](https://github.com/jupyterlite/xeus/issues/217)); service worker disabled as redundant |
+| WebKit | **non-isolated** (`COEPMiddleware`) | **service worker** ([xeus#212](https://github.com/jupyterlite/xeus/issues/212)), which `JupyterLiteConfigFlagMiddleware` re-enables per request for this engine |
+
+The service worker is *not* globally disabled, which is the detail that makes
+this work: `Tools/jupyterlite/jupyter-lite.json` lists the SW manager in
+`disabledExtensions`, and `JupyterLiteConfigFlagMiddleware` removes it again for
+WebKit at request time. Reading the static config alone gives the wrong answer.
+
+Note also what this does *not* mean: `SMOKE_SIMULATE_NO_SYNC` (no SAB *and* no
+SW) still fails on both engines, correctly — that is the freeze detector proving
+it discriminates, not a supported configuration.
 
 **Process note.** This claim survived because a spike finding was written as
 fact and then inherited. Two other stale claims sat alongside it: this document
