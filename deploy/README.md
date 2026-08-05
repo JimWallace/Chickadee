@@ -40,7 +40,7 @@ Edit `.env`:
 
 | Variable | What to set |
 |---|---|
-| `RUNNER_SHARED_SECRET` | Optional. Leave unset to use Chickadee's auto-generated three-word `.worker-secret`, or set a fixed secret explicitly (for example `openssl rand -base64 32`). |
+| `RUNNER_SHARED_SECRET` | **Required for Docker Compose** — the runner container mounts no volumes, so this is the only channel by which it learns the secret, and Compose refuses to start without it. Generate one with `openssl rand -base64 32`. A server with no separate runner container may leave it unset and fall back to the auto-generated three-word `.worker-secret`. |
 | `DATABASE_BACKEND` | Optional. Leave unset or set to `sqlite` to keep the current default backend. Set to `postgres` to use PostgreSQL. |
 | `SQLITE_PATH` | Optional. Path to the SQLite file. Defaults to `/data/chickadee.sqlite` in the containerized deployment. |
 | `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | Required only when `DATABASE_BACKEND=postgres`. |
@@ -79,10 +79,22 @@ The image is built automatically by GitHub Actions on every push to `main` — n
 Swift toolchain is required on the server. The first pull downloads ~500 MB;
 subsequent pulls only fetch changed layers.
 
-By default, the Compose runner reads `/data/.worker-secret` from the shared
-named volume, so the server's auto-generated three-word secret works without
-copying it into `.env`. If you set `RUNNER_SHARED_SECRET`, that explicit value
-still overrides the generated file.
+The Compose runner mounts no volumes and receives the secret through
+`RUNNER_SHARED_SECRET`, which both the server and the runner read and which the
+server prefers over any persisted `.worker-secret` file.
+
+It used to mount the data volume read-only, purely to read
+`/data/.worker-secret`. That volume also holds the SQLite database, every
+submission, and the results tree — and a test script runs as the same uid as
+the runner, so the secret file's `0600` mode was no barrier. A student script
+could read the HMAC secret and sign worker API calls, defeating the environment
+allowlist that withholds it. Enabling `--sandbox` would not have closed it: the
+Linux sandbox isolates the network, not the filesystem.
+
+If you are upgrading a deployment that predates this change, set
+`RUNNER_SHARED_SECRET` in `.env` before the next `docker compose up`, and treat
+the now-unused `/data/.worker-secret` inside the data volume as stale — the
+env var takes precedence over it.
 
 ### Optional PostgreSQL service example
 
@@ -657,5 +669,6 @@ If you also changed templates or static assets, rsync `Public/` and `Resources/`
 | 502 Bad Gateway | `systemctl status chickadee-server` — is it running? (While it restarts, nginx serves the themed `deploy/error-pages/maintenance.html` page instead.) |
 | SSO redirect loop | Verify `OIDC_CALLBACK` matches the redirect URI registered with your IdP |
 | Students not auto-enrolled | Make sure exactly one non-archived course exists in `/admin/courses` |
-| Runner not picking up jobs | Check `journalctl -u chickadee-runner`; verify `RUNNER_SHARED_SECRET` matches `.worker-secret` |
+| Runner not picking up jobs | Check `journalctl -u chickadee-runner`; verify `RUNNER_SHARED_SECRET` matches on both sides. Under Compose it is set once in `.env` and read by both services; the server prefers it over any `.worker-secret` file. |
+| `docker compose up` exits with "set RUNNER_SHARED_SECRET in .env" | Expected on a deployment that predates the runner losing its data-volume mount. Generate a secret with `openssl rand -base64 32` and put it in `.env`. |
 | JupyterLite broken | Ensure nginx passes `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers |

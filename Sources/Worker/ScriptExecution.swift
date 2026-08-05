@@ -172,29 +172,49 @@ private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Err
     capture: ScriptCapture,
     timeLimitSeconds: Int
 ) async -> Bool {
-    await withTaskGroup(of: Bool.self) { group in
+    // The verdict rides a flag rather than which task finishes first:
+    // `teardown` waits for the process to die, so by the time it returns the
+    // streams have closed too and either task may report first. Racing them
+    // for the answer reports a timed-out script as a normal exit.
+    let timedOut = TimeoutFlag()
+
+    await withTaskGroup(of: Void.self) { group in
         group.addTask {
             // Bounded a little past the time limit: by then the watchdog has
             // killed the child, so EOF is due. The bound bites only when a
             // leaked descriptor is holding a stream open.
             await capture.awaitStreamsClosed(withinSeconds: timeLimitSeconds + 5)
-            return false
         }
 
         group.addTask {
             do {
                 try await Task.sleep(for: .seconds(timeLimitSeconds))
             } catch {
-                return false  // cancelled: the script finished on its own
+                return  // cancelled: the script finished on its own
             }
+            // Don't claim a timeout for a script that exited in the instant
+            // the limit expired.
+            guard !capture.streamsClosed else { return }
+            timedOut.mark()
             await execution.teardown(using: scriptTeardownSequence)
-            return true
         }
 
-        let timedOut = await group.next() ?? false
+        await group.next()
         group.cancelAll()
-        return timedOut
     }
+
+    return timedOut.isSet
+}
+
+/// One-way flag the watchdog raises before tearing the child down. A class
+/// rather than a bare `Mutex` because the task-group children that touch it
+/// take it as a `sending` capture, which a noncopyable value can't satisfy.
+private final class TimeoutFlag: Sendable {
+    private let storage = Mutex(false)
+
+    func mark() { storage.withLock { $0 = true } }
+
+    var isSet: Bool { storage.withLock { $0 } }
 }
 
 // MARK: - Result mapping
@@ -277,14 +297,29 @@ final class ScriptCapture: Sendable {
     /// case.
     private static let drainGraceSeconds: TimeInterval = 2
 
+    /// Handshake between the drain threads (and the deadline) on one side and
+    /// the awaiting task on the other.
+    ///
+    /// A plain "resume the stored continuation" flag is not enough: the
+    /// streams can reach EOF before the awaiting task has stored its
+    /// continuation, and a signal that arrives first must be remembered rather
+    /// than dropped. Losing it deadlocks the run — which is exactly what a
+    /// first cut of this type did.
+    private enum Completion {
+        /// No signal yet, nobody waiting.
+        case idle
+        /// Signalled before anyone waited; the next waiter resumes at once.
+        case signalled
+        /// A waiter is parked on this continuation.
+        case waiting(CheckedContinuation<Void, Never>)
+        /// The waiter has been resumed; further signals are no-ops.
+        case done
+    }
+
     private let standardOutput: Stream
     private let standardError: Stream
-    /// Resumed once by whichever comes first: both streams reaching EOF, or
-    /// the caller's deadline. Single-shot, same shape as the termination
-    /// continuations elsewhere in the worker.
-    private let completion = Mutex<CheckedContinuation<Void, Never>?>(nil)
+    private let completion = Mutex(Completion.idle)
     private let openStreams = Mutex(2)
-    private let resumed = Mutex(false)
 
     init() {
         standardOutput = Self.makeStream()
@@ -321,6 +356,10 @@ final class ScriptCapture: Sendable {
         .fileDescriptor(FileDescriptor(rawValue: standardError.writeEnd), closeAfterSpawningProcess: true)
     }
 
+    /// True once both streams have reached EOF, i.e. the child and everything
+    /// holding a write end are gone.
+    var streamsClosed: Bool { openStreams.withLock { $0 } == 0 }
+
     /// Starts draining both streams, then suspends until both reach EOF or
     /// `withinSeconds` elapses — whichever comes first. Always resumes.
     func awaitStreamsClosed(withinSeconds: Int) async {
@@ -333,41 +372,48 @@ final class ScriptCapture: Sendable {
 
         let deadline = Task {
             try? await Task.sleep(for: .seconds(withinSeconds))
-            resumeOnce()
+            signalCompletion()
         }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            completion.withLock { $0 = continuation }
-            // A stream may have hit EOF before the continuation was stored;
-            // re-check rather than wait for a resume that already happened.
-            if openStreams.withLock({ $0 }) == 0 { resumeOnce() }
+            let resumeImmediately = completion.withLock { state -> Bool in
+                switch state {
+                case .signalled, .done:
+                    state = .done
+                    return true
+                case .idle, .waiting:
+                    state = .waiting(continuation)
+                    return false
+                }
+            }
+            if resumeImmediately { continuation.resume() }
         }
         deadline.cancel()
     }
 
-    /// Stops draining and returns what was captured. Runs a short bounded
-    /// final drain first: the child is gone by now, so anything it wrote is
-    /// already in the pipe buffer and the happy path completes on the first
-    /// read.
+    /// Returns what was captured. The drain threads have already read each
+    /// stream to EOF (or the deadline passed and we keep what arrived), so
+    /// there is nothing left to read here — and reading would race the thread
+    /// that still owns the descriptor.
     func finish() -> (stdout: String, stderr: String) {
-        let deadline = Date().addingTimeInterval(Self.drainGraceSeconds)
-        for stream in [standardOutput, standardError] {
-            stream.buffer.append(boundedReadToEOF(fromDescriptor: stream.readEnd, deadline: deadline))
-            close(stream.readEnd)
-        }
-        return (standardOutput.buffer.text(), standardError.buffer.text())
+        (standardOutput.buffer.text(), standardError.buffer.text())
     }
 
-    /// Releases the descriptors on the path where the child never launched
-    /// and there is nothing to capture.
+    /// Releases the read ends on the path where the child never launched, so
+    /// no drain thread was ever started. The write ends belong to Subprocess
+    /// from the moment they are handed over.
     func discard() {
         close(standardOutput.readEnd)
         close(standardError.readEnd)
     }
 
+    /// Reads one stream to EOF, then closes it. The descriptor's lifetime
+    /// belongs to this thread: closing it from elsewhere while this read is
+    /// parked would risk the number being reused under us.
+    ///
+    /// No deadline here. A thread still parked on a write end some unrelated
+    /// process leaked costs one thread; the run itself is already bounded by
+    /// the caller's deadline, so this can never hold up a job.
     private func drainToEOF(_ stream: Stream) {
-        // No deadline here: this thread is bounded by the caller's
-        // `awaitStreamsClosed` deadline plus `finish`'s grace, and a thread
-        // still parked on a leaked write end costs a thread, not a wedge.
         var chunk = [UInt8](repeating: 0, count: 65_536)
         while true {
             let bytesRead = read(stream.readEnd, &chunk, chunk.count)
@@ -376,8 +422,9 @@ final class ScriptCapture: Sendable {
                 continue
             }
             if bytesRead == -1 && errno == EINTR { continue }
-            return
+            break
         }
+        close(stream.readEnd)
     }
 
     private func noteStreamClosed() {
@@ -385,16 +432,24 @@ final class ScriptCapture: Sendable {
             count -= 1
             return count
         }
-        if remaining == 0 { resumeOnce() }
+        if remaining == 0 { signalCompletion() }
     }
 
-    private func resumeOnce() {
-        let alreadyResumed = resumed.withLock { wasResumed -> Bool in
-            let previous = wasResumed
-            wasResumed = true
-            return previous
+    /// Wakes the awaiting task, or records that it should not wait at all if
+    /// it has not parked yet.
+    private func signalCompletion() {
+        let waiter = completion.withLock { state -> CheckedContinuation<Void, Never>? in
+            switch state {
+            case .idle:
+                state = .signalled
+                return nil
+            case .waiting(let continuation):
+                state = .done
+                return continuation
+            case .signalled, .done:
+                return nil
+            }
         }
-        guard !alreadyResumed else { return }
-        completion.withLock { $0 }?.resume()
+        waiter?.resume()
     }
 }
