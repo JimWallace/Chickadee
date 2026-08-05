@@ -646,8 +646,12 @@ import VaporTesting
                         html.contains("This assignment is closed &mdash; view only.") == false,
                         "Staff must not see the student view-only notice")
                     #expect(
-                        html.contains("editable as course staff"),
-                        "Staff must see the staff-editable notice instead")
+                        html.contains("editable as course staff") == false,
+                        """
+                        The staff-facing closed banner was removed: an assignment is closed for \
+                        the whole time it is being authored, so it was permanent and carried \
+                        nothing staff could act on.
+                        """)
                     #expect(
                         html.contains(#"id="nb-submit""#) == false,
                         "Submission stays gated by the closed state, for staff too")
