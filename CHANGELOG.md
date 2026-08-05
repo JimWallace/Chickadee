@@ -9,6 +9,151 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.18] - 2026-08-05
+
+### Added
+
+- **Saving a browser-graded Python test now fails if the grading environment
+  cannot satisfy its imports (#1271).** Browser grading runs a fixed
+  `chickadee-python` kernel, and the editor's `connect-src 'self'` CSP leaves no
+  runtime install escape hatch, so a package that is not baked in is an
+  unrecoverable `ImportError`. That used to surface at the worst possible moment:
+  instructor validation is graded by the *native* worker on a full CPython, so a
+  test importing `seaborn` validated green and then failed for the first student
+  who submitted. The web script create/update endpoints, `PUT /suite`, and the
+  MCP `author_script` tool now reject such a write, naming the module, the line,
+  and the ways forward. Nothing about the previous Pyodide architecture allowed
+  this — there was no fixed package set to check against.
+
+  The check is deliberately narrow, because a false positive blocks an
+  instructor from saving legitimate work: it applies only to `.py` files in
+  **browser-graded** assignments (worker grading runs real `python3`, where the
+  same import is fine), and it accepts anything the setup itself bundles, the
+  modules the runner injects (`test_runtime`, `_ck_inputs`), student-module
+  names, and any import that is guarded or function-local.
+
+  The available set is derived from the vendored kernel's own package tarballs
+  by `scripts/derive-kernel-modules.py`, not from
+  `Tools/jupyterlite/environment-python.yml`. The env file states an intent that
+  only becomes true after a re-vendor — which needs micromamba and network to
+  `repo.prefix.dev`, so CI can never do one — and a check derived from intent
+  would accept `import scipy` while the shipped kernel has none. Deriving from
+  the bytes also removes the distribution-name-to-import-name problem: the
+  tarball says `site-packages/sklearn`, so there is no `scikit-learn` → `sklearn`
+  table to get wrong. `scripts/check-xeus-vendored.sh` fails if the derived index
+  drifts from the env beside it.
+
+### Changed
+
+- **The pattern-family editor's auto-compute runs on xeus-python (#1271).**
+  `Public/pyodide-worker.js` is replaced by `Public/python-eval-worker.js`, which
+  boots the same vendored `chickadee-python` kernel the editor and the browser
+  grader use. Auto-compute produces the expected value a generated test will then
+  assert, so having it run on a different interpreter — with a different numpy —
+  from the one that grades it was a real source of "the value it computed is not
+  the value the test reproduces". No behaviour change from an instructor's side:
+  the worker protocol and the timeout contract are unchanged.
+
+  With this, **no Chickadee-owned JavaScript loads Pyodide.** The only remaining
+  consumer is the vendored `jupyterlite-pyodide-kernel`, whose removal — and with
+  it the ~465 MB `Public/pyodide` and the `unsafe-eval` in the CSP — needs a
+  JupyterLite rebuild that CI cannot run.
+
+### Fixed
+
+- **A long-running browser-graded test could have reported a bogus result.** The
+  xeus `execute` helper polled a fixed number of times for the kernel's reply,
+  which read like a 2-second execution timeout; a test that really exceeded it
+  would have returned whatever partial output existed, with no error. In practice
+  it never fired — a xeus-lite cell runs inside `notify_listener`, so a slow cell
+  blocks the worker's event loop and the reply is in hand before the poll gets a
+  turn, which is why the R smoke grades a 3,139 ms script under a 2,000 ms cap.
+  The cap is now a named, overridable dead-kernel backstop rather than an
+  accidental limit, and the auto-compute worker sets a much larger one because
+  its legitimate waits are longer.
+
+### Changed
+
+- **Python browser grading moved from Pyodide to the xeus-python kernel
+  (#1271).** Test scripts now execute on the same `chickadee-python` environment
+  the notebook editor runs, so authoring and grading are one environment for
+  Python as they already were for R — "it ran in the editor" now implies "it
+  grades in the browser". No configuration: there is one Python substrate.
+- **`scipy`, `sympy`, `scikit-learn`, `statsmodels` and `pillow` are now in the
+  editor/grading environment.** Pyodide resolved these at run time from its
+  package index; a fixed environment has no runtime escape hatch, so they are
+  baked in. They are now available while *authoring* too, which Pyodide-only
+  grading never allowed. A browser probe asserts each one actually imports in a
+  real kernel, not merely that it is present in the vendored bytes.
+  `networkx`, `seaborn` and `plotly` have no emscripten-forge build and remain
+  unavailable.
+
+### Removed
+
+- **The main-thread grading fallback.** It existed only because Pyodide can run
+  on the main thread, and it carried a real hazard: a synchronous CPU-bound loop
+  in student code never yields, so the per-test timer never fires and the tab
+  freezes with the submission lost. Every substrate is now a Web Worker, where
+  `Worker.terminate()` actually kills a runaway. A browser without Worker support
+  fails the grade over to the native worker.
+- **`Public/grading-worker.js` and the Pyodide package preloader.** A fixed
+  environment needs no import scanning, which retires the class of bug where a
+  bundled helper's imports were invisible to the scanner.
+
+### Fixed
+
+- **Browser grading of R never ran in the browser on Chromium or Firefox.** The
+  student notebook page is cross-origin isolated on those engines, and a worker
+  spawned by an isolated page must itself be served `Cross-Origin-Embedder-Policy:
+  require-corp` or the browser refuses the worker script outright. The header is
+  stamped from a per-path allowlist that `/r-grading-worker.js` was never added
+  to, so every R submission was blocked at worker start and quietly failed over
+  to the native worker — correct marks, none of the speed the feature exists for.
+  Safari was unaffected (it runs the page non-isolated). Both per-language
+  grading workers are now allowlisted, and a test reads the spawn sites out of
+  the page scripts and fails if the list drifts from them in either direction.
+
+### Fixed
+
+- **The editor and browser-grading Python environment now actually contains
+  scipy, sympy, scikit-learn and statsmodels.** `environment-python.yml` had
+  listed them since the xeus-python migration and a release announced them as
+  available, but adding a name to that file changes nothing until the kernel is
+  rebuilt — and the vendored bytes had never been rebuilt, so `import scipy`
+  would have failed with an unrecoverable `ImportError` for any student whose
+  test used it. The kernels are re-vendored, and a browser probe now asserts
+  every declared package genuinely imports in a real kernel rather than merely
+  being present in the tarballs.
+
+- **The re-vendored kernel would not have booted at all without a second
+  library patch.** `scikit-learn` pulls in `requests` → `urllib3`, and
+  `urllib3.contrib.emscripten.fetch` constructs a Pyodide-only streaming fetcher
+  at module import under exactly the conditions a grading worker meets. That
+  raised out of `xkernel.start()`, so the failure was total rather than
+  degraded. `scripts/patch-xeus-python-http.py`, which already neutralised the
+  identical hazard in `pyodide-http`, now covers urllib3 too, and
+  `check-xeus-vendored.sh` asserts it — an un-patched re-vendor is a CI failure
+  rather than a dead editor. Nothing short of booting a real kernel could have
+  caught this: the environment solves cleanly and every other guard passes.
+
+### Added
+
+- **Re-vendoring the xeus kernels is a CI workflow, not a manual step.**
+  `.github/workflows/revendor-kernels.yml` rebuilds the JupyterLite bundle and
+  both kernel environments and commits the result — on demand, or when a pull
+  request changes an environment file. "CI cannot do this, it needs micromamba
+  and network to repo.prefix.dev" had been the standing assumption and it was
+  simply wrong: a hosted runner has unrestricted network and micromamba is a
+  single ~7 MB download. Believing otherwise is what allowed the environment
+  file and the shipped kernel to drift apart for a whole release.
+
+- **`scripts/check-env-vendored-sync.sh` fails when they drift again.** It is the
+  only guard that compares *declared intent* to *shipped bytes*; every other one
+  compares the vendored tree to itself, which is why none of them could see four
+  missing packages. It costs two file reads, runs on every JupyterLite-relevant
+  PR, and points at the workflow that fixes it.
+
+
 ## [0.5.17] - 2026-08-05
 
 ### Added
