@@ -23,10 +23,21 @@ name: Re-vendor xeus kernels
 # commits on unrelated work. It runs when someone asks for it, or when a PR
 # actually changes what the environments contain.
 #
-# FORK PRs get a verify-only run: pushing to a fork's branch needs credentials
-# this workflow deliberately does not have. The build still runs, so "this
-# package has no emscripten-forge build" is caught either way — which is the
-# other real failure mode (networkx, seaborn and plotly have no build at all).
+# ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
+# never pushes, and that is not caution — it is required for termination.
+# `xpython.wasm` embeds the absolute path of the temp directory it was built in
+# (`/tmp/tmpXXXXXXXX/_env/envs/chickadee-python`), which `tempfile` randomises
+# per run. The kernel is therefore NOT byte-reproducible: two builds of the same
+# environment differ, by exactly those 16 bytes and nothing else. An
+# auto-committing PR trigger would push a new commit, which would re-trigger
+# itself, which would produce a different path again — forever.
+#
+# A PR run is still worth its minutes: it proves the environment still solves and
+# the kernel still boots, which is how the urllib3 import crash was found. When
+# it reports a diff, dispatch the workflow to land one.
+#
+# Fork PRs additionally cannot be pushed to from here at all, so they are
+# verify-only by both rules.
 
 on:
   workflow_dispatch:
@@ -117,7 +128,13 @@ jobs:
           set -euo pipefail
           if git diff --quiet -- Public/jupyterlite Tools/jupyterlite; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "The rebuild reproduced the committed bytes exactly." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "The rebuild reproduced the committed bytes exactly."
+              echo ""
+              echo "Note this is unexpected for the Python kernel: xpython.wasm"
+              echo "embeds its build temp path, so it normally differs by 16 bytes"
+              echo "between any two builds."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -130,13 +147,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit the rebuild
-        # Skipped for fork PRs, which cannot be pushed to from here; the build
-        # and the verification above still ran, which is the part that matters.
+        # workflow_dispatch ONLY — see the termination argument in the header.
         if: >-
           steps.diff.outputs.changed == 'true'
-          && (github.event_name == 'workflow_dispatch' && inputs.commit
-              || github.event_name == 'pull_request'
-                 && github.event.pull_request.head.repo.full_name == github.repository)
+          && github.event_name == 'workflow_dispatch'
+          && inputs.commit
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -157,7 +172,14 @@ jobs:
           exit 1
 
       - name: Report a verify-only run
-        if: steps.diff.outputs.changed == 'true' && job.status == 'success'
+        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
         run: |
-          echo "Rebuild verified. If no commit followed, this was a fork PR —" \
-               "run this workflow from a branch in the main repository to commit it."
+          {
+            echo "### Verify-only run"
+            echo ""
+            echo "The environment solved and the kernel built and verified."
+            echo "Nothing was committed — see the header of this workflow for why"
+            echo "a pull_request trigger must not push."
+            echo ""
+            echo "To land a rebuild, run this workflow manually on this branch."
+          } >> "$GITHUB_STEP_SUMMARY"
