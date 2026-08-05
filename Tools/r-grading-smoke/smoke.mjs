@@ -135,7 +135,8 @@ function startServer() {
         // Confine reads to Public/ — this server exists only to feed the probe.
         const resolved = path.resolve(PUBLIC_DIR, '.' + urlPath);
         if (!resolved.startsWith(PUBLIC_DIR + path.sep)) {
-            res.writeHead(403);
+            console.log('[server] refused (outside Public/):', urlPath);
+            res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
             res.end('forbidden');
             return;
         }
@@ -147,8 +148,13 @@ function startServer() {
             });
             res.end(body);
         } catch {
-            res.writeHead(404);
-            res.end('not found: ' + urlPath);
+            // The requested path is logged rather than echoed into the response:
+            // reflecting it would be a (CodeQL-flagged) XSS shape even in a
+            // probe-only server, and the console is where a debugging human is
+            // looking anyway.
+            console.log('[server] 404:', urlPath);
+            res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+            res.end('not found');
         }
     });
     return new Promise((resolve) => server.listen(PORT, () => resolve(server)));
