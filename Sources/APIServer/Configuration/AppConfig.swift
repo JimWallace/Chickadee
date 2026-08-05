@@ -15,9 +15,6 @@ struct AppConfig: Sendable {
     let oidc: OIDCEnvConfig
     let security: AppSecurityConfiguration
     let scanMode: ScanModeConfiguration
-    /// Which substrate the browser grader runs Python on (#1271). R is always
-    /// the xeus-r kernel; only Python has a choice, and it is a rollout one.
-    let browserGrading: BrowserGradingConfig
     let database: DatabaseSettings
     let lockout: LoginRateLimitConfiguration
     let workers: WorkerConfig
@@ -55,7 +52,6 @@ struct AppConfig: Sendable {
             oidc: OIDCEnvConfig.fromEnvironment(),
             security: security,
             scanMode: ScanModeConfiguration.fromEnvironment(),
-            browserGrading: BrowserGradingConfig.fromEnvironment(),
             database: database,
             lockout: LoginRateLimitConfiguration.fromEnvironment(
                 trustForwardedFor: security.trustForwardedProto
@@ -205,7 +201,6 @@ extension AppConfig {
             oidc: .default,
             security: .default,
             scanMode: .default,
-            browserGrading: .default,
             database: database,
             lockout: .default,
             workers: .default,

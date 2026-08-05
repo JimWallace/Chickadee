@@ -1,21 +1,22 @@
 // Public/grading-shared.js
 //
-// Grading semantics shared by the two browser graders:
+// Python grading semantics — the pieces that describe WHAT Python runs and how
+// its outcome is read, independent of which runtime executes it.
 //
-//   - Public/grading-worker.js  — Pyodide in a Web Worker (the primary grader;
-//     the main thread races its replies against a real timeout and terminates
-//     the worker to kill run-away student code)
-//   - Public/browser-runner.js  — the main-thread fallback executor, used when
-//     Worker construction fails
+// It began life as the shared copy between a Pyodide worker and a main-thread
+// Pyodide fallback, which is why it is a separate module. Both of those are
+// gone (#1271): Python now grades on the xeus-python kernel via
+// Public/python-grading-worker.js, and there is no main-thread path, because a
+// kernel needs importScripts and the old fallback could not kill a CPU-bound
+// runaway anyway.
 //
-// Everything in this file defines WHAT Python runs and HOW its outcome is
-// interpreted: the env-config / per-script exec / stream-capture snippets, the
-// exit-code derivation, how files land in the Pyodide MEMFS, and which Pyodide
-// packages get preloaded.  Both graders must agree on all of it or the same
-// submission could grade differently depending on whether the browser had
-// Worker support.  These used to be duplicated copies pinned by a bespoke
-// drift test (grading-worker-drift.test.mjs); the 0.5 cleanup replaced that
-// with this single module, so drift is structurally impossible.
+// What remains here is still worth keeping separate: `envConfigPython` and
+// `deriveExitCode` encode the contract a test script sees and how a crashed
+// script scores, and both are asserted against the native worker's behaviour by
+// tests that should not have to boot a kernel to run.
+//
+// Consumers: Public/python-grading-worker.js (the grading cell) and
+// Public/browser-runner.js (deriveExitCode, re-exported for tests).
 //
 // Loading: classic script, no dependencies.
 //   - Workers: importScripts('/grading-shared.js' + self.location.search)
