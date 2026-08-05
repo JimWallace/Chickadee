@@ -66,13 +66,34 @@ import Testing
     @Test func seedResponseCarriesTheLanguage() throws {
         let response = BrowserRunnerSeedResponse(
             seed: "deadbeef", personalizedInputs: ["threshold": "42"],
-            personalizedFiles: nil, language: AssignmentLanguage.r.rawValue)
+            personalizedFiles: nil, language: AssignmentLanguage.r.rawValue,
+            pythonSubstrate: BrowserPythonSubstrate.pyodide.rawValue)
         #expect(response.language == "r")
 
         // Nil is the "no assignment owns this setup" case — the same one that
         // yields a nil seed, where there is nothing personalized to deliver.
         let empty = BrowserRunnerSeedResponse(
-            seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
+            seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil,
+            pythonSubstrate: BrowserPythonSubstrate.pyodide.rawValue)
         #expect(empty.language == nil)
+    }
+
+    /// The wire values the browser compares against, and the default. A typo in
+    /// either raw value silently routes every Python grade at the wrong runtime;
+    /// a wrong default silently moves a deployment onto the narrower package set.
+    @Test func pythonSubstrateWireValuesAndDefault() {
+        #expect(BrowserPythonSubstrate.pyodide.rawValue == "pyodide")
+        #expect(BrowserPythonSubstrate.xeus.rawValue == "xeus")
+        #expect(BrowserGradingConfig.default.pythonSubstrate == .pyodide)
+    }
+
+    /// An unset or unrecognised BROWSER_PYTHON_SUBSTRATE must keep Pyodide
+    /// rather than failing startup: it is a rollout knob, and a typo in it must
+    /// not take a deployment down — nor quietly narrow what submissions may
+    /// import.
+    @Test func unrecognisedSubstrateFallsBackToPyodide() {
+        #expect(BrowserPythonSubstrate(rawValue: "xues") == nil)
+        #expect(BrowserPythonSubstrate(rawValue: "") == nil)
+        #expect(BrowserPythonSubstrate(rawValue: "XEUS") == nil)
     }
 }

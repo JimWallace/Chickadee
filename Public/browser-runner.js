@@ -289,6 +289,10 @@
         // which substrate runs a given script is still decided per script by
         // RunnerCore's classification, exactly as the native worker does it.
         let assignmentLanguage = 'python';
+        // Which runtime executes Python test scripts (#1271). The server owns
+        // this so a deployment can flip it without a rebuild; 'pyodide' is the
+        // default and the value an older server (or a failed fetch) yields.
+        let pythonSubstrate = 'pyodide';
         try {
             const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
             const parsed = JSON.parse(seedText);
@@ -297,6 +301,9 @@
             }
             if (parsed && parsed.language === 'r') {
                 assignmentLanguage = 'r';
+            }
+            if (parsed && parsed.pythonSubstrate === 'xeus') {
+                pythonSubstrate = 'xeus';
             }
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
@@ -384,7 +391,7 @@
         //    the Node test harness, which has neither Worker nor a factory
         //    override, so it deterministically exercises the fallback).
         const executor = makeExecutor(
-            files, assignmentSeed, runnerCore, options.reportPhase, suites);
+            files, assignmentSeed, runnerCore, options.reportPhase, suites, pythonSubstrate);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -462,8 +469,9 @@
         return null;
     }
 
-    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites) {
-        return new RoutingExecutor(files, assignmentSeed, runnerCore, reportPhase, suites);
+    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate) {
+        return new RoutingExecutor(
+            files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate);
     }
 
     // -------------------------------------------------------------------------
@@ -483,12 +491,15 @@
     // -------------------------------------------------------------------------
 
     class RoutingExecutor {
-        constructor(files, assignmentSeed, runnerCore, reportPhase, suites) {
+        constructor(files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.reportPhase = reportPhase;
             this.suites = Array.isArray(suites) ? suites : [];
+            // 'pyodide' | 'xeus'. Only affects which worker Python goes to; R is
+            // always the xeus-r kernel, since nothing else can grade R here.
+            this.pythonSubstrate = pythonSubstrate === 'xeus' ? 'xeus' : 'pyodide';
             this.python = null;
             this.r = null;
         }
@@ -514,14 +525,33 @@
             return kinds;
         }
 
+        // The Python substrate. Both workers speak the SAME protocol
+        // (init/run), so GradingWorkerExecutor drives either without knowing
+        // which it has — the only difference is the script it spawns.
+        //
+        // The main-thread fallback is Pyodide-only, and deliberately so: it
+        // exists for environments with no Worker (the Node test harness), and
+        // booting a xeus kernel needs importScripts, which is worker-only. A
+        // xeus deployment in a Worker-less browser therefore fails over to the
+        // native worker rather than silently grading on a different runtime
+        // than the one the deployment chose.
         pythonExecutor() {
             if (!this.python) {
-                const factory = gradingWorkerFactory('/grading-worker.js');
-                this.python = factory
-                    ? new GradingWorkerExecutor(
+                const useXeus = this.pythonSubstrate === 'xeus';
+                const factory = gradingWorkerFactory(
+                    useXeus ? '/python-grading-worker.js' : '/grading-worker.js');
+                if (factory) {
+                    this.python = new GradingWorkerExecutor(
                         this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
-                        'Python')
-                    : new MainThreadExecutor(this.files, this.assignmentSeed, this.runnerCore);
+                        'Python');
+                } else if (useXeus) {
+                    this.python = new UnavailableExecutor(
+                        'Python grading on the xeus kernel needs Web Worker support, '
+                        + 'which this browser did not provide');
+                } else {
+                    this.python = new MainThreadExecutor(
+                        this.files, this.assignmentSeed, this.runnerCore);
+                }
             }
             return this.python;
         }

@@ -162,11 +162,13 @@ struct BrowserRunnerRoutes: RouteCollection {
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil,
+                pythonSubstrate: pythonSubstrate(req))
         }
         guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil,
+                pythonSubstrate: pythonSubstrate(req))
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
@@ -193,7 +195,16 @@ struct BrowserRunnerRoutes: RouteCollection {
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,
-            personalizedFiles: personalizedFiles, language: language?.rawValue)
+            personalizedFiles: personalizedFiles, language: language?.rawValue,
+            pythonSubstrate: pythonSubstrate(req))
+    }
+
+    /// The deployment's Python browser-grading substrate. Read here rather than
+    /// baked into the page so a flip takes effect on the next submission without
+    /// a rebuild, and so the value the grader uses comes from the same request
+    /// that resolved the seed.
+    private func pythonSubstrate(_ req: Request) -> String {
+        req.application.appConfig.browserGrading.pythonSubstrate.rawValue
     }
 
 }
@@ -222,6 +233,11 @@ struct BrowserRunnerSeedResponse: Content {
     /// extension. Nil when no assignment owns the setup — the same case that
     /// yields a nil seed, where there is nothing personalized to deliver.
     let language: String?
+    /// `"pyodide"` or `"xeus"` — which runtime the browser should execute
+    /// Python test scripts on (#1271). R is unaffected: the xeus-r kernel is the
+    /// only way to grade R in a browser, so it is never routed by this. Defaults
+    /// to `pyodide`; see BrowserGradingConfig for why this is a flag.
+    let pythonSubstrate: String
 }
 
 /// Returns the manifest JSON with the `graderOnlyFiles` array blanked to `[]`,

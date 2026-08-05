@@ -1,18 +1,21 @@
-name: R grading smoke test
+name: Browser grading smoke test
 
-# Boots the vendored xeus-r kernel in a headless browser and grades real R test
-# scripts through Public/r-grading-worker.js — the browser-graded-R path added
-# in #1271.
+# Boots a vendored xeus kernel in a headless browser and grades real test scripts
+# through the real grading worker — R on xeus-r, Python on xeus-python (#1271).
 #
-# Why this needs a browser. The rest of the R grading coverage proves code
-# *resolves*: Tests/BrowserRunnerJSTests runs the wrapper builder and the reply
-# parser against a fake worker, and swift test never leaves the server. Neither
-# boots a kernel, so the failures that would actually reach a student are
-# invisible to them — a re-vendored /vendor/xeus-bootstrap.js that no longer
-# matches the kernel's empack metadata, a rebuilt chickadee-r env missing a
-# shared library the kernel dlopen()s, or the wrapper's quit() masking silently
-# ceasing to be what test_runtime.R resolves (which would turn every R test into
-# a pass). All three pass every other check in CI.
+# Why this needs a browser. The rest of the coverage proves code *resolves*:
+# Tests/BrowserRunnerJSTests runs the cell builders and reply parsers against a
+# fake worker, and swift test never leaves the server. Neither boots a kernel, so
+# the failures that would actually reach a student are invisible to them — a
+# re-vendored /vendor/xeus-bootstrap.js that no longer matches a kernel's empack
+# metadata, an env rebuilt without a shared library its kernel dlopen()s, R's
+# quit() masking silently ceasing to be what test_runtime.R resolves (which would
+# turn every R test into a pass), or the Python grading cell failing to print its
+# payload. All of them pass every other check in CI.
+#
+# Both languages run even when only one looks touched: they share the kernel
+# boot, the vendored bootstrap, and the workspace writer, so a change to any of
+# those can break the other one.
 #
 # REQUIRED-GATE DESIGN, matching editor-smoke.yml: the trigger is deliberately
 # NOT path-filtered, because a path-filtered workflow is *skipped* on unrelated
@@ -30,7 +33,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: r-grading-smoke-${{ github.event_name }}-${{ github.ref }}
+  group: browser-grading-smoke-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -60,7 +63,7 @@ jobs:
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/r-grading-smoke/|Tools/vendor/|Tools/runner-support/test_runtime\.R|scripts/setup-vendor\.sh|\.github/workflows/r-grading-smoke\.yml)'; then
+          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
@@ -71,6 +74,10 @@ jobs:
     if: needs.changes.outputs.run_smoke == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [r, python]
     steps:
       - uses: actions/checkout@v4
 
@@ -79,14 +86,18 @@ jobs:
           node-version: "22"
 
       - name: Install Playwright and its Chromium
-        working-directory: Tools/r-grading-smoke
+        working-directory: Tools/browser-grading-smoke
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Grade R scripts through the real xeus-r kernel
-        run: node Tools/r-grading-smoke/smoke.mjs --browser chromium
+      - name: Grade ${{ matrix.language }} scripts through the real kernel
+        run: node Tools/browser-grading-smoke/smoke.mjs --language ${{ matrix.language }} --browser chromium
 
+  # NOTE: the job NAME is deliberately unchanged. It is the status check this
+  # workflow documents as the one to require in branch protection, and renaming a
+  # required check silently blocks every PR. Rename it only together with the
+  # branch-protection setting.
   r-grading-smoke-gate:
     # Always runs, so it can be a required status check: green when the smoke
     # passed OR was not needed, red only when it actually failed.
@@ -97,7 +108,7 @@ jobs:
       - name: Report
         run: |
           if [ "${{ needs.smoke.result }}" = "failure" ] || [ "${{ needs.smoke.result }}" = "cancelled" ]; then
-            echo "R grading smoke failed"
+            echo "browser grading smoke failed"
             exit 1
           fi
-          echo "R grading smoke: ${{ needs.smoke.result }}"
+          echo "browser grading smoke: ${{ needs.smoke.result }}"

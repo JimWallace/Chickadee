@@ -542,6 +542,8 @@ async function loadRunnerHarness(options = {}) {
             // The server resolves the assignment's language here so the browser
             // knows which per-student inputs FILE to write (#1271).
             language: options.assignmentLanguage ?? null,
+            // ...and which runtime executes Python test scripts.
+            pythonSubstrate: options.assignmentPythonSubstrate ?? 'pyodide',
           });
         },
       };
@@ -1114,6 +1116,107 @@ test('a grading-runtime init failure fails over (throws, posts nothing) even whe
 
   // The whole point: a failed grading runtime must NOT post a 0% browser result.
   // The submission belongs to the server-side failover backstop instead.
+  assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
+});
+
+test('a xeus deployment routes Python at the kernel worker, not Pyodide', async () => {
+  // The #1271 flag. Both workers speak the same protocol, so the executor does
+  // not change — only which script it spawns.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    assignmentPythonSubstrate: 'xeus',
+    zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'test_pass.py', tier: 'public' }],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_xeus',
+  );
+
+  assert.deepEqual(plain(result.outcomes.map(o => [o.testName, o.status])), [['test_pass', 'pass']]);
+  assert.deepEqual(
+    harness.gradingWorkerFactory.created.map(w => w.scriptPath),
+    ['/python-grading-worker.js'],
+  );
+});
+
+test('Pyodide stays the default when the server says nothing', async () => {
+  // An older server, or a failed seed fetch, must not silently move a
+  // deployment onto a substrate with a narrower package set.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_default',
+  );
+
+  assert.deepEqual(
+    harness.gradingWorkerFactory.created.map(w => w.scriptPath),
+    ['/grading-worker.js'],
+  );
+});
+
+test('the substrate flag never reroutes R', async () => {
+  // R has exactly one browser substrate; a Python rollout knob must not touch
+  // it. Both languages on xeus is the end state, but they get there separately.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    assignmentPythonSubstrate: 'xeus',
+    zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'publictest_a.R', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_r_under_xeus',
+  );
+
+  assert.deepEqual(
+    harness.gradingWorkerFactory.created.map(w => w.scriptPath),
+    ['/r-grading-worker.js'],
+  );
+});
+
+test('a xeus deployment with no Worker fails over instead of grading on Pyodide', async () => {
+  // The main-thread fallback is Pyodide-only (booting a kernel needs
+  // importScripts). Quietly falling back would grade on a different runtime
+  // than the deployment chose, with a wider package set — right answers today,
+  // a surprise the day someone tightens the env. Failing over to the native
+  // worker is slower and correct.
+  const harness = await loadRunnerHarness({
+    assignmentPythonSubstrate: 'xeus',   // no useGradingWorker: no Worker at all
+    zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_xeus_no_worker',
+    ),
+    /Web Worker support/,
+  );
   assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
 });
 
