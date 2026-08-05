@@ -43,7 +43,16 @@ function makeEl(marker = '') {
     textContent: marker,
     appended: [],
     childNodes: marker ? [{ marker }] : [],
-    appendChild(n) { this.appended.push(n); return n; },
+    appendChild(n) {
+      this.appended.push(n);
+      // A real element loses its scroll offset when its content is replaced —
+      // the container briefly stops overflowing and the browser clamps
+      // scrollTop to 0. Modelled here because without it the scroll-preservation
+      // test below passes whether or not the restore exists (verified: deleting
+      // `half.scrollTop = scrollTop` from swapHalf left it green).
+      this.scrollTop = 0;
+      return n;
+    },
     // The swap re-executes inline scripts; no fixture here carries one, so an
     // empty list is honest rather than convenient. The re-execution path itself
     // is exercised by the browser check, which has a real DOM.
