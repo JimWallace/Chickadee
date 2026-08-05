@@ -20,17 +20,16 @@
 //   * **One notebook open, always.** Four (file, view) combinations exist, and
 //     a live document per combination would mean a Pyodide kernel per
 //     combination; bounding that needs an eviction policy, a lot of machinery
-//     for a secondary interaction.  So switching costs a kernel boot — and
-//     since it does, switching is an ordinary navigation to this same route
-//     with different arguments rather than an in-place swap.
+//     for a secondary interaction.  So switching costs a kernel boot.
 //
-//   * **Nothing here may navigate casually.** The edit form and a live kernel
-//     share this document.  Every write goes through `inplace-forms.js` and the
-//     refresh is a DOM swap of the edit half only (`refreshEditSurface`), never
-//     a reload — a reload costs a 10-30s kernel boot and any unsaved cells,
-//     which is the failure this page was merged to prevent.  The one deliberate
-//     navigation, switching notebooks, is guarded by `beforeunload` when the
-//     form is dirty.
+//   * **Nothing here navigates.** The edit form and a live kernel share this
+//     document, so a navigation — or a `location.reload()` — costs a 10-30s
+//     kernel boot and any unsaved cells.  Writes go through `inplace-forms.js`
+//     and refresh the edit half by DOM swap (`refreshEditSurface`); switching
+//     notebooks swaps the *other* half (`refreshNotebookSurface`) and moves the
+//     URL with `pushState`.  The kernel still reboots on a switch — it belongs
+//     to the open notebook — but the edit half's scroll, open editors, and
+//     unsaved metadata no longer go with it.
 
 (function () {
     'use strict';
@@ -141,8 +140,15 @@
         paneURLs = {};
     }
 
-    var activeFile = 'assignment';
-    var activeView = 'personalized';
+    // Seeded from what the server actually rendered, not assumed: the page is
+    // reachable at `?file=solution&view=template`, and starting from the
+    // defaults would make the first switch compare against the wrong state and
+    // silently no-op.
+    var notebookBody = document.querySelector('.wb-notebook-body');
+    var activeFile = (notebookBody && notebookBody.getAttribute('data-wb-file') === 'solution')
+        ? 'solution' : 'assignment';
+    var activeView = (notebookBody && notebookBody.getAttribute('data-wb-view') === 'template')
+        ? 'template' : 'personalized';
 
     function hasTemplate(file) {
         if (!viewSwitch) return false;
@@ -227,15 +233,15 @@
 
     /// Switch which notebook the right half holds.
     ///
-    /// A **full navigation**, deliberately. Before the merge this repointed an
-    /// iframe; in one document there is no inner frame to repoint, and either
-    /// way the Pyodide kernel restarts — it is bound to the notebook that is
-    /// open. Since the cost is unavoidable, the honest form is an ordinary
-    /// navigation to this route with different arguments, which also brings the
-    /// edit half back consistent with what the notebook now shows.
+    /// Swaps the notebook half in place; the edit half is not touched. The
+    /// Pyodide kernel restarts either way — it belongs to whichever notebook is
+    /// open — but the author's *other* half does not have to pay for that: its
+    /// scroll position, expanded editors, and any metadata typed but not yet
+    /// saved all survive, where a navigation took them along.
     ///
-    /// Guarded by `beforeunload` when the edit form is dirty (see below), so
-    /// unsaved metadata is not silently lost on the way out.
+    /// The URL still changes, via `pushState`, so the address bar names what is
+    /// actually open, a reload lands in the same place, and Back returns to the
+    /// previous notebook.
     function selectPane(file, view) {
         var pane = resolvePane(paneURLs, file, view);
         if (!pane) return;
@@ -243,12 +249,52 @@
         // must not cost a kernel boot.
         if (pane.file === activeFile && pane.view === activeView) return;
         // Re-validated at the sink rather than trusting that resolvePane
-        // already did it: this is the line where a `javascript:` URL would
-        // become script execution in this origin, so the check belongs where
-        // the damage would happen, not one call up.
+        // already did it: this is where a `javascript:` URL would reach a
+        // navigation, so the check belongs where the damage would happen.
         var nextURL = safePaneURL(pane.url);
-        if (nextURL) window.location.assign(nextURL);
+        if (!nextURL) return;
+
+        activeFile = pane.file;
+        activeView = pane.view;
+        if (staleChip) staleChip.hidden = true;
+
+        ChickadeeUI.refreshNotebookSurface(nextURL).then(function (ok) {
+            if (!ok) return;  // swapHalf already reloaded
+            try {
+                window.history.pushState({ file: pane.file, view: pane.view }, '', nextURL);
+            } catch (_) { /* history unavailable — the pane is still correct */ }
+            syncViewControls();
+        });
     }
+
+    /// Point the view control at whatever is open now.
+    ///
+    /// Its markup lives in the workbench bar, not in the swapped half, so it
+    /// does not come back from the server with the notebook — without this it
+    /// would keep showing the previous file's state.
+    function syncViewControls() {
+        viewButtons.forEach(function (btn) {
+            btn.setAttribute(
+                'aria-pressed',
+                btn.getAttribute('data-wb-view') === activeView ? 'true' : 'false');
+        });
+        if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
+        var label = document.getElementById('wb-openfile');
+        if (label) label.textContent = activeFile === 'solution' ? 'Solution' : 'Assignment';
+    }
+
+    // Back/forward must move between notebooks, not leave the page half-swapped
+    // showing one file under the other's URL.
+    window.addEventListener('popstate', function (e) {
+        var st = e.state;
+        if (!st || !st.file) { window.location.reload(); return; }
+        var pane = resolvePane(paneURLs, st.file, st.view);
+        var url = pane && safePaneURL(pane.url);
+        if (!url) { window.location.reload(); return; }
+        activeFile = st.file;
+        activeView = st.view;
+        ChickadeeUI.refreshNotebookSurface(url).then(syncViewControls);
+    });
 
     viewButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -391,9 +437,10 @@
 
     // ── Unsaved-work guard ────────────────────────────────────────────────
     //
-    // Switching notebooks is a navigation now, so metadata typed into the edit
-    // half and not yet saved would leave with the page. Track dirtiness from
-    // the form's own input events and let the browser ask.
+    // Switching notebooks no longer navigates, so this is no longer about the
+    // switch — it is the ordinary case of closing the tab, following a link, or
+    // hitting reload with metadata typed into the edit half and not yet saved.
+    // Track dirtiness from the form's own input events and let the browser ask.
 
     var formDirty = false;
     document.addEventListener('input', function (e) {

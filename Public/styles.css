@@ -846,6 +846,16 @@ code { font-family: var(--font-mono); font-size: .9em; }
    itself may only be overridden by a single page. */
 .main-fullbleed { max-width: 100%; padding: 0; margin: 0; }
 
+/* A page that owns the viewport (today: the assignment workbench).
+   The site chrome and the page body split the window between them, so the
+   DOCUMENT never scrolls — the panes scroll inside themselves.
+   Without this the workbench sized itself to `100dvh` while the nav sat above
+   it, making the document ~46px taller than the window: the nav scrolled off
+   under the pointer and the "page never scrolls" invariant the workbench CSS
+   claims was quietly false. */
+.page-fullbleed { height: 100dvh; display: flex; flex-direction: column; }
+.page-fullbleed .main-fullbleed { flex: 1; min-height: 0; }
+
 /* The notebook body rendered as the workbench's right half.
    `100vh` used to mean the *pane iframe's* height — the notebook was its own
    document inside a frame. #1266 merged the workbench into one document, so

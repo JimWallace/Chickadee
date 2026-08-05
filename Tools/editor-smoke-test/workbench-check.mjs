@@ -361,6 +361,25 @@ async function main() {
       return fail("editor frame is isolated but has no SharedArrayBuffer");
     }
 
+    // 4b. The DOCUMENT does not scroll.
+    //
+    //     The panes scroll inside themselves; the page must not. Sizing the
+    //     shell to `100dvh` while the site nav sat above it made the document
+    //     taller than the window, so the nav scrolled off under the pointer and
+    //     the invariant the workbench CSS claims was quietly false.
+    const docScroll = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    const overflow = docScroll.scrollHeight - docScroll.clientHeight;
+    console.log(`document overflow = ${overflow}px (scrollHeight=${docScroll.scrollHeight} clientHeight=${docScroll.clientHeight})`);
+    if (overflow > 1) {
+      return fail(
+        `the workbench document scrolls by ${overflow}px — the site chrome and the ` +
+        `page body are not sharing the viewport, so the nav scrolls away under the ` +
+        `pointer while the panes stay pinned.`);
+    }
+
     // 5. Idle-logout needs no forwarder any more.
     //
     //    `idle-logout.js` measures interaction with its OWN document. That used
@@ -405,18 +424,37 @@ async function main() {
         "(assignmentHasTemplateView) or workbench.js is not un-hiding the control."
       );
     }
-    await page.click('#wb-viewswitch .wb-view[data-wb-view="template"]');
-    await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: FRAME_SETTLE_MS })
-      .catch(() => {});
-    await page.waitForTimeout(1000);
+    // Marked before the switch: #1268 makes switching an in-place swap of the
+    // notebook half, so THIS document must survive it. If it does not, the URL
+    // and the notebook would both still look right while the edit half had
+    // silently been rebuilt from scratch.
+    await page.evaluate(() => { window.__ckSwitchProbe = "alive"; });
+    // Click the view that is NOT open. The server defaults course staff to the
+    // template on a notebook with placeholders, so clicking "template" here was
+    // a no-op — selectPane correctly returns early — and the assertion below
+    // would have been testing nothing.
+    const openView = await page.evaluate(
+      () => (document.querySelector(".wb-notebook-body") || {}).dataset?.wbView || "personalized");
+    const targetView = openView === "template" ? "personalized" : "template";
+    console.log(`view switch: open=${openView} clicking=${targetView}`);
+    await page.click(`#wb-viewswitch .wb-view[data-wb-view="${targetView}"]`);
+    await page.waitForTimeout(1500);
     const afterView = { url: page.url() };
+    const diag = await page.evaluate(() => ({
+      paneURLs: document.getElementById("wb-shell").getAttribute("data-wb-pane-urls"),
+      bodyFile: (document.querySelector(".wb-notebook-body") || {}).dataset?.wbFile,
+      bodyView: (document.querySelector(".wb-notebook-body") || {}).dataset?.wbView,
+      pressed: Array.from(document.querySelectorAll(".wb-view")).map(
+        (b) => b.getAttribute("data-wb-view") + "=" + b.getAttribute("aria-pressed")),
+      hasRemount: typeof window.chickadeeRemountNotebook,
+      hasRefresh: typeof (window.ChickadeeUI || {}).refreshNotebookSurface,
+    }));
     console.log(`after view switch: url=${afterView.url}`);
-    // A navigation of THIS page now, not a repointed iframe: switching views
-    // reboots the kernel either way, so it is an ordinary navigation to the
-    // same route with different arguments — and the edit half comes back
-    // consistent with what the notebook shows.
-    if (!afterView.url.includes("view=template")) {
-      return fail(`the view switch did not navigate to the template (url=${afterView.url})`);
+    console.log(`  DIAG ${JSON.stringify(diag)}`);
+    if (!afterView.url.includes("view=" + targetView)) {
+      return fail(
+        `the view switch did not reach view=${targetView} (url=${afterView.url})`,
+        consoleErrors.join("\n") || "(no console errors)");
     }
     if (!afterView.url.includes("/workbench")) {
       return fail(
@@ -439,10 +477,34 @@ async function main() {
         "below would silently skip. The seed creates a solution.");
     }
     {
+      // Dirty the edit half and scroll it, so the assertions below have
+      // something real to lose. Typing into a field the server has not seen is
+      // exactly the state a navigation used to discard.
+      const primed = await page.evaluate(() => {
+        const el = document.querySelector('.wb-pane-edit input[name="assignmentName"]');
+        if (el) { el.value = "UNSAVED PROBE TITLE"; }
+        const half = document.querySelector(".wb-pane-edit");
+        if (half) half.scrollTop = 250;
+        // Read back: an unscrollable pane silently keeps scrollTop at 0, which
+        // would make the survival assertion below fail for a reason that has
+        // nothing to do with the switch.
+        return {
+          title: el ? el.value : null,
+          scroll: half ? Math.round(half.scrollTop) : null,
+          scrollHeight: half ? half.scrollHeight : null,
+          clientHeight: half ? half.clientHeight : null,
+        };
+      });
+      console.log(`primed edit half: ${JSON.stringify(primed)}`);
+      if (primed.scroll !== 250) {
+        return fail(
+          `could not scroll the edit half (scrollTop=${primed.scroll}, ` +
+          `scrollHeight=${primed.scrollHeight}, clientHeight=${primed.clientHeight}). ` +
+          `The survival assertion below would prove nothing.`);
+      }
+
       await page.click("#solution-notebook-edit-btn");
-      await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: FRAME_SETTLE_MS })
-        .catch(() => {});
-      await page.waitForTimeout(1200);
+      await page.waitForTimeout(1500);
 
       const afterOpen = { url: page.url() };
       console.log(`after Files-table open: url=${afterOpen.url}`);
@@ -463,6 +525,30 @@ async function main() {
           "the edit half is gone after opening the solution — the Edit link " +
           "navigated off the workbench instead of switching which notebook is open.");
       }
+
+      // THE POINT OF #1268: the switch swapped the notebook half only. The
+      // document was not replaced, and the edit half kept the state a
+      // navigation would have taken with it.
+      const survived = await page.evaluate(() => ({
+        page: window.__ckSwitchProbe === "alive",
+        title: (document.querySelector('.wb-pane-edit input[name="assignmentName"]') || {}).value,
+        scroll: Math.round((document.querySelector(".wb-pane-edit") || {}).scrollTop || 0),
+      }));
+      console.log(`after switch: pageAlive=${survived.page} title="${survived.title}" scroll=${survived.scroll}`);
+      if (!survived.page) {
+        return fail(
+          "switching notebooks replaced the whole document — refreshNotebookSurface " +
+          "navigated or reloaded instead of swapping the notebook half.");
+      }
+      if (survived.title !== "UNSAVED PROBE TITLE") {
+        return fail(
+          `the edit half lost unsaved input across the switch (title="${survived.title}"). ` +
+          `That is the author's typing, discarded without a prompt.`);
+      }
+      // Scroll position is deliberately NOT asserted — it is a known
+      // limitation of the swap (see refreshNotebookSurface). Left as printed
+      // output above so a future fix has a number to watch, rather than as a
+      // green assertion that quietly stops meaning anything.
 
       // Rendering the markup is not the same as loading the document, and the
       // difference is not cosmetic: an assertion here once passed for a build

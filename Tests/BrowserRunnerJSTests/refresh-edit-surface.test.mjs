@@ -31,14 +31,41 @@ import vm from 'node:vm';
 const source = await fs.readFile(path.resolve('Public/chickadee-ui.js'), 'utf8');
 
 /// A minimal element stub: enough surface for the swap path to run.
-function makeEl(html = '') {
+///
+/// The swap builds real nodes (importNode into a fragment) rather than
+/// assigning innerHTML — that is what preserves the identity of the carried-over
+/// element — so the stub has to model appendChild/textContent, not just a
+/// string. `appended` records what the swap put in.
+function makeEl(marker = '') {
   return {
-    innerHTML: html,
+    marker,
     scrollTop: 0,
+    textContent: marker,
+    appended: [],
+    childNodes: marker ? [{ marker }] : [],
+    appendChild(n) {
+      this.appended.push(n);
+      // A real element loses its scroll offset when its content is replaced —
+      // the container briefly stops overflowing and the browser clamps
+      // scrollTop to 0. Modelled here because without it the scroll-preservation
+      // test below passes whether or not the restore exists (verified: deleting
+      // `half.scrollTop = scrollTop` from swapHalf left it green).
+      this.scrollTop = 0;
+      return n;
+    },
     // The swap re-executes inline scripts; no fixture here carries one, so an
     // empty list is honest rather than convenient. The re-execution path itself
     // is exercised by the browser check, which has a real DOM.
     querySelectorAll: () => [],
+    querySelector: () => null,
+  };
+}
+
+function makeFragment() {
+  return {
+    nodes: [],
+    appendChild(n) { this.nodes.push(n); return n; },
+    querySelector: () => null,
   };
 }
 
@@ -57,6 +84,8 @@ function load(opts = {}) {
     querySelector: (sel) => (sel === '.wb-pane-edit' ? half : null),
     getElementById: (id) => (id === 'wb-shell' && opts.merged ? {} : null),
     createElement: () => ({}),
+    createDocumentFragment: makeFragment,
+    importNode: (n) => n,
   };
   const window = {
     location: {
@@ -105,7 +134,8 @@ test('refreshEditSurface: swaps the edit half in place, never navigating', async
   const ok = await ui.refreshEditSurface();
 
   assert.equal(ok, true);
-  assert.equal(half.innerHTML, '<p>fresh</p>', 'the edit half was not swapped');
+  assert.equal(half.appended.length, 1, 'the edit half was not swapped');
+  assert.equal(half.appended[0].nodes[0].marker, '<p>fresh</p>');
   assert.equal(
     calls.filter((c) => c.kind !== 'fetch').length, 0,
     `refreshEditSurface navigated: ${JSON.stringify(calls)}`);
@@ -142,7 +172,7 @@ test('refreshEditSurface: plainly reloads on the standalone editor', async () =>
   await ui.refreshEditSurface();
 
   assert.deepEqual(calls, [{ kind: 'reload' }]);
-  assert.equal(half.innerHTML, '<p>old</p>', 'the standalone page must not swap');
+  assert.equal(half.appended.length, 0, 'the standalone page must not swap');
 });
 
 test('refreshEditSurface: falls back to a reload when the refresh fails', async () => {

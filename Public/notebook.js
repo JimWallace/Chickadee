@@ -22,13 +22,30 @@
     const uploadFile = document.getElementById('nb-upload-file');
     // Course-staff authoring control; absent for students (see notebook.leaf).
     const saveAssignmentBtn = document.getElementById('nb-save-assignment');
-    const setupID     = frame ? frame.dataset.setupId : null;
-    const gradingMode = frame ? frame.dataset.gradingMode : null;
+    // `let`, not `const`: the workbench can switch which notebook is open
+    // without reloading the page, which re-reads these off the same iframe
+    // element (see `readFrameConfig` / `chickadeeRemountNotebook` below).
+    //
+    // The *element* is deliberately reused rather than replaced. 34 closures in
+    // this file capture `frame`, and a fresh element would leave every one of
+    // them pointing at a detached node. Re-pointing its `src` reloads it, which
+    // is what a switch wants anyway — the kernel belongs to the notebook that
+    // is open.
+    let setupID     = null;
+    let gradingMode = null;
     // Closed-assignment read-only mode.  Plumbed from the server via
     // NotebookContext.isClosed → notebook.leaf data-read-only.  Disables
     // editing, run shortcuts, and the upload fallback handler.  The submit
     // button is also suppressed server-side (showSubmit=false) when closed.
-    const readOnly    = frame ? frame.dataset.readOnly === 'true' : false;
+    let readOnly    = false;
+
+    function readFrameConfig() {
+        if (!frame) return;
+        setupID     = frame.dataset.setupId;
+        gradingMode = frame.dataset.gradingMode;
+        readOnly    = frame.dataset.readOnly === 'true';
+    }
+    readFrameConfig();
 
     if (!frame || !setupID) return;
 
@@ -153,11 +170,20 @@
     // Point the iframe at the embedded JupyterLite distribution.
     // The server provides a concrete JupyterLite file path via data-editor-url.
     // Fall back to the notebook-focused app only if the attribute is missing.
-    const notebookURL = frame.dataset.notebookUrl || `/api/v1/testsetups/${setupID}/assignment`;
-    const editorURL = frame.dataset.editorUrl ||
-        frame.getAttribute('src') ||
-        `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
-    const lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
+    // `let` for the same reason as the config above — a workbench switch
+    // re-derives all three against the new notebook.
+    let notebookURL = null;
+    let editorURL = null;
+    let lockedNotebookPath = null;
+
+    function readEditorURLs() {
+        notebookURL = frame.dataset.notebookUrl || `/api/v1/testsetups/${setupID}/assignment`;
+        editorURL = frame.dataset.editorUrl ||
+            frame.getAttribute('src') ||
+            `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
+        lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
+    }
+    readEditorURLs();
     // Timestamp of a forced editor reset whose navigation has not committed
     // yet (cleared by the iframe load event).  Guards the locked-path
     // enforcement against aborting its own still-loading reset.
@@ -474,6 +500,25 @@
     // spurious "kernel taking long" message over working editors. Restoring a
     // positive kernel-boot-timeout needs a liveness probe validated against real
     // JupyterLite in the editor-smoke harness first.
+
+    /// Re-open this pane against whatever notebook `#jl-frame`'s data-*
+    /// attributes now name. Called by the workbench after it has swapped the
+    /// notebook half's markup for a different file or view.
+    ///
+    /// Deliberately NOT "re-run notebook.js". This IIFE owns a freeze-watchdog
+    /// Worker, two `setInterval`s, and four window/document listeners (error,
+    /// unhandledrejection, kernel-diag message, visibilitychange). Re-executing
+    /// it would double every one of them — a second worker, double-counted
+    /// kernel diagnostics, duplicate error reports — and all of that fails
+    /// silently, showing up only as inflated numbers in
+    /// `get_browser_diagnostics`. Re-reading the config and re-mounting touches
+    /// only what actually differs between two notebooks.
+    function remountNotebook() {
+        readFrameConfig();
+        readEditorURLs();
+        mountEditor();
+    }
+    window.chickadeeRemountNotebook = remountNotebook;
 
     function mountEditor() {
         // Drop any stale, now-redundant JupyterLite service worker before booting
