@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-08-05
+
+### Added
+
+- **Review: what the corrected Leaf rule unblocks.** `docs/leaf-decomposition-review.md`
+  sizes the `assignment-new` / `_assignment-edit-body` duplication against real diffs
+  rather than marker counts, and lands on a four-slice plan. Verifies (control-first,
+  with a falsified assertion) that three inline partial includes resolve inside an
+  extend/export block. Records two live create-page defects traced to duplicated
+  JavaScript rather than to template structure: per-student `=` expressions degrade to
+  literal strings in section inputs, and section drag-reorder raises a spurious failure
+  alert because a second, redundant handler posts to an endpoint that does not accept
+  the method.
+
+### Fixed
+
+- **Per-student `=` expressions no longer degrade to literal strings on the
+  Create Assignment page.** That page carried a pre-v0.4.160 inline copy of the
+  section-inputs editor whose value parser had no `=` branch, so an expression
+  typed into a section input was persisted as the literal text and the payload
+  omitted `expressions` entirely. It now loads the same shared modules the edit
+  page uses.
+- **Section drag-reorder now persists on the Create Assignment page.** The
+  reorder endpoint was derived from the suite URL by rewriting a trailing path
+  segment, which no-ops on that page's query-string URL and posted to a GET/PUT
+  endpoint; the page's own fallback handler read an out-of-scope `draftID` and
+  threw before its request. The list reordered on screen, nothing was saved, and
+  a failure alert appeared. The endpoint is now an explicit, required builder.
+- **Deleting a suite section no longer raises two confirmation dialogs** on the
+  Create Assignment page, which bound duplicates of handlers `suite-table.js`
+  already owns.
+
+### Changed
+
+- **The suite-section shells are one shared partial** (`_suite-sections.leaf`),
+  used by both authoring surfaces, parameterized on the per-page endpoint base
+  and whether its forms submit in place.
+- **`checkUWDates` is shared** (`ChickadeeUI.checkUWDates`) instead of living as
+  three inline copies that had drifted on null-handling and on label text. Both
+  labels are preserved.
+
+
 ## [0.5.12] - 2026-08-05
 
 ### Changed
