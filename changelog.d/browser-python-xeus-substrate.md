@@ -9,9 +9,10 @@
   editor/grading environment.** Pyodide resolved these at run time from its
   package index; a fixed environment has no runtime escape hatch, so they are
   baked in. They are now available while *authoring* too, which Pyodide-only
-  grading never allowed. `networkx`, `seaborn`, `plotly` and `requests` have no
-  emscripten-forge build and are not available (`requests` could never work
-  regardless — the CSP is `connect-src 'self'`).
+  grading never allowed. A browser probe asserts each one actually imports in a
+  real kernel, not merely that it is present in the vendored bytes.
+  `networkx`, `seaborn` and `plotly` have no emscripten-forge build and remain
+  unavailable.
 
 ### Removed
 

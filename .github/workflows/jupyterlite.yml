@@ -52,7 +52,7 @@ jobs:
             echo "::notice::no diff computed — running the build (fail-safe)."
             exit 0
           fi
-          pattern='^(Public/jupyterlite/|Public/pyodide/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/add-pyodide-extras\.py|scripts/patch-pyodide-kernel\.py|scripts/check-pyodide-parity\.sh|scripts/verify-jupyterlite\.sh|scripts/check-kernel-deps-vendored\.py|scripts/check-xeus-vendored\.sh|\.github/workflows/jupyterlite\.yml)'
+          pattern='^(Public/jupyterlite/|Public/pyodide/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/add-pyodide-extras\.py|scripts/patch-pyodide-kernel\.py|scripts/check-pyodide-parity\.sh|scripts/verify-jupyterlite\.sh|scripts/check-kernel-deps-vendored\.py|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
           # Here-string, not a pipe — see editor-smoke.yml for the SIGPIPE
           # trap that silently misclassifies large diffs.
           if grep -qE "$pattern" <<< "$changed"; then
@@ -107,3 +107,11 @@ jobs:
         # emscripten-forge). Assert it is present + internally coherent so a
         # botched or partial re-vendor fails here, not in front of a student.
         run: scripts/check-xeus-vendored.sh
+
+      # Cheap (two files, no build, no network) and the one guard that compares
+      # DECLARED intent to SHIPPED bytes. Everything else here checks the
+      # vendored tree against itself, which is how an env file could list scipy
+      # while the kernel had none — see the script's header.
+      - name: Environment files match the vendored kernels
+        if: steps.detect.outputs.relevant == 'true'
+        run: scripts/check-env-vendored-sync.sh

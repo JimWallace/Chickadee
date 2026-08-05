@@ -3,33 +3,34 @@
 Companion to [xeus-python-grading-spike.md](xeus-python-grading-spike.md), which
 established that this is viable and measured the cost.
 
-> **STATUS (2026-08).** Slices 1–6 are **done and merged**: Python browser
-> grading runs on xeus-python only, the Pyodide grading path is deleted, and both
-> languages are covered by a real-kernel probe in CI. This document is now the
+> **STATUS (2026-08).** Slices 1–6 are **done**: Python browser grading runs on
+> xeus-python only, the Pyodide grading path is deleted, and both languages are
+> covered by a real-kernel probe in CI. §A1 (the authoring import check) and §A2
+> (auto-compute off Pyodide) have since shipped too. This document is now the
 > handoff for **what is left** — §A below — plus the record of how the finished
 > part works and what it cost.
 >
-> **Two things must happen before the merged work is correct in production**,
-> and neither is code:
+> **The re-vendor that used to block this is done, and is no longer manual.**
+> The kernels were rebuilt with scipy, sympy, scikit-learn, statsmodels and
+> pillow actually present, and `.github/workflows/revendor-kernels.yml` now does
+> that build on demand or when a PR changes an environment file.
 >
-> 1. **Re-vendor the JupyterLite kernels.**
->    `Tools/jupyterlite/environment-python.yml` gained scipy, sympy,
->    scikit-learn, statsmodels and pillow, but the committed bytes under
->    `Public/jupyterlite/xeus/chickadee-python/` do NOT contain them yet.
->    Adding a name to the env file changes nothing until
->    `scripts/build-jupyterlite.sh` runs, and that needs micromamba plus network
->    to `repo.prefix.dev` — it **cannot run in CI**. Until it does, `import scipy`
->    fails at grade time even though the env file lists it.
-> 2. **Confirm no live assignment imports outside the env.** Pyodide used to
->    resolve ~363 packages at run time; the kernel has what is baked in. Four
->    packages Pyodide carried have no emscripten-forge build at all and cannot be
->    added: `networkx`, `seaborn`, `plotly`, `requests` (the last is moot —
->    `connect-src 'self'` means a graded test could never use it).
+> "CI cannot rebuild the kernels" was believed for months and was **false**: a
+> hosted runner has unrestricted network and micromamba is one ~7 MB download.
+> Believing it is what let `environment-python.yml` list four packages the
+> shipped bytes did not contain, announced as available in a changelog.
+> `scripts/check-env-vendored-sync.sh` now fails on exactly that state — it is
+> the only guard that compares DECLARED intent to SHIPPED bytes; every other one
+> compares the vendored tree to itself, which is why none of them saw it.
 >
-> §A1, the authoring-time import check, has since shipped and makes (2) a
-> save-time error rather than a grade-time surprise. Note that it reads the
-> VENDORED bytes, so it currently (correctly) rejects `import scipy` — the
-> re-vendor in (1) is what will make it start accepting them.
+> The first real re-vendor immediately proved the point by failing: scikit-learn
+> pulls in `requests` → `urllib3`, whose emscripten module constructs a
+> Pyodide-only streaming fetcher at import under exactly a grading worker's
+> conditions. `xkernel.start()` raised and **the kernel did not boot at all**.
+> `scripts/patch-xeus-python-http.py` (which already handled the identical
+> `pyodide-http` hazard) was extended to cover it, and
+> `check-xeus-vendored.sh` asserts it. Nothing but a real browser could have
+> caught this: the env solved cleanly and every other guard passed.
 
 ---
 

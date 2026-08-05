@@ -244,6 +244,14 @@ window.__result = null;
     later: 'area(2)',
     statement: 'unused = 1',
     raises: 'classify()',
+    // Every package the environment file DECLARES must actually import in a
+    // real kernel. check-env-vendored-sync.sh proves they are in the tarballs;
+    // only this proves they load. scikit-learn's arrival is what dragged in
+    // urllib3, whose emscripten module crashed the kernel on import until
+    // patch-xeus-python-http.py was extended — an env can be perfectly
+    // well-formed and still not boot.
+    declared: 'import numpy, pandas, matplotlib, PIL, scipy, sympy, sklearn, statsmodels\\n'
+      + '\"all declared packages imported\"',
   })) {
     const reply = await call({ type: 'run', code });
     runs[key] = reply.ok ? { ok: true, result: reply.result } : { ok: false, error: reply.error };
@@ -359,6 +367,9 @@ if (mode === 'eval') {
     check('a raising expression is an error, not a null result',
         result.runs.raises?.ok === false && /TypeError|argument/.test(result.runs.raises.error || ''),
         JSON.stringify(result.runs.raises));
+    check('every package the environment declares actually imports',
+        result.runs.declared?.result === 'all declared packages imported',
+        JSON.stringify(result.runs.declared));
 
     if (failures.length) {
         console.log(`\nFAILED: ${failures.length} check(s)`);

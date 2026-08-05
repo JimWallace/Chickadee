@@ -15,6 +15,19 @@ if [[ ! -x "$JUPYTER_BIN" ]]; then
   exit 1
 fi
 
+# Preflight the tools the tail of this script needs. Checked HERE rather than
+# where they are used because the xeus kernel build in between takes ~15 minutes
+# and downloads two conda environments — discovering a missing `rsync` only at
+# the final copy throws all of that away, with the build output already removed
+# by the EXIT trap. Ask for seconds up front instead.
+for tool in rsync; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "missing required tool: $tool" >&2
+    echo "Install it before rebuilding (Debian/Ubuntu: apt-get install -y $tool)." >&2
+    exit 1
+  fi
+done
+
 if [[ ! -f "$LITE_SRC_DIR/jupyter-lite.json" ]]; then
   echo "missing lite source config: $LITE_SRC_DIR/jupyter-lite.json" >&2
   exit 1
@@ -45,12 +58,17 @@ fi
 # passing it twice yields two envs and two payloads.
 #
 # Built ONLY where micromamba is available: jupyterlite-xeus solves the envs at
-# build time, which needs network to repo.prefix.dev / conda-forge. CI has no
-# such network, so it skips this and treats the committed
-# Public/jupyterlite/xeus/ as the authoritative vendored kernels (the
-# reproducibility check excludes that path; scripts/check-xeus-vendored.sh
-# guards their integrity). Rebuild where micromamba + emscripten-forge are
-# reachable (a maintainer machine, or this repo's spike env).
+# build time, which needs network to repo.prefix.dev / conda-forge. Where it is
+# absent (the ordinary jupyterlite.yml build), this step is skipped and the
+# committed Public/jupyterlite/xeus/ is treated as authoritative — the
+# reproducibility check excludes that path and scripts/check-xeus-vendored.sh
+# guards its integrity.
+#
+# "CI cannot do this" was the standing belief and it was WRONG: a hosted runner
+# has unrestricted network and micromamba is one ~7 MB download.
+# .github/workflows/revendor-kernels.yml does exactly that. The skip above is
+# now a deliberate choice about WHERE a ~100 MB regenerated diff belongs, not a
+# capability limit.
 #
 # NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
 # must be passed as a bare filename, not the absolute path it was copied to.

@@ -541,10 +541,29 @@ every ambiguity toward reporting nothing, since a false positive blocks an
 instructor from saving with no self-service fix.
 
 Building the kernels needs **micromamba on PATH plus network to
-repo.prefix.dev**, which CI does not have — so CI never rebuilds them and the
-committed `Public/jupyterlite/xeus/` bytes are authoritative
-(`scripts/check-xeus-vendored.sh` guards their integrity; the reproducibility
-check excludes that path). Re-vendor on a machine that can reach the channel.
+repo.prefix.dev**. This was long documented as something *CI cannot do*, and
+that was simply **wrong** — a hosted runner has unrestricted network and
+micromamba is a single ~7 MB download. Re-vendoring is now a workflow:
+`.github/workflows/revendor-kernels.yml`, on demand or when a PR changes an
+environment file. It does not run unattended, because the output is ~100 MB of
+content-hashed binary assets and an automatic rebuild would bury unrelated work
+in unreviewable diffs.
+
+That false belief had a cost worth remembering. Adding a name to
+`environment-*.yml` changes nothing until the kernel is rebuilt, so
+"maintainer-machine only" meant env files drifted from the shipped bytes:
+scipy/sympy/scikit-learn/statsmodels were declared, announced in a changelog,
+and absent from the kernel — an unrecoverable `ImportError` waiting for the
+first student who imported one. Every existing guard compared the vendored tree
+to *itself*, so none of them could see it.
+`scripts/check-env-vendored-sync.sh` is the one that compares **declared intent
+to shipped bytes**, costs two file reads, and fails the PR pointing at the
+workflow.
+
+The committed `Public/jupyterlite/xeus/` bytes remain authoritative for every
+other job (`scripts/check-xeus-vendored.sh` guards their integrity; the
+reproducibility check excludes that path) — the rebuild is a deliberate act, not
+part of the normal build.
 
 **The vendored `pyodide-http` is patched, and must stay patched.**
 `xeus-python → xeus-python-shell-lite → pyodide-http` is an unavoidable

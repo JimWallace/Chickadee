@@ -31,11 +31,16 @@ dependencies:
   # editor runs this same env, an instructor can now use them while authoring
   # too, which Pyodide-only grading never allowed.
   #
-  # Four packages the old Pyodide index carried have NO emscripten-forge build
-  # and so cannot be added here: networkx, seaborn, plotly, and requests.
-  # `requests` is moot regardless — the editor CSP is `connect-src 'self'`, so a
-  # graded test could never reach the network with it. The other three need an
+  # Three packages the old Pyodide index carried have NO emscripten-forge build
+  # and so cannot be added here: networkx, seaborn and plotly. They need an
   # upstream build before they can come back.
+  #
+  # `requests` was on that list and should not have been — it builds fine, and
+  # in fact arrives transitively via scikit-learn. It is moot as a capability
+  # regardless (the CSP is `connect-src 'self'`), but it is NOT moot as a
+  # hazard: it drags in urllib3, whose emscripten module crashes the kernel on
+  # import unless scripts/patch-xeus-python-http.py neuters it. See that script
+  # and the urllib3 assertion in scripts/check-xeus-vendored.sh.
   - scipy
   - sympy
   - scikit-learn
