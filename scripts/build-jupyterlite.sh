@@ -127,5 +127,13 @@ python3 "$ROOT_DIR/scripts/patch-jupyterlite-diagnostics.py" "$OUTPUT_DIR"
 # editor boot. Idempotent; fails if the upstream shapes drift.
 python3 "$ROOT_DIR/scripts/patch-xeus-extension.py" "$OUTPUT_DIR"
 
+# Drop pyodide-http's Pyodide-only `to_js(dict_converter=...)` call from the
+# vendored xeus-python env. xeus-python -> xeus-python-shell-lite ->
+# pyodide-http is an unavoidable dependency chain, the shell calls patch_all()
+# at kernel startup, and the first patched HTTP call (the notebook page's Drive
+# mount) then dies on pyjs's to_js — leaving the kernel stuck at
+# `kernel_starting` forever. Idempotent; fails if the upstream source drifts.
+python3 "$ROOT_DIR/scripts/patch-xeus-python-http.py" "$OUTPUT_DIR"
+
 "$ROOT_DIR/scripts/verify-jupyterlite.sh" "$OUTPUT_DIR"
 echo "JupyterLite rebuilt at $OUTPUT_DIR"

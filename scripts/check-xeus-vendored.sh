@@ -114,3 +114,46 @@ print(
     f"(kernels {listed}, envs {kernel_envs}, packages {package_counts}, loaders {loaders})."
 )
 PY
+
+# 6. The pyodide-http payload in the Python env must carry the pyjs `to_js`
+#    patch (scripts/patch-xeus-python-http.py). Un-patched, the first HTTP call
+#    the kernel makes — the notebook page's Drive mount — raises
+#    `TypeError: to_js() got an unexpected keyword argument 'dict_converter'`
+#    and the kernel never leaves `kernel_starting`. That failure is invisible in
+#    the JupyterLite REPL (no Drive-backed file, so the call never happens), so
+#    assert it on the committed bytes rather than trusting a smoke test to catch
+#    it.
+python3 - "$BUILD_DIR" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+build = pathlib.Path(sys.argv[1])
+archives = sorted((build / "xeus").glob("*/kernel_packages/pyodide-http-*.tar.gz"))
+if not archives:
+    print("check-xeus-vendored: no pyodide-http payload (R-only vendor) — patch check skipped.")
+    sys.exit(0)
+
+for archive in archives:
+    with tarfile.open(archive, "r:gz") as tf:
+        members = [m for m in tf.getmembers() if m.name.endswith("pyodide_http/_streaming.py")]
+        if not members:
+            print(
+                f"check-xeus-vendored: {archive.name} has no pyodide_http/_streaming.py "
+                "— upstream layout changed, re-check scripts/patch-xeus-python-http.py",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        extracted = tf.extractfile(members[0])
+        source = extracted.read().decode("utf-8") if extracted else ""
+    # Test the precise upstream call, not the bare word — the patch's own
+    # marker comment would otherwise match and the guard would fail itself.
+    if "dict_converter=" in source:
+        print(
+            f"check-xeus-vendored: {archive.name} still calls to_js(dict_converter=...) "
+            "— run scripts/patch-xeus-python-http.py (the editor kernel will hang without it)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"check-xeus-vendored: OK (pyjs to_js patch present in {archive.name}).")
+PY
