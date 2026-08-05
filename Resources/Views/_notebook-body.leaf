@@ -79,9 +79,16 @@
             <button class="btn btn-primary" id="nb-submit">Submit</button>
             #elseif(isReadOnly):
             <span class="nb-closed-notice">This assignment is closed &mdash; view only.</span>
-            #elseif(isClosed):
-            <span class="nb-closed-notice">This assignment is closed to students &mdash; editable as course staff.</span>
             #endif
+            <!-- There is deliberately no staff-facing "closed to students"
+                 notice here. An assignment is closed for the whole time it is
+                 being written — creation, cloning, and every save return it to
+                 closed — so for course staff that banner was on screen
+                 permanently and carried no information they could act on. The
+                 open/closed state is shown where it can be changed, on the
+                 assignment's own controls. The `isReadOnly` branch above still
+                 fires for students, who genuinely need telling. -->
+
             #if(viewToggleURL):
             #if(!embedded):
             <!-- Suppressed in a workbench pane: the workbench has its own

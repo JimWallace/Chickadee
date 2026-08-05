@@ -161,6 +161,8 @@ struct InstructorWorkbenchRoutes: RouteCollection {
             hasSolution: hasSolution,
             assignmentHasTemplateView: assignmentHasTemplate,
             solutionHasTemplateView: solutionHasTemplate,
+            openFileHasTemplateView: fileKind == .solution
+                ? solutionHasTemplate : assignmentHasTemplate,
             standaloneEditURL: "/instructor/\(assignment.publicID)/edit"
         )
         return try await req.view.render("workbench", ctx)

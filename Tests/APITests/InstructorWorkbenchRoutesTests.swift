@@ -20,6 +20,18 @@ import VaporTesting
 
 @testable import APIServer
 
+/// The single element's markup containing `needle`, from `<` to the matching
+/// `>`. Deliberately crude — enough to assert an attribute is on the element
+/// you mean rather than anywhere in a 200KB page, which is a mistake this
+/// suite has actually made.
+func htmlElement(in html: String, containing needle: String) -> String? {
+    guard let hit = html.range(of: needle) else { return nil }
+    guard let open = html.range(of: "<", options: .backwards, range: html.startIndex..<hit.lowerBound)
+    else { return nil }
+    guard let close = html.range(of: ">", range: hit.upperBound..<html.endIndex) else { return nil }
+    return String(html[open.lowerBound..<close.upperBound])
+}
+
 @Suite struct InstructorWorkbenchRoutesTests {
 
     // MARK: - Shell
@@ -113,6 +125,52 @@ import VaporTesting
                     #expect(html.contains("data-ck-inplace"))
                     // A normal page again: the idle watchdog needs no forwarder.
                     #expect(html.contains("/idle-logout.js"))
+                })
+        }
+    }
+
+    /// The view control is always present, and disabled when it does not apply.
+    ///
+    /// It used to be omitted entirely for a notebook with no placeholders. That
+    /// reads as a rendering fault — you cannot tell "this assignment has no
+    /// personalization" from "the control failed to draw" — so it is now
+    /// rendered unavailable, with the reason in its title.
+    @Test func viewControlIsDisabledRatherThanAbsentWithoutPlaceholders() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let setup = try await arInsertSetup(id: "setup_wb_noph", on: app)
+            // No `{{name}}` anywhere: the two views would be identical bytes.
+            _ = try await arAttachStarterNotebook(
+                to: setup,
+                bytes: Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8),
+                on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_wb_noph", title: "No Placeholders Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/workbench",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Present …
+                    #expect(html.contains("id=\"wb-viewswitch\""))
+                    #expect(html.contains("data-wb-view=\"template\""))
+                    // … and not hidden, which is what the old behaviour did.
+                    #expect(!html.contains("data-solution-has-template=\"0\"\n                     hidden"))
+                    // … but unavailable, with the reason stated.
+                    //
+                    // Scoped to the button's own markup, not a bare
+                    // `contains("disabled")` — that matched something else on
+                    // this (very large) page and passed with the attribute
+                    // deleted. Verified by deleting it.
+                    let templateBtn = try #require(
+                        htmlElement(in: html, containing: "data-wb-view=\"template\""),
+                        "the Template button is not in the page at all")
+                    #expect(
+                        templateBtn.contains("disabled"),
+                        "the Template button should be disabled on a notebook with no placeholders: \(templateBtn)")
+                    #expect(templateBtn.contains("no per-student placeholders"))
                 })
         }
     }

@@ -142,6 +142,15 @@ struct AssignmentWorkbenchContext: Encodable {
     /// noise, so it is not rendered.
     let assignmentHasTemplateView: Bool
     let solutionHasTemplateView: Bool
+    /// Whether the notebook *currently open* has a template view — i.e. whether
+    /// the view control applies to it.
+    ///
+    /// Derived rather than left to the page so the control renders in its
+    /// correct enabled/disabled state on first paint. Computing it client-side
+    /// from the two flags above would show it enabled for one frame and then
+    /// disable it, which reads as a glitch on exactly the assignments where the
+    /// control is inapplicable.
+    let openFileHasTemplateView: Bool
     /// Escape hatch back to the full-width single-page editor.
     let standaloneEditURL: String
     /// Drops `.main`'s reading-column cap and gutters — the workbench sizes

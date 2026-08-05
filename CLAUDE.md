@@ -974,5 +974,6 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (2026-07 snapshot; start here before chasing a red check on an unrelated PR)
+- `docs/leaf-decomposition-brief.md` — handoff brief on the Leaf "multi-extend bug" (a misdiagnosis — the lexer does not know HTML comments), the control-first method that corrected it, and the template decomposition it was holding up
 - `docs/archive/` — finished-era investigations, superseded plans, and point-in-time audits (kept for the record; nothing in there describes current behaviour)
 - `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the archived 0.1.0–0.4.x history
