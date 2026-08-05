@@ -78,6 +78,11 @@ extension DraftAssignmentRoutes {
             checkSchemaJSON: notebookCheckFormSchemaJSON(),
             suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
             suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
+            sectionActionBase: "/instructor/new/draft/suite-sections",
+            sectionActionQuery: "?draftID=\(setup?.id ?? "")",
+            // The create page is never rendered inside a workbench pane, so its
+            // section forms keep a plain redirect.
+            sectionFormsInPlace: false,
             requiredPlatform: storedState.requiredPlatform,
             requiredArchitecture: storedState.requiredArchitecture,
             requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty

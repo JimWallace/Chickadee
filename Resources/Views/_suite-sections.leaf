@@ -1,0 +1,97 @@
+<!-- Server-rendered suite section shells, shared by the Create Assignment
+     page and the assignment edit body.
+
+     Each .section-block owns its own table shell; suite-table.js populates the
+     tbody[data-section-id] rows from the JSON seed and keeps them in sync via
+     the debounced whole-suite write. Section CRUD (create / rename / delete /
+     reorder) goes through dedicated per-page endpoints, which is the only
+     thing that differs between the two surfaces:
+
+       sectionActionBase   the /suite-sections prefix for this page
+       sectionActionQuery  a trailing query string ("?draftID=..." on the
+                           create page, empty on the edit page)
+       sectionFormsInPlace whether the per-section forms carry
+                           `data-ck-inplace`, which makes inplace-forms.js
+                           re-render a workbench pane instead of following the
+                           handler's redirect
+
+     Ungrouped blocks have no header to host the inline buttons, so they get a
+     slim per-section toolbar instead. -->
+<div id="suite-sections">
+#for(sec in suiteSectionRows):
+    <div class="section-block" data-section-id="#(sec.sectionID)">
+    #if(!sec.isUngrouped):
+        <div class="section-header" draggable="true">
+            <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
+
+            <!-- View mode -->
+            <div class="section-view">
+                <strong>#(sec.name)</strong>
+                <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                        title="Edit section" aria-label="Edit section">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+                <!-- Add Input lives inside section-view so it sits beside the
+                     name; the section-vars-form below just renders the tbody
+                     and keeps its action= for the auto-save POST. -->
+                <span class="section-spacer"></span>
+                <button type="button" class="btn action-btn btn-xs section-var-add"
+                        data-section-id="#(sec.sectionID)">+ Add Input</button>
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
+            </div>
+
+            <!-- Edit mode (hidden by default) -->
+            <div class="section-edit" style="display:none">
+                <form class="section-rename-form" method="post"
+                      action="#(sectionActionBase)/#(sec.sectionID)/rename#(sectionActionQuery)"
+                      #if(sectionFormsInPlace):data-ck-inplace#endif>
+                    #csrfFormField()
+                    <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                    <button class="btn btn-primary btn-tiny" type="submit">Save</button>
+                </form>
+                <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
+                        data-action="#(sectionActionBase)/#(sec.sectionID)/delete#(sectionActionQuery)"
+                        data-name="#(sec.name)">Delete</button>
+                <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                        aria-label="Cancel" title="Cancel">✕</button>
+            </div>
+        </div>
+
+        <!-- Section variables: the Fixed Inputs table above the Tests table.
+             Every pattern family in the section can reference these by name;
+             family-level variables shadow same-named section vars. Auto-saves
+             on change (debounced) via section-inputs-editor.js; the whole list
+             also flushes when the main Save button is clicked. -->
+        <form class="section-vars-form" method="post"
+              action="#(sectionActionBase)/#(sec.sectionID)/variables#(sectionActionQuery)"
+              data-section-id="#(sec.sectionID)">
+            <table class="results-table section-vars-table">
+                <tbody class="section-vars-body">
+                    #for(v in sec.variables):
+                    <tr class="section-var-row">
+                        <td class="section-var-namecell">
+                            <span class="section-var-row-valid section-var-valid"></span>
+                            <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
+                        </td>
+                        <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                        <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                    title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                    </tr>
+                    #endfor
+                </tbody>
+            </table>
+        </form>
+    #else:
+        <div class="section-create-toolbar"
+             data-section-id="#(sec.sectionID)">
+            <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                    data-section-id="#(sec.sectionID)">+ Add Test</button>
+        </div>
+    #endif
+        <table class="results-table">
+            <tbody data-section-id="#(sec.sectionID)"></tbody>
+        </table>
+    </div>
+#endfor
+</div>

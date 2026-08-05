@@ -439,6 +439,87 @@ import VaporTesting
         }
     }
 
+    /// The suite-section shells are one partial (`_suite-sections.leaf`)
+    /// shared with the assignment edit body. The two surfaces differ only in
+    /// where the per-section forms post and whether they carry
+    /// `data-ck-inplace`, so this asserts the create page's *URLs*, not merely
+    /// that the block rendered — a presence check would survive the partial
+    /// being handed the edit page's base.
+    ///
+    /// The edit/workbench side of the same partial is pinned by
+    /// InstructorWorkbenchRoutesTests.everyNavigatingWriteFormIsMarkedForInPlaceSubmission,
+    /// which compares the exact set of marked form actions.
+    @Test func newAssignmentPageRendersSectionShellsWithDraftScopedURLs() async throws {
+        try await withApp(app) { _ in
+            let sid = "sec_partial_1"
+            let draftID = try await makeDraft(seedSections: [(sid, "Question 1")])
+            let cookie = try await loginUser(username: "dssrt_inst10", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst10", on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/new?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+
+                    // The section shell rendered at all.
+                    #expect(html.contains("data-section-id=\"\(sid)\""))
+
+                    // Parse the form open tags rather than searching the whole
+                    // document: the partial's own comment names the marker
+                    // attribute, so a textual check would match prose.
+                    let tags = Self.formOpenTags(in: html)
+                    let sectionActions = tags.compactMap { Self.attribute("action", in: $0) }
+                        .filter { $0.contains("/suite-sections/") }
+
+                    for op in ["rename", "variables"] {
+                        let expected = "/instructor/new/draft/suite-sections/\(sid)/\(op)?draftID=\(draftID)"
+                        #expect(
+                            sectionActions.contains(expected),
+                            "the \(op) action should be draft-scoped; expected \(expected), got \(sectionActions)")
+                    }
+
+                    // Delete is a button's data-action, not a form action.
+                    #expect(
+                        html.contains(
+                            "data-action=\"/instructor/new/draft/suite-sections/\(sid)/delete?draftID=\(draftID)\""),
+                        "the delete action should be draft-scoped")
+
+                    // No section form may carry the edit page's published shape.
+                    #expect(
+                        sectionActions.allSatisfy { $0.contains("draftID=") },
+                        "a section form is missing its draftID query: \(sectionActions)")
+
+                    // The create page is never a workbench pane, so its forms
+                    // must not be marked for in-place submission.
+                    #expect(
+                        tags.allSatisfy { $0.contains("data-ck-inplace") == false },
+                        "the create page should not mark forms for in-place submission")
+                })
+        }
+    }
+
+    /// Every `<form>` open tag in `html`. Parsing the tags rather than
+    /// searching the document keeps template prose out of the assertions —
+    /// the same reason InstructorWorkbenchRoutesTests parses them.
+    private static func formOpenTags(in html: String) -> [String] {
+        html.components(separatedBy: "<form ").dropFirst().compactMap { chunk in
+            guard let end = chunk.firstIndex(of: ">") else { return nil }
+            return String(chunk[chunk.startIndex..<end])
+        }
+    }
+
+    /// The value of a double-quoted attribute in a parsed open tag.
+    private static func attribute(_ name: String, in tag: String) -> String? {
+        guard let start = tag.range(of: "\(name)=\"") else { return nil }
+        let rest = tag[start.upperBound...]
+        guard let quote = rest.firstIndex(of: "\"") else { return nil }
+        return String(rest[rest.startIndex..<quote])
+    }
+
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
     @Test func reorderDraftSuiteSections_updatesOrder() async throws {

@@ -105,10 +105,12 @@ asymmetry is consistent enough to be the thing worth guarding against.
 
 ### Finding 1 — `checkUWDates` is duplicated and has already drifted
 
-`assignment-new.leaf:986-1011` and `_assignment-edit-body.leaf:635-660`. Same
-function, two copies. The edit copy has null guards on `warningEl` that the
-create copy lacks. This is the drift risk in its finished form, not as a
-hypothetical.
+`assignment-new.leaf:986-1011` and `_assignment-edit-body.leaf:635-660` —
+and, found during implementation, a third copy at `assignments.leaf:1117`.
+Same function, three copies, drifted on two axes: only the edit copy guards
+`warningEl` against null, and the dashboard copy uses a shorter user-facing
+label (`Near:` rather than `Due date is near:`). This is the drift risk in its
+finished form, not as a hypothetical.
 
 ### Finding 2 — per-student `=` expressions silently degrade on the create page
 
@@ -165,11 +167,17 @@ Both fire. Two consequences:
   does not end in `/suite`, so the replace is a no-op and the POST goes to the
   suite endpoint — registered `GET` and `PUT` only
   (`DraftAssignmentRoutes.swift:36-37`). The 405 rejects, and the instructor
-  sees `Section reorder failed: ... Reload the page to recover.` — while the
-  inline handler has already persisted the order correctly against
-  `/suite-sections/reorder`.
+  sees `Section reorder failed: ... Reload the page to recover.`
 
-Confidence: the mechanism is traced end-to-end in source, not confirmed in a
+  **The inline handler did not cover for it.** Its POST read a `draftID` that
+  was declared only inside sibling IIFEs (`assignment-new.leaf` had four such
+  declarations, at the pre-fix lines 390, 423, 769, and 927, none in the
+  handler's scope). Under the block's own `'use strict'` that is a
+  `ReferenceError`, thrown after the DOM reorder and before the request. So
+  the list reordered on screen, neither request reached the server, and the
+  order reverted on reload — with a failure alert on top.
+
+Confidence: the mechanisms are traced end-to-end in source, not confirmed in a
 browser. Render tests would not catch either, since they do not exercise page
 JS. A smoke check should confirm both before and after the fix.
 
@@ -202,6 +210,30 @@ not a reason to decompose, and the brief's line-count table invites that
 conflation.
 
 ---
+
+## 4a. What implementing it changed about the above
+
+All four slices shipped on this branch. Three corrections to the analysis,
+recorded because the estimates above are what someone would plan against:
+
+- **`checkUWDates` had three copies, not two** — the dashboard publish form
+  carried a third, with a different label. The hoist takes the label as a
+  parameter so no visible text changed.
+- **Section drag-reorder was fully broken on the create page**, not
+  half-covered. See Finding 3: the inline handler's `draftID` was out of
+  scope, so its POST never fired either.
+- **Two guards caught their own documentation.** The suite-table absence
+  check matched the old pattern quoted in a comment, and the create-page
+  form assertion matched the marker attribute named in the new partial's
+  comment. The first was fixed by describing the pattern instead of quoting
+  it; the second by parsing form open tags, which is what
+  `InstructorWorkbenchRoutesTests` already does for exactly this reason. Both
+  are the same shape as the Leaf-comment finding this branch started from:
+  a scanner that cannot tell markup from prose about markup.
+
+Net: `assignment-new.leaf` went from 1,059 lines to 711, and `_assignment-edit-body.leaf` from 918 to 811. The Leaf partial
+accounts for 72 of those; the rest is JavaScript that moved to modules both
+pages already shared.
 
 ## 5. Slice plan
 
