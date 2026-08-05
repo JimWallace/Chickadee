@@ -309,7 +309,19 @@ async function main() {
     // stamps COEP); spawn them here so it can't regress unseen. These workers are
     // message-driven and do nothing until posted to, so spawning is cheap.
     if (isolated) {
-      const workerScripts = ["/grading-worker.js", "/freeze-watchdog-worker.js"];
+      // One grading worker, not both — but NOT because one answers for both.
+      // COEP is stamped from a per-path allowlist
+      // (NotebookAssetIsolationMiddleware.isolatedWorkerScripts), so "same
+      // directory, same middleware" proves nothing about the worker not probed
+      // here: that is exactly how #1274 shipped an R worker that every isolated
+      // engine refused. What makes one probe sufficient is that
+      // IsolatedWorkerScriptDriftTests asserts the allowlist matches the spawn
+      // sites in both directions, statically and in seconds. This probe's job is
+      // the part a Swift test cannot do — prove a real browser accepts the
+      // headers we believe we send. Spawning both would add a third live worker
+      // to the page (each importScripts a ~400 KB kernel bootstrap and starts
+      // running) while the editor is still activating its plugins.
+      const workerScripts = ["/python-grading-worker.js", "/freeze-watchdog-worker.js"];
       const workerBlocked = [];
       const onWorkerReqFail = (req) => {
         const why = req.failure()?.errorText || "";

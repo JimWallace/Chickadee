@@ -1,0 +1,190 @@
+name: Re-vendor xeus kernels
+
+# Rebuilds the vendored JupyterLite bundle and its two xeus kernel environments
+# (chickadee-python, chickadee-r) and commits the result.
+#
+# WHY THIS EXISTS. The kernels are built by jupyterlite-xeus, which solves each
+# conda environment at build time — micromamba plus network to repo.prefix.dev.
+# For a long time that was believed to be impossible in CI, so re-vendoring was
+# documented as a manual maintainer-machine step. It is not impossible: a hosted
+# runner has unrestricted network, and micromamba is a single ~7 MB download.
+#
+# The cost of believing otherwise was concrete. `Tools/jupyterlite/
+# environment-python.yml` gained scipy, sympy, scikit-learn and statsmodels, a
+# release described them as available, and the vendored bytes contained none of
+# them — because adding a name to the env file changes nothing until this build
+# runs. A student importing scipy would have hit an unrecoverable ImportError at
+# grade time. `scripts/check-env-vendored-sync.sh` now fails a PR in that state
+# and points here; this workflow is what resolves it.
+#
+# WHAT IT DOES NOT DO. It never runs automatically on `push` or on a schedule.
+# The output is ~100 MB of regenerated binary assets whose filenames are content
+# hashed, so an unattended rebuild would produce large, noisy, hard-to-review
+# commits on unrelated work. It runs when someone asks for it, or when a PR
+# actually changes what the environments contain.
+#
+# ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
+# never pushes, and that is not caution — it is required for termination.
+# `xpython.wasm` embeds the absolute path of the temp directory it was built in
+# (`/tmp/tmpXXXXXXXX/_env/envs/chickadee-python`), which `tempfile` randomises
+# per run. The kernel is therefore NOT byte-reproducible: two builds of the same
+# environment differ, by exactly those 16 bytes and nothing else. An
+# auto-committing PR trigger would push a new commit, which would re-trigger
+# itself, which would produce a different path again — forever.
+#
+# A PR run is still worth its minutes: it proves the environment still solves and
+# the kernel still boots, which is how the urllib3 import crash was found. When
+# it reports a diff, dispatch the workflow to land one.
+#
+# Fork PRs additionally cannot be pushed to from here at all, so they are
+# verify-only by both rules.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit the rebuilt bundle back to this branch"
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - "Tools/jupyterlite/environment-*.yml"
+      - "Tools/jupyterlite/requirements.txt"
+      - "Tools/jupyterlite/jupyter-lite.json"
+      - "scripts/build-jupyterlite.sh"
+      - "scripts/setup-jupyterlite.sh"
+      - "scripts/derive-kernel-modules.py"
+      - ".github/workflows/revendor-kernels.yml"
+
+concurrency:
+  group: revendor-kernels-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  revendor:
+    runs-on: ubuntu-latest
+    # The two environment solves plus the full JupyterLite build dominate this;
+    # measured at roughly 15 minutes cold, less with a warm empack cache.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Needed to push the rebuild back; harmless otherwise.
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          # Must match the kernel's own Python (currently 3.13). The derived
+          # module index takes its C-extension stdlib names from the building
+          # interpreter, so a mismatch silently narrows the list and makes the
+          # authoring import check reject stdlib imports that actually work.
+          # derive-kernel-modules.py warns when these disagree.
+          python-version: "3.13"
+
+      - name: Install micromamba
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL --max-time 180 \
+            https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/micromamba.tar.bz2
+          tar -xj -C /tmp -f /tmp/micromamba.tar.bz2 bin/micromamba
+          mv /tmp/bin/micromamba "$HOME/.local/bin/micromamba"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Report the toolchain
+        run: |
+          micromamba --version
+          rsync --version | head -1
+
+      # Solving and downloading the environments is the slow half. Keyed on the
+      # env files so a rebuild triggered by anything else reuses the packages.
+      - name: Cache the empack package downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/empack
+          key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
+          restore-keys: empack-
+
+      - name: Build the JupyterLite toolchain
+        run: scripts/setup-jupyterlite.sh
+
+      - name: Rebuild the bundle and both xeus kernels
+        env:
+          MAMBA_ROOT_PREFIX: ${{ runner.temp }}/mamba
+        run: scripts/build-jupyterlite.sh
+
+      # The point of the rebuild: prove the result actually contains what the
+      # environment files asked for, and is internally coherent. A build that
+      # "succeeds" while silently resolving a package away must not be committed.
+      - name: Verify the rebuilt kernels
+        run: |
+          scripts/check-env-vendored-sync.sh
+          scripts/check-xeus-vendored.sh
+          scripts/verify-jupyterlite.sh
+          scripts/check-pyodide-parity.sh
+
+      - name: Summarise what changed
+        id: diff
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Public/jupyterlite Tools/jupyterlite; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "The rebuild reproduced the committed bytes exactly."
+              echo ""
+              echo "Note this is unexpected for the Python kernel: xpython.wasm"
+              echo "embeds its build temp path, so it normally differs by 16 bytes"
+              echo "between any two builds."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Re-vendored kernel diff"
+            echo ""
+            echo '```'
+            git diff --stat -- Public/jupyterlite | tail -25
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit the rebuild
+        # workflow_dispatch ONLY — see the termination argument in the header.
+        if: >-
+          steps.diff.outputs.changed == 'true'
+          && github.event_name == 'workflow_dispatch'
+          && inputs.commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Public/jupyterlite
+          git commit -m "chore(jupyterlite): re-vendor the xeus kernels
+
+          Rebuilt by .github/workflows/revendor-kernels.yml from
+          Tools/jupyterlite/environment-*.yml. Regenerated bytes only."
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"${{ github.event.pull_request.head.ref || github.ref_name }}"; then
+              exit 0
+            fi
+            sleep $((2 ** attempt))
+            git pull --rebase origin "${{ github.event.pull_request.head.ref || github.ref_name }}"
+          done
+          echo "could not push the rebuild" >&2
+          exit 1
+
+      - name: Report a verify-only run
+        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
+        run: |
+          {
+            echo "### Verify-only run"
+            echo ""
+            echo "The environment solved and the kernel built and verified."
+            echo "Nothing was committed — see the header of this workflow for why"
+            echo "a pull_request trigger must not push."
+            echo ""
+            echo "To land a rebuild, run this workflow manually on this branch."
+          } >> "$GITHUB_STEP_SUMMARY"

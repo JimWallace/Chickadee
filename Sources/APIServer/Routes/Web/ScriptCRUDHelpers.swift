@@ -35,7 +35,10 @@ struct CreatedScript {
 /// into the setup zip, and — for a graded tier — adds a manifest entry.
 @discardableResult
 func createScriptInSetup(
-    setup: APITestSetup, body: CreateScriptBody, on db: any Database
+    setup: APITestSetup,
+    body: CreateScriptBody,
+    kernelEnvironment: KernelPythonEnvironment? = nil,
+    on db: any Database
 ) async throws -> CreatedScript {
     let cleaned = sanitizeSuiteFilename(body.filename)
     guard !cleaned.isEmpty, cleaned == body.filename else {
@@ -57,6 +60,10 @@ func createScriptInSetup(
         return TestScriptVariablePrepender.applyForRawScript(
             filename: cleaned, content: body.content, manifest: manifest)
     }()
+    // Refuse a browser-graded Python script whose imports the grading kernel
+    // cannot satisfy — checked on the INLINED text, since that is what runs.
+    try PythonImportGuard.check(
+        filename: cleaned, content: inlined, setup: setup, environment: kernelEnvironment)
     try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlined)
 
     let tier = normalizeTier(body.tier, isTest: body.isTest)

@@ -342,6 +342,15 @@ func makeTestApp(
         // registration separately.
         app.middleware.use(AssignmentVersionCaptureMiddleware())
 
+        // The browser-grading import check's inventory, loaded here for the same
+        // reason the version-capture middleware is registered above: rejecting a
+        // script whose imports the grading kernel lacks is part of what the
+        // instructor write routes DO, so a test app without it would let a
+        // regression through. Silently absent when the vendored kernel bytes are
+        // not in the checkout, matching production (`bootstrapAppServices`).
+        app.kernelPythonEnvironment = try? KernelPythonEnvironment.load(
+            publicDirectory: app.directory.publicDirectory)
+
         configureLeaf(app)
         try routes(app)
     }

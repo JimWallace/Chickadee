@@ -3,13 +3,18 @@
 # xpython (Python) and xr (R), built together from one emscripten-forge env.
 #
 # The xeus WASM kernels are built from emscripten-forge (needs micromamba +
-# network to repo.prefix.dev), which CI does not have. So CI never rebuilds them
-# and the committed bytes under Public/jupyterlite/xeus/ are authoritative — the
+# network to repo.prefix.dev). The ordinary CI build does not do that, so the
+# committed bytes under Public/jupyterlite/xeus/ are authoritative — the
 # reproducibility check (jupyterlite.yml) excludes that path. This script asserts
 # the vendored kernel is present and internally coherent, so a botched or partial
-# re-vendor is caught in CI instead of in front of a student. Rebuild the kernel
-# with scripts/build-jupyterlite.sh where micromamba + emscripten-forge are
-# reachable (a maintainer machine). See docs/xeus-r-kernel-spike.md.
+# re-vendor is caught in CI instead of in front of a student.
+#
+# Note what this canNOT see: it compares the vendored tree to ITSELF, so a kernel
+# that is perfectly coherent but missing a package the environment file asks for
+# passes every check here. That is how scipy/sympy/scikit-learn/statsmodels were
+# declared and shipped absent. scripts/check-env-vendored-sync.sh covers that
+# axis. Rebuild with .github/workflows/revendor-kernels.yml, or locally with
+# scripts/build-jupyterlite.sh. See docs/xeus-r-kernel-spike.md.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -113,6 +118,35 @@ print(
     f"check-xeus-vendored: OK "
     f"(kernels {listed}, envs {kernel_envs}, packages {package_counts}, loaders {loaders})."
 )
+
+# 6. The Python env's derived module index must exist and match the env that
+#    ships beside it. The server reads it to reject a browser-graded script
+#    whose imports the kernel cannot satisfy; a stale index either blocks a
+#    package that is now vendored or accepts one that was dropped, and both are
+#    silent. Regenerate with scripts/derive-kernel-modules.py (build-jupyterlite
+#    already does).
+python_env = build / "xeus" / "chickadee-python"
+if python_env.is_dir():
+    index_path = python_env / "importable-modules.json"
+    if not index_path.is_file():
+        fail(
+            f"missing {index_path} — run scripts/derive-kernel-modules.py {python_env}"
+        )
+    index = json.loads(index_path.read_text())
+    meta = json.loads((python_env / "empack_env_meta.json").read_text())
+    vendored = sorted({p["name"] for p in meta.get("packages", [])})
+    if index.get("packages") != vendored:
+        fail(
+            "importable-modules.json describes a different package set than "
+            f"empack_env_meta.json ({len(index.get('packages', []))} vs {len(vendored)} "
+            f"packages) — re-run scripts/derive-kernel-modules.py {python_env}"
+        )
+    if not index.get("modules") or not index.get("stdlibModules"):
+        fail(f"{index_path} lists no modules — regenerate it")
+    print(
+        f"check-xeus-vendored: OK (module index matches the env: "
+        f"{len(index['modules'])} package modules)."
+    )
 PY
 
 # 6. The pyodide-http payload in the Python env must carry the streaming-path
@@ -169,4 +203,47 @@ for archive in archives:
         )
         sys.exit(1)
     print(f"check-xeus-vendored: OK (pyodide-http streaming path disabled in {archive.name}).")
+
+# 8. The SAME hazard in urllib3, which arrives transitively with scikit-learn
+#    (scikit-learn -> requests -> urllib3). Its emscripten module builds a
+#    streaming fetcher at MODULE IMPORT under exactly a grading worker's
+#    conditions, and that constructor calls Pyodide's to_js(dict_converter=...).
+#    Un-patched, xkernel.start() raises and the kernel does not boot AT ALL —
+#    total, not degraded. Asserted separately from the patch script so shipping
+#    an un-patched re-vendor is a CI failure rather than a dead editor.
+urllib3_archives = sorted((build / "xeus").glob("*/kernel_packages/urllib3-*.tar.gz"))
+for archive in urllib3_archives:
+    with tarfile.open(archive, "r:gz") as tf:
+        members = [
+            m for m in tf.getmembers()
+            if m.name.endswith("site-packages/urllib3/contrib/emscripten/fetch.py")
+        ]
+        if not members:
+            print(
+                f"check-xeus-vendored: {archive.name} has no urllib3 emscripten fetch.py "
+                "— upstream layout changed; re-check scripts/patch-xeus-python-http.py",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        extracted = tf.extractfile(members[0])
+        source = extracted.read().decode("utf-8") if extracted else ""
+    # Test for the live construction, not the patch marker, so a partially
+    # applied patch cannot pass.
+    if "_fetcher = _StreamingFetcher()" in source:
+        print(
+            f"check-xeus-vendored: {archive.name} still constructs urllib3's streaming "
+            "fetcher at import — run scripts/patch-xeus-python-http.py (the kernel does "
+            "not boot at all on isolated engines without it)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if "dict_converter=" in source:
+        print(
+            f"check-xeus-vendored: {archive.name} still calls to_js(dict_converter=...) "
+            "— run scripts/patch-xeus-python-http.py",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"check-xeus-vendored: OK (urllib3 streaming fetcher suppressed in {archive.name}).")
+
 PY

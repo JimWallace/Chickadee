@@ -1,0 +1,10 @@
+{
+  "name": "chickadee-browser-grading-smoke",
+  "private": true,
+  "description": "Headless-browser smoke probe for browser grading on the xeus kernels (#1271). Run scripts/browser-grading-smoke.sh from the repo root.",
+  "version": "0.0.0",
+  "type": "module",
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

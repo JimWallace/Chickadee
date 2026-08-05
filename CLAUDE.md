@@ -95,13 +95,15 @@ Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
 **Browser grading has two substrates, routed per script (#1271).**
-`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to Pyodide
-(`/grading-worker.js`) and a `.R` test to the vendored **xeus-r** kernel
-(`/r-grading-worker.js`), choosing with the same `RunnerCore.classifyScript`
-the native worker uses to pick a subprocess command — and booting only the
-runtimes an assignment actually contains, so an R lab never loads Pyodide.
-`RunnerCore` still owns the suite loop and output interpretation for both; a
-substrate supplies only "run this script, report its exit code and streams".
+`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to the
+vendored **xeus-python** kernel (`/python-grading-worker.js`) and a `.R` test to
+**xeus-r** (`/r-grading-worker.js`), choosing with the same
+`RunnerCore.classifyScript` the native worker uses to pick a subprocess command
+— and booting only the runtimes an assignment actually contains, so an R lab
+never fetches the Python env. `RunnerCore` still owns the suite loop and output
+interpretation for both; a substrate supplies only "run this script, report its
+exit code and streams".
+
 xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
 `jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
 contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global
@@ -111,8 +113,20 @@ event loop between top-level expressions and does not regain control for
 ~180ms — a *wait*, not work: one expression summing 8M elements costs less
 than one summing 1, and R's own clock reports 0ms across nested expressions vs
 ~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
-~0.8s). Only a real kernel proves any of this, so `Tools/r-grading-smoke` boots
+~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
+
+**Every worker the notebook page spawns must be in
+`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
+cross-origin isolated on Chromium/Firefox, and a worker created by a
+`require-corp` document must ITSELF be served `require-corp` or the browser
+refuses the script (`ERR_BLOCKED_BY_RESPONSE`) — at which point `ensureReady`
+throws and the submission silently fails over to the native worker: right marks,
+none of the speed. The allowlist is per-path, so "same directory, same
+middleware" proves nothing about a worker not on it; that reasoning is how #1274
+shipped browser-graded R that no isolated engine ever ran.
+`IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
+and fails on drift in either direction.
 
 **Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
 `AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
@@ -509,11 +523,47 @@ Anything a student imports must be baked into the matching env: the editor's CSP
 missing package is an ImportError with no recovery. The Python set is currently
 numpy / pandas / matplotlib; the R side is bare `xeus-r`.
 
+**The authoring check reads the VENDORED bytes, never `environment-python.yml`.**
+Since browser grading moved onto this env, saving a browser-graded `.py` whose
+imports the kernel cannot satisfy is rejected at the write
+(`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
+and MCP `author_script`) — which matters because instructor validation is graded
+by the *native* worker on a full CPython, so such a test validates green and then
+fails for the first student who submits. The available set comes from
+`importable-modules.json`, derived from `kernel_packages/*.tar.gz` by
+`scripts/derive-kernel-modules.py`. Adding a name to the env file changes
+nothing until `build-jupyterlite.sh` runs, so a check derived from the env file
+would accept imports the shipped kernel cannot serve — the exact failure it
+exists to prevent. Reading the tarballs also means there is no
+distribution-name-to-import-name table to maintain. The check applies to
+browser-graded assignments only (worker grading runs real `python3`) and resolves
+every ambiguity toward reporting nothing, since a false positive blocks an
+instructor from saving with no self-service fix.
+
 Building the kernels needs **micromamba on PATH plus network to
-repo.prefix.dev**, which CI does not have — so CI never rebuilds them and the
-committed `Public/jupyterlite/xeus/` bytes are authoritative
-(`scripts/check-xeus-vendored.sh` guards their integrity; the reproducibility
-check excludes that path). Re-vendor on a machine that can reach the channel.
+repo.prefix.dev**. This was long documented as something *CI cannot do*, and
+that was simply **wrong** — a hosted runner has unrestricted network and
+micromamba is a single ~7 MB download. Re-vendoring is now a workflow:
+`.github/workflows/revendor-kernels.yml`, on demand or when a PR changes an
+environment file. It does not run unattended, because the output is ~100 MB of
+content-hashed binary assets and an automatic rebuild would bury unrelated work
+in unreviewable diffs.
+
+That false belief had a cost worth remembering. Adding a name to
+`environment-*.yml` changes nothing until the kernel is rebuilt, so
+"maintainer-machine only" meant env files drifted from the shipped bytes:
+scipy/sympy/scikit-learn/statsmodels were declared, announced in a changelog,
+and absent from the kernel — an unrecoverable `ImportError` waiting for the
+first student who imported one. Every existing guard compared the vendored tree
+to *itself*, so none of them could see it.
+`scripts/check-env-vendored-sync.sh` is the one that compares **declared intent
+to shipped bytes**, costs two file reads, and fails the PR pointing at the
+workflow.
+
+The committed `Public/jupyterlite/xeus/` bytes remain authoritative for every
+other job (`scripts/check-xeus-vendored.sh` guards their integrity; the
+reproducibility check excludes that path) — the rebuild is a deliberate act, not
+part of the normal build.
 
 **The vendored `pyodide-http` is patched, and must stay patched.**
 `xeus-python → xeus-python-shell-lite → pyodide-http` is an unavoidable
@@ -1030,7 +1080,16 @@ shim); and archived finished-era docs under `docs/archive/`.
   time with no escape hatch under `connect-src 'self'` — forgiving for an author
   who can ask for a package, unforgiving for a student whose submission imports
   something unanticipated at grade time. R had none of this risk: its env is
-  bare `xeus-r` and is already the editor's. Two other consumers would have to
+  bare `xeus-r` and is already the editor's. **Spiked 2026-08 —
+  `docs/xeus-python-grading-spike.md`:** xpython boots on the same standalone
+  path (one extra `bootstrapPython` export), and R's ~180ms-per-expression
+  yield does NOT generalise — xeus-python's floor is 5ms per cell vs Pyodide's
+  ~0ms, and boot is a wash once Pyodide's on-demand numpy/pandas fetch is
+  counted. The gate is purely the package set: the env has numpy/pandas/
+  matplotlib/PIL, while the vendored Pyodide resolves scipy/sklearn/sympy/
+  statsmodels/networkx/requests at run time. Chickadee's generated tests import
+  none of those, and students are already held to the env by the editor, so the
+  residual risk is hand-authored scripts. Two other consumers would have to
   move before `Public/pyodide` could go — `pyodide-worker.js` (the
   pattern-family editor's auto-compute) and the vendored
   `jupyterlite-pyodide-kernel` that anchors `check-pyodide-parity.sh`. NOT
@@ -1073,6 +1132,8 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
+- `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
+- `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
 - `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites

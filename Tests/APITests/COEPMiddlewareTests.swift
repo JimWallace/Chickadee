@@ -18,9 +18,10 @@ import VaporTesting
         app.get("instructor", ":assignmentID", "workbench") { _ in "workbench" }
         app.get("instructor", ":assignmentID", "edit") { _ in "edit" }
         app.get("jupyterlite", "notebooks", "index.html") { _ in "iframe" }
-        app.get("grading-worker.js") { _ in "// grading worker" }
+        app.get("python-grading-worker.js") { _ in "// python grading worker" }
+        app.get("r-grading-worker.js") { _ in "// r grading worker" }
         app.get("freeze-watchdog-worker.js") { _ in "// freeze worker" }
-        app.get("pyodide-worker.js") { _ in "// pyodide worker" }
+        app.get("python-eval-worker.js") { _ in "// auto-compute worker" }
         app.get("plain") { _ in "plain" }
 
         return app
@@ -101,7 +102,9 @@ import VaporTesting
 
     @Test func isolatedPageWorkerScriptsReceiveCOEPWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            for path in ["/grading-worker.js", "/freeze-watchdog-worker.js"] {
+            for path in [
+                "/python-grading-worker.js", "/r-grading-worker.js", "/freeze-watchdog-worker.js",
+            ] {
                 try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(
@@ -114,11 +117,11 @@ import VaporTesting
         }
     }
 
-    @Test func pyodideWorkerScriptIsNotForcedIsolated() async throws {
-        // /pyodide-worker.js is spawned only by the (non-isolated) assignment
+    @Test func autoComputeWorkerScriptIsNotForcedIsolated() async throws {
+        // /python-eval-worker.js is spawned only by the (non-isolated) assignment
         // editor pages, so it must NOT be forced require-corp.
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/pyodide-worker.js") { res async in
+            try await app.testing().test(.GET, "/python-eval-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
@@ -127,7 +130,7 @@ import VaporTesting
 
     @Test func workerScriptsAreNotIsolatedWhenDisabled() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/grading-worker.js") { res async in
+            try await app.testing().test(.GET, "/python-grading-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }

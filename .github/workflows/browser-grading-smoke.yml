@@ -1,0 +1,125 @@
+name: Browser grading smoke test
+
+# Boots a vendored xeus kernel in a headless browser and grades real test scripts
+# through the real grading worker — R on xeus-r, Python on xeus-python (#1271).
+#
+# Why this needs a browser. The rest of the coverage proves code *resolves*:
+# Tests/BrowserRunnerJSTests runs the cell builders and reply parsers against a
+# fake worker, and swift test never leaves the server. Neither boots a kernel, so
+# the failures that would actually reach a student are invisible to them — a
+# re-vendored /vendor/xeus-bootstrap.js that no longer matches a kernel's empack
+# metadata, an env rebuilt without a shared library its kernel dlopen()s, R's
+# quit() masking silently ceasing to be what test_runtime.R resolves (which would
+# turn every R test into a pass), or the Python grading cell failing to print its
+# payload. All of them pass every other check in CI.
+#
+# Both languages run even when only one looks touched: they share the kernel
+# boot, the vendored bootstrap, and the workspace writer, so a change to any of
+# those can break the other one.
+#
+# REQUIRED-GATE DESIGN, matching editor-smoke.yml: the trigger is deliberately
+# NOT path-filtered, because a path-filtered workflow is *skipped* on unrelated
+# PRs and a required status check that is skipped blocks those merges forever.
+# Instead this runs on every PR, a `changes` job decides whether the R grading
+# surface was touched (fail-safe: any uncertainty runs the smoke), the expensive
+# job runs only when it was, and an always-running `r-grading-smoke-gate` job
+# reports the single status to require in branch protection.
+
+on:
+  schedule:
+    # ~04:10 America/Toronto (08:10 UTC) — after the editor smoke slot.
+    - cron: "10 8 * * *"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: browser-grading-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_smoke: ${{ steps.decide.outputs.run_smoke }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the R grading surface was touched
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          if ! changed=$(git diff --name-only "$base" "$head" 2>/dev/null); then
+            echo "could not diff — running the smoke to be safe"
+            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/python-eval-|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
+            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  smoke:
+    needs: changes
+    if: needs.changes.outputs.run_smoke == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { language: r, mode: grading }
+          - { language: python, mode: grading }
+          # The pattern-family editor's auto-compute, which moved onto the same
+          # kernel in #1271 §A2. Its one new mechanism — rebuilding
+          # runPythonAsync's last-expression return value over a protocol that
+          # has no return value — fails SILENTLY when wrong: no error, just no
+          # value, and auto-compute quietly stops filling anything in. Only a
+          # real kernel shows that.
+          - { language: python, mode: eval }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright and its Chromium
+        working-directory: Tools/browser-grading-smoke
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Drive the ${{ matrix.language }} ${{ matrix.mode }} probe on the real kernel
+        run: |
+          node Tools/browser-grading-smoke/smoke.mjs \
+            --language ${{ matrix.language }} --mode ${{ matrix.mode }} --browser chromium
+
+  # NOTE: the job NAME is deliberately unchanged. It is the status check this
+  # workflow documents as the one to require in branch protection, and renaming a
+  # required check silently blocks every PR. Rename it only together with the
+  # branch-protection setting.
+  r-grading-smoke-gate:
+    # Always runs, so it can be a required status check: green when the smoke
+    # passed OR was not needed, red only when it actually failed.
+    needs: [changes, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        run: |
+          if [ "${{ needs.smoke.result }}" = "failure" ] || [ "${{ needs.smoke.result }}" = "cancelled" ]; then
+            echo "browser grading smoke failed"
+            exit 1
+          fi
+          echo "browser grading smoke: ${{ needs.smoke.result }}"

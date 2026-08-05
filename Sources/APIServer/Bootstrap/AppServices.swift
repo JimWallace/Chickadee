@@ -35,6 +35,21 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
+    // The browser grading kernel's module inventory, used to reject an authoring
+    // write whose imports the fixed environment cannot satisfy. Absent in a
+    // checkout without the vendored kernel bytes, in which case the check is
+    // skipped rather than failing every write (see KernelPythonEnvironment).
+    do {
+        app.kernelPythonEnvironment = try KernelPythonEnvironment.load(
+            publicDirectory: app.directory.publicDirectory)
+    } catch {
+        app.logger.notice(
+            """
+            Browser-grading import check disabled: \(error). Authoring writes will not be \
+            checked against the grading kernel's package set.
+            """)
+    }
+
     // MCP OAuth table cleanup (only when the MCP endpoint is mounted — grants
     // and codes exist in read_only mode too).
     if appConfig.mcp.mode.isMounted {

@@ -7,7 +7,7 @@
 // notebook.js calls window.BrowserRunner.runAndSubmit(), which:
 //   1. Downloads the test setup zip via GET /api/v1/browser-runner/testsetups/:id/download
 //   2. Fetches the manifest JSON via GET /api/v1/browser-runner/testsetups/:id/manifest
-//   3. Runs test scripts locally in Pyodide
+//   3. Runs test scripts locally on the vendored xeus kernels
 //   4. POSTs notebook bytes + TestOutcomeCollection to POST /api/v1/submissions/browser-result
 //
 // The existing /api/v1/testsetups/:id/download endpoint requires instructor+
@@ -62,7 +62,7 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         // Grader-only files (answer keys, reserved holdout sets) must never reach
         // a browser-graded student — the whole stored zip is streamed into the
-        // Pyodide FS, which a determined student can inspect. Stream a filtered
+        // kernel's filesystem, which a determined student can inspect. Stream a filtered
         // copy with those entries removed. The common case declares none (a
         // grader-only file forces worker grading, see docs/datasets.md), so the
         // empty case takes the no-copy streaming fast path.
@@ -125,7 +125,7 @@ struct BrowserRunnerRoutes: RouteCollection {
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
 
     /// Returns the per-(student, assignment) personalization seed the browser
-    /// runner injects into Pyodide as `CHICKADEE_ASSIGNMENT_SEED`.
+    /// runner injects into the grading kernel as `CHICKADEE_ASSIGNMENT_SEED`.
     ///
     /// Personalization parity: the native worker resolves this exact seed in
     /// `WorkerJobRoutes.buildJobPayload` via `AssignmentSeedStore.ensureSeed`
