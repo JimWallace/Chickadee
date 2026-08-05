@@ -1,17 +1,109 @@
 # Migration plan: Python browser grading, Pyodide → xeus-python
 
 Companion to [xeus-python-grading-spike.md](xeus-python-grading-spike.md), which
-established that this is viable and measured the cost. **Read the spike first —
-this document assumes its findings and does not repeat them.**
+established that this is viable and measured the cost.
 
-This is written as a handoff: it is what someone picking up the Python half of
-#1271 needs in order to get there without breaking grading. Browser-graded R
-shipped on the same machinery, so the shape is known rather than speculative;
-what follows is mostly "here is where the mines are."
+> **STATUS (2026-08).** Slices 1–6 are **done and merged**: Python browser
+> grading runs on xeus-python only, the Pyodide grading path is deleted, and both
+> languages are covered by a real-kernel probe in CI. This document is now the
+> handoff for **what is left** — §A below — plus the record of how the finished
+> part works and what it cost.
+>
+> **Two things must happen before the merged work is correct in production**,
+> and neither is code:
+>
+> 1. **Re-vendor the JupyterLite kernels.**
+>    `Tools/jupyterlite/environment-python.yml` gained scipy, sympy,
+>    scikit-learn, statsmodels and pillow, but the committed bytes under
+>    `Public/jupyterlite/xeus/chickadee-python/` do NOT contain them yet.
+>    Adding a name to the env file changes nothing until
+>    `scripts/build-jupyterlite.sh` runs, and that needs micromamba plus network
+>    to `repo.prefix.dev` — it **cannot run in CI**. Until it does, `import scipy`
+>    fails at grade time even though the env file lists it.
+> 2. **Confirm no live assignment imports outside the env.** Pyodide used to
+>    resolve ~363 packages at run time; the kernel has what is baked in. Four
+>    packages Pyodide carried have no emscripten-forge build at all and cannot be
+>    added: `networkx`, `seaborn`, `plotly`, `requests` (the last is moot —
+>    `connect-src 'self'` means a graded test could never use it).
+>
+> §A's first item, the authoring-time import check, is what makes (2) a
+> save-time error rather than a grade-time surprise. It is the highest-value
+> remaining work.
 
 ---
 
-## 0. The one thing that must happen before any code
+## A. What is left
+
+### A1. Reject unsatisfiable imports at authoring time — *highest value*
+
+The package set is now static and known at build time, so a test script that
+imports something the grading env lacks can be rejected **when an instructor
+saves it** instead of when a student submits. Nothing about the Pyodide
+architecture allowed this; it is a capability the migration created.
+
+Sketch: derive the env's package list (the kernel's `empack_env_meta.json` is
+already vendored and lists every installed package), expose it to the server, and
+check a script's top-level imports at the `author_script` / suite-save
+chokepoints against that list plus the standard library. Report the missing name
+and the fact that it can be added to `environment-python.yml`.
+
+Care needed on: conditional and function-local imports (do not reject what is
+guarded), `import a.b` vs `from a import b`, and the difference between a
+distribution name and its import name (`scikit-learn` → `sklearn`, `pillow` →
+`PIL`).
+
+### A2. Migrate `Public/pyodide-worker.js`
+
+The pattern-family editor's auto-compute, and the last consumer of Pyodide that
+runs student-adjacent code. Same substrate swap as the grader, and the forgiving
+case: it is instructor-side, so a missing package is an authoring annoyance
+rather than a grade-time failure.
+
+### A3. Retire `Public/pyodide` (~465 MB) and its guards
+
+Only after A2. Then delete: `Public/pyodide`, `scripts/check-pyodide-parity.sh`,
+`scripts/add-pyodide-extras.py`, `Tools/vendor/pyodide-extra-packages.json`, the
+unused nb_mypy/astor wheels, and the vendored `jupyterlite-pyodide-kernel`
+(`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) — which is currently kept
+deliberately as the parity anchor and the revert path for xeus-python, so it goes
+last and needs the same re-vendor as everything else.
+
+### A4. Tighten the CSP
+
+`script-src` carries `'unsafe-eval'`. If Pyodide was the only thing needing it,
+this can become `'wasm-unsafe-eval'` — a real narrowing. It also retires the
+accidental dependency documented in the spike, where browser Python grading
+worked *because* `data:` was absent from `script-src` and that broke Pyodide's
+classic-worker detection probe.
+
+**Do not tighten the CSP while Pyodide is still loaded anywhere.**
+
+### A5. A non-goal, recorded so nobody tries it
+
+Do not share the editor's booted kernel with the grader. The boot is the slow
+part and the temptation is obvious, but grading needs a clean session and the
+editor's namespace is whatever the student has been running.
+
+---
+
+## What the finished part cost, for calibration
+
+| | |
+|---|---|
+| xeus-python per cell | ~5 ms, independent of statement count |
+| Pyodide per cell (before) | ~0–1 ms |
+| Boot, ready for a pandas lab | xeus-python 7.9 s vs Pyodide ~8.5 s (3.4 s + on-demand numpy/pandas) |
+| Per test script, measured end to end | 12–73 ms |
+
+Both R lessons were recorded in this document as things *not* to carry over, and
+both held: Python's stderr is captured in-process (no calling-handler
+interception), and the cell needs no one-expression squeeze.
+
+---
+
+## Appendix: the original plan, kept for its reasoning
+
+### 0. The gate (now partially settled — see STATUS)
 
 **Decide the package set. This is not an engineering question and it must not be
 answered by whoever writes the code.**
