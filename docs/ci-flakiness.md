@@ -150,9 +150,45 @@ deliberately unchanged: chromium stays at hard zero, so a second sighting
 is loud rather than absorbed. If it recurs, that is the signal to treat
 chromium as in-family and go after the shared root cause.
 
-**Root cause** remains the exec-hang investigation's to close — continue
-from the probe's `grading breadcrumbs:` per-phase timings on a hung
-iteration.
+**Second chromium sighting (2026-08-05, PR #1274, run 31041617233) — and it
+is NOT the exec-hang.** The paragraph above asked for a second sighting to be
+treated as in-family. Read the breadcrumbs before doing that: this one is a
+different failure wearing the same label.
+
+```
+grading_start -> runtime_loaded [123] -> setup_unpacked [143]
+-> suite_started [172;tests=1] -> grading_init_start [173]
+-> pyodide_loaded [1584] -> env_configured [1612] -> grading_init_done [1612]
+-> suite_done [1621;n=1] -> result_posting [1622]
+-> submit_failed [2249; Failed to submit results: 500 ...]
+```
+
+Grading **completed**, in 1.6 s, with its one test graded (`suite_done n=1`).
+What failed was the POST to `/api/v1/submissions/browser-result`, which returned
+HTTP 500; the page then sat for the probe's full 300 s submit budget and the
+harness scored it a hang. Family 2 is the opposite shape — execution never
+finishing. Same counter, different bug.
+
+The PR's diff could not reach the failing endpoint: it touches one Swift file
+(`BrowserRunnerRoutes.swift`, the *seed* endpoint) and not
+`BrowserResultRoutes.swift`, and the same probe passed 12/12 on chromium twice
+on the same branch. A re-run passed.
+
+Two things follow:
+
+1. **`hangs=N/12` is a misnomer** — the counter is "iterations that did not
+   render a result", which includes a server-side 500 after a perfectly healthy
+   grade. Anyone triaging one of these should read the breadcrumb trail first
+   and only reach for `docs/archive/exec-hang-investigation.md` if the trail
+   stops *before* `suite_done`.
+2. **The chromium hard-zero gate stays**, but this sighting should not be
+   counted as evidence that chromium has joined the exec-hang family. It is
+   evidence of a separate, rarer, server-side intermittent on the result POST,
+   which nobody has looked at yet.
+
+**Root cause** of Family 2 remains the exec-hang investigation's to close —
+continue from the probe's `grading breadcrumbs:` per-phase timings on an
+iteration whose trail stops before `suite_done`.
 
 ## Family 3 — webkit editor smoke, post-idle execute (`smoke (webkit)`) — CONTAINED, same root cause as Family 2
 

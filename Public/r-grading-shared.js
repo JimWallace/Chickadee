@@ -87,6 +87,9 @@
     const R_KERNEL = {
         envName: 'chickadee-r',
         kernelName: 'xr',
+        // xeus-r has no CPython runtime to bring up after the env unpacks;
+        // xeus-python does. See xeus-kernel-shared.js.
+        needsPythonRuntime: false,
         // Shared libraries the kernel dlopen()s, mapped to where they sit under
         // the env root — the `metadata.shared` block of xr/kernel.json.
         sharedLibs: {
