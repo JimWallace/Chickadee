@@ -8,11 +8,15 @@ Why this exists
 calls `pyodide_http.patch_all()` at kernel startup, which monkey-patches
 `urllib`/`requests`.
 
-`pyodide-http` is written against **Pyodide's** `to_js`, which takes a
-`dict_converter` keyword. xeus-python runs on **pyjs**, whose `to_js` does not.
-So the first patched HTTP call raises:
+`pyodide-http` selects a streaming implementation whenever `crossOriginIsolated`
+is true, and that implementation is Pyodide-specific: it calls `to_js` with a
+`dict_converter` keyword that pyjs does not accept, and fails again further in
+even once that is fixed. It is simply not pyjs-compatible.
 
-    TypeError: to_js() got an unexpected keyword argument 'dict_converter'
+That switch produces an engine split we measured directly on CI:
+
+    Chromium (isolated, SAB present) -> streaming path  -> kernel never boots
+    WebKit (non-isolated, no SAB)    -> XHR fallback     -> kernel boots fine
 
 On Chickadee's notebook page that call is on the critical path: the kernel
 mounts the JupyterLite Drive over HTTP, the patched `urllib` routes it through
@@ -29,9 +33,10 @@ from the kernel cannot work in this deployment regardless. We are not giving up
 a capability we have; we are stopping a library from crashing the kernel on a
 capability it cannot deliver here.
 
-`js.Object.fromEntries` is the identity conversion for a plain dict under pyjs —
-pyjs's `to_js` already produces a JS object from a dict — so dropping the kwarg
-preserves the intended result on the paths that do run.
+The XHR fallback is upstream's own documented degradation for non-isolated
+contexts, not something invented here — `_streaming.py`'s module docstring
+describes it — so forcing it everywhere puts each engine on a path that one of
+them already demonstrates works.
 
 Idempotent. Fails loudly if the upstream source shape drifts, so a re-vendor
 that changes `pyodide-http` cannot silently skip the patch.
@@ -48,8 +53,33 @@ import tarfile
 
 TARGET_MEMBER_SUFFIX = "site-packages/pyodide_http/_streaming.py"
 
-ORIGINAL = "return to_js(dict_val, dict_converter=js.Object.fromEntries)"
-PATCHED = "return to_js(dict_val)  # chickadee: pyjs to_js takes no converter kwarg"
+# Two edits, both in _streaming.py. The first is the actual fix; the second is
+# belt-and-braces in case the streaming path is ever re-enabled.
+SUBSTITUTIONS = [
+    # 1. Force the XMLHttpRequest fallback on every engine.
+    #
+    #    Upstream selects the streaming implementation purely on
+    #    `crossOriginIsolated`. That is exactly the engine split we observe:
+    #    Chromium (isolated) takes the streaming path and the kernel dies;
+    #    WebKit (non-isolated) takes the XHR fallback and boots fine. The
+    #    fallback is upstream's own documented degradation, not something we
+    #    invented — pyodide-http calls it out in the module docstring — so this
+    #    puts every engine on the path one of them already proves works.
+    (
+        "if crossOriginIsolated:",
+        "if False:  # chickadee: force the XHR fallback on every engine",
+    ),
+    # 2. pyjs's to_js takes no `dict_converter` (Pyodide's does). Only reachable
+    #    if edit 1 is ever reverted, but cheap to keep correct.
+    (
+        "return to_js(dict_val, dict_converter=js.Object.fromEntries)",
+        "return to_js(dict_val)  # chickadee: pyjs to_js takes no converter kwarg",
+    ),
+]
+
+# The edit that actually matters; its marker is what the vendored-bytes guard
+# (scripts/check-xeus-vendored.sh) asserts.
+REQUIRED_MARKER = "if False:  # chickadee: force the XHR fallback on every engine"
 
 
 def fail(message: str) -> None:
@@ -72,16 +102,32 @@ def patch_archive(archive: pathlib.Path) -> str:
             fail(f"{archive.name}: {member.name} is not a regular file")
         source = extracted.read().decode("utf-8")
 
-        if PATCHED in source:
+        if REQUIRED_MARKER in source:
             return "already-patched"
-        if ORIGINAL not in source:
+
+        patched_source = source
+        applied = 0
+        for original, replacement in SUBSTITUTIONS:
+            if original in patched_source:
+                patched_source = patched_source.replace(original, replacement)
+                applied += 1
+            elif replacement in patched_source:
+                applied += 1  # already carries this edit
+
+        if REQUIRED_MARKER not in patched_source:
             fail(
-                f"{archive.name}: expected call not found in {member.name}.\n"
-                f"  looked for: {ORIGINAL}\n"
-                "  pyodide-http changed upstream — re-check whether the pyjs "
-                "to_js incompatibility still applies before relaxing this guard."
+                f"{archive.name}: the streaming-path switch was not found in {member.name}.\n"
+                f"  looked for: {SUBSTITUTIONS[0][0]!r}\n"
+                "  pyodide-http changed upstream — re-check how it selects the\n"
+                "  streaming implementation before relaxing this guard. Shipping\n"
+                "  un-patched means the editor kernel hangs on isolated engines."
             )
-        new_source = source.replace(ORIGINAL, PATCHED).encode("utf-8")
+        if applied != len(SUBSTITUTIONS):
+            fail(
+                f"{archive.name}: applied {applied}/{len(SUBSTITUTIONS)} edits — "
+                "upstream source drifted; re-check the substitution list."
+            )
+        new_source = patched_source.encode("utf-8")
 
         # Rebuild the archive, substituting the one member. Streaming into
         # memory keeps the original member order and metadata intact.
