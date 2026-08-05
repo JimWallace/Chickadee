@@ -106,8 +106,11 @@ xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
 `jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
 contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global
 environment so `test_runtime.R` stays byte-identical across both runners, and
-wraps each script in ONE top-level R expression (xeus-r charges ~250ms per
-top-level expression, so a statement-list wrapper cost ~3.5s per test vs
+wraps each script in ONE top-level R expression (xeus-lite yields to the JS
+event loop between top-level expressions and does not regain control for
+~180ms — a *wait*, not work: one expression summing 8M elements costs less
+than one summing 1, and R's own clock reports 0ms across nested expressions vs
+~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
 ~0.8s). Only a real kernel proves any of this, so `Tools/r-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
 
@@ -557,8 +560,9 @@ Public/vendor/xeus-unpack.wasm   — untarjs unpacker the bootstrap drives
 
 **One canonical Pyodide.** There is exactly one vended Pyodide, served at
 `/pyodide`, and every consumer that loads Pyodide at all loads that copy:
-Chickadee's own browser paths (`browser-runner.js`, `assignment-validate.js`,
-`pyodide-worker.js`, `notebook.js`) and the still-vendored
+Chickadee's own browser paths (`browser-runner.js` + `grading-worker.js` for
+browser grading, `pyodide-worker.js` for the pattern-family editor's
+auto-compute) and the still-vendored
 `jupyterlite-pyodide-kernel` (via `pyodideUrl` in
 `Tools/jupyterlite/jupyter-lite.json`).  (Historically the editor loaded a
 *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped that
@@ -567,7 +571,7 @@ allowance and broke the editor — see `SecurityHeadersMiddleware`.)
 **The editor's Python is no longer Pyodide, so editor and grader are no longer
 one environment — for Python.**  Authoring runs on xeus-python (Python 3.13,
 packages fixed at build time by `Tools/jupyterlite/environment-python.yml`);
-browser grading and `/validate` still run Pyodide (Python 3.14).  That skew is
+browser grading still runs Pyodide (Python 3.14).  That skew is
 deliberate and accepted, but it is a real difference — a notebook that runs in
 the editor is not thereby proven to grade in the browser runner.  The native
 worker remains the authoritative grader either way.  **R has no such skew:**
@@ -1025,9 +1029,16 @@ shim); and archived finished-era docs under `docs/archive/`.
   at runtime via `loadPackagesFromImports`, while a xeus env is fixed at build
   time with no escape hatch under `connect-src 'self'` — forgiving for an author
   who can ask for a package, unforgiving for a student whose submission imports
-  something unanticipated at grade time. `/validate` would have to migrate too
-  or the payload win evaporates. R had none of this risk: its env is bare
-  `xeus-r` and is already the editor's.
+  something unanticipated at grade time. R had none of this risk: its env is
+  bare `xeus-r` and is already the editor's. Two other consumers would have to
+  move before `Public/pyodide` could go — `pyodide-worker.js` (the
+  pattern-family editor's auto-compute) and the vendored
+  `jupyterlite-pyodide-kernel` that anchors `check-pyodide-parity.sh`. NOT
+  `/validate`: instructor validation is enqueued as a `kind == .validation`
+  submission and graded by the **native worker**
+  (`WorkerJobRoutes.collectClaimCandidates`), so it never loads Pyodide at all.
+  Earlier notes here and in #1271 claimed otherwise, citing an
+  `assignment-validate.js` that does not exist.
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond the three
   equality kinds); pattern kinds beyond the eight shipped

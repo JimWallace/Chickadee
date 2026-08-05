@@ -187,7 +187,12 @@ try {
     const page = await browser.newPage();
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
     await page.goto(`http://localhost:${PORT}/`);
-    await page.waitForFunction('window.__result !== null', { timeout: BOOT_TIMEOUT_MS });
+    // waitForFunction is (pageFunction, arg, options) — passing the options as
+    // the SECOND argument silently makes them the `arg` and leaves Playwright's
+    // 30s default in force. That default is close enough to a cold kernel boot
+    // plus four graded scripts that it would have started failing on a slow CI
+    // runner, reported as an opaque timeout rather than as anything about R.
+    await page.waitForFunction('window.__result !== null', null, { timeout: BOOT_TIMEOUT_MS });
     result = await page.evaluate('window.__result');
 } finally {
     await browser.close();

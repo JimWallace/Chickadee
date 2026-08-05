@@ -405,9 +405,9 @@ environment.
 
 The grader boots the same `chickadee-r` env the notebook editor boots for R
 notebooks. That gives R a property Python currently lacks — the editor runs
-xeus-python while browser grading and `/validate` run Pyodide — so for R, "it
-ran in the editor" and "it runs in the grader" mean the same environment, and a
-missing package is missing at authoring time rather than at grade time.
+xeus-python while browser grading runs Pyodide — so for R, "it ran in the
+editor" and "it runs in the grader" mean the same environment, and a missing
+package is missing at authoring time rather than at grade time.
 
 ### Re-creating the Rscript contract inside a kernel
 
@@ -440,22 +440,56 @@ script's stderr — for the whole cell, including anything raised inside
 silently dropped every error message, which would have left `longResult` empty on
 exactly the outcomes a student most needs it for.
 
-### The one-expression rule
+### The one-expression rule, and what the per-expression cost actually is
 
-Measured on the vendored kernel (xeus-r 0.11.2 / R 4.5.3), a cell costs roughly
-**700ms plus ~250ms for every top-level expression in it** — xeus-r evaluates
-top-level expressions one at a time. Expressions nested inside a call are free of
-that cost, and so are the expressions inside a `source()`d file. So the wrapper
-is written as a single `local({ ... })`: as a ~12-statement script it cost ~3.5s
-per test, and collapsed it costs ~0.8s. `r-grading-shared.test.mjs` asserts the
-shape structurally so it cannot quietly grow back.
+Measured on the vendored kernel (xeus-r 0.11.2 / R 4.5.3), warm, best of five:
 
-This is a property of the *wrapper*, not of test scripts. An author's own
-top-level statements are evaluated by `source()` and are not charged per
-expression.
+| cell | wall |
+|---|---|
+| 1 top-level expression, no output | 715 ms |
+| 5 top-level expressions | 1466 ms |
+| 20 top-level expressions | 4065 ms |
+| the same 20 inside one `local({ ... })` | 681 ms |
+| the same 20 inside a `source()`d file | 717 ms |
 
-Measured end-to-end on the smoke probe: kernel boot ~3.7s, then ~1–2s per test
+So: **~540 ms per cell plus ~180 ms per top-level expression**, and nesting is
+free. The wrapper is therefore written as a single `local({ ... })` —
+~3.5 s per test as a statement list, ~0.8 s collapsed.
+`r-grading-shared.test.mjs` asserts that shape structurally so it cannot quietly
+grow back.
+
+**That cost is a wait, not work.** This matters before anyone tries to optimise
+around it, and it is not obvious:
+
+| one expression, varying the compute inside it | wall |
+|---|---|
+| `sum(as.numeric(1:1))` | 686 ms |
+| `sum(as.numeric(1:100000))` | 724 ms |
+| `sum(as.numeric(1:1000000))` | 562 ms |
+| `sum(as.numeric(1:8000000))` | 559 ms |
+
+Wall time is independent of the work — summing eight million elements is
+*faster* than summing one. R's own clock says the same thing from the inside:
+three expressions nested inside a call report **0 ms** elapsed between the first
+and the last, while one bare top-level statement reports **~228 ms**. R does the
+work instantly and then sits idle.
+
+The kernel yields to the JS event loop between top-level expressions and does
+not regain control for ~200 ms. It is xeus-lite's scheduling — not R's speed,
+not the wasm's, and not the container the measurement ran in (a wait does not
+get shorter on a faster machine). Chickadee cannot shorten a window; it can only
+use fewer of them, which is exactly what the one-expression rule does.
+
+This also explains why the editor feels responsive while grading does not: an
+interactive notebook cell is one to three top-level expressions, so ~0.7–1.2 s,
+which reads as instant. Grading pays it once per test script.
+
+Measured end-to-end on the smoke probe: kernel boot ~3.7 s, then ~1–2 s per test
 script.
+
+If in-browser grading latency ever needs to come down materially, this is the
+thing to attack, and it is an upstream question (xeus-lite's inter-expression
+yield) rather than a Chickadee one.
 
 ### Booting the kernel without JupyterLab
 

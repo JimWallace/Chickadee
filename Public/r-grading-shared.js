@@ -51,17 +51,30 @@
 //
 // Why it is ONE top-level expression
 // ----------------------------------
-// Measured on the vendored `chickadee-r` kernel (xeus-r 0.11.2 / R 4.5.3), a
-// cell costs roughly 700ms plus ~250ms for every TOP-LEVEL expression in it —
-// xeus-r evaluates top-level expressions one at a time through R's `evaluate`
-// package.  Expressions nested inside a call are free of that per-expression
-// cost, and so are the expressions inside a `source()`d file.  A wrapper
-// written as ~12 statements therefore cost ~3.5s per test; the same code inside
-// a single `local({ ... })` costs ~0.8s.  Keep it one expression.
+// Measured on the vendored `chickadee-r` kernel (xeus-r 0.11.2 / R 4.5.3): a
+// cell costs ~540ms plus ~180ms for every TOP-LEVEL expression in it.  20 bare
+// statements cost 4065ms; the same 20 inside one `local({ ... })` cost 681ms,
+// and inside a `source()`d file 717ms.
+//
+// That cost is a WAIT, not work, which is worth knowing before anyone tries to
+// optimise around it:
+//
+//   * wall time is independent of the compute.  One expression summing 8
+//     million elements costs 559ms; one summing a single element costs 686ms.
+//     The bigger job is FASTER.
+//   * R's own clock agrees from the inside.  Three expressions nested inside a
+//     call report 0ms elapsed between the first and last.  One bare top-level
+//     statement reports ~228ms.
+//
+// So the kernel yields to the JS event loop between top-level expressions and
+// does not regain control for ~200ms; whatever R does inside a window is free.
+// Nothing here can shorten a window — it is xeus-lite's scheduling, not R's
+// speed and not the wasm's — but it can use FEWER of them.  Hence one
+// expression.  Keep it that way.
 //
 // The practical consequence for authors: this is a property of the WRAPPER, not
 // of test scripts.  A test script's own top-level statements are evaluated by
-// `source()` and are not charged the per-expression cost.
+// `source()`, inside a single window, and are not charged.
 
 (function (root) {
     'use strict';
