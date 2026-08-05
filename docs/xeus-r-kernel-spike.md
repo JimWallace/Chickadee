@@ -413,3 +413,56 @@ routes builds through `emscripten-forge-dev`, a channel frozen since
 2026-04-09, and `docs/notebook-editor-kernel-boot.md` describes isolation as
 "unconditional" when `COEPMiddleware` exempts WebKit. Prefer recording *what was
 measured, when, and against what version* over stating a general property.
+
+---
+
+## Correction: `/validate` never ran Pyodide (2026-08, #1271)
+
+Two places above say Pyodide "still serves browser grading and `/validate`", and
+that the editor/grader Python skew applies to `/validate` too. Both are wrong,
+and the error propagated into `CLAUDE.md` and into #1271's payload analysis
+(where it appeared as a gate on retiring `Public/pyodide`).
+
+Instructor validation is enqueued as a `kind == .validation` submission and
+graded by the **native worker** — `collectClaimCandidates` in
+`Sources/APIServer/Routes/WorkerJobRoutes.swift` says so directly ("Validation
+submissions are always worker-mode (instructors validate via worker)"). There is
+no in-browser validation path and no `assignment-validate.js`; the only caller of
+`browser-runner.js`'s `runScripts` is `runAndSubmit`, from the student submit
+button.
+
+`COEPMiddleware` does set cross-origin isolation on `/validate`, which is
+probably where the confusion started: isolation is about the embedded editor on
+that page, not about grading.
+
+The actual Pyodide consumers, after browser-graded R shipped, are:
+
+| consumer | what it is |
+|---|---|
+| `browser-runner.js` + `grading-worker.js` | browser grading, Python only |
+| `pyodide-worker.js` | the pattern-family editor's auto-compute (instructor-side) |
+| `jupyterlite-pyodide-kernel` (`pyodideUrl`) | vendored but unused as a kernel; anchors `check-pyodide-parity.sh` and is the revert path for xeus-python |
+
+All three would have to go before the ~465 MB could.
+
+## Correction: browser-graded R exists (2026-08, #1271)
+
+"Pyodide … still serves browser grading" is now true of Python only. R test
+scripts are graded in the browser on the vendored `chickadee-r` kernel — the same
+env this document's editor work produced — via `Public/r-grading-worker.js`. See
+the "Browser-graded R" section of [r-support.md](r-support.md).
+
+Two measured findings from that work are worth recording here, since they are
+properties of the kernel this document is about rather than of Chickadee:
+
+- **A cell costs ~540 ms plus ~180 ms per top-level expression, and that cost is
+  a wait, not work.** One expression summing 8M elements costs *less* than one
+  summing 1 (559 ms vs 686 ms); R's own clock reports 0 ms across three
+  expressions nested inside a call and ~228 ms across one bare top-level
+  statement. The kernel yields to the JS event loop between top-level
+  expressions and does not regain control for ~200 ms. It reads as snappy
+  interactively because a notebook cell is one to three expressions.
+- **`sink(type = "message")` cannot capture stderr.** xeus-r evaluates through
+  `evaluate::evaluate()`, whose calling handlers catch message and warning
+  conditions before they reach the stderr connection; the text is published as an
+  iopub `stream`/`stderr` message instead.

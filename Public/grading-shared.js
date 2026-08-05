@@ -206,6 +206,12 @@ sys.stderr = sys.__stderr__
         RESTORE_STREAMS_PY: RESTORE_STREAMS_PY,
         deriveExitCode: deriveExitCode,
         writeFilesToPyFS: writeFilesToPyFS,
+        // Same function, substrate-neutral name. writeFilesToPyFS only ever
+        // touches `.FS`, which every emscripten module exposes, so the R
+        // grading worker materializes its workspace with this one copy rather
+        // than a second implementation that could lose the byte-array
+        // coercion above.
+        writeFilesToEmscriptenFS: writeFilesToPyFS,
         preloadPackagesForFiles: preloadPackagesForFiles
     };
 })(typeof self !== 'undefined' ? self : globalThis);

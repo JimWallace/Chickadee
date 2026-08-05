@@ -11,6 +11,8 @@
     "@codemirror/legacy-modes": "^6.0.0",
     "@codemirror/state": "^6.0.0",
     "@codemirror/view": "^6.0.0",
+    "@emscripten-forge/mambajs-core": "^0.21.5",
+    "@emscripten-forge/untarjs": "^5.3.3",
     "jupyter-iframe-commands-host": "^0.3.0"
   },
   "devDependencies": {

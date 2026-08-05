@@ -161,10 +161,12 @@ struct BrowserRunnerRoutes: RouteCollection {
         guard let assignment = try await requireOpenStudentAssignment(for: setupID, user: caller, on: req)
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil, personalizedFiles: nil)
+            return BrowserRunnerSeedResponse(
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
         }
         guard let userID = caller.id, let assignmentID = assignment.id else {
-            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil, personalizedFiles: nil)
+            return BrowserRunnerSeedResponse(
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
@@ -175,12 +177,15 @@ struct BrowserRunnerRoutes: RouteCollection {
         // browser-graded submission binds the same values a worker would.
         var personalizedInputs: [String: String]?
         var personalizedFiles: [String: String]?
+        var language: AssignmentLanguage?
         if let manifest = setup.decodedManifest() {
             let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+            let resolved = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            language = resolved
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: manifest, seedHex: seed,
                 supportFilesDirectory: sharedDir,
-                language: AssignmentLanguage.resolve(for: setup, manifest: manifest))
+                language: resolved)
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(
@@ -188,7 +193,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,
-            personalizedFiles: personalizedFiles)
+            personalizedFiles: personalizedFiles, language: language?.rawValue)
     }
 
 }
@@ -196,10 +201,12 @@ struct BrowserRunnerRoutes: RouteCollection {
 /// JSON body for the browser-runner seed endpoint.
 struct BrowserRunnerSeedResponse: Content {
     let seed: String?
-    /// Per-student personalization input values (Python literals), keyed by
-    /// name — the `=` expressions resolved for this student's seed. The browser
-    /// writes these to `_ck_inputs.py` so generated pattern-family scripts can
-    /// load per-student args / expected. Nil when there are none (issue #461).
+    /// Per-student personalization input values, keyed by name — the `=`
+    /// expressions resolved for this student's seed, each already rendered as a
+    /// literal in the assignment's language. The browser writes these to
+    /// `_ck_inputs.py` (Python) or `_ck_inputs.R` (R) so generated
+    /// pattern-family scripts can load per-student args / expected. Nil when
+    /// there are none (issue #461).
     let personalizedInputs: [String: String]?
     /// Per-student dataset file contents (CSV slices), keyed by filename.
     /// The browser writes these into the Pyodide FS before tests run,
@@ -207,6 +214,14 @@ struct BrowserRunnerSeedResponse: Content {
     /// student's code sees only their own slice. Nil when no datasets are
     /// declared (the common case — existing assignments are unaffected).
     let personalizedFiles: [String: String]?
+    /// The assignment's resolved language (`"python"` / `"r"`), from the same
+    /// `AssignmentLanguage.resolve` the worker uses. The browser needs it to
+    /// pick the per-student inputs FILE (`_ck_inputs.py` vs `_ck_inputs.R`);
+    /// which substrate runs a given script is still decided per script from
+    /// RunnerCore's classification, so this never overrides a `.py` / `.R`
+    /// extension. Nil when no assignment owns the setup — the same case that
+    /// yields a nil seed, where there is nothing personalized to deliver.
+    let language: String?
 }
 
 /// Returns the manifest JSON with the `graderOnlyFiles` array blanked to `[]`,

@@ -94,6 +94,26 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
+**Browser grading has two substrates, routed per script (#1271).**
+`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to Pyodide
+(`/grading-worker.js`) and a `.R` test to the vendored **xeus-r** kernel
+(`/r-grading-worker.js`), choosing with the same `RunnerCore.classifyScript`
+the native worker uses to pick a subprocess command — and booting only the
+runtimes an assignment actually contains, so an R lab never loads Pyodide.
+`RunnerCore` still owns the suite loop and output interpretation for both; a
+substrate supplies only "run this script, report its exit code and streams".
+xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
+`jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
+contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global
+environment so `test_runtime.R` stays byte-identical across both runners, and
+wraps each script in ONE top-level R expression (xeus-lite yields to the JS
+event loop between top-level expressions and does not regain control for
+~180ms — a *wait*, not work: one expression summing 8M elements costs less
+than one summing 1, and R's own clock reports 0ms across nested expressions vs
+~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
+~0.8s). Only a real kernel proves any of this, so `Tools/r-grading-smoke` boots
+one in a browser in CI. See `docs/r-support.md`.
+
 **Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
 `AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
 `.R` graded script → `.r`; else an R notebook kernel in `{ir,r,webr,xr}` → `.r`;
@@ -534,24 +554,30 @@ aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
 Public/pyodide/              — the ONE canonical Pyodide distribution (~465 MB)
 Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
 Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
+Public/vendor/xeus-bootstrap.js  — mambajs slice that boots the xeus-r kernel
+Public/vendor/xeus-unpack.wasm   — untarjs unpacker the bootstrap drives
 ```
 
 **One canonical Pyodide.** There is exactly one vended Pyodide, served at
 `/pyodide`, and every consumer that loads Pyodide at all loads that copy:
-Chickadee's own browser paths (`browser-runner.js`, `assignment-validate.js`,
-`pyodide-worker.js`, `notebook.js`) and the still-vendored
+Chickadee's own browser paths (`browser-runner.js` + `grading-worker.js` for
+browser grading, `pyodide-worker.js` for the pattern-family editor's
+auto-compute) and the still-vendored
 `jupyterlite-pyodide-kernel` (via `pyodideUrl` in
 `Tools/jupyterlite/jupyter-lite.json`).  (Historically the editor loaded a
 *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped that
 allowance and broke the editor — see `SecurityHeadersMiddleware`.)
 
 **The editor's Python is no longer Pyodide, so editor and grader are no longer
-one environment.**  Authoring runs on xeus-python (Python 3.13, packages fixed
-at build time by `Tools/jupyterlite/environment-python.yml`); browser grading and
-`/validate` still run Pyodide (Python 3.14).  That skew is deliberate and
-accepted, but it is a real difference — a notebook that runs in the editor is
-not thereby proven to grade in the browser runner.  The native worker remains
-the authoritative grader either way.  The Pyodide kernel extension is still
+one environment — for Python.**  Authoring runs on xeus-python (Python 3.13,
+packages fixed at build time by `Tools/jupyterlite/environment-python.yml`);
+browser grading still runs Pyodide (Python 3.14).  That skew is
+deliberate and accepted, but it is a real difference — a notebook that runs in
+the editor is not thereby proven to grade in the browser runner.  The native
+worker remains the authoritative grader either way.  **R has no such skew:**
+browser-graded R runs the same vendored `chickadee-r` xeus kernel the editor
+boots for R notebooks (#1271), so a missing package shows up at authoring time
+rather than at grade time.  The Pyodide kernel extension is still
 built and vendored: it keeps `scripts/check-pyodide-parity.sh` anchored (that
 guard derives the Pyodide pin from the kernel's bundled wheels) and leaves a
 one-line revert if xeus-python has to be backed out.
@@ -995,6 +1021,24 @@ shim); and archived finished-era docs under `docs/archive/`.
 
   (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
+- **Consolidating on xeus (#1271) — R done, Python open.** Browser grading is
+  now two substrates: R runs the vendored xeus-r kernel (shipped here), Python
+  still runs Pyodide. Moving Python across would restore one authoring/grading
+  environment and let the ~465 MB `Public/pyodide` go, but it is gated on the
+  package-set question the issue flags as unresolved: Pyodide resolves imports
+  at runtime via `loadPackagesFromImports`, while a xeus env is fixed at build
+  time with no escape hatch under `connect-src 'self'` — forgiving for an author
+  who can ask for a package, unforgiving for a student whose submission imports
+  something unanticipated at grade time. R had none of this risk: its env is
+  bare `xeus-r` and is already the editor's. Two other consumers would have to
+  move before `Public/pyodide` could go — `pyodide-worker.js` (the
+  pattern-family editor's auto-compute) and the vendored
+  `jupyterlite-pyodide-kernel` that anchors `check-pyodide-parity.sh`. NOT
+  `/validate`: instructor validation is enqueued as a `kind == .validation`
+  submission and graded by the **native worker**
+  (`WorkerJobRoutes.collectClaimCandidates`), so it never loads Pyodide at all.
+  Earlier notes here and in #1271 claimed otherwise, citing an
+  `assignment-validate.js` that does not exist.
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond the three
   equality kinds); pattern kinds beyond the eight shipped

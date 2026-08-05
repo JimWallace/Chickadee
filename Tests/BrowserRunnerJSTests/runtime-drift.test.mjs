@@ -26,6 +26,7 @@ function normalizeCode(src) {
 async function loadEmbeds() {
   const runnerSource = await fs.readFile(path.resolve('Public/browser-runner.js'), 'utf8');
   const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
+  const rSharedSource = await fs.readFile(path.resolve('Public/r-grading-shared.js'), 'utf8');
   const testHooks = {};
   const statusEl = { hidden: true, textContent: '', className: '' };
   const document = {
@@ -39,9 +40,11 @@ async function loadEmbeds() {
   };
   context.window = { document };
   context.globalThis = context;
-  // grading-shared.js first (defines ChickadeeGradingShared), same as the page.
+  // The shared-semantics modules first (they define ChickadeeGradingShared and
+  // ChickadeeRGradingShared), same as the page.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
+  vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
   return testHooks.exports;
 }
@@ -53,6 +56,24 @@ test('embedded TEST_RUNTIME_PY stays in sync with Tools/runner-support/test_runt
     normalizeCode(embeds.TEST_RUNTIME_PY),
     normalizeCode(canon),
     'Public/browser-runner.js TEST_RUNTIME_PY drifted from Tools/runner-support/test_runtime.py — '
+      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+  );
+});
+
+test('embedded TEST_RUNTIME_R stays in sync with Tools/runner-support/test_runtime.R', async () => {
+  // The browser R grader writes this into every grading workspace so an R test
+  // script's `source("test_runtime.R")` resolves to the same helpers the native
+  // runner injects (#1271). Three copies now exist — this embed, the canonical
+  // file, and the testRuntimeR* literals in Sources/Worker/TestRuntimeSources.swift
+  // (pinned by Tests/WorkerTests/RuntimeSourceDriftTests.swift) — and a drift in
+  // any of them would make a submission grade differently depending on whether it
+  // was graded in the browser or by the worker.
+  const embeds = await loadEmbeds();
+  const canon = await fs.readFile(path.resolve('Tools/runner-support/test_runtime.R'), 'utf8');
+  assert.equal(
+    normalizeCode(embeds.TEST_RUNTIME_R),
+    normalizeCode(canon),
+    'Public/browser-runner.js TEST_RUNTIME_R drifted from Tools/runner-support/test_runtime.R — '
       + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
   );
 });

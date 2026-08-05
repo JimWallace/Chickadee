@@ -18,6 +18,10 @@ const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
   ChickadeeGradingShared: 'readonly',
+  ChickadeeRGradingShared: 'readonly',
+  // Published by the vendored /vendor/xeus-bootstrap.js, importScripts'd by the
+  // R grading worker.
+  ChickadeeXeusBootstrap: 'readonly',
 };
 
 const browserGlobals = {
@@ -42,6 +46,9 @@ const browserGlobals = {
   DecompressionStream: 'readonly', Response: 'readonly',
   Request: 'readonly', Headers: 'readonly', ReadableStream: 'readonly',
   loadPyodide: 'readonly', JSZip: 'readonly',
+  // Defined by the xeus-r kernel's emscripten glue (bin/xr.js), which the R
+  // grading worker pulls in with importScripts — MODULARIZE's EXPORT_NAME.
+  createXeusModule: 'readonly',
 };
 
 const workerGlobals = {

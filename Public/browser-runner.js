@@ -15,8 +15,13 @@
 //   6. POST notebook bytes + TestOutcomeCollection to /api/v1/submissions/browser-result
 //
 // Only active for gradingMode="browser" pages (guard at top of IIFE).
-// R test scripts (.R) are deferred until WebR is available (Issue #77).
-// Shell scripts (.sh) are not supported in the browser environment.
+//
+// Two substrates, picked per script by RunnerCore's shared classification:
+//   .py → Pyodide, via /grading-worker.js (or the main-thread fallback)
+//   .R  → the vendored xeus-r kernel, via /r-grading-worker.js
+// Only the substrates an assignment actually needs are booted, so an R lab
+// never pays for loading Pyodide (and vice versa).  Shell scripts (.sh) are not
+// supported in the browser environment on either substrate.
 
 (function () {
     'use strict';
@@ -40,6 +45,12 @@
         runScriptPython, CAPTURE_OUTPUT_PY, RESTORE_STREAMS_PY,
         deriveExitCode, writeFilesToPyFS, preloadPackagesForFiles,
     } = ChickadeeGradingShared;
+
+    // R grading semantics — the per-script wrapper and the per-student inputs
+    // file, shared with /r-grading-worker.js the same way the Python snippets
+    // are shared with /grading-worker.js.  Loaded by a <script> tag alongside
+    // grading-shared.js (see notebook.leaf).
+    const { personalizationInputsSourceR } = ChickadeeRGradingShared;
 
     // Kernelspec names that mark an R notebook. The browser cannot import
     // Swift, so this is a GENERATED copy of AssignmentLanguage.rKernelNames
@@ -234,9 +245,20 @@
         }
         if (options.reportPhase) options.reportPhase('setup_unpacked');
 
-        // 2. Runtime helper libraries.
+        // 2. Runtime helper libraries. Both languages' helpers are written
+        //    unconditionally: each is a reserved filename the OTHER language's
+        //    submission scanner already skips (test_runtime.R is in
+        //    test_runtime.R's own `.chickadee_reserved_files`; the .py helpers
+        //    are in the Python scanner's skip set), so a spare copy cannot be
+        //    mistaken for a submission. That keeps the workspace independent of
+        //    detecting the assignment's language, which matters because the
+        //    language is only known after the seed fetch below. The native
+        //    runner writes test_runtime.R conditionally (writeRRuntimeHelper)
+        //    because it builds the workspace after it has resolved the job's
+        //    language; the browser has no such ordering.
         files['test_runtime.py']  = TEST_RUNTIME_PY;
         files['sitecustomize.py'] = SITECUSTOMIZE_PY;
+        files['test_runtime.R']   = TEST_RUNTIME_R;
 
         // 3. Submitted solution bytes. Notebooks are extracted (on the main
         //    thread, via the RunnerCore wasm) to a Python/R source file; plain
@@ -261,11 +283,20 @@
         // older server) yields no seed/inputs → unset env var, no _ck_inputs.py.
         let assignmentSeed = null;
         let personalizedInputs = null;
+        // The assignment's language, as the SERVER resolved it
+        // (AssignmentLanguage.resolve — manifest scripts, then notebook kernel).
+        // It decides only which inputs file the per-student values land in;
+        // which substrate runs a given script is still decided per script by
+        // RunnerCore's classification, exactly as the native worker does it.
+        let assignmentLanguage = 'python';
         try {
             const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
             const parsed = JSON.parse(seedText);
             if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
                 assignmentSeed = parsed.seed;
+            }
+            if (parsed && parsed.language === 'r') {
+                assignmentLanguage = 'r';
             }
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
@@ -282,8 +313,17 @@
             assignmentSeed = null;  // grade without a seed rather than failing the run
             personalizedInputs = null;
         }
+        // The server already rendered each value as a literal in the
+        // assignment's language, so only the wrapper differs: `_ck` dict vs
+        // `.ck_inputs` list. Writing the Python file for an R assignment is
+        // what the pre-#1271 browser runner did, and it left every
+        // personalized R test reading an empty chickadee_inputs().
         if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
-            files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
+            if (assignmentLanguage === 'r') {
+                files['_ck_inputs.R'] = personalizationInputsSourceR(personalizedInputs);
+            } else {
+                files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
+            }
         }
 
         // 4. Fetch manifest from server (test.properties.json is not in the zip;
@@ -343,7 +383,8 @@
         //    fallback path is preserved for environments with no Worker (and for
         //    the Node test harness, which has neither Worker nor a factory
         //    override, so it deterministically exercises the fallback).
-        const executor = makeExecutor(files, assignmentSeed, runnerCore, options.reportPhase);
+        const executor = makeExecutor(
+            files, assignmentSeed, runnerCore, options.reportPhase, suites);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -407,24 +448,158 @@
     // spawns `/grading-worker.js` with the page's ?v= cache-buster so the
     // worker (and the grading-shared.js it importScripts with the same query)
     // pin to this release's bytes.
-    function gradingWorkerFactory() {
+    function gradingWorkerFactory(scriptPath) {
         const override = globalThis.__CHICKADEE_GRADING_WORKER_FACTORY__
             || (typeof window !== 'undefined' ? window.__CHICKADEE_GRADING_WORKER_FACTORY__ : undefined);
-        if (typeof override === 'function') return override;
+        if (typeof override === 'function') return () => override(scriptPath);
         if (typeof Worker !== 'undefined') {
             return () => {
                 const meta = document.querySelector('meta[name="app-version"]');
                 const v = meta && meta.content ? '?v=' + encodeURIComponent(meta.content) : '';
-                return new Worker('/grading-worker.js' + v);
+                return new Worker(scriptPath + v);
             };
         }
         return null;
     }
 
-    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase) {
-        const factory = gradingWorkerFactory();
-        if (factory) return new GradingWorkerExecutor(files, assignmentSeed, runnerCore, factory, reportPhase);
-        return new MainThreadExecutor(files, assignmentSeed, runnerCore);
+    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites) {
+        return new RoutingExecutor(files, assignmentSeed, runnerCore, reportPhase, suites);
+    }
+
+    // -------------------------------------------------------------------------
+    // RoutingExecutor — one ScriptExecutor face over two substrates.
+    //
+    // RunnerCore's shared executeSuites loop asks for exactly two things:
+    // "does this script exist?" and "run it". Which interpreter that means is a
+    // browser concern, so it is decided here, per script, using the SAME
+    // RunnerCore classification (extension → shebang → content sniff) the
+    // native worker uses to pick a subprocess command.
+    //
+    // Substrates are created lazily and — importantly — only STARTED for kinds
+    // the assignment actually contains. ensureReady() classifies the manifest's
+    // scripts up front, so an R lab never downloads and boots Pyodide, and a
+    // Python lab never fetches the 52 MB R environment. Before #1271 there was
+    // only one substrate and this question could not arise.
+    // -------------------------------------------------------------------------
+
+    class RoutingExecutor {
+        constructor(files, assignmentSeed, runnerCore, reportPhase, suites) {
+            this.files = files;
+            this.assignmentSeed = assignmentSeed ?? null;
+            this.runnerCore = runnerCore;
+            this.reportPhase = reportPhase;
+            this.suites = Array.isArray(suites) ? suites : [];
+            this.python = null;
+            this.r = null;
+        }
+
+        scriptExists(name) {
+            return Object.prototype.hasOwnProperty.call(this.files, name);
+        }
+
+        kindOf(name) {
+            const src = this.scriptExists(name) ? fileAsText(this.files[name]) : '';
+            return interpreterToKind(this.runnerCore.classifyScript(name, src));
+        }
+
+        // The distinct substrate kinds this assignment's manifest actually
+        // needs — the basis for booting one runtime instead of both.
+        requiredKinds() {
+            const kinds = new Set();
+            for (const suite of this.suites) {
+                const name = suite && suite.script;
+                if (!name || !this.scriptExists(name)) continue;
+                kinds.add(this.kindOf(name));
+            }
+            return kinds;
+        }
+
+        pythonExecutor() {
+            if (!this.python) {
+                const factory = gradingWorkerFactory('/grading-worker.js');
+                this.python = factory
+                    ? new GradingWorkerExecutor(
+                        this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
+                        'Python')
+                    : new MainThreadExecutor(this.files, this.assignmentSeed, this.runnerCore);
+            }
+            return this.python;
+        }
+
+        // The R substrate is worker-only: booting the xeus-r kernel needs
+        // importScripts, which exists only inside a worker. There is no
+        // main-thread fallback to degrade to, so a Worker-less environment gets
+        // an executor whose ensureReady throws — which routes the whole grade to
+        // the server-side failover rather than recording every R test as an
+        // error. (Python keeps its main-thread fallback; an assignment is one
+        // language, so the two cases never collide in practice.)
+        rExecutor() {
+            if (!this.r) {
+                const factory = gradingWorkerFactory('/r-grading-worker.js');
+                this.r = factory
+                    ? new GradingWorkerExecutor(
+                        this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
+                        'R')
+                    : new UnavailableExecutor(
+                        'R grading needs Web Worker support, which this browser did not provide');
+            }
+            return this.r;
+        }
+
+        async ensureReady() {
+            const kinds = this.requiredKinds();
+            const needsPython = kinds.has('python');
+            const needsR = kinds.has('r');
+            const boots = [];
+            if (needsPython) boots.push(this.pythonExecutor().ensureReady());
+            if (needsR) {
+                // A substrate that cannot start must abort the grade — that is
+                // what routes the submission to the server-side worker instead
+                // of posting an all-`error` collection as a real 0 (see the
+                // ensureReady probe in runScripts).
+                //
+                // But only when it is the substrate this assignment RUNS on.
+                // An assignment is one language, so "R failed to boot" on an R
+                // lab is a failed grade; a stray .R sitting beside Python tests
+                // is not, and must not sink the tests that can run. Those
+                // scripts then report their own error through run().
+                const boot = this.rExecutor().ensureReady();
+                boots.push(needsPython ? boot.catch(() => {}) : boot);
+            }
+            // No runnable script kind (all shell/unsupported, or an empty
+            // suite): nothing to boot. Each run() still reports its own precise
+            // "not here" message, so the grade completes rather than failing
+            // over on a runtime that was never needed.
+            await Promise.all(boots);
+        }
+
+        async run(name, limitSeconds) {
+            if (!this.scriptExists(name)) return rawError(`Script not found: ${name}`);
+            const kind = this.kindOf(name);
+            if (kind === 'python') return this.pythonExecutor().run(name, limitSeconds);
+            if (kind === 'r') return this.rExecutor().run(name, limitSeconds);
+            if (kind === 'shell') return rawError('Shell scripts cannot run in the browser runner');
+            const ext = scriptExtension(name);
+            return rawError(`Unsupported test script type: ${ext ? '.' + ext : name}`);
+        }
+
+        async dispose() {
+            for (const executor of [this.python, this.r]) {
+                if (!executor) continue;
+                try { await executor.dispose(); } catch (_) { /* best-effort */ }
+            }
+        }
+    }
+
+    // Stands in for a substrate this environment cannot provide. ensureReady
+    // throws so the caller fails over; run() is only reachable if the caller
+    // ignored that and is answered with the same explanation.
+    class UnavailableExecutor {
+        constructor(reason) { this.reason = reason; }
+        scriptExists() { return false; }
+        ensureReady() { return Promise.reject(new Error(this.reason)); }
+        run() { return Promise.resolve(rawError(this.reason)); }
+        dispose() { return Promise.resolve(); }
     }
 
     // -------------------------------------------------------------------------
@@ -553,11 +728,15 @@
             : 120000;
 
     class GradingWorkerExecutor {
-        constructor(files, assignmentSeed, runnerCore, factory, reportPhase) {
+        constructor(files, assignmentSeed, runnerCore, factory, reportPhase, label) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.factory = factory;
+            // Which substrate this instance drives ('Python' | 'R') — used only
+            // in error text and telemetry, so a failed init says which runtime
+            // failed. The protocol and lifecycle are identical for both.
+            this.label = label || 'Python';
             // Submit-phase breadcrumb sink (student submit path only). Undefined
             // on the instructor-validation path, so init telemetry stays silent
             // there, matching the existing reportPhase scoping.
@@ -692,7 +871,7 @@
                         throw new Error('grading worker init timed out after ' + GRADING_INIT_TIMEOUT_MS + 'ms');
                     }
                     if (!reply || !reply.ok) {
-                        throw new Error('Failed to configure Python environment: '
+                        throw new Error(`Failed to configure ${this.label} environment: `
                             + ((reply && reply.error) || 'grading worker init failed'));
                     }
                     this._report('grading_init_done', 'attempt=' + attempt + ';ms=' + (Date.now() - startMs));
@@ -709,23 +888,12 @@
         }
 
         async run(name, limitSeconds) {
-            // Classification on the MAIN thread (RunnerCore wasm) — identical to
-            // runRawScript. Non-python kinds never touch the worker; they return
-            // the SAME rawError messages so the shared interpreter surfaces them
-            // the same way for every runner.
-            const src = this.scriptExists(name) ? fileAsText(this.files[name]) : null;
-            const kind = interpreterToKind(this.runnerCore.classifyScript(name, src ?? ''));
-            if (kind === 'r') {
-                return rawError('R test scripts require WebR — not yet supported in browser runner');
-            }
-            if (kind === 'shell') {
-                return rawError('Shell scripts cannot run in the browser runner');
-            }
-            if (kind !== 'python') {
-                const ext = scriptExtension(name);
-                return rawError(`Unsupported test script type: ${ext ? '.' + ext : name}`);
-            }
-            if (src === null) {
+            // Classification and substrate selection happen upstream in
+            // RoutingExecutor, which is what decides that this instance is the
+            // right one for this script. All that is left here is the existence
+            // check, kept so a direct caller still gets the worker's raw-error
+            // shape rather than a rejected postMessage.
+            if (!this.scriptExists(name)) {
                 return rawError(`Script not found: ${name}`);
             }
 
@@ -747,7 +915,8 @@
                 // A worker-side failure → surface as an error outcome rather than
                 // throwing, matching the worker's exit-2 substrate-error path.
                 this._killWorker();
-                return rawError('Grading worker failed: ' + ((reply && reply.error) || 'unknown error'));
+                return rawError(`${this.label} grading worker failed: `
+                    + ((reply && reply.error) || 'unknown error'));
             }
             const r = reply.result;
             return {
@@ -963,7 +1132,10 @@
 
         const kind = interpreterToKind(runnerCore.classifyScript(scriptName, src ?? ''));
         if (kind === 'r') {
-            return rawError('R test scripts require WebR — not yet supported in browser runner');
+            // Unreachable through RoutingExecutor, which sends .R scripts to the
+            // xeus-r substrate. Kept precise for a direct caller: this function
+            // is the Pyodide path and cannot run R itself.
+            return rawError('R test scripts run on the xeus-r substrate, not this Pyodide executor');
         }
         if (kind === 'shell') {
             return rawError('Shell scripts cannot run in the browser runner');
@@ -1567,6 +1739,262 @@ for _module_name in _tr.student_module_names_in_load_order():
             setattr(builtins, _name, _value)
 `;
 
+
+    // test_runtime.R — mirrors Tools/runner-support/test_runtime.R (and the
+    // testRuntimeR* literals in Sources/Worker/TestRuntimeSources.swift).
+    // Written into every browser grading workspace so an R test script's
+    // `source("test_runtime.R")` resolves to the same helpers the native runner
+    // injects. Pinned by Tests/BrowserRunnerJSTests/runtime-drift.test.mjs.
+    //
+    // The helpers here call quit()/commandArgs() — process-level primitives a
+    // Jupyter kernel does not have. Rather than fork this copy for the browser,
+    // r-grading-shared.js masks both in the global environment before sourcing
+    // a script, so this file stays byte-identical across the two runners.
+    const TEST_RUNTIME_R = `\
+# test_runtime.R — Chickadee R test helper library.
+# Source at the top of each R test script: source("test_runtime.R")
+#
+# API:
+#   passed(message = NULL)     — exit 0  (pass)
+#   failed(message = "failed") — exit 1  (fail)
+#   errored(message = "error") — exit 2  (error)
+#   chickadee_seed()           — deterministic per-student integer seed
+#   chickadee_inputs()         — per-student inputs from _ck_inputs.R
+#
+# No external package dependencies; JSON is hand-formatted so this works
+# on bare R installs without jsonlite.
+#
+# This file is the canonical source for the runtime that the runner injects
+# into every test working directory. The helper API is inlined as the
+# \`testRuntimeRHelpers\` string literal in Sources/Worker/TestRuntimeSources.swift;
+# the chickadee_seed()/chickadee_inputs() blocks below mirror
+# Sources/Core/RPersonalizationRuntime.swift (composed onto the helpers there so
+# the server-side expression driver and this grading runtime compute the seed
+# identically). Keep all three in sync when editing.
+
+.chickadee_json_str <- function(x) {
+    x <- as.character(x)
+    x <- gsub("\\\\", "\\\\\\\\", x, fixed = TRUE)
+    x <- gsub('"',    '\\\\"',    x, fixed = TRUE)
+    x <- gsub("\\n",   "\\\\n",    x, fixed = TRUE)
+    x <- gsub("\\r",   "\\\\r",    x, fixed = TRUE)
+    x <- gsub("\\t",   "\\\\t",    x, fixed = TRUE)
+    paste0('"', x, '"')
+}
+
+.chickadee_label <- function() {
+    args  <- commandArgs(trailingOnly = FALSE)
+    fargs <- args[startsWith(args, "--file=")]
+    if (length(fargs) > 0L) {
+        path <- sub("^--file=", "", fargs[[1L]])
+        return(tools::file_path_sans_ext(basename(path)))
+    }
+    "test"
+}
+
+.chickadee_emit <- function(status, short_result, error = NULL) {
+    label <- .chickadee_label()
+    parts <- c(
+        paste0('"status":',      .chickadee_json_str(status)),
+        paste0('"shortResult":', .chickadee_json_str(short_result)),
+        paste0('"test":',        .chickadee_json_str(label))
+    )
+    if (!is.null(error)) {
+        parts <- c(parts, paste0('"error":', .chickadee_json_str(as.character(error))))
+    }
+    cat(paste0("{", paste(parts, collapse = ","), "}\\n"))
+}
+
+passed <- function(message = NULL) {
+    label <- .chickadee_label()
+    msg   <- if (!is.null(message)) as.character(message) else paste0(label, ": passed")
+    .chickadee_emit("pass", msg)
+    quit(status = 0L, save = "no")
+}
+
+failed <- function(message = "failed") {
+    label <- .chickadee_label()
+    msg   <- as.character(message)
+    .chickadee_emit("fail", paste0(label, ": ", msg), error = msg)
+    quit(status = 1L, save = "no")
+}
+
+errored <- function(message = "error") {
+    label <- .chickadee_label()
+    msg   <- as.character(message)
+    .chickadee_emit("error", paste0(label, ": ", msg), error = msg)
+    quit(status = 2L, save = "no")
+}
+
+# --- Value formatting + comparison ------------------------------------------
+# Used by generated pattern-family tests (and available to hand-authored
+# ones) so failure messages read the same whatever produced the test.
+
+# One-line, student-readable rendering of a value - the R analogue of
+# Python's repr(). Collapsed to a single line and truncated so a failure
+# message stays scannable.
+chickadee_format <- function(x, max_chars = 300L) {
+    s <- tryCatch(paste(deparse(x), collapse = " "), error = function(e) "<unprintable>")
+    s <- gsub("[[:space:]]+", " ", s)
+    if (nchar(s) > max_chars) paste0(substr(s, 1L, max_chars), " ...") else s
+}
+
+# Exact equality, with JSON-friendly numeric handling: an expected value
+# decoded from the family spec is a double (1), while a student may well
+# return an integer (1L). Comparing numerics by value keeps that difference
+# from failing an otherwise-correct answer. Everything else falls back to
+# all.equal's structural comparison (names, nesting, attributes).
+chickadee_equal <- function(actual, expected) {
+    if (is.numeric(actual) && is.numeric(expected)) {
+        if (length(actual) != length(expected)) return(FALSE)
+        return(isTRUE(all(actual == expected)))
+    }
+    if (is.logical(actual) && is.logical(expected)) {
+        if (length(actual) != length(expected)) return(FALSE)
+        return(isTRUE(all(actual == expected)))
+    }
+    isTRUE(all.equal(actual, expected))
+}
+
+# Order-insensitive comparison for the unordered_equality kind: same
+# elements, any order. Compared as characters so mixed numeric/integer
+# element types do not matter.
+chickadee_unordered_equal <- function(actual, expected) {
+    a <- tryCatch(unlist(actual, use.names = FALSE), error = function(e) NULL)
+    b <- tryCatch(unlist(expected, use.names = FALSE), error = function(e) NULL)
+    if (is.null(a) || is.null(b)) return(FALSE)
+    if (length(a) != length(b)) return(FALSE)
+    isTRUE(all(sort(as.character(a)) == sort(as.character(b))))
+}
+
+# --- Per-student personalization primitives ---------------------------------
+# Mirror of Sources/Core/RPersonalizationRuntime.swift. base R has no bignum, so
+# the 256-bit hex seed is folded with Horner's method modulo 2^31-1 (every
+# intermediate stays < 2^35, safely inside a double). Deterministic per student
+# and identical wherever called, so R stays self-consistent.
+
+chickadee_seed <- function() {
+    hex <- tolower(gsub("[^0-9a-fA-F]", "", Sys.getenv("CHICKADEE_ASSIGNMENT_SEED", "")))
+    if (!nzchar(hex)) return(0L)
+    digits <- strtoi(strsplit(hex, "")[[1L]], 16L)
+    modulus <- 2147483647            # 2^31 - 1; intermediates stay < 2^35
+    acc <- 0
+    for (d in digits) acc <- (acc * 16 + d) %% modulus
+    as.integer(acc)
+}
+
+# Returns the per-student grading inputs the worker materialized into
+# _ck_inputs.R (a \`.ck_inputs <- list(...)\` binding), or an empty list when none
+# were delivered. The R mirror of a Python test reading _ck["name"].
+chickadee_inputs <- function() {
+    if (!file.exists("_ck_inputs.R")) return(list())
+    env <- new.env(parent = baseenv())
+    ok <- tryCatch({ sys.source("_ck_inputs.R", envir = env); TRUE },
+                   error = function(e) FALSE)
+    if (ok && exists(".ck_inputs", envir = env, inherits = FALSE)) {
+        get(".ck_inputs", envir = env)
+    } else {
+        list()
+    }
+}
+
+# --- Locating the student's submission --------------------------------------
+# Mirror of the testRuntimeRStudentFile block in
+# Sources/Worker/TestRuntimeSources.swift (where the reserved inputs filename is
+# interpolated from AssignmentLanguage). Filenames Chickadee itself writes into
+# the grading workspace are never the student's submission.
+.chickadee_reserved_files <- c("test_runtime.R", "_ck_inputs.R")
+
+.chickadee_is_test_file <- function(names) {
+    grepl("^(publictest|releasetest|secrettest|studenttest)", names)
+}
+
+# The test script currently executing. It is itself a .R file sitting in the
+# working directory, so it must never be mistaken for the submission - the
+# tier-prefix rule above only covers the conventional names.
+.chickadee_running_script <- function() {
+    args  <- commandArgs(trailingOnly = FALSE)
+    fargs <- args[startsWith(args, "--file=")]
+    if (length(fargs) > 0L) return(basename(sub("^--file=", "", fargs[[1L]])))
+    ""
+}
+
+# The student's submitted R file: solution.R during validation, the extracted
+# notebook during grading. Prefers the runner's \`.chickadee_student_module\`
+# hint when it names an R file that is actually present, then falls back to
+# scanning the working directory. \`extra_skip\` lets an assignment exclude its
+# own bundled helpers, e.g. chickadee_student_file(c("a2_helpers.R")).
+# Returns NA_character_ when nothing looks like a submission.
+chickadee_student_file <- function(extra_skip = character(0)) {
+    hint_path <- ".chickadee_student_module"
+    if (file.exists(hint_path)) {
+        hinted <- tryCatch(trimws(readLines(hint_path, warn = FALSE)),
+                           error = function(e) character(0))
+        hinted <- hinted[nzchar(hinted)]
+        if (length(hinted) > 0L) {
+            preferred <- basename(hinted[[1L]])
+            if (grepl("\\\\.[Rr]$", preferred) && file.exists(preferred)) return(preferred)
+        }
+    }
+    rfiles <- list.files(pattern = "\\\\.[Rr]$")
+    skip   <- c(.chickadee_reserved_files, .chickadee_running_script(), extra_skip)
+    cand   <- rfiles[!(rfiles %in% skip) & !.chickadee_is_test_file(rfiles)]
+    if (length(cand) == 0L) return(NA_character_)
+    if ("solution.R" %in% cand) return("solution.R")
+    cand[[1L]]
+}
+
+# Evaluate the submission expression-by-expression in a fresh environment, so a
+# runtime error in one top-level line still leaves the function definitions
+# that loaded before it available to the tests.
+chickadee_load_student <- function(extra_skip = character(0)) {
+    f <- chickadee_student_file(extra_skip)
+    if (is.na(f)) errored("No R submission file was found to grade.")
+
+    env <- new.env(parent = globalenv())
+    grDevices::pdf(NULL)                 # swallow any plots the notebook draws
+    on.exit(try(grDevices::dev.off(), silent = TRUE), add = TRUE)
+
+    exprs <- tryCatch(parse(file = f), error = function(e) NULL)
+    if (is.null(exprs)) {
+        errored(paste0("Your submission (", f, ") could not be parsed as R - check for a syntax error."))
+    }
+    for (ex in exprs) tryCatch(eval(ex, envir = env), error = function(e) invisible(NULL))
+    env
+}
+
+# Split the submission back into the notebook cells it was flattened from.
+# \`extractNotebooksToCode\` writes an inert marker comment ahead of each code
+# cell, which is what gives a source-level check cell granularity that plain
+# concatenation loses. A submission that never came from a notebook (a
+# hand-written .R upload) has no markers, so the whole file is returned as one
+# cell — file granularity, which is the honest answer for a file with no cells.
+chickadee_student_cells <- function(extra_skip = character(0)) {
+    f <- chickadee_student_file(extra_skip)
+    if (is.na(f)) errored("No R submission file was found to grade.")
+    lines <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+    starts <- which(grepl("^# ---- chickadee:cell [0-9]+ ----$", lines))
+    if (length(starts) == 0L) return(paste(lines, collapse = "\\n"))
+    ends <- c(starts[-1L] - 1L, length(lines))
+    out <- character(length(starts))
+    for (i in seq_along(starts)) {
+        first <- starts[[i]] + 1L
+        out[[i]] <- if (first > ends[[i]]) "" else paste(lines[first:ends[[i]]], collapse = "\\n")
+    }
+    out
+}
+
+# Fetch a function the student was asked to write; a clear error when it is
+# missing or was overwritten with something that is not a function.
+chickadee_require_fn <- function(env, name) {
+    fn <- tryCatch(get(name, envir = env, inherits = FALSE), error = function(e) NULL)
+    if (is.null(fn) || !is.function(fn)) {
+        errored(sprintf("Your submission must define a function called \`%s()\`.", name))
+    }
+    fn
+}
+`;
+
     const testHooks = globalThis.__CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__;
     if (testHooks) {
         testHooks.exports = {
@@ -1574,6 +2002,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             // they stay in sync with Tools/runner-support/*.py.
             TEST_RUNTIME_PY,
             SITECUSTOMIZE_PY,
+            TEST_RUNTIME_R,
             // Shared grading semantics (re-exported from grading-shared.js).
             envConfigPython,
             assignmentSeedPython,
@@ -1587,6 +2016,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             extractNotebook,
             extractNotebookToMap,
             personalizationInputsSource,
+            personalizationInputsSourceR,
             runRawScript,
             runPyScriptRaw,
             deriveExitCode,
@@ -1598,6 +2028,9 @@ for _module_name in _tr.student_module_names_in_load_order():
             makeExecutor,
             MainThreadExecutor,
             GradingWorkerExecutor,
+            RoutingExecutor,
+            UnavailableExecutor,
+            interpreterToKind,
             fetchBytes,
             fetchText,
             toMessage,

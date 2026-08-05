@@ -12,6 +12,10 @@ const sharedSource = await fs.readFile(
   path.resolve('Public/grading-shared.js'),
   'utf8',
 );
+const rSharedSource = await fs.readFile(
+  path.resolve('Public/r-grading-shared.js'),
+  'utf8',
+);
 
 // Shared producer/parser contract for the dependency-skip wording; the worker
 // side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
@@ -449,7 +453,14 @@ function makeFakeGradingWorkerFactory(options) {
     }
   }
 
-  const factory = () => new FakeGradingWorker();
+  // browser-runner passes the worker script path so one factory can serve both
+  // substrates (/grading-worker.js and /r-grading-worker.js); record it so a
+  // routing test can assert which runtime a script was sent to.
+  const factory = (scriptPath) => {
+    const worker = new FakeGradingWorker();
+    worker.scriptPath = scriptPath ?? null;
+    return worker;
+  };
   factory.created = created;
   return factory;
 }
@@ -528,6 +539,9 @@ async function loadRunnerHarness(options = {}) {
           return JSON.stringify({
             seed: options.assignmentSeed ?? null,
             personalizedInputs: options.personalizedInputs ?? null,
+            // The server resolves the assignment's language here so the browser
+            // knows which per-student inputs FILE to write (#1271).
+            language: options.assignmentLanguage ?? null,
           });
         },
       };
@@ -639,10 +653,12 @@ async function loadRunnerHarness(options = {}) {
   };
   context.globalThis = context;
 
-  // grading-shared.js first (defines ChickadeeGradingShared, which the runner
-  // destructures at IIFE start), then the runner — same order as the page.
+  // The two shared-semantics modules first (they define ChickadeeGradingShared
+  // and ChickadeeRGradingShared, which the runner destructures at IIFE start),
+  // then the runner — same order as _notebook-body.leaf loads them.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
+  vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
 
   return {
@@ -906,7 +922,11 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   );
   assert.equal(result.outcomes[0].shortResult, 'timed out');
   assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
-  assert.match(result.outcomes[2].shortResult, /WebR/);
+  // This harness has no Worker and no factory override, so the xeus-r substrate
+  // is unavailable. Because Python tests are ALSO in this manifest, that must
+  // not abort the grade (see RoutingExecutor.ensureReady): the R script alone
+  // reports the missing runtime and everything else still grades.
+  assert.match(result.outcomes[2].shortResult, /R grading needs Web Worker support/);
 });
 
 test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respawns for the next script', async () => {
@@ -1095,6 +1115,117 @@ test('a grading-runtime init failure fails over (throws, posts nothing) even whe
   // The whole point: a failed grading runtime must NOT post a 0% browser result.
   // The submission belongs to the server-side failover backstop instead.
   assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
+});
+
+test('an R test script is graded on the xeus-r substrate, and Pyodide is never booted', async () => {
+  // The capability #1271 exists for. Before it, RoutingExecutor did not exist
+  // and every .R script came back as an error outcome reading "R test scripts
+  // require WebR" — R assignments could only be graded by the native worker.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'publictest_bmi.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n',
+      'releasetest_edge.R': 'source("test_runtime.R")\nJSON_RESULT_FAIL\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [
+        { script: 'publictest_bmi.R', tier: 'public' },
+        { script: 'releasetest_edge.R', tier: 'release' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_r',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes.map(o => [o.testName, o.status])),
+    [['publictest_bmi', 'pass'], ['releasetest_edge', 'fail']],
+  );
+
+  // One worker, and it is the R one. An R lab must not pay to download and boot
+  // Pyodide for tests that will never touch it.
+  const paths = harness.gradingWorkerFactory.created.map(w => w.scriptPath);
+  assert.deepEqual(paths, ['/r-grading-worker.js']);
+});
+
+test('a Python assignment never boots the R kernel', async () => {
+  // The mirror of the case above: the 52 MB chickadee-r environment must not be
+  // fetched for an assignment with no R in it.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_py',
+  );
+
+  const paths = harness.gradingWorkerFactory.created.map(w => w.scriptPath);
+  assert.deepEqual(paths, ['/grading-worker.js']);
+});
+
+test('test_runtime.R is written into every grading workspace', async () => {
+  // An R test script opens with source("test_runtime.R"); the helper has to be
+  // in the workspace the substrate materializes, exactly as the native runner's
+  // writeRRuntimeHelper puts it in the test setup directory.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'publictest_a.R', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_r_runtime',
+  );
+
+  const worker = harness.gradingWorkerFactory.created[0];
+  assert.ok(worker.files['test_runtime.R'], 'test_runtime.R must reach the R workspace');
+  assert.match(String(worker.files['test_runtime.R']), /chickadee_student_file/);
+});
+
+test('an R assignment gets _ck_inputs.R, not _ck_inputs.py', async () => {
+  // The seed endpoint already resolves each personalization value as a literal
+  // in the assignment's language; only the wrapper file differs. Writing the
+  // Python form for an R assignment — which is what the pre-#1271 runner did —
+  // left every personalized R test reading an empty chickadee_inputs().
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'publictest_a.R', tier: 'public' }],
+    },
+    assignmentSeed: 'abc123',
+    assignmentLanguage: 'r',
+    personalizedInputs: { threshold: '42' },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_r_inputs',
+  );
+
+  const worker = harness.gradingWorkerFactory.created[0];
+  assert.equal(worker.files['_ck_inputs.py'], undefined, 'an R assignment must not get the Python inputs file');
+  assert.match(String(worker.files['_ck_inputs.R']), /\.ck_inputs <- list\(/);
+  assert.match(String(worker.files['_ck_inputs.R']), /`threshold` = 42/);
 });
 
 test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
