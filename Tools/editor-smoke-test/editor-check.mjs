@@ -309,7 +309,14 @@ async function main() {
     // stamps COEP); spawn them here so it can't regress unseen. These workers are
     // message-driven and do nothing until posted to, so spawning is cheap.
     if (isolated) {
-      const workerScripts = ["/grading-worker.js", "/freeze-watchdog-worker.js"];
+      // Both grading substrates, since #1271 replaced the single Pyodide worker
+      // with one worker per language — each is spawned from the isolated page
+      // and each has to survive COEP on its own.
+      const workerScripts = [
+        "/python-grading-worker.js",
+        "/r-grading-worker.js",
+        "/freeze-watchdog-worker.js",
+      ];
       const workerBlocked = [];
       const onWorkerReqFail = (req) => {
         const why = req.failure()?.errorText || "";

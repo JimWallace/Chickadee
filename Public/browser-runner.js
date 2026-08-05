@@ -632,7 +632,8 @@
     // provide against a synchronous CPU-bound loop.
     // -------------------------------------------------------------------------
 
-    // Bounded init: how long to wait for a grading worker to finish loadPyodide +
+    // Bounded init: how long to wait for a grading worker to finish booting its
+    // kernel +
     // env-config before declaring it wedged, terminating it, and retrying once on
     // a fresh worker. The init path used to be UNBOUNDED — unlike run(), which
     // races a timer — so a Pyodide load/boot that never completed (observed
@@ -688,7 +689,7 @@
                 const msg = (e && e.data) || {};
                 // Diagnostic breadcrumbs (no `id`) emitted from inside the worker
                 // during init — forward to submit-phase telemetry so an init hang
-                // is localizable to the loadPyodide vs env-config step. Never
+                // is localizable to the kernel-boot vs env-config step. Never
                 // grading state; ignored if telemetry is unwired.
                 if (msg.type === 'phase') {
                     this._report(msg.phase, (msg.ms != null) ? ('ms=' + msg.ms) : undefined);
@@ -770,7 +771,7 @@
         }
 
         // Init the worker, bounded by GRADING_INIT_TIMEOUT_MS and retried once on
-        // a fresh worker. A wedged loadPyodide/env-config (e.g. two Pyodides
+        // a fresh worker. A wedged kernel boot / env-config (e.g. two wasm runtimes
         // contending at boot under cross-origin isolation) terminates + respawns
         // instead of hanging the whole grade forever; a second failure surfaces
         // as a clear error (matching the old throw-on-init-failure contract),

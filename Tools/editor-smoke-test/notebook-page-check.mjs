@@ -249,7 +249,8 @@ async function main() {
   //   grading_init_start without grading_init_done  → stuck in worker init
   //   pyodide_loaded without env_configured          → stuck after Pyodide load
   //   grading_init_done without suite_done           → stuck in a test run
-  // See Public/browser-runner.js GradingWorkerExecutor + Public/grading-worker.js.
+  // See Public/browser-runner.js GradingWorkerExecutor + the per-language
+  // grading workers (Public/python-grading-worker.js, r-grading-worker.js).
   const gradingPhases = [];
   page.on("request", (req) => {
     try {
@@ -292,10 +293,10 @@ async function main() {
     // (2) Our app Web Workers must spawn from the real isolated page (the #986
     // regression: a require-corp page can't spawn a worker whose script lacks
     // COEP). We do NOT spawn a synthetic probe worker here — that would start a
-    // second Pyodide load (grading-worker.js importScripts pyodide at startup)
+    // second wasm runtime (the grading worker boots its own xeus kernel)
     // and contend with the real grading. Instead the page exercises the workers
     // for us: notebook.js spawns /freeze-watchdog-worker.js on load and
-    // browser-runner.js spawns /grading-worker.js on Submit. A COEP block of
+    // browser-runner.js spawns the language's grading worker on Submit. A COEP block of
     // either surfaces as an ERR_BLOCKED request, captured in `blocked` and
     // asserted below (and the Submit step would also fail). Editor-check.mjs
     // keeps the active probe for the standalone case.
@@ -379,7 +380,7 @@ async function main() {
 
     // (4) Full submit: click Submit (enabled once the notebook syncs) and wait
     // for an inline result. This exercises in-browser grading end-to-end —
-    // grading-worker.js spawning + running Pyodide under isolation on the real
+    // the grading worker spawning + running its kernel under isolation on the real
     // page, then posting and rendering the result.
     const submit = page.locator("#nb-submit");
     const submitReady = await submit.waitFor({ state: "visible", timeout: KERNEL_BOOT_MS })
@@ -408,7 +409,7 @@ async function main() {
     const resultText = (await results.innerText()).replace(/\s+/g, " ").trim().slice(0, 200);
     console.log(`grading result rendered: "${resultText}"`);
     // The fixture's one public test (`print(...)`, exit 0) must PASS — a
-    // result of "1 / 1 passed" proves grading-worker.js spawned under isolation,
+    // result of "1 / 1 passed" proves the grading worker spawned under isolation,
     // loaded Pyodide, ran the test, and posted a correct outcome end-to-end.
     if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
       return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
