@@ -104,17 +104,6 @@ never fetches the Python env. `RunnerCore` still owns the suite loop and output
 interpretation for both; a substrate supplies only "run this script, report its
 exit code and streams".
 
-**Every worker the notebook page spawns must be in
-`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
-cross-origin isolated on Chromium/Firefox, and a worker created by a
-`require-corp` document must ITSELF be served `require-corp` or the browser
-refuses the script (`ERR_BLOCKED_BY_RESPONSE`) — at which point `ensureReady`
-throws and the submission silently fails over to the native worker: right marks,
-none of the speed. The allowlist is per-path, so "same directory, same
-middleware" proves nothing about a worker not on it; that reasoning is how #1274
-shipped browser-graded R that no isolated engine ever ran.
-`IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
-and fails on drift in either direction.
 xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
 `jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
 contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global
@@ -126,6 +115,18 @@ than one summing 1, and R's own clock reports 0ms across nested expressions vs
 ~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
 ~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
+
+**Every worker the notebook page spawns must be in
+`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
+cross-origin isolated on Chromium/Firefox, and a worker created by a
+`require-corp` document must ITSELF be served `require-corp` or the browser
+refuses the script (`ERR_BLOCKED_BY_RESPONSE`) — at which point `ensureReady`
+throws and the submission silently fails over to the native worker: right marks,
+none of the speed. The allowlist is per-path, so "same directory, same
+middleware" proves nothing about a worker not on it; that reasoning is how #1274
+shipped browser-graded R that no isolated engine ever ran.
+`IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
+and fails on drift in either direction.
 
 **Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
 `AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
@@ -521,6 +522,23 @@ Anything a student imports must be baked into the matching env: the editor's CSP
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
 numpy / pandas / matplotlib; the R side is bare `xeus-r`.
+
+**The authoring check reads the VENDORED bytes, never `environment-python.yml`.**
+Since browser grading moved onto this env, saving a browser-graded `.py` whose
+imports the kernel cannot satisfy is rejected at the write
+(`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
+and MCP `author_script`) — which matters because instructor validation is graded
+by the *native* worker on a full CPython, so such a test validates green and then
+fails for the first student who submits. The available set comes from
+`importable-modules.json`, derived from `kernel_packages/*.tar.gz` by
+`scripts/derive-kernel-modules.py`. Adding a name to the env file changes
+nothing until `build-jupyterlite.sh` runs, so a check derived from the env file
+would accept imports the shipped kernel cannot serve — the exact failure it
+exists to prevent. Reading the tarballs also means there is no
+distribution-name-to-import-name table to maintain. The check applies to
+browser-graded assignments only (worker grading runs real `python3`) and resolves
+every ambiguity toward reporting nothing, since a false positive blocks an
+instructor from saving with no self-service fix.
 
 Building the kernels needs **micromamba on PATH plus network to
 repo.prefix.dev**, which CI does not have — so CI never rebuilds them and the

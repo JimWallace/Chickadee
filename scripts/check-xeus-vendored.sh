@@ -113,6 +113,35 @@ print(
     f"check-xeus-vendored: OK "
     f"(kernels {listed}, envs {kernel_envs}, packages {package_counts}, loaders {loaders})."
 )
+
+# 6. The Python env's derived module index must exist and match the env that
+#    ships beside it. The server reads it to reject a browser-graded script
+#    whose imports the kernel cannot satisfy; a stale index either blocks a
+#    package that is now vendored or accepts one that was dropped, and both are
+#    silent. Regenerate with scripts/derive-kernel-modules.py (build-jupyterlite
+#    already does).
+python_env = build / "xeus" / "chickadee-python"
+if python_env.is_dir():
+    index_path = python_env / "importable-modules.json"
+    if not index_path.is_file():
+        fail(
+            f"missing {index_path} — run scripts/derive-kernel-modules.py {python_env}"
+        )
+    index = json.loads(index_path.read_text())
+    meta = json.loads((python_env / "empack_env_meta.json").read_text())
+    vendored = sorted({p["name"] for p in meta.get("packages", [])})
+    if index.get("packages") != vendored:
+        fail(
+            "importable-modules.json describes a different package set than "
+            f"empack_env_meta.json ({len(index.get('packages', []))} vs {len(vendored)} "
+            f"packages) — re-run scripts/derive-kernel-modules.py {python_env}"
+        )
+    if not index.get("modules") or not index.get("stdlibModules"):
+        fail(f"{index_path} lists no modules — regenerate it")
+    print(
+        f"check-xeus-vendored: OK (module index matches the env: "
+        f"{len(index['modules'])} package modules)."
+    )
 PY
 
 # 6. The pyodide-http payload in the Python env must carry the streaming-path
@@ -169,4 +198,5 @@ for archive in archives:
         )
         sys.exit(1)
     print(f"check-xeus-vendored: OK (pyodide-http streaming path disabled in {archive.name}).")
+
 PY

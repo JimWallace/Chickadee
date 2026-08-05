@@ -639,4 +639,122 @@ import VaporTesting
 
         }
     }
+
+    // MARK: - Browser-grading import check (#1271)
+    //
+    // These fixtures are `gradingMode: "browser"`, so a Python script that
+    // imports outside the vendored `chickadee-python` env is rejected here
+    // rather than failing with an ImportError for the first student who submits.
+    // The check reads the real vendored kernel's inventory, so it is skipped
+    // whole when those bytes are absent from the checkout.
+
+    private func requireKernelInventory() throws {
+        guard app.kernelPythonEnvironment != nil else {
+            throw IssueRecorded("vendored chickadee-python kernel inventory not present")
+        }
+    }
+
+    @Test func postScriptRejectsAnImportTheGradingKernelLacks() async throws {
+        try await withApp(app) { _ in
+            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+                throw IssueRecorded("zip not available")
+            }
+            try requireKernelInventory()
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setup = try await insertSetup(id: "sc_imp1", withEntries: [])
+            let a = try await insertAssignment(testSetupID: "sc_imp1", title: "ImportReject")
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(
+                        string: """
+                            {"filename":"test_stats.py","content":"import seaborn\\nprint(1)\\n",\
+                            "tier":"public","points":1}
+                            """)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                    #expect(res.body.string.contains("seaborn"))
+                }
+            )
+
+            #expect(
+                readScriptFromZip(zipPath: setup.zipPath, filename: "test_stats.py") == nil,
+                "a rejected script must not reach the zip")
+        }
+    }
+
+    @Test func postScriptAcceptsWhatTheGradingKernelProvides() async throws {
+        try await withApp(app) { _ in
+            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+                throw IssueRecorded("zip not available")
+            }
+            try requireKernelInventory()
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setup = try await insertSetup(id: "sc_imp2", withEntries: [])
+            let a = try await insertAssignment(testSetupID: "sc_imp2", title: "ImportAccept")
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(
+                        string: """
+                            {"filename":"test_ok.py",\
+                            "content":"import numpy\\nimport math\\nfrom test_runtime import passed\\n",\
+                            "tier":"public","points":1}
+                            """)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .created, "body: \(res.body.string.prefix(300))")
+                }
+            )
+
+            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_ok.py") != nil)
+        }
+    }
+
+    /// The likeliest false positive: a test importing the support file that sits
+    /// beside it in the same setup.
+    @Test func postScriptAcceptsAnImportOfABundledSupportFile() async throws {
+        try await withApp(app) { _ in
+            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+                throw IssueRecorded("zip not available")
+            }
+            try requireKernelInventory()
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setup = try await insertSetup(
+                id: "sc_imp3", withEntries: [("genome_gen.py", "def make():\n    return 1\n")])
+            let a = try await insertAssignment(testSetupID: "sc_imp3", title: "ImportLocal")
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(
+                        string: """
+                            {"filename":"test_local.py",\
+                            "content":"from genome_gen import make\\nprint(make())\\n",\
+                            "tier":"public","points":1}
+                            """)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .created, "body: \(res.body.string.prefix(300))")
+                }
+            )
+
+            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_local.py") != nil)
+        }
+    }
 }

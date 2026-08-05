@@ -26,31 +26,55 @@ established that this is viable and measured the cost.
 >    added: `networkx`, `seaborn`, `plotly`, `requests` (the last is moot —
 >    `connect-src 'self'` means a graded test could never use it).
 >
-> §A's first item, the authoring-time import check, is what makes (2) a
-> save-time error rather than a grade-time surprise. It is the highest-value
-> remaining work.
+> §A1, the authoring-time import check, has since shipped and makes (2) a
+> save-time error rather than a grade-time surprise. Note that it reads the
+> VENDORED bytes, so it currently (correctly) rejects `import scipy` — the
+> re-vendor in (1) is what will make it start accepting them.
 
 ---
 
 ## A. What is left
 
-### A1. Reject unsatisfiable imports at authoring time — *highest value*
+### A1. Reject unsatisfiable imports at authoring time — **DONE**
 
-The package set is now static and known at build time, so a test script that
-imports something the grading env lacks can be rejected **when an instructor
-saves it** instead of when a student submits. Nothing about the Pyodide
-architecture allowed this; it is a capability the migration created.
+Shipped. `PythonImportGuard` runs at all four hand-authored-script write sites
+(web create + update, `PUT /suite`, MCP `author_script`), and rejects a
+browser-graded `.py` write whose imports the kernel cannot satisfy, naming the
+module, the line, and the ways forward.
 
-Sketch: derive the env's package list (the kernel's `empack_env_meta.json` is
-already vendored and lists every installed package), expose it to the server, and
-check a script's top-level imports at the `author_script` / suite-save
-chokepoints against that list plus the standard library. Report the missing name
-and the fact that it can be added to `environment-python.yml`.
+Three decisions worth keeping, because each changes the answer:
 
-Care needed on: conditional and function-local imports (do not reject what is
-guarded), `import a.b` vs `from a import b`, and the difference between a
-distribution name and its import name (`scikit-learn` → `sklearn`, `pillow` →
-`PIL`).
+**Derive from the tarballs, not `environment-python.yml`.** The env file states
+an intent that is only true after a re-vendor, and a re-vendor needs micromamba
+plus network to `repo.prefix.dev` — CI can never do one. The env file currently
+lists scipy, sympy, scikit-learn and statsmodels; the shipped bytes contain none
+of them. A check derived from intent would have accepted `import scipy` and
+recreated the exact grade-time failure it exists to prevent.
+`scripts/derive-kernel-modules.py` reads `kernel_packages/*.tar.gz` and records
+what is actually importable; `check-xeus-vendored.sh` fails if the derived index
+drifts from the env beside it.
+
+This also dissolves the distribution-name-vs-import-name problem the sketch
+flagged. The tarball says `site-packages/sklearn`, so there is nothing to map.
+
+**Browser-graded assignments only.** A worker-graded assignment runs real
+`python3` on the runner and is not constrained by the kernel's package set at
+all. Applying the check there would reject working scripts.
+
+**Every ambiguity resolves toward reporting nothing.** A missed import restores
+the status quo (an `ImportError` at grade time); a false positive blocks an
+instructor from saving, with no self-service fix — adding a package is a
+maintainer change plus a re-vendor. So the scanner only reads column-0
+statements (which makes guarded and function-local imports fall out for free,
+rather than needing conditional analysis), skips relative imports and anything
+inside a string or comment, and the availability check additionally accepts every
+`.py` file bundled in the setup, the runner-injected modules, and student-module
+names. The "must NOT report" tests are the ones to keep adding to.
+
+Stdlib names come from the union of the env's own python tarball and the build
+machine's `sys.stdlib_module_names`, which is deliberately permissive: it may
+include something emscripten does not really support (`multiprocessing`), which
+is a missed catch, but it can never reject a stdlib import that works.
 
 ### A2. Migrate `Public/pyodide-worker.js`
 

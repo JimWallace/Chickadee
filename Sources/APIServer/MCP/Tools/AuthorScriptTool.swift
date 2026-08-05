@@ -423,7 +423,10 @@ struct AuthorScriptTool: ContentTool {
             }
         }
 
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(
+            setup: setup, body: payload, tool: Self.name,
+            kernelEnvironment: context.request.application.kernelPythonEnvironment,
+            on: context.db)
     }
 
     // MARK: - Support-file authoring (direct zip write)
@@ -440,6 +443,10 @@ struct AuthorScriptTool: ContentTool {
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: filename, content: content, manifest: manifest)
         }()
+
+        try PythonImportGuard.check(
+            filename: filename, content: toWrite, setup: setup,
+            environment: context.request.application.kernelPythonEnvironment)
 
         do {
             try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: toWrite)

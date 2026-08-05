@@ -202,6 +202,7 @@ func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
 func applySuiteEdit(
     setup: APITestSetup,
     body: SuitePayload,
+    kernelEnvironment: KernelPythonEnvironment? = nil,
     on db: Database
 ) async throws {
     var authored: [AuthoredSuiteItem] = []
@@ -273,6 +274,16 @@ func applySuiteEdit(
                 name: "items",
                 reason: "Unknown suite item kind '\(item.kind)'.")
         }
+    }
+
+    // Refuse browser-graded Python scripts whose imports the grading kernel
+    // cannot satisfy. Only items that CARRY new content are checked: a reorder
+    // or a tier change re-inlines existing files without supplying content, and
+    // failing those would make an unrelated save impossible to complete.
+    for item in body.items where item.kind == "script" {
+        guard let s = item.script, let content = s.content else { continue }
+        try PythonImportGuard.check(
+            filename: s.script, content: content, setup: setup, environment: kernelEnvironment)
     }
 
     // Section CRUD lives on dedicated endpoints (v0.4.98) — pass `nil`

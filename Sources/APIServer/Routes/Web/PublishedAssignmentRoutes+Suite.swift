@@ -50,7 +50,9 @@ extension PublishedAssignmentRoutes {
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
 
-        try await applySuiteEdit(setup: setup, body: body, on: req.db)
+        try await applySuiteEdit(
+            setup: setup, body: body,
+            kernelEnvironment: req.application.kernelPythonEnvironment, on: req.db)
 
         // Re-grade every existing student submission against the edited suite
         // (gated on a real manifest change) — restoring the v0.4.93 auto-retest

@@ -66,10 +66,15 @@ func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext
 /// `AbortError`) to `MCPToolError` so the agent sees a structured, actionable
 /// error rather than an opaque protocol-level internal error.
 func applySuiteEditMapped(
-    setup: APITestSetup, body: SuitePayload, tool: String, on db: any Database
+    setup: APITestSetup,
+    body: SuitePayload,
+    tool: String,
+    kernelEnvironment: KernelPythonEnvironment? = nil,
+    on db: any Database
 ) async throws {
     do {
-        try await applySuiteEdit(setup: setup, body: body, on: db)
+        try await applySuiteEdit(
+            setup: setup, body: body, kernelEnvironment: kernelEnvironment, on: db)
     } catch let error as WebAssignmentError {
         throw MCPToolError.from(error, tool: tool)
     } catch let error as any AbortError {
