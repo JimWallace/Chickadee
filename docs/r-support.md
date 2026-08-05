@@ -377,6 +377,124 @@ idiomatic R name like `my.df` is refused at save time even on an R assignment.
 The handler's `validate` has no language in scope today; threading one through
 is the fix, and it applies to every kind equally.
 
+## Browser-graded R (#1271)
+
+An R assignment set to `gradingMode: browser` grades in the student's browser,
+the same as a Python one. Before #1271 it could not: `browser-runner.js`
+classified a `.R` script and returned "R test scripts require WebR", so R
+submissions only ever reached the native worker. WebR was never a route out of
+that — `jupyterlite-webr` caps at `jupyterlite-core<0.7` and we pin 0.8.x — so
+the vendored **xeus-r kernel is the only way in-browser R grading exists at
+all**.
+
+### What is and is not shared
+
+`RunnerCore` (Swift, compiled to wasm) still owns the suite loop, dependency
+gating, and output interpretation for *both* languages. The kernel supplies one
+operation — run a script, report its exit code and its two streams — which is
+exactly the seam `ScriptExecutor` was carved out for. Nothing about how an exit
+code becomes a `TestOutcome` is duplicated for R.
+
+`Public/browser-runner.js`'s `RoutingExecutor` picks the substrate **per
+script**, from the same `classifyScript` the native worker uses to choose a
+subprocess command, and boots only the runtimes an assignment actually contains:
+an R lab never downloads Pyodide, and a Python lab never fetches the 52 MB R
+environment.
+
+### One environment for authoring and grading
+
+The grader boots the same `chickadee-r` env the notebook editor boots for R
+notebooks. That gives R a property Python currently lacks — the editor runs
+xeus-python while browser grading and `/validate` run Pyodide — so for R, "it
+ran in the editor" and "it runs in the grader" mean the same environment, and a
+missing package is missing at authoring time rather than at grade time.
+
+### Re-creating the Rscript contract inside a kernel
+
+The native runner grades by spawning `Rscript publictest_foo.R`. That is a
+*process* contract, and `test_runtime.R` is written to it: `passed()` /
+`failed()` / `errored()` call `quit(status = N)`, the test label comes from
+`commandArgs()`'s `--file=` entry, and stdout/stderr are two pipes. A kernel has
+none of that. Rather than fork the runtime for the browser,
+`Public/r-grading-shared.js` wraps each script so the same file works unchanged:
+
+- `quit` / `q` are masked in the global environment with a function that signals
+  a `chickadee_exit` condition carrying the status. `test_runtime.R`'s helpers
+  resolve `quit` through their enclosure (the global environment), so the mask is
+  what they call — and the canonical runtime stays byte-identical across both
+  runners (pinned by `runtime-drift.test.mjs`).
+- `commandArgs` is masked to name the script being graded.
+- The global environment is wiped before each script, standing in for the fresh
+  process the native runner gets per test.
+- stdout is sunk into a text connection and replayed around a per-run nonce, so
+  the script's own output is separable from the wrapper's report and student
+  code cannot forge a section boundary.
+
+**stderr is deliberately not sunk.** xeus-r evaluates a cell through
+`evaluate::evaluate()`, which installs *calling handlers* for message and warning
+conditions; those fire before the condition reaches the stderr connection, so
+`sink(type = "message")` captures nothing and the text is published as an iopub
+`stream`/`stderr` message instead. The kernel's stderr stream already *is* the
+script's stderr — for the whole cell, including anything raised inside
+`source()` — so the worker reads it from there. An earlier revision sank it and
+silently dropped every error message, which would have left `longResult` empty on
+exactly the outcomes a student most needs it for.
+
+### The one-expression rule
+
+Measured on the vendored kernel (xeus-r 0.11.2 / R 4.5.3), a cell costs roughly
+**700ms plus ~250ms for every top-level expression in it** — xeus-r evaluates
+top-level expressions one at a time. Expressions nested inside a call are free of
+that cost, and so are the expressions inside a `source()`d file. So the wrapper
+is written as a single `local({ ... })`: as a ~12-statement script it cost ~3.5s
+per test, and collapsed it costs ~0.8s. `r-grading-shared.test.mjs` asserts the
+shape structurally so it cannot quietly grow back.
+
+This is a property of the *wrapper*, not of test scripts. An author's own
+top-level statements are evaluated by `source()` and are not charged per
+expression.
+
+Measured end-to-end on the smoke probe: kernel boot ~3.7s, then ~1–2s per test
+script.
+
+### Booting the kernel without JupyterLab
+
+`Public/r-grading-worker.js` boots the kernel itself rather than reusing
+JupyterLite's worker. The vendored `@jupyterlite/xeus-extension` worker chunks are
+module-federation bundles that `consume` `@jupyterlab/services` and friends from
+a share scope only the JupyterLab application creates, with no fallback — they
+cannot run in a bare worker. The boot sequence mirrors upstream's
+`EmpackedXeusRemoteKernel` (`initializeModule` → `waitRunDependencies` → empack
+bootstrap → `xkernel.start`) using a small mambajs slice bundled from npm source
+into `Public/vendor/xeus-bootstrap.js` by `scripts/setup-vendor.sh`.
+
+### Per-student inputs
+
+The seed endpoint (`/api/v1/browser-runner/testsetups/:id/seed`) reports the
+assignment's resolved `language` alongside the seed, because it already computes
+it to render each personalization value as a literal in the right language. The
+browser uses it to choose the inputs *file*: `_ck_inputs.R` (a `.ck_inputs <-
+list(...)` binding) for R, `_ck_inputs.py` for Python. Writing the Python form
+for an R assignment is what the pre-#1271 runner did, and it left every
+personalized R test reading an empty `chickadee_inputs()`.
+
+Which substrate runs a given script is still decided per script from the file's
+classification, so the reported language never overrides a `.py` / `.R`
+extension.
+
+### Verifying it
+
+`Tools/r-grading-smoke/smoke.mjs` (run it with `scripts/r-grading-smoke.sh`,
+gated in CI by `.github/workflows/r-grading-smoke.yml`) serves `Public/` and
+grades real R scripts through the real kernel in a real browser. That matters
+because everything else in the R grading coverage proves code *resolves* — the
+Node suite drives a fake worker, and `swift test` never leaves the server. The
+failures the probe exists for pass every other check in CI: a re-vendored
+`xeus-bootstrap.js` that no longer matches the kernel's empack metadata, a
+rebuilt `chickadee-r` env missing a shared library the kernel `dlopen()`s, or the
+`quit()` masking ceasing to be what `test_runtime.R` resolves — which would turn
+every R test into a pass.
+
 ## Verification
 
 - `Tests/CoreTests/JSONValueRLiteralTests.swift`,
@@ -387,3 +505,13 @@ is the fix, and it applies to every kind equally.
   shape (CI-safe) and a real `Rscript` round-trip (seed math, `rLiteral`
   binding, `deparse` → JSON → decode). The round-trip is silently skipped where
   `Rscript` is absent; it runs in the r-base container and locally.
+- `Tests/BrowserRunnerJSTests/r-grading-shared.test.mjs` — the browser wrapper's
+  shape (one top-level expression, the `quit`/`commandArgs` masks) and the
+  reply parsing, including that student output cannot forge a section boundary.
+- `Tests/BrowserRunnerJSTests/browser-runner.test.mjs` — substrate routing: an R
+  script reaches `/r-grading-worker.js` and Pyodide is never spawned, and the
+  reverse for Python.
+- `Tests/APITests/BrowserRunnerSeedLanguageTests.swift` — pins the browser's
+  `_ck_inputs.R` rendering against `AssignmentLanguage.renderInputsFile(.r)`.
+- `Tools/r-grading-smoke/smoke.mjs` — the only check that boots a kernel; see
+  "Verifying it" above.

@@ -125,6 +125,30 @@ npx esbuild iframe-commands-host-entry.js \
     --minify \
     --outfile="$public_vendor/iframe-commands-host.js"
 
+# ── xeus kernel bootstrap (browser-graded R) ──────────────────────────
+# The mambajs slice Public/r-grading-worker.js uses to unpack the vendored
+# `chickadee-r` conda env into the kernel's emscripten filesystem. IIFE, not
+# ESM: the grading worker is a classic worker (it needs importScripts for the
+# kernel's emscripten glue). See Tools/vendor/xeus-bootstrap-entry.mjs for why
+# this is built from npm source instead of reusing the federated
+# @jupyterlite/xeus-extension chunks.
+#
+# untarjs ships its unpacking wasm as a bundler-resolved `import ... from
+# './unpack.wasm'`. That default is only consulted when no locateWasm is
+# supplied, and r-grading-worker.js always supplies one — so the import is
+# dropped (--loader:.wasm=empty) and the wasm is vended explicitly instead,
+# under a name that says which subsystem owns it.
+echo "==> Bundling xeus kernel bootstrap via esbuild"
+npx esbuild xeus-bootstrap-entry.mjs \
+    --bundle \
+    --format=iife \
+    --target=es2020 \
+    --minify \
+    --loader:.wasm=empty \
+    --outfile="$public_vendor/xeus-bootstrap.js"
+cp node_modules/@emscripten-forge/untarjs/lib/unpack.wasm \
+   "$public_vendor/xeus-unpack.wasm"
+
 # Inject Chickadee's extra pure-Python wheels (nb_mypy + deps) that aren't in
 # the upstream Pyodide distribution, so a re-vendor never silently drops them.
 # Pinned + sha-verified; see Tools/vendor/pyodide-extra-packages.json.
@@ -139,3 +163,4 @@ echo "==> Vendor refresh complete."
 echo "    Public/pyodide/              $(du -sh "$public_pyodide" | cut -f1)"
 echo "    Public/vendor/jszip.min.js   $(du -sh "$public_vendor/jszip.min.js" | cut -f1)"
 echo "    Public/vendor/codemirror.js  $(du -sh "$public_vendor/codemirror.js" | cut -f1)"
+echo "    Public/vendor/xeus-bootstrap.js $(du -sh "$public_vendor/xeus-bootstrap.js" | cut -f1)"
