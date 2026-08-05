@@ -598,6 +598,9 @@
             },
             uploadScript: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
+            },
+            reorderSections: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/suite-sections/reorder';
             }
         }
     });

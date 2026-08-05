@@ -108,10 +108,23 @@
         var urls      = config.urls || {};
         var formSelector = config.formSelector || 'form.form';
 
+        // `reorderSections` is required rather than derived. It used to be
+        // computed from putSuite() by rewriting a trailing path segment, which
+        // silently produced the wrong endpoint on the create page: that page's
+        // putSuite() ends in a query string rather than the segment, so the
+        // anchored rewrite never matched, and the reorder POSTed to the suite
+        // endpoint — which is registered GET/PUT only. The 405 surfaced to the
+        // instructor as "Section reorder failed". A missing builder must fail
+        // loudly at init, not resolve to a URL that happens to exist.
+        //
+        // (The old pattern is asserted absent by section-reorder-url.test.mjs,
+        // so it is described here rather than quoted.)
         if (typeof urls.putSuite !== 'function'
          || typeof urls.deleteScript !== 'function'
-         || typeof urls.uploadScript !== 'function') {
-            throw new Error('initSuiteTable: urls must supply putSuite, deleteScript, uploadScript functions');
+         || typeof urls.uploadScript !== 'function'
+         || typeof urls.reorderSections !== 'function') {
+            throw new Error('initSuiteTable: urls must supply putSuite, deleteScript, '
+                + 'uploadScript, reorderSections functions');
         }
 
         var filesInput  = document.getElementById('suite-files-input');
@@ -1094,8 +1107,7 @@
         /// DOM state already.
         function persistSectionOrder() {
             var ids = sectionIDsInOrder();
-            var base = (urls.putSuite() || '').replace(/\/suite$/, '/suite-sections/reorder');
-            global.ChickadeeUI.fetchJSON(base, {
+            global.ChickadeeUI.fetchJSON(urls.reorderSections(), {
                 method: 'POST', csrfToken: csrfToken, body: { sectionIDs: ids }
             })
             .catch(function (err) {
@@ -1695,7 +1707,10 @@
             classify: classify,
             classifyFile: classifyFile,
             isLikelyScriptName: isLikelyScriptName,
-            hasRecognizedScriptShebang: hasRecognizedScriptShebang
+            hasRecognizedScriptShebang: hasRecognizedScriptShebang,
+            // Exported for the config-validation test only. Everything past
+            // the urls check is DOM-bound and is not callable under node.
+            initSuiteTable: initSuiteTable
         };
     }
 })(typeof window !== 'undefined' ? window : globalThis);

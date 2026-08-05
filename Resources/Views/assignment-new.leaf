@@ -437,6 +437,10 @@ Create Assignment
             },
             uploadScript: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
+            },
+            reorderSections: function () {
+                return '/instructor/new/draft/suite-sections/reorder?draftID='
+                     + encodeURIComponent(draftID);
             }
         }
     });
@@ -461,106 +465,14 @@ Create Assignment
 <script src="/inputs-editor-core.js?v=#appVersion()"></script>
 <script src="/section-inputs-editor.js?v=#appVersion()"></script>
 
-<script>
-(function () {
-    'use strict';
-
-    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
-    var csrf = ChickadeeUI.getCsrfToken;
-
-
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
-    // into a test-type dropdown by the unified Test Editor modal
-    // (test-editor-modal.js, loaded below); a pick opens the modal in that type.
-
-    // ── Section header view/edit toggle ────────────────────────────────
-    document.addEventListener('click', function (e) {
-        var toggleBtn = e.target.closest && e.target.closest('.section-edit-toggle');
-        var cancelBtn = e.target.closest && e.target.closest('.section-edit-cancel');
-        var deleteBtn = e.target.closest && e.target.closest('.section-delete-btn');
-
-        if (toggleBtn) {
-            var hdr = toggleBtn.closest('.section-header');
-            if (!hdr) return;
-            hdr.querySelector('.section-view').style.display = 'none';
-            hdr.querySelector('.section-edit').style.display = 'flex';
-            var input = hdr.querySelector('.section-name-input');
-            if (input) input.focus();
-        } else if (cancelBtn) {
-            var hdr2 = cancelBtn.closest('.section-header');
-            if (!hdr2) return;
-            hdr2.querySelector('.section-view').style.display = 'flex';
-            hdr2.querySelector('.section-edit').style.display = 'none';
-        } else if (deleteBtn) {
-            var name = deleteBtn.getAttribute('data-name') || 'this section';
-            if (!confirm('Delete section "' + name + '"? Tests in this section move to Ungrouped.')) return;
-            var action = deleteBtn.getAttribute('data-action');
-            if (!action) return;
-            var form = document.createElement('form');
-            form.method = 'post';
-            form.action = action;
-            form.style.display = 'none';
-            var token = ChickadeeUI.getCsrfToken();
-            var inp = document.createElement('input');
-            inp.type = 'hidden';
-            inp.name = '_csrf';
-            inp.value = token;
-            form.appendChild(inp);
-            document.body.appendChild(form);
-            form.submit();
-        }
-    });
-
-    // ── Section header drag-reorder ─────────────────────────────────────
-    var sectionContainer = document.getElementById('suite-sections');
-    if (sectionContainer) {
-        var draggingHeader = null;
-        sectionContainer.addEventListener('dragstart', function (e) {
-            var hdr = e.target.closest && e.target.closest('.section-header');
-            if (!hdr) return;
-            draggingHeader = hdr;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', hdr.parentNode.getAttribute('data-section-id') || '');
-            hdr.style.opacity = '.4';
-        });
-        sectionContainer.addEventListener('dragend', function () {
-            if (draggingHeader) draggingHeader.style.opacity = '';
-            draggingHeader = null;
-        });
-        sectionContainer.addEventListener('dragover', function (e) {
-            if (!draggingHeader) return;
-            e.preventDefault();
-        });
-        sectionContainer.addEventListener('drop', function (e) {
-            if (!draggingHeader) return;
-            e.preventDefault();
-            var draggedBlock = draggingHeader.closest('.section-block');
-            var targetBlock = e.target.closest && e.target.closest('.section-block');
-            if (!draggedBlock || !targetBlock || draggedBlock === targetBlock) return;
-            // Don't allow dragging onto the Ungrouped block (it's terminal)
-            if (!targetBlock.querySelector('.section-header')) return;
-            var rect = targetBlock.getBoundingClientRect();
-            var midpoint = rect.top + rect.height / 2;
-            if (e.clientY < midpoint) {
-                sectionContainer.insertBefore(draggedBlock, targetBlock);
-            } else {
-                sectionContainer.insertBefore(draggedBlock, targetBlock.nextSibling);
-            }
-            // Persist new order
-            var ids = Array.from(sectionContainer.querySelectorAll('.section-block'))
-                .map(function (b) { return b.getAttribute('data-section-id') || ''; })
-                .filter(function (s) { return s !== ''; });
-            fetch('/instructor/new/draft/suite-sections/reorder?draftID=' + encodeURIComponent(draftID), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                body: JSON.stringify({ sectionIDs: ids })
-            }).catch(function (err) {
-                console.error('section reorder failed:', err);
-            });
-        });
-    }
-})();
-</script>
+<!-- Section header view/edit toggle, section delete, and section
+     drag-reorder are all owned by suite-table.js (wired above), which this
+     page and the edit page both load.  This page used to bind its own copies
+     on top: the toggle/delete pair on `document` and the drag pair on the
+     same #suite-sections element suite-table uses, so both fired.  Section
+     delete raised two confirm dialogs, and the inline reorder handler read a
+     `draftID` that was declared only inside a sibling IIFE — under strict
+     mode a ReferenceError, so its POST never went out at all. -->
 #endif
 
 <!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->

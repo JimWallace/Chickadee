@@ -392,6 +392,53 @@ import VaporTesting
         }
     }
 
+    /// The draft suite endpoint is registered for GET and PUT only. That is
+    /// what made suite-table.js's old reorder-URL derivation a live bug: it
+    /// rewrote a trailing path segment of `putSuite()`, which on this page
+    /// ends in a query string, so the rewrite was a no-op and the section
+    /// reorder POSTed here instead of to `/suite-sections/reorder`. The
+    /// request was rejected and the instructor saw "Section reorder failed".
+    ///
+    /// Pinned so that adding a POST handler here — which would make the old
+    /// derivation silently "work" while writing the wrong payload to the
+    /// wrong handler — is a deliberate act with a red test attached.
+    @Test func draftSuiteEndpointRejectsPOST() async throws {
+        try await withApp(app) { _ in
+            let sid = UUID().uuidString
+            let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
+            let cookie = try await loginUser(username: "dssrt_inst9", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst9", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            struct ReorderBody: Content { var sectionIDs: [String] }
+
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(ReorderBody(sectionIDs: [sid]), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status.code >= 400 && res.status.code < 500,
+                        "POST to the draft suite endpoint must be rejected, got \(res.status)")
+                })
+
+            // The real endpoint accepts it.
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(ReorderBody(sectionIDs: [sid]), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status.code < 400, "the reorder endpoint should accept the payload")
+                })
+        }
+    }
+
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
     @Test func reorderDraftSuiteSections_updatesOrder() async throws {
