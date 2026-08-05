@@ -115,14 +115,17 @@ print(
 )
 PY
 
-# 6. The pyodide-http payload in the Python env must carry the pyjs `to_js`
-#    patch (scripts/patch-xeus-python-http.py). Un-patched, the first HTTP call
-#    the kernel makes — the notebook page's Drive mount — raises
-#    `TypeError: to_js() got an unexpected keyword argument 'dict_converter'`
-#    and the kernel never leaves `kernel_starting`. That failure is invisible in
-#    the JupyterLite REPL (no Drive-backed file, so the call never happens), so
-#    assert it on the committed bytes rather than trusting a smoke test to catch
-#    it.
+# 6. The pyodide-http payload in the Python env must carry the streaming-path
+#    patch (scripts/patch-xeus-python-http.py). pyodide-http selects a
+#    Pyodide-specific streaming implementation whenever `crossOriginIsolated` is
+#    true; it is not pyjs-compatible, so on an isolated engine the kernel never
+#    leaves `kernel_starting` and the editor sits on "Kernel Connecting".
+#
+#    This is easy to ship broken by accident: the failure is invisible in the
+#    JupyterLite REPL (no Drive-backed file, so no HTTP call happens) AND
+#    invisible on WebKit (served non-isolated, so it takes the working fallback
+#    anyway). Only isolated engines hit it. Assert it on the committed bytes
+#    rather than trusting any one smoke config to catch it.
 python3 - "$BUILD_DIR" <<'PY'
 import pathlib
 import sys
@@ -146,14 +149,24 @@ for archive in archives:
             sys.exit(1)
         extracted = tf.extractfile(members[0])
         source = extracted.read().decode("utf-8") if extracted else ""
-    # Test the precise upstream call, not the bare word — the patch's own
-    # marker comment would otherwise match and the guard would fail itself.
-    if "dict_converter=" in source:
+    # The load-bearing edit: the streaming path must be unreachable. Test for
+    # the live `if crossOriginIsolated:` switch rather than for the patch's own
+    # marker, so a partially-applied patch cannot pass.
+    if "if crossOriginIsolated:" in source:
         print(
-            f"check-xeus-vendored: {archive.name} still calls to_js(dict_converter=...) "
-            "— run scripts/patch-xeus-python-http.py (the editor kernel will hang without it)",
+            f"check-xeus-vendored: {archive.name} still selects pyodide-http's streaming "
+            "path under cross-origin isolation — run scripts/patch-xeus-python-http.py "
+            "(the editor kernel hangs on isolated engines without it)",
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"check-xeus-vendored: OK (pyjs to_js patch present in {archive.name}).")
+    # Secondary edit, only reachable if streaming is ever re-enabled.
+    if "dict_converter=" in source:
+        print(
+            f"check-xeus-vendored: {archive.name} still calls to_js(dict_converter=...) "
+            "— run scripts/patch-xeus-python-http.py",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"check-xeus-vendored: OK (pyodide-http streaming path disabled in {archive.name}).")
 PY

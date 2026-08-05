@@ -28,15 +28,22 @@
   and each have both a loader and its `.wasm` beside it — so a partial
   re-vendor fails in CI rather than in front of a student.
 
+### Fixed
+
+- **The editor kernel no longer hangs on cross-origin-isolated engines.**
+  `pyodide-http` (an unavoidable dependency of `xeus-python-shell-lite`) selects
+  a Pyodide-specific streaming implementation whenever `crossOriginIsolated` is
+  true. It is not pyjs-compatible, so on Chromium the kernel never left
+  `kernel_starting` and the editor sat on "Kernel Connecting" indefinitely;
+  WebKit, which Chickadee serves non-isolated on purpose, took the library's
+  XMLHttpRequest fallback and worked fine. `scripts/patch-xeus-python-http.py`
+  forces that fallback on every engine — upstream's own documented degradation
+  for non-isolated contexts — and `check-xeus-vendored.sh` asserts it on the
+  committed bytes, since the fault is invisible both in the JupyterLite REPL and
+  on WebKit.
+
 ### Known issues
 
-- **Python notebooks no longer work on WebKit (Safari / iPad).** `COEPMiddleware`
-  deliberately serves WebKit non-isolated, and xeus kernels hard-require
-  SharedArrayBuffer with no fallback, so Python on Safari goes from working
-  (Pyodide + service-worker fallback) to no kernel at all; R was already
-  unavailable there for the same reason. Resolving it means re-testing whether
-  Pyodide/coincident still deadlocks isolated Safari and, if not, dropping the
-  WebKit exemption. Needs a real device.
 - **Editor and browser grader are no longer the same Python.** Authoring runs
   xeus-python 3.13; browser grading and `/validate` still run Pyodide 3.14. The
   native worker remains the authoritative grader, so marks are unaffected.
