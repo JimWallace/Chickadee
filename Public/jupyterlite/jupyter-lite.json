@@ -5,7 +5,7 @@
     "appVersion": "0.8.1-chickadee.1",
     "baseUrl": "./",
     "contentsAllJsonFile": "all.json",
-    "defaultKernelName": "python",
+    "defaultKernelName": "xpython",
     "disabledExtensions": [
       "@jupyterlite/application-extension:service-worker-manager"
     ],

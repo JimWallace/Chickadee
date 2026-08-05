@@ -1,7 +1,7 @@
 {
   "jupyter-config-data": {
     "appVersion": "0.8.1-chickadee.1",
-    "defaultKernelName": "python",
+    "defaultKernelName": "xpython",
     "fullLabextensionsUrl": "./extensions",
     "disabledExtensions": [
       "@jupyterlite/application-extension:service-worker-manager"

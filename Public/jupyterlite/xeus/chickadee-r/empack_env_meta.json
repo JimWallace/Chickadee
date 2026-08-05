@@ -2,14 +2,26 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "xeus-r",
-      "version": "0.10.0",
-      "build": "h3d3c8a5_0",
-      "filename_stem": "xeus-r-0.10.0-h3d3c8a5_0",
-      "filename": "xeus-r-0.10.0-h3d3c8a5_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-ellipsis",
+      "version": "0.3.3",
+      "build": "r45h0e10311_3",
+      "filename_stem": "r-ellipsis-0.3.3-r45h0e10311_3",
+      "filename": "r-ellipsis-0.3.3-r45h0e10311_3.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
+        "r-rlang"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus-r",
+      "version": "0.11.2",
+      "build": "h01c9e3f_1",
+      "filename_stem": "xeus-r-0.11.2-h01c9e3f_1",
+      "filename": "xeus-r-0.11.2-h01c9e3f_1.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-main-module-abi * vanilla*",
         "r-cli",
         "r-evaluate",
         "r-glue",
@@ -18,39 +30,48 @@
         "r-r6",
         "r-repr",
         "r-rlang",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0",
-        "xeus >=6.0.2,<6.1.0a0",
-        "nlohmann_json-abi 3.12.0"
+        "zlib",
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0",
+        "r-base >=4.5.3,<4.6.0a0",
+        "xeus >=6.0.5,<6.1.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-utf8",
-      "version": "1.2.6",
-      "build": "he2bab3c_1",
-      "filename_stem": "r-utf8-1.2.6-he2bab3c_1",
-      "filename": "r-utf8-1.2.6-he2bab3c_1.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "emscripten-abi",
+      "version": "4.0.9",
+      "build": "h267e887_9",
+      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
+      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-base",
+      "version": "4.5.3",
+      "build": "h1590c74_9",
+      "filename_stem": "r-base-4.5.3-h1590c74_9",
+      "filename": "r-base-4.5.3-h1590c74_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "font-ttf-dejavu >=2.37",
+        "font-ttf-dejavu-sans-mono >=2.37",
+        "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-htmltools",
-      "version": "0.5.8.1",
-      "build": "he2bab3c_2",
-      "filename_stem": "r-htmltools-0.5.8.1-he2bab3c_2",
-      "filename": "r-htmltools-0.5.8.1-he2bab3c_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-cli",
+      "version": "3.6.6",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-cli-3.6.6-r45h6b09a92_2",
+      "filename": "r-cli-3.6.6-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "r-base64enc",
-        "r-digest",
-        "r-fastmap",
-        "r-rlang",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -71,77 +92,120 @@
       "subdir": "noarch"
     },
     {
-      "name": "emscripten-abi",
-      "version": "3.1.73",
-      "build": "h267e887_12",
-      "filename_stem": "emscripten-abi-3.1.73-h267e887_12",
-      "filename": "emscripten-abi-3.1.73-h267e887_12.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-cli",
-      "version": "3.6.5",
-      "build": "he2bab3c_2",
-      "filename_stem": "r-cli-3.6.5-he2bab3c_2",
-      "filename": "r-cli-3.6.5-he2bab3c_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-fansi",
+      "version": "1.0.7",
+      "build": "r45h6b09a92_7",
+      "filename_stem": "r-fansi-1.0.7-r45h6b09a92_7",
+      "filename": "r-fansi-1.0.7-r45h6b09a92_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "xeus",
-      "version": "6.0.3",
-      "build": "h2072262_0",
-      "filename_stem": "xeus-6.0.3-h2072262_0",
-      "filename": "xeus-6.0.3-h2072262_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-glue",
+      "version": "1.8.1",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-glue-1.8.1-r45h6b09a92_2",
+      "filename": "r-glue-1.8.1-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "emscripten-abi >=3.1.73,<3.1.74.0a0",
-        "nlohmann_json-abi 3.12.0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-base64enc",
+      "version": "0.1_6",
+      "build": "r45h6b09a92_5",
+      "filename_stem": "r-base64enc-0.1_6-r45h6b09a92_5",
+      "filename": "r-base64enc-0.1_6-r45h6b09a92_5.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-rlang",
+      "version": "1.3.0",
+      "build": "r45h6b09a92_0",
+      "filename_stem": "r-rlang-1.3.0-r45h6b09a92_0",
+      "filename": "r-rlang-1.3.0-r45h6b09a92_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-vctrs",
+      "version": "0.7.3",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-vctrs-0.7.3-r45h6b09a92_2",
+      "filename": "r-vctrs-0.7.3-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-cli >=3.6.3",
+        "r-glue",
+        "r-rlang",
+        "r-lifecycle >=1.0.4",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "font-ttf-dejavu-sans-mono",
+      "version": "2.37",
+      "build": "hab24e00_0",
+      "filename_stem": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0",
+      "filename": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-fastmap",
+      "version": "1.2.0",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-fastmap-1.2.0-r45h202ccb8_7",
+      "filename": "r-fastmap-1.2.0-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-utf8",
+      "version": "1.2.6",
+      "build": "r45h6b09a92_7",
+      "filename_stem": "r-utf8-1.2.6-r45h6b09a92_7",
+      "filename": "r-utf8-1.2.6-r45h6b09a92_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
       "name": "r-jsonlite",
       "version": "2.0.0",
-      "build": "h59e44ba_1",
-      "filename_stem": "r-jsonlite-2.0.0-h59e44ba_1",
-      "filename": "r-jsonlite-2.0.0-h59e44ba_1.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-jsonlite-2.0.0-r45h202ccb8_7",
+      "filename": "r-jsonlite-2.0.0-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-fansi",
-      "version": "1.0.7",
-      "build": "he2bab3c_0",
-      "filename_stem": "r-fansi-1.0.7-he2bab3c_0",
-      "filename": "r-fansi-1.0.7-he2bab3c_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-glue",
-      "version": "1.8.0",
-      "build": "he2bab3c_1",
-      "filename_stem": "r-glue-1.8.0-he2bab3c_1",
-      "filename": "r-glue-1.8.0-he2bab3c_1.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -155,6 +219,16 @@
       "depends": [
         "r-base >=4.5,<4.6.0a0"
       ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "font-ttf-dejavu",
+      "version": "2.37",
+      "build": "hd8ed1ab_1",
+      "filename_stem": "font-ttf-dejavu-2.37-hd8ed1ab_1",
+      "filename": "font-ttf-dejavu-2.37-hd8ed1ab_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
       "subdir": "noarch"
     },
     {
@@ -185,9 +259,9 @@
     {
       "name": "nlohmann_json-abi",
       "version": "3.12.0",
-      "build": "h0f90c79_1",
-      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_1",
-      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_1.tar.gz",
+      "build": "h0f90c79_2",
+      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
+      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [],
       "subdir": "noarch"
@@ -213,28 +287,15 @@
       "subdir": "noarch"
     },
     {
-      "name": "r-digest",
-      "version": "0.6.39",
-      "build": "h59e44ba_0",
-      "filename_stem": "r-digest-0.6.39-h59e44ba_0",
-      "filename": "r-digest-0.6.39-h59e44ba_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "xeus",
+      "version": "6.0.5",
+      "build": "h0b0027f_0",
+      "filename_stem": "xeus-6.0.5-h0b0027f_0",
+      "filename": "xeus-6.0.5-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-base64enc",
-      "version": "0.1_6",
-      "build": "he2bab3c_0",
-      "filename_stem": "r-base64enc-0.1_6-he2bab3c_0",
-      "filename": "r-base64enc-0.1_6-he2bab3c_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -254,33 +315,13 @@
       "subdir": "noarch"
     },
     {
-      "name": "r-fastmap",
-      "version": "1.2.0",
-      "build": "h59e44ba_1",
-      "filename_stem": "r-fastmap-1.2.0-h59e44ba_1",
-      "filename": "r-fastmap-1.2.0-h59e44ba_1.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-vctrs",
-      "version": "0.7.2",
-      "build": "he2bab3c_0",
-      "filename_stem": "r-vctrs-0.7.2-he2bab3c_0",
-      "filename": "r-vctrs-0.7.2-he2bab3c_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
-        "r-cli >=3.6.3",
-        "r-glue",
-        "r-rlang",
-        "r-lifecycle >=1.0.4",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
+      "name": "r-main-module-abi",
+      "version": "0.1.0",
+      "build": "vanilla_ha99ebfa_0",
+      "filename_stem": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0",
+      "filename": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
       "subdir": "emscripten-wasm32"
     },
     {
@@ -296,41 +337,44 @@
       "subdir": "noarch"
     },
     {
-      "name": "r-base",
-      "version": "4.5.1",
-      "build": "h8aa216e_0",
-      "filename_stem": "r-base-4.5.1-h8aa216e_0",
-      "filename": "r-base-4.5.1-h8aa216e_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-htmltools",
+      "version": "0.5.9",
+      "build": "r45h6b09a92_4",
+      "filename_stem": "r-htmltools-0.5.9-r45h6b09a92_4",
+      "filename": "r-htmltools-0.5.9-r45h6b09a92_4.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-ellipsis",
-      "version": "0.3.2",
-      "build": "he2bab3c_2",
-      "filename_stem": "r-ellipsis-0.3.2-he2bab3c_2",
-      "filename": "r-ellipsis-0.3.2-he2bab3c_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
-      "depends": [
-        "r-base 4.5.1",
+        "r-base64enc",
+        "r-digest",
+        "r-fastmap",
         "r-rlang",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-rlang",
-      "version": "1.2.0",
-      "build": "he2bab3c_0",
-      "filename_stem": "r-rlang-1.2.0-he2bab3c_0",
-      "filename": "r-rlang-1.2.0-he2bab3c_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-dev",
+      "name": "r-digest",
+      "version": "0.6.39",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-digest-0.6.39-r45h202ccb8_7",
+      "filename": "r-digest-0.6.39-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-base 4.5.1",
-        "emscripten-abi >=3.1.73,<3.1.74.0a0"
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "build": "h8b79025_0",
+      "filename_stem": "zlib-1.3.2-h8b79025_0",
+      "filename": "zlib-1.3.2-h8b79025_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
     }
@@ -339,7 +383,7 @@
     "xeus-r"
   ],
   "channels": [
-    "https://repo.prefix.dev/emscripten-forge-dev",
+    "https://repo.prefix.dev/emscripten-forge-4x",
     "https://repo.prefix.dev/conda-forge"
   ]
 }

@@ -34,20 +34,39 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# R kernel via jupyterlite-xeus (xeus-r): build the xeus-r WASM kernel alongside
-# the Pyodide Python kernel ONLY where micromamba is available. jupyterlite-xeus
-# solves the emscripten-forge env at build time, which needs network to
-# repo.prefix.dev / conda-forge. CI has no such network, so it skips this and
-# treats the committed Public/jupyterlite/xeus/ as the authoritative vendored
-# kernel (the reproducibility check excludes that path; scripts/check-xeus-vendored.sh
-# guards its integrity). Rebuild the vendored kernel where micromamba +
-# emscripten-forge are reachable (a maintainer machine, or this repo's spike env).
-if [[ -f "$LITE_SRC_DIR/environment-r.yml" ]] && command -v micromamba >/dev/null 2>&1; then
-  cp "$LITE_SRC_DIR/environment-r.yml" "$TMP_LITE_DIR/environment.yml"
-  BUILD_ARGS+=(--XeusAddon.environment_file "$TMP_LITE_DIR/environment.yml")
-  echo "build-jupyterlite: micromamba found — building the xeus-r kernel."
-elif [[ -f "$LITE_SRC_DIR/environment-r.yml" ]]; then
-  echo "build-jupyterlite: micromamba not found — skipping the xeus-r kernel build; the committed Public/jupyterlite/xeus/ is authoritative." >&2
+# Editor kernels via jupyterlite-xeus: xpython (Python) and xr (R), each from
+# its OWN emscripten-forge env — Tools/jupyterlite/environment-{python,r}.yml.
+#
+# The two envs are separate on purpose. jupyterlite-xeus packs one
+# `kernel_packages` payload per env and a kernel fetches its whole env at boot,
+# so a single shared Python+R env made every Python boot pull all of r-base and
+# every R boot pull numpy/pandas/matplotlib — slow enough to time out the editor
+# probes ("kernel never reported idle"). `environment_file` is list-valued, so
+# passing it twice yields two envs and two payloads.
+#
+# Built ONLY where micromamba is available: jupyterlite-xeus solves the envs at
+# build time, which needs network to repo.prefix.dev / conda-forge. CI has no
+# such network, so it skips this and treats the committed
+# Public/jupyterlite/xeus/ as the authoritative vendored kernels (the
+# reproducibility check excludes that path; scripts/check-xeus-vendored.sh
+# guards their integrity). Rebuild where micromamba + emscripten-forge are
+# reachable (a maintainer machine, or this repo's spike env).
+#
+# NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
+# must be passed as a bare filename, not the absolute path it was copied to.
+XEUS_ENVS=(environment-python.yml environment-r.yml)
+XEUS_ENVS_PRESENT=()
+for env_file in "${XEUS_ENVS[@]}"; do
+  [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
+done
+if [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]] && command -v micromamba >/dev/null 2>&1; then
+  for env_file in "${XEUS_ENVS_PRESENT[@]}"; do
+    cp "$LITE_SRC_DIR/$env_file" "$TMP_LITE_DIR/$env_file"
+    BUILD_ARGS+=(--XeusAddon.environment_file "$env_file")
+  done
+  echo "build-jupyterlite: micromamba found — building the xeus kernels from ${XEUS_ENVS_PRESENT[*]}."
+elif [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]]; then
+  echo "build-jupyterlite: micromamba not found — skipping the xeus kernel build; the committed Public/jupyterlite/xeus/ is authoritative." >&2
 fi
 
 "$JUPYTER_BIN" lite build "${BUILD_ARGS[@]}"
@@ -56,9 +75,9 @@ mkdir -p "$OUTPUT_DIR"
 
 # Keep runtime notebook storage roots while refreshing all generated assets.
 RSYNC_EXCLUDES=(--exclude 'files/' --exclude 'lab/files/' --exclude 'notebooks/files/')
-# If this run did NOT build the xeus-r kernel (no micromamba) but a vendored one
+# If this run did NOT build the xeus kernels (no micromamba) but a vendored set
 # is already committed, preserve it — don't let --delete wipe the manually-built
-# kernel that this environment can't reproduce.
+# kernels that this environment can't reproduce.
 if ! command -v micromamba >/dev/null 2>&1 && [[ -d "$OUTPUT_DIR/xeus" ]]; then
   RSYNC_EXCLUDES+=(--exclude 'xeus/' --exclude 'extensions/@jupyterlite/xeus-extension/')
   echo "build-jupyterlite: preserving the committed vendored xeus-r kernel (not rebuilt this run)." >&2
@@ -107,6 +126,14 @@ python3 "$ROOT_DIR/scripts/patch-jupyterlite-diagnostics.py" "$OUTPUT_DIR"
 # only emits a csp_violation + unhandledrejection diagnostics pair on every
 # editor boot. Idempotent; fails if the upstream shapes drift.
 python3 "$ROOT_DIR/scripts/patch-xeus-extension.py" "$OUTPUT_DIR"
+
+# Drop pyodide-http's Pyodide-only `to_js(dict_converter=...)` call from the
+# vendored xeus-python env. xeus-python -> xeus-python-shell-lite ->
+# pyodide-http is an unavoidable dependency chain, the shell calls patch_all()
+# at kernel startup, and the first patched HTTP call (the notebook page's Drive
+# mount) then dies on pyjs's to_js — leaving the kernel stuck at
+# `kernel_starting` forever. Idempotent; fails if the upstream source drifts.
+python3 "$ROOT_DIR/scripts/patch-xeus-python-http.py" "$OUTPUT_DIR"
 
 "$ROOT_DIR/scripts/verify-jupyterlite.sh" "$OUTPUT_DIR"
 echo "JupyterLite rebuilt at $OUTPUT_DIR"
