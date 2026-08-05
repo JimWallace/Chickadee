@@ -631,8 +631,13 @@ async function loadRunnerHarness(options = {}) {
   // (the rest of the suite exercises that).  When a test opts in via
   // `useGradingWorker`, install a fake-worker factory so the GradingWorkerExecutor
   // path runs without real Pyodide.
+  // Every substrate is a Web Worker running a vendored xeus kernel — there is
+  // no main-thread path any more (#1271), so the harness always installs the
+  // fake worker unless a test is deliberately proving the Worker-less failover.
+  // `useGradingWorker` is kept as an opt-OUT marker (`noWorker: true`) rather
+  // than the old opt-in, since "no Worker" is now the exceptional case.
   let gradingWorkerFactory = null;
-  if (options.useGradingWorker) {
+  if (!options.noWorker) {
     gradingWorkerFactory = options.workerFactory ?? makeFakeGradingWorkerFactory(options);
     context.__CHICKADEE_GRADING_WORKER_FACTORY__ = gradingWorkerFactory;
   }
@@ -734,8 +739,9 @@ test('runAndSubmit executes Python scripts, posts a browser-wasm result collecti
   assert.ok(harness.postBodies[0].notebookText.includes('"answer = 42\\n"'));
   assert.equal(harness.statusEl.hidden, true);
   assert.equal(
-    [...harness.py.FS.entries.keys()].some(key => key.startsWith('/chickadee_work_')),
-    false,
+    harness.gradingWorkerFactory.created.every(w => w.terminated),
+    true,
+    'dispose must terminate the grading worker, reclaiming the kernel',
   );
   assert.equal(
     harness.fetchCalls.filter(call => call.url.includes('/manifest')).length,
@@ -783,6 +789,8 @@ test('runAndSubmit emits ordered submit-phase breadcrumbs; validation stays sile
       'runtime_loaded',
       'setup_unpacked',
       'suite_started',
+      'grading_init_start',
+      'grading_init_done',
       'suite_done',
       'result_posting',
       'result_posted',
@@ -836,7 +844,8 @@ test('runScripts validates a plain Python solution without posting a submission'
   assert.equal(result.outcomes[0].status, 'pass');
   assert.equal(result.collection.totalTests, 1);
   assert.equal(harness.postBodies.length, 0);
-  const hintWrite = harness.py.FS.writes.find(write => write.targetPath.endsWith('/.chickadee_student_module'));
+  const workerFiles = harness.gradingWorkerFactory.created[0].files;
+  const hintWrite = { value: workerFiles['.chickadee_student_module'] };
   assert.equal(hintWrite && String(hintWrite.value), 'solution.py');
 });
 
@@ -885,7 +894,9 @@ test('dependency failures are skipped without executing blocked scripts', async 
       },
     ],
   );
-  assert.deepEqual(harness.py.state.configuredScripts, ['test_build.py']);
+  assert.deepEqual(
+    harness.gradingWorkerFactory.created.flatMap(w => w.runCalls.map(c => c.script)),
+    ['test_build.py']);
 });
 
 test('timeouts and unsupported script types are surfaced in outcomes', async () => {
@@ -919,16 +930,18 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
     [
       ['test_slow', 'timeout'],
       ['test_shell', 'error'],
-      ['test_r', 'error'],
+      ['test_r', 'pass'],
     ],
   );
   assert.equal(result.outcomes[0].shortResult, 'timed out');
+  // Shell is the only kind with no substrate at all — it is reported per script
+  // rather than aborting the grade, so the tests that CAN run still do.
   assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
-  // This harness has no Worker and no factory override, so the xeus-r substrate
-  // is unavailable. Because Python tests are ALSO in this manifest, that must
-  // not abort the grade (see RoutingExecutor.ensureReady): the R script alone
-  // reports the missing runtime and everything else still grades.
-  assert.match(result.outcomes[2].shortResult, /R grading needs Web Worker support/);
+  // R routes to its own kernel worker and grades normally alongside Python.
+  assert.deepEqual(
+    [...new Set(harness.gradingWorkerFactory.created.map(w => w.scriptPath))].sort(),
+    ['/python-grading-worker.js', '/r-grading-worker.js'],
+  );
 });
 
 test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respawns for the next script', async () => {
@@ -944,7 +957,6 @@ test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respa
   // old main-thread code could not recover from this; the executor must time it
   // out (terminate), then grade the next script in a brand-new worker.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: {
       'runaway.py': '# runaway\nJSON_RESULT_PASS\n',  // would "pass" if it ever returned
       'after.py': '# after\nJSON_RESULT_PASS\n',
@@ -997,7 +1009,6 @@ test('GradingWorkerExecutor brackets the worker init with start/done breadcrumbs
   // keepalive submit-phase funnel. Only the student submit path emits them
   // (runAndSubmit wires reportPhase; instructor validation stays silent).
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1039,7 +1050,6 @@ test('GradingWorkerExecutor bounds a wedged worker init: times out, retries once
   // grading_init_start breadcrumbs (the attempts) prove the retry; the run never
   // exceeds the budget. This is the safety net the old unbounded init lacked.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     initPending: true,          // fake worker never replies to 'init'
     gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
     zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
@@ -1094,7 +1104,6 @@ test('a grading-runtime init failure fails over (throws, posts nothing) even whe
   );
 
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     initPending: true,          // worker init never replies → init fails
     gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
     runnerExecuteSuites: swallowingExecuteSuites,
@@ -1119,12 +1128,10 @@ test('a grading-runtime init failure fails over (throws, posts nothing) even whe
   assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
 });
 
-test('a xeus deployment routes Python at the kernel worker, not Pyodide', async () => {
-  // The #1271 flag. Both workers speak the same protocol, so the executor does
-  // not change — only which script it spawns.
+test('Python is graded on the xeus-python kernel worker', async () => {
+  // Since #1271 there is one Python substrate. Both workers speak the same
+  // protocol, so the executor does not change — only the script it spawns.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
-    assignmentPythonSubstrate: 'xeus',
     zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1145,36 +1152,11 @@ test('a xeus deployment routes Python at the kernel worker, not Pyodide', async 
   );
 });
 
-test('Pyodide stays the default when the server says nothing', async () => {
-  // An older server, or a failed seed fetch, must not silently move a
-  // deployment onto a substrate with a narrower package set.
-  const harness = await loadRunnerHarness({
-    useGradingWorker: true,
-    zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
-    manifest: {
-      gradingMode: 'browser',
-      timeLimitSeconds: 10,
-      testSuites: [{ script: 'test_pass.py', tier: 'public' }],
-    },
-  });
 
-  await harness.window.BrowserRunner.runAndSubmit(
-    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
-    'setup_default',
-  );
-
-  assert.deepEqual(
-    harness.gradingWorkerFactory.created.map(w => w.scriptPath),
-    ['/grading-worker.js'],
-  );
-});
-
-test('the substrate flag never reroutes R', async () => {
+test('R is graded on its own kernel worker, never the Python one', async () => {
   // R has exactly one browser substrate; a Python rollout knob must not touch
   // it. Both languages on xeus is the end state, but they get there separately.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
-    assignmentPythonSubstrate: 'xeus',
     zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1194,14 +1176,13 @@ test('the substrate flag never reroutes R', async () => {
   );
 });
 
-test('a xeus deployment with no Worker fails over instead of grading on Pyodide', async () => {
-  // The main-thread fallback is Pyodide-only (booting a kernel needs
-  // importScripts). Quietly falling back would grade on a different runtime
-  // than the deployment chose, with a wider package set — right answers today,
-  // a surprise the day someone tightens the env. Failing over to the native
-  // worker is slower and correct.
+test('a browser with no Worker fails the grade over instead of guessing', async () => {
+  // There is no main-thread path any more: a xeus kernel needs importScripts,
+  // which is worker-only, and the old Pyodide fallback could not kill a
+  // CPU-bound runaway anyway. Failing over to the native worker is slower and
+  // correct; grading on a different runtime would not be.
   const harness = await loadRunnerHarness({
-    assignmentPythonSubstrate: 'xeus',   // no useGradingWorker: no Worker at all
+    noWorker: true,
     zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1225,7 +1206,6 @@ test('an R test script is graded on the xeus-r substrate, and Pyodide is never b
   // and every .R script came back as an error outcome reading "R test scripts
   // require WebR" — R assignments could only be graded by the native worker.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: {
       'publictest_bmi.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n',
       'releasetest_edge.R': 'source("test_runtime.R")\nJSON_RESULT_FAIL\n',
@@ -1260,7 +1240,6 @@ test('a Python assignment never boots the R kernel', async () => {
   // The mirror of the case above: the 52 MB chickadee-r environment must not be
   // fetched for an assignment with no R in it.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: { 'test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1275,7 +1254,7 @@ test('a Python assignment never boots the R kernel', async () => {
   );
 
   const paths = harness.gradingWorkerFactory.created.map(w => w.scriptPath);
-  assert.deepEqual(paths, ['/grading-worker.js']);
+  assert.deepEqual(paths, ['/python-grading-worker.js']);
 });
 
 test('test_runtime.R is written into every grading workspace', async () => {
@@ -1283,7 +1262,6 @@ test('test_runtime.R is written into every grading workspace', async () => {
   // in the workspace the substrate materializes, exactly as the native runner's
   // writeRRuntimeHelper puts it in the test setup directory.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1308,7 +1286,6 @@ test('an R assignment gets _ck_inputs.R, not _ck_inputs.py', async () => {
   // Python form for an R assignment — which is what the pre-#1271 runner did —
   // left every personalized R test reading an empty chickadee_inputs().
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
     manifest: {
       gradingMode: 'browser',
@@ -1337,7 +1314,6 @@ test('GradingWorkerExecutor grades pass/fail through one worker and classifies n
   // RAW output, and a shell script is rejected on the MAIN thread without ever
   // touching the worker (its 'run' never reaches the worker).
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: {
       'test_pass.py': '# pass\nJSON_RESULT_PASS\n',
       'test_fail.py': '# fail\nJSON_RESULT_FAIL\n',
@@ -1384,7 +1360,6 @@ test('per-script timeLimitSeconds in the manifest overrides the assignment defau
   // The override must be the limit handed to the executor for `slow.py`, while
   // `fast.py` (no override) still gets the assignment default.
   const harness = await loadRunnerHarness({
-    useGradingWorker: true,
     zipFiles: {
       'slow.py': '# slow\nJSON_RESULT_PASS\n',
       'fast.py': '# fast\nJSON_RESULT_PASS\n',
@@ -1448,7 +1423,8 @@ test('extensionless Python test scripts dispatch via their shebang instead of fa
     ],
   );
   // The extensionless Python script actually executed (it was compiled).
-  assert.ok(harness.py.state.configuredScripts.includes('beats'));
+  assert.ok(harness.gradingWorkerFactory.created
+    .flatMap(w => w.runCalls.map(c => c.script)).includes('beats'));
   assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
   assert.match(result.outcomes[2].shortResult, /Unsupported test script type: mystery/);
 });
@@ -1732,7 +1708,9 @@ test('injects the per-student seed into os.environ for parity with the native wo
     'setup_seed',
   );
 
-  assert.equal(harness.py.state.assignmentSeedEnv, 'deadbeefcafe0123');
+  // The seed now reaches the substrate over the worker's init message rather
+  // than through a main-thread Pyodide handle.
+  assert.equal(harness.gradingWorkerFactory.created[0].seed, 'deadbeefcafe0123');
   assert.equal(
     harness.fetchCalls.filter(call => call.url.endsWith('/seed')).length,
     1,
@@ -1783,10 +1761,9 @@ test('writes _ck_inputs.py from the seed endpoint personalizedInputs (parity wit
     'setup_personalized',
   );
 
-  // FS.writes is an append-only log, so the record survives workdir cleanup.
-  const write = harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py'));
-  assert.ok(write, '_ck_inputs.py must be written to the work dir');
-  const src = String(write.value);
+  // The file map is handed to the substrate over the worker's init message.
+  const src = String(harness.gradingWorkerFactory.created[0].files['_ck_inputs.py'] ?? '');
+  assert.ok(src, '_ck_inputs.py must reach the grading workspace');
   assert.ok(src.includes('_ck = {'), 'emits a _ck dict');
   assert.ok(src.includes('"adults_expected": 2,'), 'value inserted verbatim');
   assert.ok(src.includes(`"patients": [{'mrn': '1001'}],`), 'Python-literal value preserved');
@@ -1936,52 +1913,4 @@ test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', as
 // imports a bundled helper which itself imports numpy therefore ran with numpy
 // unloaded — green on the native validation run (numpy installed system-wide),
 // ModuleNotFoundError for every student in the browser.
-test('preloadPackagesForFiles scans bundled helpers, not just the test script', async () => {
-  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
-  const { preloadPackagesForFiles } = harness.hooks;
 
-  // The shape that broke Lab 9: the test script names only the helper; the
-  // third-party import lives one level down, inside the helper.
-  const files = {
-    'publictest_summarize.py': 'import lab9_helpers as H\nH.build_cohort(1)\n',
-    'lab9_helpers.py': 'import numpy as np\nimport pandas as pd\n',
-    'nhanes_bp.csv': 'age,high_bp\n40,1\n',
-  };
-
-  await preloadPackagesForFiles(harness.py, files);
-
-  const scanned = harness.py.state.loadPackageCalls;
-  assert.ok(
-    scanned.some(src => src.includes('import numpy')),
-    'helper source carrying the numpy import must be handed to loadPackagesFromImports',
-  );
-  // Non-Python bundle entries are not source and must not be scanned.
-  assert.ok(
-    !scanned.some(src => src.includes('age,high_bp')),
-    'CSV data files must not be scanned as Python source',
-  );
-});
-
-test('preloadPackagesForFiles isolates each file so one bad source cannot suppress the rest', async () => {
-  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
-  const { preloadPackagesForFiles } = harness.hooks;
-
-  // Pyodide parses the source to find imports, so an unparseable file throws.
-  // Scanning per-file (not one concatenated blob) keeps a student's
-  // half-finished submission from blocking the helper's packages.
-  const seen = [];
-  const py = {
-    async loadPackagesFromImports(src) {
-      seen.push(src);
-      if (src.includes('def broken(')) throw new SyntaxError('invalid syntax');
-    },
-  };
-
-  await preloadPackagesForFiles(py, {
-    'student_module.py': 'def broken(\n',
-    'lab9_helpers.py': 'import numpy as np\n',
-  });
-
-  assert.equal(seen.length, 2, 'a throwing file must not abort the scan');
-  assert.ok(seen.some(src => src.includes('import numpy')));
-});

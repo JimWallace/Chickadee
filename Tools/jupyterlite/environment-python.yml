@@ -24,3 +24,20 @@ dependencies:
   - numpy
   - pandas
   - matplotlib
+  # Added when browser grading moved onto this env (#1271): the grader used to
+  # be Pyodide, which resolved these from its 363-package index at run time, and
+  # a fixed env has no runtime escape hatch under `connect-src 'self'`. Baking
+  # them in keeps the imports that already worked working — and, because the
+  # editor runs this same env, an instructor can now use them while authoring
+  # too, which Pyodide-only grading never allowed.
+  #
+  # Four packages the old Pyodide index carried have NO emscripten-forge build
+  # and so cannot be added here: networkx, seaborn, plotly, and requests.
+  # `requests` is moot regardless — the editor CSP is `connect-src 'self'`, so a
+  # graded test could never reach the network with it. The other three need an
+  # upstream build before they can come back.
+  - scipy
+  - sympy
+  - scikit-learn
+  - statsmodels
+  - pillow

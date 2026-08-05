@@ -127,7 +127,6 @@ import Vapor
             ),
             security: seed.security,
             scanMode: seed.scanMode,
-            browserGrading: seed.browserGrading,
             database: seed.database,
             lockout: seed.lockout,
             workers: seed.workers,
@@ -161,7 +160,6 @@ import Vapor
             ),
             security: .default,
             scanMode: .default,
-            browserGrading: .default,
             database: .sqliteInMemory(),
             lockout: .default,
             workers: WorkerConfig(

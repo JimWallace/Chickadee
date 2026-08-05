@@ -8,17 +8,19 @@
 //
 // Workflow:
 //   1. Fetch test setup zip from /api/v1/browser-runner/testsetups/:id/download
-//   2. Unpack zip into Pyodide in-memory filesystem
-//   3. Write test_runtime.py + sitecustomize.py helper libraries
+//   2. Unpack zip into the kernel's in-memory filesystem
+//   3. Write the test_runtime helper libraries
 //   4. Write notebook bytes and extract code cells to .py (equiv. of nb_to_py.py)
-//   5. Run each .py test script in Pyodide; capture stdout/stderr
+//   5. Run each test script on its kernel; capture stdout/stderr
 //   6. POST notebook bytes + TestOutcomeCollection to /api/v1/submissions/browser-result
 //
 // Only active for gradingMode="browser" pages (guard at top of IIFE).
 //
 // Two substrates, picked per script by RunnerCore's shared classification:
-//   .py → Pyodide, via /grading-worker.js (or the main-thread fallback)
+//   .py → the vendored xeus-python kernel, via /python-grading-worker.js
 //   .R  → the vendored xeus-r kernel, via /r-grading-worker.js
+// Both are Web Workers running a xeus kernel from the SAME environment the
+// notebook editor boots, so "it ran in the editor" implies "it grades here".
 // Only the substrates an assignment actually needs are booted, so an R lab
 // never pays for loading Pyodide (and vice versa).  Shell scripts (.sh) are not
 // supported in the browser environment on either substrate.
@@ -40,15 +42,14 @@
     // Public/grading-shared.js (a <script> tag before this file on the
     // notebook page), so the worker grader and this main-thread fallback
     // cannot drift.  Throws loudly here if the tag is missing.
-    const {
-        envConfigPython, assignmentSeedPython, STDOUT_REDIRECT_PY,
-        runScriptPython, CAPTURE_OUTPUT_PY, RESTORE_STREAMS_PY,
-        deriveExitCode, writeFilesToPyFS, preloadPackagesForFiles,
-    } = ChickadeeGradingShared;
+    // The one piece of grading-shared.js this file still needs: the exit-code
+    // mapping, used nowhere here directly but re-exported for the tests that pin
+    // it. Everything else in that module is consumed inside the grading workers.
+    const { deriveExitCode } = ChickadeeGradingShared;
 
     // R grading semantics — the per-script wrapper and the per-student inputs
     // file, shared with /r-grading-worker.js the same way the Python snippets
-    // are shared with /grading-worker.js.  Loaded by a <script> tag alongside
+    // are shared with /r-grading-worker.js.  Loaded by a <script> tag alongside
     // grading-shared.js (see notebook.leaf).
     const { personalizationInputsSourceR } = ChickadeeRGradingShared;
 
@@ -289,10 +290,6 @@
         // which substrate runs a given script is still decided per script by
         // RunnerCore's classification, exactly as the native worker does it.
         let assignmentLanguage = 'python';
-        // Which runtime executes Python test scripts (#1271). The server owns
-        // this so a deployment can flip it without a rebuild; 'pyodide' is the
-        // default and the value an older server (or a failed fetch) yields.
-        let pythonSubstrate = 'pyodide';
         try {
             const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
             const parsed = JSON.parse(seedText);
@@ -301,9 +298,6 @@
             }
             if (parsed && parsed.language === 'r') {
                 assignmentLanguage = 'r';
-            }
-            if (parsed && parsed.pythonSubstrate === 'xeus') {
-                pythonSubstrate = 'xeus';
             }
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
@@ -391,7 +385,7 @@
         //    the Node test harness, which has neither Worker nor a factory
         //    override, so it deterministically exercises the fallback).
         const executor = makeExecutor(
-            files, assignmentSeed, runnerCore, options.reportPhase, suites, pythonSubstrate);
+            files, assignmentSeed, runnerCore, options.reportPhase, suites);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -452,7 +446,7 @@
     // A grading worker can be used when the environment exposes the Worker
     // constructor OR a test/embed override factory is present. The factory seam
     // lets the Node harness inject a fake Worker (no real Pyodide); production
-    // spawns `/grading-worker.js` with the page's ?v= cache-buster so the
+    // spawns the substrate's worker with the page's ?v= cache-buster so the
     // worker (and the grading-shared.js it importScripts with the same query)
     // pin to this release's bytes.
     function gradingWorkerFactory(scriptPath) {
@@ -469,9 +463,8 @@
         return null;
     }
 
-    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate) {
-        return new RoutingExecutor(
-            files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate);
+    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites) {
+        return new RoutingExecutor(files, assignmentSeed, runnerCore, reportPhase, suites);
     }
 
     // -------------------------------------------------------------------------
@@ -491,15 +484,12 @@
     // -------------------------------------------------------------------------
 
     class RoutingExecutor {
-        constructor(files, assignmentSeed, runnerCore, reportPhase, suites, pythonSubstrate) {
+        constructor(files, assignmentSeed, runnerCore, reportPhase, suites) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.reportPhase = reportPhase;
             this.suites = Array.isArray(suites) ? suites : [];
-            // 'pyodide' | 'xeus'. Only affects which worker Python goes to; R is
-            // always the xeus-r kernel, since nothing else can grade R here.
-            this.pythonSubstrate = pythonSubstrate === 'xeus' ? 'xeus' : 'pyodide';
             this.python = null;
             this.r = null;
         }
@@ -525,33 +515,29 @@
             return kinds;
         }
 
-        // The Python substrate. Both workers speak the SAME protocol
-        // (init/run), so GradingWorkerExecutor drives either without knowing
-        // which it has — the only difference is the script it spawns.
+        // Both substrates are Web Workers running a vendored xeus kernel, and
+        // both speak the same init/run protocol, so GradingWorkerExecutor drives
+        // either without knowing which it has — the only difference is the
+        // script it spawns.
         //
-        // The main-thread fallback is Pyodide-only, and deliberately so: it
-        // exists for environments with no Worker (the Node test harness), and
-        // booting a xeus kernel needs importScripts, which is worker-only. A
-        // xeus deployment in a Worker-less browser therefore fails over to the
-        // native worker rather than silently grading on a different runtime
-        // than the one the deployment chose.
+        // There is no main-thread fallback any more. The old one existed only
+        // because Pyodide can run on the main thread, and it carried a real
+        // hazard: a synchronous CPU-bound loop in student code never yields, so
+        // the per-test timer never fires and the tab freezes with the submission
+        // lost. Worker.terminate() is the only kill path that works, and a
+        // kernel cannot be booted outside a worker anyway (it needs
+        // importScripts). A Worker-less browser therefore fails the grade over
+        // to the native worker: slower, and correct.
         pythonExecutor() {
             if (!this.python) {
-                const useXeus = this.pythonSubstrate === 'xeus';
-                const factory = gradingWorkerFactory(
-                    useXeus ? '/python-grading-worker.js' : '/grading-worker.js');
-                if (factory) {
-                    this.python = new GradingWorkerExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
-                        'Python');
-                } else if (useXeus) {
-                    this.python = new UnavailableExecutor(
-                        'Python grading on the xeus kernel needs Web Worker support, '
+                const factory = gradingWorkerFactory('/python-grading-worker.js');
+                this.python = factory
+                    ? new GradingWorkerExecutor(
+                        this.files, this.assignmentSeed, this.runnerCore, factory,
+                        this.reportPhase, 'Python')
+                    : new UnavailableExecutor(
+                        'Browser grading needs Web Worker support, '
                         + 'which this browser did not provide');
-                } else {
-                    this.python = new MainThreadExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore);
-                }
             }
             return this.python;
         }
@@ -630,102 +616,6 @@
         ensureReady() { return Promise.reject(new Error(this.reason)); }
         run() { return Promise.resolve(rawError(this.reason)); }
         dispose() { return Promise.resolve(); }
-    }
-
-    // -------------------------------------------------------------------------
-    // MainThreadExecutor — the legacy path, unchanged behaviour.
-    //
-    // Loads Pyodide on the main thread, materializes the file map into py.FS,
-    // runs the shared env-config + seed setup, then grades each script via
-    // runRawScript/runPyScriptRaw (which race a sleep() timer per the v0.4.x
-    // model). Used only when no Worker is available — e.g. the Node test harness,
-    // which deliberately has neither Worker nor a factory override. NOTE: this
-    // path CANNOT kill a CPU-bound infinite loop in student code (the sleep timer
-    // never gets a turn on a blocked main thread) — that's exactly the bug the
-    // GradingWorkerExecutor fixes. It stays only for Worker-less environments.
-    // -------------------------------------------------------------------------
-
-    class MainThreadExecutor {
-        constructor(files, assignmentSeed, runnerCore) {
-            this.files = files;
-            this.assignmentSeed = assignmentSeed;
-            this.runnerCore = runnerCore;
-            this.py = null;
-            this.workDir = null;
-            this._ready = null;
-        }
-
-        async _ensureReady() {
-            if (this._ready) return this._ready;
-            this._ready = (async () => {
-                try {
-                    setRunnerStatus('loading', 'Initializing Python runtime…');
-                    this.py = await loadPyodideOnce();
-                } catch (e) {
-                    throw new Error('Failed to initialize Python runtime: ' + toMessage(e));
-                }
-                const py = this.py;
-                this.workDir = `/chickadee_work_${Date.now()}`;
-                try {
-                    py.FS.mkdir(this.workDir);
-                } catch (e) {
-                    throw new Error('Failed to create work directory: ' + toMessage(e));
-                }
-                writeFilesToPyFS(py, this.workDir, this.files);
-                // Load the packages the setup's .py files import (numpy, pandas,
-                // …) BEFORE any script runs, including imports reached only
-                // through a bundled helper module.
-                await preloadPackagesForFiles(py, this.files);
-                // Add working directory to Python's path and set up builtins.
-                // We cannot rely on sitecustomize.py being auto-imported in
-                // Pyodide (the interpreter is already running, and
-                // "sitecustomize" is a special name the site machinery may have
-                // cached). We import test_runtime directly and wire builtins
-                // ourselves; we also flush stale helper/student modules so
-                // repeated submissions in one Pyodide session don't inherit the
-                // previous run's module state.
-                try {
-                    await py.runPythonAsync(envConfigPython(this.workDir));
-                } catch (e) {
-                    throw new Error('Failed to configure Python environment: ' + toMessage(e));
-                }
-                // os.environ persists for the whole session, so one set covers
-                // every script (parity with the worker's test subprocess).
-                if (this.assignmentSeed !== null && this.assignmentSeed !== undefined) {
-                    try {
-                        await py.runPythonAsync(assignmentSeedPython(this.assignmentSeed));
-                    } catch (e) {
-                        throw new Error('Failed to set assignment seed: ' + toMessage(e));
-                    }
-                }
-            })();
-            return this._ready;
-        }
-
-        scriptExists(name) {
-            // Existence is answered from the file map (the source of truth) so the
-            // check doesn't depend on Pyodide being initialized yet.
-            return Object.prototype.hasOwnProperty.call(this.files, name);
-        }
-
-        async run(name, limitSeconds) {
-            await this._ensureReady();
-            return runRawScript(this.py, this.runnerCore, this.workDir, name, limitSeconds);
-        }
-
-        // Eagerly initialize the runtime so a hard init failure (Pyodide can't
-        // load / env-config throws) surfaces as a thrown error the caller can
-        // fail over on, rather than only surfacing lazily inside the first run().
-        ensureReady() {
-            return this._ensureReady();
-        }
-
-        async dispose() {
-            if (this.py && this.workDir) {
-                // Clean up MEMFS to avoid OOM on repeated submissions.
-                try { removeRecursive(this.py, this.workDir); } catch (_) { /* best-effort */ }
-            }
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -989,9 +879,6 @@
         catch (_) { return ''; }
     }
 
-    // preloadPackagesForFiles comes from grading-shared.js (shared with the
-    // worker) — see its docstring for why every bundled .py is scanned.
-
     // -------------------------------------------------------------------------
     // Status display
     // -------------------------------------------------------------------------
@@ -1148,38 +1035,6 @@
     // content-sniff) now lives in RunnerCore (Swift/wasm) and is shared with the
     // native worker \u2014 see loadRunnerCore().classifyScript / interpreterToKind.
 
-    // Run one script and return a RAW ScriptOutput
-    // { exitCode, stdout, stderr, executionTimeMs, timedOut }. RunnerCore's
-    // shared `interpretScriptOutput` (driven by `executeSuites`) turns it into a
-    // TestOutcome — identical interpretation to the native worker. The browser
-    // only runs Python (Pyodide); other interpreters return their "not here"
-    // message as a non-zero exit so the shared interpreter surfaces it the same
-    // way for every runner.
-    async function runRawScript(py, runnerCore, workDir, scriptName, timeLimitSeconds) {
-        let src = null;
-        try { src = py.FS.readFile(`${workDir}/${scriptName}`, { encoding: 'utf8' }); }
-        catch (_) { src = null; }
-
-        const kind = interpreterToKind(runnerCore.classifyScript(scriptName, src ?? ''));
-        if (kind === 'r') {
-            // Unreachable through RoutingExecutor, which sends .R scripts to the
-            // xeus-r substrate. Kept precise for a direct caller: this function
-            // is the Pyodide path and cannot run R itself.
-            return rawError('R test scripts run on the xeus-r substrate, not this Pyodide executor');
-        }
-        if (kind === 'shell') {
-            return rawError('Shell scripts cannot run in the browser runner');
-        }
-        if (kind !== 'python') {
-            const ext = scriptExtension(scriptName);
-            return rawError(`Unsupported test script type: ${ext ? '.' + ext : scriptName}`);
-        }
-        if (src === null) {
-            return rawError(`Script not found: ${scriptName}`);
-        }
-        return runPyScriptRaw(py, src, scriptName, timeLimitSeconds);
-    }
-
     // A synthetic raw output for a substrate error: exit 2 → RunnerCore maps to
     // `error`, with `message` as the (last-line) shortResult.
     function rawError(message) {
@@ -1191,43 +1046,6 @@
     // raise — the SAME codes the native subprocess exits with — so RunnerCore's
     // exit-code → status mapping is identical across runners. No interpretation
     // happens here.
-    async function runPyScriptRaw(py, src, scriptName, timeLimitSeconds) {
-        const startMs = Date.now();
-
-        // Auto-load any Pyodide packages the script imports (numpy, pandas, …).
-        try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
-
-        // Redirect sys.stdout / sys.stderr to JS buffers.
-        await py.runPythonAsync(STDOUT_REDIRECT_PY);
-
-        let timedOut = false;
-        let pyErr    = null;
-
-        const runPromise     = py.runPythonAsync(runScriptPython(scriptName)).catch(err => { pyErr = err; });
-        const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
-        await Promise.race([runPromise, timeoutPromise]);
-
-        let stdout = '', stderr = '', brExitCode = null;
-        try {
-            const captured = await py.runPythonAsync(CAPTURE_OUTPUT_PY);
-            const result = captured.toJs ? captured.toJs() : [String(captured), '', null];
-            stdout = result[0] || '';
-            stderr = result[1] || '';
-            brExitCode = result[2];
-            captured.destroy && captured.destroy();
-        } catch (_) { /* fallback: no output */ }
-
-        await py.runPythonAsync(RESTORE_STREAMS_PY);
-
-        const executionTimeMs = Date.now() - startMs;
-        if (timedOut) {
-            return { exitCode: -1, stdout, stderr, executionTimeMs, timedOut: true };
-        }
-
-        const derived = deriveExitCode(brExitCode, pyErr, stderr);
-        return { exitCode: derived.exitCode, stdout, stderr: derived.stderr, executionTimeMs, timedOut: false };
-    }
-
     // deriveExitCode comes from grading-shared.js (shared with the worker).
 
     // -------------------------------------------------------------------------
@@ -1295,22 +1113,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // Pyodide loader (lazy singleton)
-    // -------------------------------------------------------------------------
-
-    let _pyodide = null;
-
-    async function loadPyodideOnce() {
-        if (_pyodide) return _pyodide;
-        if (!window.loadPyodide) {
-            await loadScript('/pyodide/pyodide.js');
-        }
-        _pyodide = await window.loadPyodide();
-        return _pyodide;
-    }
-
-    // -------------------------------------------------------------------------
-    // JSZip loader (lazy singleton)
+    // Misc helpers
     // -------------------------------------------------------------------------
 
     let _JSZip = null;
@@ -1324,26 +1127,15 @@
         return _JSZip;
     }
 
-    // -------------------------------------------------------------------------
-    // MEMFS helpers
-    // -------------------------------------------------------------------------
-
-    function removeRecursive(py, path) {
-        const stat = py.FS.stat(path);
-        if (py.FS.isDir(stat.mode)) {
-            for (const name of py.FS.readdir(path)) {
-                if (name === '.' || name === '..') continue;
-                removeRecursive(py, `${path}/${name}`);
-            }
-            py.FS.rmdir(path);
-        } else {
-            py.FS.unlink(path);
-        }
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const el   = document.createElement('script');
+            el.src     = src;
+            el.onload  = resolve;
+            el.onerror = () => reject(new Error(`Failed to load ${src}`));
+            document.head.appendChild(el);
+        });
     }
-
-    // -------------------------------------------------------------------------
-    // Misc helpers
-    // -------------------------------------------------------------------------
 
     async function fetchBytes(url) {
         const res = await fetch(url);
@@ -1362,20 +1154,6 @@
         if (e instanceof Error && e.message) return e.message;
         const s = String(e);
         return (s && s !== '[object Object]') ? s : 'unknown error';
-    }
-
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const s   = document.createElement('script');
-            s.src     = src;
-            s.onload  = resolve;
-            s.onerror = () => reject(new Error(`Failed to load ${src}`));
-            document.head.appendChild(s);
-        });
-    }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     // -------------------------------------------------------------------------
@@ -2034,12 +1812,6 @@ chickadee_require_fn <- function(env, name) {
             SITECUSTOMIZE_PY,
             TEST_RUNTIME_R,
             // Shared grading semantics (re-exported from grading-shared.js).
-            envConfigPython,
-            assignmentSeedPython,
-            STDOUT_REDIRECT_PY,
-            runScriptPython,
-            CAPTURE_OUTPUT_PY,
-            RESTORE_STREAMS_PY,
             runAndSubmit,
             runScripts,
             scriptExtension,
@@ -2047,16 +1819,10 @@ chickadee_require_fn <- function(env, name) {
             extractNotebookToMap,
             personalizationInputsSource,
             personalizationInputsSourceR,
-            runRawScript,
-            runPyScriptRaw,
             deriveExitCode,
             buildCollection,
-            removeRecursive,
-            writeFilesToPyFS,
             fileAsText,
-            preloadPackagesForFiles,
             makeExecutor,
-            MainThreadExecutor,
             GradingWorkerExecutor,
             RoutingExecutor,
             UnavailableExecutor,
@@ -2065,7 +1831,6 @@ chickadee_require_fn <- function(env, name) {
             fetchText,
             toMessage,
             __resetStateForTests() {
-                _pyodide = null;
                 _JSZip   = null;
                 _runnerCore = null;
                 if (statusEl) {

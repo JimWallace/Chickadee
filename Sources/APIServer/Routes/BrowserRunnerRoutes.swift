@@ -7,7 +7,7 @@
 // notebook.js calls window.BrowserRunner.runAndSubmit(), which:
 //   1. Downloads the test setup zip via GET /api/v1/browser-runner/testsetups/:id/download
 //   2. Fetches the manifest JSON via GET /api/v1/browser-runner/testsetups/:id/manifest
-//   3. Runs test scripts locally in Pyodide
+//   3. Runs test scripts locally on the vendored xeus kernels
 //   4. POSTs notebook bytes + TestOutcomeCollection to POST /api/v1/submissions/browser-result
 //
 // The existing /api/v1/testsetups/:id/download endpoint requires instructor+
@@ -62,7 +62,7 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         // Grader-only files (answer keys, reserved holdout sets) must never reach
         // a browser-graded student — the whole stored zip is streamed into the
-        // Pyodide FS, which a determined student can inspect. Stream a filtered
+        // kernel's filesystem, which a determined student can inspect. Stream a filtered
         // copy with those entries removed. The common case declares none (a
         // grader-only file forces worker grading, see docs/datasets.md), so the
         // empty case takes the no-copy streaming fast path.
@@ -125,7 +125,7 @@ struct BrowserRunnerRoutes: RouteCollection {
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
 
     /// Returns the per-(student, assignment) personalization seed the browser
-    /// runner injects into Pyodide as `CHICKADEE_ASSIGNMENT_SEED`.
+    /// runner injects into the grading kernel as `CHICKADEE_ASSIGNMENT_SEED`.
     ///
     /// Personalization parity: the native worker resolves this exact seed in
     /// `WorkerJobRoutes.buildJobPayload` via `AssignmentSeedStore.ensureSeed`
@@ -162,13 +162,11 @@ struct BrowserRunnerRoutes: RouteCollection {
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil,
-                pythonSubstrate: pythonSubstrate(req))
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
         }
         guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil,
-                pythonSubstrate: pythonSubstrate(req))
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
@@ -195,16 +193,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,
-            personalizedFiles: personalizedFiles, language: language?.rawValue,
-            pythonSubstrate: pythonSubstrate(req))
-    }
-
-    /// The deployment's Python browser-grading substrate. Read here rather than
-    /// baked into the page so a flip takes effect on the next submission without
-    /// a rebuild, and so the value the grader uses comes from the same request
-    /// that resolved the seed.
-    private func pythonSubstrate(_ req: Request) -> String {
-        req.application.appConfig.browserGrading.pythonSubstrate.rawValue
+            personalizedFiles: personalizedFiles, language: language?.rawValue)
     }
 
 }
@@ -233,11 +222,6 @@ struct BrowserRunnerSeedResponse: Content {
     /// extension. Nil when no assignment owns the setup — the same case that
     /// yields a nil seed, where there is nothing personalized to deliver.
     let language: String?
-    /// `"pyodide"` or `"xeus"` — which runtime the browser should execute
-    /// Python test scripts on (#1271). R is unaffected: the xeus-r kernel is the
-    /// only way to grade R in a browser, so it is never routed by this. Defaults
-    /// to `pyodide`; see BrowserGradingConfig for why this is a flag.
-    let pythonSubstrate: String
 }
 
 /// Returns the manifest JSON with the `graderOnlyFiles` array blanked to `[]`,

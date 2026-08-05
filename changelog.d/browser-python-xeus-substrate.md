@@ -1,20 +1,26 @@
-### Added
-
-- **Python browser grading can run on the xeus-python kernel (#1271).** A new
-  substrate grades `.py` test scripts on the same `chickadee-python` environment
-  the notebook editor runs, so authoring and grading become one environment for
-  Python as they already are for R. Off by default: set
-  `BROWSER_PYTHON_SUBSTRATE=xeus` to opt a deployment in. Pyodide remains the
-  default because a fixed build-time environment narrows what a submission may
-  import — see `docs/xeus-python-grading-migration-plan.md` for the scan to run
-  before flipping it.
-
 ### Changed
 
-- **The xeus kernel boot is shared between the R and Python graders**
-  (`Public/xeus-kernel-shared.js`), so there is one implementation of booting a
-  vendored kernel rather than one per language.
-- **The browser-grading smoke probe covers both languages.**
-  `Tools/r-grading-smoke` became `Tools/browser-grading-smoke` and runs R and
-  Python in CI. Both languages run even when only one looks touched: they share
-  the kernel boot, the vendored bootstrap and the workspace writer.
+- **Python browser grading moved from Pyodide to the xeus-python kernel
+  (#1271).** Test scripts now execute on the same `chickadee-python` environment
+  the notebook editor runs, so authoring and grading are one environment for
+  Python as they already were for R — "it ran in the editor" now implies "it
+  grades in the browser". No configuration: there is one Python substrate.
+- **`scipy`, `sympy`, `scikit-learn`, `statsmodels` and `pillow` are now in the
+  editor/grading environment.** Pyodide resolved these at run time from its
+  package index; a fixed environment has no runtime escape hatch, so they are
+  baked in. They are now available while *authoring* too, which Pyodide-only
+  grading never allowed. `networkx`, `seaborn`, `plotly` and `requests` have no
+  emscripten-forge build and are not available (`requests` could never work
+  regardless — the CSP is `connect-src 'self'`).
+
+### Removed
+
+- **The main-thread grading fallback.** It existed only because Pyodide can run
+  on the main thread, and it carried a real hazard: a synchronous CPU-bound loop
+  in student code never yields, so the per-test timer never fires and the tab
+  freezes with the submission lost. Every substrate is now a Web Worker, where
+  `Worker.terminate()` actually kills a runaway. A browser without Worker support
+  fails the grade over to the native worker.
+- **`Public/grading-worker.js` and the Pyodide package preloader.** A fixed
+  environment needs no import scanning, which retires the class of bug where a
+  bundled helper's imports were invisible to the scanner.
