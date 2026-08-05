@@ -189,11 +189,19 @@
                      data-assignment-has-template="#if(assignmentHasTemplateView):1#else:0#endif"
                      data-solution-has-template="#if(solutionHasTemplateView):1#else:0#endif"
                      hidden>
+                    <!-- `aria-pressed` follows the view actually open, rather
+                         than assuming "With values". The server defaults course
+                         staff to the TEMPLATE on a notebook carrying
+                         placeholders (resolveNotebookViewMode), so hardcoding
+                         this made the control claim the wrong view on exactly
+                         the assignments the control exists for. -->
                     <button class="btn action-btn wb-view" type="button"
-                            data-wb-view="personalized" aria-pressed="true"
+                            data-wb-view="personalized"
+                            aria-pressed="#if(notebook.isTemplateView):false#else:true#endif"
                             title="The notebook as a student sees it, with values substituted">With values</button>
                     <button class="btn action-btn wb-view" type="button"
-                            data-wb-view="template" aria-pressed="false"
+                            data-wb-view="template"
+                            aria-pressed="#if(notebook.isTemplateView):true#else:false#endif"
                             title="The authored template, with placeholders left standing">Template</button>
                 </div>
                 <span class="wb-bar-spacer"></span>
@@ -213,7 +221,8 @@
                  to this route with different arguments rather than an in-place
                  swap.  The URL for each is in the lookup table on `#wb-shell`. -->
             #if(notebook):
-            <div class="wb-notebook-body wb-scroll" data-wb-file="#(notebook.fileKind)">
+            <div class="wb-notebook-body wb-scroll" data-wb-file="#(notebook.fileKind)"
+                 data-wb-view="#if(notebook.isTemplateView):template#else:personalized#endif">
                 #extend("_notebook-body", notebook)
             </div>
             #else:
