@@ -547,8 +547,7 @@
         // main-thread fallback to degrade to, so a Worker-less environment gets
         // an executor whose ensureReady throws — which routes the whole grade to
         // the server-side failover rather than recording every R test as an
-        // error. (Python keeps its main-thread fallback; an assignment is one
-        // language, so the two cases never collide in practice.)
+        // error. Python is now identical on this point; see pythonExecutor.
         rExecutor() {
             if (!this.r) {
                 const factory = gradingWorkerFactory('/r-grading-worker.js');

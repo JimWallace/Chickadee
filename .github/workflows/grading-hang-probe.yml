@@ -2,8 +2,8 @@ name: Browser grading-hang probe
 
 # DIAGNOSTIC harness — NOT a required gate. Reproduces and MEASURES the
 # intermittent browser-grading hang seen on JupyterLite 0.8 / Pyodide 314: the
-# real student notebook page boots the editor kernel's Pyodide AND, on Submit, a
-# SECOND Pyodide in grading-worker.js under cross-origin isolation, and the grade
+# real student notebook page boots the editor kernel AND, on Submit, a SECOND
+# kernel in the grading worker under cross-origin isolation, and the grade
 # intermittently never completes (~1 in 6 on 314; reliable on 0.7.6). The
 # required editor-smoke gate runs the grading check ONCE per engine, so a 1/6
 # flake usually slips through; this probe loops it to surface the rate and, on a
@@ -37,7 +37,8 @@ on:
       - "Tools/editor-smoke-test/**"
       - ".github/workflows/grading-hang-probe.yml"
       - "Public/browser-runner.js"
-      - "Public/grading-worker.js"
+      - "Public/*grading-worker.js"
+      - "Public/*grading-shared.js"
       - "Public/notebook*.js"
       - "Public/pyodide/**"
       - "Public/jupyterlite/**"

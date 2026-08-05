@@ -13,6 +13,18 @@
   emscripten-forge build and are not available (`requests` could never work
   regardless — the CSP is `connect-src 'self'`).
 
+### Fixed
+
+- **Browser-graded R was silently failing over to the native worker.** The
+  notebook page is cross-origin isolated, so a worker it spawns must itself be
+  served `Cross-Origin-Embedder-Policy: require-corp` or the browser refuses the
+  script outright (`ERR_BLOCKED_BY_RESPONSE`). `/r-grading-worker.js` shipped
+  without being added to that list, so every browser-graded R submission was
+  blocked and graded server-side instead — correct results, much slower, and
+  nothing in the UI said why. Both per-language grading workers are now on the
+  list, and a test enumerates the shipped workers so the next rename fails in CI
+  rather than in a browser.
+
 ### Removed
 
 - **The main-thread grading fallback.** It existed only because Pyodide can run
