@@ -8,12 +8,17 @@
 //      dozen concurrent `/bin/sh` / `python3` spawns can't form the
 //      fork/posix_spawn storm that flakes these tests under parallel CI load.
 //
-//   2. Retries *only* the "subprocess never launched" outcome — the `-1` exit
-//      sentinel with no output and no timeout.  That outcome is the ambiguous
-//      transient (a fork failure under load, or a spuriously-fired timeout);
-//      it is never a real result.  A genuine regression produces output (a
-//      wrong exit code, captured stdout/stderr, or `timedOut == true`), so it
-//      is never retried or masked — only the empty liveness flake is.
+//   2. Retries *only* the "subprocess never launched" outcome, which
+//      `executeScriptLaunch` reports as exit code 2 with the launch-error
+//      prefix leading stderr.  That is the transient (a spawn refused under
+//      load), never a real grading result.  A genuine regression produces a
+//      wrong exit code, captured script output, or `timedOut == true`, none
+//      of which match — so nothing real is retried or masked.
+//
+//      This predicate used to be the bare `-1` exit sentinel with empty
+//      output, which conflated a failed launch with a spuriously-fired
+//      timeout.  Since the move to swift-subprocess a launch failure is a
+//      thrown error mapped to exit 2, and `-1` means only "timed out".
 //
 // This generalizes the narrow `runRetryingLaunchFailure` added for the two
 // env-passthrough tests in #787 to all of the suite's real-script call sites,
@@ -32,7 +37,7 @@ import Darwin
 #endif
 
 /// Runs `script` through `runner` under the shared subprocess-launch throttle,
-/// retrying only the empty `-1` "never launched" sentinel.
+/// retrying only the "never launched" outcome.
 ///
 /// Drop-in for `await runner.run(...)`: same arguments (with `env` defaulting
 /// to empty, matching the `ScriptRunner` convenience overload), same
@@ -49,10 +54,7 @@ func runScriptRobustly(
         var output = await runner.run(
             script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
         var remaining = attempts - 1
-        while remaining > 0,
-            output.exitCode == -1, !output.timedOut,
-            output.stdout.isEmpty, output.stderr.isEmpty
-        {
+        while remaining > 0, isLaunchFailure(output) {
             remaining -= 1
             WedgeWatchdog.noteActivity()
             output = await runner.run(
@@ -60,6 +62,14 @@ func runScriptRobustly(
         }
         return output
     }
+}
+
+/// True when `output` is `executeScriptLaunch`'s launch-failure shape: exit 2,
+/// no stdout, and a stderr that is exactly the launch-error report. A script
+/// that itself exits 2 writes its own stderr (or none), so it can't match.
+private func isLaunchFailure(_ output: ScriptOutput) -> Bool {
+    output.exitCode == 2 && !output.timedOut && output.stdout.isEmpty
+        && output.stderr.hasPrefix("Failed to launch ")
 }
 
 /// Builds, launches, and reaps a bare `Process` under the shared

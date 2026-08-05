@@ -11,7 +11,9 @@
 //             file-writes only inside the working directory.
 //
 // Callers interact through the ScriptRunner protocol; no change is needed at
-// call sites compared to UnsandboxedScriptRunner.
+// call sites compared to UnsandboxedScriptRunner. The sandbox is entirely a
+// matter of which executable leads the argument vector — the launch, capture,
+// and time-limit machinery is the shared one in ScriptExecution.swift.
 
 import Core
 import Foundation
@@ -19,87 +21,23 @@ import Foundation
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
-        #if os(Linux)
-        let launch = configureLinuxSandboxedProcess(
-            script: script,
-            workDir: workDir,
-            env: env
-        )
-
-        return await executeLinuxScriptProcess(
-            launch,
+        await executeScriptLaunch(
+            sandboxedLaunch(script: script, workDir: workDir, env: env),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
         )
-        #else
-        let proc = Process()
-        let launch = configureSandboxedProcess(
-            proc,
-            script: script,
-            workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds,
-            env: env
-        )
-
-        return await executeScriptProcess(
-            proc,
-            timeLimitSeconds: timeLimitSeconds,
-            launchErrorPrefix: "Failed to launch sandboxed script",
-            usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
-            usesExternalTimeout: launch.usesExternalTimeout
-        )
-        #endif
     }
 }
 
 // MARK: - Platform-specific sandbox setup
 
-private func configureSandboxedProcess(
-    _ proc: Process,
-    script: URL,
-    workDir: URL,
-    timeLimitSeconds: Int,
-    env: [String: String]
-) -> ProcessLaunchConfiguration {
+private func sandboxedLaunch(script: URL, workDir: URL, env: [String: String]) -> ScriptLaunch {
     let invocation = scriptInvocation(for: script)
-    #if os(macOS)
-    let profile = macOSSandboxProfile(workDir: workDir)
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-    proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
-    proc.currentDirectoryURL = workDir
-    proc.environment = mergedScriptEnvironment(overrides: env)
-    return ProcessLaunchConfiguration(
-        usesSeparateProcessGroup: false,
-        usesExternalTimeout: false
-    )
-    #else
-    // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
-    // behaviour so the worker remains functional on unexpected targets.
-    proc.executableURL = invocation.executableURL
-    proc.arguments = invocation.arguments
-    proc.currentDirectoryURL = workDir
-    proc.environment = mergedScriptEnvironment(overrides: env)
-    return ProcessLaunchConfiguration(
-        usesSeparateProcessGroup: false,
-        usesExternalTimeout: false
-    )
-    #endif
-}
+    let environment = mergedScriptEnvironment(overrides: env)
 
-// MARK: - macOS sandbox profile
-
-#if os(Linux)
-private func configureLinuxSandboxedProcess(
-    script: URL,
-    workDir: URL,
-    env: [String: String]
-) -> LinuxProcessLaunchConfiguration {
-    let invocation = scriptInvocation(for: script)
-    // The child is driven through execve() with a parent-built envp (see
-    // executeLinuxScriptProcess), so the env in the
-    // LinuxProcessLaunchConfiguration is exactly what reaches the script.
-    return LinuxProcessLaunchConfiguration(
+    #if os(Linux)
+    return ScriptLaunch(
         executablePath: "/usr/bin/unshare",
         arguments: [
             "--fork",
@@ -109,10 +47,27 @@ private func configureLinuxSandboxedProcess(
             "--map-root-user",
             invocation.executableURL.path,
         ] + invocation.arguments,
-        env: mergedScriptEnvironment(overrides: env)
+        env: environment
     )
+    #elseif os(macOS)
+    return ScriptLaunch(
+        executablePath: "/usr/bin/sandbox-exec",
+        arguments: ["-p", macOSSandboxProfile(workDir: workDir), invocation.executableURL.path]
+            + invocation.arguments,
+        env: environment
+    )
+    #else
+    // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
+    // behaviour so the worker remains functional on unexpected targets.
+    return ScriptLaunch(
+        executablePath: invocation.executableURL.path,
+        arguments: invocation.arguments,
+        env: environment
+    )
+    #endif
 }
-#endif
+
+// MARK: - macOS sandbox profile
 
 #if os(macOS)
 private func macOSSandboxProfile(workDir: URL) -> String {

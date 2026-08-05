@@ -102,6 +102,19 @@ semantics). Regression test: `scriptDoesNotInheritNonAllowlistedParentEnv`.
 `timeout-minutes: 20` stays — it is sized for the cache-miss path where the
 test job compiles from scratch.)
 
+**Superseded (2026-08).** The hand-written `fork()`/`execve()`/`waitpid()`
+launcher this section describes no longer exists. Every worker subprocess now
+goes through `executeScriptLaunch` (`Sources/Worker/ScriptExecution.swift`),
+built on `swift-subprocess`, which spawns without the fork-in-a-multithreaded-
+process hazard that caused all of this — so points 1–3 above are now the
+library's problem rather than ours, and the separate macOS `Process` path is
+gone with them. Points 4 and 5 survive in `BoundedPipeRead.swift`, still used
+by the capability probes and the MIME detector, which do build pipes by hand.
+The analysis is kept because it explains constraints the replacement still has
+to honour: session isolation before anything else can fail, a group-wide kill
+rather than a per-pid one, no unbounded wait anywhere on a cooperative-pool
+thread, and an environment that *replaces* rather than augments the parent's.
+
 ## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open
 
 **Symptom.** The grading-hang probe (`grading-hang-probe.yml`) boots the

@@ -19,6 +19,27 @@ import Foundation
 import Glibc
 #endif
 
+/// Foundation's `Pipe` does not set `FD_CLOEXEC` (verified on Swift 6.3 /
+/// glibc 2.39 and Darwin). Without it, any subprocess spawned concurrently
+/// with this run inherits duplicates of these descriptors across its exec,
+/// and the read side then never sees EOF until that unrelated process exits
+/// (issue #1139's cross-test stall). The intended child still receives its
+/// ends: `dup2`/spawn file actions clear the flag on the duplicate they
+/// install.
+///
+/// Every worker-side subprocess pipe should go through this — a single
+/// non-CLOEXEC pipe elsewhere re-opens the EOF-starvation window for everyone
+/// (issue #1233). The script-execution path no longer builds pipes by hand,
+/// but the capability probes and the MIME detector still do.
+func setCloseOnExec(_ pipe: Pipe) {
+    for handle in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {
+        let descriptor = handle.fileDescriptor
+        let flags = fcntl(descriptor, F_GETFD)
+        guard flags != -1 else { continue }
+        _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC)
+    }
+}
+
 /// Reads from `descriptor` until EOF or `deadline`, whichever comes first,
 /// and returns whatever accumulated (capped at `maxBytes`; excess is
 /// discarded, mirroring `CapturedPipeBuffer`'s OOM guard). The poll
