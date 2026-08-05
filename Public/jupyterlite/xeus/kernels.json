@@ -1,1 +1,1 @@
-[{"kernel": "xr", "env_name": "chickadee"}, {"kernel": "xpython", "env_name": "chickadee"}]
+[{"kernel": "xpython", "env_name": "chickadee-python"}, {"kernel": "xr", "env_name": "chickadee-r"}]

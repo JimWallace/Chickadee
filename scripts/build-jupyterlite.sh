@@ -34,23 +34,38 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# Editor kernels via jupyterlite-xeus: ONE emscripten-forge env supplies BOTH
-# xpython (Python) and xr (R) — see Tools/jupyterlite/environment.yml. Built
-# ONLY where micromamba is available: jupyterlite-xeus solves the env at build
-# time, which needs network to repo.prefix.dev / conda-forge. CI has no such
-# network, so it skips this and treats the committed Public/jupyterlite/xeus/ as
-# the authoritative vendored kernel (the reproducibility check excludes that
-# path; scripts/check-xeus-vendored.sh guards its integrity). Rebuild the
-# vendored kernels where micromamba + emscripten-forge are reachable (a
-# maintainer machine, or this repo's spike env).
+# Editor kernels via jupyterlite-xeus: xpython (Python) and xr (R), each from
+# its OWN emscripten-forge env — Tools/jupyterlite/environment-{python,r}.yml.
 #
-# NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so it
+# The two envs are separate on purpose. jupyterlite-xeus packs one
+# `kernel_packages` payload per env and a kernel fetches its whole env at boot,
+# so a single shared Python+R env made every Python boot pull all of r-base and
+# every R boot pull numpy/pandas/matplotlib — slow enough to time out the editor
+# probes ("kernel never reported idle"). `environment_file` is list-valued, so
+# passing it twice yields two envs and two payloads.
+#
+# Built ONLY where micromamba is available: jupyterlite-xeus solves the envs at
+# build time, which needs network to repo.prefix.dev / conda-forge. CI has no
+# such network, so it skips this and treats the committed
+# Public/jupyterlite/xeus/ as the authoritative vendored kernels (the
+# reproducibility check excludes that path; scripts/check-xeus-vendored.sh
+# guards their integrity). Rebuild where micromamba + emscripten-forge are
+# reachable (a maintainer machine, or this repo's spike env).
+#
+# NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
 # must be passed as a bare filename, not the absolute path it was copied to.
-if [[ -f "$LITE_SRC_DIR/environment.yml" ]] && command -v micromamba >/dev/null 2>&1; then
-  cp "$LITE_SRC_DIR/environment.yml" "$TMP_LITE_DIR/environment.yml"
-  BUILD_ARGS+=(--XeusAddon.environment_file environment.yml)
-  echo "build-jupyterlite: micromamba found — building the xeus kernels (xpython + xr)."
-elif [[ -f "$LITE_SRC_DIR/environment.yml" ]]; then
+XEUS_ENVS=(environment-python.yml environment-r.yml)
+XEUS_ENVS_PRESENT=()
+for env_file in "${XEUS_ENVS[@]}"; do
+  [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
+done
+if [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]] && command -v micromamba >/dev/null 2>&1; then
+  for env_file in "${XEUS_ENVS_PRESENT[@]}"; do
+    cp "$LITE_SRC_DIR/$env_file" "$TMP_LITE_DIR/$env_file"
+    BUILD_ARGS+=(--XeusAddon.environment_file "$env_file")
+  done
+  echo "build-jupyterlite: micromamba found — building the xeus kernels from ${XEUS_ENVS_PRESENT[*]}."
+elif [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]]; then
   echo "build-jupyterlite: micromamba not found — skipping the xeus kernel build; the committed Public/jupyterlite/xeus/ is authoritative." >&2
 fi
 

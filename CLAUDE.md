@@ -468,9 +468,13 @@ scripts/build-jupyterlite.sh
 updating kernel versions or config.
 
 **Both editor kernels are xeus kernels, from one env.**
-`Tools/jupyterlite/environment.yml` declares a single emscripten-forge
-environment that yields `xpython` (Python, xeus-python) and `xr` (R, xeus-r);
-`jupyter lite build` compiles both into `Public/jupyterlite/xeus/`. Python moved
+`Tools/jupyterlite/environment-python.yml` and `environment-r.yml` declare one
+emscripten-forge environment each, yielding `xpython` (Python, xeus-python) and
+`xr` (R, xeus-r); `jupyter lite build` compiles both into
+`Public/jupyterlite/xeus/`. They are **separate envs on purpose** — a kernel
+fetches its whole env at boot, so a shared env makes every Python boot pull
+r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
+the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
 technology for both languages. Notebook metadata is normalized to those names by
 `normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`).
@@ -480,7 +484,7 @@ serves the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of
 any kind on 2026-04-09 — frozen, not merely older. Do not point the env file
 back at it.
 
-Anything a student imports must be baked into that env: the editor's CSP is
+Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
 numpy / pandas / matplotlib; the R side is bare `xeus-r`.
@@ -517,7 +521,7 @@ allowance and broke the editor — see `SecurityHeadersMiddleware`.)
 
 **The editor's Python is no longer Pyodide, so editor and grader are no longer
 one environment.**  Authoring runs on xeus-python (Python 3.13, packages fixed
-at build time by `Tools/jupyterlite/environment.yml`); browser grading and
+at build time by `Tools/jupyterlite/environment-python.yml`); browser grading and
 `/validate` still run Pyodide (Python 3.14).  That skew is deliberate and
 accepted, but it is a real difference — a notebook that runs in the editor is
 not thereby proven to grade in the browser runner.  The native worker remains

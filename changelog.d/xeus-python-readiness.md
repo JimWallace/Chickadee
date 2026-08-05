@@ -1,14 +1,21 @@
 ### Changed
 
-- **The editor's Python kernel is now xeus-python; both editor kernels come from
-  one env.** `Tools/jupyterlite/environment.yml` builds `xpython`
-  (xeus-python 0.19.0, Python 3.13.1) and `xr` (xeus-r 0.11.2, R 4.5.3) from a
-  single emscripten-forge environment, so authoring runs one kernel technology
-  for both languages. Notebooks normalize to `xpython` / `xr`; new starter
-  scaffolds are written with the `xpython` kernelspec. Verified in headless
-  Chromium against the vendored bytes: both kernels boot and execute
-  cross-origin isolated, pandas/numpy/matplotlib import, and the boot makes zero
-  external network requests.
+- **The editor's Python kernel is now xeus-python.**
+  `Tools/jupyterlite/environment-python.yml` and `environment-r.yml` build
+  `xpython` (xeus-python 0.19.0, Python 3.13.1) and `xr` (xeus-r 0.11.2,
+  R 4.5.3), so authoring runs one kernel technology for both languages.
+  Notebooks normalize to `xpython` / `xr`; new starter scaffolds are written
+  with the `xpython` kernelspec. Verified in headless Chromium against the
+  vendored bytes: both kernels boot and execute cross-origin isolated,
+  pandas/numpy/matplotlib import, and the boot makes zero external network
+  requests.
+- **Each kernel gets its own emscripten-forge env.** A xeus kernel fetches its
+  whole env at boot, so building Python and R into one shared env made every
+  Python boot pull all of `r-base` and every R boot pull numpy/pandas/
+  matplotlib — slow enough to time out the editor probes with "kernel never
+  reported idle". `check-xeus-vendored.sh` now asserts the two envs stay
+  distinct, and that neither has acquired the other's packages, so a re-vendor
+  cannot silently recombine them.
 - **Kernel builds moved to the `emscripten-forge-4x` channel.** The
   `emscripten-forge-dev` alias the R kernel was pinned to serves the frozen 3x
   (emscripten 3.x ABI) channel — its last build of any package was 2026-04-09 —

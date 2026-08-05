@@ -34,8 +34,7 @@ if not ext.is_dir():
     fail(f"missing xeus federated extension: {ext}")
 
 # 2. kernels.json must register BOTH editor kernels: xpython (Python) and xr (R).
-#    They are built from one shared env (Tools/jupyterlite/environment.yml), so a
-#    vendor that drops either one is a partial re-vendor, not a valid state.
+#    A vendor that drops either one is a partial re-vendor, not a valid state.
 kernels_json = build / "xeus" / "kernels.json"
 if not kernels_json.is_file():
     fail(f"missing {kernels_json} — the vendored xeus kernels are absent")
@@ -43,7 +42,7 @@ kernels = json.loads(kernels_json.read_text())
 listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
 
 expected_language = {"xpython": "python", "xr": "r"}
-env_names = set()
+kernel_envs = {}
 loaders = []
 
 for kernel_name, language in sorted(expected_language.items()):
@@ -53,7 +52,7 @@ for kernel_name, language in sorted(expected_language.items()):
     env_name = entries[0].get("env_name")
     if not env_name:
         fail(f"no env_name for the {kernel_name} kernel in kernels.json")
-    env_names.add(env_name)
+    kernel_envs[kernel_name] = env_name
 
     # 3. The kernelspec must exist and declare the expected language.
     spec_path = build / "xeus" / env_name / kernel_name / "kernel.json"
@@ -80,18 +79,38 @@ for kernel_name, language in sorted(expected_language.items()):
         fail(f"{kernel_name} kernel WASM binary missing: {wasm}")
     loaders.append(loader_rel)
 
-# 5. The packed package payload must be non-trivial (guards a truncated vendor).
-#    Both kernels share one env, so there is one payload to check.
-if len(env_names) != 1:
-    fail(f"expected one shared xeus env across kernels, got: {sorted(env_names)}")
-env_name = env_names.pop()
-kernel_packages = build / "xeus" / env_name / "kernel_packages"
-pkgs = sorted(kernel_packages.glob("*.tar.gz")) if kernel_packages.is_dir() else []
-if len(pkgs) < 5:
-    fail(f"xeus/{env_name}/kernel_packages looks empty/partial: {len(pkgs)} package(s)")
+# 5. Each kernel must live in its OWN env, and each env must carry a non-trivial
+#    packed payload.
+#
+#    The separation is load-bearing, not cosmetic: a kernel fetches its whole env
+#    at boot, so putting Python and R in one env makes every Python boot pull
+#    r-base and every R boot pull numpy/pandas/matplotlib. That was slow enough
+#    to time out the editor probes with "kernel never reported idle". Assert the
+#    envs stay distinct so a re-vendor cannot silently recombine them.
+if len(set(kernel_envs.values())) != len(kernel_envs):
+    fail(
+        "xeus kernels must each have their own env (a shared env makes every "
+        f"kernel boot fetch both languages' payloads): {kernel_envs}"
+    )
+
+package_counts = {}
+for kernel_name, env_name in sorted(kernel_envs.items()):
+    kernel_packages = build / "xeus" / env_name / "kernel_packages"
+    pkgs = sorted(kernel_packages.glob("*.tar.gz")) if kernel_packages.is_dir() else []
+    if len(pkgs) < 5:
+        fail(f"xeus/{env_name}/kernel_packages looks empty/partial: {len(pkgs)} package(s)")
+    package_counts[kernel_name] = len(pkgs)
+
+    # The Python env must not carry R, and vice versa — the recombination this
+    # guard exists to prevent would otherwise show up only as a slow boot.
+    names = [p.name for p in pkgs]
+    if kernel_name == "xpython" and any(n.startswith("r-base-") for n in names):
+        fail(f"xeus/{env_name} (Python) contains r-base — the envs have been merged")
+    if kernel_name == "xr" and any(n.startswith(("numpy-", "pandas-")) for n in names):
+        fail(f"xeus/{env_name} (R) contains numpy/pandas — the envs have been merged")
 
 print(
     f"check-xeus-vendored: OK "
-    f"(kernels {listed}, env {env_name}, {len(pkgs)} packages, loaders {loaders})."
+    f"(kernels {listed}, envs {kernel_envs}, packages {package_counts}, loaders {loaders})."
 )
 PY

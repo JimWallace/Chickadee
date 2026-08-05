@@ -2,7 +2,7 @@
 
 Status: **spike complete and fully shipped, including Phase 3.** Both editor
 kernels are now xeus kernels built from one env
-(`Tools/jupyterlite/environment.yml` → `xpython` + `xr`,
+(`Tools/jupyterlite/environment-{python,r}.yml` → `xpython` + `xr`,
 `Public/jupyterlite/xeus/kernels.json`), wired up in
 `Sources/APIServer/Helpers/NotebookContentHelpers.swift`.
 This note records what was tested, what works, what does not, the reproducible
@@ -315,8 +315,8 @@ COOP/COEP blocker is resolved) — `COEPMiddleware` sets isolation on
 
 ## What actually shipped (2026-08)
 
-One emscripten-forge environment (`Tools/jupyterlite/environment.yml`) supplies
-both editor kernels. `scripts/build-jupyterlite.sh` compiles them into
+Two emscripten-forge environments — `Tools/jupyterlite/environment-python.yml`
+and `environment-r.yml` — supply the two editor kernels, one each. `scripts/build-jupyterlite.sh` compiles them into
 `Public/jupyterlite/xeus/` and they are committed like the rest of the bundle.
 
 | Component | Version | Note |

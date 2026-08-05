@@ -1,0 +1,26 @@
+# Python editor kernel (xpython / xeus-python), built into Public/jupyterlite by
+# scripts/build-jupyterlite.sh.
+#
+# SEPARATE from environment-r.yml on purpose. jupyterlite-xeus packs one
+# `kernel_packages` payload per env and the kernel fetches its whole env at
+# boot — so a single shared Python+R env made every Python boot pull all ~32 MB
+# of r-base and every R boot pull numpy/pandas/matplotlib. That was slow enough
+# to time out the editor probes ("kernel never reported idle"). Two envs keep
+# each boot to its own language.
+#
+# Anything a student imports must be baked in here. The editor's CSP is
+# connect-src 'self', so there is no runtime pip/piplite escape hatch — a
+# missing package is an ImportError with no recovery.
+#
+# Channel: emscripten-forge-4x. The older `emscripten-forge-dev` alias serves
+# the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of any
+# kind on 2026-04-09 — frozen, not merely older.
+name: chickadee-python
+channels:
+  - https://repo.prefix.dev/emscripten-forge-4x
+  - https://repo.prefix.dev/conda-forge
+dependencies:
+  - xeus-python
+  - numpy
+  - pandas
+  - matplotlib

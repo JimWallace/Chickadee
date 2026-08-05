@@ -9,8 +9,9 @@ jupyterlite-pyodide-kernel==0.8.1
 # `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
 jupyter-iframe-commands==0.3.0
 # BOTH editor kernels — xpython (xeus-python) and xr (xeus-r) — are built from
-# one emscripten-forge env, Tools/jupyterlite/environment.yml; the build needs
-# micromamba on PATH and network to repo.prefix.dev.  R is on xeus rather than
+# emscripten-forge, one env each: Tools/jupyterlite/environment-python.yml and
+# environment-r.yml.  The build needs micromamba on PATH and network to
+# repo.prefix.dev.  R is on xeus rather than
 # WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
 # docs/xeus-r-kernel-spike.md, #77).
 jupyterlite-xeus==5.0.0
