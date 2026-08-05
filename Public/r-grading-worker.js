@@ -44,7 +44,11 @@
 // CPU-bound loop.  R execution inside the kernel is synchronous, so a runaway
 // wedges this worker and nothing else.
 
-importScripts('/vendor/xeus-bootstrap.js');
+// The worker's own ?v= cache-buster is forwarded to every Chickadee-authored
+// file it pulls in, so one release's grading files pin together. The kernel's
+// own assets under /jupyterlite/xeus/ are not busted: they are regenerated only
+// by a deliberate re-vendor, and the editor loads them unbusted too.
+importScripts('/vendor/xeus-bootstrap.js' + (self.location.search || ''));
 importScripts('/grading-shared.js' + (self.location.search || ''));
 importScripts('/r-grading-shared.js' + (self.location.search || ''));
 
