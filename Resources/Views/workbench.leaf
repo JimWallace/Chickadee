@@ -10,9 +10,13 @@
 .wb-shell {
     display: flex;
     flex-direction: column;
-    /* dvh, not vh: mobile browsers shrink the visual viewport when chrome
-       appears, and vh would leave the bottom of the editor under it. */
-    height: 100dvh;
+    /* 100% of what `.page-fullbleed` hands us, not of the viewport: the site
+       nav is above us and taking the whole window would push the document
+       taller than the screen.  The viewport measurement (`100dvh`, chosen over
+       `vh` because mobile browsers shrink the visual viewport when their chrome
+       appears) now lives on the body, once. */
+    height: 100%;
+    min-height: 0;
 }
 
 .wb-bar {

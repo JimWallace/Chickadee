@@ -361,6 +361,25 @@ async function main() {
       return fail("editor frame is isolated but has no SharedArrayBuffer");
     }
 
+    // 4b. The DOCUMENT does not scroll.
+    //
+    //     The panes scroll inside themselves; the page must not. Sizing the
+    //     shell to `100dvh` while the site nav sat above it made the document
+    //     taller than the window, so the nav scrolled off under the pointer and
+    //     the invariant the workbench CSS claims was quietly false.
+    const docScroll = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    const overflow = docScroll.scrollHeight - docScroll.clientHeight;
+    console.log(`document overflow = ${overflow}px (scrollHeight=${docScroll.scrollHeight} clientHeight=${docScroll.clientHeight})`);
+    if (overflow > 1) {
+      return fail(
+        `the workbench document scrolls by ${overflow}px — the site chrome and the ` +
+        `page body are not sharing the viewport, so the nav scrolls away under the ` +
+        `pointer while the panes stay pinned.`);
+    }
+
     // 5. Idle-logout needs no forwarder any more.
     //
     //    `idle-logout.js` measures interaction with its OWN document. That used
