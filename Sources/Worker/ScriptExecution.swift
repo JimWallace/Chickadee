@@ -16,10 +16,25 @@
 //
 // What this file still owns, because Subprocess deliberately doesn't:
 //
+//   • The capture pipes. We create them, set FD_CLOEXEC, and hand Subprocess
+//     the write ends via `.fileDescriptor(_:closeAfterSpawningProcess:)`.
+//     Subprocess's own pipes come from swift-system's `FileDescriptor.pipe()`,
+//     which is bare `pipe(2)` with no `O_CLOEXEC` — so a process spawned
+//     concurrently with the child inherits a duplicate of the write end and
+//     the read side never sees EOF (issues #1139/#1233). That is fatal on the
+//     `.sequence` output path: its `AsyncSequence` has no cancellation handler
+//     anywhere in the library, so a drain parked on an EOF that will never
+//     arrive cannot be cancelled, the body never returns, `run` never returns,
+//     and enough of those starve the cooperative pool and wedge the process.
+//     Owning the pipes restores both guards at once: CLOEXEC on creation, and
+//     a deadline-bounded final drain.
+//
 //   • Bounded output capture. Subprocess's `.string(limit:)` *throws* once a
 //     child exceeds the limit; a student script printing in a tight loop must
 //     still grade, with the first megabyte kept and a truncation marker
-//     appended. So output is streamed (`.sequence`) into `CapturedPipeBuffer`.
+//     appended. Output accumulates into `CapturedPipeBuffer` instead, drained
+//     concurrently so a child writing more than one pipe buffer never blocks
+//     on a full pipe.
 //
 //   • The time limit. The deadline is ours to enforce and ours to report:
 //     `ScriptOutput.timedOut` is an explicit flag, not something inferred
@@ -58,8 +73,7 @@ func executeScriptLaunch(
     launchErrorPrefix: String
 ) async -> ScriptOutput {
     let start = Date()
-    let stdoutBuffer = CapturedPipeBuffer()
-    let stderrBuffer = CapturedPipeBuffer()
+    let capture = ScriptCapture()
 
     do {
         let result = try await Subprocess.run(
@@ -69,26 +83,24 @@ func executeScriptLaunch(
             workingDirectory: FilePath(workDir.path),
             platformOptions: scriptPlatformOptions(),
             input: .none,
-            output: .sequence,
-            error: .sequence
+            output: capture.standardOutputTarget,
+            error: capture.standardErrorTarget
         ) { execution in
-            await runScriptBody(
-                execution,
-                timeLimitSeconds: timeLimitSeconds,
-                stdoutBuffer: stdoutBuffer,
-                stderrBuffer: stderrBuffer
-            )
+            await runScriptWatchdog(
+                execution, capture: capture, timeLimitSeconds: timeLimitSeconds)
         }
 
         let didTimeOut = result.closureResult
+        let captured = capture.finish()
         return ScriptOutput(
             exitCode: didTimeOut ? -1 : exitCode(from: result.terminationStatus),
-            stdout: stdoutBuffer.text(),
-            stderr: stderrBuffer.text(),
+            stdout: captured.stdout,
+            stderr: captured.stderr,
             executionTimeMs: elapsedMs(since: start),
             timedOut: didTimeOut
         )
     } catch {
+        capture.discard()
         return ScriptOutput(
             exitCode: 2,
             stdout: "",
@@ -144,83 +156,44 @@ private func subprocessEnvironment(_ env: [String: String]) -> [Environment.Key:
 
 // MARK: - Running body
 
-/// What ended the run. The body waits for `.streamsClosed` either way: when
-/// the watchdog fires it kills the child, which closes the streams, so the
-/// drains always terminate.
-private enum ScriptRunPhase: Sendable {
-    /// Both output streams reached EOF — the child and everything holding a
-    /// write end are gone.
-    case streamsClosed
-    /// The time limit elapsed and the teardown ladder has been run.
-    case deadlineElapsed
-    /// The deadline sleep was cancelled because the streams closed first.
-    case watchdogStoodDown
-}
-
-/// Drains both output streams to EOF while a watchdog enforces the time
-/// limit, and reports whether the watchdog was the one that ended the run.
-private func runScriptBody<Input: InputProtocol>(
-    _ execution: Execution<Input, SequenceOutput, SequenceOutput>,
-    timeLimitSeconds: Int,
-    stdoutBuffer: CapturedPipeBuffer,
-    stderrBuffer: CapturedPipeBuffer
+/// The body of the run: nothing but the time-limit watchdog. Output capture
+/// happens on the pipes `ScriptCapture` owns, not here — see the file comment
+/// for why draining Subprocess's own `.sequence` streams is unsafe under
+/// concurrent spawns.
+///
+/// Returns whether the watchdog was the one that ended the run.
+///
+/// EOF on both capture streams is the exit signal — what `.sequence` would
+/// have provided, except that these are pipes we made close-on-exec and drain
+/// on a deadline, so a leaked write-end duplicate degrades to a slow run
+/// rather than a permanent hang.
+private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Error: ErrorOutputProtocol>(
+    _ execution: Execution<Input, Output, Error>,
+    capture: ScriptCapture,
+    timeLimitSeconds: Int
 ) async -> Bool {
-    let timedOut = TimeoutFlag()
-
-    await withTaskGroup(of: ScriptRunPhase.self) { group in
+    await withTaskGroup(of: Bool.self) { group in
         group.addTask {
-            await withTaskGroup(of: Void.self) { drains in
-                drains.addTask { await drain(execution.standardOutput, into: stdoutBuffer) }
-                drains.addTask { await drain(execution.standardError, into: stderrBuffer) }
-            }
-            return .streamsClosed
+            // Bounded a little past the time limit: by then the watchdog has
+            // killed the child, so EOF is due. The bound bites only when a
+            // leaked descriptor is holding a stream open.
+            await capture.awaitStreamsClosed(withinSeconds: timeLimitSeconds + 5)
+            return false
         }
 
         group.addTask {
             do {
                 try await Task.sleep(for: .seconds(timeLimitSeconds))
             } catch {
-                return .watchdogStoodDown
+                return false  // cancelled: the script finished on its own
             }
-            timedOut.mark()
             await execution.teardown(using: scriptTeardownSequence)
-            return .deadlineElapsed
+            return true
         }
 
-        // The watchdog may report first (it kills, then the drains finish) or
-        // never (the script exited on its own). Either way the body returns
-        // only once the streams are closed, so no output is dropped.
-        while let phase = await group.next() {
-            if phase == .streamsClosed {
-                group.cancelAll()
-                break
-            }
-        }
-    }
-
-    return timedOut.isSet
-}
-
-/// One-way flag the watchdog raises before tearing the child down. A class
-/// rather than a bare `Mutex` because the task-group children that touch it
-/// take it as a `sending` capture, which a noncopyable value can't satisfy.
-private final class TimeoutFlag: Sendable {
-    private let storage = Mutex(false)
-
-    func mark() { storage.withLock { $0 = true } }
-
-    var isSet: Bool { storage.withLock { $0 } }
-}
-
-private func drain(_ sequence: SubprocessOutputSequence, into buffer: CapturedPipeBuffer) async {
-    do {
-        for try await chunk in sequence {
-            let bytes = chunk.withUnsafeBytes { Data($0) }
-            buffer.append(bytes)
-        }
-    } catch {
-        // A read error mid-stream loses the tail, not the run: whatever
-        // arrived is still the child's output and still worth showing.
+        let timedOut = await group.next() ?? false
+        group.cancelAll()
+        return timedOut
     }
 }
 
@@ -276,5 +249,152 @@ final class CapturedPipeBuffer: Sendable {
 
     func text() -> String {
         String(data: storage.withLock { $0.data }, encoding: .utf8) ?? ""
+    }
+}
+
+// MARK: - Capture pipes
+
+/// The two capture pipes for one script run: created here so they can be made
+/// close-on-exec, drained continuously so a chatty child never blocks on a
+/// full pipe, and torn down on a deadline so a leaked write-end duplicate can
+/// postpone EOF but never hang the worker.
+///
+/// Each stream is drained by a dedicated short-lived thread rather than on the
+/// cooperative pool. The pool has roughly one thread per core and never grows,
+/// so parking two of its threads per running script would starve the very
+/// tasks meant to enforce the time limit (June 2026 audit, P1.5). Thread count
+/// is bounded by `--max-jobs`.
+final class ScriptCapture: Sendable {
+    private struct Stream {
+        let readEnd: Int32
+        let writeEnd: Int32
+        let buffer = CapturedPipeBuffer()
+    }
+
+    /// Grace given to the final drain after the child should be gone. Whatever
+    /// it wrote is already in the kernel pipe buffer, so the happy path
+    /// completes immediately; the deadline only bounds the leaked-descriptor
+    /// case.
+    private static let drainGraceSeconds: TimeInterval = 2
+
+    private let standardOutput: Stream
+    private let standardError: Stream
+    /// Resumed once by whichever comes first: both streams reaching EOF, or
+    /// the caller's deadline. Single-shot, same shape as the termination
+    /// continuations elsewhere in the worker.
+    private let completion = Mutex<CheckedContinuation<Void, Never>?>(nil)
+    private let openStreams = Mutex(2)
+    private let resumed = Mutex(false)
+
+    init() {
+        standardOutput = Self.makeStream()
+        standardError = Self.makeStream()
+    }
+
+    /// A pipe whose descriptors are close-on-exec from the moment they exist.
+    ///
+    /// Without this, a subprocess spawned concurrently with our child
+    /// inherits a duplicate of the write end across its exec, and the read
+    /// side never sees EOF until that unrelated process exits (#1139/#1233).
+    /// Subprocess's own pipes do not set the flag, which is why we supply
+    /// ours rather than using `.sequence`.
+    private static func makeStream() -> Stream {
+        var descriptors: (Int32, Int32) = (-1, -1)
+        _ = withUnsafeMutablePointer(to: &descriptors) { pointer in
+            pointer.withMemoryRebound(to: Int32.self, capacity: 2) { pipe($0) }
+        }
+        for descriptor in [descriptors.0, descriptors.1] {
+            let flags = fcntl(descriptor, F_GETFD)
+            if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
+        }
+        return Stream(readEnd: descriptors.0, writeEnd: descriptors.1)
+    }
+
+    /// The write ends, handed to Subprocess. `closeAfterSpawningProcess` makes
+    /// it close the parent's copy once the child holds its own — required for
+    /// EOF, and the reason this type never closes a write end itself.
+    var standardOutputTarget: FileDescriptorOutput {
+        .fileDescriptor(FileDescriptor(rawValue: standardOutput.writeEnd), closeAfterSpawningProcess: true)
+    }
+
+    var standardErrorTarget: FileDescriptorOutput {
+        .fileDescriptor(FileDescriptor(rawValue: standardError.writeEnd), closeAfterSpawningProcess: true)
+    }
+
+    /// Starts draining both streams, then suspends until both reach EOF or
+    /// `withinSeconds` elapses — whichever comes first. Always resumes.
+    func awaitStreamsClosed(withinSeconds: Int) async {
+        for stream in [standardOutput, standardError] {
+            Thread.detachNewThread { [self] in
+                drainToEOF(stream)
+                noteStreamClosed()
+            }
+        }
+
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(withinSeconds))
+            resumeOnce()
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            completion.withLock { $0 = continuation }
+            // A stream may have hit EOF before the continuation was stored;
+            // re-check rather than wait for a resume that already happened.
+            if openStreams.withLock({ $0 }) == 0 { resumeOnce() }
+        }
+        deadline.cancel()
+    }
+
+    /// Stops draining and returns what was captured. Runs a short bounded
+    /// final drain first: the child is gone by now, so anything it wrote is
+    /// already in the pipe buffer and the happy path completes on the first
+    /// read.
+    func finish() -> (stdout: String, stderr: String) {
+        let deadline = Date().addingTimeInterval(Self.drainGraceSeconds)
+        for stream in [standardOutput, standardError] {
+            stream.buffer.append(boundedReadToEOF(fromDescriptor: stream.readEnd, deadline: deadline))
+            close(stream.readEnd)
+        }
+        return (standardOutput.buffer.text(), standardError.buffer.text())
+    }
+
+    /// Releases the descriptors on the path where the child never launched
+    /// and there is nothing to capture.
+    func discard() {
+        close(standardOutput.readEnd)
+        close(standardError.readEnd)
+    }
+
+    private func drainToEOF(_ stream: Stream) {
+        // No deadline here: this thread is bounded by the caller's
+        // `awaitStreamsClosed` deadline plus `finish`'s grace, and a thread
+        // still parked on a leaked write end costs a thread, not a wedge.
+        var chunk = [UInt8](repeating: 0, count: 65_536)
+        while true {
+            let bytesRead = read(stream.readEnd, &chunk, chunk.count)
+            if bytesRead > 0 {
+                stream.buffer.append(Data(chunk[0..<bytesRead]))
+                continue
+            }
+            if bytesRead == -1 && errno == EINTR { continue }
+            return
+        }
+    }
+
+    private func noteStreamClosed() {
+        let remaining = openStreams.withLock { count -> Int in
+            count -= 1
+            return count
+        }
+        if remaining == 0 { resumeOnce() }
+    }
+
+    private func resumeOnce() {
+        let alreadyResumed = resumed.withLock { wasResumed -> Bool in
+            let previous = wasResumed
+            wasResumed = true
+            return previous
+        }
+        guard !alreadyResumed else { return }
+        completion.withLock { $0 }?.resume()
     }
 }
