@@ -461,6 +461,47 @@
     // never unloads the document, so `refreshEditSurface` just reads
     // `half.scrollTop` before and writes it back after.
 
+    // Warns when a chosen date falls within three days of a UWaterloo
+    // important date.  Hoisted here from three inline copies that had already
+    // drifted: the two assignment editors guarded `warningEl` against null in
+    // one copy but not the other, and the dashboard publish form used a
+    // shorter label.  The guards are kept (strictest wins, as with escapeHtml
+    // above) and the label is a parameter, so no page's visible text changes.
+    //
+    // Returns a promise so callers — and tests — can await the fetch.
+    function checkUWDates(dateTimeValue, warningEl, options) {
+        var label = (options && options.label) || 'Due date is near:';
+
+        function hide() {
+            if (warningEl) warningEl.style.display = 'none';
+        }
+
+        if (!dateTimeValue) { hide(); return Promise.resolve(); }
+        var selected = new Date(dateTimeValue);
+        if (isNaN(selected.getTime())) { hide(); return Promise.resolve(); }
+
+        return fetch('/api/v1/uw-dates').then(function (resp) {
+            if (!resp.ok) return;
+            return resp.json();
+        }).then(function (dates) {
+            if (!dates || !warningEl) return;
+            var threeDays = 3 * 86400000;
+            var near = dates.filter(function (d) {
+                var start = new Date(d.startDate);
+                var end = new Date(d.endDate);
+                return selected >= new Date(start.getTime() - threeDays)
+                    && selected < new Date(end.getTime() + threeDays);
+            });
+            if (near.length > 0) {
+                warningEl.textContent = '⚠ ' + label + ' '
+                    + near.map(function (d) { return d.title; }).join(', ');
+                warningEl.style.display = '';
+            } else {
+                warningEl.style.display = 'none';
+            }
+        }).catch(function () { /* offline or 404 — the warning is advisory */ });
+    }
+
     var root = typeof window !== 'undefined' ? window : globalThis;
     root.ChickadeeUI = {
         escapeHtml: escapeHtml,
@@ -470,6 +511,7 @@
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
         notifyWorkbench: notifyWorkbench,
+        checkUWDates: checkUWDates,
         refreshEditSurface: refreshEditSurface,
         refreshNotebookSurface: refreshNotebookSurface,
         renderSparkline: renderSparkline,
