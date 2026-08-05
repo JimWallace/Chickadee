@@ -447,5 +447,7 @@
     "zipimport",
     "zlib",
     "zoneinfo"
-  ]
+  ],
+  "derivedOnPython": "3.11",
+  "kernelPython": "3.13.1"
 }
