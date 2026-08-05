@@ -273,78 +273,7 @@ Create Assignment
          the JSON seed and keeps them in sync via the debounced
          `PUT /instructor/new/draft/suite`.  Section CRUD goes through the
          draft-scoped endpoints in AssignmentRoutes+DraftSections.swift. -->
-    <div id="suite-sections">
-    #for(sec in suiteSectionRows):
-        <div class="section-block" data-section-id="#(sec.sectionID)">
-        #if(!sec.isUngrouped):
-            <div class="section-header" draggable="true">
-                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
-
-                <!-- View mode -->
-                <div class="section-view">
-                    <strong>#(sec.name)</strong>
-                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
-                            title="Edit section" aria-label="Edit section">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                    </button>
-                    <span class="section-spacer"></span>
-                    <button type="button" class="btn action-btn btn-xs section-var-add"
-                            data-section-id="#(sec.sectionID)">+ Add Input</button>
-                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
-                            data-section-id="#(sec.sectionID)">+ Add Test</button>
-                </div>
-
-                <!-- Edit mode (hidden by default) -->
-                <div class="section-edit" style="display:none">
-                    <form class="section-rename-form" method="post"
-                          action="/instructor/new/draft/suite-sections/#(sec.sectionID)/rename?draftID=#(draftID)">
-                        #csrfFormField()
-                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
-                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
-                    </form>
-                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
-                            data-action="/instructor/new/draft/suite-sections/#(sec.sectionID)/delete?draftID=#(draftID)"
-                            data-name="#(sec.name)">Delete</button>
-                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
-                            aria-label="Cancel" title="Cancel">✕</button>
-                </div>
-            </div>
-
-            <!-- Section variables (shared inputs) form.  Auto-saves on
-                 change (debounced), POSTs JSON to the draft-scoped
-                 variables endpoint. -->
-            <form class="section-vars-form" method="post"
-                  action="/instructor/new/draft/suite-sections/#(sec.sectionID)/variables?draftID=#(draftID)"
-                  data-section-id="#(sec.sectionID)">
-                <table class="results-table section-vars-table">
-                    <tbody class="section-vars-body">
-                        #for(v in sec.variables):
-                        <tr class="section-var-row">
-                            <td class="section-var-namecell">
-                                <span class="section-var-row-valid section-var-valid"></span>
-                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
-                            </td>
-                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
-                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
-                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
-                        </tr>
-                        #endfor
-                    </tbody>
-                </table>
-            </form>
-        #else:
-            <div class="section-create-toolbar"
-                 data-section-id="#(sec.sectionID)">
-                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
-                        data-section-id="#(sec.sectionID)">+ Add Test</button>
-            </div>
-        #endif
-            <table class="results-table">
-                <tbody data-section-id="#(sec.sectionID)"></tbody>
-            </table>
-        </div>
-    #endfor
-    </div>
+    #extend("_suite-sections")
 </div>
 
 <!-- Suite seed (full reconciled GET /suite payload) — same shape the
@@ -437,6 +366,10 @@ Create Assignment
             },
             uploadScript: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
+            },
+            reorderSections: function () {
+                return '/instructor/new/draft/suite-sections/reorder?draftID='
+                     + encodeURIComponent(draftID);
             }
         }
     });
@@ -450,279 +383,25 @@ Create Assignment
 })();
 </script>
 
-<!-- Section-variables auto-save (mirrors assignment-edit.leaf:847-1113).
-     Each section gets a Shared Inputs table; rows debounce-POST to
-     /instructor/new/draft/suite-sections/:sid/variables. -->
-<script>
-(function () {
-    'use strict';
+<!-- Section inputs editor — the same shared modules the edit page loads
+     (Public/inputs-editor-core.js + Public/section-inputs-editor.js).  Until
+     v0.5.x this page carried its own pre-v0.4.160 inline copy, whose value
+     parser had no `=` branch: a per-student expression typed into a section
+     input was classified as a bare string and persisted as the literal text
+     "= seed % 26", with the payload omitting `expressions` entirely.  The
+     modules post to `form.action`, which the markup above already scopes to
+     the draft endpoints, so there is no URL wiring to pass in. -->
+<script src="/inputs-editor-core.js?v=#appVersion()"></script>
+<script src="/section-inputs-editor.js?v=#appVersion()"></script>
 
-    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
-    var csrf = ChickadeeUI.getCsrfToken;
-
-    function isValidPyIdent(s) {
-        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
-    }
-
-    function tryParseValue(raw) {
-        var t = String(raw == null ? '' : raw).trim();
-        if (!t) return { ok: false, empty: true };
-        if (t === 'True')  return { ok: true, value: true,  strict: true };
-        if (t === 'False') return { ok: true, value: false, strict: true };
-        if (t === 'None')  return { ok: true, value: null,  strict: true };
-        try { return { ok: true, value: JSON.parse(t), strict: true }; }
-        catch (_) {}
-        if (t.indexOf('"') === -1) {
-            var pyish = t.replace(/'/g, '"')
-                         .replace(/\bTrue\b/g, 'true')
-                         .replace(/\bFalse\b/g, 'false')
-                         .replace(/\bNone\b/g, 'null');
-            try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
-            catch (_) {}
-        }
-        return { ok: true, value: String(raw), strict: false };
-    }
-
-    function refreshRow(tr) {
-        var name = (tr.querySelector('.section-var-name') || {}).value || '';
-        var rawVal = (tr.querySelector('.section-var-value') || {}).value || '';
-        name = name.trim();
-        var nameOk = name && isValidPyIdent(name);
-        var nameEl = tr.querySelector('.section-var-name');
-        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
-        if (nameOk) {
-            var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
-                .map(function (el) { return el.value.trim(); });
-            if (others.filter(function (n) { return n === name; }).length > 1) {
-                nameEl.style.borderColor = 'var(--red)';
-                nameOk = false;
-            }
-        }
-        var parsed = tryParseValue(rawVal);
-        var valueEl = tr.querySelector('.section-var-value');
-        var valueOk = parsed.ok && !parsed.empty && parsed.strict;
-        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber)';
-        valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
-            ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
-        var check = tr.querySelector('.section-var-row-valid');
-        if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
-    }
-
-    function refreshAllRows(tbody) {
-        Array.from(tbody.querySelectorAll('tr.section-var-row')).forEach(refreshRow);
-    }
-
-    function addEmptyRow(tbody) {
-        var tr = document.createElement('tr');
-        tr.className = 'section-var-row';
-        tr.innerHTML =
-            '<td class="section-var-namecell">'
-          +   '<span class="section-var-row-valid section-var-valid"></span>'
-          +   '<input type="text" class="form-input section-var-name section-var-name-input" value="" placeholder="Input Name">'
-          + '</td>'
-          + '<td><input type="text" class="form-input section-var-value section-var-value-input" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>'
-          + '<td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove" title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
-        tbody.appendChild(tr);
-        refreshRow(tr);
-        var input = tr.querySelector('.section-var-name');
-        if (input) input.focus();
-    }
-
-    function buildPayload(form) {
-        var tbody = form.querySelector('tbody.section-vars-body');
-        if (!tbody) return null;
-        var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
-        var variables = [];
-        var valid = true;
-        for (var i = 0; i < rows.length; i++) {
-            var tr = rows[i];
-            var name = (tr.querySelector('.section-var-name').value || '').trim();
-            var rawVal = tr.querySelector('.section-var-value').value || '';
-            if (!name && !rawVal.trim()) continue;
-            if (!isValidPyIdent(name)) { valid = false; continue; }
-            var parsed = tryParseValue(rawVal);
-            if (parsed.empty) { valid = false; continue; }
-            variables.push({ name: name, value: parsed.value });
-        }
-        var seen = {};
-        for (var k = 0; k < variables.length; k++) {
-            if (seen[variables[k].name]) { valid = false; break; }
-            seen[variables[k].name] = true;
-        }
-        return valid ? { variables: variables } : null;
-    }
-
-    function wireAutoSave(form) {
-        var tbody = form.querySelector('tbody.section-vars-body');
-        if (!tbody) return { flush: function () { return Promise.resolve(); } };
-
-        var timer = null;
-        var inFlight = null;
-        var pending = false;
-
-        function doPost() {
-            var payload = buildPayload(form);
-            if (!payload) return Promise.resolve();
-            inFlight = fetch(form.action, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                redirect: 'manual',
-                body: JSON.stringify(payload)
-            }).then(function (r) {
-                if (!r.ok && r.type !== 'opaqueredirect') {
-                    return r.text().catch(function () { return ''; }).then(function (t) {
-                        throw new Error('section-vars save failed: HTTP ' + r.status + ' ' + t.slice(0, 200));
-                    });
-                }
-            }).catch(function (err) {
-                console.error('section-vars auto-save failed:', err);
-            }).finally(function () {
-                inFlight = null;
-                if (pending) { pending = false; doPost(); }
-            });
-            return inFlight;
-        }
-
-        function schedule() {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(function () { timer = null; flushNow(); }, 500);
-        }
-
-        function flushNow() {
-            if (timer) { clearTimeout(timer); timer = null; }
-            if (inFlight) { pending = true; return inFlight; }
-            return doPost() || Promise.resolve();
-        }
-
-        refreshAllRows(tbody);
-
-        form.addEventListener('input', function (e) {
-            var tr = e.target.closest && e.target.closest('tr.section-var-row');
-            if (tr) {
-                refreshAllRows(tbody);
-                schedule();
-            }
-        });
-        form.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.section-var-remove');
-            if (btn && form.contains(btn)) {
-                var tr = btn.closest('tr.section-var-row');
-                if (tr) { tr.remove(); refreshAllRows(tbody); schedule(); }
-            }
-        });
-        form.addEventListener('submit', function (e) { e.preventDefault(); flushNow(); });
-
-        return { flush: flushNow };
-    }
-
-    var forms = Array.from(document.querySelectorAll('form.section-vars-form')).map(wireAutoSave);
-
-    window.chickadeeFlushSectionVars = function () {
-        return Promise.all(forms.map(function (f) { return f.flush(); }));
-    };
-
-    document.querySelectorAll('button.section-var-add').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var sid = btn.getAttribute('data-section-id') || '';
-            var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
-            if (!form) return;
-            var tbody = form.querySelector('tbody.section-vars-body');
-            if (tbody) addEmptyRow(tbody);
-        });
-    });
-
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
-    // into a test-type dropdown by the unified Test Editor modal
-    // (test-editor-modal.js, loaded below); a pick opens the modal in that type.
-
-    // ── Section header view/edit toggle ────────────────────────────────
-    document.addEventListener('click', function (e) {
-        var toggleBtn = e.target.closest && e.target.closest('.section-edit-toggle');
-        var cancelBtn = e.target.closest && e.target.closest('.section-edit-cancel');
-        var deleteBtn = e.target.closest && e.target.closest('.section-delete-btn');
-
-        if (toggleBtn) {
-            var hdr = toggleBtn.closest('.section-header');
-            if (!hdr) return;
-            hdr.querySelector('.section-view').style.display = 'none';
-            hdr.querySelector('.section-edit').style.display = 'flex';
-            var input = hdr.querySelector('.section-name-input');
-            if (input) input.focus();
-        } else if (cancelBtn) {
-            var hdr2 = cancelBtn.closest('.section-header');
-            if (!hdr2) return;
-            hdr2.querySelector('.section-view').style.display = 'flex';
-            hdr2.querySelector('.section-edit').style.display = 'none';
-        } else if (deleteBtn) {
-            var name = deleteBtn.getAttribute('data-name') || 'this section';
-            if (!confirm('Delete section "' + name + '"? Tests in this section move to Ungrouped.')) return;
-            var action = deleteBtn.getAttribute('data-action');
-            if (!action) return;
-            var form = document.createElement('form');
-            form.method = 'post';
-            form.action = action;
-            form.style.display = 'none';
-            var token = ChickadeeUI.getCsrfToken();
-            var inp = document.createElement('input');
-            inp.type = 'hidden';
-            inp.name = '_csrf';
-            inp.value = token;
-            form.appendChild(inp);
-            document.body.appendChild(form);
-            form.submit();
-        }
-    });
-
-    // ── Section header drag-reorder ─────────────────────────────────────
-    var sectionContainer = document.getElementById('suite-sections');
-    if (sectionContainer) {
-        var draggingHeader = null;
-        sectionContainer.addEventListener('dragstart', function (e) {
-            var hdr = e.target.closest && e.target.closest('.section-header');
-            if (!hdr) return;
-            draggingHeader = hdr;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', hdr.parentNode.getAttribute('data-section-id') || '');
-            hdr.style.opacity = '.4';
-        });
-        sectionContainer.addEventListener('dragend', function () {
-            if (draggingHeader) draggingHeader.style.opacity = '';
-            draggingHeader = null;
-        });
-        sectionContainer.addEventListener('dragover', function (e) {
-            if (!draggingHeader) return;
-            e.preventDefault();
-        });
-        sectionContainer.addEventListener('drop', function (e) {
-            if (!draggingHeader) return;
-            e.preventDefault();
-            var draggedBlock = draggingHeader.closest('.section-block');
-            var targetBlock = e.target.closest && e.target.closest('.section-block');
-            if (!draggedBlock || !targetBlock || draggedBlock === targetBlock) return;
-            // Don't allow dragging onto the Ungrouped block (it's terminal)
-            if (!targetBlock.querySelector('.section-header')) return;
-            var rect = targetBlock.getBoundingClientRect();
-            var midpoint = rect.top + rect.height / 2;
-            if (e.clientY < midpoint) {
-                sectionContainer.insertBefore(draggedBlock, targetBlock);
-            } else {
-                sectionContainer.insertBefore(draggedBlock, targetBlock.nextSibling);
-            }
-            // Persist new order
-            var ids = Array.from(sectionContainer.querySelectorAll('.section-block'))
-                .map(function (b) { return b.getAttribute('data-section-id') || ''; })
-                .filter(function (s) { return s !== ''; });
-            fetch('/instructor/new/draft/suite-sections/reorder?draftID=' + encodeURIComponent(draftID), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                body: JSON.stringify({ sectionIDs: ids })
-            }).catch(function (err) {
-                console.error('section reorder failed:', err);
-            });
-        });
-    }
-})();
-</script>
+<!-- Section header view/edit toggle, section delete, and section
+     drag-reorder are all owned by suite-table.js (wired above), which this
+     page and the edit page both load.  This page used to bind its own copies
+     on top: the toggle/delete pair on `document` and the drag pair on the
+     same #suite-sections element suite-table uses, so both fired.  Section
+     delete raised two confirm dialogs, and the inline reorder handler read a
+     `draftID` that was declared only inside a sibling IIFE — under strict
+     mode a ReferenceError, so its POST never went out at all. -->
 #endif
 
 <!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->
@@ -963,7 +642,7 @@ Create Assignment
         var dueAtInput = document.getElementById('dueAt');
         var warning    = document.getElementById('uw-date-warning');
         if (!dueAtInput || !warning) return;
-        dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
+        dueAtInput.addEventListener('change', function () { ChickadeeUI.checkUWDates(dueAtInput.value, warning); });
     })();
 
     // ── Grading mode hint ─────────────────────────────────────────────
@@ -983,33 +662,6 @@ Create Assignment
     })();
 })();
 </script>
-<script>
-function checkUWDates(dateTimeValue, warningEl) {
-    if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
-    var selected = new Date(dateTimeValue);
-    if (isNaN(selected.getTime())) { warningEl.style.display = 'none'; return; }
-    fetch('/api/v1/uw-dates').then(function (resp) {
-        if (!resp.ok) return;
-        return resp.json();
-    }).then(function (dates) {
-        if (!dates) return;
-        var threeDays = 3 * 86400000;
-        var near = dates.filter(function (d) {
-            var start = new Date(d.startDate);
-            var end   = new Date(d.endDate);
-            return selected >= new Date(start.getTime() - threeDays)
-                && selected < new Date(end.getTime() + threeDays);
-        });
-        if (near.length > 0) {
-            warningEl.textContent = '\u26a0 Due date is near: ' + near.map(function (d) { return d.title; }).join(', ');
-            warningEl.style.display = '';
-        } else {
-            warningEl.style.display = 'none';
-        }
-    }).catch(function () {});
-}
-</script>
-
 <!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
      One modal for "+ Add Test"; picking a type morphs the body in place.
      The notebook-check form is a body renderer (test-renderer-check.js, fed

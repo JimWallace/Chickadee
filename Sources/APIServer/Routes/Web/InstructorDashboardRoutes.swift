@@ -655,6 +655,12 @@ struct InstructorDashboardRoutes: RouteCollection {
             checkSchemaJSON: notebookCheckFormSchemaJSON(),
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
+            sectionActionBase: "/instructor/\(idStr)/suite-sections",
+            sectionActionQuery: "",
+            // Unconditional, matching the other forms on this page: the
+            // attribute is inert unless `inplace-forms.js` is loaded, which
+            // only happens on an embedded (workbench pane) render.
+            sectionFormsInPlace: true,
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
             achievementSignalOptions: AchievementSignalPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,

@@ -298,91 +298,7 @@
          via the debounced `PUT /suite`.  Section CRUD (create / rename /
          delete / reorder) goes through dedicated endpoints — see
          AssignmentRoutes+SuiteSections.swift. -->
-    <div id="suite-sections">
-    #for(sec in suiteSectionRows):
-        <div class="section-block" data-section-id="#(sec.sectionID)">
-        #if(!sec.isUngrouped):
-            <div class="section-header" draggable="true">
-                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
-
-                <!-- View mode -->
-                <div class="section-view">
-                    <strong>#(sec.name)</strong>
-                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
-                            title="Edit section" aria-label="Edit section">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                    </button>
-                    <!-- Inline section action buttons (v0.4.103).  Add Input
-                         lives inside section-view so it sits beside the
-                         name; the section-vars-form below just renders the
-                         tbody and keeps its action= for the auto-save POST. -->
-                    <span class="section-spacer"></span>
-                    <button type="button" class="btn action-btn btn-xs section-var-add"
-                            data-section-id="#(sec.sectionID)">+ Add Input</button>
-                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
-                            data-section-id="#(sec.sectionID)">+ Add Test</button>
-                </div>
-
-                <!-- Edit mode (hidden by default) -->
-                <div class="section-edit" style="display:none">
-                    <form class="section-rename-form" method="post"
-                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename"
-                          data-ck-inplace>
-                        #csrfFormField()
-                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
-                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
-                    </form>
-                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
-                            data-action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/delete"
-                            data-name="#(sec.name)">Delete</button>
-                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
-                            aria-label="Cancel" title="Cancel">✕</button>
-                </div>
-            </div>
-
-            <!-- Section variables (v0.4.100, restructured v0.4.101).
-                 Fixed Inputs table above the Tests table.  Every pattern
-                 family in the section can reference these via `$name`;
-                 family-level variables shadow same-named section vars.
-                 Auto-saves on change (debounced); explicit Save button
-                 removed — the whole list also flushes when the main
-                 Save & Validate button is clicked. -->
-            <form class="section-vars-form" method="post"
-                  action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
-                  data-section-id="#(sec.sectionID)">
-                <table class="results-table section-vars-table">
-                    <tbody class="section-vars-body">
-                        #for(v in sec.variables):
-                        <tr class="section-var-row">
-                            <td class="section-var-namecell">
-                                <span class="section-var-row-valid section-var-valid"></span>
-                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
-                            </td>
-                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
-                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
-                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
-                        </tr>
-                        #endfor
-                    </tbody>
-                </table>
-            </form>
-        #else:
-            <!-- Ungrouped block has no header to host inline buttons —
-                 keep a slim per-section toolbar (no Upload, v0.4.103).
-                 The global Upload button at the page top still handles
-                 zip uploads. -->
-            <div class="section-create-toolbar"
-                 data-section-id="#(sec.sectionID)">
-                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
-                        data-section-id="#(sec.sectionID)">+ Add Test</button>
-            </div>
-        #endif
-            <table class="results-table">
-                <tbody data-section-id="#(sec.sectionID)"></tbody>
-            </table>
-        </div>
-    #endfor
-    </div>
+    #extend("_suite-sections")
 </div>
 
 <!-- ── Achievements ──────────────────────────────────────────────────
@@ -564,7 +480,7 @@
     if (dueInput) {
         dueInput.addEventListener('change', function () {
             refreshDueDisplay();
-            checkUWDates(dueInput.value, document.getElementById('uw-date-warning'));
+            ChickadeeUI.checkUWDates(dueInput.value, document.getElementById('uw-date-warning'));
         });
     }
 
@@ -598,6 +514,9 @@
             },
             uploadScript: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
+            },
+            reorderSections: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/suite-sections/reorder';
             }
         }
     });
@@ -631,32 +550,6 @@
     // `window.__chickadeeTargetSection` and opens the modal already in that
     // type (no second picker inside the modal).
 })();
-</script>
-<script>
-function checkUWDates(dateTimeValue, warningEl) {
-    if (!dateTimeValue) { if (warningEl) warningEl.style.display = 'none'; return; }
-    var selected = new Date(dateTimeValue);
-    if (isNaN(selected.getTime())) { if (warningEl) warningEl.style.display = 'none'; return; }
-    fetch('/api/v1/uw-dates').then(function (resp) {
-        if (!resp.ok) return;
-        return resp.json();
-    }).then(function (dates) {
-        if (!dates || !warningEl) return;
-        var threeDays = 3 * 86400000;
-        var near = dates.filter(function (d) {
-            var start = new Date(d.startDate);
-            var end = new Date(d.endDate);
-            return selected >= new Date(start.getTime() - threeDays)
-                && selected < new Date(end.getTime() + threeDays);
-        });
-        if (near.length > 0) {
-            warningEl.textContent = '\u26a0 Due date is near: ' + near.map(function (d) { return d.title; }).join(', ');
-            warningEl.style.display = '';
-        } else {
-            warningEl.style.display = 'none';
-        }
-    }).catch(function () { /* silently ignore */ });
-}
 </script>
 
 <!-- ── Pattern Family Editor JS ─────────────────────────────────────────────

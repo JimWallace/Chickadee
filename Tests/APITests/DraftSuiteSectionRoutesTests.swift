@@ -327,6 +327,199 @@ import VaporTesting
         }
     }
 
+    /// The draft endpoint has always accepted per-student `=` expressions —
+    /// it decodes an optional `expressions` list alongside `variables` — but
+    /// nothing exercised that path, and until v0.5.x the create page's inline
+    /// editor never sent the key. A payload without it is coalesced to `[]`,
+    /// so an expression authored on that page was silently downgraded to a
+    /// literal string. This pins the server half of the contract the page's
+    /// shared editor module now relies on.
+    @Test func updateDraftSuiteSectionVariables_roundTripsPerStudentExpressions() async throws {
+        try await withApp(app) { _ in
+            let sid = UUID().uuidString
+            let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
+            let cookie = try await loginUser(username: "dssrt_inst8", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst8", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            struct MixedBody: Content {
+                var variables: [FamilyVariable]
+                var expressions: [PersonalizationExpression]
+            }
+            let body = MixedBody(
+                variables: [FamilyVariable(name: "max_bmi", value: .int(30))],
+                expressions: [PersonalizationExpression(name: "shift", expression: "seed % 26")]
+            )
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(body, as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // The expression survives as an expression, not as a literal whose
+            // value happens to be the text "= seed % 26".
+            let dict = try await loadManifestDict(setupID: draftID)
+            let sections = try #require(dict["sections"] as? [[String: Any]])
+            #expect(sections.count == 1)
+
+            let vars = sections[0]["variables"] as? [[String: Any]] ?? []
+            #expect(vars.count == 1)
+            #expect(vars.first?["name"] as? String == "max_bmi")
+            #expect(
+                vars.contains { ($0["name"] as? String) == "shift" } == false,
+                "The expression must not land in `variables`")
+
+            let exprs = try #require(sections[0]["expressions"] as? [[String: Any]])
+            #expect(exprs.count == 1)
+            #expect(exprs.first?["name"] as? String == "shift")
+            #expect(exprs.first?["expression"] as? String == "seed % 26")
+
+            // And it renders back into the editor with the `=` prefix the
+            // shared value parser classifies on load — the same helper the
+            // create and edit templates both loop over.
+            let setup = try await APITestSetup.find(draftID, on: app.db)
+            let manifest = try #require(setup?.manifest)
+            let rows = suiteSectionShellRows(fromManifest: manifest)
+            let shiftRow = try #require(
+                rows.first?.variables.first { $0.name == "shift" },
+                "The expression should render as a section-input row")
+            #expect(shiftRow.valueJSON == "= seed % 26")
+        }
+    }
+
+    /// The draft suite endpoint is registered for GET and PUT only. That is
+    /// what made suite-table.js's old reorder-URL derivation a live bug: it
+    /// rewrote a trailing path segment of `putSuite()`, which on this page
+    /// ends in a query string, so the rewrite was a no-op and the section
+    /// reorder POSTed here instead of to `/suite-sections/reorder`. The
+    /// request was rejected and the instructor saw "Section reorder failed".
+    ///
+    /// Pinned so that adding a POST handler here — which would make the old
+    /// derivation silently "work" while writing the wrong payload to the
+    /// wrong handler — is a deliberate act with a red test attached.
+    @Test func draftSuiteEndpointRejectsPOST() async throws {
+        try await withApp(app) { _ in
+            let sid = UUID().uuidString
+            let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
+            let cookie = try await loginUser(username: "dssrt_inst9", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst9", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            struct ReorderBody: Content { var sectionIDs: [String] }
+
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(ReorderBody(sectionIDs: [sid]), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status.code >= 400 && res.status.code < 500,
+                        "POST to the draft suite endpoint must be rejected, got \(res.status)")
+                })
+
+            // The real endpoint accepts it.
+            try await app.asyncTest(
+                .POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(ReorderBody(sectionIDs: [sid]), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status.code < 400, "the reorder endpoint should accept the payload")
+                })
+        }
+    }
+
+    /// The suite-section shells are one partial (`_suite-sections.leaf`)
+    /// shared with the assignment edit body. The two surfaces differ only in
+    /// where the per-section forms post and whether they carry
+    /// `data-ck-inplace`, so this asserts the create page's *URLs*, not merely
+    /// that the block rendered — a presence check would survive the partial
+    /// being handed the edit page's base.
+    ///
+    /// The edit/workbench side of the same partial is pinned by
+    /// InstructorWorkbenchRoutesTests.everyNavigatingWriteFormIsMarkedForInPlaceSubmission,
+    /// which compares the exact set of marked form actions.
+    @Test func newAssignmentPageRendersSectionShellsWithDraftScopedURLs() async throws {
+        try await withApp(app) { _ in
+            let sid = "sec_partial_1"
+            let draftID = try await makeDraft(seedSections: [(sid, "Question 1")])
+            let cookie = try await loginUser(username: "dssrt_inst10", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst10", on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/new?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+
+                    // The section shell rendered at all.
+                    #expect(html.contains("data-section-id=\"\(sid)\""))
+
+                    // Parse the form open tags rather than searching the whole
+                    // document: the partial's own comment names the marker
+                    // attribute, so a textual check would match prose.
+                    let tags = Self.formOpenTags(in: html)
+                    let sectionActions = tags.compactMap { Self.attribute("action", in: $0) }
+                        .filter { $0.contains("/suite-sections/") }
+
+                    for op in ["rename", "variables"] {
+                        let expected = "/instructor/new/draft/suite-sections/\(sid)/\(op)?draftID=\(draftID)"
+                        #expect(
+                            sectionActions.contains(expected),
+                            "the \(op) action should be draft-scoped; expected \(expected), got \(sectionActions)")
+                    }
+
+                    // Delete is a button's data-action, not a form action.
+                    #expect(
+                        html.contains(
+                            "data-action=\"/instructor/new/draft/suite-sections/\(sid)/delete?draftID=\(draftID)\""),
+                        "the delete action should be draft-scoped")
+
+                    // No section form may carry the edit page's published shape.
+                    #expect(
+                        sectionActions.allSatisfy { $0.contains("draftID=") },
+                        "a section form is missing its draftID query: \(sectionActions)")
+
+                    // The create page is never a workbench pane, so its forms
+                    // must not be marked for in-place submission.
+                    #expect(
+                        tags.allSatisfy { $0.contains("data-ck-inplace") == false },
+                        "the create page should not mark forms for in-place submission")
+                })
+        }
+    }
+
+    /// Every `<form>` open tag in `html`. Parsing the tags rather than
+    /// searching the document keeps template prose out of the assertions —
+    /// the same reason InstructorWorkbenchRoutesTests parses them.
+    private static func formOpenTags(in html: String) -> [String] {
+        html.components(separatedBy: "<form ").dropFirst().compactMap { chunk in
+            guard let end = chunk.firstIndex(of: ">") else { return nil }
+            return String(chunk[chunk.startIndex..<end])
+        }
+    }
+
+    /// The value of a double-quoted attribute in a parsed open tag.
+    private static func attribute(_ name: String, in tag: String) -> String? {
+        guard let start = tag.range(of: "\(name)=\"") else { return nil }
+        let rest = tag[start.upperBound...]
+        guard let quote = rest.firstIndex(of: "\"") else { return nil }
+        return String(rest[rest.startIndex..<quote])
+    }
+
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
     @Test func reorderDraftSuiteSections_updatesOrder() async throws {

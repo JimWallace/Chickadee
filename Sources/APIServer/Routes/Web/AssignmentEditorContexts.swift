@@ -65,6 +65,13 @@ struct NewAssignmentContext: Encodable {
     /// at least the Ungrouped block so the suite editor renders even
     /// before a draft has been created.
     let suiteSectionRows: [SuiteSectionShellRow]
+    /// Drives `_suite-sections.leaf`, shared with the edit page. The block is
+    /// identical between the two surfaces apart from where its per-section
+    /// forms post and whether they carry `data-ck-inplace`, so those are the
+    /// only things the partial takes.
+    let sectionActionBase: String
+    let sectionActionQuery: String
+    let sectionFormsInPlace: Bool
     let requiredPlatform: String
     let requiredArchitecture: String
     let requiredLanguagesCSV: String
@@ -201,6 +208,11 @@ struct EditAssignmentContext: Encodable {
     /// template uses these to render the `.section-block` + `<tbody
     /// data-section-id>` shells that `suite-table.js` populates.
     let suiteSectionRows: [SuiteSectionShellRow]
+    /// Drives `_suite-sections.leaf`, shared with the create page. See the
+    /// matching fields on `NewAssignmentContext`.
+    let sectionActionBase: String
+    let sectionActionQuery: String
+    let sectionFormsInPlace: Bool
     /// Slice 1 — assignment-scope global inputs, rendered as the same
     /// `name + valueJSON` shape section variables use.  The new
     /// "Global Inputs" panel at the top of the edit page iterates this
