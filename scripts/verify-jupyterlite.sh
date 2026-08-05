@@ -24,8 +24,13 @@ def fail(message: str) -> None:
     print(message, file=sys.stderr)
     sys.exit(1)
 
-if data.get("defaultKernelName") != "python":
-    fail("defaultKernelName must be 'python'")
+# The editor's Python kernel is xeus-python (`xpython`), not the Pyodide kernel.
+# The Pyodide kernel extension stays vendored (see below) as the non-isolated
+# WebKit fallback and as the anchor for the Pyodide parity guard, but new
+# notebooks and the REPL must default to the kernel we normalize notebooks to
+# (jupyterLitePythonKernelName in NotebookContentHelpers.swift).
+if data.get("defaultKernelName") != "xpython":
+    fail("defaultKernelName must be 'xpython'")
 
 if data.get("fullLabextensionsUrl") != "./extensions":
     fail("fullLabextensionsUrl must be './extensions'")

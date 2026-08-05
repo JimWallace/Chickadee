@@ -8,8 +8,15 @@ jupyterlite-pyodide-kernel==0.8.1
 # cross-frame poking with a supported API.  Federated into the bundle by
 # `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
 jupyter-iframe-commands==0.3.0
-# R kernel via xeus (xeus-r), NOT WebR: jupyterlite-webr is dead-ended at
-# jupyterlite-core<0.7 (see docs/xeus-r-kernel-spike.md, #77).  jupyterlite-xeus
-# builds the xeus-r WASM kernel from emscripten-forge; the R kernel env is
-# Tools/jupyterlite/environment-r.yml and the build needs micromamba on PATH.
+# BOTH editor kernels — xpython (xeus-python) and xr (xeus-r) — are built from
+# one emscripten-forge env, Tools/jupyterlite/environment.yml; the build needs
+# micromamba on PATH and network to repo.prefix.dev.  R is on xeus rather than
+# WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
+# docs/xeus-r-kernel-spike.md, #77).
 jupyterlite-xeus==5.0.0
+# The Pyodide kernel is no longer the editor's Python (defaultKernelName is
+# xpython).  It stays vendored on purpose: scripts/check-pyodide-parity.sh
+# derives the Public/pyodide version pin from this package's bundled core
+# wheels, and keeping it is the cheap revert if xeus-python has to be backed
+# out.  Public/pyodide itself is still load-bearing for browser grading and
+# /validate, which are not xeus.

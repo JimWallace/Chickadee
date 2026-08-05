@@ -88,7 +88,9 @@ import VaporTesting
             else {
                 Issue.record("Reset working copy is not a valid normalized notebook"); return
             }
-            #expect(kernelspec["name"] as? String == "python", "Starter must be normalized to Python (Pyodide) kernel.")
+            #expect(
+                kernelspec["name"] as? String == "xpython",
+                "Starter must be normalized to the xeus-python kernel.")
             // Sanity: starter contains the original markdown cell content
             let resetText = String(data: afterReset, encoding: .utf8) ?? ""
             #expect(

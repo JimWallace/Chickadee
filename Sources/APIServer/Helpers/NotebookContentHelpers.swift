@@ -18,10 +18,25 @@ import Vapor
 let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 
 // JupyterLite kernel identifiers used when normalizing notebook metadata.
-let jupyterLitePythonKernelName = "python"
-let jupyterLitePythonKernelDisplayName = "Python (Pyodide)"
+//
+// Both editor kernels are now xeus kernels built from one emscripten-forge env
+// (Tools/jupyterlite/environment.yml): Python moved off the Pyodide kernel onto
+// xeus-python so the editor runs a single kernel technology. Attachment is by
+// `name`; the display names are friendly labels and deliberately omit the
+// language version the kernelspec carries (e.g. "Python 3.13 (XPython)"), so a
+// kernel rebuild does not churn every stored notebook's metadata.
+let jupyterLitePythonKernelName = "xpython"
+let jupyterLitePythonKernelDisplayName = "Python (xeus-python)"
 let jupyterLiteRKernelName = "xr"
 let jupyterLiteRKernelDisplayName = "R (xeus-r)"
+
+/// Kernelspec names treated as "this is a Python notebook" when normalizing.
+///
+/// `xpython` is in the set so a notebook already normalized to the xeus kernel
+/// round-trips as Python rather than falling through to the "unknown kernel →
+/// leave unchanged" branch; `python`/`python3` cover notebooks authored against
+/// the former Pyodide kernel and anything imported from desktop Jupyter.
+let pythonKernelNames: Set<String> = ["python", "python3", "xpython"]
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {
@@ -114,8 +129,9 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
 
 /// Normalizes notebook metadata so JupyterLite can attach the right browser kernel.
 ///
-/// - Python notebooks (`python`/`python3` or missing kernelspec) →
-///   kernelspec.name = "python", display_name = "Python (Pyodide)".
+/// - Python notebooks (`python`/`python3`/`xpython`, or missing kernelspec) →
+///   kernelspec.name = "xpython", display_name = "Python (xeus-python)" — the
+///   vendored xeus-python kernel.
 /// - R notebooks (`ir`, `r`, `webr`, `xr`) →
 ///   kernelspec.name = "xr", display_name = "R (xeus-r)" — the vendored xeus-r kernel.
 /// - Any other explicit kernelspec → returned unchanged.
@@ -141,12 +157,12 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         }
         metadata["language_info"] = languageInfo
     } else if let name = existingName, !name.isEmpty,
-        name != "python", name != "python3"
+        !pythonKernelNames.contains(name)
     {
         // Unknown non-Python, non-R kernel → leave unchanged.
         return data
     } else {
-        // Python kernel (or missing kernelspec) → normalize to Python (Pyodide).
+        // Python kernel (or missing kernelspec) → normalize to xeus-python.
         kernelSpec["name"] = jupyterLitePythonKernelName
         kernelSpec["display_name"] = jupyterLitePythonKernelDisplayName
         metadata["kernelspec"] = kernelSpec

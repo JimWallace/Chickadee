@@ -13,7 +13,7 @@ csp_violation + unhandledrejection pair into client diagnostics on every boot.
 
 The mapping is only consulted by xeus's runtime pip-install path, which
 Chickadee never uses: the kernel env is fully baked at build time from
-Tools/jupyterlite/environment-r.yml. The stub resolves to a Response-shaped
+Tools/jupyterlite/environment.yml. The stub resolves to a Response-shaped
 object carrying an empty mapping, which is the code's own "mapping
 unavailable" fallback (identity name-mapping) — minus the network attempt,
 the console.error, and the unhandled rejection.

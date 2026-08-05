@@ -158,9 +158,9 @@ func defaultNotebookData(title: String) -> Data {
           ],
           "metadata": {
             "kernelspec": {
-              "display_name": "Python (Pyodide)",
+              "display_name": "Python (xeus-python)",
               "language": "python",
-              "name": "python"
+              "name": "xpython"
             },
             "language_info": {
               "name": "python"

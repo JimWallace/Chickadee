@@ -210,8 +210,8 @@ import VaporTesting
             let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
             let metadata = savedJSON?["metadata"] as? [String: Any]
             let kernelspec = metadata?["kernelspec"] as? [String: Any]
-            #expect(kernelspec?["name"] as? String == "python")
-            #expect(kernelspec?["display_name"] as? String == "Python (Pyodide)")
+            #expect(kernelspec?["name"] as? String == "xpython")
+            #expect(kernelspec?["display_name"] as? String == "Python (xeus-python)")
 
         }
     }
@@ -316,8 +316,8 @@ import VaporTesting
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
                     let metadata = json?["metadata"] as? [String: Any]
                     let kernelspec = metadata?["kernelspec"] as? [String: Any]
-                    #expect(kernelspec?["name"] as? String == "python")
-                    #expect(kernelspec?["display_name"] as? String == "Python (Pyodide)")
+                    #expect(kernelspec?["name"] as? String == "xpython")
+                    #expect(kernelspec?["display_name"] as? String == "Python (xeus-python)")
                 }
             )
 
@@ -543,10 +543,12 @@ import VaporTesting
             let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
             let metadata = savedJSON?["metadata"] as? [String: Any]
             let kernelspec = metadata?["kernelspec"] as? [String: Any]
-            #expect(kernelspec?["name"] as? String == "python", "python3 kernel should still normalize to python")
             #expect(
-                kernelspec?["display_name"] as? String == "Python (Pyodide)",
-                "display_name should still be Python (Pyodide)")
+                kernelspec?["name"] as? String == "xpython",
+                "python3 kernel should still normalize to xpython")
+            #expect(
+                kernelspec?["display_name"] as? String == "Python (xeus-python)",
+                "display_name should still be Python (xeus-python)")
 
         }
     }

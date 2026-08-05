@@ -345,7 +345,7 @@ import VaporTesting
                 encoding: .utf8
             )
             #expect(workingCopy.contains("Notebook seed"))
-            #expect(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
+            #expect(workingCopy.contains("\"display_name\":\"Python (xeus-python)\""))
 
         }
     }
@@ -1891,7 +1891,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     #expect(res.body.string.contains("Nested manifest starter"))
-                    #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                    #expect(res.body.string.contains("\"display_name\":\"Python (xeus-python)\""))
                 })
 
         }
@@ -2023,7 +2023,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     #expect(res.body.string.contains("First nested notebook"))
-                    #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                    #expect(res.body.string.contains("\"display_name\":\"Python (xeus-python)\""))
                 })
 
         }

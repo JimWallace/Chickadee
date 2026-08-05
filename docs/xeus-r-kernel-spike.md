@@ -1,11 +1,31 @@
 # In-browser R notebook kernel — spike findings (2026-07)
 
-Status: **spike complete, validated end-to-end; the production wiring has
-since shipped** (`Public/jupyterlite/xeus/kernels.json`;
-`jupyterLiteRKernelName = "xr"` in
-`Sources/APIServer/Helpers/NotebookContentHelpers.swift`).
+Status: **spike complete and fully shipped, including Phase 3.** Both editor
+kernels are now xeus kernels built from one env
+(`Tools/jupyterlite/environment.yml` → `xpython` + `xr`,
+`Public/jupyterlite/xeus/kernels.json`), wired up in
+`Sources/APIServer/Helpers/NotebookContentHelpers.swift`.
 This note records what was tested, what works, what does not, the reproducible
-recipe, and the phased plan to ship R notebook support.
+recipe, and the phased plan that shipped R notebook support.
+
+> **2026-08 update — Phase 3 is done, and the blocker below was resolved
+> upstream in March 2026.** Two things changed since this spike was written:
+>
+> 1. **emscripten-forge split channels.** The `emscripten-forge-dev` URL this
+>    document uses throughout now serves the **3x** (emscripten 3.x ABI)
+>    channel, which received its last build of *any* package on **2026-04-09**.
+>    It is frozen. The live channel is **`emscripten-forge-4x`**. Everything
+>    below that reads "no xeus-6 xeus-python exists" was true of the frozen
+>    channel and false of the live one.
+> 2. **xeus-python has been built against xeus 6 since 0.18.1 (2026-03-09)**,
+>    with a proper `run_exports` pin (`xeus >=6.0.2,<6.1`) — the supported
+>    pairing this document said to wait for, not the unguarded 0.17.4 trick.
+>    Shipped on **0.19.0 build 2** (`xeus >=6.0.5,<6.1`).
+>
+> Read the xeus-python sections below as history: the reasoning was correct at
+> the time and the conclusion ("wait for a real xeus-6 build") is exactly what
+> happened. See the "What actually shipped" section at the end for current
+> state.
 
 Tracker: issue #77 ("Add R submission support and WebR kernel support"). Part 1
 (worker-graded R submissions) already shipped in PR #102. This spike covers the
@@ -264,15 +284,12 @@ Nothing to build. Worker-R already grades authoritatively. With web-based
 grading being retired, no browser-side R grader (WebR or xeus) is needed —
 **punt WebR-for-grading.**
 
-### Phase 3 — Python → xeus unification (blocked on upstream)
+### Phase 3 — Python → xeus unification (SHIPPED 2026-08)
 
-Unifying Python onto xeus is **blocked until emscripten-forge ships a
-`xeus-python` built against xeus 6**. Every published xeus-python is ABI-bound to
-xeus 5.2; the `xeus >=6` workaround runs an unguarded xeus-5-era build (0.17.4)
-and is **not production-safe** (see the xeus-python section). When a xeus-6
-`xeus-python` lands, the remaining gates are the **Safari/iPad SAB** question and
-a **package-parity sweep**. Until then, keep Python on Pyodide. Do not couple this
-to shipping R.
+Was: blocked until emscripten-forge shipped a `xeus-python` built against xeus 6.
+That landed as **0.18.1 on 2026-03-09** (`xeus >=6.0.2,<6.1`, a real
+`run_exports` pin — not the unguarded 0.17.4 workaround), on the
+`emscripten-forge-4x` channel. See "What actually shipped" below.
 
 ---
 
@@ -293,3 +310,57 @@ to shipping R.
 Cross-origin isolation for the notebook editor already ships (the old #77
 COOP/COEP blocker is resolved) — `COEPMiddleware` sets isolation on
 `/testsetups/:id/notebook` and `/validate`.
+
+---
+
+## What actually shipped (2026-08)
+
+One emscripten-forge environment (`Tools/jupyterlite/environment.yml`) supplies
+both editor kernels. `scripts/build-jupyterlite.sh` compiles them into
+`Public/jupyterlite/xeus/` and they are committed like the rest of the bundle.
+
+| Component | Version | Note |
+|---|---|---|
+| channel | `emscripten-forge-4x` | 3x / `emscripten-forge-dev` is frozen since 2026-04-09 |
+| xeus | 6.0.5 | |
+| xeus-python (`xpython`) | 0.19.0 | Python 3.13.1 — replaces the Pyodide editor kernel |
+| xeus-r (`xr`) | 0.11.2 | R 4.5.3, up from xeus-r 0.10.0 / R 4.5.1 |
+| Python packages | numpy 2.5.1, pandas 3.0.5, matplotlib 3.11.1 | fixed at build time |
+| R packages | none beyond `xeus-r` | add `r-*` to the env as courses need them |
+
+Payload: `Public/jupyterlite/xeus` is **96 MB** (was 57 MB for R alone); the
+whole bundle is 181 MB. Pyodide (`Public/pyodide`, ~465 MB) is unchanged and
+still serves browser grading and `/validate`.
+
+### Verified
+
+Headless Chromium against the vendored bytes, served cross-origin isolated:
+
+- `xpython` boots, executes, and imports pandas + numpy; `matplotlib` renders.
+- `xr` boots and executes; `R.version.string` reports 4.5.3.
+- `crossOriginIsolated === true` in both cases, and **zero external network
+  requests** during boot or execution — the FIPPA posture is intact.
+
+### Two things this does NOT settle
+
+**Safari / iPad is still the open question, and consolidation sharpened it.**
+`COEPMiddleware` deliberately serves WebKit *non-isolated* because the
+SharedArrayBuffer/`coincident` transport deadlocked Safari. xeus has no
+non-SAB fallback. So on WebKit today:
+
+| | before | after |
+|---|---|---|
+| Python | worked (Pyodide + service-worker fallback) | **no kernel** |
+| R | already unavailable | unavailable |
+
+Moving Python to xeus therefore converts a working Safari path into a broken
+one. Nothing here changes `COEPMiddleware`, so that regression is live for any
+WebKit user the moment a notebook's kernelspec says `xpython`. The fix is to
+re-test whether current Pyodide/coincident still deadlocks isolated Safari —
+the finding is from 2026 and may well be stale — and if it doesn't, drop the
+WebKit exemption so every engine is isolated. That needs a real device.
+
+**Editor and grader are no longer the same Python.** Authoring runs xeus-python
+3.13; browser grading and `/validate` run Pyodide 3.14. The native worker is
+still the authoritative grader, so this does not affect marks — but "it ran in
+the editor" no longer implies "it runs in the browser runner".

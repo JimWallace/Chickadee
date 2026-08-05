@@ -58,7 +58,16 @@ const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:80
   /\/$/,
   ""
 );
-const replURL = `${baseURL}/jupyterlite/repl/index.html?kernel=python&toolbar=1`;
+// Which kernel the REPL boots. Defaults to `python` — the Pyodide kernel — NOT
+// because that is the editor's default (it is `xpython` now, see
+// Tools/jupyterlite/jupyter-lite.json) but because most probes below are
+// pyodide-kernel behaviours: the `data:`-worker waitAsync polyfill and the
+// service-worker stdin fallback are things xeus kernels do not have. Pointing
+// this at `xpython` without reworking those probes would assert nothing.
+// Overridable so an xeus config can be added without forking the harness.
+const kernelName = process.env.SMOKE_KERNEL || "python";
+const replURL =
+  `${baseURL}/jupyterlite/repl/index.html?kernel=${encodeURIComponent(kernelName)}&toolbar=1`;
 // Disable the service worker on the wire (rewrite jupyter-lite.json). With
 // cross-origin isolation on, SAB still carries synchronous stdin, so the editor
 // must stay healthy — this proves the kernel no longer depends on the SW.

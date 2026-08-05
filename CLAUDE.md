@@ -467,6 +467,30 @@ scripts/build-jupyterlite.sh
 `Public/jupyterlite` is generated output and is checked in; rebuild only when
 updating kernel versions or config.
 
+**Both editor kernels are xeus kernels, from one env.**
+`Tools/jupyterlite/environment.yml` declares a single emscripten-forge
+environment that yields `xpython` (Python, xeus-python) and `xr` (R, xeus-r);
+`jupyter lite build` compiles both into `Public/jupyterlite/xeus/`. Python moved
+off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
+technology for both languages. Notebook metadata is normalized to those names by
+`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`).
+
+The channel is **`emscripten-forge-4x`**. The older `emscripten-forge-dev` alias
+serves the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of
+any kind on 2026-04-09 — frozen, not merely older. Do not point the env file
+back at it.
+
+Anything a student imports must be baked into that env: the editor's CSP is
+`connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
+missing package is an ImportError with no recovery. The Python set is currently
+numpy / pandas / matplotlib; the R side is bare `xeus-r`.
+
+Building the kernels needs **micromamba on PATH plus network to
+repo.prefix.dev**, which CI does not have — so CI never rebuilds them and the
+committed `Public/jupyterlite/xeus/` bytes are authoritative
+(`scripts/check-xeus-vendored.sh` guards their integrity; the reproducibility
+check excludes that path). Re-vendor on a machine that can reach the channel.
+
 ---
 
 ## Vendored browser libraries
@@ -483,13 +507,24 @@ Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 ```
 
 **One canonical Pyodide.** There is exactly one vended Pyodide, served at
-`/pyodide`, and *both* consumers load it: the JupyterLite editor kernel (via
-`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's own
-browser paths (`browser-runner.js`, `assignment-validate.js`,
-`pyodide-worker.js`, `notebook.js`).  The editor and grader
-therefore run the identical Python environment.  (Historically the editor
-loaded a *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped
-that allowance and broke the editor — see `SecurityHeadersMiddleware`.)
+`/pyodide`, and every consumer that loads Pyodide at all loads that copy:
+Chickadee's own browser paths (`browser-runner.js`, `assignment-validate.js`,
+`pyodide-worker.js`, `notebook.js`) and the still-vendored
+`jupyterlite-pyodide-kernel` (via `pyodideUrl` in
+`Tools/jupyterlite/jupyter-lite.json`).  (Historically the editor loaded a
+*second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped that
+allowance and broke the editor — see `SecurityHeadersMiddleware`.)
+
+**The editor's Python is no longer Pyodide, so editor and grader are no longer
+one environment.**  Authoring runs on xeus-python (Python 3.13, packages fixed
+at build time by `Tools/jupyterlite/environment.yml`); browser grading and
+`/validate` still run Pyodide (Python 3.14).  That skew is deliberate and
+accepted, but it is a real difference — a notebook that runs in the editor is
+not thereby proven to grade in the browser runner.  The native worker remains
+the authoritative grader either way.  The Pyodide kernel extension is still
+built and vendored: it keeps `scripts/check-pyodide-parity.sh` anchored (that
+guard derives the Pyodide pin from the kernel's bundled wheels) and leaves a
+one-line revert if xeus-python has to be backed out.
 
 **The Pyodide version is not hardcoded — it is derived from the kernel.**
 The only version pin is `jupyterlite-pyodide-kernel` in

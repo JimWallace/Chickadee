@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Integrity guard for the manually-vendored xeus-r kernel in Public/jupyterlite.
+# Integrity guard for the manually-vendored xeus kernels in Public/jupyterlite:
+# xpython (Python) and xr (R), built together from one emscripten-forge env.
 #
-# The xeus-r WASM kernel is built from emscripten-forge (needs micromamba +
-# network to repo.prefix.dev), which CI does not have. So CI never rebuilds it
+# The xeus WASM kernels are built from emscripten-forge (needs micromamba +
+# network to repo.prefix.dev), which CI does not have. So CI never rebuilds them
 # and the committed bytes under Public/jupyterlite/xeus/ are authoritative — the
 # reproducibility check (jupyterlite.yml) excludes that path. This script asserts
 # the vendored kernel is present and internally coherent, so a botched or partial
@@ -32,36 +33,58 @@ ext = build / "extensions" / "@jupyterlite" / "xeus-extension"
 if not ext.is_dir():
     fail(f"missing xeus federated extension: {ext}")
 
-# 2. kernels.json must register the xr (R) kernel.
+# 2. kernels.json must register BOTH editor kernels: xpython (Python) and xr (R).
+#    They are built from one shared env (Tools/jupyterlite/environment.yml), so a
+#    vendor that drops either one is a partial re-vendor, not a valid state.
 kernels_json = build / "xeus" / "kernels.json"
 if not kernels_json.is_file():
-    fail(f"missing {kernels_json} — the vendored xeus kernel is absent")
+    fail(f"missing {kernels_json} — the vendored xeus kernels are absent")
 kernels = json.loads(kernels_json.read_text())
-xr = [k for k in kernels if isinstance(k, dict) and k.get("kernel") == "xr"]
-if not xr:
-    listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
-    fail(f"xr (R) kernel not registered in kernels.json: {listed}")
-env_name = xr[0].get("env_name")
-if not env_name:
-    fail("no env_name for the xr kernel in kernels.json")
+listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
 
-# 3. The xr kernelspec must exist and declare R.
-spec_path = build / "xeus" / env_name / "xr" / "kernel.json"
-if not spec_path.is_file():
-    fail(f"missing xr kernelspec: {spec_path}")
-spec = json.loads(spec_path.read_text())
-if (spec.get("language") or "").lower() != "r":
-    fail(f"xr kernelspec language is not R: {spec.get('language')!r}")
+expected_language = {"xpython": "python", "xr": "r"}
+env_names = set()
+loaders = []
 
-# 4. The kernel loader named by argv[0] (the WASM bootstrap) must exist.
-argv = spec.get("argv", [])
-loader_rel = argv[0] if argv else None
-if not loader_rel:
-    fail("xr kernelspec has no argv/loader")
-if not (build / loader_rel).is_file():
-    fail(f"xr kernel loader missing: {build / loader_rel} (argv[0]={loader_rel!r})")
+for kernel_name, language in sorted(expected_language.items()):
+    entries = [k for k in kernels if isinstance(k, dict) and k.get("kernel") == kernel_name]
+    if not entries:
+        fail(f"{kernel_name} kernel not registered in kernels.json: {listed}")
+    env_name = entries[0].get("env_name")
+    if not env_name:
+        fail(f"no env_name for the {kernel_name} kernel in kernels.json")
+    env_names.add(env_name)
 
-# 5. The packed R package payload must be non-trivial (guards a truncated vendor).
+    # 3. The kernelspec must exist and declare the expected language.
+    spec_path = build / "xeus" / env_name / kernel_name / "kernel.json"
+    if not spec_path.is_file():
+        fail(f"missing {kernel_name} kernelspec: {spec_path}")
+    spec = json.loads(spec_path.read_text())
+    if (spec.get("language") or "").lower() != language:
+        fail(
+            f"{kernel_name} kernelspec language is not {language}: "
+            f"{spec.get('language')!r}"
+        )
+
+    # 4. The kernel loader named by argv[0] (the WASM bootstrap) must exist, as
+    #    must the .wasm beside it — a loader with no binary is the classic
+    #    half-copied vendor.
+    argv = spec.get("argv", [])
+    loader_rel = argv[0] if argv else None
+    if not loader_rel:
+        fail(f"{kernel_name} kernelspec has no argv/loader")
+    if not (build / loader_rel).is_file():
+        fail(f"{kernel_name} kernel loader missing: {build / loader_rel} (argv[0]={loader_rel!r})")
+    wasm = (build / loader_rel).with_suffix(".wasm")
+    if not wasm.is_file():
+        fail(f"{kernel_name} kernel WASM binary missing: {wasm}")
+    loaders.append(loader_rel)
+
+# 5. The packed package payload must be non-trivial (guards a truncated vendor).
+#    Both kernels share one env, so there is one payload to check.
+if len(env_names) != 1:
+    fail(f"expected one shared xeus env across kernels, got: {sorted(env_names)}")
+env_name = env_names.pop()
 kernel_packages = build / "xeus" / env_name / "kernel_packages"
 pkgs = sorted(kernel_packages.glob("*.tar.gz")) if kernel_packages.is_dir() else []
 if len(pkgs) < 5:
@@ -69,6 +92,6 @@ if len(pkgs) < 5:
 
 print(
     f"check-xeus-vendored: OK "
-    f"(xr kernel, language R, {len(pkgs)} packages, loader {loader_rel})."
+    f"(kernels {listed}, env {env_name}, {len(pkgs)} packages, loaders {loaders})."
 )
 PY
