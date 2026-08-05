@@ -846,10 +846,15 @@ code { font-family: var(--font-mono); font-size: .9em; }
    itself may only be overridden by a single page. */
 .main-fullbleed { max-width: 100%; padding: 0; margin: 0; }
 
-/* The notebook page rendered into an assignment-workbench pane.  `100vh` here
-   is the *pane iframe's* height, not the window's, and the pane has no site nav
-   above it — so only the notebook's own toolbar row has to be subtracted, where
-   the standalone page also pays for the nav and course tabs. */
+/* The notebook body rendered as the workbench's right half.
+   `100vh` used to mean the *pane iframe's* height — the notebook was its own
+   document inside a frame. #1266 merged the workbench into one document, so
+   this is now the window, and the figure is no longer a height the frame
+   should end up at. It only has to be *at least* the pane's: the frame is a
+   flex item in `.wb-notebook-body`, so it shrinks to the space actually
+   available (measured: 785px inside an 812px body at a 900px viewport).
+   Subtracting only the toolbar row keeps it comfortably above that, since the
+   workbench's own bar and pane head take more than 3rem between them. */
 .jl-frame-embedded { height: calc(100vh - 3rem); }
 
 /* ── Auth pages ──────────────────────────────────────── */

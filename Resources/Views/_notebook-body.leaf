@@ -1,0 +1,192 @@
+<style>
+#if(!embedded):
+/* Override the 900px max-width for this page only.  The default .main also
+   carries a 2rem top+bottom margin (styles.css) — wasted vertical space on the
+   editor page, where every pixel counts on laptops/iPads — so trim it to a
+   hairline top margin and no bottom margin.
+
+   Emitted only when this body *is* the page.  Embedded (#1266: inlined into
+   the workbench, in the same document as the edit half) `.main` belongs to the
+   host, which sizes itself to the viewport — restyling it from here would
+   reach outside this half and fight `.main-fullbleed`. */
+.main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
+#endif
+
+/* Closed-assignment "view only" notice + fallback/small-screen text. */
+.nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
+.nb-notice-title { margin: .2rem 0 .5rem; }
+.nb-notice-text { margin: 0; color: var(--gray-700); }
+.nb-fallback-title { margin: .2rem 0; }
+.nb-fallback-text { margin: .4rem 0; }
+.nb-fallback-diagnostic { margin-top: .6rem; }
+.nb-fallback-pre { white-space: pre-wrap; font-size: .85em; margin: .4rem 0; }
+
+/* Proactive low-memory hint (revealed by notebook-preflight.js on a low-RAM
+   device). Non-blocking and dismissible — the editor still loads beneath it. */
+.nb-device-warning {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: .4rem 0;
+    padding: .5rem .75rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius-md);
+    color: var(--gray-700);
+    font-size: var(--text-base);
+}
+.nb-device-warning-text { flex: 1; }
+.nb-device-warning-dismiss {
+    border: 0;
+    background: transparent;
+    color: var(--gray-700);
+    font-size: var(--text-xl);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 .25rem;
+}
+
+/* The JupyterLite editor needs room and a pointer; it is unusable on a phone.
+   Below 640px we hide the editor surface and show a notice instead.  Tablets
+   (641px+) keep the full editor. */
+.nb-smallscreen-notice { display: none; }
+@media (max-width: 640px) {
+    .notebook-header,
+    #jl-frame,
+    #nb-fallback,
+    #nb-device-warning,
+    #nb-browser-support-warning,
+    #nb-results,
+    #browser-runner-status { display: none; }
+    .nb-smallscreen-notice {
+        display: block;
+        margin: 2rem auto;
+        max-width: 32rem;
+        padding: 1.25rem 1.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+    }
+}
+</style>
+<div class="notebook-header">
+    <div class="notebook-toolbar">
+        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <div class="notebook-actions">
+            #if(isTemplateView):
+            <span class="nb-closed-notice">Editing the template &mdash; placeholders stand as written.</span>
+            #elseif(showSubmit):
+            <button class="btn btn-primary" id="nb-submit">Submit</button>
+            #elseif(isReadOnly):
+            <span class="nb-closed-notice">This assignment is closed &mdash; view only.</span>
+            #elseif(isClosed):
+            <span class="nb-closed-notice">This assignment is closed to students &mdash; editable as course staff.</span>
+            #endif
+            #if(viewToggleURL):
+            #if(!embedded):
+            <!-- Suppressed in a workbench pane: the workbench has its own
+                 template/values control, so this would be a second one for the
+                 same thing — and `viewToggleURL` carries no `embedded=1`, so
+                 following it would load the fully-chromed page into the pane. -->
+            <a class="btn" href="#(viewToggleURL)">
+                #if(isTemplateView):View with values#else:Edit the template#endif
+            </a>
+            #endif
+            #endif
+            #if(canSaveToAssignment):
+            <!-- Present but hidden in a workbench pane: the workbench's single
+                 Save calls the function notebook.js binds here, so the element
+                 must exist — but a second visible Save button would be the same
+                 action twice. -->
+            <button class="btn btn-primary" id="nb-save-assignment" #if(embedded):hidden#endif data-file-kind="#(fileKind)"
+                    data-view-mode="#if(isTemplateView):template#else:personalized#endif"
+                    title="Write what is in this editor back to the assignment for every student">
+                #if(fileKind == "solution"):Save solution#else:Save to assignment#endif
+            </button>
+            #endif
+            #if(downloadURL):
+            #if(!embedded):
+            <!-- Suppressed in a workbench pane: the left pane's Files table
+                 already links the file, so this is a second route to the same
+                 download.  Kept on the standalone page, where it is the only
+                 one. -->
+            <a class="btn"
+               href="#(downloadURL)"
+               download>Download</a>
+            #endif
+            #endif
+        </div>
+    </div>
+</div>
+<div id="nb-browser-support-warning" class="nb-device-warning" role="note" hidden>
+    <span class="nb-device-warning-text">
+        Your browser may not be fully supported. Chickadee works best on the same
+        browsers as LEARN &mdash; Safari&nbsp;26+, Chrome&nbsp;140+, Edge&nbsp;140+,
+        or Firefox&nbsp;143+. You can keep working: if in-browser testing
+        doesn&rsquo;t run, your submission is still graded on our servers, and you
+        can always submit by uploading your <code>.ipynb</code> file.
+    </span>
+    <button type="button" id="nb-browser-support-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
+</div>
+<div id="nb-device-warning" class="nb-device-warning" role="note" hidden>
+    <span class="nb-device-warning-text">
+        This device may be low on memory for the in-browser editor. If the
+        notebook gets slow or the Python kernel stops, try a laptop or desktop
+        in Chrome or Firefox.
+    </span>
+    <button type="button" id="nb-device-warning-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
+</div>
+<div class="nb-smallscreen-notice" role="note">
+    <h2 class="nb-notice-title">Open on a larger screen</h2>
+    <p class="nb-notice-text">
+        The notebook editor needs a tablet or computer. Please reopen this
+        assignment on a larger screen to edit and submit your notebook.
+    </p>
+</div>
+<!-- The editor is booted by notebook.js *after* the capability preflight
+     resolves (mountEditor sets the iframe src from data-editor-url), not
+     eagerly here. Booting eagerly during HTML parse raced the preflight's
+     service-worker registration and IndexedDB probes — the same subsystems the
+     kernel's cold boot uses — and intermittently left the kernel dead
+     ("Kernel Unknown"). Starting at about:blank serializes the load. On phones
+     notebook.js skips the mount entirely, so the iframe stays about:blank. -->
+<iframe
+    id="jl-frame"
+    class="jl-frame#if(embedded): jl-frame-embedded#endif"
+    title="Notebook editor"
+    data-setup-id="#(testSetupID)"
+    data-grading-mode="#(gradingMode)"
+    data-browser-unsupported="#(browserUnsupported)"
+    data-notebook-url="#(notebookURL)"
+    data-editor-url="#(jupyterLiteEditorURL)"
+    data-working-copy-mtime="#(workingCopyMtime)"
+    data-read-only="#(isReadOnly)"
+    src="about:blank"
+    loading="eager">
+</iframe>
+<section id="nb-fallback" class="nb-fallback" role="alert" hidden>
+    <h2 class="nb-fallback-title">Editor didn&rsquo;t load</h2>
+    <p class="nb-fallback-text">
+        The in-browser notebook editor didn&rsquo;t start in your browser.
+        You can still submit your assignment by uploading your <code>.ipynb</code> file directly.
+    </p>
+    <p class="nb-fallback-text">
+        <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
+    </p>
+    <p class="nb-fallback-text">
+        Still stuck? You can
+        <a id="nb-reset-editor-link" href="/reset-editor">reset the notebook editor</a>
+        &mdash; this clears cached editor data in your browser (your submitted
+        work is safe) so the kernel can start fresh.
+    </p>
+    <details class="nb-fallback-diagnostic">
+        <summary>Diagnostic details</summary>
+        <pre id="nb-fallback-details" class="nb-fallback-pre"></pre>
+    </details>
+</section>
+<div id="nb-results" class="nb-results" hidden></div>
+<div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<script src="/notebook-preflight.js?v=#appVersion()"></script>
+<script src="/grading-shared.js?v=#appVersion()"></script>
+<script src="/notebook.js?v=#appVersion()"></script>
+<script src="/browser-runner.js?v=#appVersion()" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>

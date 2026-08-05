@@ -6,37 +6,36 @@
 //
 // This exists because that nesting introduced a failure mode no unit test can
 // see. Cross-origin isolation is a property of the ENTIRE ancestor chain, so
-// the workbench shell and its left pane must both carry COOP/COEP or:
-//
-//   * `crossOriginIsolated` goes false inside the notebook iframe, the kernel
-//     silently drops off SharedArrayBuffer onto the service-worker comlink
-//     transport, and NOTHING reports an error — the editor still boots, just
-//     on the path the codebase deliberately moved away from; or
-//   * under `require-corp` the browser refuses the left pane outright
-//     (ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader) and the author
-//     gets an empty pane where the editor should be.
+// the workbench must carry COOP/COEP or `crossOriginIsolated` goes false inside
+// the editor iframe, the kernel silently drops off SharedArrayBuffer onto the
+// service-worker comlink transport, and NOTHING reports an error — the editor
+// still boots, just on the path the codebase deliberately moved away from.
 //
 // COEPMiddlewareTests pins the *headers*. Only a real browser can confirm the
-// isolation those headers are supposed to produce actually survives two levels
-// of framing, which is what this check does. It is the automated form of what
-// was otherwise a manual "open DevTools in the nested iframe" step.
+// isolation those headers are supposed to produce actually survives the
+// framing, which is what this check does. It is the automated form of what was
+// otherwise a manual "open DevTools in the nested iframe" step.
 //
 // Asserts, as the instructor who authors the assignment:
 //
-//   1. the workbench shell is cross-origin isolated (chromium/firefox);
-//   2. the LEFT pane loaded a real edit page — i.e. was not COEP-refused;
-//   3. the NESTED notebook iframe is cross-origin isolated and has
-//      SharedArrayBuffer — the property the whole chain exists to preserve;
-//   4. there is exactly ONE notebook iframe — the tabs and the view switch
-//      repoint it rather than each owning a live document, so there is one
-//      Pyodide kernel however many notebooks the assignment has;
-//   5. a keystroke in a pane reaches the shell as `chickadee:activity`, the
-//      chain that stops the idle watchdog signing an author out mid-edit;
-//   6. the view switch appears on a notebook that carries placeholders and
-//      repoints to `view=template`, and the tabs repoint to the other file;
-//   7. a write from the pane (creating a suite section) leaves the pane on the
-//      panel URL rather than following the handler's redirect into the chromed
-//      standalone editor, and does not disturb the notebook document.
+//   1. the workbench is cross-origin isolated (chromium/firefox);
+//   2. both halves are in THIS document — #1266 merged them, so a wrapper
+//      iframe reappearing means a write can navigate one out from under the
+//      author;
+//   3. there is exactly ONE iframe and it is the JupyterLite editor — each live
+//      notebook document holds a Pyodide kernel, so one per destination is one
+//      kernel per destination;
+//   4. that editor frame is isolated and has SharedArrayBuffer — the property
+//      the whole chain exists to preserve;
+//   5. idle-logout.js is loaded and the deleted cross-frame activity forwarder
+//      is not — one document means the watchdog sees keystrokes directly;
+//   6. the view switch appears on a notebook carrying placeholders and
+//      navigates to `view=template`, and the Files table opens the solution,
+//      both without leaving the workbench;
+//   7. a write (creating a suite section) lands, WITHOUT replacing this
+//      document or the editor's — the assertion the whole merge rests on, since
+//      a reload here costs the author's kernel and unsaved cells;
+//   8. optionally (SMOKE_SHOTS=<dir>), screenshots for human review.
 //
 // WebKit is expected NON-isolated at every level — it needs the comlink path —
 // so there the assertion is inverted, exactly as in notebook-page-check.mjs.
@@ -47,6 +46,7 @@
 import { chromium, webkit, firefox } from "playwright";
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
+import fsp from "node:fs/promises";
 
 const BROWSERS = { chromium, webkit, firefox };
 const browserName = process.env.SMOKE_BROWSER || "chromium";
@@ -296,107 +296,89 @@ async function main() {
       );
     }
 
-    // Give both panes a chance to commit their navigations.
+    // Give the editor iframe a chance to commit its navigation.  It is the
+    // only frame left: #1266 merged both halves into this document, so the
+    // wrapper frames the old waits keyed on no longer exist.
     await page.waitForFunction(
       () => {
-        const l = document.getElementById("wb-edit-frame");
-        const n = document.getElementById("wb-notebook");
-        return l && n && l.contentWindow && n.contentWindow;
+        const f = document.getElementById("jl-frame");
+        return f && f.contentWindow;
       },
       { timeout: FRAME_SETTLE_MS }
     );
     await page.waitForTimeout(2000);
 
-    // 2. The left pane must be a REAL edit page. If COEP refused it, the frame
-    //    exists but holds a browser error document.
-    const left = await isolationOf(page, "/workbench/panel", "left pane");
-    console.log(`left pane: isolated=${left.isolated} bodyLen=${left.bodyLen}`);
-    if (left.bodyLen < 100) {
+    // 2. Both halves are in THIS document — no wrapper frames.
+    const halves = await page.evaluate(() => ({
+      hasEditor: !!document.getElementById("suite-sections"),
+      hasFiles: !!document.getElementById("notebook-files-table"),
+      hasNotebook: !!document.getElementById("jl-frame"),
+      iframes: document.querySelectorAll("iframe").length,
+      wrapperFrames: document.querySelectorAll("#wb-edit-frame, #wb-notebook").length,
+    }));
+    console.log(
+      `merged doc: editor=${halves.hasEditor} files=${halves.hasFiles} ` +
+      `notebook=${halves.hasNotebook} iframes=${halves.iframes}`
+    );
+    if (!halves.hasEditor || !halves.hasFiles) {
+      return fail("the edit half is not in the workbench document (no #suite-sections)");
+    }
+    if (!halves.hasNotebook) {
+      return fail("the notebook half is not in the workbench document (no #jl-frame)");
+    }
+    if (halves.wrapperFrames !== 0) {
       return fail(
-        "the left pane is empty — the edit page was almost certainly refused by COEP " +
-        "(ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader). " +
-        "/instructor/:id/workbench/panel needs the same isolation headers as the shell."
+        `found ${halves.wrapperFrames} wrapper iframe(s). #1266 removed them; a ` +
+        `reintroduced one means a write can navigate a pane out from under the author.`
       );
     }
-    const leftHasEditor = await page
-      .frames()
-      .find((f) => f.url().includes("/workbench/panel"))
-      .evaluate(() => !!document.getElementById("suite-sections"));
-    if (!leftHasEditor) {
-      return fail("the left pane loaded but is not the assignment editor (no #suite-sections)");
+
+    // 3. Exactly ONE iframe, and it is the editor.
+    //
+    //    Counted rather than name-checked: each live notebook document holds a
+    //    Pyodide kernel, so an iframe per destination is a kernel per
+    //    destination. This also proves the merge actually happened rather than
+    //    the panes simply being renamed.
+    if (halves.iframes !== 1) {
+      return fail(
+        `expected exactly one iframe (the JupyterLite editor), found ${halves.iframes}.`
+      );
     }
 
-    // 3. The nested notebook page — the reason this check exists.
-    const nb = await isolationOf(page, "/notebook", "notebook pane");
-    console.log(`notebook pane: isolated=${nb.isolated} SharedArrayBuffer=${nb.sab}`);
+    // 4. The editor iframe is cross-origin isolated — the reason this check
+    //    exists. The merge removed a link in the ancestor chain, so re-prove it
+    //    rather than assuming it got easier.
+    const nb = await isolationOf(page, "/jupyterlite/", "editor frame");
+    console.log(`editor frame: isolated=${nb.isolated} SharedArrayBuffer=${nb.sab}`);
     if (nb.isolated !== expectIsolated) {
       return fail(
-        `NESTED notebook pane isolation is ${nb.isolated}, expected ${expectIsolated}. ` +
+        `editor frame isolation is ${nb.isolated}, expected ${expectIsolated}. ` +
         `This is the silent failure: the kernel still boots, but on the ` +
         `service-worker comlink transport instead of SharedArrayBuffer.`
       );
     }
     if (expectIsolated && !nb.sab) {
-      return fail("nested notebook pane is isolated but has no SharedArrayBuffer");
+      return fail("editor frame is isolated but has no SharedArrayBuffer");
     }
 
-    // 4. Exactly one notebook document.
+    // 5. Idle-logout needs no forwarder any more.
     //
-    //    The tabs and the view switch repoint a single iframe. Asserting the
-    //    count — not just that the right one is loaded — is what keeps a future
-    //    change from quietly reintroducing an iframe per destination, which is
-    //    an iframe per Pyodide kernel.
-    const mounts = await page.evaluate(() => {
-      const frames = document.querySelectorAll("#wb-notebook, .wb-notebook-pane");
-      const f = document.getElementById("wb-notebook");
-      return {
-        count: frames.length,
-        src: f ? f.getAttribute("src") : null,
-        // Deliberately NOT a lookup in this document. The solution is now
-        // reached from the left pane's Files table, so its presence is a fact
-        // about that pane — and keying off a shell element that no longer
-        // exists is exactly how the assertion below would skip silently while
-        // looking like it passed.
-        solutionPresent: null,
-      };
-    });
-    console.log(`notebook frames=${mounts.count} src=${mounts.src}`);
-    if (mounts.count !== 1) {
-      return fail(
-        `expected exactly one notebook iframe, found ${mounts.count}. Each live ` +
-        `notebook document holds a Pyodide kernel, so one per destination is one ` +
-        `kernel per destination.`
-      );
+    //    `idle-logout.js` measures interaction with its OWN document. That used
+    //    to be the shell while every keystroke landed in a pane, so an author
+    //    could be signed out mid-edit unless `embedded-activity.js` forwarded
+    //    activity up. One document means the watchdog and the keystrokes are
+    //    the same document, so assert the forwarder is *gone* and the watchdog
+    //    is present to see events directly.
+    const idle = await page.evaluate(() => ({
+      hasIdleLogout: !!document.querySelector('script[src*="idle-logout.js"]'),
+      hasForwarder: !!document.querySelector('script[src*="embedded-activity.js"]'),
+    }));
+    console.log(`idle-logout=${idle.hasIdleLogout} forwarder=${idle.hasForwarder}`);
+    if (!idle.hasIdleLogout) {
+      return fail("idle-logout.js is not loaded — an author will not be signed out at all");
     }
-    if (!mounts.src || !mounts.src.includes("file=assignment")) {
-      return fail(`the notebook iframe is not showing the assignment (src=${mounts.src})`);
-    }
-
-    // 5. Activity forwarding — the guard against being signed out mid-edit.
-    //
-    // `idle-logout.js` measures interaction with its OWN document, and it lives
-    // on the shell; every keystroke an author makes lands in a pane. Without the
-    // forwarder the shell sits apparently idle and signs the author out ~30
-    // minutes into a session. That is a bug you cannot notice in a smoke test
-    // that only checks the first minute, so assert the mechanism directly:
-    // a keystroke in a pane must raise `chickadee:activity` on the shell.
-    const sawActivity = await page.evaluate(async () => {
-      let seen = false;
-      const onActivity = () => { seen = true; };
-      window.addEventListener("chickadee:activity", onActivity);
-      const frame = document.getElementById("wb-edit-frame");
-      frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
-      await new Promise((r) => setTimeout(r, 500));
-      window.removeEventListener("chickadee:activity", onActivity);
-      return seen;
-    });
-    console.log(`pane keystroke reached the shell as chickadee:activity = ${sawActivity}`);
-    if (!sawActivity) {
-      return fail(
-        "a keystroke in a pane did not reach the shell. embedded-activity.js is not " +
-        "forwarding, or workbench.js is not re-raising it — which means idle-logout.js " +
-        "on the shell will sign an author out while they are actively typing."
-      );
+    if (idle.hasForwarder) {
+      return fail("embedded-activity.js is still loaded; #1266 deleted it");
     }
 
     // 6a. The view switch, asserted while the ASSIGNMENT is selected.
@@ -424,152 +406,212 @@ async function main() {
       );
     }
     await page.click('#wb-viewswitch .wb-view[data-wb-view="template"]');
+    await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: FRAME_SETTLE_MS })
+      .catch(() => {});
     await page.waitForTimeout(1000);
-    const afterView = await page.evaluate(() => {
-      const f = document.getElementById("wb-notebook");
-      return { src: f.getAttribute("src"), view: f.getAttribute("data-wb-view") };
-    });
-    console.log(`after view switch: src=${afterView.src}`);
-    if (!afterView.src || !afterView.src.includes("view=template")) {
-      return fail(`the view switch did not repoint the notebook (src=${afterView.src})`);
+    const afterView = { url: page.url() };
+    console.log(`after view switch: url=${afterView.url}`);
+    // A navigation of THIS page now, not a repointed iframe: switching views
+    // reboots the kernel either way, so it is an ordinary navigation to the
+    // same route with different arguments — and the edit half comes back
+    // consistent with what the notebook shows.
+    if (!afterView.url.includes("view=template")) {
+      return fail(`the view switch did not navigate to the template (url=${afterView.url})`);
+    }
+    if (!afterView.url.includes("/workbench")) {
+      return fail(
+        `the view switch left the workbench entirely (url=${afterView.url}). It must ` +
+        `stay on this route — landing on the bare notebook page loses the edit half.`);
     }
 
-    // 6b. The left pane's Files table drives the notebook pane.
+    // 6b. The Files table drives which notebook is open.
     //
     //     Two things are asserted, and the second is the one that was a live
-    //     bug: those Edit links carry no `embedded=1`, so before this wiring a
-    //     click navigated the LEFT pane into a fully-chromed notebook page and
-    //     the assignment editor vanished from the workbench.
-    const panelFrame = page.frames().find((f) => f.url().includes("/workbench/panel"));
-    const hasSolutionEdit = await panelFrame.evaluate(
+    //     bug: those Edit links used to be able to navigate the LEFT pane into
+    //     a fully-chromed notebook page, and the assignment editor vanished.
+    const hasSolutionEdit = await page.evaluate(
       () => !!document.getElementById("solution-notebook-edit-btn"));
     // Asserted, not assumed: the seed creates a solution, so a missing button
     // means the wiring or the seed broke — not that this case does not apply.
     if (!hasSolutionEdit) {
       return fail(
-        "the left pane has no solution Edit button, so the Files-table switching " +
-        "assertion below would silently skip. The seed creates a solution.");
+        "the Files table has no solution Edit button, so the switching assertion " +
+        "below would silently skip. The seed creates a solution.");
     }
     {
-      await panelFrame.click("#solution-notebook-edit-btn");
+      await page.click("#solution-notebook-edit-btn");
+      await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: FRAME_SETTLE_MS })
+        .catch(() => {});
       await page.waitForTimeout(1200);
 
-      const afterOpen = await page.evaluate(() => {
-        const f = document.getElementById("wb-notebook");
-        return { src: f.getAttribute("src"), file: f.getAttribute("data-wb-file") };
-      });
-      console.log(`after Files-table open: src=${afterOpen.src}`);
-      if (!afterOpen.src || !afterOpen.src.includes("file=solution")) {
+      const afterOpen = { url: page.url() };
+      console.log(`after Files-table open: url=${afterOpen.url}`);
+      if (!afterOpen.url.includes("file=solution")) {
         return fail(
-          `clicking the Files table's solution Edit did not repoint the notebook ` +
-          `(src=${afterOpen.src})`);
+          `clicking the Files table's solution Edit did not open the solution ` +
+          `(url=${afterOpen.url})`);
       }
 
-      const leftStillEditor = await page
-        .frames()
-        .find((f) => f.url().includes("/workbench/panel"))
-        ?.evaluate(() => !!document.getElementById("suite-sections"));
-      if (!leftStillEditor) {
+      // Still the workbench, with both halves — the failure mode being guarded
+      // against is landing on a bare notebook page with no editor.
+      const stillMerged = await page.evaluate(() => ({
+        editor: !!document.getElementById("suite-sections"),
+        notebook: !!document.getElementById("jl-frame"),
+      }));
+      if (!stillMerged.editor) {
         return fail(
-          "the left pane is no longer the assignment editor — the Edit link " +
-          "navigated the pane instead of opening into the notebook pane.");
+          "the edit half is gone after opening the solution — the Edit link " +
+          "navigated off the workbench instead of switching which notebook is open.");
       }
 
-      // Repointing the `src` attribute is not the same as loading a document,
-      // and the difference is not cosmetic: this assertion passed for a build
-      // where the solution notebook 404'd and the pane held a
+      // Rendering the markup is not the same as loading the document, and the
+      // difference is not cosmetic: an assertion here once passed for a build
+      // where the solution notebook 404'd and the frame held a
       // `chrome-error://` page. The author saw an error where the editor should
       // be and the check said OK.
-      const solutionCommitted = page
-        .frames()
-        .some((f) => f.url().includes("/notebook?") && f.url().includes("file=solution"));
-      if (!solutionCommitted) {
+      if (!stillMerged.notebook) {
         return fail(
-          "the notebook pane's src says file=solution but no such document committed — " +
-          "the solution page failed to load (a 404 leaves a chrome-error frame here).",
+          "the solution opened but there is no editor iframe — the notebook body " +
+          "did not render (a missing solution degrades to the no-notebook pane).",
+          page.frames().map((f) => f.url() || "(blank)").join("\n  "));
+      }
+      const editorCommitted = page
+        .frames()
+        .some((f) => (f.url() || "").includes("/jupyterlite/"));
+      if (!editorCommitted) {
+        return fail(
+          "no JupyterLite document committed in the editor frame after switching to " +
+          "the solution — the frame is sitting on about:blank or an error page.",
           page.frames().map((f) => f.url() || "(blank)").join("\n  "));
       }
     }
 
-    // 7. A write from the pane keeps the pane — and keeps the notebook alive.
+    // 7. A write keeps the page — and keeps the kernel alive.
     //
-    //    Every write on the edit page answers with a redirect to
-    //    `/instructor/:id/edit`, the fully-chromed standalone editor. Inside the
-    //    workbench that redirect lands IN THE PANE: the author adds a suite
-    //    section and the editor is replaced by a second copy of itself, nav bar
-    //    and all, under the workbench's own Save button. Adding a section is
-    //    not an edge case, so neither was the broken state.
+    //    Every write on the edit half answers with a redirect to
+    //    `/instructor/:id/edit`, the fully-chromed standalone editor. Following
+    //    it used to land IN THE LEFT PANE: the author added a suite section and
+    //    the editor was replaced by a second copy of itself, nav bar and all.
     //
-    //    The second assertion is forward-looking. Today a pane re-render cannot
-    //    touch the notebook, because they are separate documents — so the probe
-    //    below is nearly free. It stops being free the moment the panes become
-    //    one document, where the same write would tear down the live Pyodide
-    //    kernel and the author's unsaved cells with it. Writing it now means the
-    //    merge has a test that already knows what it must not break.
+    //    Merged (#1266) the stakes are higher, and this is the assertion that
+    //    carries them. The edit form and a live Pyodide kernel now share ONE
+    //    document, so a navigation — or a `location.reload()` in the refresh
+    //    path — tears the kernel down and takes the author's unsaved cells with
+    //    it. The probe below was written before the merge precisely so the merge
+    //    would inherit a test that already knew what it must not break.
     {
       // Marked from inside the frame, via Playwright, rather than by reaching
-      // through `contentWindow` from the shell: the shell cannot touch the
-      // notebook frame's window (the browser reports it cross-origin under the
-      // isolation headers this page depends on, even though both documents are
-      // same-origin). Playwright evaluates per-frame and is not subject to that,
-      // and a Frame handle survives navigation — which is precisely what makes
-      // it a document-identity probe. If the document is replaced, the property
-      // is gone from the new one.
-      const notebookFrame = page.frames().find((f) => f.url().includes("/notebook?"));
-      if (!notebookFrame) {
+      // through `contentWindow`: the page cannot touch the editor frame's window
+      // (the browser reports it cross-origin under the isolation headers this
+      // page depends on, even though both documents are same-origin). Playwright
+      // evaluates per-frame and is not subject to that, and a Frame handle
+      // survives navigation — which is precisely what makes it a
+      // document-identity probe. If the document is replaced, the property is
+      // gone from the new one.
+      const editorFrame = page.frames().find((f) => (f.url() || "").includes("/jupyterlite/"));
+      if (!editorFrame) {
         return fail(
-          "no notebook frame to probe — the workbench is not showing a notebook.",
+          "no editor frame to probe — the workbench is not showing a notebook.",
           page.frames().map((f) => f.url() || "(blank)").join("\n  "));
       }
-      await notebookFrame.evaluate(() => { window.__ckWorkbenchProbe = "alive"; });
+      await editorFrame.evaluate(() => { window.__ckWorkbenchProbe = "alive"; });
       // Read it back before relying on it. An unsettable probe would make the
       // survival assertion below pass while testing nothing.
-      const probeStuck = await notebookFrame.evaluate(
+      const probeStuck = await editorFrame.evaluate(
         () => window.__ckWorkbenchProbe === "alive");
       if (!probeStuck) {
         return fail(
-          "could not mark the notebook document, so the survival assertion below " +
-          "would prove nothing. The notebook frame is probably still navigating.");
+          "could not mark the editor document, so the survival assertion below " +
+          "would prove nothing. The editor frame is probably still navigating.");
       }
 
-      const panel = page.frames().find((f) => f.url().includes("/workbench/panel"));
+      // The page's own identity, so a full-page reload is detectable. A reload
+      // is the specific regression: it would look like a successful refresh
+      // (the section appears) while having restarted the kernel.
+      await page.evaluate(() => { window.__ckPageProbe = "alive"; });
+
       const sectionName = "Probe Section";
-      await panel.evaluate(() => {
+      await page.evaluate(() => {
         document.getElementById("add-suite-section-details").open = true;
       });
-      await panel.fill('#add-suite-section-details input[name="name"]', sectionName);
-      await panel.click('#add-suite-section-details button[type="submit"]');
+      await page.fill('#add-suite-section-details input[name="name"]', sectionName);
+      await page.click('#add-suite-section-details button[type="submit"]');
       await page.waitForTimeout(2500);
 
-      const panelAfter = page.frames().find((f) => f.url().includes("/workbench/panel"));
-      if (!panelAfter) {
+      if (!page.url().includes("/workbench")) {
         return fail(
-          "after creating a suite section the left pane left /workbench/panel — the " +
-          "handler's redirect to the chromed /edit page navigated the pane. This is " +
-          "exactly what inplace-forms.js exists to prevent.",
-          page.frames().map((f) => f.url()).join("\n"));
+          `after creating a suite section the page left the workbench (url=${page.url()}) ` +
+          `— the handler's redirect to the chromed /edit page was followed. This is ` +
+          `exactly what inplace-forms.js exists to prevent.`);
       }
 
-      const sectionLanded = await panelAfter.evaluate(
+      const sectionLanded = await page.evaluate(
         (name) => Array.from(document.querySelectorAll(".section-header strong"))
           .some((el) => el.textContent.trim() === name),
         sectionName);
       if (!sectionLanded) {
         return fail(
-          `the pane re-rendered but "${sectionName}" is not in it — the POST did not ` +
-          `land, so staying on the panel URL proved nothing.`);
+          `the edit half re-rendered but "${sectionName}" is not in it — the POST did ` +
+          `not land, so staying on the workbench URL proved nothing.`);
       }
 
-      const notebookSurvived = await notebookFrame
+      // The document was never replaced: the refresh was a DOM swap of the edit
+      // half, not a reload. Without this, "the section appeared" is equally
+      // consistent with a full reload that cost the kernel.
+      const pageSurvived = await page
+        .evaluate(() => window.__ckPageProbe === "alive")
+        .catch(() => false);
+      if (!pageSurvived) {
+        return fail(
+          "the workbench document was replaced by the write — refreshEditSurface " +
+          "reloaded the page instead of swapping the edit half. That restarts the " +
+          "Pyodide kernel and discards the author's unsaved cells.");
+      }
+
+      const notebookSurvived = await editorFrame
         .evaluate(() => window.__ckWorkbenchProbe === "alive")
         .catch(() => false);
       if (!notebookSurvived) {
         return fail(
-          "a write in the left pane replaced the notebook document. Today that is a " +
-          "kernel reboot; once the panes are one document it is the author's unsaved " +
-          "cells.");
+          "a write replaced the editor document — the author's kernel restarted and " +
+          "their unsaved cells are gone.");
       }
-      console.log("suite-section write: pane stayed on the panel, notebook document intact");
+      console.log("suite-section write: page and kernel both intact, section landed");
+    }
+
+    // 8. Optional: capture the page for human review.
+    //
+    //    Set SMOKE_SHOTS=<dir>. Off in CI — this proves nothing on its own, and
+    //    the `visual` job owns regression diffing. It exists because layout
+    //    defects in this feature have repeatedly passed every assertion and
+    //    been obvious in one image (#1263's collapsed pane did). The widths
+    //    bracket the single-pane breakpoint at 1140px, so the third shot is the
+    //    stacked fallback rather than a narrower split.
+    if (process.env.SMOKE_SHOTS) {
+      const dir = process.env.SMOKE_SHOTS;
+      await fsp.mkdir(dir, { recursive: true });
+      for (const width of [1600, 1280, 1000]) {
+        for (const scheme of ["light", "dark"]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.emulateMedia({ colorScheme: scheme });
+          await page.waitForTimeout(400);
+          const file = `${dir}/workbench-${width}-${scheme}.png`;
+          await page.screenshot({ path: file });
+          // Printed alongside the image because "is that dead space or just the
+          // editor's own empty background?" is not answerable from the picture,
+          // and guessing it either way is how a layout bug survives review.
+          const boxes = await page.evaluate(() => {
+            const r = (el) => (el ? Math.round(el.getBoundingClientRect().height) : null);
+            return {
+              pane: r(document.querySelector(".wb-pane-notebook")),
+              body: r(document.querySelector(".wb-notebook-body")),
+              frame: r(document.getElementById("jl-frame")),
+              edit: r(document.querySelector(".wb-pane-edit")),
+            };
+          });
+          console.log(`shot: ${file}  panes=${JSON.stringify(boxes)}`);
+        }
+      }
     }
 
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");

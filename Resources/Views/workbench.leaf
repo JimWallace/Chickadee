@@ -52,13 +52,38 @@
     display: flex;
     flex-direction: column;
 }
-.wb-pane-frame {
+/* Both panes hold real content now, not iframes, so the internal scrolling an
+   iframe gave for free has to be asked for.  The page itself still never
+   scrolls — `.wb-shell` is pinned to the viewport. */
+.wb-scroll {
     flex: 1;
-    width: 100%;
-    border: 0;
-    display: block;
     min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
+/* The notebook half is the exception: its editor fills the pane, so it must not
+   scroll as a block. */
+.wb-notebook-body {
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+}
+/* The edit half needs its own gutter. It used to inherit one from the pane
+   document's `.main`; inlined, its content would otherwise sit flush against
+   the viewport edge. */
+.wb-pane-edit { padding: 0 .75rem; }
+
+/* Degraded right pane: the assignment has no notebook on disk yet. */
+.wb-nonotebook {
+    margin: 2rem auto;
+    max-width: 32rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+.wb-nonotebook-title { margin: .2rem 0 .5rem; font-size: var(--text-lg); }
+.wb-nonotebook-text { margin: 0; color: var(--gray-700); font-size: var(--text-base); }
 
 .wb-splitter {
     width: .5rem;
@@ -131,11 +156,13 @@
                 title="Save the open notebook and the assignment's details, then re-validate">Save</button>
     </div>
     <div class="wb-body">
-        <section class="wb-pane wb-pane-edit" aria-label="Assignment editor">
-            <iframe class="wb-pane-frame"
-                    id="wb-edit-frame"
-                    title="Assignment editor"
-                    src="#(editPanelURL)"></iframe>
+        <!-- The edit page's body, inline.  the extend's second parameter binds
+             the partial against the nested `edit` context, so this is the same
+             file that `/instructor/:id/edit` uses — one copy of the markup, two
+             surfaces.  `.wb-scroll` gives it the internal scroll the iframe
+             used to provide for free. -->
+        <section class="wb-pane wb-pane-edit wb-scroll" aria-label="Assignment editor">
+            #extend("_assignment-edit-body", edit)
         </section>
         <button class="wb-splitter"
                 id="wb-splitter"
@@ -172,23 +199,35 @@
                 <span class="wb-bar-spacer"></span>
                 <span class="wb-stale-chip" id="wb-stale-chip" role="status" hidden></span>
             </div>
-            <!-- ONE notebook iframe.  The tabs and the view switch change its
-                 src; they do not each get their own live document.
-                 Two files times two views is four combinations, and a live
-                 iframe per combination means a live Pyodide kernel per
-                 combination — so keeping them all mounted would need an
-                 eviction policy to bound memory, which is a lot of machinery
-                 for a secondary interaction.  The workbench's actual purpose is
-                 having the edit page and *a* notebook on screen together, and
-                 that holds however many notebooks are mounted.  So: one kernel,
-                 always, and switching notebooks costs a boot.
-                 The URL for each (file, view) is in the lookup table below. -->
-            <iframe class="wb-pane-frame"
-                    id="wb-notebook"
-                    title="Notebook"
-                    data-wb-file="assignment"
-                    data-wb-view="personalized"
-                    src="#(initialNotebookURL)"></iframe>
+            <!-- The notebook page's body, inline — the same partial the
+                 standalone notebook page extends, bound against the nested
+                 `notebook` context.  It carries the one `#jl-frame` editor
+                 iframe, which is now the only iframe on this page.
+
+                 Still ONE notebook at a time.  Four (file, view) combinations
+                 exist, and a live document per combination would mean a live
+                 Pyodide kernel per combination — so keeping them mounted would
+                 need an eviction policy to bound memory, a lot of machinery
+                 for a secondary interaction.  Switching therefore costs a
+                 kernel boot, and since it does, it is an ordinary navigation
+                 to this route with different arguments rather than an in-place
+                 swap.  The URL for each is in the lookup table on `#wb-shell`. -->
+            #if(notebook):
+            <div class="wb-notebook-body wb-scroll" data-wb-file="#(notebook.fileKind)">
+                #extend("_notebook-body", notebook)
+            </div>
+            #else:
+            <!-- No notebook on disk yet.  The edit half stays fully usable —
+                 uploading a starter is one of the things it is for — so this
+                 pane says so rather than 404ing the page. -->
+            <div class="wb-nonotebook" role="note">
+                <h2 class="wb-nonotebook-title">No notebook yet</h2>
+                <p class="wb-nonotebook-text">
+                    This assignment has no starter notebook. Upload one in the
+                    Files table on the left and it will open here.
+                </p>
+            </div>
+            #endif
         </section>
     </div>
 </div>

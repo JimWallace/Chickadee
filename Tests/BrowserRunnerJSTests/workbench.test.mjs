@@ -72,13 +72,17 @@ test('clampLeftWidth: a viewport narrower than the notebook floor clamps to zero
 // actually carries {{placeholders}}. These fixtures model an assignment that
 // has one and a solution that does not.
 // Real-shaped paths, not placeholders: resolvePane only accepts URLs matching
-// the embedded notebook-page shape, so a toy path here would be rejected and
-// the tests would be exercising the reject path by accident.
-const NB = '/testsetups/setup_abc123/notebook';
+// the workbench-route shape, so a toy path here would be rejected and the tests
+// would be exercising the reject path by accident.
+//
+// #1266: these address the workbench itself, not the notebook page. Switching
+// notebooks is a navigation of this page (the kernel reboots either way), so
+// the destinations are workbench URLs and the sink is `location.assign`.
+const WB = '/instructor/Ab12Cd/workbench';
 const URLS = {
-  'assignment:personalized': NB + '?file=assignment&view=personalized&embedded=1',
-  'assignment:template': NB + '?file=assignment&view=template&embedded=1',
-  'solution:personalized': NB + '?file=solution&view=personalized&embedded=1',
+  'assignment:personalized': WB + '?file=assignment&view=personalized',
+  'assignment:template': WB + '?file=assignment&view=template',
+  'solution:personalized': WB + '?file=solution&view=personalized',
 };
 
 test('resolvePane: returns the exact destination when it exists', () => {
@@ -97,8 +101,8 @@ test('resolvePane: falls back to the rendered view rather than doing nothing', (
   assert.equal(p.key, 'solution:personalized');
 });
 
-test('resolvePane: refuses a destination that is not a notebook-page path', () => {
-  // The destination map arrives as DOM text and the sink is an iframe src, so a
+test('resolvePane: refuses a destination that is not a workbench path', () => {
+  // The destination map arrives as DOM text and the sink is a navigation, so a
   // javascript: URL there would be script execution in this origin. The server
   // never produces one — the point is that this file no longer depends on that.
   const hostile = {
@@ -113,9 +117,10 @@ test('resolvePane: refuses a destination that is not a notebook-page path', () =
 
 test('resolvePane: a bad entry falls through rather than being served', () => {
   // A malformed template entry must degrade to the rendered view, not hand the
-  // caller a pane whose URL will be rejected later and leave the frame blank.
+  // caller a destination that will be rejected at the navigation sink and leave
+  // the click doing nothing at all.
   const mixed = {
-    'assignment:personalized': '/testsetups/setup_1/notebook?file=assignment&view=personalized',
+    'assignment:personalized': WB + '?file=assignment&view=personalized',
     'assignment:template': 'javascript:alert(1)',
   };
   const p = Workbench.resolvePane(mixed, 'assignment', 'template');

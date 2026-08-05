@@ -258,10 +258,15 @@ import VaporTesting
                     // Chrome gone …
                     #expect(!html.contains("<nav class=\"nav\""), "Embedded pane must not render the site nav")
                     #expect(!html.contains("skip-link"))
-                    // … watchdog swapped for the forwarder (the shell owns the
-                    // idle timer; the pane only reports activity to it) …
-                    #expect(!html.contains("/idle-logout.js"))
-                    #expect(html.contains("/embedded-activity.js"))
+                    // … the idle watchdog loads unconditionally now.  It is a
+                    // no-op here — an embedded rendering has no logout form, so
+                    // `idle-logout.js` bails on its own — and #1266 deleted the
+                    // `embedded-activity.js` forwarder that used to be swapped
+                    // in for it.  That forwarder existed because the watchdog
+                    // lived in a *parent* document while the keystrokes landed
+                    // in this one; the workbench is a single document now, so
+                    // there is nothing to forward across.
+                    #expect(!html.contains("/embedded-activity.js"))
                     // … and the editor itself is untouched, now pane-height.
                     #expect(html.contains("data-setup-id=\"\(setupID)\""))
                     #expect(html.contains("jl-frame-embedded"))

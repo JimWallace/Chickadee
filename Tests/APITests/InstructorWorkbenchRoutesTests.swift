@@ -38,28 +38,108 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("/instructor/\(assignment.publicID)/workbench/panel"))
                     // `view=` is always explicit: the server defaults staff to
                     // the template on a notebook with placeholders, so an
                     // omitted `view=` would make the Assignment tab mean
                     // different things on different assignments.
-                    #expect(html.contains("file=assignment&amp;view=personalized&amp;embedded=1"))
+                    //
+                    // #1266: these now address the *workbench* route, not the
+                    // notebook page — switching notebooks is a navigation of
+                    // this page rather than a repointed iframe.
+                    #expect(html.contains("file=assignment&amp;view=personalized"))
+                    #expect(!html.contains("embedded=1"))
                     // `validationStatus == "passed"` means a reference solution
                     // exists, so the solution tab is offered.
-                    // The destination table rides a data-attribute, so Leaf
-                    // HTML-escapes it: quotes become &quot; and & becomes &amp;.
                     #expect(html.contains("solution:personalized"))
-                    #expect(html.contains("file=solution&amp;view=personalized&amp;embedded=1"))
-                    // One notebook document, not one per destination: the Files
-                    // table repoints a single iframe.
-                    #expect(html.contains("id=\"wb-notebook\""))
-                    // The chrome the review asked for: one Save, and none of
-                    // the controls the left pane already provides.
+                    #expect(html.contains("file=solution&amp;view=personalized"))
+                    // The chrome: one Save, and none of the controls the edit
+                    // half already provides.
                     #expect(html.contains("id=\"wb-save\""))
                     #expect(!html.contains("wb-tab-solution"))
                     #expect(!html.contains("wb-collapse-edit"))
                     #expect(!html.contains("Full-width editor"))
                     #expect(html.contains("Workbench Lab"))
+                })
+        }
+    }
+
+    /// #1266's central claim: the workbench is **one document**.
+    ///
+    /// The edit form and the notebook body are both present, and the only
+    /// `<iframe>` left is the JupyterLite editor itself. The two wrapper frames
+    /// (`wb-edit-frame`, `wb-notebook`) are what made a write in the left pane
+    /// able to navigate a pane out from under the author.
+    @Test func workbenchIsOneDocumentWithOnlyTheEditorIframe() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let setup = try await arInsertSetup(id: "setup_wb_merged", on: app)
+            _ = try await arAttachStarterNotebook(
+                to: setup,
+                bytes: Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8),
+                on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_wb_merged", title: "Merged Lab", isOpen: false,
+                validationStatus: "passed", on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/workbench",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+
+                    // The edit half, inline — not behind an iframe.
+                    #expect(html.contains("suite-sections"))
+                    #expect(html.contains("notebook-files-table"))
+                    // The notebook half, inline, with the editor iframe.
+                    #expect(html.contains("id=\"jl-frame\""))
+
+                    // The wrapper frames are gone.
+                    #expect(!html.contains("id=\"wb-edit-frame\""))
+                    #expect(!html.contains("id=\"wb-notebook\""))
+
+                    // Exactly one iframe in the whole document, and it is the
+                    // editor. Counted rather than name-checked: a second frame
+                    // reintroduced under any id is the regression.
+                    let iframeCount = html.components(separatedBy: "<iframe").count - 1
+                    #expect(iframeCount == 1, "expected exactly one iframe, found \(iframeCount)")
+
+                    // The cross-frame layer is deleted, not merely unused.
+                    #expect(!html.contains("/embedded-pane.js"))
+                    #expect(!html.contains("/embedded-activity.js"))
+                    // ...and the merged page keeps the in-place form handler,
+                    // which is what stops a write navigating the kernel away.
+                    #expect(html.contains("/inplace-forms.js"))
+                    #expect(html.contains("data-ck-inplace"))
+                    // A normal page again: the idle watchdog needs no forwarder.
+                    #expect(html.contains("/idle-logout.js"))
+                })
+        }
+    }
+
+    /// An assignment with no notebook on disk still renders an editable page.
+    ///
+    /// Inlining the notebook made its absence able to fail the whole route;
+    /// before the merge it failed inside an iframe and left the edit half
+    /// usable. The degraded pane keeps that property.
+    @Test func workbenchWithoutANotebookStillRendersTheEditHalf() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await arInsertSetup(id: "setup_wb_nonb", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_wb_nonb", title: "No Notebook Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/workbench",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("No notebook yet"))
+                    // The edit half is fully present — uploading a starter is
+                    // one of the things it is for.
+                    #expect(html.contains("notebook-files-table"))
+                    #expect(html.contains("No Notebook Lab"))
                 })
         }
     }
@@ -85,12 +165,12 @@ import VaporTesting
         }
     }
 
-    // MARK: - Left pane
+    // MARK: - Edit half
 
-    /// The pane must render the *whole* edit page — this is the assertion that
-    /// would fail if `assignment-edit.leaf` ever hit the LeafKit extend bug, and
-    /// the reason the workbench composes by iframe instead of merging templates.
-    @Test func panelRendersTheEditPageWithoutSiteChrome() async throws {
+    /// The merged page must carry the *whole* edit page, not a reduced copy of
+    /// it. Retargeted from the deleted `/workbench/panel` route in #1266: the
+    /// edit half is now inline, so this asserts against the workbench URL.
+    @Test func workbenchRendersTheWholeEditPage() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb3", on: app)
@@ -98,7 +178,7 @@ import VaporTesting
                 testSetupID: "setup_wb3", title: "Panel Lab", isOpen: false, on: app)
 
             try await app.asyncTest(
-                .GET, "/instructor/\(assignment.publicID)/workbench/panel",
+                .GET, "/instructor/\(assignment.publicID)/workbench",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.status == .ok)
@@ -108,16 +188,14 @@ import VaporTesting
                     #expect(html.contains("global-inputs-block"))
                     #expect(html.contains("notebook-files-table"))
                     #expect(html.contains("Panel Lab"))
-                    // … the site chrome is not …
-                    #expect(!html.contains("<nav class=\"nav\""))
-                    #expect(!html.contains("skip-link"))
-                    #expect(!html.contains("/idle-logout.js"))
-                    #expect(html.contains("/embedded-activity.js"))
-                    // … and the pane does not link to the surface containing it.
-                    #expect(!html.contains("/workbench\""))
-                    // The Files table's Edit buttons are what open a notebook
-                    // in the other pane, so they must carry the marker
-                    // embedded-pane.js keys on.
+                    // … and the page carries the ordinary site chrome once,
+                    // at the top level.  It used to be suppressed here because
+                    // this markup was an iframe's document sitting under the
+                    // shell's own nav; merged, there is one document and one
+                    // nav, so the skip link is correct rather than duplicated.
+                    #expect(html.contains("skip-link"))
+                    // The Files table's Edit buttons are what choose which
+                    // notebook is open, so they must keep their marker.
                     #expect(html.contains("data-wb-file=\"assignment\""))
                     // Only the assignment marker: this fixture has no reference
                     // solution, so that row renders "Create solution" instead of
@@ -128,16 +206,10 @@ import VaporTesting
                     // closing the assignment.
                     #expect(!html.contains("Save &amp; Validate"))
                     #expect(html.contains("name=\"liveEdit\""))
-                    // Every write on this page redirects to the chromed
-                    // standalone editor.  Inside a pane that redirect lands
-                    // *in the pane*, which is what made the workbench confusing
-                    // to use: adding a suite section replaced the editor with a
-                    // second copy of itself.  These two attributes are the whole
-                    // fix — the marker on each such form, and the URL the pane
-                    // returns to instead.
-                    #expect(
-                        html.contains(
-                            "data-ck-panel-url=\"/instructor/\(assignment.publicID)/workbench/panel\""))
+                    // Every write on this page answers with a redirect.  In
+                    // one document, following it would navigate away from the
+                    // live kernel — so each such form carries the in-place
+                    // marker and the handler fetches it instead.
                     #expect(html.contains("/inplace-forms.js"))
                     #expect(html.contains("data-ck-inplace"))
                 })
@@ -164,7 +236,7 @@ import VaporTesting
                 testSetupID: "setup_wb7", title: "Marked Lab", isOpen: false, on: app)
 
             try await app.asyncTest(
-                .GET, "/instructor/\(assignment.publicID)/workbench/panel",
+                .GET, "/instructor/\(assignment.publicID)/workbench",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.status == .ok)
@@ -366,8 +438,7 @@ import VaporTesting
                 testSetupID: "setup_wb5", title: "Gated Lab", isOpen: true, on: app)
 
             for path in [
-                "/instructor/\(assignment.publicID)/workbench",
-                "/instructor/\(assignment.publicID)/workbench/panel",
+                "/instructor/\(assignment.publicID)/workbench"
             ] {
                 try await app.asyncTest(
                     .GET, path,

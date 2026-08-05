@@ -183,12 +183,24 @@
     // not visible from here — those surface via the watchdog's kernel-unhealthy
     // path instead.  Resource-load errors (<img>/<script> 404s) don't bubble to
     // a non-capturing window listener, so we only see real script errors.
+    // Which page these handlers are running on.  They are `window`-level, so
+    // since #1266 merged the workbench into one document they also catch
+    // exceptions thrown by the *edit* half — code that has nothing to do with
+    // the notebook editor.  Those reports still arrive here, so tag them:
+    // without this, an error in the suite table reads in
+    // `get_browser_diagnostics` as an editor failure and pollutes the signal
+    // the kernel watchdog is judged by.  `scriptURL` narrows it further where
+    // the browser supplies a filename.
+    const errorSurface = document.getElementById('wb-shell') ? 'workbench' : 'notebook';
+
     if (failures && failures.reportEditorError) {
         window.addEventListener('error', function (e) {
             if (!e || (!e.message && !e.error)) return;
             const err = e.error;
             failures.reportEditorError({
                 source:  'onerror',
+                surface: errorSurface,
+                scriptURL: (e && e.filename) || null,
                 message: e.message || (err && err.message) || 'error',
                 stack:   err && err.stack
             });
@@ -197,6 +209,7 @@
             const reason = e && e.reason;
             failures.reportEditorError({
                 source:  'unhandledrejection',
+                surface: errorSurface,
                 message: (reason && reason.message) || String(reason || 'unhandledrejection'),
                 stack:   reason && reason.stack
             });

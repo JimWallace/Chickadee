@@ -1,13 +1,20 @@
-// Unit tests for ChickadeeUI.notifyWorkbench — the cross-pane notification the
-// assignment workbench's shell listens for.
+// Unit tests for ChickadeeUI.notifyWorkbench — the note the assignment
+// workbench listens for when something it is displaying goes stale.
 //
-// Three pages call it (the notebook editor, the global-inputs editor, the
-// section-inputs editor) and every one of them is also reachable directly as a
-// top-level page. Two properties matter and neither is visible by reading a
-// single call site: it must be silent when there is no shell above it, and it
-// must never broadcast to '*' — these are same-origin notes about what an
-// instructor is editing, and a wildcard target would hand them to any document
-// that managed to frame the page.
+// Re-specified in #1266. It used to `postMessage` to `window.parent`, because
+// the workbench composed the editor and the notebook as two iframes and the
+// listener was in a different document. One document means one event bus: it
+// now dispatches a `chickadee:workbench` CustomEvent on this window, and
+// workbench.js listens for it directly.
+//
+// The origin checks that used to matter here are moot for the same reason —
+// nothing crosses a document boundary any more, so there is no boundary a
+// framing third party could forge across, and no target origin to get wrong.
+//
+// What still matters: three pages call this (the notebook editor, the
+// global-inputs editor, the section-inputs editor) and every one of them is
+// also reachable directly as a top-level page with nothing listening. Firing
+// there must be harmless rather than an error in a caller's success path.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,62 +24,74 @@ import vm from 'node:vm';
 
 const source = await fs.readFile(path.resolve('Public/chickadee-ui.js'), 'utf8');
 
-/// Loads chickadee-ui.js against a stub window whose `parent` we control, and
-/// records every postMessage the module makes.
-function load({ framed }) {
-  const posted = [];
+/// Loads chickadee-ui.js against a stub window, recording dispatched events.
+///
+/// `opts.customEventThrows` models a browser with no usable CustomEvent
+/// constructor — the one failure mode the implementation still guards.
+function load(opts = {}) {
+  const dispatched = [];
   const window = {
     location: { origin: 'https://chickadee.example' },
     document: { querySelector: () => null },
+    dispatchEvent: (e) => { dispatched.push(e); return true; },
+    addEventListener: () => {},
   };
-  window.parent = framed ? { postMessage: (data, origin) => posted.push({ data, origin }) } : window;
+  window.parent = window;
 
-  const context = vm.createContext({ window, document: window.document, globalThis: {} });
+  class StubCustomEvent {
+    constructor(type, init) {
+      if (opts.customEventThrows) throw new Error('CustomEvent unavailable');
+      this.type = type;
+      this.detail = init && init.detail;
+    }
+  }
+
+  const context = vm.createContext({
+    window,
+    document: window.document,
+    globalThis: {},
+    CustomEvent: StubCustomEvent,
+  });
   vm.runInContext(source, context);
-  return { ui: window.ChickadeeUI, posted };
+  return { ui: window.ChickadeeUI, dispatched };
 }
 
-test('notifyWorkbench: posts to the shell when the page is a workbench pane', () => {
-  const { ui, posted } = load({ framed: true });
+test('notifyWorkbench: dispatches a same-document event carrying the type', () => {
+  const { ui, dispatched } = load();
   ui.notifyWorkbench('notebook-saved');
 
-  assert.equal(posted.length, 1);
-  // Field-by-field rather than deepEqual: the payload is constructed inside the
-  // vm realm, so its prototype is not this realm's Object.prototype.
-  assert.equal(posted[0].data.source, 'chickadee');
-  assert.equal(posted[0].data.type, 'notebook-saved');
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].type, 'chickadee:workbench');
+  assert.equal(dispatched[0].detail.type, 'notebook-saved');
 });
 
-test('notifyWorkbench: targets this origin explicitly, never a wildcard', () => {
-  const { ui, posted } = load({ framed: true });
+test('notifyWorkbench: each notification kind rides through unchanged', () => {
+  // workbench.js switches on this value, so a mangled or dropped type is a
+  // silently missing staleness chip rather than a visible failure.
+  const { ui, dispatched } = load();
   ui.notifyWorkbench('inputs-changed');
-
-  assert.equal(posted[0].origin, 'https://chickadee.example');
-  assert.notEqual(posted[0].origin, '*');
-});
-
-test('notifyWorkbench: is a no-op on a standalone page', () => {
-  // window.parent === window is how every one of these pages loads when opened
-  // directly. Posting there would be harmless but wasteful; the real point is
-  // that the standalone pages behave identically to before the workbench.
-  const { ui, posted } = load({ framed: false });
   ui.notifyWorkbench('notebook-saved');
-  ui.notifyWorkbench('inputs-changed');
 
-  assert.equal(posted.length, 0);
+  assert.deepEqual(dispatched.map((e) => e.detail.type), ['inputs-changed', 'notebook-saved']);
 });
 
-test('notifyWorkbench: a throwing parent does not propagate', () => {
-  // A parent that navigated away mid-save throws on postMessage. The pane's own
-  // save already succeeded, so losing the cross-pane hint must not surface as
-  // an error in the caller's success path.
-  const window = {
-    location: { origin: 'https://chickadee.example' },
-    document: { querySelector: () => null },
-  };
-  window.parent = { postMessage: () => { throw new Error('parent is gone'); } };
-  const context = vm.createContext({ window, document: window.document, globalThis: {} });
-  vm.runInContext(source, context);
+test('notifyWorkbench: fires unconditionally, with no parent-frame check', () => {
+  // Deliberate: on a page with nothing listening, dispatching an event nobody
+  // handles costs nothing, and that is simpler than each caller knowing which
+  // surface it is on. The old implementation returned early when
+  // `window.parent === window`, which — now that it is always true — would have
+  // made this a permanent no-op.
+  const { ui, dispatched } = load();
+  ui.notifyWorkbench('notebook-saved');
 
-  assert.doesNotThrow(() => window.ChickadeeUI.notifyWorkbench('notebook-saved'));
+  assert.equal(dispatched.length, 1, 'notifyWorkbench went silent on a top-level page');
+});
+
+test('notifyWorkbench: a failure to construct the event does not propagate', () => {
+  // The caller has just saved successfully. Losing the staleness hint must not
+  // surface as an error in that success path.
+  const { ui, dispatched } = load({ customEventThrows: true });
+
+  assert.doesNotThrow(() => ui.notifyWorkbench('notebook-saved'));
+  assert.equal(dispatched.length, 0);
 });

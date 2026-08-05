@@ -91,11 +91,30 @@ struct AssignmentWorkbenchContext: Encodable {
     let assignmentID: String
     let testSetupID: String
     let assignmentTitle: String
-    /// Left pane — the edit page in embedded mode.
-    let editPanelURL: String
-    /// The notebook the single right-hand iframe loads at page load: the
-    /// assignment, rendered.
-    let initialNotebookURL: String
+    /// The left pane's content, rendered inline by
+    /// `#extend("_assignment-edit-body", edit)`.
+    ///
+    /// Nested rather than flattened so the *same* partial serves the
+    /// standalone `/edit` page, where it resolves against a bare
+    /// `EditAssignmentContext`. LeafKit binds a partial against a sub-object
+    /// when it is passed as the extend's second parameter, so one copy of the
+    /// markup answers to both — and `embedded`, which means different things
+    /// to the two halves, stays unambiguous because each half reads its own.
+    let edit: EditAssignmentContext
+    /// The right pane's content, rendered inline by
+    /// `#extend("_notebook-body", notebook)`. Built by
+    /// `WebRoutes.workbenchNotebookContext`, the same builder the standalone
+    /// notebook page uses.
+    ///
+    /// **Optional, and that is load-bearing.** Building it reads a notebook off
+    /// disk, which throws `.notFound` for an assignment that has none yet — a
+    /// real state, since an assignment can be created and its metadata and
+    /// suite edited before any notebook is uploaded. When the workbench
+    /// composed the notebook as an iframe, a missing notebook failed *inside*
+    /// the frame and left the edit half usable; inlining it would have made
+    /// that failure 404 the whole authoring page. So the pane degrades to a
+    /// placeholder instead and the edit half stays reachable.
+    let notebook: NotebookContext?
     /// `{"<file>:<view>": "<url>"}` for every combination that exists, as a
     /// JSON object the page embeds and the tab handlers look up.  A lookup
     /// table rather than one iframe per entry: there is only ever one notebook
@@ -121,6 +140,16 @@ struct AssignmentWorkbenchContext: Encodable {
     /// Drops `.main`'s reading-column cap and gutters — the workbench sizes
     /// itself to the viewport and scrolls inside its panes.
     let fullBleed: Bool = true
+    /// Loads `inplace-forms.js`, which fetches this page's form POSTs instead
+    /// of letting them navigate.
+    ///
+    /// Load-bearing, not cosmetic. The edit half's writes — save, secret
+    /// reveal, create-solution, suite-section add/rename/delete, support-file
+    /// upload/delete — all answer with a redirect. In one document a
+    /// navigation would tear down the Pyodide kernel in the other half, which
+    /// is the whole failure this page was merged to avoid. When the halves
+    /// were iframes the frame absorbed it; now nothing does.
+    let inPlaceForms: Bool = true
 }
 
 struct EditAssignmentContext: Encodable {
@@ -194,17 +223,10 @@ struct EditAssignmentContext: Encodable {
     let notice: String?
     let error: String?
     /// True when this page is being rendered into the left pane of the
-    /// assignment workbench (`GET /instructor/:assignmentID/workbench/panel`)
+    /// assignment workbench (`GET /instructor/:assignmentID/workbench`)
     /// rather than as the standalone edit page.  `base.leaf` reads it to
     /// suppress the site chrome, and the template reads it to drop the
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
-    /// The URL that re-renders this page in place — set only on the embedded
-    /// render, where it is the panel route itself.  `base.leaf` emits it as
-    /// `data-ck-panel-url` and `inplace-forms.js` sends the pane back here
-    /// after a write, instead of letting the handler's redirect to the chromed
-    /// `/edit` page land inside the pane.  `nil` standalone, where following
-    /// that redirect is the correct behaviour.
-    let panelURL: String?
 }

@@ -86,13 +86,11 @@ struct COEPMiddleware: AsyncMiddleware {
             return true
         }
 
-        // Assignment workbench (/instructor/:assignmentID/workbench) and its
-        // left pane (…/workbench/panel).
+        // Assignment workbench (/instructor/:assignmentID/workbench).
         //
-        // Both need the headers, and the reason is the whole point of this
+        // It needs the headers, and the reason is the whole point of this
         // block: cross-origin isolation is a property of the *entire ancestor
-        // chain*.  The workbench nests the notebook page one level deeper than
-        // it has ever been nested, so
+        // chain*.  The workbench hosts the JupyterLite editor iframe, so
         //
         //   • without isolation on the shell, the notebook iframe cannot be
         //     isolated either, `crossOriginIsolated` goes false inside it, and
@@ -102,17 +100,19 @@ struct COEPMiddleware: AsyncMiddleware {
         //     reliability regression with no error message; and
         //   • under `require-corp` a nested document must itself send
         //     `require-corp` or the browser refuses to load it outright
-        //     (`ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader`), so
-        //     the *left* pane needs them too even though it runs no Python.
+        //     (`ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader`).
         //
-        // Gated on the same flag as the notebook page: the panes and their
-        // shell must agree, and the unit-test seam has to be able to turn the
+        // #1266 merged the workbench into one document, so the chain is one
+        // link shorter — the `…/workbench/panel` arm below went with the route
+        // it matched.  The requirement on the workbench itself is unchanged.
+        //
+        // Gated on the same flag as the notebook page: the page and its editor
+        // frame must agree, and the unit-test seam has to be able to turn the
         // whole thing off in one place.  WebKit is exempted by the caller, which
         // is what keeps Safari's comlink path working — there it is simply
         // "no isolation anywhere in the chain", which is equally consistent.
-        if isolateNotebook, parts.count >= 3, parts[0] == "instructor" {
-            if parts.count == 3, last == "workbench" { return true }
-            if parts.count == 4, parts[2] == "workbench", last == "panel" { return true }
+        if isolateNotebook, parts.count == 3, parts[0] == "instructor", last == "workbench" {
+            return true
         }
 
         return false
