@@ -355,33 +355,17 @@ actor WorkerDaemon {
     /// allowlisted environment (no worker secrets).
     func runMake(in directory: URL, target: String?) async throws {
         let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
-        let arguments = target.map { [$0] } ?? []
-        #if os(Linux)
-        let launch = LinuxProcessLaunchConfiguration(
+        let launch = ScriptLaunch(
             executablePath: "/usr/bin/make",
-            arguments: arguments,
+            arguments: target.map { [$0] } ?? [],
             env: mergedScriptEnvironment(overrides: [:])
         )
-        let output = await executeLinuxScriptProcess(
+        let output = await executeScriptLaunch(
             launch,
             workDir: directory,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch make"
         )
-        #else
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/make")
-        proc.arguments = arguments
-        proc.currentDirectoryURL = directory
-        proc.environment = mergedScriptEnvironment(overrides: [:])
-        let output = await executeScriptProcess(
-            proc,
-            timeLimitSeconds: timeLimitSeconds,
-            launchErrorPrefix: "Failed to launch make",
-            usesSeparateProcessGroup: false,
-            usesExternalTimeout: false
-        )
-        #endif
         if output.timedOut {
             throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)
         }

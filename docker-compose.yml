@@ -80,6 +80,11 @@ services:
       BRIGHTSPACE_SYNC_DEBOUNCE_SECS: ${BRIGHTSPACE_SYNC_DEBOUNCE_SECS:-}
 
       LOG_LEVEL:                    ${LOG_LEVEL:-info}
+
+      # Runner <-> server HMAC secret. Required: it is the only channel by
+      # which the runner container learns the secret, now that it no longer
+      # mounts the data volume. Generate one with the command in .env.example.
+      RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     networks:
       - chickadee
     healthcheck:
@@ -92,11 +97,22 @@ services:
   # ----------------------------------------------------------------
   # Runner — polls the server for pending jobs and runs test scripts
   # ----------------------------------------------------------------
+  # The runner deliberately mounts NO volumes. It used to mount the data
+  # volume read-only, purely to read /data/.worker-secret — but that volume
+  # also holds the SQLite database, every submission, and the results tree,
+  # and a test script runs as the same uid as the runner, so 0600 on the
+  # secret file was no barrier. A student script could therefore read the
+  # HMAC secret and sign worker API calls, defeating the environment
+  # allowlist in mergedScriptEnvironment that exists to withhold exactly
+  # that. Sandboxing does not close it either: the Linux sandbox creates no
+  # mount namespace. The secret now arrives by environment variable, which
+  # the runner already prefers over any file (resolveWorkerSharedSecret),
+  # and the runner container can no longer see student data at all.
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
     entrypoint: ["/bin/sh", "-lc"]
-    volumes:
-      - chickadee-data:/data:ro
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     command:
       - >
         exec /app/chickadee-runner
@@ -105,8 +121,10 @@ services:
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
       # Note: --sandbox is intentionally omitted here.
       # Docker already provides container-level process isolation.
-      # To enable OS-level sandboxing (Linux unshare namespaces),
-      # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
+      # To enable OS-level sandboxing (Linux unshare namespaces), add
+      # "--sandbox" here. That buys network isolation for test scripts;
+      # it does not restrict filesystem access, which is why the data
+      # volume is unmounted above rather than sandboxed around.
     networks:
       - chickadee
     depends_on:

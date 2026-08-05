@@ -102,6 +102,19 @@ semantics). Regression test: `scriptDoesNotInheritNonAllowlistedParentEnv`.
 `timeout-minutes: 20` stays — it is sized for the cache-miss path where the
 test job compiles from scratch.)
 
+**Superseded (2026-08).** The hand-written `fork()`/`execve()`/`waitpid()`
+launcher this section describes no longer exists. Every worker subprocess now
+goes through `executeScriptLaunch` (`Sources/Worker/ScriptExecution.swift`),
+built on `swift-subprocess`, which spawns without the fork-in-a-multithreaded-
+process hazard that caused all of this — so points 1–3 above are now the
+library's problem rather than ours, and the separate macOS `Process` path is
+gone with them. Points 4 and 5 survive in `BoundedPipeRead.swift`, still used
+by the capability probes and the MIME detector, which do build pipes by hand.
+The analysis is kept because it explains constraints the replacement still has
+to honour: session isolation before anything else can fail, a group-wide kill
+rather than a per-pid one, no unbounded wait anywhere on a cooperative-pool
+thread, and an environment that *replaces* rather than augments the parent's.
+
 ## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open
 
 **Symptom.** The grading-hang probe (`grading-hang-probe.yml`) boots the
@@ -152,6 +165,59 @@ iteration.
 notebook-page e2e) get exactly one retry, logged with a `::warning` so the
 flake rate stays visible in annotations. Chromium legs stay strict — a
 chromium failure is treated as real, first time.
+
+---
+
+## Family 4 — `worker-tests` SIGABRT via the wedge watchdog (URLSession cancel deadlock) — OPEN, upstream
+
+**Symptom.** `worker-tests` fails (not cancelled) after ~5 minutes with
+`exited with unexpected signal code 6`. The crashing thread is
+`WedgeWatchdog.abortWedgedProcess` at `WedgeWatchdog.swift:120` — i.e. the
+watchdog working as designed, aborting a wedged process so CI gets a thread
+dump instead of a silent job kill. The wedge itself is elsewhere in the dump.
+
+**Root cause (from the dumps).** A lock-order inversion between Swift
+Concurrency's per-task status-record lock and a Dispatch queue inside
+swift-corelibs-foundation's `URLSession`, on Linux:
+
+- one thread is in `swift_asyncLet_finish` → `swift_task_cancel` →
+  `withStatusRecordLock` → `URLSession.CancelState.cancel()` →
+  `DispatchQueue.sync` — holding the status-record lock, waiting on the queue;
+- another is in the multi-handle completing a transfer →
+  `URLSession.download(for:delegate:)`'s continuation →
+  `flagAsAndEnqueueOnExecutor` → `withStatusRecordLock` — holding/serving that
+  queue, waiting on the lock.
+
+Neither can proceed, and the cooperative pool fills behind them. Every frame
+is in `libFoundationNetworking` / `libswift_Concurrency` / `libdispatch`;
+the only first-party frame is the watchdog reporting it.
+
+**Trigger.** Cancelling an in-flight `URLSession` download. The worker's job
+setup runs `async let submissionDownload` alongside the test-setup fetch
+(`RunnerDaemon+JobProcessing.swift`), so when one leg fails — which several
+tests deliberately induce with 404s — `swift_asyncLet_finish` cancels the
+other mid-transfer and can hit the inversion. Whether the racing transfer is
+completing (`completeTask`) or failing (`urlProtocol(task:didFailWithError:)`)
+varies between dumps; the inversion is the same.
+
+**Evidence it is not PR-local.** Observed on `main` at commit `32922738`
+(run 31020720996, job 92360716560, 2026-08-05 15:53) and on an unrelated
+feature branch (run 31029658951, job 92390500832) with identical stacks.
+`main` was otherwise green on 14 of its 15 preceding runs, so the rate is
+low but real.
+
+**Handling for now.** Re-run the failed job — `/rerun-failed` on the PR, or
+`rerun-failed-jobs`. Before blaming a red `worker-tests` on the diff in front
+of you, check the dump for `WedgeWatchdog.abortWedgedProcess` plus a
+`CancelState.cancel` / `withStatusRecordLock` pair; that combination is this
+family, not the change under test.
+
+**Attack notes.** A real fix is upstream. First-party mitigation would be to
+stop cancelling in-flight downloads: sequence the two fetches instead of
+racing them under `async let`, or give each its own detached task whose
+failure does not cancel its sibling. Neither has been attempted — this entry
+records the diagnosis so the next person does not re-derive it from a
+register dump.
 
 ---
 

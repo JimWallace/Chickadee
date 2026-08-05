@@ -32,6 +32,16 @@ let package = Package(
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
         // any target, so `swift build` / `swift test` are unaffected.
         .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.64.0"),
+        // The worker's one subprocess-launch primitive. Replaces a hand-rolled
+        // fork()/execve()/waitpid() path that existed because Foundation's
+        // Process deadlocked forking from the multithreaded daemon (issue
+        // #1139); Subprocess spawns without that hazard and is CI-tested on the
+        // distributions the runner ships on.
+        .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "1.0.0"),
+        // Subprocess speaks `FilePath` at its API boundary. Already in the
+        // resolved graph as its dependency; declared explicitly because a
+        // target may only import what it declares.
+        .package(url: "https://github.com/apple/swift-system.git", from: "1.5.0"),
     ],
     targets: [
         // MARK: - Runner core
@@ -106,6 +116,8 @@ let package = Package(
                 .target(name: "Core"),
                 .target(name: "RunnerCore"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/Worker",
             exclude: ["README.md"],
