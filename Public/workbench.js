@@ -273,12 +273,20 @@
     /// does not come back from the server with the notebook — without this it
     /// would keep showing the previous file's state.
     function syncViewControls() {
+        var applicable = hasTemplate(activeFile);
         viewButtons.forEach(function (btn) {
             btn.setAttribute(
                 'aria-pressed',
                 btn.getAttribute('data-wb-view') === activeView ? 'true' : 'false');
+            // Disabled, not hidden: on a notebook with no placeholders the two
+            // views are the same bytes, so switching is meaningless — but a
+            // control that disappears is easily read as a rendering fault,
+            // where a greyed-out one with a reason in its title is not.
+            btn.disabled = !applicable;
+            btn.title = applicable
+                ? btn.getAttribute('data-wb-title-on') || btn.title
+                : 'This notebook has no per-student placeholders, so there is only one version of it';
         });
-        if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
         var label = document.getElementById('wb-openfile');
         if (label) label.textContent = activeFile === 'solution' ? 'Solution' : 'Assignment';
     }
@@ -302,10 +310,10 @@
         });
     });
 
-    // The template already loaded the assignment's rendered view, so only the
-    // view control needs syncing — show it when this notebook has a template
-    // worth switching to.
-    if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
+    // The server already rendered the control in its correct enabled/disabled
+    // state, so this is belt-and-braces for the case where the two disagree —
+    // and it is the one call that keeps that logic in a single place.
+    syncViewControls();
 
     // ── Single-pane fallback (narrow desktop windows) ──────────────────────
 

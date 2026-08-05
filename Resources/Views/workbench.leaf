@@ -121,6 +121,17 @@
     background: var(--health-teal);
     color: var(--surface);
 }
+/* Unavailable, not absent: this notebook has no placeholders, so the two views
+   would be the same bytes.  Keeping the control on screen means its absence is
+   never mistaken for a rendering bug. */
+.wb-view:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+.wb-view:disabled[aria-pressed="true"] {
+    background: var(--gray-200);
+    color: var(--gray-700);
+}
 /* Set by workbench.js when a left-pane edit invalidates what the notebook is
    showing.  Advisory only — reloading the pane would restart the kernel and
    discard the author's live state, so the author chooses when. */
@@ -191,22 +202,37 @@
                 <div class="wb-viewswitch" id="wb-viewswitch" role="group"
                      aria-label="Notebook view"
                      data-assignment-has-template="#if(assignmentHasTemplateView):1#else:0#endif"
-                     data-solution-has-template="#if(solutionHasTemplateView):1#else:0#endif"
-                     hidden>
+                     data-solution-has-template="#if(solutionHasTemplateView):1#else:0#endif">
                     <!-- `aria-pressed` follows the view actually open, rather
                          than assuming "With values". The server defaults course
                          staff to the TEMPLATE on a notebook carrying
                          placeholders (resolveNotebookViewMode), so hardcoding
                          this made the control claim the wrong view on exactly
                          the assignments the control exists for. -->
+                    <!-- Always present, disabled when the open notebook carries
+                         no `{{placeholders}}` — the two views would be
+                         byte-identical there, so switching is meaningless, but
+                         a control that vanishes is harder to reason about than
+                         one that is visibly unavailable. `disabled` is rendered
+                         server-side rather than applied by JS so it does not
+                         flash enabled on load; workbench.js keeps it in sync
+                         after a switch.
+
+                         The disabled title says WHY, because "this assignment
+                         has no personalization" is the actual answer and is not
+                         guessable from a greyed-out button. -->
                     <button class="btn action-btn wb-view" type="button"
                             data-wb-view="personalized"
                             aria-pressed="#if(notebook.isTemplateView):false#else:true#endif"
-                            title="The notebook as a student sees it, with values substituted">With values</button>
+                            #if(!openFileHasTemplateView):disabled#endif
+                            data-wb-title-on="The notebook as a student sees it, with values substituted"
+                            title="#if(openFileHasTemplateView):The notebook as a student sees it, with values substituted#else:This notebook has no per-student placeholders, so there is only one version of it#endif">With values</button>
                     <button class="btn action-btn wb-view" type="button"
                             data-wb-view="template"
                             aria-pressed="#if(notebook.isTemplateView):true#else:false#endif"
-                            title="The authored template, with placeholders left standing">Template</button>
+                            #if(!openFileHasTemplateView):disabled#endif
+                            data-wb-title-on="The authored template, with placeholders left standing"
+                            title="#if(openFileHasTemplateView):The authored template, with placeholders left standing#else:This notebook has no per-student placeholders, so there is only one version of it#endif">Template</button>
                 </div>
                 <span class="wb-bar-spacer"></span>
                 <span class="wb-stale-chip" id="wb-stale-chip" role="status" hidden></span>
