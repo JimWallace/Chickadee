@@ -21,7 +21,7 @@ import VaporTesting
         app.get("python-grading-worker.js") { _ in "// python grading worker" }
         app.get("r-grading-worker.js") { _ in "// r grading worker" }
         app.get("freeze-watchdog-worker.js") { _ in "// freeze worker" }
-        app.get("pyodide-worker.js") { _ in "// pyodide worker" }
+        app.get("python-eval-worker.js") { _ in "// auto-compute worker" }
         app.get("plain") { _ in "plain" }
 
         return app
@@ -117,11 +117,11 @@ import VaporTesting
         }
     }
 
-    @Test func pyodideWorkerScriptIsNotForcedIsolated() async throws {
-        // /pyodide-worker.js is spawned only by the (non-isolated) assignment
+    @Test func autoComputeWorkerScriptIsNotForcedIsolated() async throws {
+        // /python-eval-worker.js is spawned only by the (non-isolated) assignment
         // editor pages, so it must NOT be forced require-corp.
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/pyodide-worker.js") { res async in
+            try await app.testing().test(.GET, "/python-eval-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }

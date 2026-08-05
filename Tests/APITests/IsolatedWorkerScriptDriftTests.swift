@@ -24,10 +24,11 @@
 // list matches them in BOTH directions: nothing spawned is missing (the #1274
 // bug) and nothing listed is stale (the #1271 bug).
 //
-// Only the scripts loaded by the isolated pages are scanned. `pyodide-worker.js`
-// is spawned by the assignment-editor pages, which are deliberately NOT isolated
-// — forcing `require-corp` on it would be a regression, not a fix — so its
-// spawn site lives in a file this test does not read.
+// Only the scripts loaded by the isolated pages are scanned.
+// `python-eval-worker.js` is spawned by the assignment-editor pages, which are
+// deliberately NOT isolated — forcing `require-corp` on it would be a
+// regression, not a fix — so its spawn site lives in a file this test does not
+// read.
 
 import Foundation
 import Testing

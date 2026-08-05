@@ -76,21 +76,54 @@ machine's `sys.stdlib_module_names`, which is deliberately permissive: it may
 include something emscripten does not really support (`multiprocessing`), which
 is a missed catch, but it can never reject a stdlib import that works.
 
-### A2. Migrate `Public/pyodide-worker.js`
+### A2. Migrate `Public/pyodide-worker.js` — **DONE**
 
-The pattern-family editor's auto-compute, and the last consumer of Pyodide that
-runs student-adjacent code. Same substrate swap as the grader, and the forgiving
-case: it is instructor-side, so a missing package is an authoring annoyance
-rather than a grade-time failure.
+Shipped as `Public/python-eval-worker.js` + `Public/python-eval-shared.js`;
+`pyodide-worker.js` is deleted. **No Chickadee-owned JavaScript loads Pyodide any
+more** — the only remaining reference is `pyodideUrl` in the JupyterLite config,
+consumed by the vendored `jupyterlite-pyodide-kernel` that A3 retires.
 
-### A3. Retire `Public/pyodide` (~465 MB) and its guards
+The protocol is unchanged, so the editor's client code moved by one URL. The one
+genuinely new mechanism is the same one grading hit: `py.runPythonAsync(src)`
+**returns** the last expression's value and the editor read it directly, while an
+`execute_request` returns nothing. The value is printed behind a per-run nonce
+and parsed back, and the trailing expression is split off the AST so it can be
+`eval`d for its value while the rest is `exec`d for side effects. Reading
+`execute_result` off iopub would look simpler but couples the contract to display
+formatting (`repr` truncation, `ast_node_interactivity`).
 
-Only after A2. Then delete: `Public/pyodide`, `scripts/check-pyodide-parity.sh`,
-`scripts/add-pyodide-extras.py`, `Tools/vendor/pyodide-extra-packages.json`, the
-unused nb_mypy/astor wheels, and the vendored `jupyterlite-pyodide-kernel`
-(`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) — which is currently kept
-deliberately as the parity anchor and the revert path for xeus-python, so it goes
-last and needs the same re-vendor as everything else.
+This one fails *silently* when wrong — no error, just no value, and auto-compute
+quietly stops filling anything in — so it gets a real-kernel probe:
+`smoke.mjs --mode eval`, now in the CI matrix. It proves the split returns
+values, that a solution cell which raises is reported rather than swallowed *and*
+does not stop later cells from defining their functions, and that a statement
+yields null rather than a fabricated result.
+
+Also fixed while here: `execute`'s poll cap was a bare `for (var i = 0; i < 400;
+i++)` that read like a 2-second execution timeout. It is not one — a xeus-lite
+cell runs inside `notify_listener`, so a long cell blocks the worker's event loop
+and the reply is already in the sink before the poll gets a turn. Proof rather
+than argument: the R smoke grades a 3,139 ms script and passes under the 2,000 ms
+cap. It is now a named, overridable dead-kernel backstop, and the auto-compute
+worker passes a much larger one because its legitimate waits are longer.
+
+### A3. Retire `Public/pyodide` (~465 MB) and its guards — **BLOCKED on a re-vendor**
+
+A2 is done, so nothing Chickadee writes loads Pyodide. The single remaining
+consumer is the vendored `jupyterlite-pyodide-kernel` (`pyodideUrl` in
+`Tools/jupyterlite/jupyter-lite.json`), kept deliberately as the
+`check-pyodide-parity.sh` anchor and the revert path for xeus-python.
+
+Removing it means editing generated JupyterLite output, which means running
+`scripts/build-jupyterlite.sh` — micromamba plus network to `repo.prefix.dev`,
+which **CI cannot do**. So this is gated on the same maintainer-machine re-vendor
+as the missing scipy/sympy/scikit-learn/statsmodels packages in the STATUS block
+above, and the two should be done in one pass.
+
+When that pass happens, delete together: `Public/pyodide`,
+`scripts/check-pyodide-parity.sh`, `scripts/add-pyodide-extras.py`,
+`Tools/vendor/pyodide-extra-packages.json`, the unused nb_mypy/astor wheels, and
+the pyodide kernel extension.
 
 ### A4. Tighten the CSP
 
@@ -100,7 +133,10 @@ accidental dependency documented in the spike, where browser Python grading
 worked *because* `data:` was absent from `script-src` and that broke Pyodide's
 classic-worker detection probe.
 
-**Do not tighten the CSP while Pyodide is still loaded anywhere.**
+**Do not tighten the CSP while Pyodide is still loaded anywhere.** After A2 that
+means: still blocked, because the vendored pyodide kernel extension is still in
+the bundle and would load Pyodide if any notebook ever asked for its kernel.
+A4 therefore follows A3, not A2.
 
 ### A5. A non-goal, recorded so nobody tries it
 
@@ -310,7 +346,7 @@ in [xeus-r-kernel-spike.md](xeus-r-kernel-spike.md)):
 | consumer | disposition |
 |---|---|
 | `Public/grading-worker.js` + the `browser-runner.js` main-thread fallback | removed by this migration |
-| `Public/pyodide-worker.js` — the pattern-family editor's auto-compute | same substrate swap; instructor-side, so the package set is the forgiving case |
+| `Public/pyodide-worker.js` — the pattern-family editor's auto-compute | **done** — replaced by `python-eval-worker.js` on xeus-python |
 | the vendored `jupyterlite-pyodide-kernel` (`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) | kept deliberately today as the parity anchor and the revert path for xeus-python; retire it and `scripts/check-pyodide-parity.sh` together |
 
 Removing Pyodide also removes the accidental CSP dependency documented in the

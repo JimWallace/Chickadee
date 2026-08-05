@@ -138,7 +138,29 @@
     // synchronous inside notify_listener, so by the time it returns the kernel
     // has already published everything; the drain loop only covers a reply
     // posted from a later task.
-    async function execute(code) {
+    // How long `execute` keeps polling for the kernel's execute_reply before
+    // giving up. This is a DEAD-KERNEL BACKSTOP, not an execution timeout: a
+    // xeus-lite cell runs inside `notify_listener`, so a long-running cell
+    // blocks this worker's event loop outright and the reply is already in the
+    // sink by the time the poll below gets a turn. The cap only matters when a
+    // reply is never coming — a kernel that crashed or was killed mid-cell —
+    // where it stops `execute` hanging forever.
+    //
+    // Wall-clock limits on student or instructor code are enforced from the MAIN
+    // thread, which races the worker's reply against a timer and calls
+    // `Worker.terminate()`. That is the only kill path that works against a
+    // synchronous CPU-bound loop, and it is why this number does not have to be
+    // generous.
+    //
+    // Measured, so it is not just an argument: the R leg of
+    // Tools/browser-grading-smoke grades a script taking 3,139 ms and passes
+    // under this 2,000 ms cap. If the cap were an execution timeout that script
+    // would report a bogus result instead.
+    var DEFAULT_MAX_WAIT_MS = 2000;
+
+    async function execute(code, options) {
+        var maxWaitMs = (options && options.maxWaitMs) || DEFAULT_MAX_WAIT_MS;
+        var polls = Math.max(1, Math.ceil(maxWaitMs / 5));
         _counter += 1;
         sink = [];
         _server.notify_listener({
@@ -163,7 +185,7 @@
             channel: 'shell',
             buffers: [],
         });
-        for (var i = 0; i < 400; i++) {
+        for (var i = 0; i < polls; i++) {
             if (sink.some(function (m) { return m.header.msg_type === 'execute_reply'; })) break;
             await new Promise(function (r) { setTimeout(r, 5); });
         }

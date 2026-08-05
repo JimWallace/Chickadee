@@ -1426,7 +1426,7 @@
         // uses a family.  Respects manual overrides: once the user types in
         // the Expected cell we mark it `data-manual` and never clobber.
         //
-        // v0.4.135: Pyodide runs in a Web Worker (`/pyodide-worker.js`)
+        // v0.4.135: the interpreter runs in a Web Worker (`/python-eval-worker.js`)
         // instead of on the main thread.  Synchronous tight loops in the
         // instructor's solution notebook (`while True: pass`, infinite
         // recursion) used to freeze the editor modal and the rest of the
@@ -1454,7 +1454,7 @@
         function getWorker() {
             if (_worker) return _worker;
             var version = (document.querySelector('meta[name="app-version"]') || {}).content || '';
-            var workerURL = '/pyodide-worker.js' + (version ? '?v=' + encodeURIComponent(version) : '');
+            var workerURL = '/python-eval-worker.js' + (version ? '?v=' + encodeURIComponent(version) : '');
             _worker = new Worker(workerURL);
             _worker.addEventListener('message', function (e) {
                 var data = e.data || {};

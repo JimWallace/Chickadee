@@ -145,7 +145,23 @@ const language = (() => {
 const LANG = LANGUAGES[language];
 const FILES = LANG.files;
 
-const PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>R grading smoke</title>
+// `grading` drives the grading worker; `eval` drives the pattern-family
+// editor's auto-compute worker (#1271 plan §A2), which speaks a different
+// protocol against the same kernel. Both are here rather than in a second tool
+// because everything expensive — the static server, the browser launch, the
+// generous boot timeout — is shared, and the auto-compute worker needs exactly
+// the same thing proving: that a REAL kernel does what the unit tests assume.
+const mode = (() => {
+    const index = process.argv.indexOf('--mode');
+    const value = index >= 0 ? process.argv[index + 1] : 'grading';
+    if (value !== 'grading' && value !== 'eval') {
+        console.log(`unknown --mode ${value}; expected grading or eval`);
+        process.exit(1);
+    }
+    return value;
+})();
+
+const PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>browser grading smoke</title>
 <body><pre id="log"></pre><script>
 window.__result = null;
 const files = ${JSON.stringify(FILES)};
@@ -186,12 +202,62 @@ const scripts = ${JSON.stringify(LANG.scripts)};
 })().catch((err) => { window.__result = { ok: false, stage: 'page', error: String(err) }; });
 </script>`;
 
+// The auto-compute probe. Two solution cells (one of which raises, because a
+// failing early cell must NOT stop later cells from defining their functions),
+// then expressions evaluated against the namespace they left behind.
+const EVAL_PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>auto-compute smoke</title>
+<body><pre id="log"></pre><script>
+window.__result = null;
+(async () => {
+  const worker = new Worker('/python-eval-worker.js');
+  let counter = 0;
+  const pending = new Map();
+  worker.onmessage = (event) => {
+    const message = event.data || {};
+    const settle = pending.get(message.id);
+    if (settle) { pending.delete(message.id); settle(message); }
+  };
+  worker.onerror = (event) => {
+    window.__result = { ok: false, stage: 'worker', error: event.message || 'worker error' };
+  };
+  const call = (payload) => new Promise((resolve) => {
+    const id = ++counter;
+    pending.set(id, resolve);
+    worker.postMessage(Object.assign({ id }, payload));
+  });
+
+  const bootStart = Date.now();
+  const init = await call({ type: 'init' });
+  const bootMs = Date.now() - bootStart;
+  if (!init.ok) { window.__result = { ok: false, stage: 'init', error: init.error }; return; }
+
+  const load = await call({ type: 'loadCells', cells: [
+    'import math\\n\\ndef classify(bmi):\\n    return "under" if bmi < 18.5 else "ok"',
+    'this_name_does_not_exist()',
+    'def area(r):\\n    return round(math.pi * r * r, 2)',
+  ] });
+  if (!load.ok) { window.__result = { ok: false, stage: 'loadCells', error: load.error }; return; }
+
+  const runs = {};
+  for (const [key, code] of Object.entries({
+    call: 'classify(18.49)',
+    later: 'area(2)',
+    statement: 'unused = 1',
+    raises: 'classify()',
+  })) {
+    const reply = await call({ type: 'run', code });
+    runs[key] = reply.ok ? { ok: true, result: reply.result } : { ok: false, error: reply.error };
+  }
+  window.__result = { ok: true, bootMs, cellErrors: load.cellErrors, runs };
+})().catch((err) => { window.__result = { ok: false, stage: 'page', error: String(err) }; });
+</script>`;
+
 function startServer() {
     const server = http.createServer(async (req, res) => {
         const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         if (urlPath === '/' || urlPath === '/index.html') {
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...ISOLATION_HEADERS });
-            res.end(PROBE_PAGE);
+            res.end(mode === 'eval' ? EVAL_PROBE_PAGE : PROBE_PAGE);
             return;
         }
         // Confine reads to Public/ — this server exists only to feed the probe.
@@ -261,12 +327,48 @@ try {
     server.close();
 }
 
-console.log(`\nbrowser grading smoke — ${language} (${browserName})`);
+console.log(`\nbrowser ${mode} smoke — ${language} (${browserName})`);
 if (!result || !result.ok) {
     console.log(`  FAIL boot — stage=${result?.stage} error=${result?.error}`);
     process.exit(1);
 }
-console.log(`  kernel booted in ${result.bootMs}ms; phases=${result.phases.join(',')}`);
+console.log(`  kernel booted in ${result.bootMs}ms`);
+
+if (mode === 'eval') {
+    // A cell that raises must be REPORTED, not swallowed and not fatal: the
+    // editor explains a downstream "function not defined" in terms of the
+    // earlier cell that crashed, which it can only do if it was told.
+    const errors = result.cellErrors || [];
+    check('the failing solution cell is reported', errors.length === 1, JSON.stringify(errors));
+    check('it is attributed to the right cell', errors[0]?.index === 1, JSON.stringify(errors));
+    check('its message is the exception line',
+        /NameError/.test(errors[0]?.message || ''), JSON.stringify(errors));
+
+    // The last-expression split. This is the one genuinely new mechanism in the
+    // move off Pyodide — runPythonAsync RETURNED this value — and getting it
+    // wrong does not throw, it silently yields nothing.
+    check('a call expression returns its value',
+        result.runs.call?.result === 'under', JSON.stringify(result.runs.call));
+    // Proves the namespace survived the cell that raised, which is the whole
+    // reason per-cell errors are caught rather than propagated.
+    check('a function defined after the failing cell is callable',
+        result.runs.later?.result === '12.57', JSON.stringify(result.runs.later));
+    check('source ending in a statement runs and yields no value',
+        result.runs.statement?.ok === true && result.runs.statement.result === null,
+        JSON.stringify(result.runs.statement));
+    check('a raising expression is an error, not a null result',
+        result.runs.raises?.ok === false && /TypeError|argument/.test(result.runs.raises.error || ''),
+        JSON.stringify(result.runs.raises));
+
+    if (failures.length) {
+        console.log(`\nFAILED: ${failures.length} check(s)`);
+        process.exit(1);
+    }
+    console.log('\nPASS');
+    process.exit(0);
+}
+
+console.log(`  phases=${result.phases.join(',')}`);
 
 const [passName, failName, boomName, contextName] = LANG.scripts;
 const pass = result.results[passName];

@@ -63,7 +63,7 @@ jobs:
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
+          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/python-eval-|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
@@ -77,7 +77,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [r, python]
+        include:
+          - { language: r, mode: grading }
+          - { language: python, mode: grading }
+          # The pattern-family editor's auto-compute, which moved onto the same
+          # kernel in #1271 §A2. Its one new mechanism — rebuilding
+          # runPythonAsync's last-expression return value over a protocol that
+          # has no return value — fails SILENTLY when wrong: no error, just no
+          # value, and auto-compute quietly stops filling anything in. Only a
+          # real kernel shows that.
+          - { language: python, mode: eval }
     steps:
       - uses: actions/checkout@v4
 
@@ -91,8 +100,10 @@ jobs:
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Grade ${{ matrix.language }} scripts through the real kernel
-        run: node Tools/browser-grading-smoke/smoke.mjs --language ${{ matrix.language }} --browser chromium
+      - name: Drive the ${{ matrix.language }} ${{ matrix.mode }} probe on the real kernel
+        run: |
+          node Tools/browser-grading-smoke/smoke.mjs \
+            --language ${{ matrix.language }} --mode ${{ matrix.mode }} --browser chromium
 
   # NOTE: the job NAME is deliberately unchanged. It is the status check this
   # workflow documents as the one to require in branch protection, and renaming a
