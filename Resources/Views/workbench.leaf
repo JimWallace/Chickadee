@@ -61,13 +61,17 @@
     overflow-y: auto;
     overflow-x: hidden;
 }
-/* The notebook half is the exception: its editor sizes itself to the pane via
-   `.jl-frame-embedded`, so it must not scroll as a block. */
+/* The notebook half is the exception: its editor fills the pane, so it must not
+   scroll as a block. */
 .wb-notebook-body {
     display: flex;
     flex-direction: column;
     overflow-y: hidden;
 }
+/* The edit half needs its own gutter. It used to inherit one from the pane
+   document's `.main`; inlined, its content would otherwise sit flush against
+   the viewport edge. */
+.wb-pane-edit { padding: 0 .75rem; }
 
 /* Degraded right pane: the assignment has no notebook on disk yet. */
 .wb-nonotebook {

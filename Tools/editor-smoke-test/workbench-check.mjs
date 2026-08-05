@@ -6,37 +6,36 @@
 //
 // This exists because that nesting introduced a failure mode no unit test can
 // see. Cross-origin isolation is a property of the ENTIRE ancestor chain, so
-// the workbench shell and its left pane must both carry COOP/COEP or:
-//
-//   * `crossOriginIsolated` goes false inside the notebook iframe, the kernel
-//     silently drops off SharedArrayBuffer onto the service-worker comlink
-//     transport, and NOTHING reports an error — the editor still boots, just
-//     on the path the codebase deliberately moved away from; or
-//   * under `require-corp` the browser refuses the left pane outright
-//     (ERR_BLOCKED_BY_RESPONSE.CoepFrameResourceNeedsCoepHeader) and the author
-//     gets an empty pane where the editor should be.
+// the workbench must carry COOP/COEP or `crossOriginIsolated` goes false inside
+// the editor iframe, the kernel silently drops off SharedArrayBuffer onto the
+// service-worker comlink transport, and NOTHING reports an error — the editor
+// still boots, just on the path the codebase deliberately moved away from.
 //
 // COEPMiddlewareTests pins the *headers*. Only a real browser can confirm the
-// isolation those headers are supposed to produce actually survives two levels
-// of framing, which is what this check does. It is the automated form of what
-// was otherwise a manual "open DevTools in the nested iframe" step.
+// isolation those headers are supposed to produce actually survives the
+// framing, which is what this check does. It is the automated form of what was
+// otherwise a manual "open DevTools in the nested iframe" step.
 //
 // Asserts, as the instructor who authors the assignment:
 //
-//   1. the workbench shell is cross-origin isolated (chromium/firefox);
-//   2. the LEFT pane loaded a real edit page — i.e. was not COEP-refused;
-//   3. the NESTED notebook iframe is cross-origin isolated and has
-//      SharedArrayBuffer — the property the whole chain exists to preserve;
-//   4. there is exactly ONE notebook iframe — the tabs and the view switch
-//      repoint it rather than each owning a live document, so there is one
-//      Pyodide kernel however many notebooks the assignment has;
-//   5. a keystroke in a pane reaches the shell as `chickadee:activity`, the
-//      chain that stops the idle watchdog signing an author out mid-edit;
-//   6. the view switch appears on a notebook that carries placeholders and
-//      repoints to `view=template`, and the tabs repoint to the other file;
-//   7. a write from the pane (creating a suite section) leaves the pane on the
-//      panel URL rather than following the handler's redirect into the chromed
-//      standalone editor, and does not disturb the notebook document.
+//   1. the workbench is cross-origin isolated (chromium/firefox);
+//   2. both halves are in THIS document — #1266 merged them, so a wrapper
+//      iframe reappearing means a write can navigate one out from under the
+//      author;
+//   3. there is exactly ONE iframe and it is the JupyterLite editor — each live
+//      notebook document holds a Pyodide kernel, so one per destination is one
+//      kernel per destination;
+//   4. that editor frame is isolated and has SharedArrayBuffer — the property
+//      the whole chain exists to preserve;
+//   5. idle-logout.js is loaded and the deleted cross-frame activity forwarder
+//      is not — one document means the watchdog sees keystrokes directly;
+//   6. the view switch appears on a notebook carrying placeholders and
+//      navigates to `view=template`, and the Files table opens the solution,
+//      both without leaving the workbench;
+//   7. a write (creating a suite section) lands, WITHOUT replacing this
+//      document or the editor's — the assertion the whole merge rests on, since
+//      a reload here costs the author's kernel and unsaved cells;
+//   8. optionally (SMOKE_SHOTS=<dir>), screenshots for human review.
 //
 // WebKit is expected NON-isolated at every level — it needs the comlink path —
 // so there the assertion is inverted, exactly as in notebook-page-check.mjs.
@@ -47,6 +46,7 @@
 import { chromium, webkit, firefox } from "playwright";
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
+import fsp from "node:fs/promises";
 
 const BROWSERS = { chromium, webkit, firefox };
 const browserName = process.env.SMOKE_BROWSER || "chromium";
@@ -577,6 +577,41 @@ async function main() {
           "their unsaved cells are gone.");
       }
       console.log("suite-section write: page and kernel both intact, section landed");
+    }
+
+    // 8. Optional: capture the page for human review.
+    //
+    //    Set SMOKE_SHOTS=<dir>. Off in CI — this proves nothing on its own, and
+    //    the `visual` job owns regression diffing. It exists because layout
+    //    defects in this feature have repeatedly passed every assertion and
+    //    been obvious in one image (#1263's collapsed pane did). The widths
+    //    bracket the single-pane breakpoint at 1140px, so the third shot is the
+    //    stacked fallback rather than a narrower split.
+    if (process.env.SMOKE_SHOTS) {
+      const dir = process.env.SMOKE_SHOTS;
+      await fsp.mkdir(dir, { recursive: true });
+      for (const width of [1600, 1280, 1000]) {
+        for (const scheme of ["light", "dark"]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.emulateMedia({ colorScheme: scheme });
+          await page.waitForTimeout(400);
+          const file = `${dir}/workbench-${width}-${scheme}.png`;
+          await page.screenshot({ path: file });
+          // Printed alongside the image because "is that dead space or just the
+          // editor's own empty background?" is not answerable from the picture,
+          // and guessing it either way is how a layout bug survives review.
+          const boxes = await page.evaluate(() => {
+            const r = (el) => (el ? Math.round(el.getBoundingClientRect().height) : null);
+            return {
+              pane: r(document.querySelector(".wb-pane-notebook")),
+              body: r(document.querySelector(".wb-notebook-body")),
+              frame: r(document.getElementById("jl-frame")),
+              edit: r(document.querySelector(".wb-pane-edit")),
+            };
+          });
+          console.log(`shot: ${file}  panes=${JSON.stringify(boxes)}`);
+        }
+      }
     }
 
     console.log("E2E OK — workbench isolation chain intact, panes wired as designed.");
