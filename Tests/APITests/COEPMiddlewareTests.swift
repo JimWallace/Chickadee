@@ -18,7 +18,8 @@ import VaporTesting
         app.get("instructor", ":assignmentID", "workbench") { _ in "workbench" }
         app.get("instructor", ":assignmentID", "edit") { _ in "edit" }
         app.get("jupyterlite", "notebooks", "index.html") { _ in "iframe" }
-        app.get("grading-worker.js") { _ in "// grading worker" }
+        app.get("python-grading-worker.js") { _ in "// python grading worker" }
+        app.get("r-grading-worker.js") { _ in "// r grading worker" }
         app.get("freeze-watchdog-worker.js") { _ in "// freeze worker" }
         app.get("pyodide-worker.js") { _ in "// pyodide worker" }
         app.get("plain") { _ in "plain" }
@@ -101,7 +102,9 @@ import VaporTesting
 
     @Test func isolatedPageWorkerScriptsReceiveCOEPWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            for path in ["/grading-worker.js", "/freeze-watchdog-worker.js"] {
+            for path in [
+                "/python-grading-worker.js", "/r-grading-worker.js", "/freeze-watchdog-worker.js",
+            ] {
                 try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(
@@ -111,6 +114,33 @@ import VaporTesting
                         res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
                 }
             }
+        }
+    }
+
+    /// The block this guards is invisible in unit tests, because a test app
+    /// serves whatever paths it declares: the real failure is a worker script
+    /// that EXISTS on disk and is spawned by the isolated notebook page but was
+    /// never added to `isolatedWorkerScripts`. Splitting the one Pyodide grading
+    /// worker into one worker per language did exactly that, and the only thing
+    /// that caught it was a browser probe reporting 12/12 hangs. Enumerate the
+    /// shipped grading workers instead, so the next rename fails here.
+    @Test func everyShippedGradingWorkerIsIsolated() throws {
+        let publicDir = URL(fileURLWithPath: #filePath)  // Tests/APITests/<thisFile>
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Public")
+        let names = try FileManager.default.contentsOfDirectory(atPath: publicDir.path)
+            .filter { $0.hasSuffix("-grading-worker.js") }
+            .sorted()
+        #expect(!names.isEmpty, "expected at least one grading worker under Public/")
+        for name in names {
+            #expect(
+                NotebookAssetIsolationMiddleware.isolatedWorkerScripts.contains("/" + name),
+                """
+                Public/\(name) is spawned from the isolated notebook page, so it must be in \
+                isolatedWorkerScripts or the browser blocks it (ERR_BLOCKED_BY_RESPONSE)
+                """)
         }
     }
 
@@ -127,7 +157,7 @@ import VaporTesting
 
     @Test func workerScriptsAreNotIsolatedWhenDisabled() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/grading-worker.js") { res async in
+            try await app.testing().test(.GET, "/python-grading-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }

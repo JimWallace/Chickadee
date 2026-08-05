@@ -518,8 +518,8 @@ extension.
 
 ### Verifying it
 
-`Tools/r-grading-smoke/smoke.mjs` (run it with `scripts/r-grading-smoke.sh`,
-gated in CI by `.github/workflows/r-grading-smoke.yml`) serves `Public/` and
+`Tools/browser-grading-smoke/smoke.mjs` (run it with `scripts/browser-grading-smoke.sh`,
+gated in CI by `.github/workflows/browser-grading-smoke.yml`) serves `Public/` and
 grades real R scripts through the real kernel in a real browser. That matters
 because everything else in the R grading coverage proves code *resolves* — the
 Node suite drives a fake worker, and `swift test` never leaves the server. The
@@ -547,5 +547,5 @@ every R test into a pass.
   reverse for Python.
 - `Tests/APITests/BrowserRunnerSeedLanguageTests.swift` — pins the browser's
   `_ck_inputs.R` rendering against `AssignmentLanguage.renderInputsFile(.r)`.
-- `Tools/r-grading-smoke/smoke.mjs` — the only check that boots a kernel; see
+- `Tools/browser-grading-smoke/smoke.mjs` — the only check that boots a kernel; see
   "Verifying it" above.

@@ -43,6 +43,22 @@
 // has one auto-compute in flight at a time (the debounce coalesces),
 // but the id field keeps the protocol self-contained.
 
+//
+// LOAD-BEARING CSP DEPENDENCY (measured 2026-08, docs/xeus-python-grading-spike.md).
+// This is a CLASSIC worker, and Pyodide 3.14 refuses to load in one:
+//   throw new Error("Classic web workers are not supported")
+// It detects a classic worker by probing `importScripts("data:text/javascript,")`
+// and treating success as proof.  Chickadee's CSP is
+// `script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:` — no `data:` — so that
+// probe is blocked by policy, throws, and reports FALSE.  Pyodide concludes it is
+// not in a classic worker and loads normally.
+//
+// So this file works because a security header defeats a feature probe.  Adding
+// `data:` to script-src would break every browser-graded Python submission; they
+// would fail over to the native worker and grade correctly but silently slower,
+// with nothing pointing at the CSP.  If script-src ever needs `data:`, convert
+// this to a module worker (`import { loadPyodide } from '/pyodide/pyodide.mjs'`)
+// in the same change.
 importScripts('/pyodide/pyodide.js');
 
 let _pyodide = null;

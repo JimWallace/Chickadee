@@ -26,6 +26,7 @@
 import {
     empackLockToMambajsLock,
     bootstrapEmpackPackedEnvironment,
+    bootstrapPython,
     loadSharedLibs,
     waitRunDependencies,
 } from '@emscripten-forge/mambajs-core';
@@ -34,6 +35,11 @@ import { initUntarJS } from '@emscripten-forge/untarjs';
 globalThis.ChickadeeXeusBootstrap = {
     empackLockToMambajsLock,
     bootstrapEmpackPackedEnvironment,
+    // Only xeus-python needs this: the CPython runtime has to be brought up
+    // after the env is unpacked, which xeus-r has no equivalent of. Upstream's
+    // initializeInterpreter branches on `kernelSpec.name === 'xpython'` for
+    // exactly this reason.
+    bootstrapPython,
     loadSharedLibs,
     waitRunDependencies,
     initUntarJS,
