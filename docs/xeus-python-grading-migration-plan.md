@@ -54,7 +54,7 @@ Everything below assumes this is settled.
 - `Public/grading-shared.js` — the Python grading semantics (env config,
   per-script exec, stdout capture, exit-code derivation). **Most of this carries
   over unchanged; see §3.**
-- `Tools/r-grading-smoke/` — the pattern for a probe that boots a real kernel.
+- `Tools/browser-grading-smoke/` — the pattern for a probe that boots a real kernel.
 
 `RunnerCore` owns the suite loop and output interpretation and does not change.
 If a diff touches how an exit code becomes a `TestOutcome`, something has gone
@@ -145,7 +145,7 @@ most needs it for. It was caught only by a probe that booted a real kernel.
 
 Required before flipping the default:
 
-- **Extend `Tools/r-grading-smoke`** (or add a sibling) to grade Python scripts
+- **Extend `Tools/browser-grading-smoke`** (or add a sibling) to grade Python scripts
   through the real kernel: a pass, a fail, an uncaught exception with a message
   that must reach stderr, and a script reading `chickadee_seed()` and
   `_ck_inputs.py`. Assert on stderr explicitly — that is the check that would

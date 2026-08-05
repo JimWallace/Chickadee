@@ -47,10 +47,10 @@ Tools/vendor/node_modules/
 /node_modules/
 Tools/vendor/package-lock.json
 
-# R grading smoke probe toolchain (Tools/r-grading-smoke) — the probe script and
-# its package.json are checked in; Playwright installs on demand in CI.
-Tools/r-grading-smoke/node_modules/
-Tools/r-grading-smoke/package-lock.json
+# Browser grading smoke probe toolchain (Tools/browser-grading-smoke) — the probe
+# script and its package.json are checked in; Playwright installs on demand in CI.
+Tools/browser-grading-smoke/node_modules/
+Tools/browser-grading-smoke/package-lock.json
 
 # Visual-regression working dirs (Tools/visual-regression; committed baselines
 # live in Tools/visual-regression/baselines/).

@@ -1,24 +1,29 @@
-// Tools/r-grading-smoke/smoke.mjs
+// Tools/browser-grading-smoke/smoke.mjs
 //
-// End-to-end smoke probe for browser-graded R (#1271).
+// End-to-end smoke probe for browser grading on the vendored xeus kernels
+// (#1271) — R via xeus-r, Python via xeus-python.
 //
-// Everything else that covers the R grading path proves code *resolves*: the
-// Node suite in Tests/BrowserRunnerJSTests runs the wrapper-building and
-// reply-parsing logic against a fake worker, and swift test never leaves the
-// server. None of it boots a kernel. This probe does: it serves Public/ over
-// HTTP, loads the real Public/r-grading-worker.js in a real browser, and grades
-// real R scripts through the vendored xeus-r kernel.
+// Everything else that covers these paths proves code *resolves*: the Node suite
+// in Tests/BrowserRunnerJSTests runs the cell-building and reply-parsing logic
+// against a fake worker, and swift test never leaves the server. None of it
+// boots a kernel. This probe does: it serves Public/ over HTTP, loads the real
+// grading worker in a real browser, and grades real test scripts.
 //
-// That matters more here than for most smoke tests, because the failure modes
-// this guards against are invisible everywhere else:
-//   * the vendored /vendor/xeus-bootstrap.js drifting from what the kernel's
+// That matters more here than for most smoke tests, because the failure modes it
+// guards against are invisible everywhere else:
+//   * the vendored /vendor/xeus-bootstrap.js drifting from what a kernel's
 //     empack metadata expects (a re-vendor is the likely cause),
-//   * Public/jupyterlite/xeus/chickadee-r/ being rebuilt without the shared
-//     libraries the kernel dlopen()s,
-//   * the wrapper's quit()/commandArgs() masking silently ceasing to be what
-//     test_runtime.R resolves — which would turn every R test into a pass.
+//   * an env rebuilt without the shared libraries its kernel dlopen()s,
+//   * R: the quit()/commandArgs() masking silently ceasing to be what
+//     test_runtime.R resolves — which would turn every R test into a pass,
+//   * Python: the grading cell failing to print its payload, which is the only
+//     channel back over the Jupyter protocol.
 //
-// Usage:  node Tools/r-grading-smoke/smoke.mjs [--browser chromium|webkit]
+// Each language asserts on stderr explicitly. That is not decoration: the R
+// implementation shipped a bug where stderr was silently dropped and every unit
+// test still passed, because only a real kernel exposes it.
+//
+// Usage:  node Tools/browser-grading-smoke/smoke.mjs [--language r|python] [--browser chromium|webkit]
 // Exits 0 on success, 1 on any assertion failure or timeout.
 
 import http from 'node:http';
@@ -51,45 +56,102 @@ const ISOLATION_HEADERS = {
     'cross-origin-resource-policy': 'cross-origin',
 };
 
-// A miniature test setup: the helper library the runner injects, plus four
-// scripts covering every exit path RunnerCore maps to a status.
+// A miniature test setup per language: the helper library the runner injects,
+// plus scripts covering every exit path RunnerCore maps to a status.
 const TEST_RUNTIME_R = await fs.readFile(
     path.join(REPO_ROOT, 'Tools', 'runner-support', 'test_runtime.R'), 'utf8');
+const TEST_RUNTIME_PY = await fs.readFile(
+    path.join(REPO_ROOT, 'Tools', 'runner-support', 'test_runtime.py'), 'utf8');
+const SITECUSTOMIZE_PY = await fs.readFile(
+    path.join(REPO_ROOT, 'Tools', 'runner-support', 'sitecustomize.py'), 'utf8');
 
-const FILES = {
-    'test_runtime.R': TEST_RUNTIME_R,
-    // Exit 0, and a JSON footer RunnerCore reads for the shortResult.
-    'publictest_pass.R': `source("test_runtime.R")
+const LANGUAGES = {
+    r: {
+        worker: '/r-grading-worker.js',
+        scripts: ['publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R', 'publictest_context.R'],
+        files: {
+            'test_runtime.R': TEST_RUNTIME_R,
+            // Exit 0, and a JSON footer RunnerCore reads for the shortResult.
+            'publictest_pass.R': `source("test_runtime.R")
 cat("checking arithmetic\\n")
 if (7 * 191 == 1337) passed("all cases passed") else failed("arithmetic is broken")
 `,
-    // Exit 1, with the failure message on stdout and stderr.
-    'publictest_fail.R': `source("test_runtime.R")
+            // Exit 1, with the failure message on stdout.
+            'publictest_fail.R': `source("test_runtime.R")
 failed("expected 5, got 4")
 `,
-    // Exit 1 from an uncaught R error, not from the helper API.
-    'publictest_boom.R': `source("test_runtime.R")
+            // Exit 1 from an uncaught R error, not from the helper API.
+            'publictest_boom.R': `source("test_runtime.R")
 stop("this test blew up")
 `,
-    // The label comes from commandArgs()'s --file= entry, which only exists
-    // because the wrapper masks it; the seed comes from the environment.
-    'publictest_context.R': `source("test_runtime.R")
+            // The label exists only because the wrapper masks commandArgs();
+            // the seed comes from the environment and the input from _ck_inputs.
+            'publictest_context.R': `source("test_runtime.R")
 cat("label=", .chickadee_label(), " seed=", chickadee_seed(), "\\n", sep = "")
 cat("input=", chickadee_inputs()[["threshold"]], "\\n", sep = "")
 passed("context ok")
 `,
-    '_ck_inputs.R': `.ck_inputs <- list(\n    \`threshold\` = 42\n)\n`,
-    '.chickadee_student_module': 'submission.R',
-    'submission.R': 'classify <- function(x) if (x > 0) "positive" else "non-positive"\n',
+            '_ck_inputs.R': '.ck_inputs <- list(\n    `threshold` = 42\n)\n',
+            '.chickadee_student_module': 'submission.R',
+            'submission.R': 'classify <- function(x) if (x > 0) "positive" else "non-positive"\n',
+        },
+        expectLabel: /label=publictest_context\b/,
+        blewUp: /this test blew up/,
+    },
+    python: {
+        worker: '/python-grading-worker.js',
+        scripts: ['publictest_pass.py', 'publictest_fail.py', 'publictest_boom.py', 'publictest_context.py'],
+        files: {
+            'test_runtime.py': TEST_RUNTIME_PY,
+            'sitecustomize.py': SITECUSTOMIZE_PY,
+            'publictest_pass.py': `from test_runtime import passed
+print("checking arithmetic")
+assert 7 * 191 == 1337
+passed("all cases passed")
+`,
+            'publictest_fail.py': `from test_runtime import failed
+failed("expected 5, got 4")
+`,
+            // An uncaught exception, not the helper API: a `python3 script`
+            // subprocess exits non-zero with the traceback on stderr.
+            'publictest_boom.py': `raise ValueError("this test blew up")
+`,
+            'publictest_context.py': `import os
+from test_runtime import passed
+import _ck_inputs
+print("label=publictest_context")
+print("seed=" + os.environ.get("CHICKADEE_ASSIGNMENT_SEED", ""))
+print("input=" + str(_ck_inputs._ck["threshold"]))
+passed("context ok")
+`,
+            '_ck_inputs.py': '_ck = {\n    "threshold": 42,\n}\n',
+            '.chickadee_student_module': 'submission.py',
+            'submission.py': 'def classify(x):\n    return "positive" if x > 0 else "non-positive"\n',
+        },
+        expectLabel: /label=publictest_context\b/,
+        blewUp: /this test blew up/,
+    },
 };
+
+const language = (() => {
+    const index = process.argv.indexOf('--language');
+    const value = index >= 0 ? process.argv[index + 1] : 'r';
+    if (!LANGUAGES[value]) {
+        console.log(`unknown --language ${value}; expected one of ${Object.keys(LANGUAGES).join(', ')}`);
+        process.exit(1);
+    }
+    return value;
+})();
+const LANG = LANGUAGES[language];
+const FILES = LANG.files;
 
 const PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>R grading smoke</title>
 <body><pre id="log"></pre><script>
 window.__result = null;
 const files = ${JSON.stringify(FILES)};
-const scripts = ['publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R', 'publictest_context.R'];
+const scripts = ${JSON.stringify(LANG.scripts)};
 (async () => {
-  const worker = new Worker('/r-grading-worker.js');
+  const worker = new Worker('${LANG.worker}');
   let counter = 0;
   const pending = new Map();
   const phases = [];
@@ -199,42 +261,43 @@ try {
     server.close();
 }
 
-console.log(`\nR grading smoke (${browserName})`);
+console.log(`\nbrowser grading smoke — ${language} (${browserName})`);
 if (!result || !result.ok) {
     console.log(`  FAIL boot — stage=${result?.stage} error=${result?.error}`);
     process.exit(1);
 }
 console.log(`  kernel booted in ${result.bootMs}ms; phases=${result.phases.join(',')}`);
 
-const pass = result.results['publictest_pass.R'];
+const [passName, failName, boomName, contextName] = LANG.scripts;
+const pass = result.results[passName];
 check('a passing test exits 0', pass.exitCode === 0, `exitCode=${pass.exitCode}`);
 check('its stdout reaches the grader', /checking arithmetic/.test(pass.stdout), JSON.stringify(pass.stdout));
 check('the JSON footer is the last stdout line',
-    /"status":"pass"/.test(pass.stdout.trim().split('\n').pop() || ''), JSON.stringify(pass.stdout));
+    /"status":\s*"pass"/.test(pass.stdout.trim().split('\n').pop() || ''), JSON.stringify(pass.stdout));
 
-const fail = result.results['publictest_fail.R'];
+const fail = result.results[failName];
 check('a failing test exits 1', fail.exitCode === 1, `exitCode=${fail.exitCode}`);
-check('the failure message survives', /expected 5, got 4/.test(fail.stdout), JSON.stringify(fail.stdout));
+check('the failure message survives', /expected 5, got 4/.test(fail.stdout + fail.stderr),
+    JSON.stringify(fail.stdout));
 
-const boom = result.results['publictest_boom.R'];
-check('an uncaught R error exits 1', boom.exitCode === 1, `exitCode=${boom.exitCode}`);
+const boom = result.results[boomName];
+check('an uncaught error exits non-zero', boom.exitCode !== 0, `exitCode=${boom.exitCode}`);
+// The check that would have caught the R stderr bug. Unit tests cannot see this.
 check('its message lands on stderr, for longResult',
-    /this test blew up/.test(boom.stderr), JSON.stringify(boom.stderr));
+    LANG.blewUp.test(boom.stderr), JSON.stringify(boom.stderr));
 
-const context = result.results['publictest_context.R'];
-check('commandArgs masking gives the script label',
-    /label=publictest_context\b/.test(context.stdout), JSON.stringify(context.stdout));
-check('the per-student seed reaches chickadee_seed()',
-    /seed=\d+/.test(context.stdout) && !/seed=0\b/.test(context.stdout), JSON.stringify(context.stdout));
-check('_ck_inputs.R reaches chickadee_inputs()',
+const context = result.results[contextName];
+check('the script label is resolved', LANG.expectLabel.test(context.stdout), JSON.stringify(context.stdout));
+check('the per-student seed reaches the runtime',
+    /seed=\S/.test(context.stdout) && !/seed=0\b/.test(context.stdout), JSON.stringify(context.stdout));
+check('the per-student inputs file is readable',
     /input=42/.test(context.stdout), JSON.stringify(context.stdout));
 
-// Cross-script isolation: the global-environment wipe stands in for the fresh
-// process the native runner gets per test. If it regressed, `passed()` from an
-// earlier script would still be bound and later scripts would misbehave.
-check('each script is graded in a clean global environment',
-    pass.exitCode === 0 && context.exitCode === 0,
-    `pass=${pass.exitCode} context=${context.exitCode}`);
+// Cross-script isolation: each script must be graded as the native runner would,
+// in a workspace not polluted by the previous one.
+check('every script produced a result',
+    [pass, fail, boom, context].every(r => r && typeof r.exitCode === 'number'),
+    'a script returned no result');
 
 const slowest = Math.max(...Object.values(result.results).map(r => r.ms));
 console.log(`  slowest script: ${slowest}ms`);

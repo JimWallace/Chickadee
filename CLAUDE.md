@@ -111,7 +111,7 @@ event loop between top-level expressions and does not regain control for
 ~180ms — a *wait*, not work: one expression summing 8M elements costs less
 than one summing 1, and R's own clock reports 0ms across nested expressions vs
 ~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
-~0.8s). Only a real kernel proves any of this, so `Tools/r-grading-smoke` boots
+~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
 
 **Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**

@@ -122,6 +122,7 @@ private func resolveAppConfig(
                 oidc: preloaded.oidc,
                 security: preloaded.security,
                 scanMode: preloaded.scanMode,
+                browserGrading: preloaded.browserGrading,
                 database: preloaded.database,
                 lockout: preloaded.lockout,
                 workers: preloaded.workers,
