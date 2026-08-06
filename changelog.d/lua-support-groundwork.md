@@ -52,3 +52,25 @@
   likewise notebook checks, and Lua notebooks extracted through the Python
   sanitizer), so the interpreter fix is only safe as part of finishing the
   second half.
+
+- **A language conformance matrix** (`Tests/APITests/LanguageConformanceMatrixTests`)
+  — what "supported" *means*, asserted for every `AssignmentLanguage` rather
+  than for whichever ones someone remembered. Before it, the suite had exactly
+  one test parameterised over language and it read
+  `arguments: [AssignmentLanguage.python, .r]` — a hand-listed pair, not
+  `allCases`, so a third case would have left it silently testing two languages
+  and passing. That is the same fail-open shape as the `chickadee-*` glob and
+  `expected_language`; this was the third instance and the worst-placed, since
+  it is the thing meant to notice omissions.
+
+  Everything in the matrix iterates `allCases`, and the per-language glue it
+  needs itself lives in one exhaustive `adapter(for:)` switch, so a new case
+  cannot compile without supplying it. It covers structural invariants
+  (extensions and kernel aliases disjoint, inputs filename consistent with the
+  language, kernel env file exists), **the interpreter being present on the
+  runner image** (the exit-127 defect), every `PatternKind` and
+  `NotebookCheckKind` rendering per language with unsupported kinds *named*
+  rather than merely absent, every generated script **parsing in its own
+  language**, and the inputs file the server writes being the one the language
+  actually reads back. `PatternKind` gained `CaseIterable` to make the kind half
+  possible — it had none, so the kinds could not be iterated at all.
