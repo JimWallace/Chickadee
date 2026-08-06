@@ -30,23 +30,97 @@
 // language is closed, chosen at compile time, and two of the three differ by
 // one character.
 //
-// WHAT IS DELIBERATELY *NOT* HERE. This holds facts — extensions, filenames,
-// kernel aliases, how the language is spelled to a student. It does NOT hold
-// the three answers that are JUDGEMENTS:
+// FACTS, AND ONE JUDGEMENT THAT REPLACED THREE. Most of this is plain fact —
+// extensions, filenames, kernel aliases, how the language is spelled to a
+// student. Those were eight parallel switches and are now eight fields.
 //
-//   `runnerProvidedModules`, `studentModulePrefixes`,
-//   `supportFilesPathEnvironmentVariable`
+// `runnerProvidedModules`, `studentModulePrefixes` and
+// `supportFilesPathEnvironmentVariable` were a different problem: three
+// switches, three chances to copy the neighbour's answer — and the neighbour is
+// exactly who you must not copy, since R and Lua land on OPPOSITE answers for
+// the same shape. They were not three questions. They were three projections of
+// one: `ModuleResolution`, how the language reaches code that is not the
+// student's. It is asked once now, and they are derived.
 //
-// Those stay as their own documented switches on `AssignmentLanguage`, because
-// for them the reasoning IS the value. `runnerProvidedModules` is empty for R
-// and non-empty for Lua — the same shape with the opposite answer, because R
-// reaches its runtime with a file read and Lua with a real module load. Flatten
-// that into a struct literal and it becomes three strings someone copies from
-// the neighbour, which is the exact mistake the runbook shouts about. A field in
-// a literal invites filling in; a switch arm with four lines of rationale above
-// it invites reading.
+// That reduction was checked against three languages this codebase does not
+// have (Octave, Java, C++) before it was made — see `ModuleResolution`. Octave
+// is why it is one judgement PLUS one fact rather than one judgement alone, and
+// C++ is why the reduction stops where it does.
 
 import Foundation
+
+/// How a language reaches code that is not the student's own.
+///
+/// THE ONE JUDGEMENT. `runnerProvidedModules`, `studentModulePrefixes` and
+/// `supportFilesPathEnvironmentVariable` used to be three separate switches,
+/// three chances to copy the neighbour's answer by mistake — and the neighbour
+/// is exactly who you must not copy, since R and Lua land on opposite answers
+/// for the same shape. They are all projections of this single question, so it
+/// is asked once and they are derived.
+///
+/// Scored against three languages this codebase does not have, to check the
+/// idea was not overfitted to the three it does:
+///
+/// | language | resolution | derives correctly? |
+/// |---|---|---|
+/// | Python | `byName("PYTHONPATH")` + a `sitecustomize` hook | yes |
+/// | R | `fileRead` (`source()`) | yes |
+/// | Lua | `byName("LUA_PATH")`, cwd already on path | yes |
+/// | Octave | `byName("OCTAVE_PATH")`, resolved by filename | yes — but see below |
+/// | Java | `byName("CLASSPATH")` | yes |
+/// | C++ | none — `#include` is compile-time | n/a, and see below |
+///
+/// **Octave is why the search-path variable needs a second input.** R is
+/// file-based and needs no variable; Octave is *also* file-based in spirit and
+/// needs `OCTAVE_PATH`. What actually decides it is not the resolution
+/// mechanism but `workingDirectoryIsOnDefaultSearchPath` — a per-implementation
+/// accident (Lua puts `./?.lua` on the path, Python and Octave do not). Hence
+/// one judgement plus one fact, not one judgement alone.
+///
+/// **C++ is why this type stops here.** A compiled language reaches other code
+/// at compile time, so none of these three fields mean anything for it — but it
+/// also would not need them: Chickadee already grades C++ today through a `.sh`
+/// suite script and the existing `make` step, with no `AssignmentLanguage`
+/// involvement at all. This type is about AUTHORING (generated families,
+/// notebook checks, personalization, in-browser kernels), not grading. The
+/// place C++ would genuinely break is `literal(_:)` — `JSONValue` is
+/// dynamically typed and C++ needs a type for every literal, so `[1, "two"]`
+/// has no rendering. That is an impossibility rather than a judgement, and it
+/// is recorded in docs/adding-a-xeus-kernel.md rather than anticipated here.
+public enum ModuleResolution: Equatable, Sendable {
+    /// Code is reached by READING A FILE — R's `source()`. Nothing is
+    /// name-addressable, so nothing is importable, no prefix can be declared,
+    /// and no search-path variable exists to set.
+    case fileRead
+
+    /// Code is reached by NAME, resolved against a search path.
+    ///
+    /// - Parameter searchPathVariable: the environment variable that extends
+    ///   that path, or nil where the language has none.
+    /// - Parameter interpreterHookModules: modules the INTERPRETER itself
+    ///   auto-loads, as distinct from ones the runner injects. Python's
+    ///   `sitecustomize` is the only instance across all six languages
+    ///   surveyed; it lives here because it is a property of how that runtime
+    ///   resolves modules, not a fourth thing to remember.
+    case byName(searchPathVariable: String?, interpreterHookModules: Set<String> = [])
+}
+
+/// Files the RUNNER writes into every grading workspace, which are therefore
+/// importable in any language that resolves modules by name.
+///
+/// One constant rather than a per-language list: the runner writes the same
+/// things whatever the language, so a per-language copy could only ever be
+/// wrong. It was — Python's copy omitted `solution`, while `test_runtime.py`
+/// itself special-cases `solution.py`, so a hand-authored `import solution`
+/// was reported unsatisfiable by the import guard.
+private let runnerInjectedModuleNames: Set<String> = ["test_runtime", "_ck_inputs"]
+
+/// Prefixes of names a student's extracted submission can be loaded under. The
+/// concrete name depends on what they upload and is unknowable while authoring,
+/// so the guard matches on prefix.
+private let studentSubmissionModulePrefixes: [String] = [
+    "solution", "submission", "student", "_ck_",
+]
 
 /// Everything factual about one assignment language.
 ///
@@ -116,6 +190,21 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// `minimumVersion` requirement may be matching against.
     public let interpreterProbe: InterpreterProbe
 
+    /// THE ONE JUDGEMENT — see `ModuleResolution`. Three former switches derive
+    /// from this, so it is asked once instead of three times.
+    public let moduleResolution: ModuleResolution
+
+    /// THE ONE FACT the resolution mechanism cannot supply: whether the
+    /// language's default search path already contains the working directory.
+    ///
+    /// Separate because it does not follow from the mechanism — Lua puts
+    /// `./?.lua` on `package.path` and so needs no variable set, while Python
+    /// and Octave resolve by name just the same and do. Setting a variable that
+    /// is not needed is not harmless either: assigning `LUA_PATH` REPLACES the
+    /// default path unless it contains `;;`, which would break the very lookup
+    /// it was meant to enable.
+    public let workingDirectoryIsOnDefaultSearchPath: Bool
+
     public struct InterpreterProbe: Equatable, Sendable {
         public let command: String
         public let versionArguments: [String]
@@ -134,7 +223,9 @@ public struct LanguageDescriptor: Equatable, Sendable {
         notebookKernelNames: Set<String>,
         kernelEnvironmentFileName: String,
         missingDependencyFailureDescription: String,
-        interpreterProbe: InterpreterProbe
+        interpreterProbe: InterpreterProbe,
+        moduleResolution: ModuleResolution,
+        workingDirectoryIsOnDefaultSearchPath: Bool
     ) {
         self.displayName = displayName
         self.scriptExtensions = scriptExtensions
@@ -144,6 +235,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.kernelEnvironmentFileName = kernelEnvironmentFileName
         self.missingDependencyFailureDescription = missingDependencyFailureDescription
         self.interpreterProbe = interpreterProbe
+        self.moduleResolution = moduleResolution
+        self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
     }
 }
 
@@ -165,7 +258,14 @@ extension AssignmentLanguage {
                 notebookKernelNames: [],
                 kernelEnvironmentFileName: "environment-python.yml",
                 missingDependencyFailureDescription: "an ImportError",
-                interpreterProbe: .init(command: "python3", versionArguments: ["--version"])
+                interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
+                moduleResolution: .byName(
+                    searchPathVariable: "PYTHONPATH",
+                    interpreterHookModules: ["sitecustomize"]),
+                // The driver runs from a temp directory with cwd set to the
+                // support-files directory, so `sys.path[0]` is the driver's
+                // directory and not the one the helpers are in.
+                workingDirectoryIsOnDefaultSearchPath: false
             )
         case .r:
             return LanguageDescriptor(
@@ -176,7 +276,12 @@ extension AssignmentLanguage {
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
                 kernelEnvironmentFileName: "environment-r.yml",
                 missingDependencyFailureDescription: "an error from library()",
-                interpreterProbe: .init(command: "R", versionArguments: ["--version"])
+                interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
+                // `source("test_runtime.R")` is a file read, not a module load:
+                // there is no name to resolve, so nothing is importable and no
+                // guard could reject anything.
+                moduleResolution: .fileRead,
+                workingDirectoryIsOnDefaultSearchPath: true
             )
         case .lua:
             return LanguageDescriptor(
@@ -188,8 +293,65 @@ extension AssignmentLanguage {
                 kernelEnvironmentFileName: "environment-lua.yml",
                 missingDependencyFailureDescription: "an error from require()",
                 // `-v`, not `--version` — see `interpreterProbe`'s note.
-                interpreterProbe: .init(command: "lua", versionArguments: ["-v"])
+                interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
+                // `require("test_runtime")` IS a module load — the same shape as
+                // R's and the opposite answer, which is why this is asked per
+                // language rather than inherited.
+                moduleResolution: .byName(searchPathVariable: "LUA_PATH"),
+                // Verified rather than assumed: `lua -e 'print(package.path)'`
+                // ends with `./?.lua;./?/init.lua`.
+                workingDirectoryIsOnDefaultSearchPath: true
             )
+        }
+    }
+}
+
+// MARK: - Derived from the resolution mechanism
+//
+// Three properties that used to be three hand-written switches. They are
+// computed here so a new language answers ONE question (plus one fact) rather
+// than three — and cannot answer them inconsistently, which was possible before
+// and had happened.
+
+extension AssignmentLanguage {
+
+    /// Modules the runner injects into the grading workspace, importable even
+    /// though no kernel package ships them.
+    ///
+    /// Empty for a `fileRead` language by FACT, not omission: R reaches its
+    /// runtime with `source()`, so there is no name for a guard to check.
+    public var runnerProvidedModules: Set<String> {
+        switch descriptor.moduleResolution {
+        case .fileRead:
+            return []
+        case .byName(_, let interpreterHookModules):
+            return runnerInjectedModuleNames.union(interpreterHookModules)
+        }
+    }
+
+    /// Prefixes of extracted-submission modules the import guard must not
+    /// reject. Empty for a `fileRead` language, for the same reason.
+    public var studentModulePrefixes: [String] {
+        switch descriptor.moduleResolution {
+        case .fileRead: return []
+        case .byName: return studentSubmissionModulePrefixes
+        }
+    }
+
+    /// Environment variable that puts the assignment's support files on this
+    /// language's module search path when the personalization driver runs, or
+    /// nil when none is needed.
+    ///
+    /// Needs BOTH inputs: the mechanism supplies which variable exists, and
+    /// `workingDirectoryIsOnDefaultSearchPath` decides whether setting it would
+    /// achieve anything. Octave is the case that proves the second is required
+    /// — file-resolved like R, yet it does need `OCTAVE_PATH`.
+    public var supportFilesPathEnvironmentVariable: String? {
+        switch descriptor.moduleResolution {
+        case .fileRead:
+            return nil
+        case .byName(let searchPathVariable, _):
+            return descriptor.workingDirectoryIsOnDefaultSearchPath ? nil : searchPathVariable
         }
     }
 }

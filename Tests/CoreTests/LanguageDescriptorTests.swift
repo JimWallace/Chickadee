@@ -100,4 +100,63 @@ import Testing
     func capabilityNameIsTheWireValueAndNotADescriptorField(_ language: AssignmentLanguage) {
         #expect(language.capabilityName == language.rawValue)
     }
+
+    // MARK: - The three derived from one judgement + one fact
+
+    /// The derivation reproduces what the three hand-written switches said,
+    /// with one deliberate exception asserted below. This is the evidence that
+    /// collapsing them changed nothing by accident.
+    @Test func theDerivationsMatchTheHandWrittenAnswers() {
+        #expect(
+            AssignmentLanguage.python.runnerProvidedModules
+                == ["test_runtime", "sitecustomize", "_ck_inputs"])
+        #expect(AssignmentLanguage.r.runnerProvidedModules.isEmpty)
+        #expect(AssignmentLanguage.lua.runnerProvidedModules == ["test_runtime", "_ck_inputs"])
+
+        #expect(AssignmentLanguage.python.supportFilesPathEnvironmentVariable == "PYTHONPATH")
+        #expect(AssignmentLanguage.r.supportFilesPathEnvironmentVariable == nil)
+        // Lua resolves by name and HAS a variable, but `./?.lua` is already on
+        // `package.path` — so the fact, not the mechanism, makes this nil.
+        #expect(AssignmentLanguage.lua.supportFilesPathEnvironmentVariable == nil)
+
+        #expect(AssignmentLanguage.r.studentModulePrefixes.isEmpty)
+    }
+
+    /// The one deliberate change: Python's hand-written prefix list omitted
+    /// `solution` and `submission`, while `test_runtime.py` itself special-cases
+    /// `solution.py` — so a hand-authored `import solution` in a browser-graded
+    /// test was reported unsatisfiable. Deriving from one shared list fixes it,
+    /// and can only ever WIDEN what the guard accepts, which is the direction
+    /// that guard resolves ambiguity by design.
+    @Test func everyNameAddressableLanguageAcceptsTheNamesTheRunnerCanWrite() {
+        for language in AssignmentLanguage.allCases {
+            guard case .byName = language.descriptor.moduleResolution else { continue }
+            for produced in ["solution", "submission", "student", "_ck_inputs"] {
+                #expect(
+                    language.studentModulePrefixes.contains(where: { produced.hasPrefix($0) })
+                        || language.runnerProvidedModules.contains(produced),
+                    """
+                    \(language) would reject `\(produced)`, which the runner can genuinely write                     into a grading workspace — the import guard would report an instructor's                     hand-authored reference to it as unsatisfiable.
+                    """)
+            }
+        }
+    }
+
+    /// A `fileRead` language declares nothing importable, and that is a fact
+    /// rather than an omission: there is no name to resolve, so no guard could
+    /// reject anything. Pinned so a future language cannot copy R's empties
+    /// while actually loading modules by name — the exact mistake this
+    /// derivation removes the opportunity for.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func onlyFileReadLanguagesDeclareNothingImportable(_ language: AssignmentLanguage) {
+        switch language.descriptor.moduleResolution {
+        case .fileRead:
+            #expect(language.runnerProvidedModules.isEmpty)
+            #expect(language.studentModulePrefixes.isEmpty)
+            #expect(language.supportFilesPathEnvironmentVariable == nil)
+        case .byName:
+            #expect(!language.runnerProvidedModules.isEmpty)
+            #expect(!language.studentModulePrefixes.isEmpty)
+        }
+    }
 }

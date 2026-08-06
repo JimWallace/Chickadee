@@ -318,64 +318,6 @@ extension AssignmentLanguage {
         descriptor.missingDependencyFailureDescription
     }
 
-    /// Modules the RUNNER injects into the grading workspace, which are therefore
-    /// importable even though no kernel package ships them.
-    ///
-    /// Empty for R by fact, not by omission: R reaches its runtime with
-    /// `source("test_runtime.R")`, which is a file read rather than a package
-    /// load, so nothing here is `library()`-able. A third language must answer
-    /// this rather than inherit R's silence.
-    public var runnerProvidedModules: Set<String> {
-        switch self {
-        case .python: return ["test_runtime", "sitecustomize", "_ck_inputs"]
-        case .r: return []
-        // NON-empty, and this is the arm that shows why the question has to be
-        // asked per language rather than copied from the neighbour. R's is
-        // empty because `source("test_runtime.R")` is a file read — there is no
-        // module to resolve, so there is nothing to declare. Lua reaches
-        // exactly the same runtime with `require("test_runtime")`, which IS a
-        // module load. Same shape as R, opposite answer.
-        //
-        // Both names are genuinely injected by the runner and genuinely
-        // requirable, which is what this property asks. Note that nothing
-        // consumes the Lua answer TODAY: `KernelImportGuard.language(forFile:)`
-        // returns nil for `.lua` on purpose, because emscripten-forge ships no
-        // Lua library packages and a guard with an empty inventory would reject
-        // every `require`, starting with this one. Stated correctly here so it
-        // is already right if that ever changes.
-        //
-        // `sitecustomize` has no Lua equivalent: it is a CPython interpreter
-        // hook, not a general idea.
-        case .lua: return ["test_runtime", "_ck_inputs"]
-        }
-    }
-
-    /// Prefixes of extracted-submission modules. The concrete name depends on
-    /// what a student uploads and is unknowable while authoring, so the guard
-    /// matches on prefix. Empty for R for the same reason as above.
-    public var studentModulePrefixes: [String] {
-        switch self {
-        case .python: return ["student", "_ck_"]
-        case .r: return []
-        // Generated Lua reaches the submission through
-        // `chickadee.load_student()`, which is a `loadfile` — so on the
-        // generated path this could honestly be empty, as R's is.
-        //
-        // It is not, because Lua differs from R in the way that matters here:
-        // R has no module system, so an instructor hand-writing a test has no
-        // choice but to `source()`. Lua has `require`, and requiring the
-        // submission is the natural thing to reach for. Declaring the prefixes
-        // costs nothing and states the truth — the submission IS importable
-        // under these names — following the guard's own rule that ambiguity
-        // resolves toward reporting nothing, because a false positive blocks an
-        // instructor from saving with no self-service fix.
-        //
-        // Like `runnerProvidedModules` above, nothing reads the Lua answer
-        // while `KernelImportGuard` declines to route `.lua`.
-        case .lua: return ["solution", "student", "_ck_"]
-        }
-    }
-
     /// See `LanguageDescriptor.interpreterProbe`. Kept as a tuple here because
     /// every call site destructures it.
     public var interpreterProbe: (command: String, versionArguments: [String]) {
@@ -390,28 +332,4 @@ extension AssignmentLanguage {
     /// list is matched against. The raw value, so the two halves cannot drift.
     public var capabilityName: String { rawValue }
 
-    /// Environment variable that puts the assignment's support files on this
-    /// language's module search path when the personalization driver runs.
-    /// `nil` where the language has no such mechanism.
-    public var supportFilesPathEnvironmentVariable: String? {
-        switch self {
-        case .python: return "PYTHONPATH"
-        // Rscript resolves `source()` relative to the working directory the
-        // driver already sets, so there is nothing to put on a path.
-        case .r: return nil
-        // Lua LOOKS like it wants `LUA_PATH`, and it does not. That variable
-        // takes search *patterns* rather than directories, so setting it to a
-        // bare path would not resolve anything — and the standalone interpreter
-        // already carries `./?.lua` in `package.path`, while the driver spawns
-        // with its cwd set to the support-files directory. Verified rather than
-        // reasoned: `lua -e 'print(package.path)'` on the runner image ends
-        // with `./?.lua;./?/init.lua`.
-        //
-        // Setting it would also be actively harmful: assigning `LUA_PATH`
-        // REPLACES the default path unless it contains `;;`, so the obvious
-        // wrong version of this line removes `./?.lua` and breaks the very
-        // lookup it was meant to enable.
-        case .lua: return nil
-        }
-    }
 }

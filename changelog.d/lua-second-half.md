@@ -92,3 +92,10 @@
   message, and then "No R submission file was found to grade" — blamed for a
   platform failure. Guarantees apply to the student's own notebook only, so an
   instructor's markdown-only helper still skips leniently, now with a warning.
+- **The import guard rejected `import solution` on Python assignments.**
+  `studentModulePrefixes` was hand-written per language and Python's omitted
+  `solution` and `submission`, while `test_runtime.py` itself special-cases
+  `solution.py` — so an instructor's hand-authored reference to their own
+  reference solution was reported unsatisfiable in a browser-graded test. The
+  prefixes are now derived from one shared list, which can only widen what the
+  guard accepts.

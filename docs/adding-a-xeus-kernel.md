@@ -376,20 +376,22 @@ protocol or a class hierarchy — short version: a closed enum makes a missing
 answer a **compile error**, and the alternatives make an omission look like a
 decision. Read it before proposing to change the shape.
 
-What is deliberately NOT in the descriptor is the handful of arms that are
-JUDGEMENTS rather than facts, because for those the reasoning is the value:
+One judgement remains, and it replaced three:
 
-- `runnerProvidedModules`, `studentModulePrefixes` — what the import guard must
-  not reject. **Answer these from the language, not by copying R:** R is empty
-  because it reaches its runtime with `source()`, a file read; Lua's is
-  non-empty because `require("test_runtime")` is a genuine module load. Same
-  shape, opposite answer — which is exactly why they are not descriptor fields.
-  A field in a literal invites filling in; a switch arm with four lines of
-  rationale above it invites reading.
-- `supportFilesPathEnvironmentVariable` — and verify it. Lua looks like it
-  wants `LUA_PATH`; it does not, because that variable takes search *patterns*
-  and the standalone interpreter already carries `./?.lua`. One command settles
-  it: `lua -e 'print(package.path)'`.
+- `moduleResolution` — **how does the language reach code that is not the
+  student's?** `.fileRead` (R's `source()`) or `.byName(searchPathVariable:)`
+  (Python, Lua). From it `runnerProvidedModules`, `studentModulePrefixes` and
+  `supportFilesPathEnvironmentVariable` are all *derived*, so a new language
+  answers one question instead of three — and cannot answer them
+  inconsistently, which was possible before and had happened.
+
+  R is `.fileRead` and Lua is `.byName` for the same runtime helper, which is
+  the whole reason this must be answered from the language rather than copied
+  from the neighbour.
+- `workingDirectoryIsOnDefaultSearchPath` — the one FACT the mechanism cannot
+  supply. Lua puts `./?.lua` on `package.path` and so needs no variable set;
+  Python resolves by name just the same and does. Verify it, do not assume:
+  `lua -e 'print(package.path)'`.
 
 And two behaviours that take arguments and so stay methods: `literal(_:)` (needs
 a new `JSONValue.<x>Literal`) and `renderInputsFile(_:)` (the `_ck_inputs.<x>`
@@ -523,6 +525,53 @@ types and so pointed at nothing.
 7. **The submission policy.** See "The submission policy" below. Nothing fails when a
    language is missing from it; the student just gets silence instead of a
    message.
+
+### What this model cannot see, scored against three languages it does not have
+
+The reduction above — three judgements to one plus one fact — was checked
+against Octave, Java and C++ *before* it was made, because a theory that is
+clean on three data points is exactly when it is most likely overfitted. It
+survived, but not intact, and the failures are the useful part.
+
+| language | `moduleResolution` | derives? |
+|---|---|---|
+| Python | `byName("PYTHONPATH")`, `sitecustomize` hook | yes |
+| R | `fileRead` (`source()`) | yes |
+| Lua | `byName("LUA_PATH")`, cwd already on path | yes |
+| Octave | `byName("OCTAVE_PATH")`, resolved by filename | yes — with the extra fact |
+| Java | `byName("CLASSPATH")` | yes |
+| C++ | none; `#include` is compile-time | no — see below |
+
+**Octave is why one judgement was not enough.** R is file-based and needs no
+path variable. Octave is file-based in spirit and *does* need `OCTAVE_PATH`.
+What decides it is not the mechanism but whether the default search path already
+contains the working directory — a per-implementation accident. Without the
+fourth language that would have shipped as a clean-looking derivation that was
+quietly wrong for the next language to arrive.
+
+**Two axes the model cannot represent at all.** All three current languages sit
+on the same side of both, so neither is visible in the code:
+
+1. **Interpreted vs compiled.** Every `ScriptInterpreter` case hands a *file* to
+   a *command*. Java and C++ need a build step first. Chickadee HAS one
+   (`TestProperties.makefile`), so this is not a wall — but nothing in
+   `AssignmentLanguage` knows about it, and `interpreterProbe` in particular
+   assumes a thing you can hand a file to.
+2. **Dynamically vs statically typed literals.** `literal(_:)` renders a
+   `JSONValue`, which is dynamically typed. C++ needs a type for every literal,
+   so `[1, "two"]` has no rendering at all. That is an impossibility, not a
+   judgement, and it would force this type to grow a notion of *which
+   `JSONValue` shapes can I render* — which none of the three current languages
+   need.
+
+**The reframe worth carrying forward:** a language does not have to be an
+`AssignmentLanguage` to be graded. Chickadee can grade C++ today through a `.sh`
+suite script and the `make` step, with none of this machinery. `AssignmentLanguage`
+is about AUTHORING — generated pattern families, notebook checks,
+personalization, in-browser kernels. So the first question about a candidate
+language is not "what is its module system" but **"does it want the authoring
+surface at all?"** For a compiled language the honest answer may be no, and that
+is a much cheaper place to land than half of this document.
 
 ### The submission policy: what a student is guaranteed
 
