@@ -10,15 +10,6 @@
   re-adding the kernel means re-vendoring that payload and restoring its CSP
   allowances.
 
-### Fixed
-
-- **Kernel package requests no longer cost a database lookup each.**
-  `/jupyterlite/xeus/` — ~230 MB and the largest asset tree in the app — was not
-  on `EditorAssetFastPathMiddleware`, so every one of the ~50 package fetches a
-  kernel boot makes rode the full middleware chain and paid a Fluent session
-  lookup it never needed. That is exactly the class-wide-rush cost the fast path
-  exists to remove, and the kernels were the one tree it missed.
-
 ### Changed
 
 - **`script-src` keeps `'unsafe-eval'`, and now says why.** Retiring Pyodide was
@@ -34,6 +25,20 @@
   classic-worker probe — is genuinely gone, since that probe went with Pyodide.
 
 ### Known
+
+- **The vendored kernels are still not on the asset fast path.**
+  `/jupyterlite/xeus/` is ~230 MB and the largest asset tree in the app, and a
+  kernel boot fetches every package in its environment — ~50 requests, each
+  riding the full middleware chain and paying a Fluent session lookup it does
+  not need. Putting it on `EditorAssetFastPathMiddleware` was written and
+  reverted here: it is the only behavioural server change in this release, and
+  WebKit's editor smoke failed deterministically across it while Chromium
+  passed. The tree is not only package tarballs — `kernels.json` and each
+  `<env>/<kernel>/kernel.json` are fetched during app startup, so
+  short-circuiting the chain also skips it for requests made before a kernel
+  exists, on the one engine we deliberately serve non-isolated with the
+  JupyterLite service worker intercepting fetches. Scoping the prefix to
+  `kernel_packages/` is the likely shape; it needs a green WebKit smoke first.
 
 - **The `Atomics.waitAsync` polyfill patch still does not cover the kernel we
   run, and fixing it needs WebKit evidence first.**
