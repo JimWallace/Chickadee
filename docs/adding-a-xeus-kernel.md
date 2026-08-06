@@ -365,30 +365,36 @@ tell you" below — those are the ones that have historically shipped broken.
 
 ### The 26 the compiler names
 
-**`Sources/Core/AssignmentLanguage.swift`** — the hub. Eleven arms, each a real
-decision rather than a fill-in:
+**`Sources/Core/AssignmentLanguage.swift`** — the hub. The FACTS now live in one
+`LanguageDescriptor` literal per language (`Core/LanguageDescriptor.swift`), so
+most of this is one struct to write rather than eleven arms to find: display
+name, script extensions, generated extension, inputs filename, kernel aliases,
+kernel env file, missing-dependency wording, interpreter probe.
 
-- `scriptExtensions` — the extension that marks the language
-- `notebookKernelNames` — kernelspec aliases that positively mark a notebook as
-  this language. Python is deliberately EMPTY (it is the fallback); a new
-  language is not, or its notebooks resolve to Python. Has a generated JS twin —
-  see "What the compiler will not tell you".
-- `literal(_:)` — needs a new `JSONValue.<x>Literal`
-- `inputsFileName` / `renderInputsFile` — the `_ck_inputs.<x>` contract, which
-  must match byte-for-byte what the language's `test_runtime` reads AND what
-  the browser's `personalizationInputsSource<X>` writes
-- `generatedScriptExtension` — feeds `spec_hash` and the `TestSetupCache` key
-- `kernelEnvironmentFileName`, `missingDependencyFailureDescription` — the
-  authoring rejection message
+That file also records why this is a descriptor on a closed enum rather than a
+protocol or a class hierarchy — short version: a closed enum makes a missing
+answer a **compile error**, and the alternatives make an omission look like a
+decision. Read it before proposing to change the shape.
+
+What is deliberately NOT in the descriptor is the handful of arms that are
+JUDGEMENTS rather than facts, because for those the reasoning is the value:
+
 - `runnerProvidedModules`, `studentModulePrefixes` — what the import guard must
   not reject. **Answer these from the language, not by copying R:** R is empty
   because it reaches its runtime with `source()`, a file read; Lua's is
   non-empty because `require("test_runtime")` is a genuine module load. Same
-  shape, opposite answer.
+  shape, opposite answer — which is exactly why they are not descriptor fields.
+  A field in a literal invites filling in; a switch arm with four lines of
+  rationale above it invites reading.
 - `supportFilesPathEnvironmentVariable` — and verify it. Lua looks like it
   wants `LUA_PATH`; it does not, because that variable takes search *patterns*
   and the standalone interpreter already carries `./?.lua`. One command settles
   it: `lua -e 'print(package.path)'`.
+
+And two behaviours that take arguments and so stay methods: `literal(_:)` (needs
+a new `JSONValue.<x>Literal`) and `renderInputsFile(_:)` (the `_ck_inputs.<x>`
+contract, which must match byte-for-byte what the language's `test_runtime`
+reads AND what the browser's `personalizationInputsSource<X>` writes).
 
 **`Sources/RunnerCore/`** — notebook extraction. If the language flattens cells
 behind an inert comment marker (as R and Lua both do), reuse

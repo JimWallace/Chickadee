@@ -43,32 +43,8 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// `scripts/generate-js-constants.sh`.
     public static let luaKernelNames: Set<String> = ["xlua", "lua"]
 
-    /// Kernelspec `name` values (and `language_info.name`) that positively mark
-    /// a notebook as THIS language — the per-language generalisation
-    /// `rKernelNames` was always going to need, and the table a new language
-    /// edits instead of adding another `isXNotebookMetadata`.
-    ///
-    /// Python is deliberately EMPTY, and that is not an oversight. It is
-    /// `default`, reached by falling through when nothing else matched; giving
-    /// it a positive alias set would change how every existing assignment
-    /// resolves (a notebook with no kernelspec, or an unrecognised one, must
-    /// keep landing on Python). Positive detection is for the non-default
-    /// languages only.
-    public var notebookKernelNames: Set<String> {
-        switch self {
-        case .python: return []
-        case .r: return AssignmentLanguage.rKernelNames
-        // `xlua` is the vendored kernel's name in
-        // Public/jupyterlite/xeus/kernels.json; `lua` is what `language_info`
-        // reports. Both are listed because a kernel Chickadee vendors is
-        // reachable from the editor's Kernel -> Change Kernel menu whether or
-        // not anyone intended it to be — that is the rule this whole arc is
-        // built on ("there is no such thing as a grading-only kernel"), and a
-        // notebook an author produced that way has to resolve to something
-        // other than Python.
-        case .lua: return AssignmentLanguage.luaKernelNames
-        }
-    }
+    /// See `LanguageDescriptor.notebookKernelNames`.
+    public var notebookKernelNames: Set<String> { descriptor.notebookKernelNames }
 
     /// The language a notebook's `metadata` positively declares, or nil when it
     /// declares nothing recognisable (in which case the caller falls back to
@@ -93,19 +69,8 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         return nil
     }
 
-    /// Graded-script filename extensions (lowercased) that mark this language.
-    /// The single source of truth for the "`.R` script → R assignment" sniff,
-    /// consolidated from the resolution, worker-routing, and raw-script
-    /// inlining sites that each hand-inlined it
-    /// (docs/language-handling-review.md §4 — the same shape `rKernelNames`
-    /// was in before #1230).
-    public var scriptExtensions: Set<String> {
-        switch self {
-        case .python: return ["py"]
-        case .r: return ["r"]
-        case .lua: return ["lua"]
-        }
-    }
+    /// See `LanguageDescriptor.scriptExtensions`.
+    public var scriptExtensions: Set<String> { descriptor.scriptExtensions }
 
     /// The language a graded-script filename extension implies, or nil for an
     /// extension that carries no language signal (`sh`, data files, …).
@@ -264,24 +229,14 @@ extension AssignmentLanguage {
     }
 
     /// Filename of the per-student grading-inputs file the worker materializes.
-    public var inputsFileName: String {
-        switch self {
-        case .python: return "_ck_inputs.py"
-        case .r: return "_ck_inputs.R"
-        case .lua: return "_ck_inputs.lua"
-        }
-    }
+    /// See `LanguageDescriptor.inputsFileName`.
+    public var inputsFileName: String { descriptor.inputsFileName }
 
     /// Extension for scripts Chickadee generates (pattern-family cases,
     /// notebook checks). `.py` for Python — unchanged, so every existing
     /// generated filename, `spec_hash` and `TestSetupCache` key is stable.
-    public var generatedScriptExtension: String {
-        switch self {
-        case .python: return "py"
-        case .r: return "R"
-        case .lua: return "lua"
-        }
-    }
+    /// See `LanguageDescriptor.generatedScriptExtension`.
+    public var generatedScriptExtension: String { descriptor.generatedScriptExtension }
 
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
@@ -353,22 +308,14 @@ extension AssignmentLanguage {
 
     /// The env file a maintainer edits to add a package to this language's
     /// browser-grading kernel, named in the authoring rejection message.
-    public var kernelEnvironmentFileName: String {
-        switch self {
-        case .python: return "environment-python.yml"
-        case .r: return "environment-r.yml"
-        case .lua: return "environment-lua.yml"
-        }
-    }
+    /// See `LanguageDescriptor.kernelEnvironmentFileName`.
+    public var kernelEnvironmentFileName: String { descriptor.kernelEnvironmentFileName }
 
     /// How a missing dependency presents to a student at grade time, phrased for
     /// the same rejection message.
+    /// See `LanguageDescriptor.missingDependencyFailureDescription`.
     public var missingDependencyFailureDescription: String {
-        switch self {
-        case .python: return "an ImportError"
-        case .r: return "an error from library()"
-        case .lua: return "an error from require()"
-        }
+        descriptor.missingDependencyFailureDescription
     }
 
     /// Modules the RUNNER injects into the grading workspace, which are therefore
@@ -429,48 +376,14 @@ extension AssignmentLanguage {
         }
     }
 
-    /// The command a runner probes to decide whether it can grade this
-    /// language, with the arguments that make it print a version and exit 0.
-    ///
-    /// This exists because runner capability matching had no idea a third
-    /// language existed. `RunnerProfileDetector` hand-listed `python3` / `R` /
-    /// `swift`, so no runner ever advertised Lua — which is worse than it
-    /// sounds: an instructor who typed `lua` into an assignment's required
-    /// languages would have matched NO runner and queued that assignment's jobs
-    /// forever. Driving the probe from `allCases` means a new language is
-    /// advertised the day its case exists.
-    ///
-    /// The version arguments are per-language for the same reason the
-    /// conformance matrix's are: `--version` is not universal. `lua` prints a
-    /// usage message and exits 1 for it; the flag is `-v`.
-    ///
-    /// A KNOWN ASYMMETRY, deliberately preserved: R is probed with `R` while
-    /// the worker invokes `Rscript`. Both ship together in `r-base`, and the
-    /// two print differently-shaped version strings — changing the probe would
-    /// change the version text already advertised by deployed runners, which an
-    /// assignment's `minimumVersion` requirement may be matching against. Not
-    /// worth the churn to tidy.
+    /// See `LanguageDescriptor.interpreterProbe`. Kept as a tuple here because
+    /// every call site destructures it.
     public var interpreterProbe: (command: String, versionArguments: [String]) {
-        switch self {
-        case .python: return ("python3", ["--version"])
-        case .r: return ("R", ["--version"])
-        case .lua: return ("lua", ["-v"])
-        }
+        (descriptor.interpreterProbe.command, descriptor.interpreterProbe.versionArguments)
     }
 
-    /// How the language is written in prose a STUDENT reads — an error about
-    /// their upload, a warning about a file that could not be graded.
-    ///
-    /// Not `rawValue`: that is a wire token (`r`, `lua`) and "is not a valid r
-    /// script" reads like a typo. Kept separate from `capabilityName` for the
-    /// same reason — one is matched against, the other is read.
-    public var displayName: String {
-        switch self {
-        case .python: return "Python"
-        case .r: return "R"
-        case .lua: return "Lua"
-        }
-    }
+    /// See `LanguageDescriptor.displayName`.
+    public var displayName: String { descriptor.displayName }
 
     /// The name this language advertises itself under in a runner's
     /// `languageVersions`, and the token an assignment's required-languages
