@@ -12,6 +12,16 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case python
     case r
 
+    /// What an assignment resolves to when nothing about it says otherwise.
+    ///
+    /// Named rather than written as `.python` at the comparison sites, because
+    /// those sites are asking "did resolution fall back?" and not "is this
+    /// Python?". The two questions have the same answer today and would diverge
+    /// the moment a third language existed: `manifestOnly == .python` would
+    /// stop consulting the notebook kernelspec for a Julia assignment that had
+    /// resolved positively, which is the opposite of what that guard wants.
+    public static let `default`: AssignmentLanguage = .python
+
     /// Kernelspec `name` values (and `language_info.name`) that mark an R
     /// notebook. The single source of truth for the sniff: every Swift consumer
     /// reads it through `isRNotebookMetadata(_:)` rather than re-listing the
@@ -133,7 +143,10 @@ extension AssignmentLanguage {
         notebookData: @autoclosure () -> Data?
     ) -> AssignmentLanguage {
         let manifestOnly = resolve(manifest: manifest)
-        guard manifest.language == nil, manifestOnly == .python else { return manifestOnly }
+        // `== .default`, not `== .python`: the question is whether resolution
+        // fell back, so that the kernelspec is only consulted when the manifest
+        // said nothing. See the `default` declaration.
+        guard manifest.language == nil, manifestOnly == .default else { return manifestOnly }
         guard let data = notebookData(),
             let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let metadata = notebook["metadata"] as? [String: Any]
@@ -239,6 +252,69 @@ extension AssignmentLanguage {
             return "\(header)\n.ck_inputs <- list(\n"
                 + assignments.joined(separator: ",\n")
                 + "\n)\n"
+        }
+    }
+
+    // MARK: - Language-specific facts that were boolean tests
+    //
+    // Each of these replaced an `if language == .python` / `== .r` at its call
+    // site. The equality form compiles fine when a third case is added and
+    // silently routes it down whichever branch it happens to fall — Python bytes
+    // for a Julia assignment, R's error wording for a Julia ImportError. An
+    // exhaustive switch here turns each of those into a compile error naming the
+    // decision that has to be made. See docs/language-handling-review.md §4.
+
+    /// The env file a maintainer edits to add a package to this language's
+    /// browser-grading kernel, named in the authoring rejection message.
+    public var kernelEnvironmentFileName: String {
+        switch self {
+        case .python: return "environment-python.yml"
+        case .r: return "environment-r.yml"
+        }
+    }
+
+    /// How a missing dependency presents to a student at grade time, phrased for
+    /// the same rejection message.
+    public var missingDependencyFailureDescription: String {
+        switch self {
+        case .python: return "an ImportError"
+        case .r: return "an error from library()"
+        }
+    }
+
+    /// Modules the RUNNER injects into the grading workspace, which are therefore
+    /// importable even though no kernel package ships them.
+    ///
+    /// Empty for R by fact, not by omission: R reaches its runtime with
+    /// `source("test_runtime.R")`, which is a file read rather than a package
+    /// load, so nothing here is `library()`-able. A third language must answer
+    /// this rather than inherit R's silence.
+    public var runnerProvidedModules: Set<String> {
+        switch self {
+        case .python: return ["test_runtime", "sitecustomize", "_ck_inputs"]
+        case .r: return []
+        }
+    }
+
+    /// Prefixes of extracted-submission modules. The concrete name depends on
+    /// what a student uploads and is unknowable while authoring, so the guard
+    /// matches on prefix. Empty for R for the same reason as above.
+    public var studentModulePrefixes: [String] {
+        switch self {
+        case .python: return ["student", "_ck_"]
+        case .r: return []
+        }
+    }
+
+    /// Environment variable that puts the assignment's support files on this
+    /// language's module search path when the personalization driver runs.
+    /// `nil` where the language has no such mechanism.
+    public var supportFilesPathEnvironmentVariable: String? {
+        switch self {
+        case .python: return "PYTHONPATH"
+        // Rscript resolves `source()` relative to the working directory the
+        // driver already sets, so there is nothing to put on a path.
+        case .r: return nil
         }
     }
 }
