@@ -438,11 +438,14 @@ extension WorkerDaemon {
                 }
             }
 
-            // Install shared Python test runtime helpers for every run.
+            // Install the shared test runtime helpers for every run — one per
+            // language, unconditionally. A setup's scripts are not classified
+            // until they run, and an unused helper costs one small file write.
             try stageTimings.measureSync("runtime_helper_setup") {
                 try writePythonRuntimeHelpers(in: testSetupDir)
                 try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
                 try writeRRuntimeHelper(in: testSetupDir)
+                try writeLuaRuntimeHelper(in: testSetupDir)
             }
 
             return JobPreparedWorkspace(

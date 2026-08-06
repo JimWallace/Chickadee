@@ -1,7 +1,13 @@
 # Adding a xeus kernel
 
-How to teach Chickadee a third in-browser language, and — more usefully — what
+How to teach Chickadee another in-browser language, and — more usefully — what
 that actually costs.
+
+> **This has now been done once, deliberately, with Lua.** Everything below was
+> written before; §"What the Lua run actually cost" at the end records what
+> held, what did not, and which of R's expensive lessons turned out not to
+> generalise. Read the two together — where they disagree, the Lua section is
+> the measurement and this text is the prediction.
 
 ## Read this first: two halves, very different sizes
 
@@ -86,6 +92,8 @@ completes or raises. A failure there is a real finding about the architecture
 rather than a mismatch you would have predicted. Its near-absent package
 ecosystem is a bonus: it exercises whether on-demand loading degrades gracefully
 with nothing to load.
+
+*This is what was done.* See "What the Lua run actually cost" below.
 
 **To teach with: `xeus-cpp` is more viable than it looks, and the REPL is not the
 problem.** It depends on `cppinterop` (CppInterOp, the Clang-REPL layer that
@@ -203,6 +211,14 @@ Do not reimplement it.
   maps the same extension to a native subprocess command, so the worker and the
   browser agree.
 
+  **Re-vendor the browser wasm in the same change.** `RoutingExecutor` calls
+  `classifyScript` out of the vendored `Public/runner-wasm/`, so until that is
+  rebuilt the browser classifies your extension as `unsupported` while the
+  native worker handles it fine — the #801 failure class.
+  `runner-wasm-vendor.yml` heals it on merge to `main`, but a release ships in
+  between. Run `scripts/build-runner-wasm.sh`, then
+  `scripts/runnercore-source-hash.sh > Public/runner-wasm/source.sha`.
+
 ### 8. Allowlist the worker for cross-origin isolation
 
 `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`. **This one has bitten
@@ -285,3 +301,115 @@ be *authored*. Still needed, and each is a new artifact:
 - notebook kernel-name aliases (`AssignmentLanguage.rKernelNames` generalises to
   per-language sets), runner capability strings, and the MCP tool descriptions
   that currently say "Python or R"
+
+## What the Lua run actually cost
+
+Lua shipped as `chickadee-lua` / `xlua`, browser-graded through
+`Public/lua-grading-worker.js`, and it stopped exactly where this document said
+it would: a language that can be **graded** and not one that can be **authored**.
+`AssignmentLanguage` is still `.python | .r`, there is no Lua literal renderer,
+no pattern-family or notebook-check renderer, and no personalization driver. So
+the boundary in "Where the second half begins" is real and was not crossed.
+
+### What held
+
+The claim that **the browser substrate is language-agnostic** survived contact.
+`Public/xeus-kernel-shared.js` was not modified — not one line. The whole
+browser half is two new files (a ~230-line `lua-grading-shared.js` and a
+~130-line worker that is mostly protocol), plus one arm each in
+`interpreterToKind`, `RoutingExecutor`, `ScriptClassification.swift` and
+`ScriptInvocation.swift`.
+
+The enumerated-not-discovered traps were also real, and both were hit exactly
+where predicted: `expected_language` in `check-xeus-vendored.sh` and the
+`XEUS_ENVS` array in `build-jupyterlite.sh`. Neither errors on a kernel it has
+never heard of. The `chickadee-*` naming rule is what made the module-index step
+pick the new env up for free.
+
+### What did not hold — R's two expensive lessons do not generalise
+
+This is the finding worth carrying forward. Both of R's hard-won rules are
+**xeus-r properties, not xeus-lite ones**, and treating them as substrate law
+would have cost days for nothing:
+
+- **The one-top-level-expression rule.** xeus-r yields to the JS event loop
+  between top-level expressions and does not regain control for ~180ms. Measured
+  on xeus-lua: a cell of 20 top-level `print` statements costs **5ms**, and a
+  cell summing 20 million integers costs **184ms** — wall time tracks the work,
+  which is precisely what the R numbers showed was *not* happening there. (This
+  matches the xeus-python spike, which measured a 5ms per-cell floor.)
+- **Reading stderr off the kernel's stream because a sink cannot see it.** That
+  is `evaluate::evaluate()`'s calling handlers, which are an R thing. Lua's
+  `io.stderr:write` reaches the kernel's stderr stream directly, and the wrapper
+  writes an uncaught error there itself.
+
+The lesson is not "ignore the R notes" but "each kernel's quirk is its own".
+Budget for one per kernel, as this document says; do not budget for the *same*
+one.
+
+### The quirk Lua did have, which no manifest predicts
+
+xeus-lua compiles a cell as `return <cell>` first, so it can report a value, and
+falls back to running it as a plain block. A cell that opens with a `local`
+declaration and then uses it satisfies neither reading cleanly — the fallback
+reports the name as an undefined **global**, with a confusing error naming a
+`_xeus_lua_return_expression` chunk the author never wrote. The wrapper is
+therefore a single call expression into a harness installed once at boot, which
+sidesteps the question: the harness's own statements are inside a function the
+kernel never re-parses.
+
+So Lua and R both end up sending "one expression" per script, for entirely
+unrelated reasons. That coincidence is a good way to reach the wrong conclusion
+about the next kernel.
+
+### The other per-language work, which was not substrate work
+
+- **`os.exit` masking**, the direct analogue of R's `quit()` masking — and the
+  same failure mode if it regresses: `passed()` and `failed()` would both raise
+  nothing the wrapper recognises, and every test would read as a clean exit 0.
+  The smoke test is the only thing that can see this.
+- **A per-script wipe of globals added since boot**, standing in for the fresh
+  process the native runner gives each test. R clears its global environment
+  outright; Lua cannot — `_G` *is* the standard library — so the wipe is keyed
+  on a boot snapshot. Two smoke fixtures (one leaks a global, the next asserts
+  it is gone and that `print` still exists) are what prove it.
+- **`package.path`.** `lua script.lua` searches the working directory; the
+  kernel's path points only at its own asset dir, so `require("test_runtime")`
+  would have failed in the browser and nowhere else.
+- **No directory listing.** `test_runtime.lua` cannot scan for the submission
+  the way its R and Python siblings do — Lua's standard library has no
+  `list.files`, and `io.popen` is a subprocess the wasm kernel does not have. It
+  reads the runner's `.chickadee_student_module` hint, which is written on every
+  job, with `solution.lua` as the fallback.
+
+### Costs, measured
+
+| | Lua | R | Python |
+|---|---|---|---|
+| env on disk | **19 MB** | 74 MB | 85 MB |
+| kernel boot (Chromium, local disk) | **2.5–3.1s** | ~4.0s | ~5.2s |
+| slowest graded script | **27ms** | seconds (attach) | ~1.1s |
+| packages available | **none** | 51 | 48 |
+
+"None" is the correct answer and not a gap: emscripten-forge carries no Lua
+library packages, so `importable-modules.json` has an empty `moduleOwners` and
+`runInstallingMissingPackages` correctly makes one pass and lets the original
+`module 'x' not found` stand. That is the half of the on-demand mechanism a
+student's typo actually hits, and Lua is the only env that can prove it
+terminates with nothing to install.
+
+`bootSeeds` is therefore also absent, deliberately: every package in the env is
+in `xeus-lua`'s own transitive closure (the 6 MB `python` package arrives via
+`jupyterlab_widgets` → `xwidgets` and is never executed), so a seed list would
+select all ten and save nothing.
+
+### One thing this document under-weighted
+
+Adding a case to `ScriptInterpreter` changes `Sources/RunnerCore/`, which means
+the **vendored browser wasm is stale until it is re-vendored** — the #801 class.
+`runner-wasm-vendor.yml` handles it automatically on merge to `main`, but with a
+one-release lag, during which `RoutingExecutor` would classify every `.lua`
+script as `unsupported` while the worker beside it graded them perfectly. Build
+it in the same change (`scripts/build-runner-wasm.sh`, then refresh
+`Public/runner-wasm/source.sha`) rather than relying on the lag. Step 7 above
+should say so.

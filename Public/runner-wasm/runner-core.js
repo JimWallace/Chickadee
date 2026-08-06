@@ -888,7 +888,7 @@ var UnsafeEventLoopYield = class extends Error {
 };
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.d509133d3dbb.wasm";
+var MODULE_PATH = "RunnerWasm.e51e2e93efda.wasm";
 async function createInstantiator(options, swift) {
   return {
     /**
@@ -2343,7 +2343,7 @@ async function initBrowser(_options) {
   const options = _options || {};
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.d509133d3dbb.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.e51e2e93efda.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module

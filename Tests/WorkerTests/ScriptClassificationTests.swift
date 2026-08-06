@@ -19,6 +19,8 @@ import Testing
         #expect(classifyScriptInterpreter(name: "t.php", source: "") == .php)
         #expect(classifyScriptInterpreter(name: "t.R", source: "") == .rscript)
         #expect(classifyScriptInterpreter(name: "t.r", source: "") == .rscript)
+        #expect(classifyScriptInterpreter(name: "t.lua", source: "") == .lua)
+        #expect(classifyScriptInterpreter(name: "t.LUA", source: "") == .lua)
     }
 
     @Test func extensionlessShebang() {
@@ -30,6 +32,7 @@ import Testing
         #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env ruby\nputs 1") == .ruby)
         #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/perl\nprint 1") == .perl)
         #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env node\nconsole.log(1)") == .node)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env lua\nprint(1)") == .lua)
     }
 
     @Test func unknownExtensionFallsToShebangThenContent() {

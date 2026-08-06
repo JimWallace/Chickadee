@@ -30,7 +30,7 @@ function defaultClassifyStub(name, source) {
   const base = String(name).slice(String(name).lastIndexOf('/') + 1);
   const dot = base.lastIndexOf('.');
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-  const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript' };
+  const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript', lua: 'lua' };
   if (byExt[ext]) return byExt[ext];
   const first = String(source || '').replace(/^[\uFEFF\s]+/, '').split('\n', 1)[0] || '';
   if (first.startsWith('#!')) {
@@ -39,6 +39,7 @@ function defaultClassifyStub(name, source) {
     if (lo.includes('node') || lo.includes('javascript')) return 'node';
     if (lo.includes('ruby')) return 'ruby';
     if (lo.includes('perl')) return 'perl';
+    if (lo.includes('lua')) return 'lua';
     if (lo.includes('bash')) return 'bash';
     if (lo.includes('zsh')) return 'zsh';
     if (lo.includes('sh')) return 'sh';

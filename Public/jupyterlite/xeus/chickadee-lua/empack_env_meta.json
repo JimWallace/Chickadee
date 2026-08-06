@@ -1,0 +1,137 @@
+{
+  "prefix": "/",
+  "packages": [
+    {
+      "name": "python_abi",
+      "version": "3.13",
+      "build": "8_cp313",
+      "filename_stem": "python_abi-3.13-8_cp313",
+      "filename": "python_abi-3.13-8_cp313.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xwidgets",
+      "version": "0.30.0",
+      "build": "h0b0027f_1",
+      "filename_stem": "xwidgets-0.30.0-h0b0027f_1",
+      "filename": "xwidgets-0.30.0-h0b0027f_1.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "nlohmann_json >=3.12",
+        "xeus >=6,<7",
+        "xproperty <0.13",
+        "jupyterlab_widgets >=3.0.15,<3.1.0",
+        "emscripten-abi >=4,<5.0a0",
+        "xeus >=6.0.2,<6.1.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "emscripten-abi",
+      "version": "4.0.9",
+      "build": "h267e887_9",
+      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
+      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xproperty",
+      "version": "0.12.1",
+      "build": "h0b0027f_0",
+      "filename_stem": "xproperty-0.12.1-h0b0027f_0",
+      "filename": "xproperty-0.12.1-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "nlohmann_json",
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "xeus-lua",
+      "version": "0.10.1",
+      "build": "h0b0027f_0",
+      "filename_stem": "xeus-lua-0.10.1-h0b0027f_0",
+      "filename": "xeus-lua-0.10.1-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "xeus >=6.0.3,<6.1.0a0",
+        "xwidgets >=0.30.0,<0.31.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "nlohmann_json-abi",
+      "version": "3.12.0",
+      "build": "h0f90c79_2",
+      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
+      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "nlohmann_json",
+      "version": "3.12.0",
+      "build": "h0b0027f_0",
+      "filename_stem": "nlohmann_json-3.12.0-h0b0027f_0",
+      "filename": "nlohmann_json-3.12.0-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "xeus",
+      "version": "6.0.5",
+      "build": "h0b0027f_0",
+      "filename_stem": "xeus-6.0.5-h0b0027f_0",
+      "filename": "xeus-6.0.5-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "python",
+      "version": "3.13.1",
+      "build": "h_2efca29_11_cp313",
+      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
+      "filename": "python-3.13.1-h_2efca29_11_cp313.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python_abi 3.13.* *_cp313",
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "jupyterlab_widgets",
+      "version": "3.0.16",
+      "build": "pyhcf101f3_1",
+      "filename_stem": "jupyterlab_widgets-3.0.16-pyhcf101f3_1",
+      "filename": "jupyterlab_widgets-3.0.16-pyhcf101f3_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
+      "subdir": "noarch"
+    }
+  ],
+  "specs": [
+    "xeus-lua"
+  ],
+  "channels": [
+    "https://repo.prefix.dev/emscripten-forge-4x",
+    "https://repo.prefix.dev/conda-forge"
+  ]
+}

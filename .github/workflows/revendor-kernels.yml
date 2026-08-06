@@ -1,7 +1,7 @@
 name: Re-vendor xeus kernels
 
-# Rebuilds the vendored JupyterLite bundle and its two xeus kernel environments
-# (chickadee-python, chickadee-r) and commits the result.
+# Rebuilds the vendored JupyterLite bundle and its xeus kernel environments
+# (chickadee-python, chickadee-r, chickadee-lua) and commits the result.
 #
 # WHY THIS EXISTS. The kernels are built by jupyterlite-xeus, which solves each
 # conda environment at build time — micromamba plus network to repo.prefix.dev.
@@ -66,8 +66,9 @@ permissions:
 jobs:
   revendor:
     runs-on: ubuntu-latest
-    # The two environment solves plus the full JupyterLite build dominate this;
-    # measured at roughly 15 minutes cold, less with a warm empack cache.
+    # The environment solves plus the full JupyterLite build dominate this;
+    # measured at roughly 15 minutes cold for two envs, less with a warm empack
+    # cache. chickadee-lua adds ~10 MB of packages and little time.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
