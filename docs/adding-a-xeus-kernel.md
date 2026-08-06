@@ -435,9 +435,10 @@ the three.
 
 ### What the compiler will *not* tell you
 
-**Five** things, each of which has shipped broken at least once. Number 5 was
-found during the Lua run and is the most dangerous of them, because it is a
-shape rather than a place.
+**Seven** things, each of which has shipped broken at least once. Numbers 5-7
+were found during the Lua run; 5 is the most dangerous, because it is a shape
+rather than a place, and 6-7 are whole subsystems that needed no change to their
+types and so pointed at nothing.
 
 1. **The interpreter on the runner image.** `Dockerfile` installs `python3`,
    `r-base` and `lua5.4`. A language whose binary is missing fails `env <lang>`
@@ -499,6 +500,62 @@ shape rather than a place.
    only the subscript was a compile error; the loader and the struct could be
    missed, leaving the new language with a permanently nil inventory. It is
    keyed by language now.
+6. **Runner capability matching, in BOTH directions.** `RunnerProfileDetector`
+   hand-listed the interpreters it probes, so no runner advertised the new
+   language however it was provisioned — and that is worse than an omission,
+   because an assignment REQUIRING the language then matched no runner and
+   queued forever. `detectRequirementSuggestions` hand-listed extensions, so an
+   assignment in the new language suggested no requirement and its jobs went to
+   any runner, including one with no interpreter (every test exiting 127). Both
+   read `AssignmentLanguage` now — the probe from `allCases`, extensions from
+   the one extension table.
+
+   The probe's ARGUMENTS matter as much as its command: `--version` works for
+   python3 and R and **fails on lua**, which exits 1 with a usage message. A
+   hardcoded `--version` leaves the language undetectable even after it is added
+   to the loop.
+7. **The submission policy.** See "The submission policy" below. Nothing fails when a
+   language is missing from it; the student just gets silence instead of a
+   message.
+
+### The submission policy: what a student is guaranteed
+
+Separate from "does the language grade", and easy to skip because nothing fails
+when you do. `Sources/Worker/SubmissionPolicy.swift` states, once, what
+Chickadee promises a student about their upload — valid notebook JSON, at least
+one code cell, unsupported files warn rather than fail, no gradeable source is
+an error naming the language. Adding a language means answering
+`submissionGuaranteeExemption` for every guarantee.
+
+**It is a policy value, not a protocol, and that is deliberate.** A protocol
+scatters the policy across N conformances where it cannot be read as policy,
+and — worse — it makes opting out INVISIBLE: an empty method body or an
+inherited default is indistinguishable from a decision nobody made. That is
+precisely how R and Lua ended up with no submission validation at all while
+Python had 445 lines of it. Here an exemption is a value with a reason attached,
+the reason is greppable, and `SubmissionPolicyTests` fails on an empty one.
+
+It is also not where the variation is. Walking the upload, MIME-classifying it,
+checking a notebook parses and has code cells, warning on files that cannot be
+graded — none of those are language questions. The genuinely per-language part
+is which extractor runs and what the output is called, and that already lives in
+RunnerCore.
+
+**Most guarantees admit no exemption, on purpose.** There is no honest reason
+for an R student to get silence where a Python student gets a message; that
+difference was never decided, it was just unbuilt. `theUniversalGuaranteesHaveNoExemptions`
+enforces it, and its failure message says so. The valve exists for things
+genuinely shaped by the language — today exactly one: R and Lua skip the
+introspectable `.source.*` sidecar, because it exists for `astStructure` checks
+and those are Python-only by design, so nothing would ever read the file.
+
+One scoping rule worth knowing before you touch it: the guarantees apply to the
+**student's own notebook**, identified by filename, and not to every `.ipynb` in
+the workspace. An instructor's bundled helper may legitimately be
+markdown-only, and failing a job over one would be a regression dressed as a
+fix. The Python normalizer gets that scoping free by walking only the
+submission directory; the generic extractor walks the merged workspace, so it is
+told which file is the student's.
 
 ### The browser half's own checklist
 
@@ -541,6 +598,12 @@ state this document exists to warn you about:
       message are seen
 - [ ] `LanguageConformanceMatrixTests` is green with the new case **and the
       interpreter actually present**; confirm the executed half did not skip
+- [ ] `submissionGuaranteeExemption` is answered for every guarantee, and every
+      exemption carries a reason you would defend to an instructor
+- [ ] a runner ADVERTISES the language (`interpreterProbe`) and an assignment in
+      it SUGGESTS a requirement — capability matching fails in both directions
+      and the second is worse: requiring a language no runner advertises queues
+      the assignment's jobs forever
 
 That fourth-from-last one is a real trap: Lua's runtime could read
 `_ck_inputs.lua` from day one, and the smoke test supplied one as a fixture —

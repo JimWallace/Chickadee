@@ -458,6 +458,20 @@ extension AssignmentLanguage {
         }
     }
 
+    /// How the language is written in prose a STUDENT reads — an error about
+    /// their upload, a warning about a file that could not be graded.
+    ///
+    /// Not `rawValue`: that is a wire token (`r`, `lua`) and "is not a valid r
+    /// script" reads like a typo. Kept separate from `capabilityName` for the
+    /// same reason — one is matched against, the other is read.
+    public var displayName: String {
+        switch self {
+        case .python: return "Python"
+        case .r: return "R"
+        case .lua: return "Lua"
+        }
+    }
+
     /// The name this language advertises itself under in a runner's
     /// `languageVersions`, and the token an assignment's required-languages
     /// list is matched against. The raw value, so the two halves cannot drift.

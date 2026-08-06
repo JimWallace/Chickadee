@@ -75,3 +75,20 @@
   submission declares instead of whether it is R. Python and R behaviour is
   unchanged, including the deliberate rule that a mixed Python+R suite keeps
   Python's normalizer.
+
+### Added
+
+- **A submission policy: what Chickadee guarantees a student about their
+  upload, stated once for every language.** `SubmissionPolicy` names the
+  guarantees — valid notebook JSON, at least one code cell, unsupported files
+  warn rather than fail, no gradeable source is an error naming the language —
+  and each language either provides one or exempts itself **with a reason**.
+  Only one exemption exists: R and Lua skip the introspectable sidecar, because
+  it exists for `astStructure` checks and those are Python-only by design.
+
+  This closes a real asymmetry. The Python path had 445 lines of validation and
+  student-facing errors; the generic path used `guard let … else { continue }`,
+  so an R or Lua student whose notebook was corrupt or empty got no file, no
+  message, and then "No R submission file was found to grade" — blamed for a
+  platform failure. Guarantees apply to the student's own notebook only, so an
+  instructor's markdown-only helper still skips leniently, now with a warning.

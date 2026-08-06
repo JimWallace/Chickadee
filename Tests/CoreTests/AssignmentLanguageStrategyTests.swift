@@ -85,9 +85,15 @@ import Testing
         #expect(decoded.language == nil)
     }
 
-    /// Both languages round-trip and survive the runner-facing projection —
+    /// Every language round-trips and survives the runner-facing projection —
     /// Python is recorded explicitly, not left to be re-inferred.
-    @Test(arguments: [AssignmentLanguage.python, .r])
+    ///
+    /// `allCases`, not a hand-listed pair. This read `[AssignmentLanguage
+    /// .python, .r]` and so silently stopped covering the third language the
+    /// day it existed — the same "enumerated rather than discovered, fails
+    /// open" shape `LanguageConformanceMatrixTests` was written to end, still
+    /// alive one file over.
+    @Test(arguments: AssignmentLanguage.allCases)
     func recordedLanguageRoundTripsAndSurvivesRunnerSanitize(
         _ language: AssignmentLanguage
     ) throws {

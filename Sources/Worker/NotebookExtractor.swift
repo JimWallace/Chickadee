@@ -34,7 +34,7 @@ struct NotebookExtractor {
 
     func extractPythonSource(from notebook: [String: Any], filename: String) throws -> NotebookExtraction {
         guard let cells = notebook["cells"] as? [[String: Any]] else {
-            throw SubmissionNormalizationError.invalidPythonSubmission(filename)
+            throw SubmissionNormalizationError.invalidSubmission(filename, .python)
         }
 
         // Delegate to the shared, dependency-free core so the native worker and
@@ -76,6 +76,77 @@ struct NotebookExtractor {
     }
 }
 
+/// One notebook's language and cells, after the submission policy has had its
+/// say. Nil means "skip this file" — only ever returned for a notebook that is
+/// not the student's own.
+private struct ResolvedNotebook {
+    let language: AssignmentLanguage
+    let cells: [[String: Any]]
+}
+
+/// Read a notebook, decide its language, and apply the submission guarantees.
+///
+/// Split out of `extractNotebooksToCode` because it is the whole policy step and
+/// the loop around it is just file plumbing — and because inlining both pushed
+/// that function past the cyclomatic-complexity limit, which was a fair signal
+/// rather than a threshold to raise.
+private func resolveNotebookForExtraction(
+    at item: URL,
+    forcedLanguage: AssignmentLanguage?,
+    isStudentSubmission: Bool,
+    warnings: inout [String]
+) throws -> ResolvedNotebook? {
+    // The language has to be known before the file can be validated, because
+    // the guarantees are declared per language — so the bytes are read
+    // leniently first and validated once the language is settled.
+    guard let data = try? Data(contentsOf: item) else {
+        // Unreadable on disk is an infrastructure fault, not a student one —
+        // but for the student's own file it still has to be loud.
+        if isStudentSubmission {
+            throw SubmissionNormalizationError.invalidNotebookJSON(item.lastPathComponent)
+        }
+        return nil
+    }
+    let lenient = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+
+    // A caller-forced language wins over the notebook's own kernelspec;
+    // otherwise sniff it with the shared detector.
+    //
+    // `fromNotebookMetadata`, not the older boolean `isRNotebook`. The boolean
+    // form answers "R or not", so a Lua notebook took the `else` branch and was
+    // extracted as PYTHON — a silent wrong answer the compiler could not flag,
+    // because `?:` on two cases type-checks perfectly well however many cases
+    // exist. The general form returns the language it recognised, or nil to
+    // mean "nothing recognisable, use the default".
+    let language =
+        forcedLanguage
+        ?? (lenient?["metadata"] as? [String: Any]).flatMap(AssignmentLanguage.fromNotebookMetadata)
+        ?? .default
+
+    // For the student's own notebook the policy THROWS a message they can act
+    // on; for anything else it stays lenient and merely warns, because failing
+    // a job over an instructor's markdown-only helper would be a regression
+    // dressed as a fix.
+    guard isStudentSubmission else {
+        guard let cells = lenient?["cells"] as? [[String: Any]] else {
+            if submissionGuaranteeApplies(.unsupportedFilesWarn, to: language) {
+                warnings.append(
+                    "\(item.lastPathComponent) could not be read as a notebook and was skipped.")
+            }
+            return nil
+        }
+        return ResolvedNotebook(language: language, cells: cells)
+    }
+
+    let validated = try SubmissionValidation.validatedNotebook(
+        data: data, filename: item.lastPathComponent, language: language)
+    let cells = (validated["cells"] as? [[String: Any]]) ?? []
+    let codeCellCount = cells.filter { ($0["cell_type"] as? String) == "code" }.count
+    try SubmissionValidation.requireCodeCells(
+        codeCellCount, filename: item.lastPathComponent, language: language)
+    return ResolvedNotebook(language: language, cells: cells)
+}
+
 // MARK: - Notebook-to-code extraction for test setup directories
 
 /// Extract code cells from all .ipynb notebooks in `directory` into .py or .R source files.
@@ -93,12 +164,29 @@ struct NotebookExtractor {
 ///   kernelspec was rewritten by the in-browser editor still extracts to the
 ///   source the suite can actually grade. Nil keeps the per-notebook kernelspec
 ///   detection, which is what an assignment with no owning language wants.
-func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguage? = nil) throws {
+/// - Parameter studentNotebookName: the filename of the STUDENT's own upload,
+///   when known. The submission guarantees in `SubmissionPolicy` are enforced
+///   for that file and only that file: a corrupt or empty student notebook is
+///   an error they can act on, while an instructor's helper notebook in the
+///   same workspace may legitimately be markdown-only and must keep the lenient
+///   skip. The Python normalizer gets this scoping for free by walking only the
+///   submission directory; this walks the merged workspace, so it has to be
+///   told.
+/// - Returns: warnings about files that could not be graded — the
+///   `unsupportedFilesWarn` guarantee, which the generic path previously did
+///   not provide at all.
+@discardableResult
+func extractNotebooksToCode(
+    in directory: URL,
+    forcedLanguage: AssignmentLanguage? = nil,
+    studentNotebookName: String? = nil
+) throws -> [String] {
     let items =
         (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
         )) ?? []
+    var warnings: [String] = []
 
     for item in items where item.pathExtension.lowercased() == "ipynb" {
         // Every .ipynb in the directory is extracted to .py (or .R).  The
@@ -106,26 +194,16 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguag
         // this function runs (driven by manifest.starterNotebook), so the
         // only notebooks remaining are the student/canonical submission and
         // any instructor-provided helper notebooks that should be converted.
-        guard
-            let data = try? Data(contentsOf: item),
-            let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let cells = notebook["cells"] as? [[String: Any]]
-        else { continue }
-
-        // A caller-forced language wins over the notebook's own kernelspec;
-        // otherwise sniff it with the shared detector.
-        //
-        // `fromNotebookMetadata`, not the older boolean `isRNotebook`. The
-        // boolean form answers "R or not", so a Lua notebook took the `else`
-        // branch and was extracted as PYTHON — a silent wrong answer the
-        // compiler could not flag, because `?:` on two cases type-checks
-        // perfectly well however many cases exist. The general form returns the
-        // language it recognised, or nil to mean "nothing recognisable, use the
-        // default", which is the distinction the fallback actually wants.
-        let language =
-            forcedLanguage
-            ?? (notebook["metadata"] as? [String: Any]).flatMap(AssignmentLanguage.fromNotebookMetadata)
-            ?? .default
+        let resolved = try resolveNotebookForExtraction(
+            at: item,
+            forcedLanguage: forcedLanguage,
+            isStudentSubmission:
+                studentNotebookName
+                .map { $0 == item.lastPathComponent } ?? false,
+            warnings: &warnings)
+        guard let resolved else { continue }
+        let language = resolved.language
+        let cells = resolved.cells
 
         // Deliberately not `generatedScriptExtension`: that property is scoped to
         // scripts Chickadee *generates* (pattern cases, notebook checks) where the
@@ -184,4 +262,5 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguag
 
         try output.write(to: outURL, atomically: true, encoding: .utf8)
     }
+    return warnings
 }

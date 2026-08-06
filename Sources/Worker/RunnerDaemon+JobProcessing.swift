@@ -548,9 +548,17 @@ extension WorkerDaemon {
                 // in-browser editor can rewrite it) — so the student-module hint
                 // has to name the same file, or it points at a path that was
                 // never written.
-                try extractNotebooksToCode(in: testSetupDir, forcedLanguage: forcedLanguage)
+                // The student's own filename is passed so the submission
+                // guarantees apply to it and not to an instructor's helper
+                // notebook sitting in the same merged workspace.
+                let warnings = try extractNotebooksToCode(
+                    in: testSetupDir,
+                    forcedLanguage: forcedLanguage,
+                    studentNotebookName: job.submissionFilename.map {
+                        URL(fileURLWithPath: $0).lastPathComponent
+                    })
                 return (
-                    [],
+                    warnings,
                     preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
                         // nil means the extractor trusted the notebook's own
