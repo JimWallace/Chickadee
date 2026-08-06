@@ -4,20 +4,22 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 
-// Guards against the embedded Python runtime helpers in Public/browser-runner.js
+// Guards against the embedded runtime helpers in Public/browser-runner.js
 // drifting from the canonical copies in Tools/runner-support/.  The Swift embeds
 // are checked separately by Tests/WorkerTests/RuntimeSourceDriftTests.swift.
 //
 // Comparison is over executable code only: blank lines and full-line comments
 // are stripped, since the embeds intentionally omit some documentation comments
-// but MUST keep identical behaviour.
+// but MUST keep identical behaviour.  The comment marker is per-language — `#`
+// for Python and R, `--` for Lua — so a reworded Lua comment does not read as a
+// behaviour change and teach everyone to stop reading the diff.
 
-function normalizeCode(src) {
+function normalizeCode(src, comment = '#') {
   return String(src)
     .split('\n')
     .filter(line => {
       const s = line.trim();
-      return s && !s.startsWith('#');
+      return s && !s.startsWith(comment);
     })
     .map(line => line.replace(/[ \t]+$/, ''))
     .join('\n');
@@ -85,6 +87,17 @@ test('embedded SITECUSTOMIZE_PY stays in sync with Tools/runner-support/sitecust
     normalizeCode(embeds.SITECUSTOMIZE_PY),
     normalizeCode(canon),
     'Public/browser-runner.js SITECUSTOMIZE_PY drifted from Tools/runner-support/sitecustomize.py — '
+      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+  );
+});
+
+test('embedded TEST_RUNTIME_LUA stays in sync with Tools/runner-support/test_runtime.lua', async () => {
+  const embeds = await loadEmbeds();
+  const canon = await fs.readFile(path.resolve('Tools/runner-support/test_runtime.lua'), 'utf8');
+  assert.equal(
+    normalizeCode(embeds.TEST_RUNTIME_LUA, '--'),
+    normalizeCode(canon, '--'),
+    'Public/browser-runner.js TEST_RUNTIME_LUA drifted from Tools/runner-support/test_runtime.lua — '
       + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
   );
 });

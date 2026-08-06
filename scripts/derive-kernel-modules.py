@@ -58,11 +58,22 @@ SITE_PACKAGES = re.compile(r"^lib/python3\.\d+/site-packages/(?P<entry>[^/]+)")
 # from the building interpreter at all: `library(stats)` and `library(dplyr)`
 # are both just directories here.
 R_LIBRARY = re.compile(r"^lib/R/library/(?P<entry>[^/]+)")
+# Lua's two install roots: `share/lua/<ver>/` for pure-Lua modules and
+# `lib/lua/<ver>/` for C ones. `require("a.b")` maps to `a/b.lua`, so only the
+# FIRST path component is a top-level name — matching how the Python scan treats
+# site-packages entries.
+LUA_LIBRARY = re.compile(r"^(?:share|lib)/lua/\d+\.\d+/(?P<entry>[^/]+)")
 STDLIB = re.compile(r"^lib/python3\.\d+/(?P<entry>[^/]+)$")
 STDLIB_DIR = re.compile(r"^lib/python3\.\d+/(?P<entry>[^/]+)/")
 
 # Directory entries under site-packages that are metadata, not importable.
 NOT_A_MODULE = re.compile(r"\.(dist-info|egg-info|egg-link|pth)$|^__pycache__$")
+
+# Lua 5.4's standard libraries, which `require` resolves out of
+# `package.loaded` without touching the filesystem.
+LUA_STDLIB = [
+    "coroutine", "debug", "io", "math", "os", "package", "string", "table", "utf8",
+]
 
 
 def module_name(entry: str) -> str | None:
@@ -104,6 +115,52 @@ def scan_r(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], dict[str, str]]
                         found.add(entry)
                         if owner:
                             owners.setdefault(entry, owner)
+    return found, owners
+
+
+def scan_lua(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], dict[str, str]]:
+    """(`require`-able names, name → owning conda package) from this Lua env.
+
+    Expected to come back EMPTY, and that is the correct answer rather than a
+    bug: emscripten-forge carries no Lua library packages, so the vendored env
+    is the kernel and nothing else. An empty `moduleOwners` is what makes the
+    browser grader's on-demand install path correctly resolve nothing and let a
+    `require` failure stand as the plain error a student needs to see.
+
+    Written as a real scan anyway — if a Lua package ever appears on the
+    channel, this picks it up with no further work, and a scan that hard-coded
+    "empty" would silently keep saying so.
+    """
+    packages = env_dir / "kernel_packages"
+    if not packages.is_dir():
+        sys.exit(f"derive-kernel-modules: no kernel_packages under {env_dir}")
+    by_file = owner_of(meta)
+    found: set[str] = set()
+    owners: dict[str, str] = {}
+    def lua_module_name(entry: str) -> str | None:
+        # `foo.lua` and `foo.so` are modules; `foo/` is the package `foo` (its
+        # submodules are `foo.bar`, which `require` resolves through the
+        # directory rather than as separate top-level names). Anything else with
+        # a dot in it is not a Lua module name. Deliberately NOT module_name(),
+        # which is Python-shaped and would drop `foo.lua` for having a dot.
+        stem = entry
+        for suffix in (".lua", ".so"):
+            if entry.endswith(suffix):
+                stem = entry[: -len(suffix)]
+                break
+        if "." in stem or not stem:
+            return None
+        return stem
+
+    for archive in sorted(packages.glob("*.tar.gz")):
+        owner = by_file.get(archive.name)
+        with tarfile.open(archive, "r:gz") as tar:
+            for name in tar.getnames():
+                if match := LUA_LIBRARY.match(name):
+                    if resolved := lua_module_name(match.group("entry")):
+                        found.add(resolved)
+                        if owner:
+                            owners.setdefault(resolved, owner)
     return found, owners
 
 
@@ -151,9 +208,28 @@ def main() -> None:
 
     meta = json.loads(meta_path.read_text())
 
-    # R is the simpler half and shares only the file's shape. Detected from the
-    # env's own package list rather than its directory name, so a renamed env
-    # still works.
+    # Which language this env is, from the env's OWN package list rather than
+    # its directory name, so a renamed env still works. `xeus-lua` rather than
+    # `lua`: the kernel statically links the interpreter, so there is no
+    # separate `lua` package to key on.
+    if any(p["name"] == "xeus-lua" for p in meta.get("packages", [])):
+        lua_modules, lua_owners = scan_lua(env_dir, meta)
+        write_index(
+            env_dir,
+            meta,
+            modules=sorted(lua_modules),
+            # Lua's standard libraries are compiled into the interpreter and
+            # pre-populated in `package.loaded`, so they appear in no tarball —
+            # the same reason Python's C extension modules need
+            # `sys.stdlib_module_names`. There is no host Lua to ask, and the
+            # list is fixed by the language version, so it is written out.
+            stdlib=LUA_STDLIB,
+            host_python=None,
+            module_owners=lua_owners,
+        )
+        return
+
+    # R is the simpler half and shares only the file's shape.
     if any(p["name"] == "r-base" for p in meta.get("packages", [])):
         r_modules, r_owners = scan_r(env_dir, meta)
         write_index(

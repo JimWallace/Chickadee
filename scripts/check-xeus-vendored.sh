@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Integrity guard for the manually-vendored xeus kernels in Public/jupyterlite:
-# xpython (Python) and xr (R), built together from one emscripten-forge env.
+# xpython (Python), xr (R) and xlua (Lua), each built from its own
+# emscripten-forge env.
 #
 # The xeus WASM kernels are built from emscripten-forge (needs micromamba +
 # network to repo.prefix.dev). The ordinary CI build does not do that, so the
@@ -38,15 +39,19 @@ ext = build / "extensions" / "@jupyterlite" / "xeus-extension"
 if not ext.is_dir():
     fail(f"missing xeus federated extension: {ext}")
 
-# 2. kernels.json must register BOTH editor kernels: xpython (Python) and xr (R).
-#    A vendor that drops either one is a partial re-vendor, not a valid state.
+# 2. kernels.json must register EVERY kernel: xpython (Python), xr (R), xlua
+#    (Lua). A vendor that drops one is a partial re-vendor, not a valid state.
+#
+#    This map — NOT kernels.json — is what the loop below iterates, so a kernel
+#    absent from it ships completely unguarded: a partial or botched re-vendor
+#    of it passes CI silently. Add an entry whenever you add an env.
 kernels_json = build / "xeus" / "kernels.json"
 if not kernels_json.is_file():
     fail(f"missing {kernels_json} — the vendored xeus kernels are absent")
 kernels = json.loads(kernels_json.read_text())
 listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
 
-expected_language = {"xpython": "python", "xr": "r"}
+expected_language = {"xpython": "python", "xr": "r", "xlua": "lua"}
 kernel_envs = {}
 loaders = []
 
@@ -113,39 +118,53 @@ for kernel_name, env_name in sorted(kernel_envs.items()):
         fail(f"xeus/{env_name} (Python) contains r-base — the envs have been merged")
     if kernel_name == "xr" and any(n.startswith(("numpy-", "pandas-")) for n in names):
         fail(f"xeus/{env_name} (R) contains numpy/pandas — the envs have been merged")
+    # Lua is the small env and must stay that way. It DOES legitimately carry a
+    # `python-` tarball — jupyterlab_widgets, which arrives via xwidgets, is a
+    # noarch Python package — so python is not evidence of a merge here and is
+    # deliberately not listed. r-base and numpy/pandas would be.
+    if kernel_name == "xlua" and any(n.startswith(("r-base-", "numpy-", "pandas-")) for n in names):
+        fail(f"xeus/{env_name} (Lua) contains r-base/numpy/pandas — the envs have been merged")
 
 print(
     f"check-xeus-vendored: OK "
     f"(kernels {listed}, envs {kernel_envs}, packages {package_counts}, loaders {loaders})."
 )
 
-# 6. The Python env's derived module index must exist and match the env that
-#    ships beside it. The server reads it to reject a browser-graded script
-#    whose imports the kernel cannot satisfy; a stale index either blocks a
-#    package that is now vendored or accepts one that was dropped, and both are
-#    silent. Regenerate with scripts/derive-kernel-modules.py (build-jupyterlite
-#    already does).
-python_env = build / "xeus" / "chickadee-python"
-if python_env.is_dir():
-    index_path = python_env / "importable-modules.json"
+# 6. Each env's derived module index must exist and match the env that ships
+#    beside it. The server reads it to reject a browser-graded script whose
+#    imports the kernel cannot satisfy, and the browser grader reads its
+#    `moduleOwners` to turn a runtime "no such module" back into something
+#    installable; a stale index either blocks a package that is now vendored or
+#    accepts one that was dropped, and both are silent. Regenerate with
+#    scripts/derive-kernel-modules.py (build-jupyterlite already does).
+for env_name in sorted(set(kernel_envs.values())):
+    env_dir = build / "xeus" / env_name
+    if not env_dir.is_dir():
+        continue
+    index_path = env_dir / "importable-modules.json"
     if not index_path.is_file():
-        fail(
-            f"missing {index_path} — run scripts/derive-kernel-modules.py {python_env}"
-        )
+        fail(f"missing {index_path} — run scripts/derive-kernel-modules.py {env_dir}")
     index = json.loads(index_path.read_text())
-    meta = json.loads((python_env / "empack_env_meta.json").read_text())
+    meta = json.loads((env_dir / "empack_env_meta.json").read_text())
     vendored = sorted({p["name"] for p in meta.get("packages", [])})
     if index.get("packages") != vendored:
         fail(
-            "importable-modules.json describes a different package set than "
-            f"empack_env_meta.json ({len(index.get('packages', []))} vs {len(vendored)} "
-            f"packages) — re-run scripts/derive-kernel-modules.py {python_env}"
+            f"{env_name}'s importable-modules.json describes a different package set "
+            f"than empack_env_meta.json ({len(index.get('packages', []))} vs "
+            f"{len(vendored)} packages) — re-run "
+            f"scripts/derive-kernel-modules.py {env_dir}"
         )
-    if not index.get("modules") or not index.get("stdlibModules"):
-        fail(f"{index_path} lists no modules — regenerate it")
+    # Every env must claim SOMETHING importable, or the index is not being
+    # generated. Which half carries it differs by language: Python and R list
+    # package modules, while Lua's package set is genuinely empty (the channel
+    # ships no Lua libraries) and its whole answer is the interpreter's built-in
+    # stdlib list.
+    if not index.get("modules") and not index.get("stdlibModules"):
+        fail(f"{index_path} lists no modules at all — regenerate it")
     print(
-        f"check-xeus-vendored: OK (module index matches the env: "
-        f"{len(index['modules'])} package modules)."
+        f"check-xeus-vendored: OK ({env_name} module index matches the env: "
+        f"{len(index['modules'])} package modules, "
+        f"{len(index.get('stdlibModules', []))} stdlib)."
     )
 PY
 

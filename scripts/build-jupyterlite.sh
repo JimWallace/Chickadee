@@ -47,15 +47,20 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# Editor kernels via jupyterlite-xeus: xpython (Python) and xr (R), each from
-# its OWN emscripten-forge env — Tools/jupyterlite/environment-{python,r}.yml.
+# Kernels via jupyterlite-xeus: xpython (Python), xr (R) and xlua (Lua), each
+# from its OWN emscripten-forge env —
+# Tools/jupyterlite/environment-{python,r,lua}.yml.
 #
-# The two envs are separate on purpose. jupyterlite-xeus packs one
+# The envs are separate on purpose. jupyterlite-xeus packs one
 # `kernel_packages` payload per env and a kernel fetches its whole env at boot,
 # so a single shared Python+R env made every Python boot pull all of r-base and
 # every R boot pull numpy/pandas/matplotlib — slow enough to time out the editor
 # probes ("kernel never reported idle"). `environment_file` is list-valued, so
-# passing it twice yields two envs and two payloads.
+# passing it once per env yields one payload each.
+#
+# NOTE: the `chickadee-*` naming is load-bearing, not cosmetic — the module-index
+# step at the end of this script globs `Public/jupyterlite/xeus/chickadee-*`, so
+# an env named anything else is skipped silently and ships with no index.
 #
 # Built ONLY where micromamba is available: jupyterlite-xeus solves the envs at
 # build time, which needs network to repo.prefix.dev / conda-forge. Where it is
@@ -72,7 +77,7 @@ fi
 #
 # NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
 # must be passed as a bare filename, not the absolute path it was copied to.
-XEUS_ENVS=(environment-python.yml environment-r.yml)
+XEUS_ENVS=(environment-python.yml environment-r.yml environment-lua.yml)
 XEUS_ENVS_PRESENT=()
 for env_file in "${XEUS_ENVS[@]}"; do
   [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
@@ -98,7 +103,7 @@ RSYNC_EXCLUDES=(--exclude 'files/' --exclude 'lab/files/' --exclude 'notebooks/f
 # kernels that this environment can't reproduce.
 if ! command -v micromamba >/dev/null 2>&1 && [[ -d "$OUTPUT_DIR/xeus" ]]; then
   RSYNC_EXCLUDES+=(--exclude 'xeus/' --exclude 'extensions/@jupyterlite/xeus-extension/')
-  echo "build-jupyterlite: preserving the committed vendored xeus-r kernel (not rebuilt this run)." >&2
+  echo "build-jupyterlite: preserving the committed vendored xeus kernels (not rebuilt this run)." >&2
 fi
 rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$TEMP_BUILD_DIR"/ "$OUTPUT_DIR"/
 

@@ -32,6 +32,13 @@ enum KernelImportGuard {
     /// Deliberately extension-based rather than `RunnerCore.classifyScript`:
     /// this decides which *inventory* to check against, and the browser router
     /// makes the same extension-first decision when it picks a substrate.
+    ///
+    /// `.lua` is browser-gradable but returns nil, and that is the right
+    /// answer rather than a gap: emscripten-forge ships no Lua library
+    /// packages, so the `chickadee-lua` inventory is empty and there is nothing
+    /// a `require` could be checked against. A guard with an empty inventory
+    /// would reject every `require`, including the `require("test_runtime")`
+    /// every Lua test opens with.
     static func language(forFile filename: String) -> AssignmentLanguage? {
         switch (filename as NSString).pathExtension.lowercased() {
         case "py": return .python

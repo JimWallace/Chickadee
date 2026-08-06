@@ -80,6 +80,7 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     case .node: return envInvocation(interpreter: "node", script: script)
     case .php: return envInvocation(interpreter: "php", script: script)
     case .rscript: return envInvocation(interpreter: "Rscript", script: script)
+    case .lua: return envInvocation(interpreter: "lua", script: script)
     case .unknown:
         if FileManager.default.isExecutableFile(atPath: script.path) {
             return ScriptInvocation(executableURL: script, arguments: [])

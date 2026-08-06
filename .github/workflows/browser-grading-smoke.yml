@@ -1,7 +1,8 @@
 name: Browser grading smoke test
 
 # Boots a vendored xeus kernel in a headless browser and grades real test scripts
-# through the real grading worker — R on xeus-r, Python on xeus-python (#1271).
+# through the real grading worker — R on xeus-r, Python on xeus-python (#1271),
+# Lua on xeus-lua.
 #
 # Why this needs a browser. The rest of the coverage proves code *resolves*:
 # Tests/BrowserRunnerJSTests runs the cell builders and reply parsers against a
@@ -10,12 +11,13 @@ name: Browser grading smoke test
 # re-vendored /vendor/xeus-bootstrap.js that no longer matches a kernel's empack
 # metadata, an env rebuilt without a shared library its kernel dlopen()s, R's
 # quit() masking silently ceasing to be what test_runtime.R resolves (which would
-# turn every R test into a pass), or the Python grading cell failing to print its
-# payload. All of them pass every other check in CI.
+# turn every R test into a pass), Lua's os.exit() replacement doing the same, or
+# the Python grading cell failing to print its payload. All of them pass every
+# other check in CI.
 #
-# Both languages run even when only one looks touched: they share the kernel
+# Every language runs even when only one looks touched: they share the kernel
 # boot, the vendored bootstrap, and the workspace writer, so a change to any of
-# those can break the other one.
+# those can break the others.
 #
 # REQUIRED-GATE DESIGN, matching editor-smoke.yml: the trigger is deliberately
 # NOT path-filtered, because a path-filtered workflow is *skipped* on unrelated
@@ -49,7 +51,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decide whether the R grading surface was touched
+      - name: Decide whether the browser grading surface was touched
         id: decide
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -63,7 +65,7 @@ jobs:
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/python-eval-|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
+          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/lua-grading-|Public/python-eval-|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
@@ -80,6 +82,7 @@ jobs:
         include:
           - { language: r, mode: grading }
           - { language: python, mode: grading }
+          - { language: lua, mode: grading }
           # The pattern-family editor's auto-compute, which moved onto the same
           # kernel in #1271 §A2. Its one new mechanism — rebuilding
           # runPythonAsync's last-expression return value over a protocol that

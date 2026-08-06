@@ -478,6 +478,11 @@ actor WorkerDaemon {
         try testRuntimeR.write(to: rRuntimeURL, atomically: true, encoding: .utf8)
     }
 
+    func writeLuaRuntimeHelper(in directory: URL) throws {
+        let luaRuntimeURL = directory.appendingPathComponent("test_runtime.lua")
+        try testRuntimeLua.write(to: luaRuntimeURL, atomically: true, encoding: .utf8)
+    }
+
     func writePythonRuntimeHelpers(in directory: URL) throws {
         let runtimeURL = directory.appendingPathComponent("test_runtime.py")
         try testRuntimePy.write(to: runtimeURL, atomically: true, encoding: .utf8)

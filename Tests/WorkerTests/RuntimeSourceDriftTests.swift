@@ -3,8 +3,8 @@ import Testing
 
 @testable import chickadee_runner
 
-// Guards against the runtime helpers drifting between their three copies:
-//   * Tools/runner-support/test_runtime.py / .R / sitecustomize.py  (canonical)
+// Guards against the runtime helpers drifting between their copies:
+//   * Tools/runner-support/test_runtime.py / .R / .lua / sitecustomize.py  (canonical)
 //   * Sources/Worker/TestRuntimeSources.swift  (native worker embeds these)
 //   * Public/browser-runner.js                 (the browser runner embeds these)
 //
@@ -13,6 +13,11 @@ import Testing
 // over executable code only — blank lines and full-line comments are ignored,
 // since the embeds intentionally omit some documentation comments but MUST keep
 // identical behaviour.
+//
+// The comment marker is per-language: `#` for Python and R, `--` for Lua. A
+// normalizer that only knew `#` would compare Lua's prose as if it were code —
+// which would not be wrong, exactly, but would fail the suite over a reworded
+// sentence and teach everyone to stop reading the diff.
 @Suite struct RuntimeSourceDriftTests {
 
     private func rstrip(_ s: String) -> String {
@@ -24,12 +29,12 @@ import Testing
         return String(s[..<end])
     }
 
-    private func normalizedCode(_ src: String) -> String {
+    private func normalizedCode(_ src: String, comment: String = "#") -> String {
         src.split(separator: "\n", omittingEmptySubsequences: false)
             .map { String($0) }
             .filter {
                 let s = $0.trimmingCharacters(in: .whitespaces)
-                return !s.isEmpty && !s.hasPrefix("#")
+                return !s.isEmpty && !s.hasPrefix(comment)
             }
             .map { rstrip($0) }
             .joined(separator: "\n")
@@ -60,6 +65,13 @@ import Testing
         #expect(
             normalizedCode(testRuntimeR) == normalizedCode(canon),
             "`testRuntimeR` has drifted from Tools/runner-support/test_runtime.R. Re-sync.")
+    }
+
+    @Test func testRuntimeLuaMatchesCanonical() throws {
+        let canon = try canonical("Tools/runner-support/test_runtime.lua")
+        #expect(
+            normalizedCode(testRuntimeLua, comment: "--") == normalizedCode(canon, comment: "--"),
+            "`testRuntimeLua` has drifted from Tools/runner-support/test_runtime.lua. Re-sync.")
     }
 
     @Test func sitecustomizePyMatchesCanonical() throws {

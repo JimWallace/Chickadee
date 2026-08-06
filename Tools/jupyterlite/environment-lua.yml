@@ -1,0 +1,35 @@
+# Lua editor/grading kernel (xlua / xeus-lua), built into Public/jupyterlite by
+# scripts/build-jupyterlite.sh.
+#
+# SEPARATE from environment-python.yml and environment-r.yml for the same reason
+# those two are separate from each other: jupyterlite-xeus packs one
+# `kernel_packages` payload per env and a kernel fetches its whole env at boot,
+# so folding Lua into either would make every Python or R boot pay for it.
+#
+# WHY LUA IS HERE. It is the architecture test docs/adding-a-xeus-kernel.md
+# recommends: small, on the xeus 6 line (6.0.5, the same generation
+# Public/xeus-kernel-shared.js mirrors), and — unlike SQL or JavaScript — it
+# preserves Chickadee's grading model. Files on disk, a `require`-shaped import,
+# a runtime helper library, and a script that either completes or raises.
+#
+# THE PACKAGE SET IS THE KERNEL AND NOTHING ELSE, and that is not an oversight.
+# emscripten-forge-4x carries no `lua-*` library packages at all, so there is
+# nothing to add: the module index derived from these tarballs has an empty
+# `moduleOwners`, and on-demand loading correctly resolves nothing. That makes
+# Lua the one env where the two costs documented at length in environment-r.yml
+# — boot, paid by everyone, and attach, charged against the 10-second per-test
+# limit — collapse to boot alone.
+#
+# Boot is ~10 MB unpacked, against 74 MB for R and 85 MB for Python. Most of it
+# is the `python` package (6 MB), which arrives transitively via
+# jupyterlab_widgets -> xwidgets and is not something the Lua kernel executes.
+# Re-measure with Tools/browser-grading-smoke rather than trusting that to age.
+#
+# Channel: emscripten-forge-4x. The older `emscripten-forge-dev` alias serves
+# the 3x (emscripten 3.x ABI) channel, frozen since 2026-04-09.
+name: chickadee-lua
+channels:
+  - https://repo.prefix.dev/emscripten-forge-4x
+  - https://repo.prefix.dev/conda-forge
+dependencies:
+  - xeus-lua

@@ -66,6 +66,7 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
     static let isolatedWorkerScripts: Set<String> = [
         "/python-grading-worker.js",  // browser submission grader, Python (browser-runner.js)
         "/r-grading-worker.js",  // browser submission grader, R (browser-runner.js)
+        "/lua-grading-worker.js",  // browser submission grader, Lua (browser-runner.js)
         "/freeze-watchdog-worker.js",  // main-thread freeze failover (notebook.js)
     ]
 

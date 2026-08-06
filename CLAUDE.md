@@ -94,15 +94,16 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
-**Browser grading has two substrates, routed per script (#1271).**
+**Browser grading has three substrates, routed per script (#1271).**
 `RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to the
-vendored **xeus-python** kernel (`/python-grading-worker.js`) and a `.R` test to
-**xeus-r** (`/r-grading-worker.js`), choosing with the same
+vendored **xeus-python** kernel (`/python-grading-worker.js`), a `.R` test to
+**xeus-r** (`/r-grading-worker.js`), and a `.lua` test to **xeus-lua**
+(`/lua-grading-worker.js`), choosing with the same
 `RunnerCore.classifyScript` the native worker uses to pick a subprocess command
 — and booting only the runtimes an assignment actually contains, so an R lab
 never fetches the Python env. `RunnerCore` still owns the suite loop and output
-interpretation for both; a substrate supplies only "run this script, report its
-exit code and streams".
+interpretation for all three; a substrate supplies only "run this script, report
+its exit code and streams".
 
 xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
 `jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
@@ -116,6 +117,21 @@ than one summing 1, and R's own clock reports 0ms across nested expressions vs
 ~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
 
+**Lua is the architecture test, not a teachable language yet.** `chickadee-lua`
+(19 MB, boot ~2.5s) grades `.lua` scripts in the browser and the native worker
+injects `Tools/runner-support/test_runtime.lua` beside the Python and R helpers,
+so one file serves `lua script.lua` and the kernel. But `AssignmentLanguage` is
+still `.python | .r`: there is no Lua literal renderer, pattern-family or
+notebook-check renderer, or personalization driver. Its two per-kernel quirks
+are `os.exit` masking (R's `quit()` problem again — if it regresses, every test
+reads as a pass) and a per-script wipe of globals added since boot, since `_G`
+*is* Lua's standard library and cannot be cleared outright. Crucially, **R's two
+expensive lessons did NOT generalise**: xeus-lua costs 5ms for 20 top-level
+statements (no ~180ms yield) and its `io.stderr` reaches the kernel stream
+directly (no `evaluate` calling-handler trap). Budget one quirk per kernel, not
+the same one. Measurements and the full postmortem:
+`docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost".
+
 **Every worker the notebook page spawns must be in
 `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
 cross-origin isolated on Chromium/Firefox, and a worker created by a
@@ -126,7 +142,8 @@ none of the speed. The allowlist is per-path, so "same directory, same
 middleware" proves nothing about a worker not on it; that reasoning is how #1274
 shipped browser-graded R that no isolated engine ever ran.
 `IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
-and fails on drift in either direction.
+and fails on drift in either direction. It currently lists the three grading
+workers (Python, R, Lua) plus the freeze watchdog.
 
 **Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
 `AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
@@ -501,17 +518,26 @@ scripts/build-jupyterlite.sh
 `Public/jupyterlite` is generated output and is checked in; rebuild only when
 updating kernel versions or config.
 
-**Both editor kernels are xeus kernels, from one env.**
-`Tools/jupyterlite/environment-python.yml` and `environment-r.yml` declare one
-emscripten-forge environment each, yielding `xpython` (Python, xeus-python) and
-`xr` (R, xeus-r); `jupyter lite build` compiles both into
+**Every vendored kernel is a xeus kernel, one env each.**
+`Tools/jupyterlite/environment-python.yml`, `environment-r.yml` and
+`environment-lua.yml` declare one emscripten-forge environment each, yielding
+`xpython` (Python, xeus-python), `xr` (R, xeus-r) and `xlua` (Lua, xeus-lua);
+`jupyter lite build` compiles them all into
 `Public/jupyterlite/xeus/`. They are **separate envs on purpose** — a kernel
 fetches its whole env at boot, so a shared env makes every Python boot pull
 r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
 the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
-technology for both languages. Notebook metadata is normalized to those names by
-`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`).
+technology for every language. Notebook metadata is normalized to those names by
+`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for Python
+and R; Lua is a grading substrate only and no notebook resolves to `xlua`.
+
+**Two places enumerate the kernels rather than discovering them, and both fail
+open for one they have never heard of:** the `chickadee-*` glob in
+`build-jupyterlite.sh` (which decides who gets a module index) and
+`expected_language` in `check-xeus-vendored.sh` (which decides who gets a
+vendoring guard). Neither errors — you simply get a kernel nothing checks.
+`docs/adding-a-xeus-kernel.md` is the runbook.
 
 The channel is **`emscripten-forge-4x`**. The older `emscripten-forge-dev` alias
 serves the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of
@@ -1116,7 +1142,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
 - `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
 - `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
-- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee a third in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins
+- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise)
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
 - `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
