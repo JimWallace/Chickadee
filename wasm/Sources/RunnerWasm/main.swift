@@ -74,6 +74,26 @@ let runnerExtractR = JSClosure { args in
 
 JSObject.global.runnerExtractR = .object(runnerExtractR)
 
+// Exposed to JS as `globalThis.runnerExtractLua(cells, filename)` — the same
+// shape as `runnerExtractR`, because it is the same extraction: `extractLua`
+// and `extractR` are both one call to RunnerCore's `extractWithCellMarkers`,
+// differing only in the comment leader (`--` vs `#`). Keeping it a separate
+// export rather than a language parameter mirrors how the JS side already
+// dispatches, and keeps each export's return shape fixed.
+let runnerExtractLua = JSClosure { args in
+    guard let cellsArray = args.first?.object else { return .undefined }
+    let filename = args.count > 1 ? (args[1].string ?? "") : ""
+    let extracted = extractLua(cells: parseNotebookCells(cellsArray), filename: filename)
+
+    guard let objectConstructor = JSObject.global.Object.function else { return .undefined }
+    let result = objectConstructor.new()
+    result.source = .string(extracted.source)
+    result.codeCellCount = .number(Double(extracted.codeCellCount))
+    return .object(result)
+}
+
+JSObject.global.runnerExtractLua = .object(runnerExtractLua)
+
 // Exposed to JS as `globalThis.runnerClassifyScript(name, source)` → the
 // interpreter raw value ("python", "sh", "bash", "ruby", …, "unknown"). The
 // shared "which interpreter?" decision (RunnerCore.classifyScriptInterpreter),

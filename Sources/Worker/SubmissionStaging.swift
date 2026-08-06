@@ -125,6 +125,7 @@ func preferredStudentModuleFilename(
         switch language {
         case .python: sourceExtension = "py"
         case .r: sourceExtension = "R"
+        case .lua: sourceExtension = "lua"
         }
         return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }

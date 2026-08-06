@@ -50,6 +50,21 @@ import Testing
         /// `-e` — and this matrix's first run failed on exactly that, which is
         /// a small demonstration of why the glue belongs in one forced place.
         let evalFlag: String
+        /// Arguments that make the interpreter report its version and exit 0,
+        /// used only to decide whether the executed half of the matrix can run.
+        ///
+        /// A field for the SAME reason `evalFlag` is one, learned the same way.
+        /// This was hardcoded as `--version`, which python3 and Rscript accept
+        /// and **lua does not** — `lua --version` prints a usage message and
+        /// exits 1. So the availability probe answered "absent" on a machine
+        /// with a perfectly good Lua, and every executed assertion skipped
+        /// SILENTLY: the suite reported green having never parsed a line of
+        /// generated Lua or read back a Lua inputs file.
+        ///
+        /// That is precisely the failure this file was written to prevent, one
+        /// level up — the lesson from `evalFlag` was recorded but not
+        /// generalised to its neighbour three lines away.
+        let versionArguments: [String]
         /// The Debian package that provides it, as the Dockerfile installs it.
         let debianPackage: String
         /// Source that parses `path` WITHOUT executing it, exiting non-zero on
@@ -70,6 +85,7 @@ import Testing
             return Adapter(
                 interpreter: "python3",
                 evalFlag: "-c",
+                versionArguments: ["--version"],
                 debianPackage: "python3",
                 parseOnlyProgram: { path in
                     "import ast,sys;ast.parse(open(\(pythonString(path))).read())"
@@ -82,6 +98,7 @@ import Testing
             return Adapter(
                 interpreter: "Rscript",
                 evalFlag: "-e",
+                versionArguments: ["--version"],
                 debianPackage: "r-base",
                 parseOnlyProgram: { path in "invisible(parse(\(rString(path))))" },
                 readInputsProgram: { key in
@@ -90,6 +107,33 @@ import Testing
                     """
                     env <- new.env(); sys.source("_ck_inputs.R", envir = env)
                     cat(get(".ck_inputs", envir = env)[[\(rString(key))]], "\\n")
+                    """
+                }
+            )
+        case .lua:
+            return Adapter(
+                interpreter: "lua",
+                evalFlag: "-e",
+                versionArguments: ["-v"],
+                debianPackage: "lua5.4",
+                // `loadfile` compiles without running, which is exactly the
+                // parse check wanted here — `dofile` would execute a script
+                // that expects a submission and a runtime beside it.
+                parseOnlyProgram: { path in "assert(loadfile(\(luaString(path))))" },
+                readInputsProgram: { key in
+                    // Mirrors chickadee.inputs(), INCLUDING the environment it
+                    // supplies: the chunk is data, but that data may name
+                    // `chickadee.NULL` for a JSON null inside a table, so the
+                    // reader is what binds `chickadee`. A stub with just the
+                    // sentinel is enough, and keeps this from depending on
+                    // test_runtime.lua being copied into the scratch directory.
+                    """
+                    local env = setmetatable({ chickadee = { NULL = setmetatable({}, {}) } },
+                                             { __index = _G })
+                    local chunk = assert(loadfile("_ck_inputs.lua", "t", env))
+                    local values = chunk()
+                    assert(values[\(luaString(key))] ~= nil, "missing key")
+                    print(tostring(values[\(luaString(key))]))
                     """
                 }
             )
@@ -258,13 +302,25 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func everyGeneratedScriptParsesInItsOwnLanguage(_ language: AssignmentLanguage) throws {
         let adapter = Self.adapter(for: language)
-        guard Self.isAvailable(adapter.interpreter) else { return }
+        guard Self.isAvailable(adapter) else { return }
 
         let dir = try Self.scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
         for kind in PatternKind.allCases {
-            for script in renderPatternFamily(GeneratedSourceFixtures.family(kind: kind), language: language) {
+            let family = GeneratedSourceFixtures.family(kind: kind)
+            // The cases AND the auto-generated existence guard. The guard was
+            // missed at first, and the omission was invisible: it is produced by
+            // `existenceGuard(for:)` rather than by `renderPatternFamily`, so
+            // iterating the latter's result silently covered every generated
+            // script except that one — in all three languages. It is the script
+            // every other case in the family `dependsOn`, so a syntax error in
+            // it fails the whole family at grade time.
+            var scripts = renderPatternFamily(family, language: language)
+            if let guardScript = existenceGuard(for: family, language: language) {
+                scripts.append(guardScript)
+            }
+            for script in scripts {
                 let url = dir.appendingPathComponent(script.filename)
                 try script.source.write(to: url, atomically: true, encoding: .utf8)
                 let (code, err) = Self.run(
@@ -299,14 +355,26 @@ import Testing
         _ language: AssignmentLanguage
     ) throws {
         let adapter = Self.adapter(for: language)
-        guard Self.isAvailable(adapter.interpreter) else { return }
+        guard Self.isAvailable(adapter) else { return }
 
         let dir = try Self.scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
         // Rendered exactly as the worker and the browser render it: values
         // arrive already-literal in the target language.
-        let rendered = language.renderInputsFile(["threshold": language.literal(.int(42))])
+        //
+        // `holes` carries a null INSIDE a collection, which is not decoration.
+        // Each language spells a missing value differently and two of the three
+        // spellings are load-bearing: R uses `NA` because `NULL` vanishes from a
+        // `list()`, and Lua uses the sentinel `chickadee.NULL` because a `nil`
+        // in a table constructor is not stored at all. A scalar-only fixture
+        // exercises neither, and the Lua one in particular fails in the worst
+        // way — the chunk raises, the reader's `pcall` swallows it, and EVERY
+        // per-student value reads as missing rather than anything erroring.
+        let rendered = language.renderInputsFile([
+            "threshold": language.literal(.int(42)),
+            "holes": language.literal(.array([.int(60), .null, .int(20)])),
+        ])
         try rendered.write(
             to: dir.appendingPathComponent(language.inputsFileName),
             atomically: true, encoding: .utf8)
@@ -348,10 +416,10 @@ import Testing
         return (process.terminationStatus, String(data: errData, encoding: .utf8) ?? "")
     }
 
-    static func isAvailable(_ interpreter: String) -> Bool {
+    static func isAvailable(_ adapter: Adapter) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [interpreter, "--version"]
+        process.arguments = [adapter.interpreter] + adapter.versionArguments
         process.standardOutput = Pipe()
         process.standardError = Pipe()
         do { try process.run() } catch { return false }
@@ -361,4 +429,5 @@ import Testing
 
     static func pythonString(_ s: String) -> String { JSONValue.string(s).pythonLiteral }
     static func rString(_ s: String) -> String { JSONValue.string(s).rLiteral }
+    static func luaString(_ s: String) -> String { JSONValue.string(s).luaLiteral }
 }

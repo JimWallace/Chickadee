@@ -113,8 +113,18 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguag
 
         // A caller-forced language wins over the notebook's own kernelspec;
         // otherwise sniff it with the shared detector.
+        //
+        // `fromNotebookMetadata`, not the older boolean `isRNotebook`. The
+        // boolean form answers "R or not", so a Lua notebook took the `else`
+        // branch and was extracted as PYTHON — a silent wrong answer the
+        // compiler could not flag, because `?:` on two cases type-checks
+        // perfectly well however many cases exist. The general form returns the
+        // language it recognised, or nil to mean "nothing recognisable, use the
+        // default", which is the distinction the fallback actually wants.
         let language =
-            forcedLanguage ?? (AssignmentLanguage.isRNotebook(notebook) ? .r : .python)
+            forcedLanguage
+            ?? (notebook["metadata"] as? [String: Any]).flatMap(AssignmentLanguage.fromNotebookMetadata)
+            ?? .default
 
         // Deliberately not `generatedScriptExtension`: that property is scoped to
         // scripts Chickadee *generates* (pattern cases, notebook checks) where the
@@ -124,27 +134,37 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguag
         switch language {
         case .python: ext = "py"
         case .r: ext = "R"
+        case .lua: ext = "lua"
         }
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
         let output: String
         switch language {
-        case .r:
+        case .r, .lua:
             // Flattening concatenates cells, which loses the boundaries a
             // source-level check (`.cellContains`) needs.  Python keeps them
-            // because `wrapCellForResilientLoad` labels each cell; R gets the
-            // same information from inert marker comments, which
+            // because `wrapCellForResilientLoad` labels each cell; R and Lua get
+            // the same information from inert marker comments, which
             // `chickadee_student_cells()` splits on.  The assembly lives in
-            // RunnerCore (`extractR`) — the same implementation the browser
+            // RunnerCore (`extractR` / `extractLua`, both over one
+            // `extractWithCellMarkers`) — the same implementation the browser
             // runner calls via wasm, so the two extractors cannot drift.
+            //
+            // One arm rather than two because the languages differ only in
+            // their comment leader, which is the parameter the shared extractor
+            // already takes.
             let inputCells = cells.map { cell in
                 NotebookCell(
                     cellType: (cell["cell_type"] as? String) ?? "",
                     source: NotebookCellSources.cellSource(cell)
                 )
             }
-            output = extractR(cells: inputCells, filename: item.lastPathComponent).source
+            let extracted =
+                language == .lua
+                ? extractLua(cells: inputCells, filename: item.lastPathComponent)
+                : extractR(cells: inputCells, filename: item.lastPathComponent)
+            output = extracted.source
         case .python:
             var assembled = "# Generated from \(item.lastPathComponent)\n\n"
             let extractor = NotebookExtractor()

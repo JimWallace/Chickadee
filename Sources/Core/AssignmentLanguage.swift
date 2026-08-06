@@ -11,6 +11,7 @@ import Foundation
 public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case python
     case r
+    case lua
 
     /// What an assignment resolves to when nothing about it says otherwise.
     ///
@@ -34,6 +35,14 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// while the generated copy is stale.
     public static let rKernelNames: Set<String> = ["ir", "r", "webr", "xr"]
 
+    /// Kernelspec `name` values that mark a Lua notebook. `xlua` is the
+    /// vendored xeus-lua kernel; `lua` is what `language_info.name` reports.
+    ///
+    /// Carried in the same generated block as `rKernelNames` in
+    /// `Public/browser-runner.js` — after editing either, run
+    /// `scripts/generate-js-constants.sh`.
+    public static let luaKernelNames: Set<String> = ["xlua", "lua"]
+
     /// Kernelspec `name` values (and `language_info.name`) that positively mark
     /// a notebook as THIS language — the per-language generalisation
     /// `rKernelNames` was always going to need, and the table a new language
@@ -49,6 +58,15 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         switch self {
         case .python: return []
         case .r: return AssignmentLanguage.rKernelNames
+        // `xlua` is the vendored kernel's name in
+        // Public/jupyterlite/xeus/kernels.json; `lua` is what `language_info`
+        // reports. Both are listed because a kernel Chickadee vendors is
+        // reachable from the editor's Kernel -> Change Kernel menu whether or
+        // not anyone intended it to be — that is the rule this whole arc is
+        // built on ("there is no such thing as a grading-only kernel"), and a
+        // notebook an author produced that way has to resolve to something
+        // other than Python.
+        case .lua: return AssignmentLanguage.luaKernelNames
         }
     }
 
@@ -85,6 +103,7 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         switch self {
         case .python: return ["py"]
         case .r: return ["r"]
+        case .lua: return ["lua"]
         }
     }
 
@@ -240,6 +259,7 @@ extension AssignmentLanguage {
         switch self {
         case .python: return value.pythonLiteral
         case .r: return value.rLiteral
+        case .lua: return value.luaLiteral
         }
     }
 
@@ -248,6 +268,7 @@ extension AssignmentLanguage {
         switch self {
         case .python: return "_ck_inputs.py"
         case .r: return "_ck_inputs.R"
+        case .lua: return "_ck_inputs.lua"
         }
     }
 
@@ -258,6 +279,7 @@ extension AssignmentLanguage {
         switch self {
         case .python: return "py"
         case .r: return "R"
+        case .lua: return "lua"
         }
     }
 
@@ -271,7 +293,17 @@ extension AssignmentLanguage {
     /// form binds `.ck_inputs` (R forbids a leading-underscore identifier, so the
     /// variable can't be `_ck`) and omits the trailing comma R's `list()` rejects.
     public func renderInputsFile(_ values: [String: String]) -> String {
-        let header = "# Auto-generated per-student grading inputs (issue #461). Do not edit."
+        // The comment leader is per-language, and Lua's is the reason this is
+        // not one shared constant. `#` is not a Lua comment — but a Lua chunk
+        // whose FIRST line starts with `#` has that line skipped outright, a
+        // shebang accommodation. So a `#` header parsed, the round-trip test
+        // passed, and the file was one edit away from breaking: move the header
+        // down a line, or put anything above it, and the whole inputs file
+        // becomes a syntax error that surfaces as every per-student value
+        // silently reading as missing.
+        let commentLeader = self == .lua ? "--" : "#"
+        let header =
+            "\(commentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
         let keys = values.keys.sorted()
         switch self {
         case .python:
@@ -287,6 +319,26 @@ extension AssignmentLanguage {
             return "\(header)\n.ck_inputs <- list(\n"
                 + assignments.joined(separator: ",\n")
                 + "\n)\n"
+        case .lua:
+            // A chunk that RETURNS a table, because `chickadee.inputs()` reads
+            // it with `loadfile` + `pcall` and keeps the returned value. Not a
+            // global assignment: a Lua library that wrote globals would be a
+            // surprise, and the runtime's own module is a table for the same
+            // reason.
+            //
+            // A PURE DATA CHUNK — no `require`, no statements. The values may
+            // mention `chickadee.NULL`, the sentinel `JSONValue.luaLiteral`
+            // emits for a JSON null inside a table (Lua stores no `nil` in a
+            // constructor, so a hole would silently eat an authored case's
+            // positional alignment). That name is bound by the READER:
+            // `chickadee.inputs()` loads this chunk with an environment
+            // carrying the runtime, so the file itself stays dependency-free
+            // and can be written into an empty directory.
+            let assignments = keys.map {
+                "    [\(JSONValue.string($0).luaLiteral)] = \(values[$0] ?? "nil")"
+            }
+            guard !keys.isEmpty else { return "\(header)\nreturn {}\n" }
+            return "\(header)\nreturn {\n" + assignments.joined(separator: ",\n") + "\n}\n"
         }
     }
 
@@ -305,6 +357,7 @@ extension AssignmentLanguage {
         switch self {
         case .python: return "environment-python.yml"
         case .r: return "environment-r.yml"
+        case .lua: return "environment-lua.yml"
         }
     }
 
@@ -314,6 +367,7 @@ extension AssignmentLanguage {
         switch self {
         case .python: return "an ImportError"
         case .r: return "an error from library()"
+        case .lua: return "an error from require()"
         }
     }
 
@@ -328,6 +382,24 @@ extension AssignmentLanguage {
         switch self {
         case .python: return ["test_runtime", "sitecustomize", "_ck_inputs"]
         case .r: return []
+        // NON-empty, and this is the arm that shows why the question has to be
+        // asked per language rather than copied from the neighbour. R's is
+        // empty because `source("test_runtime.R")` is a file read — there is no
+        // module to resolve, so there is nothing to declare. Lua reaches
+        // exactly the same runtime with `require("test_runtime")`, which IS a
+        // module load. Same shape as R, opposite answer.
+        //
+        // Both names are genuinely injected by the runner and genuinely
+        // requirable, which is what this property asks. Note that nothing
+        // consumes the Lua answer TODAY: `KernelImportGuard.language(forFile:)`
+        // returns nil for `.lua` on purpose, because emscripten-forge ships no
+        // Lua library packages and a guard with an empty inventory would reject
+        // every `require`, starting with this one. Stated correctly here so it
+        // is already right if that ever changes.
+        //
+        // `sitecustomize` has no Lua equivalent: it is a CPython interpreter
+        // hook, not a general idea.
+        case .lua: return ["test_runtime", "_ck_inputs"]
         }
     }
 
@@ -338,6 +410,22 @@ extension AssignmentLanguage {
         switch self {
         case .python: return ["student", "_ck_"]
         case .r: return []
+        // Generated Lua reaches the submission through
+        // `chickadee.load_student()`, which is a `loadfile` — so on the
+        // generated path this could honestly be empty, as R's is.
+        //
+        // It is not, because Lua differs from R in the way that matters here:
+        // R has no module system, so an instructor hand-writing a test has no
+        // choice but to `source()`. Lua has `require`, and requiring the
+        // submission is the natural thing to reach for. Declaring the prefixes
+        // costs nothing and states the truth — the submission IS importable
+        // under these names — following the guard's own rule that ambiguity
+        // resolves toward reporting nothing, because a false positive blocks an
+        // instructor from saving with no self-service fix.
+        //
+        // Like `runnerProvidedModules` above, nothing reads the Lua answer
+        // while `KernelImportGuard` declines to route `.lua`.
+        case .lua: return ["solution", "student", "_ck_"]
         }
     }
 
@@ -350,6 +438,19 @@ extension AssignmentLanguage {
         // Rscript resolves `source()` relative to the working directory the
         // driver already sets, so there is nothing to put on a path.
         case .r: return nil
+        // Lua LOOKS like it wants `LUA_PATH`, and it does not. That variable
+        // takes search *patterns* rather than directories, so setting it to a
+        // bare path would not resolve anything — and the standalone interpreter
+        // already carries `./?.lua` in `package.path`, while the driver spawns
+        // with its cwd set to the support-files directory. Verified rather than
+        // reasoned: `lua -e 'print(package.path)'` on the runner image ends
+        // with `./?.lua;./?/init.lua`.
+        //
+        // Setting it would also be actively harmful: assigning `LUA_PATH`
+        // REPLACES the default path unless it contains `;;`, so the obvious
+        // wrong version of this line removes `./?.lua` and breaks the very
+        // lookup it was meant to enable.
+        case .lua: return nil
         }
     }
 }

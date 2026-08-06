@@ -135,6 +135,19 @@ func existenceGuard(
     // Exhaustive so a future language cannot silently receive Python bytes
     // (docs/language-handling-review.md §4).
     switch language {
+    case .lua:
+        return GeneratedScript(
+            filename: generatedScriptFilename(
+                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
+                language: .lua),
+            source: renderLuaExistenceGuard(family: family, specHash: hash),
+            tier: tier,
+            points: 0,
+            displayName: label,
+            caseKey: patternExistenceGuardCaseKey,
+            familyID: family.id,
+            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
+        )
     case .r:
         return GeneratedScript(
             filename: generatedScriptFilename(
@@ -245,6 +258,11 @@ private func renderCase(
             perStudentNames: perStudentNames)
     case .r:
         source = renderRPatternCase(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    case .lua:
+        source = renderLuaPatternCase(
             family: family, case: c,
             sectionVariables: sectionVariables, specHash: specHash,
             perStudentNames: perStudentNames)

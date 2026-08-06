@@ -41,6 +41,17 @@ enum TestScriptVariablePrepender {
                 variables
                 .map { "\(rIdentifier($0.name)) <- \($0.value.rLiteral)" }
                 .joined(separator: "\n")
+        case .lua:
+            // `local`, which is both the Lua idiom and what keeps a family's
+            // variables out of `_G` — the environment the student's submission
+            // is loaded beside. A later `local` of the same name shadows an
+            // earlier one for the rest of the chunk, which is exactly the
+            // `family > section > global` precedence Python gets from
+            // last-assignment-wins and R from top-to-bottom evaluation.
+            return
+                variables
+                .map { "local \(luaIdentifier($0.name)) = \($0.value.luaLiteral)" }
+                .joined(separator: "\n")
         }
     }
 

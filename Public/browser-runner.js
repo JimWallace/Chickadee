@@ -54,6 +54,7 @@
     // are shared with /r-grading-worker.js.  Loaded by a <script> tag alongside
     // grading-shared.js (see notebook.leaf).
     const { personalizationInputsSourceR } = ChickadeeRGradingShared;
+    const { personalizationInputsSourceLua } = ChickadeeLuaGradingShared;
 
     // Kernelspec names that mark an R notebook. The browser cannot import
     // Swift, so this is a GENERATED copy of AssignmentLanguage.rKernelNames
@@ -63,6 +64,9 @@
     // CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN
     const R_KERNEL_NAMES = ['ir', 'r', 'webr', 'xr'];
     // CHICKADEE_GENERATED:R_KERNEL_NAMES:END
+    // CHICKADEE_GENERATED:LUA_KERNEL_NAMES:BEGIN
+    const LUA_KERNEL_NAMES = ['lua', 'xlua'];
+    // CHICKADEE_GENERATED:LUA_KERNEL_NAMES:END
 
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
@@ -325,6 +329,8 @@
         if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
             if (assignmentLanguage === 'r') {
                 files['_ck_inputs.R'] = personalizationInputsSourceR(personalizedInputs);
+            } else if (assignmentLanguage === 'lua') {
+                files['_ck_inputs.lua'] = personalizationInputsSourceLua(personalizedInputs);
             } else {
                 files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
             }
@@ -952,12 +958,33 @@
         const ksName = (ks.name || '').toLowerCase();
         const liName = ((meta.language_info || {}).name || '').toLowerCase();
         const isR    = R_KERNEL_NAMES.includes(ksName) || liName === 'r';
+        const isLua  = LUA_KERNEL_NAMES.includes(ksName) || liName === 'lua';
         const stem   = filename.replace(/\.ipynb$/i, '');
 
         const cells = (notebook.cells || []).map(cell => ({
             cell_type: cell.cell_type,
             source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
         }));
+
+        if (isLua) {
+            if (typeof core.extractLua !== 'function') {
+                // Loud, and specific to Lua. Falling through to the Python
+                // extractor would silently produce a `.py` file from a Lua
+                // notebook and grade it against a Lua suite — every test
+                // failing for a reason no student could act on.
+                throw new Error(
+                    'This Lua notebook cannot be extracted: the vendored RunnerCore wasm '
+                    + 'predates extractLua. Re-vendor Public/runner-wasm '
+                    + '(scripts/build-runner-wasm.sh) or grade on the native worker.');
+            }
+            // Same shared marker-emitting extractor as R, differing only in the
+            // comment leader — `extractLua` and `extractR` are both one call to
+            // RunnerCore's `extractWithCellMarkers`, so the browser and the
+            // native worker cannot drift.
+            files[`${stem}.lua`] = core.extractLua(cells, filename).source;
+            files['.chickadee_student_module'] = `${stem}.lua`;
+            return;
+        }
 
         if (isR) {
             // Shared RunnerCore implementation: header + an inert
@@ -1001,8 +1028,8 @@
     //
     // Loads the vendored, embedded-Swift RunnerCore bridge and returns its
     // exported functions — `extractPython(cells, filename)`, `extractR(cells,
-    // filename)` and `classifyScript(name, source)`, the SAME Swift code the
-    // native worker runs. A test harness can preset the `globalThis.runner*`
+    // filename)`, `extractLua(cells, filename)` and `classifyScript(name,
+    // source)`, the SAME Swift code the native worker runs. A test harness can preset the `globalThis.runner*`
     // globals to skip loading the wasm.
     // -------------------------------------------------------------------------
 
@@ -1024,6 +1051,17 @@
         _runnerCore = {
             extractPython: globalThis.runnerExtractPython,
             extractR: globalThis.runnerExtractR,
+            // Deliberately NOT part of `ready()` above. The vendored wasm is
+            // rebuilt by a main-only workflow (runner-wasm-vendor.yml), so
+            // between merging a new export and that job committing the
+            // artifact there is a window where the checked-in wasm does not
+            // register it. Requiring it in `ready()` would make
+            // `loadRunnerCore` throw in that window and fail browser grading
+            // over to the native worker for EVERY language — right marks, none
+            // of the speed — because one language's extractor was missing.
+            // Left possibly-undefined here and checked at the one use site,
+            // which errors loudly for Lua alone.
+            extractLua: globalThis.runnerExtractLua,
             classifyScript: globalThis.runnerClassifyScript,
         };
         return _runnerCore;
@@ -1994,6 +2032,50 @@ function M.equal(actual, expected)
     return actual == expected
 end
 
+-- Order-insensitive comparison for the unordered_equality kind: same elements,
+-- any order. The Lua analogue of chickadee_unordered_equal in test_runtime.R,
+-- and it takes the same shortcut for the same reason — elements are compared as
+-- STRINGS, so a student returning 1 where the answer says 1.0 still matches,
+-- and a table sorts against a table without needing a total order on values.
+--
+-- \`table.sort\` with a mixed-type array raises ("attempt to compare number with
+-- string"), which is exactly the case an unordered comparison must survive, so
+-- the mapping to strings happens before the sort rather than inside it.
+--
+-- The sort key is NOT \`M.format\`, and that was a real bug when it was: Lua 5.4
+-- prints the integer 1 as "1" and the float 1.0 as "1.0", so
+-- \`unordered_equal({1,2}, {1.0,2.0})\` answered false while \`M.equal(1, 1.0)\`
+-- answered true — the same submission passing \`boundaryEquality\` and failing
+-- \`unorderedEquality\`. Numbers are normalised through \`%.17g\`, which collapses
+-- the integer/float split without losing precision, and the key carries a type
+-- tag so the number 1 and the string "1" stay distinct the way \`==\` says they
+-- are.
+local function unordered_key(value)
+    local kind = type(value)
+    if kind == "number" then
+        return "n:" .. string.format("%.17g", value)
+    end
+    return kind:sub(1, 1) .. ":" .. M.format(value)
+end
+
+function M.unordered_equal(actual, expected)
+    if type(actual) ~= "table" or type(expected) ~= "table" then
+        return false
+    end
+    if #actual ~= #expected then return false end
+    local a, b = {}, {}
+    for i = 1, #actual do
+        a[i] = unordered_key(actual[i])
+        b[i] = unordered_key(expected[i])
+    end
+    table.sort(a)
+    table.sort(b)
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
 -- --- Per-student personalization primitives ---------------------------------
 -- Mirror of chickadee_seed() in test_runtime.R and the Python equivalent. Lua
 -- 5.4 has 64-bit integers but no bignum, so the 256-bit hex seed is folded with
@@ -2014,8 +2096,20 @@ end
 
 -- The per-student grading inputs the worker materialized into _ck_inputs.lua
 -- (a chunk returning a table), or an empty table when none were delivered.
+-- The chunk is loaded with \`chickadee\` bound, because the values in it were
+-- rendered by \`JSONValue.luaLiteral\`, which spells a JSON null inside a table
+-- as the sentinel \`chickadee.NULL\` (Lua stores no \`nil\` in a constructor, so a
+-- hole would silently eat an authored case's positional alignment).
+--
+-- Binding it HERE rather than making the file \`require\` the runtime itself
+-- keeps \`_ck_inputs.lua\` a pure data chunk with no dependencies — which is what
+-- lets the conformance matrix write one into an empty directory and read it
+-- back. Without the binding a single null makes the chunk raise, \`pcall\`
+-- swallows it, this returns \`{}\`, and every per-student value silently reads as
+-- missing: a wrong mark rather than a crash.
 function M.inputs()
-    local chunk = loadfile("_ck_inputs.lua")
+    local env = setmetatable({ chickadee = M }, { __index = _G })
+    local chunk = loadfile("_ck_inputs.lua", "t", env)
     if not chunk then return {} end
     local ok, value = pcall(chunk)
     if ok and type(value) == "table" then return value end
@@ -2085,6 +2179,58 @@ function M.load_student()
     end
     pcall(chunk)
     return env
+end
+
+-- The submission split into notebook cells, for source-level checks.
+--
+-- \`extractLua\` writes an inert \`-- ---- chickadee:cell N ----\` comment ahead of
+-- each cell, which is what gives a source-level check cell granularity that
+-- plain concatenation loses. Same design as chickadee_student_cells in
+-- test_runtime.R, down to the marker text — only the comment leader differs,
+-- which is why both extractors share \`extractWithCellMarkers\`.
+--
+-- A submission that never came from a notebook (a hand-written .lua upload) has
+-- no markers, so the whole file comes back as one cell — file granularity,
+-- which is the honest answer for a file with no cells.
+function M.student_cells()
+    local file = M.student_file()
+    if not file then
+        M.errored("No Lua submission file was found to grade.")
+    end
+    local handle = io.open(file, "r")
+    if not handle then return {} end
+    local text = handle:read("a") or ""
+    handle:close()
+
+    -- Split without inventing a trailing empty line. Appending "\\n" and
+    -- matching greedily does invent one, which put a stray newline on the end
+    -- of the LAST cell only — so a \`cellContains\` check comparing exact source
+    -- would behave differently for the final cell than for every other one.
+    local lines = {}
+    local pos = 1
+    while pos <= #text do
+        local nl = text:find("\\n", pos, true)
+        if nl then
+            lines[#lines + 1] = text:sub(pos, nl - 1)
+            pos = nl + 1
+        else
+            lines[#lines + 1] = text:sub(pos)
+            pos = #text + 1
+        end
+    end
+
+    local cells, current, seen_marker = {}, nil, false
+    for _, line in ipairs(lines) do
+        if line:match("^%-%- ---- chickadee:cell %d+ ----$") then
+            if current then cells[#cells + 1] = table.concat(current, "\\n") end
+            current, seen_marker = {}, true
+        elseif current then
+            current[#current + 1] = line
+        end
+    end
+    if current then cells[#cells + 1] = table.concat(current, "\\n") end
+    if not seen_marker then return { (text:gsub("\\n$", "")) } end
+    return cells
 end
 
 -- Fetch a function the student was asked to write; a clear error when it is

@@ -82,6 +82,8 @@ enum GeneratedMessage {
     static let missing = standard.label("missing")
     static let budget = standard.label("budget")
     static let took = standard.label("took")
+    static let position = standard.label("position")
+    static let searched = standard.label("searched")
 
     /// `.performanceThreshold` in Python names its fields `threshold` and
     /// `elapsed`, which are longer than `expected`, so that message sits on its
