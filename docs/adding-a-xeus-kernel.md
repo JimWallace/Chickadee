@@ -160,7 +160,7 @@ from the YAML would accept imports the shipped kernel cannot serve.
 If the language has no package ecosystem, emit an empty `moduleOwners`. On-demand
 loading then correctly does nothing.
 
-### 3b. Register it with the vendoring guard
+### 4. Register it with the vendoring guard
 
 `scripts/check-xeus-vendored.sh` carries
 `expected_language = {"xpython": "python", "xr": "r"}` and iterates **that map**,
@@ -168,7 +168,7 @@ not `kernels.json`. A third kernel that is not in it ships completely unguarded:
 a partial or botched re-vendor of your kernel passes CI. Add the entry when you
 add the env.
 
-### 4. Write the language module
+### 5. Write the language module
 
 `Public/<lang>-grading-shared.js`, exporting:
 
@@ -182,7 +182,7 @@ Mirror the kernel's own `kernel.json` for `sharedLibs` and `argv`.
 `python-grading-shared.test.mjs` asserts that correspondence for Python — write
 the equivalent, because getting it wrong fails at boot with an opaque error.
 
-### 5. Write the worker
+### 6. Write the worker
 
 `Public/<lang>-grading-worker.js` — about 150 lines, mostly protocol. Copy
 `r-grading-worker.js`; it is the shorter of the two. You supply:
@@ -195,7 +195,7 @@ the equivalent, because getting it wrong fails at boot with an opaque error.
 The retry loop itself is `runInstallingMissingPackages` in the shared substrate.
 Do not reimplement it.
 
-### 6. Route to it
+### 7. Route to it
 
 - `Public/browser-runner.js` — `RoutingExecutor` picks a worker by script
   extension.
@@ -203,7 +203,7 @@ Do not reimplement it.
   maps the same extension to a native subprocess command, so the worker and the
   browser agree.
 
-### 7. Allowlist the worker for cross-origin isolation
+### 8. Allowlist the worker for cross-origin isolation
 
 `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`. **This one has bitten
 us.** The notebook page is cross-origin isolated on Chromium and Firefox, and a
@@ -217,7 +217,7 @@ The allowlist is per-path, so "same directory as an allowed worker" proves
 nothing. `IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page
 scripts and fails on drift in either direction.
 
-### 8. Ship a runtime helper
+### 9. Ship a runtime helper
 
 `Tools/runner-support/test_runtime.<x>` — the `passed()` / `failed()` / `errored()`
 API a test script calls. It must behave identically under the native subprocess
@@ -226,7 +226,7 @@ and in the kernel, which have no process contract in common. See
 `commandArgs()` had to be masked in the global environment so one file works in
 both.
 
-### 9. Prove it on a real kernel
+### 10. Prove it on a real kernel
 
 Add a fixture to `Tools/browser-grading-smoke/smoke.mjs` and run:
 
