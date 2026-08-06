@@ -59,3 +59,9 @@
   Both now resolve through `AssignmentLanguage` — the probe from `allCases`,
   the extension through the one extension table — so a new language is
   advertised and suggested the day its case exists.
+- **A `.lua` test suite file could not be uploaded through the web form.** The
+  allowlist was hand-listed (`sh/bash/zsh/py/r/rb/pl/js/php`) and a `.lua`
+  upload was silently dropped from the suite rather than rejected with a
+  message, while the MCP `author_script` path accepted it. Assignment-language
+  extensions now come from `AssignmentLanguage`, and an extensionless script
+  with a `lua` shebang is recognised.
