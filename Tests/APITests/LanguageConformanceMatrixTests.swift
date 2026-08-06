@@ -205,6 +205,51 @@ import Testing
         }
     }
 
+    /// The student-facing wording must be the SAME in every language.
+    ///
+    /// It is currently hand-repeated: `"  expected: "` and `"  got:      "`
+    /// each appear in fourteen files across both languages and both renderer
+    /// families, with nothing tying them together. So a reworded Python failure
+    /// silently diverges from the R one, and a student on an R lab reads
+    /// different prose than a student on a Python lab for the same mistake.
+    ///
+    /// This pins them from the outside. It is also the guard that makes the
+    /// planned extraction — hoisting this vocabulary into one place so a new
+    /// language inherits it rather than retyping it — verifiable from both
+    /// ends: the goldens prove the bytes did not move, and this proves the
+    /// languages still agree.
+    @Test func studentFacingWordingIsSharedAcrossLanguages() {
+        // The field labels and phrases a generated failure message is built
+        // from. Not every kind emits every one; the assertion is that whichever
+        // ones a kind uses, it uses in EVERY language.
+        let vocabulary = [
+            "unexpected exception", "wrong value",
+            "  input:    ", "  expected: ", "  got:      ", "Returned ",
+        ]
+
+        for kind in PatternKind.allCases {
+            var perLanguage: [AssignmentLanguage: Set<String>] = [:]
+            for language in AssignmentLanguage.allCases {
+                let source = renderPatternFamily(
+                    GeneratedSourceFixtures.family(kind: kind), language: language
+                )
+                .map(\.source).joined(separator: "\n")
+                perLanguage[language] = Set(vocabulary.filter { source.contains($0) })
+            }
+            guard let reference = perLanguage[.default] else { continue }
+            for (language, used) in perLanguage where language != .default {
+                #expect(
+                    used == reference,
+                    """
+                    \(kind) uses different failure wording in \(language) than in \
+                    \(AssignmentLanguage.default). Only in \(AssignmentLanguage.default): \
+                    \(reference.subtracting(used).sorted()). Only in \(language): \
+                    \(used.subtracting(reference).sorted()).
+                    """)
+            }
+        }
+    }
+
     // MARK: - Executed against the real interpreter (skipped when absent)
 
     /// The assertion that would have caught a whole class of renderer bug: a

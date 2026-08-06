@@ -74,3 +74,19 @@
   language**, and the inputs file the server writes being the one the language
   actually reads back. `PatternKind` gained `CaseIterable` to make the kind half
   possible — it had none, so the kinds could not be iterated at all.
+
+- **Byte-for-byte goldens for every generated script** (72 snapshots covering
+  every `PatternKind` and `NotebookCheckKind` in every language, plus each
+  language's inputs file), and a **cross-language wording guard**. Together they
+  make the planned renderer refactor provable rather than a judgement call:
+  generated filenames embed a `spec_hash` and `TestSetupCache` keys on manifest
+  content, so a change of one byte rewrites every existing assignment's manifest
+  and busts every cache entry. Snapshot first, refactor, and the work is correct
+  exactly when the goldens still pass.
+
+  The wording guard covers the other axis. `"  expected: "` and `"  got:      "`
+  are each hand-repeated in **fourteen** files across both languages and both
+  renderer families, so a reworded Python failure could silently diverge from
+  the R one and a student on an R lab would read different prose for the same
+  mistake. The guard asserts that whichever message fields a kind uses, it uses
+  in every language — currently true, now pinned.
