@@ -25,9 +25,9 @@
 //     change; a rebuild produces a new hash → new URL.  Cached immutably
 //     for a year, eliminating the per-boot revalidation storm.
 //   * Everything else on the fast path (unhashed names like the MathJax
-//     fonts, all of /pyodide/, /vendor/) is stamped `no-cache` so it
+//     fonts, /vendor/, the kernel binaries) is stamped `no-cache` so it
 //     revalidates: re-vendoring rewrites those bytes IN PLACE under stable
-//     names — including the deterministically patched pyodide-kernel wheel —
+//     names —
 //     so immutable caching would pin stale bytes across an upgrade (#574's
 //     failure class). `no-cache` (an explicit "revalidate before use", a cheap
 //     304 via ETag when unchanged) is required because an ETag ALONE lets the
@@ -46,7 +46,13 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     static let fastPathPrefixes = [
         "/jupyterlite/build/",
         "/jupyterlite/extensions/",
-        "/pyodide/",
+        // The vendored xeus kernels: ~230 MB and by far the largest tree here.
+        // A kernel boot fetches every package in its environment — 48 files for
+        // Python, 51 for R — and until v0.5.19 every one of those rode the full
+        // chain and paid a Fluent session lookup it never needed, which is
+        // precisely the cost this middleware exists to remove. Vendored bytes by
+        // construction, same as the two trees above.
+        "/jupyterlite/xeus/",
         "/vendor/",
     ]
 

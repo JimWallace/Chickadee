@@ -125,11 +125,11 @@ if (
 path.write_text(text)
 PY
 
-# Rewrite the pyodide-kernel's Atomics.waitAsync polyfill worker from a data: URL
+# Rewrite each kernel extension's Atomics.waitAsync polyfill worker from a data: URL
 # to a blob: URL so it survives our CSP (worker-src 'self' blob:) and COEP —
 # letting engines without native waitAsync (older Safari / iPadOS) boot the kernel
 # cross-origin isolated. Idempotent; fails if the upstream polyfill string drifts.
-python3 "$ROOT_DIR/scripts/patch-pyodide-waitasync-worker.py" "$OUTPUT_DIR"
+python3 "$ROOT_DIR/scripts/patch-waitasync-worker.py" "$OUTPUT_DIR"
 
 # Inject the in-iframe kernel-boot diagnostics collector (jl-kernel-diagnostics.js)
 # into the editor index.html documents. `jupyter lite build` regenerates those, so

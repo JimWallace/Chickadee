@@ -125,7 +125,6 @@ jobs:
           scripts/check-env-vendored-sync.sh
           scripts/check-xeus-vendored.sh
           scripts/verify-jupyterlite.sh
-          scripts/check-pyodide-parity.sh
 
       - name: Summarise what changed
         id: diff

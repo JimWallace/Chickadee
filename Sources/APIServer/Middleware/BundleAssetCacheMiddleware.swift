@@ -1,7 +1,7 @@
 // APIServer/Middleware/BundleAssetCacheMiddleware.swift
 //
-// Cache discipline for the vended in-browser editor bundle — JupyterLite
-// (`/jupyterlite/`) and Pyodide (`/pyodide/`). FileMiddleware serves these with
+// Cache discipline for the vended in-browser editor bundle (`/jupyterlite/`).
+// FileMiddleware serves these with
 // an ETag but NO Cache-Control, so browsers fall back to *heuristic* caching and
 // can reuse a stale copy for hours without revalidating. That is exactly how the
 // exec_hang fix (a changed kernel wheel, same filename) failed to reach
@@ -38,7 +38,7 @@ struct BundleAssetCacheMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let response = try await next.respond(to: request)
         let path = request.url.path
-        guard path.hasPrefix("/jupyterlite/") || path.hasPrefix("/pyodide/") else {
+        guard path.hasPrefix("/jupyterlite/") else {
             return response
         }
         guard

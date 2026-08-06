@@ -2,7 +2,7 @@
 //
 // The one irreducible seam between the two runners: *running a script*.
 // The native worker runs a subprocess under a sandbox; the browser runner
-// drives Pyodide. Everything else — the suite-execution loop, the dependency
+// drives the browser's xeus kernel. Everything else — the suite-execution loop, the dependency
 // gate, the skip messages, the outcome shaping — is shared (see
 // `executeSuites`). Keeping this protocol deliberately narrow is what keeps the
 // drift surface small: the more the substrate implements, the less is shared.
@@ -22,7 +22,7 @@ import _Concurrency
 ///
 /// Conformances:
 /// - `NativeScriptExecutor` (worker) — subprocess + sandbox via `ScriptRunner`.
-/// - `BrowserScriptExecutor` (browser, Stage 4) — Pyodide via JavaScriptKit.
+/// - `BrowserScriptExecutor` (browser) — a vendored xeus kernel via JavaScriptKit.
 public protocol ScriptExecutor {
     /// True if a runnable script with this name exists in the workspace.
     /// A missing script is skipped by `executeSuites` with no emitted outcome,

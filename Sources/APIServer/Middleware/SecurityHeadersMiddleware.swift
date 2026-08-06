@@ -103,29 +103,36 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         request.storage[OpenerPolicyKey.self] = value
     }
 
-    /// CSP for application pages.  Permissive enough to keep JupyterLite,
-    /// Pyodide, and the CodeMirror-based assignment editor functional:
-    ///   - 'unsafe-eval' is required by Pyodide's WASM bootstrap.
+    /// CSP for application pages.  Permissive enough to keep JupyterLite and the
+    /// CodeMirror-based assignment editor functional:
+    ///   - 'unsafe-eval' is required, and NOT only by Pyodide.  Retiring Pyodide
+    ///     in v0.5.19 was expected to allow narrowing this to 'wasm-unsafe-eval'
+    ///     (docs/xeus-python-grading-migration-plan.md §A4 said as much).  It
+    ///     does not: measured with Pyodide fully removed, `wasm-unsafe-eval`
+    ///     leaves JupyterLab unable to activate its plugins — the editor loads,
+    ///     reports `crossOriginIsolated`, fetches both kernel manifests, and
+    ///     then never renders a console, with
+    ///     `@jupyterlab/codemirror-extension:commands failed to activate`.
+    ///     JupyterLab compiles JSON-schema validators at run time, which needs
+    ///     real `eval`.  Do not retry this without a plan for that; the editor
+    ///     smoke catches it, but only on a full boot.
     ///   - 'unsafe-inline' covers inline `<script>` and `onclick=` handlers
     ///     in the Leaf templates.
-    ///   - blob: in worker-src is required by JupyterLite's web workers.
+    ///   - blob: in worker-src is required by JupyterLite's web workers, and by
+    ///     the Atomics.waitAsync polyfill that `scripts/patch-waitasync-worker.py`
+    ///     rewrites from a (CSP-blocked) data: worker into a blob: one.
     ///
-    /// jszip, CodeMirror, and Pyodide are all vendored under `Public/` (see
-    /// `scripts/setup-vendor.sh`).  There is ONE canonical Pyodide, served at
-    /// `/pyodide`, loaded by both the JupyterLite editor kernel (via
-    /// `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's
-    /// own browser paths (browser-runner grading, `/validate`).
-    /// Every browser asset is therefore same-origin, so NO third-party origin
-    /// appears in the policy.
+    /// jszip and CodeMirror are vendored under `Public/` (see
+    /// `scripts/setup-vendor.sh`); both editor kernels are vendored under
+    /// `Public/jupyterlite/xeus/`.  Every browser asset is same-origin, so NO
+    /// third-party origin appears in the policy.
     ///
     /// History worth keeping: the editor kernel used to load Pyodide from
     /// `cdn.jsdelivr.net` (the jupyterlite-pyodide-kernel default).  #574
     /// dropped the CDN allowance assuming self-hosting was complete — but the
     /// editor had never been repointed, so its kernel broke (a student-facing
-    /// outage).  The editor is now served the vendored copy, so the allowance
-    /// is gone for good.  Two guards keep a CDN dependency from creeping back
-    /// in: `cSPHasNoExternalScriptConnectOrWorkerOrigins` here, and the
-    /// `pyodideUrl`-is-same-origin check in `scripts/verify-jupyterlite.sh`.
+    /// outage).  Pyodide is gone entirely now, but the lesson stands and
+    /// `cSPHasNoExternalScriptConnectOrWorkerOrigins` still guards it.
     /// Tighten with per-response nonces in a follow-up.
     ///
     /// `form-action` is rendered per-request so the IdP origin from

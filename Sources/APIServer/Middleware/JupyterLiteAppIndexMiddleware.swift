@@ -14,7 +14,7 @@
 //
 // That bare-directory URL is therefore ONLY ever requested by the stray tab —
 // the in-iframe editor always loads `…/index.html`. Rather than redirect it to a
-// SECOND full editor (which boots a second Pyodide and, on WebKit, contends with
+// SECOND full editor (which boots a second kernel and, on WebKit, contends with
 // the kernel already running in the iframe), this middleware returns a tiny
 // self-closing page: the stray tab was opened by `window.open`, so `window.close()`
 // closes it, and it never boots a kernel. (`notebook.js` also suppresses the

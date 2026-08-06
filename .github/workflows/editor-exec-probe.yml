@@ -38,7 +38,6 @@ on:
       - "Public/jl-kernel-diagnostics.js"
       - "Public/browser-runner.js"
       - "Public/jupyterlite/**"
-      - "scripts/patch-pyodide-kernel.py"
 
 concurrency:
   group: editor-exec-probe-${{ github.event_name }}-${{ github.ref }}
@@ -63,7 +62,7 @@ jobs:
       matrix:
         browser: [chromium, webkit]
     # Same Swift image as the other jobs so the cached server binary runs and the
-    # vended Public/pyodide it serves is the exact build CI ships.
+    # vendored kernels it serves are the exact build CI ships.
     container:
       # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
       # the test packages), so the probe harness does not apt-get them at job

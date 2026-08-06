@@ -29,8 +29,6 @@ on:
       - "Public/vendor/iframe-commands-host.js"
       - "Public/notebook*.js"
       - "Public/jupyterlite/**"
-      - "Public/pyodide/**"
-      - "scripts/patch-pyodide-kernel.py"
 
 concurrency:
   group: notebook-bridge-probe-${{ github.event_name }}-${{ github.ref }}

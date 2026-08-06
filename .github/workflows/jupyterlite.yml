@@ -52,7 +52,7 @@ jobs:
             echo "::notice::no diff computed — running the build (fail-safe)."
             exit 0
           fi
-          pattern='^(Public/jupyterlite/|Public/pyodide/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/add-pyodide-extras\.py|scripts/patch-pyodide-kernel\.py|scripts/check-pyodide-parity\.sh|scripts/verify-jupyterlite\.sh|scripts/check-kernel-deps-vendored\.py|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
+          pattern='^(Public/jupyterlite/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/verify-jupyterlite\.sh|scripts/check-kernel-deps-vendored\.py|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
           # Here-string, not a pipe — see editor-smoke.yml for the SIGPIPE
           # trap that silently misclassifies large diffs.
           if grep -qE "$pattern" <<< "$changed"; then
@@ -74,23 +74,15 @@ jobs:
       # network beyond GitHub. So the vendored Public/jupyterlite bytes are
       # authoritative and we verify their coherence here rather than rebuild-and-
       # diff. Rebuild them with scripts/build-jupyterlite.sh where micromamba +
-      # emscripten-forge are reachable (a maintainer machine — the Pyodide half
-      # stays deterministic there). See docs/xeus-r-kernel-spike.md.
+      # emscripten-forge are reachable, or via the re-vendor workflow. See
+      # docs/xeus-r-kernel-spike.md.
       - name: Verify the committed JupyterLite bundle is coherent
         if: steps.detect.outputs.relevant == 'true'
-        # pyodideUrl same-origin, the nb_mypy kernel-wheel sha cascade, the
-        # waitAsync blob worker, the diagnostics collector tag, and the xeus
+        # No Pyodide may return, the waitAsync blob worker (every extension,
+        # not just one), the diagnostics collector tag, and the xeus
         # parselmouth-fetch stub — the internal invariants a rebuild used to
         # guarantee, asserted on the committed bytes.
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
-
-      - name: Verify Pyodide parity (vended == kernel)
-        if: steps.detect.outputs.relevant == 'true'
-        # Fails if Public/pyodide drifts from the version the editor kernel is
-        # pinned to — the latent condition behind the #574 editor outage. This
-        # is what makes the editor's same-origin Pyodide trustworthy: green
-        # here means the vended copy actually matches the kernel.
-        run: scripts/check-pyodide-parity.sh
 
       - name: Verify editor kernel boots with zero external fetches (FIPPA)
         if: steps.detect.outputs.relevant == 'true'

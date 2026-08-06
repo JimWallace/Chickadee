@@ -66,7 +66,7 @@ jobs:
           # paths-ignore'd from the analysis, and the vendored Pyodide
           # distribution is machine-generated — a re-vendor PR gains nothing
           # from a CodeQL pass (the weekly schedule + main pushes cover them).
-          js_changed="$(grep -E '\.(js|mjs|cjs|ts|tsx)$' <<< "$changed" | grep -vE '^Public/(jupyterlite|pyodide)/' || true)"
+          js_changed="$(grep -E '\.(js|mjs|cjs|ts|tsx)$' <<< "$changed" | grep -vE '^Public/jupyterlite/' || true)"
           wf_changed="$(grep -E '^\.github/workflows/codeql-js\.yml$' <<< "$changed" || true)"
           if [ -n "$js_changed" ] || [ -n "$wf_changed" ]; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
