@@ -7,6 +7,7 @@
 //   POST   /instructor/:assignmentID/scripts
 //   DELETE /instructor/:assignmentID/scripts/:filename
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -648,9 +649,10 @@ import VaporTesting
     // The check reads the real vendored kernel's inventory, so it is skipped
     // whole when those bytes are absent from the checkout.
 
-    private func requireKernelInventory() throws {
-        guard app.kernelPythonEnvironment != nil else {
-            throw IssueRecorded("vendored chickadee-python kernel inventory not present")
+    private func requireKernelInventory(_ language: AssignmentLanguage = .python) throws {
+        guard app.kernelEnvironments?[language] != nil else {
+            throw IssueRecorded(
+                "vendored \(KernelEnvironment.environmentName(for: language)) inventory not present")
         }
     }
 
@@ -755,6 +757,80 @@ import VaporTesting
             )
 
             #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_local.py") != nil)
+        }
+    }
+
+    // MARK: - The R half of the same check
+    //
+    // R had the sharper version of this problem: until v0.5.19 the grading
+    // environment was bare `xeus-r`, so ANY tidyverse call failed at grade time.
+
+    @Test func postScriptRejectsAnRLibraryTheGradingKernelLacks() async throws {
+        try await withApp(app) { _ in
+            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+                throw IssueRecorded("zip not available")
+            }
+            try requireKernelInventory(.r)
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setup = try await insertSetup(id: "sc_rimp1", withEntries: [])
+            let a = try await insertAssignment(testSetupID: "sc_rimp1", title: "RImportReject")
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(
+                        string: """
+                            {"filename":"publictest_plot.R",\
+                            "content":"library(ggplot2)\\nprint(1)\\n",\
+                            "tier":"public","points":1}
+                            """)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                    #expect(res.body.string.contains("ggplot2"))
+                }
+            )
+
+            #expect(
+                readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_plot.R") == nil,
+                "a rejected script must not reach the zip")
+        }
+    }
+
+    @Test func postScriptAcceptsRLibrariesTheGradingKernelProvides() async throws {
+        try await withApp(app) { _ in
+            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+                throw IssueRecorded("zip not available")
+            }
+            try requireKernelInventory(.r)
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setup = try await insertSetup(id: "sc_rimp2", withEntries: [])
+            let a = try await insertAssignment(testSetupID: "sc_rimp2", title: "RImportAccept")
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(
+                        string: """
+                            {"filename":"publictest_ok.R",\
+                            "content":"library(dplyr)\\nlibrary(stats)\\nx <- tibble::tibble(a = 1)\\n",\
+                            "tier":"public","points":1}
+                            """)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .created, "body: \(res.body.string.prefix(300))")
+                }
+            )
+
+            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_ok.R") != nil)
         }
     }
 }

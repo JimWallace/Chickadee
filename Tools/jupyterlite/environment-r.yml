@@ -4,8 +4,57 @@
 # SEPARATE from environment-python.yml on purpose — see the note there: one
 # shared env makes every kernel boot fetch both languages' payloads.
 #
-# Deliberately bare; add r-* packages here as courses need them, remembering
-# that the editor has no runtime install path (CSP is connect-src 'self').
+# The editor has no runtime install path (CSP is connect-src 'self'), so
+# anything a student or an instructor's test script calls `library()` on must be
+# baked in here. Until v0.5.19 this env was bare `xeus-r`, which meant base R
+# only — no dplyr, no ggplot2 — and any `library(dplyr)` failed at grade time
+# with nothing to warn the author. `PythonImportGuard`'s R counterpart now
+# rejects such a save, and this list is what it checks against.
+#
+# COST OF ADDING TO THIS LIST — measure, do not guess. There are two costs and
+# the second is the one that bites.
+#
+# 1. Boot. A kernel fetches its WHOLE environment at boot, paid on every R
+#    notebook open and every browser-graded R submission. Measured with
+#    Tools/browser-grading-smoke: 5.9s bare, 10.0s with the full tidyverse core.
+#
+# 2. ATTACH. `library(pkg)` is startlingly expensive under wasm. Measured in a
+#    real kernel by Tools/browser-grading-smoke, which prints per-package
+#    timings — re-read them there rather than trusting these numbers to age well.
+#
+#    The costs are NOT independent, and that matters more than any single
+#    figure: the tidyverse packages share a dependency graph (rlang, vctrs, cli,
+#    pillar…), so whichever attaches FIRST pays for all of it and the rest come
+#    cheap. Measured both ways:
+#
+#      ggplot2 first: ggplot2 193.5s, then dplyr 1.6s
+#      dplyr first:   dplyr 25.9s, then tidyr 10.8s, readr 12.9s, stringr 3.8s,
+#                     forcats 2.1s, purrr 1.1s, tibble 1.0s
+#
+#    So the floor for ANY tidyverse use on a cold kernel is ~26s, and the whole
+#    set is ~58s. The default per-test time limit is 10 SECONDS, so the first
+#    browser-graded R test that attaches anything from here will exceed it
+#    unless the assignment raises its limit. That is a real constraint on
+#    browser-graded R, not a reason to keep the env bare — worker grading is
+#    unaffected, and the editor has no per-cell timeout.
+#
+#    ggplot2 is excluded because 193s is beyond what any limit should have to
+#    absorb and would hang a student's first editor cell for three minutes;
+#    lubridate (32.4s) for the same reason with less margin. Both remain
+#    *addable* by a course that accepts the cost — a deliberate choice, not a
+#    default.
+#
+# The smoke test attaches every package listed here and fails if any does not
+# load, so this list cannot silently claim something the kernel will not give.
+#
+# WHAT IS NOT AVAILABLE. Availability is the union of emscripten-forge-4x
+# (compiled, emscripten-wasm32) and conda-forge (noarch, pure-R) — a package
+# missing from one is often present in the other, so check by SOLVING rather
+# than by reading a repodata listing:
+#
+#   micromamba create -n probe --dry-run --platform emscripten-wasm32 \
+#     -c https://repo.prefix.dev/emscripten-forge-4x \
+#     -c https://repo.prefix.dev/conda-forge xeus-r r-somepackage
 #
 # Channel: emscripten-forge-4x. The older `emscripten-forge-dev` alias serves
 # the 3x (emscripten 3.x ABI) channel, frozen since 2026-04-09.
@@ -15,3 +64,15 @@ channels:
   - https://repo.prefix.dev/conda-forge
 dependencies:
   - xeus-r
+  # The tidyverse core an introductory data-science course actually uses, minus
+  # the two whose attach cost makes them unusable as defaults (see above).
+  # `r-tidyverse` (the metapackage) does not solve here anyway, so members are
+  # listed individually — better regardless, since it keeps the payload to what
+  # is genuinely used rather than the whole umbrella.
+  - r-dplyr
+  - r-tidyr
+  - r-readr
+  - r-stringr
+  - r-tibble
+  - r-purrr
+  - r-forcats

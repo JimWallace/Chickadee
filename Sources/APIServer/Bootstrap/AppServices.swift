@@ -7,6 +7,7 @@
 //
 // Extracted from configure(_:) in #496.
 
+import Core
 import Fluent
 import Vapor
 
@@ -38,15 +39,14 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     // The browser grading kernel's module inventory, used to reject an authoring
     // write whose imports the fixed environment cannot satisfy. Absent in a
     // checkout without the vendored kernel bytes, in which case the check is
-    // skipped rather than failing every write (see KernelPythonEnvironment).
-    do {
-        app.kernelPythonEnvironment = try KernelPythonEnvironment.load(
-            publicDirectory: app.directory.publicDirectory)
-    } catch {
+    // skipped rather than failing every write (see KernelEnvironment).
+    app.kernelEnvironments = KernelEnvironments.load(
+        publicDirectory: app.directory.publicDirectory)
+    for language in AssignmentLanguage.allCases where app.kernelEnvironments?[language] == nil {
         app.logger.notice(
             """
-            Browser-grading import check disabled: \(error). Authoring writes will not be \
-            checked against the grading kernel's package set.
+            Browser-grading import check disabled for \(language.rawValue): no vendored kernel \
+            inventory. Authoring writes will not be checked against its package set.
             """)
     }
 

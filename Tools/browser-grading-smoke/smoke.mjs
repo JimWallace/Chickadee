@@ -68,7 +68,10 @@ const SITECUSTOMIZE_PY = await fs.readFile(
 const LANGUAGES = {
     r: {
         worker: '/r-grading-worker.js',
-        scripts: ['publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R', 'publictest_context.R'],
+        scripts: [
+            'publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R',
+            'publictest_context.R', 'publictest_packages.R',
+        ],
         files: {
             'test_runtime.R': TEST_RUNTIME_R,
             // Exit 0, and a JSON footer RunnerCore reads for the shortResult.
@@ -83,6 +86,20 @@ failed("expected 5, got 4")
             // Exit 1 from an uncaught R error, not from the helper API.
             'publictest_boom.R': `source("test_runtime.R")
 stop("this test blew up")
+`,
+            // Every package environment-r.yml DECLARES must actually attach in a
+            // real kernel. check-env-vendored-sync.sh proves they are in the
+            // tarballs; only this proves they LOAD — and an env can be perfectly
+            // well-formed and still not work, which is exactly how the Python
+            // side shipped a urllib3 that stopped the kernel booting.
+            'publictest_packages.R': `source("test_runtime.R")
+for (pkg in c("dplyr", "tidyr", "readr", "stringr", "tibble",
+              "purrr", "forcats")) {
+  t0 <- Sys.time()
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+  cat(pkg, "=", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
+}
+passed("all declared packages attached")
 `,
             // The label exists only because the wrapper masks commandArgs();
             // the seed comes from the environment and the input from _ck_inputs.
@@ -411,6 +428,16 @@ check('the per-student inputs file is readable',
 check('every script produced a result',
     [pass, fail, boom, context].every(r => r && typeof r.exitCode === 'number'),
     'a script returned no result');
+
+// R only: the declared-package fixture. Python's equivalent lives in the eval
+// probe, which has a namespace to evaluate an import expression against.
+if (language === 'r') {
+    const packages = result.results['publictest_packages.R'];
+    check('every package the environment declares actually attaches',
+        packages && packages.exitCode === 0,
+        JSON.stringify(packages));
+    console.log('  attach timings:', (packages?.stdout || '').replace(/\n/g, ' ').trim());
+}
 
 const slowest = Math.max(...Object.values(result.results).map(r => r.ms));
 console.log(`  slowest script: ${slowest}ms`);

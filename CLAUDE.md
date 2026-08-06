@@ -521,9 +521,12 @@ back at it.
 Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib; the R side is bare `xeus-r`.
+numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
+the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
+forcats).
 
-**The authoring check reads the VENDORED bytes, never `environment-python.yml`.**
+**Both kernel environments are checked at authoring time, and the check reads
+the VENDORED bytes, never the environment YAML.**
 Since browser grading moved onto this env, saving a browser-graded `.py` whose
 imports the kernel cannot satisfy is rejected at the write
 (`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
@@ -536,9 +539,22 @@ nothing until `build-jupyterlite.sh` runs, so a check derived from the env file
 would accept imports the shipped kernel cannot serve — the exact failure it
 exists to prevent. Reading the tarballs also means there is no
 distribution-name-to-import-name table to maintain. The check applies to
-browser-graded assignments only (worker grading runs real `python3`) and resolves
-every ambiguity toward reporting nothing, since a false positive blocks an
-instructor from saving with no self-service fix.
+browser-graded assignments only (worker grading runs a real interpreter) and
+resolves every ambiguity toward reporting nothing, since a false positive blocks
+an instructor from saving with no self-service fix. `KernelImportGuard` handles
+both languages, dispatching on file extension; R is scanned by
+`RLibraryScanner` for `library()`/`require()`/`::`.
+
+**R attach cost is the constraint on the R env, not download size.**
+`library()` is startlingly expensive under wasm and the costs are *not*
+independent — the tidyverse shares a dependency graph, so whichever package
+attaches first pays for all of it (~26s cold; the whole shipped set ~58s), and
+the rest come cheap. That is why `ggplot2` (193s alone) and `lubridate` (32s)
+are excluded from the default env despite solving fine, and why the default
+10s per-test limit is a real constraint on browser-graded R. Boot cost barely
+moved (5.9s bare → 5.1s with the tidyverse core). `Tools/browser-grading-smoke`
+prints per-package timings and asserts every declared package actually attaches
+— measure there rather than reasoning about package counts.
 
 Building the kernels needs **micromamba on PATH plus network to
 repo.prefix.dev**. This was long documented as something *CI cannot do*, and

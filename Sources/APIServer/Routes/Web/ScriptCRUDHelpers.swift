@@ -37,7 +37,7 @@ struct CreatedScript {
 func createScriptInSetup(
     setup: APITestSetup,
     body: CreateScriptBody,
-    kernelEnvironment: KernelPythonEnvironment? = nil,
+    kernelEnvironments: KernelEnvironments? = nil,
     on db: any Database
 ) async throws -> CreatedScript {
     let cleaned = sanitizeSuiteFilename(body.filename)
@@ -62,8 +62,8 @@ func createScriptInSetup(
     }()
     // Refuse a browser-graded Python script whose imports the grading kernel
     // cannot satisfy — checked on the INLINED text, since that is what runs.
-    try PythonImportGuard.check(
-        filename: cleaned, content: inlined, setup: setup, environment: kernelEnvironment)
+    try KernelImportGuard.check(
+        filename: cleaned, content: inlined, setup: setup, environments: kernelEnvironments)
     try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlined)
 
     let tier = normalizeTier(body.tier, isTest: body.isTest)

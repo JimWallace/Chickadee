@@ -69,12 +69,12 @@ func applySuiteEditMapped(
     setup: APITestSetup,
     body: SuitePayload,
     tool: String,
-    kernelEnvironment: KernelPythonEnvironment? = nil,
+    kernelEnvironments: KernelEnvironments? = nil,
     on db: any Database
 ) async throws {
     do {
         try await applySuiteEdit(
-            setup: setup, body: body, kernelEnvironment: kernelEnvironment, on: db)
+            setup: setup, body: body, kernelEnvironments: kernelEnvironments, on: db)
     } catch let error as WebAssignmentError {
         throw MCPToolError.from(error, tool: tool)
     } catch let error as any AbortError {

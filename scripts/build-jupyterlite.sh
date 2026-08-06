@@ -153,13 +153,16 @@ python3 "$ROOT_DIR/scripts/patch-xeus-extension.py" "$OUTPUT_DIR"
 # `kernel_starting` forever. Idempotent; fails if the upstream source drifts.
 python3 "$ROOT_DIR/scripts/patch-xeus-python-http.py" "$OUTPUT_DIR"
 
-# Derive the set of top-level module names each env can import, from the env's
-# own package tarballs. The server reads this to reject a browser-graded Python
-# script whose imports the fixed environment cannot satisfy, at the moment an
-# instructor saves it rather than when a student submits. It MUST be regenerated
+# Derive the set of importable names each env provides, from that env's own
+# package tarballs — Python modules and R libraries alike. The server reads these
+# to reject a browser-graded script whose imports the fixed environment cannot
+# satisfy, at the moment an instructor saves it rather than when a student
+# submits. It MUST be regenerated
 # whenever the env changes, which is why it lives here rather than being a
 # separate manual step; scripts/check-xeus-vendored.sh fails if it drifts.
-python3 "$ROOT_DIR/scripts/derive-kernel-modules.py" "$OUTPUT_DIR/xeus/chickadee-python"
+for env_dir in "$OUTPUT_DIR"/xeus/chickadee-*; do
+  [ -d "$env_dir" ] && python3 "$ROOT_DIR/scripts/derive-kernel-modules.py" "$env_dir"
+done
 
 "$ROOT_DIR/scripts/verify-jupyterlite.sh" "$OUTPUT_DIR"
 echo "JupyterLite rebuilt at $OUTPUT_DIR"

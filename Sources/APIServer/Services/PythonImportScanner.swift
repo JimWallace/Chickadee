@@ -2,7 +2,7 @@
 //
 // Extracts the top-level module names a Python source file imports
 // unconditionally, so an authoring write can be checked against what the
-// browser grading environment actually provides (see KernelPythonEnvironment).
+// browser grading environment actually provides (see KernelEnvironment).
 //
 // Deliberately a scanner, not a parser. The question is narrow — "which
 // third-party packages does this file require in order to be importable at all"
