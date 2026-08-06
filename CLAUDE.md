@@ -578,9 +578,12 @@ exists to prevent. Reading the tarballs also means there is no
 distribution-name-to-import-name table to maintain. The check applies to
 browser-graded assignments only (worker grading runs a real interpreter) and
 resolves every ambiguity toward reporting nothing, since a false positive blocks
-an instructor from saving with no self-service fix. `KernelImportGuard` handles
-both languages, dispatching on file extension; R is scanned by
-`RLibraryScanner` for `library()`/`require()`/`::`.
+an instructor from saving with no self-service fix. `KernelImportGuard` dispatches on file
+extension; R is scanned by `RLibraryScanner` for `library()`/`require()`/`::`.
+It declines `.lua` on purpose: emscripten-forge ships no Lua library packages,
+so the `chickadee-lua` inventory is empty and a guard against it would reject
+every `require`, starting with the `require("test_runtime")` that opens every
+generated Lua test.
 
 **A kernel env has TWO costs, and they fall on different people. Be sparing.**
 *Boot* — fetching and mounting the whole env — is paid by everyone on every
@@ -967,7 +970,7 @@ Full design, runbook, and host steps:
 
 **The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
 course offering run on Chickadee and the pivot to next year's feature work.
-The system is a working client–server autograder: Python and R assignments;
+The system is a working client–server autograder: Python, R and Lua assignments;
 browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (8 kinds) and notebook checks (10 kinds); achievements; student slip days;
@@ -1153,10 +1156,10 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
 - `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
 - `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
-- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise)
+- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 26 compiler-named sites measured on the Lua run, the **five** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r :   .python`, which type-check forever and route the new language to Python), the browser half's own checklist, and a done test that requires the generated code be executed rather than parsed
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
-- `docs/language-handling-review.md` — second-opinion design review of the Python-or-R dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules
+- `docs/language-handling-review.md` — second-opinion design review of the assignment-language dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules. Written before Lua existed, so §4's prediction is now **scored against the real third language** — what held (bucket A never changed; every bucket-B site failed to compile) and what did not (the compiler-invisible surface is a recurring shape, not a checklist)
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
 - `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
