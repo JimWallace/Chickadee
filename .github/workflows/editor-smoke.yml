@@ -179,12 +179,15 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
-      # Same editor probe, but against the kernel students actually get.
+      # The dedicated synchronous-stdin probe.
       #
-      # The selftest above runs `?kernel=python` — the Pyodide kernel, which
-      # since v0.5.14 is no longer the editor default (`defaultKernelName` is
-      # `xpython`, and notebooks normalize to it). Without this step every
-      # stdin/freeze result we have describes a kernel no student boots.
+      # This step used to carry a second job: the selftest above ran
+      # `?kernel=python` — the Pyodide kernel — so without this, every
+      # stdin/freeze result described a kernel no student booted. Retiring
+      # Pyodide deleted that kernelspec, and the selftest now defaults to
+      # `xpython` itself, so the two run the same kernel. The step stays because
+      # it asserts something the selftest does not: that `input()` actually
+      # round-trips over each engine's sync transport.
       #
       # Both engines have a synchronous-stdin transport, and they are different
       # ones — which is exactly why this must run on both:

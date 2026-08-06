@@ -63,29 +63,28 @@ if "const originalList = (config || {}).federated_extensions || [];" not in conf
 if "config.federated_extensions = allExtensions;" not in config_utils:
     fail("config-utils.js is missing federated extension assignment fix")
 
-# NOT ASSERTED: the Atomics.waitAsync polyfill worker form.
+# The Atomics.waitAsync polyfill worker must be the blob: form
+# (scripts/patch-waitasync-worker.py). A data: worker is blocked by our CSP
+# (worker-src 'self' blob:) and COEP, so an un-patched chunk hangs the kernel on
+# engines without native waitAsync (older Safari / iPadOS).
 #
-# Retiring Pyodide turned up that the xeus extension ships the same
-# `new Worker("data:application/javascript,…")` polyfill the pyodide-kernel
-# extension did, and that scripts/patch-waitasync-worker.py had only ever
-# globbed the latter. A data: worker is blocked by our CSP
-# (worker-src 'self' blob:), so on an engine without native waitAsync the
-# polyfill's helper worker is never created.
-#
-# Re-scoping the patch to every extension — rewriting the xeus chunks to the
-# blob: form for the first time — was shipped and reverted in the same PR:
-# it is the one change in that PR that touches code only WebKit executes
-# (Chromium has native Atomics.waitAsync and never constructs the worker),
-# and WebKit's editor smoke failed deterministically with it in. The
-# substitution itself is faithful — the data: URL decodes byte-for-byte to
-# the blob: body — so the fault is not a mangled worker, and "a worker that
-# previously failed CSP now actually starts" is a real behaviour change on
-# exactly one engine.
-#
-# So the finding stands and the fix does not ship until it has WebKit
-# evidence behind it. Asserting the blob: form here would require applying
-# an untested patch to the kernel we run for both languages, which is how
-# this got shipped once already.
+# Scans EVERY federated extension, not one. This guard and its patch script were
+# scoped to the pyodide-kernel extension, and the xeus extension ships the
+# identical polyfill — in the kernel Chickadee actually runs, for both languages.
+# A per-extension scope is how that went unseen; a glob is how it stays seen.
+# Retiring Pyodide made it load-bearing rather than merely tidy: selftest leg 4
+# stubs out Atomics.waitAsync to force the polyfill path, and with the pyodide
+# extension gone the xeus chunks are the only ones left for it to exercise.
+data_worker_chunks = [
+    p.name
+    for p in sorted((build_dir / "extensions").glob("@jupyterlite/*/static/*.js"))
+    if "data:application/javascript,onmessage" in p.read_text()
+]
+if data_worker_chunks:
+    fail(
+        f"a waitAsync polyfill still uses a data: worker in {data_worker_chunks} — "
+        "run scripts/patch-waitasync-worker.py (build-jupyterlite.sh does this)."
+    )
 
 # The in-iframe kernel-boot diagnostics collector must be injected into the
 # kernel-bearing editor documents (scripts/patch-jupyterlite-diagnostics.py). A

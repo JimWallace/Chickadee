@@ -40,17 +40,28 @@
   JupyterLite service worker intercepting fetches. Scoping the prefix to
   `kernel_packages/` is the likely shape; it needs a green WebKit smoke first.
 
-- **The `Atomics.waitAsync` polyfill patch still does not cover the kernel we
-  run, and fixing it needs WebKit evidence first.**
-  `patch-waitasync-worker.py` rewrites the polyfill's helper worker from a
-  `data:` URL — blocked by our CSP (`worker-src 'self' blob:`) — into a `blob:`
-  one, and had only ever globbed the pyodide-kernel extension. Retiring Pyodide
-  turned up that the **xeus** extension ships the identical unpatched polyfill,
-  for both languages. Re-scoping the patch was written, shipped, and reverted
-  inside this change: it is the only edit here touching code that solely WebKit
-  executes — Chromium has native `Atomics.waitAsync` and never constructs the
-  worker — and WebKit's editor smoke failed deterministically with it applied.
-  The substitution is faithful (the `data:` URL decodes byte-for-byte to the
-  `blob:` body), so the fault is not a mangled worker; a helper worker that
-  previously failed CSP now genuinely starts, on one engine only. The script is
-  kept, unwired from `build-jupyterlite.sh`, until that is understood.
+### Fixed
+
+- **The editor smoke test was booting Pyodide, and said so.** Its default leg
+  requested `?kernel=python` — the Pyodide kernelspec — deliberately, because
+  its probes were written as pyodide-kernel behaviours. Deleting `Public/pyodide`
+  deleted that kernelspec, so every leg asked for a kernel that no longer
+  existed. Chromium tolerated it; WebKit did not, and the failure presented as
+  a Safari-class editor regression — modal dialog over the console, plugins
+  failing to activate — rather than as a stale fixture. The selftest now
+  defaults to `xpython`, the editor's actual default and the only Python kernel
+  that exists. Both premises behind the old default had expired too: the
+  `data:`-worker waitAsync polyfill is not pyodide-specific, and service-worker
+  stdin is exactly what xeus does on WebKit.
+
+- **The `Atomics.waitAsync` polyfill patch never covered the kernel we
+  actually run.** `patch-pyodide-waitasync-worker.py` rewrites the polyfill's
+  helper worker from a `data:` URL — blocked by our CSP (`worker-src 'self'
+  blob:`), hanging the kernel on engines without native `waitAsync` (older
+  Safari / iPadOS) — into a `blob:` one. It globbed only the pyodide-kernel
+  extension, and the **xeus** extension ships the identical polyfill, unpatched,
+  for both languages. Retiring Pyodide made this load-bearing rather than merely
+  tidy: selftest leg 4 stubs out `Atomics.waitAsync` to force the polyfill path,
+  and with the pyodide extension gone the xeus chunks are the only ones left for
+  it to exercise. Renamed to `patch-waitasync-worker.py` and scoped to every
+  federated extension, with `verify-jupyterlite.sh` asserting the same breadth.
