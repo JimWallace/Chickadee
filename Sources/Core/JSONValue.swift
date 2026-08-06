@@ -110,6 +110,90 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             return "list(" + pairs.joined(separator: ", ") + ")"
         }
     }
+
+    /// Deterministic Lua literal representation, suitable for embedding inside
+    /// generated Lua test scripts and the `_ck_inputs.lua` inputs file.
+    ///
+    /// Lua has ONE composite type, so both a JSON array and a JSON object
+    /// render as a table constructor — `{1, 2, 3}` and `{["a"] = 1}`. Keys are
+    /// always bracketed-and-quoted rather than using the bare `a = 1` form,
+    /// because a JSON key may be a Lua reserved word (`end`, `then`, `nil`) or
+    /// contain characters no identifier can; quoting every key is uniformly
+    /// correct and keeps the output stable under a key rename.
+    ///
+    /// The awkward case is `null`, which Lua spells `nil` — and a `nil` inside
+    /// a table constructor is not stored at all, which silently breaks the
+    /// positional alignment an authored case depends on. Measured on lua 5.4,
+    /// `{60, nil, 20}`:
+    ///   - `ipairs` stops at the hole and visits **one** element, not three;
+    ///   - `table.concat` raises `invalid value (nil) at index 2`;
+    ///   - `#t` is *unspecified* — it happens to answer 3 here, which makes it
+    ///     the worst kind of bug: it looks fine until the allocation differs.
+    ///
+    /// This is the same trap `rLiteral` documents for R's `NULL`. R's answer is
+    /// `NA`; Lua has no missing-value scalar, so the answer here is a
+    /// **sentinel table**, `chickadee.NULL`, which is a real value and occupies
+    /// its slot (`ipairs` then visits all three). It is defined by
+    /// `test_runtime.lua`, so a generated script must bind the runtime under
+    /// exactly that name — `local chickadee = require("test_runtime")` — and
+    /// compares against it with `chickadee.equal`, which treats the sentinel as
+    /// equal only to itself.
+    ///
+    /// A bare `nil` is used only where a value stands alone (an input, a scalar
+    /// expected value), where nothing can be misaligned.
+    public var luaLiteral: String {
+        luaLiteral(inTable: false)
+    }
+
+    private func luaLiteral(inTable: Bool) -> String {
+        switch self {
+        case .null:
+            // See the note above: inside a constructor a `nil` would not occupy
+            // its slot, so the sentinel stands in for it there and only there.
+            return inTable ? "chickadee.NULL" : "nil"
+        case .bool(let b): return b ? "true" : "false"
+        case .int(let i): return String(i)
+        case .double(let d):
+            // Lua 5.4 distinguishes integers from floats, and `1` would come
+            // back as an integer where the author wrote a float. `0/0` and
+            // `1/0` are how Lua spells the non-finite literals it cannot parse.
+            if d.isNaN { return "(0/0)" }
+            if d.isInfinite { return d < 0 ? "(-1/0)" : "(1/0)" }
+            let s = String(d)
+            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+        case .string(let s):
+            return encodeLuaString(s)
+        case .array(let a):
+            return "{" + a.map { $0.luaLiteral(inTable: true) }.joined(separator: ", ") + "}"
+        case .object(let o):
+            let pairs = o.sorted { $0.key < $1.key }
+                .map { "[\(encodeLuaString($0.key))] = \($0.value.luaLiteral(inTable: true))" }
+            return "{" + pairs.joined(separator: ", ") + "}"
+        }
+    }
+}
+
+/// Lua's string escapes are C-like and overlap Python's, but `\xNN` is a Lua
+/// 5.2+ feature and a literal newline inside a quoted string is a syntax error,
+/// so every control character is escaped rather than passed through.
+private func encodeLuaString(_ s: String) -> String {
+    var out = "\""
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\\": out += #"\\"#
+        case "\"": out += #"\""#
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        default:
+            if ch.value < 0x20 || ch.value == 0x7F {
+                out += String(format: "\\%03d", ch.value)  // decimal: works in 5.1+
+            } else {
+                out.unicodeScalars.append(ch)
+            }
+        }
+    }
+    return out + "\""
 }
 
 private func encodePythonString(_ s: String) -> String {

@@ -29,7 +29,14 @@ no seam removes them. [docs/language-handling-review.md](language-handling-revie
 So: **you can have a language grading `.lua` scripts in the browser in a day, and
 a language a course can actually be authored in is a much larger arc.** #1207's R
 series is the yardstick for the second. This document takes you through the
-first, and tells you honestly where the second begins.
+first, then gives the second as a compiler-generated worklist and a done test.
+
+**The two halves are not independently shippable.** Vendoring a kernel registers
+its kernelspec in the editor, so stopping after the first half leaves an
+authorable language with no extraction or rendering behind it. Chickadee has
+exactly one rule here: a language is supported or it is not present. If you are
+not going to finish the second half, do not vendor the kernel — spike it on a
+throwaway branch instead.
 
 ## Which kernels exist
 
@@ -284,23 +291,214 @@ an uncaught error with its message on stderr, and — if the language has packag
   the worklist is the entire reason the count of touched files is acceptable.
   See `docs/language-handling-review.md` §4.
 
-## Where the second half begins
+## The second half: making the language *supported*
 
-Once scripts run, you have a language that can be *graded* and not one that can
-be *authored*. Still needed, and each is a new artifact:
+Once scripts run you have a language that can be **graded** and not one that can
+be **authored**. That gap is not a rough edge — it is most of the work, and
+Chickadee has now been on both sides of it. Lua reached the end of the first
+half in a day; the second half is an R-sized arc.
 
-- a `JSONValue.<x>Literal` renderer, and inputs-file rendering on
-  `AssignmentLanguage`
-- `PatternFamilyRenderer<X>` — the eight generated kinds
-- `NotebookCheckRenderer<X>` plus its kind-support gate
-- a personalization driver and seed runtime — including the language's answer to
-  R's no-bignum problem (`RPersonalizationRuntime.chickadeeSeedRSource`)
-- a submission-normalization strategy. `shouldNormalizePythonSubmission` is
-  shaped "R, or else Python" and is the one language decision the compiler will
-  not force you to make; there is a comment at the function saying so.
-- notebook kernel-name aliases (`AssignmentLanguage.rKernelNames` generalises to
-  per-language sets), runner capability strings, and the MCP tool descriptions
-  that currently say "Python or R"
+**There is no such thing as a grading-only kernel.** A vendored kernel is
+registered in `Public/jupyterlite/xeus/kernels.json`, which means the xeus
+extension registers its kernelspec at editor startup and it becomes reachable
+in Kernel -> Change Kernel. An author can then produce a notebook in a language
+whose extraction path does not exist, and find out at submission time. If you
+are not going to finish the second half, do not vendor the kernel.
+
+### The worklist is compiler-generated — use that
+
+Do NOT write this list by hand. Add the case and let the type checker enumerate
+the work:
+
+```bash
+swift build 2>&1 | grep "error:" | sort -u
+```
+
+Every `switch` over `AssignmentLanguage` is deliberately exhaustive with no
+`default:` arm, for exactly this reason (see
+[docs/language-handling-review.md](language-handling-review.md) §4). Adding
+`case lua` to `Sources/Core/AssignmentLanguage.swift` and rebuilding produced,
+in three passes, the complete census below. Each pass fixes one layer and
+reveals the next, because a target only type-checks once its dependency does:
+
+| Pass | Layer | Sites |
+|---|---|---|
+| 1 | `Core` | 10 |
+| 2 | `RunnerCore` + `Worker` | 3 |
+| 3 | `APIServer` | 12 |
+
+That is 25 compiler-named sites. **The compiler cannot see four more**, listed
+under "What the compiler will not tell you" below — those are the ones that
+have historically shipped broken.
+
+### The 25 the compiler names
+
+**`Sources/Core/AssignmentLanguage.swift`** — the hub. Ten arms, each a real
+decision rather than a fill-in:
+
+- `scriptExtensions` — the extension that marks the language
+- `literal(_:)` — needs a new `JSONValue.<x>Literal`
+- `inputsFileName` / `renderInputsFile` — the `_ck_inputs.<x>` contract, which
+  must match byte-for-byte what the language's `test_runtime` reads AND what
+  the browser's `personalizationInputsSource<X>` writes
+- `generatedScriptExtension` — feeds `spec_hash` and the `TestSetupCache` key
+- `kernelEnvironmentFileName`, `missingDependencyFailureDescription` — the
+  authoring rejection message
+- `runnerProvidedModules`, `studentModulePrefixes` — what the import guard must
+  not reject. **Answer these from the language, not by copying R:** R is empty
+  because it reaches its runtime with `source()`, a file read; Lua's is
+  non-empty because `require("test_runtime")` is a genuine module load. Same
+  shape, opposite answer.
+- `supportFilesPathEnvironmentVariable` — and verify it. Lua looks like it
+  wants `LUA_PATH`; it does not, because that variable takes search *patterns*
+  and the standalone interpreter already carries `./?.lua`. One command settles
+  it: `lua -e 'print(package.path)'`.
+
+**`Sources/RunnerCore/`** — notebook extraction. If the language flattens cells
+behind an inert comment marker (as R and Lua both do), reuse
+`extractWithCellMarkers` rather than adding a third copy; Python is genuinely
+different and keeps its own. The marker must round-trip through the language's
+`chickadee_student_cells()`.
+
+**`Sources/Worker/`** — `NotebookExtractor` (output extension + assembly) and
+`SubmissionStaging` (the `.ipynb` -> source name).
+
+**`Sources/APIServer/`** — 12 sites, dominated by two:
+
+- `PatternFamilyRenderer.swift` (x2) — a `renderLuaPatternCase` and an
+  existence guard covering **8 kinds**
+- `NotebookCheckRenderer.swift` — a `renderLuaNotebookCheck` covering **9**
+  (`astStructure` is Python-only by design)
+- `PersonalizationEvaluator.swift` (x2) — the driver script and its value
+  emission, plus a seed runtime answering the language's version of R's
+  no-bignum problem (`RPersonalizationRuntime.chickadeeSeedRSource`)
+- `KernelEnvironment` (x2), `KernelImportGuard`, `NotebookCheckKindHandler`
+  (x2), `NotebookCheckValidator`, `TestScriptVariablePrepender` — small arms
+
+**Budget the renderers honestly.** `PatternFamilyRendererR.swift` is 545 lines
+and `NotebookCheckRendererR*.swift` is 650. They are the bulk of the second
+half, and they are *code that generates student-facing test code* — a subtle
+error is a wrong mark, not a crash. Do not write them without running the
+generated source against a real interpreter, which is the same rule the rest of
+this document keeps arriving at.
+
+### What the compiler will *not* tell you
+
+Four things, each of which has shipped broken at least once:
+
+1. **The interpreter on the runner image.** `Dockerfile` installs `python3` and
+   `r-base`. A language whose binary is missing fails `env <lang>` with
+   command-not-found — and because instructor validation is enqueued as a
+   `kind == .validation` submission graded by the **native worker**, even a
+   purely browser-graded assignment cannot be validated. This shipped with Lua.
+2. **`shouldNormalizePythonSubmission`** is shaped "R, or else Python". It is
+   the one language decision the compiler will not force; there is a comment at
+   the function saying so.
+3. **The generated JS constants.** `AssignmentLanguage.rKernelNames` has a copy
+   in `Public/browser-runner.js` written by `scripts/generate-js-constants.sh`.
+   A per-language set needs its own generated block.
+4. **The vendored browser wasm.** See step 7 — `RoutingExecutor` calls
+   `classifyScript` out of `Public/runner-wasm/`, so the browser disagrees with
+   the worker until it is rebuilt.
+
+### The done test
+
+The language is supported when all of these are true. Anything less is the
+state this document exists to warn you about:
+
+- [ ] `swift build` is clean with the new case and **no `default:` arm added**
+- [ ] the interpreter is on the runner image, and worker grading of a
+      hand-authored test passes
+- [ ] instructor validation of an assignment in the language passes
+- [ ] `Tools/browser-grading-smoke --language <x>` passes on a real kernel
+- [ ] a notebook in the language extracts, and its cells round-trip through
+      `chickadee_student_cells()`
+- [ ] a pattern family generates, and the generated source runs under the real
+      interpreter
+- [ ] a notebook check generates, ditto
+- [ ] a per-student `=` expression evaluates, and the seed the driver binds
+      equals the seed a graded script reads
+- [ ] `_ck_inputs.<x>` is *written* by both the worker and the browser, not
+      merely readable by the runtime
+
+That last one is a real trap: Lua's runtime could read `_ck_inputs.lua` from
+day one, and the smoke test supplied one as a fixture — which proved the
+*reader* worked and said nothing about whether anything ever wrote it.
+
+## What a half-supported language actually does
+
+Lua spent one release in the state this document now forbids — kernel vendored,
+first half done, second half not — so what that state *does* is measured rather
+than predicted. Read this before deciding to ship half.
+
+The short version: **the failure is loud where it matters and silent where it
+does not**, and the loud part is load-bearing. Do not "fix" it without replacing
+it.
+
+### The path an instructor actually takes
+
+| Step | What happens | Verified |
+|---|---|---|
+| Author `publictest_x.lua` | MCP `author_script` accepts it — no extension allowlist | code |
+| …via the web *upload* | **rejected** — `isLikelyTestSuiteFile` lists `sh/bash/zsh/py/r/rb/pl/js/php`, not `lua` | code |
+| Language resolution | `AssignmentLanguage(scriptExtension: "lua")` is nil → resolves to `.python` | code |
+| Grading mode | defaults to **`worker`** (`APICourseSection.defaultGradingMode`) | code |
+| Worker runs it | `/usr/bin/env lua …` → **exit 127**, `env: 'lua': No such file or directory` | run |
+| RunnerCore maps 127 | not 0/1/3 → **`.error`** | code |
+
+Two things are worth noticing.
+
+**It errors, it does not fail.** Exit 127 lands in the `default:` arm, so every
+test reports `error` with the `env:` message in `longResult`. That is the
+difference between "this assignment is broken" and "this student is wrong", and
+it is the only reason a half-supported language is survivable at all.
+
+**Validation catches it before students do.** Instructor validation is enqueued
+as a `kind == .validation` submission graded by the **native worker**, so the
+instructor hits exit 127 on their own reference solution — in browser-graded
+mode too, where student grading would otherwise have worked. The instructor
+cannot reach a class without first seeing it fail. That is an accident of the
+architecture, not a designed guard, and validation is advisory rather than
+blocking — but it is what has been standing between a half-supported language
+and a broken lab.
+
+### The trap: fixing the interpreter makes it quieter, not safer
+
+Putting the interpreter on the runner image removes exit 127. That fixes the
+*script* path — and removes the loud signal that was masking a set of silent
+ones, because the assignment still resolves to `.python`:
+
+- `_ck_inputs.py` is written; the Lua runtime reads `_ck_inputs.lua` and gets an
+  **empty table**. Every per-student input silently becomes nil. No error.
+- pattern families generate `.py` cases (`generatedScriptExtension` follows the
+  resolved language), which then run under `python3` inside a Lua assignment.
+- notebook checks, the same.
+- a notebook whose kernel is `xlua` extracts through the **Python** sanitizer,
+  because `isRNotebook` is false and `.python` is the fallback — producing an
+  `analysis.py` of mangled Lua.
+
+So the honest ordering is: **the interpreter fix is only safe as part of
+finishing the second half.** On its own it trades one visible error for four
+invisible wrong answers. If you land it early — as we did, because worker
+grading and validation were outright broken without it — say so, and keep the
+language out of instructors' hands by another means until the rest lands.
+
+### The closure options, and the rule
+
+There are only two honest end states, and "kernel vendored, renderers missing"
+is neither:
+
+1. **Finish the second half.** The worklist above is exact.
+2. **Remove the language.** Delete the env, the worker, the routing and the
+   `kernels.json` entry.
+
+If you need a holding position between them, the chokepoint is the four
+hand-authored script write sites (`KernelImportGuard` is already wired into
+exactly those: the web create/update handlers, `PUT /suite`, and MCP
+`author_script`). A guard there that refuses to save a graded script in a
+language that is not fully supported converts every silent failure above into
+one clear refusal at authoring time. That is a deliberate decision to take, not
+a default to drift into.
 
 ## What the Lua run actually cost
 

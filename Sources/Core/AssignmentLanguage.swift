@@ -34,6 +34,47 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// while the generated copy is stale.
     public static let rKernelNames: Set<String> = ["ir", "r", "webr", "xr"]
 
+    /// Kernelspec `name` values (and `language_info.name`) that positively mark
+    /// a notebook as THIS language — the per-language generalisation
+    /// `rKernelNames` was always going to need, and the table a new language
+    /// edits instead of adding another `isXNotebookMetadata`.
+    ///
+    /// Python is deliberately EMPTY, and that is not an oversight. It is
+    /// `default`, reached by falling through when nothing else matched; giving
+    /// it a positive alias set would change how every existing assignment
+    /// resolves (a notebook with no kernelspec, or an unrecognised one, must
+    /// keep landing on Python). Positive detection is for the non-default
+    /// languages only.
+    public var notebookKernelNames: Set<String> {
+        switch self {
+        case .python: return []
+        case .r: return AssignmentLanguage.rKernelNames
+        }
+    }
+
+    /// The language a notebook's `metadata` positively declares, or nil when it
+    /// declares nothing recognisable (in which case the caller falls back to
+    /// `default`). Checks `kernelspec.name` first, then `language_info.name`.
+    ///
+    /// The ONE implementation of the sniff. `isRNotebookMetadata` is a thin
+    /// equality on top of it rather than a second copy, so a new language is a
+    /// `notebookKernelNames` arm and nothing else.
+    public static func fromNotebookMetadata(_ metadata: [String: Any]) -> AssignmentLanguage? {
+        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String {
+            let lowered = kernel.lowercased()
+            if let match = allCases.first(where: { $0.notebookKernelNames.contains(lowered) }) {
+                return match
+            }
+        }
+        if let info = (metadata["language_info"] as? [String: Any])?["name"] as? String {
+            let lowered = info.lowercased()
+            if let match = allCases.first(where: { $0.notebookKernelNames.contains(lowered) }) {
+                return match
+            }
+        }
+        return nil
+    }
+
     /// Graded-script filename extensions (lowercased) that mark this language.
     /// The single source of truth for the "`.R` script → R assignment" sniff,
     /// consolidated from the resolution, worker-routing, and raw-script
@@ -104,13 +145,7 @@ extension AssignmentLanguage {
     /// extraction (`extractNotebooksToCode`) all call through here, so the
     /// alias list lives in exactly one place.
     public static func isRNotebookMetadata(_ metadata: [String: Any]) -> Bool {
-        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
-            rKernelNames.contains(kernel.lowercased())
-        {
-            return true
-        }
-        return ((metadata["language_info"] as? [String: Any])?["name"] as? String)?
-            .lowercased() == "r"
+        fromNotebookMetadata(metadata) == .r
     }
 
     /// `isRNotebookMetadata(_:)` for a parsed notebook object. A notebook with

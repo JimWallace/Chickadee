@@ -21,7 +21,13 @@ import Foundation
 /// floating-point counterpart: `abs(result - expected) <= tolerance`.
 /// Future kinds (e.g. `boundaryBoolean`, `boundaryMultiArg`,
 /// `boundaryException`) slot in alongside.
-public enum PatternKind: String, Codable, Sendable, Equatable {
+///
+/// `CaseIterable` is load-bearing, not convenience: it is what lets the
+/// language conformance matrix (`Tests/APITests/LanguageConformanceMatrixTests`)
+/// assert that EVERY kind renders in EVERY language. A hand-listed set of kinds
+/// in a test is the fail-open shape this codebase has been bitten by three
+/// times — see docs/adding-a-xeus-kernel.md.
+public enum PatternKind: String, Codable, Sendable, Equatable, CaseIterable {
     case boundaryEquality = "boundary_equality"
     case approximateEquality = "approximate_equality"
     /// Checks that a module-level variable exists on `student_module` and
