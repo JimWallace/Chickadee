@@ -429,6 +429,40 @@ extension AssignmentLanguage {
         }
     }
 
+    /// The command a runner probes to decide whether it can grade this
+    /// language, with the arguments that make it print a version and exit 0.
+    ///
+    /// This exists because runner capability matching had no idea a third
+    /// language existed. `RunnerProfileDetector` hand-listed `python3` / `R` /
+    /// `swift`, so no runner ever advertised Lua — which is worse than it
+    /// sounds: an instructor who typed `lua` into an assignment's required
+    /// languages would have matched NO runner and queued that assignment's jobs
+    /// forever. Driving the probe from `allCases` means a new language is
+    /// advertised the day its case exists.
+    ///
+    /// The version arguments are per-language for the same reason the
+    /// conformance matrix's are: `--version` is not universal. `lua` prints a
+    /// usage message and exits 1 for it; the flag is `-v`.
+    ///
+    /// A KNOWN ASYMMETRY, deliberately preserved: R is probed with `R` while
+    /// the worker invokes `Rscript`. Both ship together in `r-base`, and the
+    /// two print differently-shaped version strings — changing the probe would
+    /// change the version text already advertised by deployed runners, which an
+    /// assignment's `minimumVersion` requirement may be matching against. Not
+    /// worth the churn to tidy.
+    public var interpreterProbe: (command: String, versionArguments: [String]) {
+        switch self {
+        case .python: return ("python3", ["--version"])
+        case .r: return ("R", ["--version"])
+        case .lua: return ("lua", ["-v"])
+        }
+    }
+
+    /// The name this language advertises itself under in a runner's
+    /// `languageVersions`, and the token an assignment's required-languages
+    /// list is matched against. The raw value, so the two halves cannot drift.
+    public var capabilityName: String { rawValue }
+
     /// Environment variable that puts the assignment's support files on this
     /// language's module search path when the personalization driver runs.
     /// `nil` where the language has no such mechanism.

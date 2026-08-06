@@ -220,6 +220,58 @@ import Testing
             """)
     }
 
+    /// Runner capability matching has to know the language exists, in BOTH
+    /// directions, or it fails in one of two ways — and the second is worse:
+    ///
+    ///   * no requirement suggested for the assignment → its jobs go to any
+    ///     runner, including one whose image has no interpreter, and every test
+    ///     exits 127;
+    ///   * no runner advertising the language → an assignment that DOES require
+    ///     it matches nothing and queues forever.
+    ///
+    /// Lua had both. Neither is a compile error, because both lists were
+    /// strings hand-written at the edges of a system whose types were already
+    /// language-generic — `RunnerCompatibility.swift` needed no change at all,
+    /// which is exactly why nothing pointed at the two that did.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyLanguageIsProbeableByARunner(_ language: AssignmentLanguage) {
+        let probe = language.interpreterProbe
+        #expect(!probe.command.isEmpty, "\(language) has no interpreter probe command")
+        #expect(
+            !probe.versionArguments.isEmpty,
+            "\(language) has no version arguments — the probe cannot exit 0")
+        // The advertised name is the token an assignment's required-languages
+        // list is matched against, so the two halves must agree.
+        #expect(language.capabilityName == language.rawValue)
+    }
+
+    /// Runs the real probe for whichever interpreters this machine has. The
+    /// point is the ARGUMENTS: `lua --version` exits 1, and a hardcoded
+    /// `--version` is what made Lua invisible to capability detection.
+    @Test func everyLanguageProbeActuallyReportsAVersion() {
+        for language in AssignmentLanguage.allCases {
+            let probe = language.interpreterProbe
+            let (code, _) = Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            // The interpreter simply not being on this machine is not a defect,
+            // and it is **exit 127** — `/usr/bin/env` reports command-not-found
+            // that way, the same code the original Lua defect surfaced as. (-1
+            // is this helper's own "could not even spawn env".) Everything else
+            // must be a clean exit, which is what catches a probe whose
+            // ARGUMENTS are wrong on an interpreter that is present: that case
+            // exits 1, is indistinguishable from absence to the detector, and
+            // silently costs the language its capability advertisement.
+            guard code != -1, code != 127 else { continue }
+            let invocation = "\(probe.command) \(probe.versionArguments.joined(separator: " "))"
+            #expect(
+                code == 0,
+                """
+                `\(invocation)` exited \(code). A runner probes exactly this to decide whether it \
+                can grade \(language); a non-zero exit means it never advertises the language, and \
+                an assignment requiring \(language) matches no runner at all.
+                """)
+        }
+    }
+
     // MARK: - Renderer coverage (never skipped)
 
     @Test(arguments: AssignmentLanguage.allCases)

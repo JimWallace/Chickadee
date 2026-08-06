@@ -46,3 +46,16 @@
 - **The worker's notebook extractor asked "is this R?"** and sent everything
   else to the Python path, which a Lua notebook is not. It now resolves the
   language positively via `fromNotebookMetadata`.
+
+### Fixed
+
+- **Runner capability matching could not see Lua, in both directions.**
+  `RunnerProfileDetector` hand-listed `python3` / `R` / `swift`, so no runner
+  ever advertised Lua however it was provisioned — which made requiring it
+  *worse* than not: an assignment with `lua` in its required languages matched
+  no runner and queued forever. And `detectRequirementSuggestions` mapped only
+  `.py`/`.r`, so a Lua assignment suggested no language requirement at all and
+  its jobs went to any runner, including one whose image has no interpreter.
+  Both now resolve through `AssignmentLanguage` — the probe from `allCases`,
+  the extension through the one extension table — so a new language is
+  advertised and suggested the day its case exists.
