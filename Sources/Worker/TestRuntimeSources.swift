@@ -789,10 +789,29 @@ let testRuntimeLua =
         return rendered
     end
 
+    -- The stand-in for a JSON null inside a generated table literal.
+    --
+    -- Lua has no missing-value scalar, and a bare `nil` in a table constructor is
+    -- not stored at all: `{60, nil, 20}` makes `ipairs` stop after one element and
+    -- `table.concat` raise, so an authored case's positional alignment is silently
+    -- lost. A sentinel TABLE is a real value and occupies its slot. This is Lua's
+    -- answer to the problem R solves with `NA` (see `JSONValue.luaLiteral`, which
+    -- emits `chickadee.NULL` and is what requires this to exist under that name).
+    --
+    -- Compared by identity, so nothing a student can construct is equal to it.
+    M.NULL = setmetatable({}, { __tostring = function() return "NULL" end })
+
     -- Exact equality, with Lua 5.4's integer/float split handled the way a student
     -- would expect: 1 and 1.0 are the same answer. `==` already says so for
     -- numbers, so the only work is comparing array-like tables element by element.
+    --
+    -- `M.NULL` is equal only to itself. It must be checked BEFORE the table arm,
+    -- or two distinct sentinels would compare equal as empty tables — which would
+    -- be harmless today but wrong the moment a student returned `{}`.
     function M.equal(actual, expected)
+        if actual == M.NULL or expected == M.NULL then
+            return rawequal(actual, expected)
+        end
         if type(actual) == "table" and type(expected) == "table" then
             if #actual ~= #expected then return false end
             for i = 1, #actual do

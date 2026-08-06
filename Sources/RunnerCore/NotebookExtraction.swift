@@ -108,7 +108,35 @@ public struct ExtractedRNotebook: Sendable, Equatable {
 /// worker performed inline before the hoist (PR #1235), including the
 /// header-only output for a notebook with no code cells.
 public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
-    var output = "# Generated from \(filename)\n\n"
+    extractWithCellMarkers(cells: cells, filename: filename, comment: "#")
+}
+
+/// Extract Lua from a notebook's cells. Identical in shape to `extractR` —
+/// verbatim cells behind an inert boundary comment — because both languages
+/// need the same thing and for the same reason: a flattened source file that a
+/// source-level notebook check can still split back into cells.
+///
+/// Only the comment marker differs (`--` rather than `#`), which is why the two
+/// share `extractWithCellMarkers` instead of being two copies that can drift.
+/// Python is genuinely different and keeps its own implementation: it labels
+/// cells via `wrapCellForResilientLoad` rather than by comment, so a failing
+/// cell does not take the rest of the module with it.
+public func extractLua(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    extractWithCellMarkers(cells: cells, filename: filename, comment: "--")
+}
+
+/// The shared body of the marker-based extractors. Emits each non-empty code
+/// cell verbatim (trailing whitespace trimmed) behind a boundary comment whose
+/// number is the cell's 1-based position in the ORIGINAL notebook — a markdown
+/// cell between two code cells shows as a gap rather than silently renumbering.
+///
+/// Byte-identical to the extraction the native worker performed inline before
+/// the hoist (PR #1235), including the header-only output for a notebook with
+/// no code cells.
+private func extractWithCellMarkers(
+    cells: [NotebookCell], filename: String, comment: String
+) -> ExtractedRNotebook {
+    var output = "\(comment) Generated from \(filename)\n\n"
     var codeCellCount = 0
     for (index, cell) in cells.enumerated() {
         guard cell.cellType == "code" else { continue }
@@ -116,10 +144,14 @@ public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNoteb
         while src.last?.isWhitespace == true { src.removeLast() }
         guard !src.isEmpty else { continue }
         codeCellCount += 1
-        output += rCellBoundaryMarker(cellNumber: index + 1) + "\n"
+        output += cellBoundaryMarker(cellNumber: index + 1, comment: comment) + "\n"
         output += src + "\n\n"
     }
     return ExtractedRNotebook(source: output, codeCellCount: codeCellCount)
+}
+
+private func cellBoundaryMarker(cellNumber: Int, comment: String) -> String {
+    "\(comment) ---- chickadee:cell \(cellNumber) ----"
 }
 
 /// Comment line the R extraction writes ahead of each code cell, so the
@@ -130,13 +162,24 @@ public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNoteb
 /// (`testRuntimeRStudentFile`, mirrored in `Tools/runner-support/test_runtime.R`).
 /// `NotebookExtractorRCellMarkerTests` pins the two against each other.
 public func rCellBoundaryMarker(cellNumber: Int) -> String {
-    "# ---- chickadee:cell \(cellNumber) ----"
+    cellBoundaryMarker(cellNumber: cellNumber, comment: "#")
+}
+
+/// The Lua counterpart, split back out by `chickadee_student_cells()` in
+/// `Tools/runner-support/test_runtime.lua`. `NotebookExtractorLuaCellMarkerTests`
+/// pins the two against each other, as the R pair is pinned.
+public func luaCellBoundaryMarker(cellNumber: Int) -> String {
+    cellBoundaryMarker(cellNumber: cellNumber, comment: "--")
 }
 
 /// Regex the runtime uses to recognize a marker line. Kept beside the writer
 /// so the two are defined together; the runtime spells it out literally
 /// because `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror.
 public let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"
+
+/// The Lua equivalent. Spelled out literally for the same reason: the runtime
+/// that consumes it is a byte-for-byte mirror and cannot import this.
+public let luaCellBoundaryMarkerPattern = "^%-%- ---- chickadee:cell %d+ ----$"
 
 // MARK: - Per-cell transforms (shared by both runners)
 

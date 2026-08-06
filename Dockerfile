@@ -102,6 +102,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         python3-scipy \
         python3-matplotlib \
         r-base \
+        lua5.4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user for the application processes.
