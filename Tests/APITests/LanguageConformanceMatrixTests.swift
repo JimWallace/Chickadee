@@ -178,18 +178,10 @@ import Testing
 
     // MARK: - Renderer coverage (never skipped)
 
-    /// Notebook-check kinds a language legitimately does not implement. Naming
-    /// them here is the point: an unsupported kind must be a recorded decision,
-    /// not an omission discovered by an instructor.
-    static let notebookCheckKindExceptions: [AssignmentLanguage: Set<NotebookCheckKind>] = [
-        // `astStructure` inspects a Python AST and has no meaning elsewhere.
-        .r: [.astStructure]
-    ]
-
     @Test(arguments: AssignmentLanguage.allCases)
     func everyPatternKindRendersInEveryLanguage(_ language: AssignmentLanguage) {
         for kind in PatternKind.allCases {
-            let scripts = renderPatternFamily(Self.family(kind: kind), language: language)
+            let scripts = renderPatternFamily(GeneratedSourceFixtures.family(kind: kind), language: language)
             #expect(!scripts.isEmpty, "\(language)/\(kind) rendered no scripts")
             for script in scripts {
                 #expect(
@@ -204,9 +196,9 @@ import Testing
 
     @Test(arguments: AssignmentLanguage.allCases)
     func everyNotebookCheckKindRendersOrIsADeclaredException(_ language: AssignmentLanguage) {
-        let exceptions = Self.notebookCheckKindExceptions[language] ?? []
+        let exceptions = GeneratedSourceFixtures.notebookCheckKindExceptions[language] ?? []
         for kind in NotebookCheckKind.allCases where !exceptions.contains(kind) {
-            let generated = renderNotebookCheck(Self.check(kind: kind), language: language)
+            let generated = renderNotebookCheck(GeneratedSourceFixtures.check(kind: kind), language: language)
             #expect(
                 !generated.script.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 "\(language)/\(kind) rendered an empty check — implement it or declare it")
@@ -227,7 +219,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         for kind in PatternKind.allCases {
-            for script in renderPatternFamily(Self.family(kind: kind), language: language) {
+            for script in renderPatternFamily(GeneratedSourceFixtures.family(kind: kind), language: language) {
                 let url = dir.appendingPathComponent(script.filename)
                 try script.source.write(to: url, atomically: true, encoding: .utf8)
                 let (code, err) = Self.run(
@@ -237,9 +229,9 @@ import Testing
             }
         }
 
-        let exceptions = Self.notebookCheckKindExceptions[language] ?? []
+        let exceptions = GeneratedSourceFixtures.notebookCheckKindExceptions[language] ?? []
         for kind in NotebookCheckKind.allCases where !exceptions.contains(kind) {
-            let generated = renderNotebookCheck(Self.check(kind: kind), language: language)
+            let generated = renderNotebookCheck(GeneratedSourceFixtures.check(kind: kind), language: language)
             let url = dir.appendingPathComponent(generated.script.filename)
             try generated.script.source.write(to: url, atomically: true, encoding: .utf8)
             let (code, err) = Self.run(
@@ -278,47 +270,6 @@ import Testing
             adapter.interpreter, [adapter.evalFlag, adapter.readInputsProgram("threshold")],
             in: dir)
         #expect(code == 0, "\(language) could not read its own inputs file: \(err)")
-    }
-
-    // MARK: - Fixtures
-
-    /// One plausible family per kind. Semantics do not have to be sensible —
-    /// the assertions are "it renders" and "it parses" — but the shape does,
-    /// because several kinds read `args` / `expected` positionally.
-    static func family(kind: PatternKind) -> PatternFamily {
-        let example: PatternCase
-        switch kind {
-        case .variableEquality:
-            example = PatternCase(key: "01", label: "v", args: [.string("total")], expected: .int(3))
-        case .returnTypeCheck:
-            example = PatternCase(key: "01", label: "t", args: [.int(1)], expected: .string("int"))
-        case .exceptionExpected:
-            example = PatternCase(
-                key: "01", label: "e", args: [.int(-1)], expected: .string("ValueError"))
-        case .stdoutEquality:
-            example = PatternCase(
-                key: "01", label: "s", args: [.int(1)], expected: .string("hello"))
-        case .unorderedEquality:
-            example = PatternCase(
-                key: "01", label: "u", args: [.int(1)], expected: .array([.int(1), .int(2)]))
-        case .performanceThreshold:
-            example = PatternCase(key: "01", label: "p", args: [.int(1)], expected: .double(0.5))
-        case .boundaryEquality, .approximateEquality:
-            example = PatternCase(key: "01", label: "b", args: [.double(18.49)], expected: .int(1))
-        }
-        return PatternFamily(
-            id: "fam", name: "Family", kind: kind,
-            functionName: "classify", paramNames: ["x"], cases: [example])
-    }
-
-    /// One plausible check per kind, with the fields that kind reads.
-    static func check(kind: NotebookCheckKind) -> NotebookCheck {
-        NotebookCheck(
-            id: "chk", name: "Check", kind: kind,
-            variable: "df",
-            expectedRows: 3, expectedCols: 2,
-            expectedColumns: ["a", "b"],
-            expectedCSV: "a,b\n1,2\n")
     }
 
     // MARK: - Helpers
