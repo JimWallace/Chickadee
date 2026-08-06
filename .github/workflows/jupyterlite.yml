@@ -52,7 +52,7 @@ jobs:
             echo "::notice::no diff computed — running the build (fail-safe)."
             exit 0
           fi
-          pattern='^(Public/jupyterlite/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/verify-jupyterlite\.sh|scripts/check-kernel-deps-vendored\.py|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
+          pattern='^(Public/jupyterlite/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/verify-jupyterlite\.sh|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
           # Here-string, not a pipe — see editor-smoke.yml for the SIGPIPE
           # trap that silently misclassifies large diffs.
           if grep -qE "$pattern" <<< "$changed"; then
@@ -84,14 +84,16 @@ jobs:
         # guarantee, asserted on the committed bytes.
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
 
-      - name: Verify editor kernel boots with zero external fetches (FIPPA)
-        if: steps.detect.outputs.relevant == 'true'
-        # Asserts every module the editor kernel imports at startup is provided
-        # by the locally-vended Pyodide. A miss would fall through to
-        # piplite.install(...) -> CDN/PyPI at boot, which FIPPA blocks — bricking
-        # the editor (the v0.4.292 `comm` outage). Catches that class in CI
-        # instead of on a student's screen.
-        run: python3 scripts/check-kernel-deps-vendored.py
+      # The FIPPA property — the editor kernel boots with ZERO external fetches —
+      # used to be checked by scripts/check-kernel-deps-vendored.py, which scanned
+      # the Pyodide kernel wheels' startup imports against the vended pyodide-lock
+      # and piplite index. All three are gone with Pyodide (v0.5.19), and so is
+      # that whole failure class: there is no runtime install path to fall through
+      # to. The property is now structural and guarded elsewhere —
+      # verify-jupyterlite.sh asserts the parselmouth-fetch stub (xeus's one
+      # runtime external fetch) is applied, and check-xeus-vendored.sh plus
+      # check-env-vendored-sync.sh assert the envs are complete and coherent, so
+      # nothing a kernel imports at boot is missing from the vendored bytes.
 
       - name: Verify the vendored xeus-r kernel is intact
         if: steps.detect.outputs.relevant == 'true'
