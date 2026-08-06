@@ -32,8 +32,27 @@
   least one new package — and a module the environment does not have leaves the
   original `ModuleNotFoundError` exactly as it was.
 
-  R is unchanged: its optional half is only 36% of the payload, and `r-base`
-  plus `r-stringi` are 39 MB of unavoidable kernel.
+- **R does the same, and gains more than expected.** `r-grading-worker.js` boots
+  `xeus-r` alone and installs on the same loop, shared in
+  `xeus-kernel-shared.js`. R words the failure identically for `library()`,
+  `require()` and `pkg::fn` — the latter two route through `loadNamespace()` —
+  so one pattern covers every way a script can name a package.
+
+  R's optional share is smaller than Python's (22.2 MB of 62.1, so 36%) because
+  `r-base` alone is 25 MB. But **`r-stringi` (14 MB) is not part of the bare
+  kernel** — it arrives with `stringr`/`tidyr` — so a dplyr-only assignment
+  installs 2.4 MB rather than the whole 22.2 MB set, and a base-R lab installs
+  none of it.
+
+  Measured on the smoke fixture that attaches *and exercises* all seven
+  tidyverse packages, same harness before and after: the script went from
+  **62 006 ms** on a full-env boot to **5 621–6 815 ms** on a bare kernel with
+  on-demand install, and boot from 5.1–10 s to 3.9–4.0 s. Reproducible across
+  three runs. The mechanism for the ~10× is **not established** — the plausible
+  one is that installing a subset lets `loadSharedLibs` resolve exactly the
+  needed shared objects at install time, where the full-env boot left it to R's
+  lazy path at first attach (26 s for `dplyr`) — and it is recorded as inference
+  rather than asserted.
 
 ### Fixed
 

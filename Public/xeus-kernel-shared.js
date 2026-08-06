@@ -267,6 +267,53 @@
         return (owner && canInstall(owner)) ? owner : null;
     }
 
+    // The backstop on re-runs, not the expected count. Every pass must install
+    // at least one package that was not installed before, so the installable set
+    // strictly shrinks and the loop terminates on its own; this only guards
+    // against a pathological environment. It has to comfortably exceed the
+    // number of packages one script can name — the R smoke's fixture attaches
+    // all seven tidyverse packages in a loop, which is seven passes on a bare
+    // kernel — so it is set well above any real script rather than tuned.
+    var MAX_ON_DEMAND_PASSES = 16;
+
+    // Run `attempt` until it stops failing on a package the environment could
+    // supply, installing what it asks for in between.
+    //
+    // Both languages need exactly this, with three things differing: the regex
+    // that names the missing thing, where in the reply to look for it, and
+    // whether anything must run after an install. Sharing the loop is the point
+    // — a retry that terminates for Python and spins for R would be a very
+    // expensive way to find out they had drifted.
+    //
+    // `options`:
+    //   pattern      — RegExp whose first capture group is the missing name
+    //   textOf       — (result) => string to search
+    //   afterInstall — optional source to execute once packages land
+    //   onInstall    — optional (names) => void, for telemetry
+    //
+    // Returns whatever `attempt` last returned. Any step that cannot make
+    // progress — no match, no owning package, nothing new installed — returns
+    // that result untouched, so the caller sees the original failure exactly as
+    // it would without this.
+    async function runInstallingMissingPackages(attempt, options) {
+        for (var pass = 0; ; pass++) {
+            var result = await attempt();
+            if (pass >= MAX_ON_DEMAND_PASSES) return result;
+
+            var match = options.pattern.exec(options.textOf(result) || '');
+            if (!match) return result;
+
+            var pkg = packageForModule(match[1]);
+            if (!pkg) return result;
+
+            var added = await addPackages([pkg]);
+            if (!added.length) return result;
+
+            if (options.afterInstall) await execute(options.afterInstall);
+            if (options.onInstall) options.onInstall(added);
+        }
+    }
+
     // Materialize a file map into a fresh work directory and chdir there.
     function mountWorkspace(workDir, files, writeFiles) {
         try { _module.FS.mkdir(workDir); } catch (_) { /* fresh worker; ignore */ }
@@ -348,6 +395,7 @@
         addPackages: addPackages,
         canInstall: canInstall,
         packageForModule: packageForModule,
+        runInstallingMissingPackages: runInstallingMissingPackages,
         // Exported for tests: the subset a given set of seeds implies is the
         // whole design, and asserting it against the real vendored manifest
         // beats a copy of this walk that can drift from it.

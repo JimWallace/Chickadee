@@ -70,7 +70,7 @@ const LANGUAGES = {
         worker: '/r-grading-worker.js',
         scripts: [
             'publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R',
-            'publictest_context.R', 'publictest_packages.R',
+            'publictest_context.R', 'publictest_nopackage.R', 'publictest_packages.R',
         ],
         files: {
             'test_runtime.R': TEST_RUNTIME_R,
@@ -87,11 +87,22 @@ failed("expected 5, got 4")
             'publictest_boom.R': `source("test_runtime.R")
 stop("this test blew up")
 `,
+            // A package R does not have must fail the ordinary way. This is what
+            // shows the on-demand retry terminates instead of spinning, and that
+            // a student's typo still reads as a plain "no package called".
+            'publictest_nopackage.R': `library(notarealpackage)
+`,
             // Every package environment-r.yml DECLARES must actually attach in a
             // real kernel. check-env-vendored-sync.sh proves they are in the
             // tarballs; only this proves they LOAD — and an env can be perfectly
             // well-formed and still not work, which is exactly how the Python
             // side shipped a urllib3 that stopped the kernel booting.
+            //
+            // Since the kernel now boots with base R only, this also exercises
+            // on-demand install seven times over: each library() call misses,
+            // installs, and the script re-runs. Attaching an already-attached
+            // package is instant, so the retries cost only the new package each
+            // time.
             'publictest_packages.R': `source("test_runtime.R")
 for (pkg in c("dplyr", "tidyr", "readr", "stringr", "tibble",
               "purrr", "forcats")) {
@@ -99,7 +110,17 @@ for (pkg in c("dplyr", "tidyr", "readr", "stringr", "tibble",
   suppressPackageStartupMessages(library(pkg, character.only = TRUE))
   cat(pkg, "=", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
 }
-passed("all declared packages attached")
+# Attaching is not working. Call into several of them so a package that loaded
+# but cannot run — or an on-demand install that landed an incomplete closure —
+# fails here rather than reporting a green attach.
+d <- dplyr::filter(tibble::tibble(x = c(1, 5, 9)), x > 2)
+stopifnot(nrow(d) == 2)
+stopifnot(stringr::str_to_upper("ok") == "OK")
+stopifnot(identical(purrr::map_dbl(1:3, ~ .x * 2), c(2, 4, 6)))
+stopifnot(nrow(tidyr::pivot_longer(tibble::tibble(a = 1, b = 2), everything())) == 2)
+stopifnot(as.character(forcats::fct_rev(factor(c("a", "b")))[1]) == "a")
+stopifnot(readr::parse_number("42 items") == 42)
+passed("all declared packages attached and ran")
 `,
             // The label exists only because the wrapper masks commandArgs();
             // the seed comes from the environment and the input from _ck_inputs.
@@ -471,11 +492,20 @@ if (language === 'python') {
 }
 
 if (language === 'r') {
+    // Doubles as the on-demand test: the kernel boots with base R only, so each
+    // of these seven attaches misses, installs, and re-runs the script.
     const packages = result.results['publictest_packages.R'];
-    check('every package the environment declares actually attaches',
+    check('every declared package attaches, installing each on demand',
         packages && packages.exitCode === 0,
         JSON.stringify(packages));
     console.log('  attach timings:', (packages?.stdout || '').replace(/\n/g, ' ').trim());
+
+    const noPackage = result.results['publictest_nopackage.R'];
+    check('a package the environment lacks still fails normally',
+        noPackage && noPackage.exitCode !== 0, JSON.stringify(noPackage));
+    check('and says so, rather than looping or going silent',
+        /notarealpackage/.test((noPackage?.stderr || '') + (noPackage?.stdout || '')),
+        JSON.stringify(noPackage?.stderr));
 }
 
 const slowest = Math.max(...Object.values(result.results).map(r => r.ms));

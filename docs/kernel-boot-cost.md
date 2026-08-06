@@ -43,8 +43,21 @@ scipy and pandas — so they are not additive:
 scipy costs ~27 MB of boot payload for a package that imports in 0.09 s and that
 Chickadee's generated tests never touch.
 
-R's split is different and less promising: `r-base` (25 MB) and `r-stringi`
-(14 MB) are the bare kernel, so only 36% of the R payload is optional.
+R's optional share is smaller — 36% against Python's 84% — because `r-base`
+alone is 25 MB of unavoidable kernel. But **`r-stringi` (14 MB) is not part of
+the bare kernel**; it arrives with `stringr`/`tidyr`. Getting that backwards is
+what initially made the R saving look not worth having, and the marginal costs
+are what matter:
+
+```
++r-dplyr    2.4 MB (7 pkgs)     +r-tibble   0.8 MB (3)
++r-tidyr   18.6 MB (12)         +r-purrr    0.7 MB (2)
++r-readr    4.7 MB (16)         +r-forcats  1.4 MB (5)
++r-stringr 14.7 MB (3)          all seven  22.2 MB (23)
+```
+
+So a dplyr-only assignment installs 2.4 MB rather than all 22.2 MB, and a lab
+that stays in base R installs none of it.
 
 ## What that costs in wall-clock
 
@@ -140,6 +153,39 @@ unpacker resolves paths relative to cwd — installing from there fails inside t
 vendored bundle with a bare `Error` and no message. `addPackages` chdirs to `/`
 and restores afterwards. This is invisible to every unit test and only appears in
 a real kernel; `Tools/browser-grading-smoke` is what caught it.
+
+### R does the same, and gains more than expected
+
+`r-grading-worker.js` boots `xeus-r` alone and installs on the same failure-driven
+loop — shared with Python in `xeus-kernel-shared.js`, because a retry that
+terminates for one language and spins for the other would be an expensive way to
+discover they had drifted. R words the failure identically for `library()`,
+`require()` and `pkg::fn` (the latter two route through `loadNamespace()`), so
+one pattern covers every way a script can name a package:
+`there is no package called 'dplyr'`.
+
+Re-running a script after each install is cheap despite R's very expensive first
+attach, because attaching a package already attached in this session is instant:
+a re-run pays only for the newly installed one.
+
+Measured on the smoke's fixture, which attaches **and exercises** all seven
+tidyverse packages, Chromium, same harness before and after:
+
+| | boot | that script |
+|---|---|---|
+| full env at boot | 5.1–10 s | **62 006 ms** |
+| bare kernel + on demand | 3.9–4.0 s | **5 621–6 815 ms** |
+
+Reproducible across three runs, and the script calls into `dplyr`, `tidyr`,
+`readr`, `stringr`, `tibble`, `purrr` and `forcats` rather than merely attaching
+them, so it is not a green attach hiding a broken package.
+
+**The mechanism for the ~10× is not established.** The plausible one is that
+`addPackages` runs `loadSharedLibs` over exactly the newly installed subset at
+install time, so the shared objects are already resolved when `library()` runs,
+whereas the full-env boot left that work to R's own lazy path at first attach
+(where it measured 26 s for `dplyr`). That is inference, not a measurement, and
+it is recorded here as such rather than asserted.
 
 ### The eval worker keeps the full environment
 

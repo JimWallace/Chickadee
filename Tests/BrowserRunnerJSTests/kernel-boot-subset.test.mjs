@@ -20,9 +20,11 @@ import vm from 'node:vm';
 // computes after the on-demand install.
 
 const ENV_DIR = 'Public/jupyterlite/xeus/chickadee-python';
+const R_ENV_DIR = 'Public/jupyterlite/xeus/chickadee-r';
 
 const kernelSource = await fs.readFile(path.resolve('Public/xeus-kernel-shared.js'), 'utf8');
 const pythonSource = await fs.readFile(path.resolve('Public/python-grading-shared.js'), 'utf8');
+const rSource = await fs.readFile(path.resolve('Public/r-grading-shared.js'), 'utf8');
 
 // The module binds postMessage at load to divert kernel traffic; nothing else
 // it touches at load time exists outside a worker.
@@ -32,11 +34,16 @@ context.globalThis = context;
 const vmContext = vm.createContext(context);
 vm.runInContext(kernelSource, vmContext, { filename: 'xeus-kernel-shared.js' });
 vm.runInContext(pythonSource, vmContext, { filename: 'python-grading-shared.js' });
+vm.runInContext(rSource, vmContext, { filename: 'r-grading-shared.js' });
 const kernel = context.ChickadeeXeusKernel;
 const python = context.ChickadeePythonGradingShared;
+const r = context.ChickadeeRGradingShared;
 
 const meta = JSON.parse(await fs.readFile(path.resolve(ENV_DIR, 'empack_env_meta.json'), 'utf8'));
 const index = JSON.parse(await fs.readFile(path.resolve(ENV_DIR, 'importable-modules.json'), 'utf8'));
+const rMeta = JSON.parse(await fs.readFile(path.resolve(R_ENV_DIR, 'empack_env_meta.json'), 'utf8'));
+const rIndex = JSON.parse(
+  await fs.readFile(path.resolve(R_ENV_DIR, 'importable-modules.json'), 'utf8'));
 
 test('the boot seeds resolve to a runnable kernel', () => {
   const booted = kernel.packageClosure(meta, python.PYTHON_KERNEL.bootSeeds);
@@ -90,4 +97,44 @@ test('import names map to the package that ships them, not the distribution name
   // get it wrong. Deriving from the tarballs is what makes these fall out.
   assert.equal(index.moduleOwners.PIL, 'pillow');
   assert.equal(index.moduleOwners.matplotlib, 'matplotlib-base');
+});
+
+test('the R boot seeds give base R without the tidyverse', () => {
+  const booted = new Set(kernel.packageClosure(rMeta, r.R_KERNEL.bootSeeds));
+  assert.ok(booted.has('r-base'), 'boot subset has no base R');
+  assert.ok(booted.has('xeus-r'), 'boot subset has no kernel');
+  for (const optional of ['r-dplyr', 'r-tidyr', 'r-readr', 'r-stringr', 'r-tibble',
+    'r-purrr', 'r-forcats']) {
+    assert.ok(!booted.has(optional), `${optional} is in the R boot subset`);
+  }
+  // r-stringi is 14 MB and is NOT part of the bare kernel — it arrives with
+  // stringr/tidyr. Pinned because getting this backwards is what made the R
+  // saving look not worth having.
+  assert.ok(!booted.has('r-stringi'), 'r-stringi should not be in the bare R kernel');
+});
+
+test('a dplyr-only R assignment installs far less than the whole tidyverse', () => {
+  // The case that motivates doing this for R at all: the tidyverse shares a
+  // dependency graph, but dplyr's slice of it is small.
+  const booted = new Set(kernel.packageClosure(rMeta, r.R_KERNEL.bootSeeds));
+  const dplyrOnly = kernel.packageClosure(rMeta, ['r-dplyr']).filter(p => !booted.has(p));
+  const everything = kernel.packageClosure(rMeta, [
+    'r-dplyr', 'r-tidyr', 'r-readr', 'r-stringr', 'r-tibble', 'r-purrr', 'r-forcats',
+  ]).filter(p => !booted.has(p));
+  assert.ok(dplyrOnly.length < everything.length / 2,
+    `dplyr pulls ${dplyrOnly.length} of ${everything.length} optional packages`);
+});
+
+test('every R package name resolves to an installable package', () => {
+  // R's on-demand path resolves `there is no package called 'dplyr'` through the
+  // same moduleOwners map, so the same property has to hold for the R env.
+  const packages = new Set(rMeta.packages.map(p => p.name));
+  for (const name of rIndex.modules) {
+    const owner = rIndex.moduleOwners[name];
+    assert.ok(owner, `no owning package recorded for R package ${name}`);
+    assert.ok(packages.has(owner), `${name} maps to ${owner}, which is not in the env`);
+  }
+  // R prefixes its conda package names, so these genuinely differ.
+  assert.equal(rIndex.moduleOwners.dplyr, 'r-dplyr');
+  assert.equal(rIndex.moduleOwners.stats, 'r-base');
 });
