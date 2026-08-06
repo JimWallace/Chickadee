@@ -23,7 +23,6 @@ on:
   pull_request:
     paths:
       - "Public/**"
-      - "!Public/pyodide/**"
       - "!Public/jupyterlite/**"
       - "Resources/Views/**"
       - "Tools/visual-regression/**"

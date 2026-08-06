@@ -4,7 +4,7 @@
 // to dynamic (Leaf-rendered) pages that require cross-origin isolation.
 //
 // Cross-origin isolation (COOP same-origin + COEP require-corp) is what makes
-// `SharedArrayBuffer` available, which Pyodide needs to run synchronous Python
+// `SharedArrayBuffer` available, which the kernel needs to run synchronous code
 // (stdin / filesystem) without blocking the page. Two pages opt in:
 //
 //   • /instructor/…/validate — browser-side validation (assignment-validate.js).
@@ -16,7 +16,7 @@
 //     document — where the kernel worker actually runs — is isolated too.
 //
 // COEP require-corp only restricts CROSS-origin subresources; same-origin ones
-// (Chickadee vendors Pyodide / CodeMirror / jszip same-origin) load unchanged.
+// (Chickadee vendors the kernels / CodeMirror / jszip same-origin) load unchanged.
 //
 // History: isolation was gated behind `NOTEBOOK_CROSS_ORIGIN_ISOLATION` while
 // the editor was verified to boot under COEP, because COEP on the editor page
@@ -72,7 +72,7 @@ struct COEPMiddleware: AsyncMiddleware {
         let parts = path.split(separator: "/").map(String.init)
         let last = parts.last ?? ""
 
-        // Instructor validate page — loads assignment-validate.js (Pyodide).
+        // Instructor validate page — loads assignment-validate.js.
         // Matched by last path component rather than a prefix so it does not
         // sweep in the rest of /instructor/*, which has no need of isolation.
         // (The historic reason given here — that those pages load CDN

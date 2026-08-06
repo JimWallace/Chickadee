@@ -8,7 +8,7 @@ name: Browser grading-hang probe
 # required editor-smoke gate runs the grading check ONCE per engine, so a 1/6
 # flake usually slips through; this probe loops it to surface the rate and, on a
 # hang, prints the grading submit-phase breadcrumbs (grading_init_start/done,
-# pyodide_loaded, env_configured, suite_started/done) that localize WHERE it
+# python_kernel_booted, env_configured, suite_started/done) that localize WHERE it
 # wedged. A reproduced hang is the SIGNAL. Thresholds (docs/ci-flakiness.md,
 # Family 2): chromium is green only at hangs=0 everywhere; webkit tolerates
 # hangs<=1 on pull_request runs (with a loud warning — the known ambient
@@ -39,9 +39,7 @@ on:
       - "Public/browser-runner.js"
       - "Public/grading-worker.js"
       - "Public/notebook*.js"
-      - "Public/pyodide/**"
       - "Public/jupyterlite/**"
-      - "scripts/patch-pyodide-kernel.py"
 
 concurrency:
   group: grading-hang-probe-${{ github.event_name }}-${{ github.ref }}
@@ -63,7 +61,7 @@ jobs:
       matrix:
         browser: [chromium, webkit]
     # Same Swift image as the other editor jobs so the cached server binary runs
-    # and the vended Public/pyodide it serves is the exact build CI ships.
+    # and the vendored kernels it serves are the exact build CI ships.
     container:
       # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
       # the test packages), so the probe harness does not apt-get them at job

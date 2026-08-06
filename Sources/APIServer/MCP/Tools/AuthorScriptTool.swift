@@ -425,7 +425,7 @@ struct AuthorScriptTool: ContentTool {
 
         try await applySuiteEditMapped(
             setup: setup, body: payload, tool: Self.name,
-            kernelEnvironment: context.request.application.kernelPythonEnvironment,
+            kernelEnvironments: context.request.application.kernelEnvironments,
             on: context.db)
     }
 
@@ -444,9 +444,9 @@ struct AuthorScriptTool: ContentTool {
                 filename: filename, content: content, manifest: manifest)
         }()
 
-        try PythonImportGuard.check(
+        try KernelImportGuard.check(
             filename: filename, content: toWrite, setup: setup,
-            environment: context.request.application.kernelPythonEnvironment)
+            environments: context.request.application.kernelEnvironments)
 
         do {
             try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: toWrite)

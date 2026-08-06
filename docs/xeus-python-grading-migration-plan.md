@@ -126,13 +126,24 @@ When that pass happens, delete together: `Public/pyodide`,
 `Tools/vendor/pyodide-extra-packages.json`, the unused nb_mypy/astor wheels, and
 the pyodide kernel extension.
 
-### A4. Tighten the CSP
+### A4. Tighten the CSP — **TRIED, AND IT DOES NOT WORK**
 
-`script-src` carries `'unsafe-eval'`. If Pyodide was the only thing needing it,
-this can become `'wasm-unsafe-eval'` — a real narrowing. It also retires the
-accidental dependency documented in the spike, where browser Python grading
-worked *because* `data:` was absent from `script-src` and that broke Pyodide's
-classic-worker detection probe.
+The premise was "if Pyodide was the only thing needing `'unsafe-eval'`, this can
+become `'wasm-unsafe-eval'`". Pyodide was not the only thing needing it.
+
+Measured with Pyodide fully removed: under `'wasm-unsafe-eval'` the editor loads,
+reports `crossOriginIsolated = true`, spawns its workers, fetches both kernel
+manifests — and then never renders a console, with
+`@jupyterlab/codemirror-extension:commands failed to activate: No provider for
+@jupyterlab/notebook:INotebookTracker`. Restoring `'unsafe-eval'` with no other
+change makes the same smoke pass. JupyterLab compiles JSON-schema validators at
+run time, which needs real `eval`; that is a JupyterLab requirement, not a
+Pyodide one.
+
+So `'unsafe-eval'` stays. Narrowing it is a JupyterLab-upstream problem (or a
+per-response-nonce project), not a leftover of the Pyodide era. The accidental
+`data:`-in-`script-src` dependency the spike documented IS gone, because the
+classic-worker probe it affected went with Pyodide.
 
 **Do not tighten the CSP while Pyodide is still loaded anywhere.** After A2 that
 means: still blocked, because the vendored pyodide kernel extension is still in

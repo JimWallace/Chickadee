@@ -57,7 +57,7 @@ extension DraftAssignmentRoutes {
 
         try await applySuiteEdit(
             setup: setup, body: body,
-            kernelEnvironment: req.application.kernelPythonEnvironment, on: req.db)
+            kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
         let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
@@ -76,7 +76,7 @@ extension DraftAssignmentRoutes {
         let body = try req.content.decode(CreateScriptBody.self)
         let result = try await createScriptInSetup(
             setup: setup, body: body,
-            kernelEnvironment: req.application.kernelPythonEnvironment, on: req.db)
+            kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
         struct CreatedResponse: Content {
             var filename: String

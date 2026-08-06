@@ -13,11 +13,6 @@
     "federated_extensions": [
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.af5d2dda3bb046a0.js",
-        "name": "@jupyterlite/pyodide-kernel-extension"
-      },
-      {
-        "extension": "./extension",
         "load": "static/remoteEntry.d7c4e2e310eb29cb.js?ck1",
         "name": "@jupyterlite/xeus-extension",
         "style": "./style"
@@ -404,15 +399,7 @@
     "fullLabextensionsUrl": "./extensions",
     "fullStaticUrl": "./build",
     "licensesUrl": "./lab/api/licenses",
-    "litePluginSettings": {
-      "@jupyterlite/pyodide-kernel-extension:kernel": {
-        "disablePyPIFallback": true,
-        "pipliteUrls": [
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=e30b96ab0418c9595ea142c52f23aa5abc04e4c97e5113099ae17a8dd9af2343"
-        ],
-        "pyodideUrl": "/pyodide/pyodide.mjs"
-      }
-    },
+    "litePluginSettings": {},
     "versionInfo": {
       "@jupyter-notebook/application": {
         "label": "Jupyter Notebook",

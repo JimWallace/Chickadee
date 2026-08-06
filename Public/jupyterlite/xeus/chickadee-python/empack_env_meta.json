@@ -2,18 +2,6 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "charset-normalizer",
-      "version": "3.4.9",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "charset-normalizer-3.4.9-pyhd8ed1ab_0",
-      "filename": "charset-normalizer-3.4.9-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "ptyprocess",
       "version": "0.7.0",
       "build": "pyhd8ed1ab_1",
@@ -124,19 +112,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "idna",
-      "version": "3.18",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "idna-3.18-pyhcf101f3_0",
-      "filename": "idna-3.18-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "pytz",
       "version": "2026.3.post1",
       "build": "pyhcf101f3_0",
@@ -159,35 +134,6 @@
       "depends": [
         "python >=3.10",
         "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "requests",
-      "version": "2.34.2",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "requests-2.34.2-pyhcf101f3_0",
-      "filename": "requests-2.34.2-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "certifi >=2023.5.7",
-        "charset-normalizer >=2,<4",
-        "idna >=2.5,<4",
-        "urllib3 >=1.26,<3",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "threadpoolctl",
-      "version": "3.6.0",
-      "build": "pyhecae5ae_0",
-      "filename_stem": "threadpoolctl-3.6.0-pyhecae5ae_0",
-      "filename": "threadpoolctl-3.6.0-pyhecae5ae_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.9"
       ],
       "subdir": "noarch"
     },
@@ -232,41 +178,6 @@
         "traitlets"
       ],
       "subdir": "noarch"
-    },
-    {
-      "name": "pysocks",
-      "version": "1.7.1",
-      "build": "py313h1804a44_3",
-      "filename_stem": "pysocks-1.7.1-py313h1804a44_3",
-      "filename": "pysocks-1.7.1-py313h1804a44_3.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python >=3.8",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "scikit-learn",
-      "version": "1.9.0",
-      "build": "np23py313hb9816c2_0",
-      "filename_stem": "scikit-learn-1.9.0-np23py313hb9816c2_0",
-      "filename": "scikit-learn-1.9.0-np23py313hb9816c2_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "numpy",
-        "scipy",
-        "joblib >=1.0.0",
-        "threadpoolctl >=2.0.0",
-        "requests",
-        "narwhals",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313",
-        "numpy >=2.2,<3"
-      ],
-      "subdir": "emscripten-wasm32"
     },
     {
       "name": "traitlets",
@@ -454,18 +365,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "certifi",
-      "version": "2026.7.22",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "certifi-2026.7.22-pyhd8ed1ab_0",
-      "filename": "certifi-2026.7.22-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "fonttools",
       "version": "4.39.4",
       "build": "py313h6d8a2ba_2",
@@ -488,34 +387,6 @@
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "sympy",
-      "version": "1.14.0",
-      "build": "py313h1804a44_3",
-      "filename_stem": "sympy-1.14.0-py313h1804a44_3",
-      "filename": "sympy-1.14.0-py313h1804a44_3.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "mpmath",
-        "python",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "narwhals",
-      "version": "2.24.0",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "narwhals-2.24.0-pyhcf101f3_0",
-      "filename": "narwhals-2.24.0-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
       ],
       "subdir": "noarch"
     },
@@ -600,22 +471,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "joblib",
-      "version": "1.5.3",
-      "build": "py313h1804a44_3",
-      "filename_stem": "joblib-1.5.3-py313h1804a44_3",
-      "filename": "joblib-1.5.3-py313h1804a44_3.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "setuptools",
-        "numpy",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "backcall",
       "version": "0.2.0",
       "build": "pyh9f0ad1d_0",
@@ -691,18 +546,6 @@
         "ipython >=7.21",
         "python",
         "xeus-python-shell-raw 0.8.0 pyhd8ed1ab_0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "mpmath",
-      "version": "1.4.1",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "mpmath-1.4.1-pyhd8ed1ab_0",
-      "filename": "mpmath-1.4.1-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
       ],
       "subdir": "noarch"
     },
@@ -786,32 +629,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "setuptools",
-      "version": "83.0.0",
-      "build": "pyh332efcf_0",
-      "filename_stem": "setuptools-83.0.0-pyh332efcf_0",
-      "filename": "setuptools-83.0.0-pyh332efcf_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "urllib3",
-      "version": "2.2.2",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "urllib3-2.2.2-pyhd8ed1ab_0",
-      "filename": "urllib3-2.2.2-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "brotli-python >=1.0.9",
-        "pysocks >=1.5.6,<2.0,!=1.5.7",
-        "python >=3.8"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "xeus-python",
       "version": "0.19.0",
       "build": "py313h6852881_2",
@@ -826,20 +643,6 @@
         "python_abi 3.13.* *_cp313",
         "xeus >=6.0.5,<6.1.0a0",
         "nlohmann_json-abi 3.12.0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "brotli-python",
-      "version": "1.2.0",
-      "build": "py313ha26e73d_2",
-      "filename_stem": "brotli-python-1.2.0-py313ha26e73d_2",
-      "filename": "brotli-python-1.2.0-py313ha26e73d_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -862,8 +665,6 @@
     "pandas",
     "matplotlib",
     "scipy",
-    "sympy",
-    "scikit-learn",
     "statsmodels",
     "pillow"
   ],

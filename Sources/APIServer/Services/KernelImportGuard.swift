@@ -1,0 +1,143 @@
+// APIServer/Services/KernelImportGuard.swift
+//
+// The authoring chokepoint for KernelEnvironment: refuse to save a
+// browser-graded script whose imports the grading kernel cannot satisfy.
+//
+// Every hand-authored script write goes through one of four call sites — the web
+// create and update handlers, `PUT /suite`, and the MCP `author_script` tool —
+// and all four call this immediately before the zip write, so the check cannot
+// be bypassed by choosing a different authoring surface.
+//
+// Generated scripts (pattern families, notebook checks) are deliberately NOT
+// checked. They are produced by renderers whose imports are fixed and known
+// good, they never pass through these entry points, and rejecting one would
+// leave an instructor unable to fix it — the fault would be in the renderer.
+
+import Core
+import Foundation
+import Vapor
+
+enum KernelImportGuard {
+
+    /// A reference a browser-graded script makes that its grading kernel cannot
+    /// satisfy.
+    struct Unsatisfied: Equatable, Sendable {
+        let name: String
+        let line: Int
+    }
+
+    /// The language a script file is graded in, or nil when its extension means
+    /// neither kernel runs it (a `.sh` suite, a data file).
+    ///
+    /// Deliberately extension-based rather than `RunnerCore.classifyScript`:
+    /// this decides which *inventory* to check against, and the browser router
+    /// makes the same extension-first decision when it picks a substrate.
+    static func language(forFile filename: String) -> AssignmentLanguage? {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "py": return .python
+        case "r": return .r
+        default: return nil
+        }
+    }
+
+    /// The unsatisfiable references in `source`, given what the setup supplies.
+    static func unsatisfied(
+        in source: String,
+        environment: KernelEnvironment,
+        localModules: Set<String>
+    ) -> [Unsatisfied] {
+        switch environment.language {
+        case .python:
+            return PythonImportScanner.topLevelImports(in: source)
+                .filter { !environment.provides($0.module) && !localModules.contains($0.module) }
+                .map { Unsatisfied(name: $0.module, line: $0.line) }
+        case .r:
+            return RLibraryScanner.referencedPackages(in: source)
+                .filter { !environment.provides($0.package) && !localModules.contains($0.package) }
+                .map { Unsatisfied(name: $0.package, line: $0.line) }
+        }
+    }
+
+    /// The name a bundled file is importable under, or nil when it is not an
+    /// importable source file for `language`.
+    ///
+    /// R is `source()`d by path rather than imported by name, so a bundled `.R`
+    /// helper is not a `library()` target — but accepting its stem costs nothing
+    /// and removes a whole class of false positive if a course ever ships a
+    /// package-shaped helper.
+    static func localModuleName(forFile filename: String) -> String? {
+        let base = (filename as NSString).lastPathComponent
+        let stem: String
+        if base.hasSuffix(".py") {
+            stem = String(base.dropLast(3))
+        } else if base.lowercased().hasSuffix(".r") {
+            stem = String(base.dropLast(2))
+        } else {
+            return nil
+        }
+        guard let first = stem.first, first == "_" || first.isLetter else { return nil }
+        return stem.allSatisfy { $0 == "_" || $0 == "." || $0.isLetter || $0.isNumber }
+            ? stem : nil
+    }
+
+    /// The human-facing rejection message.
+    static func message(
+        for unsatisfied: [Unsatisfied], filename: String, language: AssignmentLanguage
+    ) -> String {
+        let names = unsatisfied.map(\.name)
+        let list = names.map { "`\($0)`" }.joined(separator: ", ")
+        let plural = names.count == 1 ? "it" : "they"
+        let locations = unsatisfied.map { "\($0.name) (line \($0.line))" }.joined(separator: ", ")
+        let envFile = language == .python ? "environment-python.yml" : "environment-r.yml"
+        let failure =
+            language == .python
+            ? "an ImportError" : "an error from library()"
+        return """
+            \(filename) needs \(list), which the browser grading environment does not provide, \
+            so \(plural) would fail with \(failure) for every student who submits — even though \
+            validation passes, because validation is graded by the native worker on a full \
+            installation. Found at: \(locations). Either avoid it, switch this assignment to \
+            worker grading, or ask a maintainer to add the package to \
+            Tools/jupyterlite/\(envFile) and re-vendor the kernel.
+            """
+    }
+
+    /// Throws when `content` references something the browser grading kernel
+    /// cannot provide. A no-op unless every condition holds, because outside
+    /// them the fixed-environment constraint does not apply:
+    ///
+    ///   * the file is Python or R,
+    ///   * that language's inventory loaded,
+    ///   * and the assignment is browser-graded — worker grading runs a real
+    ///     interpreter, where the same reference is fine.
+    static func check(
+        filename: String,
+        content: String,
+        setup: APITestSetup,
+        environments: KernelEnvironments?
+    ) throws {
+        guard
+            let language = language(forFile: filename),
+            let environment = environments?[language],
+            let manifest = setup.decodedManifest(),
+            manifest.gradingMode == .browser
+        else { return }
+
+        // Anything else bundled in the setup is available at run time, and is
+        // the likeliest false positive: a test that imports the support file
+        // sitting beside it. Include the file being written, so a script that
+        // refers to itself by name is not reported.
+        var localModules = Set(
+            listZipEntries(zipPath: setup.zipPath)
+                .compactMap(Self.localModuleName(forFile:)))
+        if let own = localModuleName(forFile: filename) { localModules.insert(own) }
+
+        let missing = unsatisfied(
+            in: content, environment: environment, localModules: localModules)
+        guard !missing.isEmpty else { return }
+
+        throw WebAssignmentError.invalidParameter(
+            name: "content",
+            reason: message(for: missing, filename: filename, language: language))
+    }
+}

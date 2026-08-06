@@ -31,6 +31,15 @@ dependencies:
   # editor runs this same env, an instructor can now use them while authoring
   # too, which Pyodide-only grading never allowed.
   #
+  # TRIMMED in v0.5.19: `scikit-learn` and `sympy` were dropped. Both were added
+  # to preserve parity with what Pyodide *could* resolve, not because any lab
+  # needed them, and both are expensive — scikit-learn 10.8s to import (over the
+  # default per-test limit on its own) and sympy 5.9s. Dropping scikit-learn also
+  # drops `requests` -> `urllib3`, whose emscripten module has to be patched or
+  # the kernel does not boot at all; the patch and its guard stay in place, since
+  # they cost nothing when the package is absent and a future addition could
+  # bring it back.
+  #
   # Three packages the old Pyodide index carried have NO emscripten-forge build
   # and so cannot be added here: networkx, seaborn and plotly. They need an
   # upstream build before they can come back.
@@ -42,7 +51,36 @@ dependencies:
   # import unless scripts/patch-xeus-python-http.py neuters it. See that script
   # and the urllib3 assertion in scripts/check-xeus-vendored.sh.
   - scipy
-  - sympy
-  - scikit-learn
   - statsmodels
   - pillow
+
+# COST, measured — the same two-part cost the R env documents, milder here but
+# not free. Re-measure with Tools/browser-grading-smoke rather than trusting
+# these to age well.
+#
+# 1. Boot, paid by every user whether or not they import anything: the kernel
+#    fetches and mounts the whole env. Single-run samples for this 85 MB env
+#    range 8.2-10.1s, so treat it as "about nine seconds" and no finer.
+#
+# 2. Import, paid only by a script that uses the package. Measured with all
+#    eight of the then-shipped packages present:
+#
+#      scikit-learn 10.8s | sympy 5.9s | pandas 4.8s | matplotlib 1.3s
+#      numpy 0.9s | statsmodels 0.3s | scipy 0.1s | PIL 0.0s
+#
+#    The first two are why they are no longer here. pandas at 4.8s is half the
+#    default 10-SECOND per-test limit and is unavoidable — it is what the course
+#    teaches. (Ordering matters as it does in R: scipy measures 0.1s only because
+#    numpy and pandas came first in that run.)
+#
+# WHERE THE SIZE IS, which is not where the import cost is. `openblas` is 16 MB,
+# the largest single package here, and NOTHING but scipy needs it — numpy does
+# not. scipy (11 MB) plus openblas is therefore ~27 MB of a ~69 MB env, or about
+# 40% of everyone's boot payload, for a package whose *import* is nearly free.
+# statsmodels is the only remaining reason scipy is here. Dropping both is the
+# single biggest boot saving available, and is a live option if no lab needs
+# them — it is a course decision, not an engineering one.
+#
+# Both costs argue for restraint. The env is not a place to put things that
+# might be handy — every addition is paid at boot by everyone, and a heavy
+# import is paid against a 10s budget by whoever uses it.

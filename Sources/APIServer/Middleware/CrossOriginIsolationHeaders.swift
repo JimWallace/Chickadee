@@ -2,7 +2,7 @@
 //
 // The COOP + COEP + CORP trio that makes a document, dedicated worker, or
 // subresource participate in a cross-origin-isolated context — which is what
-// gives the Pyodide kernel `SharedArrayBuffer` for synchronous execution.
+// gives the xeus kernel `SharedArrayBuffer` for synchronous execution.
 //
 // Shared by the two middlewares that serve the notebook editor's assets
 // (`NotebookAssetIsolationMiddleware` for the slow-path HTML documents,

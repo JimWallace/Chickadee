@@ -1,6 +1,5 @@
 jupyterlite==0.8.1
 jupyterlite-core==0.8.1
-jupyterlite-pyodide-kernel==0.8.1
 # jupyter-iframe-commands — labextension running INSIDE the editor iframe that
 # exposes the JupyterLab command registry to the parent frame over postMessage.
 # Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),
@@ -15,9 +14,8 @@ jupyter-iframe-commands==0.3.0
 # WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
 # docs/xeus-r-kernel-spike.md, #77).
 jupyterlite-xeus==5.0.0
-# The Pyodide kernel is no longer the editor's Python (defaultKernelName is
-# xpython).  It stays vendored on purpose: scripts/check-pyodide-parity.sh
-# derives the Public/pyodide version pin from this package's bundled core
-# wheels, and keeping it is the cheap revert if xeus-python has to be backed
-# out.  Public/pyodide itself is still load-bearing for browser grading and
-# /validate, which are not xeus.
+# The Pyodide kernel was retired in v0.5.19, and with it the ~465 MB vendored
+# Public/pyodide.  It had been kept as the parity anchor for those bytes and as
+# a revert path for xeus-python; once nothing loaded Pyodide it was a federated
+# extension serving no purpose.  Both editor kernels and both browser graders
+# are xeus now.

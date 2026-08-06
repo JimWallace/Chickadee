@@ -52,7 +52,7 @@ extension PublishedAssignmentRoutes {
 
         try await applySuiteEdit(
             setup: setup, body: body,
-            kernelEnvironment: req.application.kernelPythonEnvironment, on: req.db)
+            kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
         // Re-grade every existing student submission against the edited suite
         // (gated on a real manifest change) — restoring the v0.4.93 auto-retest

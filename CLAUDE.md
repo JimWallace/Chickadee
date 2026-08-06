@@ -521,9 +521,12 @@ back at it.
 Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib; the R side is bare `xeus-r`.
+numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
+the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
+forcats).
 
-**The authoring check reads the VENDORED bytes, never `environment-python.yml`.**
+**Both kernel environments are checked at authoring time, and the check reads
+the VENDORED bytes, never the environment YAML.**
 Since browser grading moved onto this env, saving a browser-graded `.py` whose
 imports the kernel cannot satisfy is rejected at the write
 (`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
@@ -536,9 +539,31 @@ nothing until `build-jupyterlite.sh` runs, so a check derived from the env file
 would accept imports the shipped kernel cannot serve — the exact failure it
 exists to prevent. Reading the tarballs also means there is no
 distribution-name-to-import-name table to maintain. The check applies to
-browser-graded assignments only (worker grading runs real `python3`) and resolves
-every ambiguity toward reporting nothing, since a false positive blocks an
-instructor from saving with no self-service fix.
+browser-graded assignments only (worker grading runs a real interpreter) and
+resolves every ambiguity toward reporting nothing, since a false positive blocks
+an instructor from saving with no self-service fix. `KernelImportGuard` handles
+both languages, dispatching on file extension; R is scanned by
+`RLibraryScanner` for `library()`/`require()`/`::`.
+
+**A kernel env has TWO costs, and they fall on different people. Be sparing.**
+*Boot* — fetching and mounting the whole env — is paid by everyone on every
+notebook open and every browser-graded submission, whether or not they touch the
+package. *Import/attach* is paid only by a script that uses it, but is charged
+against the default **10-second** per-test limit. Measured in real kernels:
+
+| | R | Python |
+|---|---|---|
+| boot | ~5-10s (52-91 MB; single runs, noisy) | ~8-10s (85 MB) |
+| worst single import | `ggplot2` **193s**, `lubridate` 32s | `scikit-learn` **10.8s**, `sympy` 5.9s, `pandas` 4.8s |
+
+Attach costs are **not independent**: the R tidyverse shares a dependency graph,
+so whichever package attaches first pays for all of it (~26s cold, ~58s for the
+set) and the rest come cheap. `ggplot2` and `lubridate` are excluded from the
+default R env on that basis despite solving fine; `scikit-learn` already exceeds
+the default limit in Python. `Tools/browser-grading-smoke` prints per-package
+timings and asserts every declared package actually loads — measure there rather
+than reasoning about package counts, and treat single boot numbers as a trend
+only.
 
 Building the kernels needs **micromamba on PATH plus network to
 repo.prefix.dev**. This was long documented as something *CI cannot do*, and
@@ -595,98 +620,55 @@ both engines because the transports fail independently.
 
 ## Vendored browser libraries
 
-Pyodide, jszip, and CodeMirror are vendored under `Public/` rather than
-pulled from third-party CDNs at runtime, so student / instructor IPs
-aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
-(FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
+jszip and CodeMirror are vendored under `Public/` rather than pulled from
+third-party CDNs at runtime, so student / instructor IPs aren't leaked to
+`cdn.jsdelivr.net` and `esm.sh` on every page load (FIPPA / PIPEDA concern
+surfaced in the v0.4.171 audit). The editor kernels are vendored under
+`Public/jupyterlite/xeus/` for the same reason.
 
 ```
-Public/pyodide/              — the ONE canonical Pyodide distribution (~465 MB)
-Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
-Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
-Public/vendor/xeus-bootstrap.js  — mambajs slice that boots the xeus-r kernel
+Public/vendor/jszip.min.js       — jszip the browser runner uses for zip extraction
+Public/vendor/codemirror.js      — bundled CodeMirror 6 ESM
+Public/vendor/xeus-bootstrap.js  — mambajs slice that boots a xeus kernel
 Public/vendor/xeus-unpack.wasm   — untarjs unpacker the bootstrap drives
 ```
 
-**One canonical Pyodide.** There is exactly one vended Pyodide, served at
-`/pyodide`, and every consumer that loads Pyodide at all loads that copy:
-Chickadee's own browser paths (`browser-runner.js` + `grading-worker.js` for
-browser grading, `pyodide-worker.js` for the pattern-family editor's
-auto-compute) and the still-vendored
-`jupyterlite-pyodide-kernel` (via `pyodideUrl` in
-`Tools/jupyterlite/jupyter-lite.json`).  (Historically the editor loaded a
-*second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped that
-allowance and broke the editor — see `SecurityHeadersMiddleware`.)
+**Pyodide is gone (v0.5.19).** `Public/pyodide` was ~465 MB of vendored bytes;
+`check-pyodide-parity.sh`, `add-pyodide-extras.py`,
+`Tools/vendor/pyodide-extra-packages.json`, `patch-pyodide-kernel.py`, the
+nb_mypy/astor wheels and the `jupyterlite-pyodide-kernel` federated extension
+went with it. Both editor kernels and both browser graders are xeus.
+`verify-jupyterlite.sh` fails if any `pyodide` federated extension or plugin
+setting reappears, because re-adding the kernel means re-vendoring that payload
+and restoring its CSP allowances.
 
-**The editor's Python is no longer Pyodide, so editor and grader are no longer
-one environment — for Python.**  Authoring runs on xeus-python (Python 3.13,
-packages fixed at build time by `Tools/jupyterlite/environment-python.yml`);
-browser grading still runs Pyodide (Python 3.14).  That skew is
-deliberate and accepted, but it is a real difference — a notebook that runs in
-the editor is not thereby proven to grade in the browser runner.  The native
-worker remains the authoritative grader either way.  **R has no such skew:**
-browser-graded R runs the same vendored `chickadee-r` xeus kernel the editor
-boots for R notebooks (#1271), so a missing package shows up at authoring time
-rather than at grade time.  The Pyodide kernel extension is still
-built and vendored: it keeps `scripts/check-pyodide-parity.sh` anchored (that
-guard derives the Pyodide pin from the kernel's bundled wheels) and leaves a
-one-line revert if xeus-python has to be backed out.
+**Two things the retirement did NOT deliver, both measured:**
 
-**The Pyodide version is not hardcoded — it is derived from the kernel.**
-The only version pin is `jupyterlite-pyodide-kernel` in
-`Tools/jupyterlite/requirements.txt`; its bundled core wheels are ABI-locked
-to a specific Pyodide release, so `scripts/setup-vendor.sh` reads that version
-out of the built bundle and vends exactly it.  One pin, one version, no drift.
+- **`'unsafe-eval'` cannot be narrowed to `'wasm-unsafe-eval'`.** The plan
+  assumed Pyodide was the only thing needing it. It is not: with Pyodide fully
+  removed, `wasm-unsafe-eval` leaves JupyterLab unable to activate its plugins —
+  the editor loads, reports `crossOriginIsolated`, fetches both kernel manifests,
+  then never renders a console. Restoring `'unsafe-eval'` with no other change
+  makes the same smoke pass. JupyterLab compiles JSON-schema validators at run
+  time. Do not retry without a plan for that.
+- **Kernel packages still revalidate on every boot.** They are `no-cache`
+  because conda filenames are stable across an in-place patch
+  (`patch-xeus-python-http.py` rewrites bytes under the same name), so immutable
+  caching would pin an unpatched copy — the #574 failure class. Making them
+  immutable needs content-addressed filenames, because
+  `empackLockToMambajsLock` builds package URLs as `pkgRootUrl + '/' + filename`
+  inside the vendored bundle, leaving no seam for a `?v=` cache-buster.
+  `/jupyterlite/xeus/` IS now on `EditorAssetFastPathMiddleware`, so those ~50
+  revalidations per boot no longer each cost a Fluent session lookup.
 
-Rebuild order matters:
-
-```bash
-scripts/setup-jupyterlite.sh     # build the .venv-jlite toolchain
-scripts/build-jupyterlite.sh     # rebuild the bundle (kernel version baked in)
-scripts/setup-vendor.sh          # derives Pyodide version from the kernel, re-vendors
-```
-
-`scripts/check-pyodide-parity.sh` fails the build (and CI, via
-`jupyterlite.yml`) if the vended Pyodide ever drifts from the kernel's pinned
-version — the guard against repeating #574.  jszip is fetched by
-`setup-vendor.sh`; CodeMirror is bundled via `npm` + `esbuild` from
-`Tools/vendor/{package.json, codemirror-entry.js}`.  `Public/pyodide` and
-`Public/vendor` are checked in for the same reason `Public/jupyterlite` is —
-every contributor and CI runner sees the same bytes without a build-time
-network fetch.
-
-**Extra packages + nb_mypy (currently DISABLED).** Pure-Python packages not
-in the upstream Pyodide distribution are declared in
-`Tools/vendor/pyodide-extra-packages.json` (pinned URL + sha256) and injected
-into the one lock by `scripts/add-pyodide-extras.py` (run from
-`setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're present so
-a re-vendor can't silently drop them.  This is how the `nb_mypy` (+ `astor`)
-wheels get into the editor bundle — but **nb_mypy type-checking is disabled**
-(see the `scripts/patch-pyodide-kernel.py` docstring): its IPython
-`pre_run_cell` hook ran a synchronous compiled-WASM mypy on every cell
-execute, on the kernel's single thread, and wedged the first cell in the real
-editor.  The wheels stay vended (harmless, unloaded) and the patch keeps an
-empty activation block so re-enabling is a one-line change; revisit
-type-checking only as a feature that never runs on the cell-execute path.
-The same kernel-wheel patch is what carries the v0.4.526 chdir fix; patching
-a bundled wheel means a sha cascade (wheel → `all.json` digest →
-`pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is consistent
-so a mismatch (which would make piplite reject the kernel) is a build
-failure, not a browser surprise.
-
-**Xeus extension parselmouth stub.** The vendored `@jupyterlite/xeus-extension`
-(the xeus-r kernel's UI wiring) upstream fetches a conda→PyPI name mapping from
-`raw.githubusercontent.com` at module load — on every editor boot, for every
-kernel, though only xeus's unused runtime pip-install path consults it.
-`scripts/patch-xeus-extension.py` (run from `build-jupyterlite.sh`, asserted by
-`verify-jupyterlite.sh`) stubs it to a resolved empty mapping: the CSP blocks
-the request by policy anyway, and un-patched it emitted a `csp_violation` +
-`unhandledrejection` diagnostics pair on every boot. The same patch
-cache-busts the extension's chunk and remoteEntry URLs (`?v=ck1<hash>` in the
-loader template, `?ck1` on the federated `load` in the built
-`jupyter-lite.json`): the stub changed bytes in place under immutable-cached
-hashed names, and only a URL change reaches browsers that loaded the editor
-pre-stub.
+**The waitAsync polyfill patch covers every extension, not one.**
+`scripts/patch-waitasync-worker.py` (was `patch-pyodide-waitasync-worker.py`)
+rewrites the `Atomics.waitAsync` polyfill's helper worker from a CSP-blocked
+`data:` URL to a `blob:` one. It was scoped to the pyodide-kernel extension —
+and when Pyodide was retired it turned out the **xeus** extension shipped the
+identical un-patched polyfill, in the kernel Chickadee actually runs, for both
+languages. A per-extension scope is how that went unseen for two releases; the
+glob and the matching `verify-jupyterlite.sh` assertion are how it stays seen.
 
 ---
 

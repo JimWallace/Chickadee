@@ -58,14 +58,26 @@ const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:80
   /\/$/,
   ""
 );
-// Which kernel the REPL boots. Defaults to `python` — the Pyodide kernel — NOT
-// because that is the editor's default (it is `xpython` now, see
-// Tools/jupyterlite/jupyter-lite.json) but because most probes below are
-// pyodide-kernel behaviours: the `data:`-worker waitAsync polyfill and the
-// service-worker stdin fallback are things xeus kernels do not have. Pointing
-// this at `xpython` without reworking those probes would assert nothing.
-// Overridable so an xeus config can be added without forking the harness.
-const kernelName = process.env.SMOKE_KERNEL || "python";
+// Which kernel the REPL boots. `xpython` — the editor's default, and since
+// v0.5.19 the only Python kernel that exists.
+//
+// This defaulted to `python` for a long time, which was the PYODIDE kernel, on
+// the reasoning that the probes below are pyodide-kernel behaviours. That
+// reasoning expired with Pyodide, and the default outlived it: deleting
+// `Public/pyodide` deleted the only kernelspec named `python`, so every leg was
+// asking for a kernel that no longer existed. Chromium tolerated it and WebKit
+// did not — the console never rendered, a modal jp-Dialog took the clicks, and
+// the failure read like an engine regression rather than a stale fixture.
+//
+// Both premises behind the old default are also gone. The `data:`-worker
+// waitAsync polyfill is not pyodide-specific — the xeus extension ships the
+// identical one, and patch-waitasync-worker.py now covers it, which is what
+// keeps leg 4 meaningful. Service-worker stdin is precisely what xeus does on
+// WebKit (jupyterlite/xeus#212).
+//
+// Still overridable, so a second kernel (xr) can be probed without forking the
+// harness.
+const kernelName = process.env.SMOKE_KERNEL || "xpython";
 const replURL =
   `${baseURL}/jupyterlite/repl/index.html?kernel=${encodeURIComponent(kernelName)}&toolbar=1`;
 // Disable the service worker on the wire (rewrite jupyter-lite.json). With

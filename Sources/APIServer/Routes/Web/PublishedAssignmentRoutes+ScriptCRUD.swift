@@ -75,9 +75,9 @@ extension PublishedAssignmentRoutes {
             )
         }()
 
-        try PythonImportGuard.check(
+        try KernelImportGuard.check(
             filename: filename, content: inlinedContent, setup: setup,
-            environment: req.application.kernelPythonEnvironment)
+            environments: req.application.kernelEnvironments)
 
         do {
             try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
@@ -101,7 +101,7 @@ extension PublishedAssignmentRoutes {
 
         let result = try await createScriptInSetup(
             setup: setup, body: body,
-            kernelEnvironment: req.application.kernelPythonEnvironment, on: req.db)
+            kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
         if !result.isTest {
             // Support files (tier=="support") aren't entries in `testSuites`,

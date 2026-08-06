@@ -80,7 +80,7 @@ jobs:
           # the assets the editor actually loads and the middlewares that isolate
           # them. Over-matching is safe (it just runs the smoke); under-matching
           # is the dangerous direction.
-          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/python-grading-worker\.js|Public/r-grading-worker\.js|Public/python-eval-worker\.js|Public/xeus-kernel-shared\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/embedded-activity\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Resources/Views/workbench\.leaf|Resources/Views/notebook\.leaf|Resources/Views/base\.leaf|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
+          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/python-grading-worker\.js|Public/r-grading-worker\.js|Public/python-eval-worker\.js|Public/xeus-kernel-shared\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/embedded-activity\.js|Public/jupyterlite/|Public/vendor/|Resources/Views/workbench\.leaf|Resources/Views/notebook\.leaf|Resources/Views/base\.leaf|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
           # Use a here-string, NOT `echo "$changed" | grep -qE`: with a large
           # changed-file list (e.g. a full JupyterLite bundle re-vendor) grep -q
           # matches early and closes the pipe, echo takes SIGPIPE, and the
@@ -121,7 +121,7 @@ jobs:
         browser: [chromium, webkit]
     # Run in the same swift image the other jobs use so the cached server binary
     # (dynamically linked against this image's Swift runtime) actually runs, and
-    # so the vended Public/pyodide it serves is the exact build CI ships.
+    # so the vendored kernels it serves are the exact build CI ships.
     container:
       # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
       # the test packages), so the probe harness does not apt-get them at job
@@ -179,12 +179,15 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
-      # Same editor probe, but against the kernel students actually get.
+      # The dedicated synchronous-stdin probe.
       #
-      # The selftest above runs `?kernel=python` — the Pyodide kernel, which
-      # since v0.5.14 is no longer the editor default (`defaultKernelName` is
-      # `xpython`, and notebooks normalize to it). Without this step every
-      # stdin/freeze result we have describes a kernel no student boots.
+      # This step used to carry a second job: the selftest above ran
+      # `?kernel=python` — the Pyodide kernel — so without this, every
+      # stdin/freeze result described a kernel no student booted. Retiring
+      # Pyodide deleted that kernelspec, and the selftest now defaults to
+      # `xpython` itself, so the two run the same kernel. The step stays because
+      # it asserts something the selftest does not: that `input()` actually
+      # round-trips over each engine's sync transport.
       #
       # Both engines have a synchronous-stdin transport, and they are different
       # ones — which is exactly why this must run on both:

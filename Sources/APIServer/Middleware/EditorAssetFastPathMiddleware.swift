@@ -25,9 +25,9 @@
 //     change; a rebuild produces a new hash → new URL.  Cached immutably
 //     for a year, eliminating the per-boot revalidation storm.
 //   * Everything else on the fast path (unhashed names like the MathJax
-//     fonts, all of /pyodide/, /vendor/) is stamped `no-cache` so it
+//     fonts, /vendor/, the kernel binaries) is stamped `no-cache` so it
 //     revalidates: re-vendoring rewrites those bytes IN PLACE under stable
-//     names — including the deterministically patched pyodide-kernel wheel —
+//     names —
 //     so immutable caching would pin stale bytes across an upgrade (#574's
 //     failure class). `no-cache` (an explicit "revalidate before use", a cheap
 //     304 via ETag when unchanged) is required because an ETag ALONE lets the
@@ -46,7 +46,23 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     static let fastPathPrefixes = [
         "/jupyterlite/build/",
         "/jupyterlite/extensions/",
-        "/pyodide/",
+        // NOT "/jupyterlite/xeus/", though it is the obvious candidate: ~230 MB,
+        // the largest tree here, and a kernel boot fetches every package in its
+        // environment (48 files for Python, 51 for R), each paying a Fluent
+        // session lookup on the full chain that it never needs.
+        //
+        // Adding it was tried and reverted. It is the only behavioural server
+        // change in the v0.5.19 Pyodide retirement, and WebKit's editor smoke
+        // failed deterministically across that commit while Chromium passed.
+        // The tree is not just package tarballs: `/jupyterlite/xeus/kernels.json`
+        // and each `<env>/<kernel>/kernel.json` are fetched during app startup,
+        // so short-circuiting them skips BundleAssetCacheMiddleware and the
+        // isolation middlewares for requests the editor makes before a kernel
+        // exists — and WebKit is the engine we deliberately serve NON-isolated,
+        // with the JupyterLite service worker enabled and intercepting fetches.
+        // Re-add it only with a green WebKit smoke, and consider scoping it to
+        // `/jupyterlite/xeus/*/kernel_packages/` so the startup JSON keeps
+        // riding the normal chain.
         "/vendor/",
     ]
 

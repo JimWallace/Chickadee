@@ -17,7 +17,7 @@
 // https://github.com/swiftlang/swift/issues/89492 (when that lands as a clean
 // diagnostic / auto-import, this explicit import can go). The runtime supplies
 // the executor — on wasm it's the single cooperative executor — so `await`ing
-// the substrate (subprocess on the worker, Pyodide in the browser) just works.
+// the substrate (subprocess on the worker, a xeus kernel in the browser) just works.
 import _Concurrency
 
 /// The `shortResult` emitted when a test is auto-failed because one of its
@@ -41,7 +41,7 @@ public func skippedPrerequisiteMessage(prerequisite: String) -> String {
 ///   - suites: the manifest entries, projected to the runtime view, in order.
 ///   - timeLimitSeconds: per-script wall-clock limit, enforced by the executor.
 ///   - attemptNumber: stamped onto every outcome; drives `isFirstPassSuccess`.
-///   - executor: the substrate that actually runs scripts (subprocess / Pyodide).
+///   - executor: the substrate that actually runs scripts (subprocess / xeus kernel).
 ///   - onEvent: observability sink; the loop does no logging itself.
 /// - Returns: one `TestOutcome` per executed-or-skipped entry, in suite order.
 public func executeSuites(

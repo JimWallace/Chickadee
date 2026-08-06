@@ -348,7 +348,7 @@ func makeTestApp(
         // instructor write routes DO, so a test app without it would let a
         // regression through. Silently absent when the vendored kernel bytes are
         // not in the checkout, matching production (`bootstrapAppServices`).
-        app.kernelPythonEnvironment = try? KernelPythonEnvironment.load(
+        app.kernelEnvironments = KernelEnvironments.load(
             publicDirectory: app.directory.publicDirectory)
 
         configureLeaf(app)

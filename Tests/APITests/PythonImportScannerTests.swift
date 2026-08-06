@@ -144,14 +144,15 @@ import Testing
 
 @Suite struct PythonImportAvailabilityTests {
 
-    private let environment = KernelPythonEnvironment(
+    private let environment = KernelEnvironment(
+        language: .python,
         packageModules: ["numpy", "pandas", "matplotlib", "PIL"],
         stdlibModules: ["os", "sys", "math", "json"])
 
     private func unsatisfied(_ source: String, local: Set<String> = []) -> [String] {
-        PythonImportAvailability.unsatisfiedImports(
+        KernelImportGuard.unsatisfied(
             in: source, environment: environment, localModules: local
-        ).map(\.module)
+        ).map(\.name)
     }
 
     @Test func flagsAPackageTheKernelDoesNotHave() {
@@ -186,16 +187,17 @@ import Testing
     }
 
     @Test func localModuleNamesComeFromPythonFilesOnly() {
-        #expect(PythonImportAvailability.localModuleName(forFile: "helpers.py") == "helpers")
-        #expect(PythonImportAvailability.localModuleName(forFile: "dir/helpers.py") == "helpers")
-        #expect(PythonImportAvailability.localModuleName(forFile: "data.csv") == nil)
-        #expect(PythonImportAvailability.localModuleName(forFile: "test-one.py") == nil)
-        #expect(PythonImportAvailability.localModuleName(forFile: "run.sh") == nil)
+        #expect(KernelImportGuard.localModuleName(forFile: "helpers.py") == "helpers")
+        #expect(KernelImportGuard.localModuleName(forFile: "dir/helpers.py") == "helpers")
+        #expect(KernelImportGuard.localModuleName(forFile: "data.csv") == nil)
+        #expect(KernelImportGuard.localModuleName(forFile: "test-one.py") == nil)
+        #expect(KernelImportGuard.localModuleName(forFile: "run.sh") == nil)
     }
 
     @Test func theMessageNamesTheModuleTheLineAndAWayForward() {
-        let message = PythonImportAvailability.message(
-            for: [.init(module: "scipy", line: 3)], filename: "publictest_stats.py")
+        let message = KernelImportGuard.message(
+            for: [.init(name: "scipy", line: 3)], filename: "publictest_stats.py",
+            language: .python)
         #expect(message.contains("publictest_stats.py"))
         #expect(message.contains("scipy"))
         #expect(message.contains("line 3"))
@@ -215,7 +217,7 @@ import Testing
     }
 
     @Test func theVendoredIndexLoadsAndDescribesTheRealEnvironment() throws {
-        let environment = try KernelPythonEnvironment.load(publicDirectory: Self.publicDirectory)
+        let environment = try KernelEnvironment.load(publicDirectory: Self.publicDirectory, language: .python)
 
         // The env's whole reason for existing.
         for module in ["numpy", "pandas", "matplotlib", "PIL"] {
@@ -231,6 +233,18 @@ import Testing
         for module in ["seaborn", "networkx", "plotly"] {
             #expect(!environment.provides(module), "\(module) has no build and cannot be present")
         }
+        // Removed in v0.5.19 on measured import cost — sklearn 10.8s (over the
+        // default per-test limit by itself) and sympy 5.9s — having been added
+        // only to preserve Pyodide parity. Pinned so re-adding one is a
+        // deliberate act that revisits that limit, not a quiet re-vendor.
+        for module in ["sklearn", "sympy"] {
+            #expect(
+                !environment.provides(module),
+                """
+                \(module) is back in the vendored Python env; it was dropped for its import \
+                cost against the 10s per-test limit, so re-check that limit first
+                """)
+        }
     }
 
     /// The index must be regenerated after a re-vendor. Comparing it against the
@@ -239,7 +253,7 @@ import Testing
     /// package set, either blocking a newly-added package or accepting a dropped
     /// one.
     @Test func theIndexMatchesTheVendoredEnvironmentMetadata() throws {
-        let environment = try KernelPythonEnvironment.load(publicDirectory: Self.publicDirectory)
+        let environment = try KernelEnvironment.load(publicDirectory: Self.publicDirectory, language: .python)
         let metaURL = URL(fileURLWithPath: Self.publicDirectory)
             .appendingPathComponent("jupyterlite/xeus/chickadee-python/empack_env_meta.json")
         let meta = try JSONSerialization.jsonObject(with: Data(contentsOf: metaURL))

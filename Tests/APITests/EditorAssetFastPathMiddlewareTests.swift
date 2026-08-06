@@ -30,7 +30,6 @@ import VaporTesting
             ("jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js", "hashed-ext"),
             ("jupyterlite/extensions/@jupyterlite/kernel/install.json", "{}"),
             ("jupyterlite/files/users/5f1c0b9a-0000-0000-0000-000000000000/work.ipynb", "student-work"),
-            ("pyodide/pyodide-lock.json", "{}"),
             ("vendor/jszip.min.js", "jszip"),
         ]
         for fixture in fixtures {
@@ -106,9 +105,12 @@ import VaporTesting
         }
     }
 
-    @Test func pyodideAndVendorAreFastPathedWithoutImmutableCaching() async throws {
+    // Unhashed names on the fast path revalidate rather than cache immutably:
+    // re-vendoring rewrites those bytes in place under a stable name, so
+    // freezing them would pin a stale copy (#574's failure class).
+    @Test func unhashedBundleAssetsAndVendorAreFastPathedWithoutImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
-            for path in ["/pyodide/pyodide-lock.json", "/vendor/jszip.min.js"] {
+            for path in ["/jupyterlite/build/MathJax_Main-Regular.woff", "/vendor/jszip.min.js"] {
                 try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(res.headers.first(name: .cacheControl) == "no-cache")
@@ -159,7 +161,7 @@ import VaporTesting
         try await withApp(try await makeApp(crossOriginIsolation: false)) { app in
             for path in [
                 "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
-                "/pyodide/pyodide-lock.json",
+                "/vendor/jszip.min.js",
             ] {
                 try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
@@ -170,16 +172,16 @@ import VaporTesting
     }
 
     // When cross-origin isolation is ON, the fast path must stamp the COOP +
-    // COEP + CORP trio on the vendored editor assets it serves — especially the
-    // Pyodide kernel WORKER chunk, whose missing COEP was the worker-block: an
-    // isolated editor page spawning a worker without COEP is blocked by Chrome.
+    // COEP + CORP trio on the vendored editor assets it serves — especially a
+    // kernel WORKER chunk, whose missing COEP was the worker-block: an isolated
+    // editor page spawning a worker without COEP is blocked by Chrome.
     @Test func fastPathIsolatesEditorAssetsWhenEnabled() async throws {
         try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
             // The hashed extension chunk stands in for the kernel worker chunk.
             for path in [
                 "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
                 "/jupyterlite/build/100.5a28c9e.js",
-                "/pyodide/pyodide-lock.json",
+                "/jupyterlite/build/MathJax_Main-Regular.woff",
                 "/vendor/jszip.min.js",
             ] {
                 try await app.testing().test(.GET, path) { res async in
@@ -203,7 +205,9 @@ import VaporTesting
         ("/jupyterlite/build/MathJax_Main-Regular.woff", false),
         ("/jupyterlite/extensions/@jupyterlite/kernel/install.json", false),
         ("/jupyterlite/build/bundle.js", false),
-        ("/pyodide/pyodide.asm.wasm", false),
+        // Not on the fast path at all (see the middleware's prefix list), so it
+        // can never be stamped immutable however its name looks.
+        ("/jupyterlite/xeus/chickadee-python/bin/xpython.wasm", false),
         ("/vendor/codemirror.js", false),
     ])
     func contentHashDetection(path: String, expected: Bool) {
