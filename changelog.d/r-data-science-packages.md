@@ -45,3 +45,21 @@
   anyone writing a browser-graded test that uses it.
   `Tools/browser-grading-smoke` prints per-package timings; measure there rather
   than guessing from package counts.
+
+- **`scikit-learn` and `sympy` are dropped from the Python environment.** Both
+  were added during the xeus-python migration to preserve parity with what
+  Pyodide *could* resolve at run time, not because any lab used them, and both
+  are expensive: scikit-learn takes 10.8s to import — over the default per-test
+  limit on its own — and sympy 5.9s. The environment goes from 62 packages /
+  85 MB to 48 / 75 MB, and loses `requests` → `urllib3` with them, which is the
+  dependency whose emscripten module has to be patched or the kernel does not
+  boot at all. That patch and its guard stay in place: they cost nothing when the
+  package is absent, and a future addition could bring it back.
+
+  `numpy`, `pandas`, `matplotlib`, `scipy`, `statsmodels` and `pillow` remain.
+  Note for anyone trimming further: `openblas` is 16 MB, the largest single
+  package in the environment, and **only scipy needs it** — numpy does not. scipy
+  plus openblas is ~27 MB of a ~69 MB payload for a package whose import is
+  nearly free, and statsmodels is the only remaining reason scipy is there. That
+  is the biggest boot saving still available, and it is a course decision rather
+  than an engineering one.

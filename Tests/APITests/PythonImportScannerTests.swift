@@ -233,6 +233,18 @@ import Testing
         for module in ["seaborn", "networkx", "plotly"] {
             #expect(!environment.provides(module), "\(module) has no build and cannot be present")
         }
+        // Removed in v0.5.19 on measured import cost — sklearn 10.8s (over the
+        // default per-test limit by itself) and sympy 5.9s — having been added
+        // only to preserve Pyodide parity. Pinned so re-adding one is a
+        // deliberate act that revisits that limit, not a quiet re-vendor.
+        for module in ["sklearn", "sympy"] {
+            #expect(
+                !environment.provides(module),
+                """
+                \(module) is back in the vendored Python env; it was dropped for its import \
+                cost against the 10s per-test limit, so re-check that limit first
+                """)
+        }
     }
 
     /// The index must be regenerated after a re-vendor. Comparing it against the

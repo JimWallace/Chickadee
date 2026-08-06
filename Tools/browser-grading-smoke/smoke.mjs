@@ -267,7 +267,7 @@ window.__result = null;
     // urllib3, whose emscripten module crashed the kernel on import until
     // patch-xeus-python-http.py was extended — an env can be perfectly
     // well-formed and still not boot.
-    declared: 'import numpy, pandas, matplotlib, PIL, scipy, sympy, sklearn, statsmodels\\n'
+    declared: 'import numpy, pandas, matplotlib, PIL, scipy, statsmodels\\n'
       + '\"all declared packages imported\"',
   })) {
     const reply = await call({ type: 'run', code });
