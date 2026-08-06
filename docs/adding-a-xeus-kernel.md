@@ -425,6 +425,81 @@ That last one is a real trap: Lua's runtime could read `_ck_inputs.lua` from
 day one, and the smoke test supplied one as a fixture — which proved the
 *reader* worked and said nothing about whether anything ever wrote it.
 
+## What a half-supported language actually does
+
+Lua spent one release in the state this document now forbids — kernel vendored,
+first half done, second half not — so what that state *does* is measured rather
+than predicted. Read this before deciding to ship half.
+
+The short version: **the failure is loud where it matters and silent where it
+does not**, and the loud part is load-bearing. Do not "fix" it without replacing
+it.
+
+### The path an instructor actually takes
+
+| Step | What happens | Verified |
+|---|---|---|
+| Author `publictest_x.lua` | MCP `author_script` accepts it — no extension allowlist | code |
+| …via the web *upload* | **rejected** — `isLikelyTestSuiteFile` lists `sh/bash/zsh/py/r/rb/pl/js/php`, not `lua` | code |
+| Language resolution | `AssignmentLanguage(scriptExtension: "lua")` is nil → resolves to `.python` | code |
+| Grading mode | defaults to **`worker`** (`APICourseSection.defaultGradingMode`) | code |
+| Worker runs it | `/usr/bin/env lua …` → **exit 127**, `env: 'lua': No such file or directory` | run |
+| RunnerCore maps 127 | not 0/1/3 → **`.error`** | code |
+
+Two things are worth noticing.
+
+**It errors, it does not fail.** Exit 127 lands in the `default:` arm, so every
+test reports `error` with the `env:` message in `longResult`. That is the
+difference between "this assignment is broken" and "this student is wrong", and
+it is the only reason a half-supported language is survivable at all.
+
+**Validation catches it before students do.** Instructor validation is enqueued
+as a `kind == .validation` submission graded by the **native worker**, so the
+instructor hits exit 127 on their own reference solution — in browser-graded
+mode too, where student grading would otherwise have worked. The instructor
+cannot reach a class without first seeing it fail. That is an accident of the
+architecture, not a designed guard, and validation is advisory rather than
+blocking — but it is what has been standing between a half-supported language
+and a broken lab.
+
+### The trap: fixing the interpreter makes it quieter, not safer
+
+Putting the interpreter on the runner image removes exit 127. That fixes the
+*script* path — and removes the loud signal that was masking a set of silent
+ones, because the assignment still resolves to `.python`:
+
+- `_ck_inputs.py` is written; the Lua runtime reads `_ck_inputs.lua` and gets an
+  **empty table**. Every per-student input silently becomes nil. No error.
+- pattern families generate `.py` cases (`generatedScriptExtension` follows the
+  resolved language), which then run under `python3` inside a Lua assignment.
+- notebook checks, the same.
+- a notebook whose kernel is `xlua` extracts through the **Python** sanitizer,
+  because `isRNotebook` is false and `.python` is the fallback — producing an
+  `analysis.py` of mangled Lua.
+
+So the honest ordering is: **the interpreter fix is only safe as part of
+finishing the second half.** On its own it trades one visible error for four
+invisible wrong answers. If you land it early — as we did, because worker
+grading and validation were outright broken without it — say so, and keep the
+language out of instructors' hands by another means until the rest lands.
+
+### The closure options, and the rule
+
+There are only two honest end states, and "kernel vendored, renderers missing"
+is neither:
+
+1. **Finish the second half.** The worklist above is exact.
+2. **Remove the language.** Delete the env, the worker, the routing and the
+   `kernels.json` entry.
+
+If you need a holding position between them, the chokepoint is the four
+hand-authored script write sites (`KernelImportGuard` is already wired into
+exactly those: the web create/update handlers, `PUT /suite`, and MCP
+`author_script`). A guard there that refuses to save a graded script in a
+language that is not fully supported converts every silent failure above into
+one clear refusal at authoring time. That is a deliberate decision to take, not
+a default to drift into.
+
 ## What the Lua run actually cost
 
 Lua shipped as `chickadee-lua` / `xlua`, browser-graded through

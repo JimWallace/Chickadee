@@ -40,3 +40,15 @@
   the rule the Lua work surfaced: a vendored kernel is registered in the editor,
   so there is no such thing as a grading-only kernel — finish the second half or
   do not vendor it.
+
+  It also records **what a half-supported language actually does**, measured
+  rather than predicted, since Lua spent a release in exactly that state: the
+  worker path fails with exit 127 (`env: 'lua': No such file or directory`),
+  which RunnerCore maps to `error` rather than `fail`, and instructor
+  validation — a native-worker job even for browser-graded assignments — hits it
+  before any student can. The section also flags the trap that follows: putting
+  the interpreter on the image removes that loud signal while leaving four
+  silent ones (empty `_ck_inputs`, `.py` pattern cases in a Lua assignment,
+  likewise notebook checks, and Lua notebooks extracted through the Python
+  sanitizer), so the interpreter fix is only safe as part of finishing the
+  second half.
