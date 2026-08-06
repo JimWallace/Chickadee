@@ -117,10 +117,29 @@ passed("context ok")
     },
     python: {
         worker: '/python-grading-worker.js',
-        scripts: ['publictest_pass.py', 'publictest_fail.py', 'publictest_boom.py', 'publictest_context.py'],
+        scripts: [
+            'publictest_pass.py', 'publictest_fail.py', 'publictest_boom.py',
+            'publictest_context.py', 'publictest_ondemand.py', 'publictest_nomodule.py',
+        ],
         files: {
             'test_runtime.py': TEST_RUNTIME_PY,
             'sitecustomize.py': SITECUSTOMIZE_PY,
+            // On-demand package loading. The grading kernel boots the bare
+            // interpreter (`bootSeeds`), so numpy is genuinely absent when this
+            // script starts — it can only pass if the ModuleNotFoundError was
+            // caught, numpy's closure installed into the LIVE kernel, and the
+            // script re-run. Nothing but a real kernel can prove that.
+            'publictest_ondemand.py': `from test_runtime import passed
+import numpy
+assert int(numpy.arange(4).sum()) == 6
+passed("numpy loaded on demand")
+`,
+            // The other half of the same mechanism: a module the environment
+            // does NOT have must fail exactly as it always did. This is what
+            // proves the retry loop terminates instead of spinning, and that a
+            // student's typo still reads as a plain ImportError.
+            'publictest_nomodule.py': `import torch_not_in_this_env
+`,
             'publictest_pass.py': `from test_runtime import passed
 print("checking arithmetic")
 assert 7 * 191 == 1337
@@ -431,6 +450,26 @@ check('every script produced a result',
 
 // R only: the declared-package fixture. Python's equivalent lives in the eval
 // probe, which has a namespace to evaluate an import expression against.
+// Python only: on-demand package loading. The kernel boots without numpy, so a
+// pass here means the missing-module path actually installed it mid-suite; and
+// a module the env lacks must still fail the ordinary way, which is what shows
+// the retry terminates rather than spinning.
+if (language === 'python') {
+    const onDemand = result.results['publictest_ondemand.py'];
+    check('a package absent at boot is installed on demand',
+        onDemand && onDemand.exitCode === 0, JSON.stringify(onDemand));
+    check('the on-demand package actually computes',
+        /numpy loaded on demand/.test((onDemand?.stdout || '') + (onDemand?.stderr || '')),
+        JSON.stringify(onDemand?.stdout));
+
+    const noModule = result.results['publictest_nomodule.py'];
+    check('a module the environment lacks still fails normally',
+        noModule && noModule.exitCode !== 0, JSON.stringify(noModule));
+    check('and says so, rather than looping or going silent',
+        /torch_not_in_this_env/.test((noModule?.stderr || '') + (noModule?.stdout || '')),
+        JSON.stringify(noModule?.stderr));
+}
+
 if (language === 'r') {
     const packages = result.results['publictest_packages.R'];
     check('every package the environment declares actually attaches',

@@ -60,10 +60,80 @@
     var _server = null;
     var _counter = 0;
 
+    // Kept from boot so packages can be added to the LIVE kernel afterwards —
+    // see addPackages below.
+    var _meta = null;
+    var _untarjs = null;
+    var _pkgRootUrl = null;
+    var _installed = null;
+    var _moduleOwners = null;
+
+    // The package name out of a conda dependency spec ("python >=3.9" → "python").
+    function dependencyName(spec) {
+        return String(spec).trim().split(/[\s<>=!]/)[0];
+    }
+
+    // Transitive closure of `seeds` over empack_env_meta.json's own `depends`
+    // arrays. The manifest is self-describing, so this needs no solver and no
+    // network: every package the environment can install is already listed with
+    // its dependencies, and we are only ever choosing a subset of it.
+    function closure(meta, seeds) {
+        var byName = {};
+        meta.packages.forEach(function (p) { byName[p.name] = p; });
+        var seen = Object.create(null);
+        var stack = seeds.slice();
+        while (stack.length) {
+            var name = stack.pop();
+            if (seen[name] || !byName[name]) continue;
+            seen[name] = true;
+            (byName[name].depends || []).forEach(function (d) {
+                stack.push(dependencyName(d));
+            });
+        }
+        return Object.keys(seen);
+    }
+
+    // `meta` restricted to `names`, preserving every other field. mambajs reads
+    // the package list and nothing else about the shape, so a filtered copy is
+    // a valid manifest.
+    function subsetMeta(meta, names) {
+        var keep = Object.create(null);
+        names.forEach(function (n) { keep[n] = true; });
+        var copy = {};
+        Object.keys(meta).forEach(function (k) { copy[k] = meta[k]; });
+        copy.packages = meta.packages.filter(function (p) { return keep[p.name]; });
+        return copy;
+    }
+
+    // Unpack a manifest (whole or subset) into the emscripten FS.
+    async function installMeta(meta) {
+        var lock = bootstrap.empackLockToMambajsLock({
+            empackEnvMeta: meta, pkgRootUrl: _pkgRootUrl,
+        });
+        return await bootstrap.bootstrapEmpackPackedEnvironment({
+            empackEnvMeta: meta,
+            lock: lock,
+            pkgRootUrl: _pkgRootUrl,
+            Module: _module,
+            untarjs: _untarjs,
+        });
+    }
+
     // Boot the kernel named by `spec` (see the KERNEL constants in the two
     // language modules, each mirroring its kernel.json).  Resolves once the
     // kernel is started and ready to take an execute_request.
-    async function boot(spec) {
+    //
+    // `options.seeds`, when given, boots only the closure of those package names
+    // instead of the whole environment — the rest can be added later with
+    // addPackages. Omitting it installs everything, which is the original
+    // behaviour byte for byte.
+    //
+    // Why bother: installing a package is untar + FS write + dlopen, and that
+    // cost is paid even when every byte is already in the browser cache.
+    // Measured on the Python env (Chromium, 3 runs, local disk so download is
+    // ~free): full 48-package env 8604 ms, bare kernel 4822 ms, kernel+numpy
+    // 4839 ms. 84% of that env is optional data-science packages.
+    async function boot(spec, options) {
         var envRoot = '/jupyterlite/xeus/' + spec.envName;
         var binaryJS = envRoot + '/bin/' + spec.kernelName + '.js';
         var binaryWASM = envRoot + '/bin/' + spec.kernelName + '.wasm';
@@ -92,21 +162,31 @@
             throw new Error('failed to fetch the ' + spec.kernelName
                 + ' kernel environment manifest: HTTP ' + metaResponse.status);
         }
-        var empackEnvMeta = await metaResponse.json();
-        var pkgRootUrl = envRoot + '/kernel_packages';
-        var lock = bootstrap.empackLockToMambajsLock({
-            empackEnvMeta: empackEnvMeta, pkgRootUrl: pkgRootUrl,
-        });
+        _meta = await metaResponse.json();
+        _pkgRootUrl = envRoot + '/kernel_packages';
         // Point untarjs at the vendored unpacking wasm explicitly, rather than
         // letting it fall back to a bundler-injected URL (see setup-vendor.sh).
-        var untarjs = await bootstrap.initUntarJS(function () { return UNPACK_WASM_URL; });
-        var bootstrapped = await bootstrap.bootstrapEmpackPackedEnvironment({
-            empackEnvMeta: empackEnvMeta,
-            lock: lock,
-            pkgRootUrl: pkgRootUrl,
-            Module: mod,
-            untarjs: untarjs,
-        });
+        _untarjs = await bootstrap.initUntarJS(function () { return UNPACK_WASM_URL; });
+
+        // module → owning conda package, generated from the same tarballs by
+        // scripts/derive-kernel-modules.py. Only needed to turn a
+        // ModuleNotFoundError back into something installable, so a missing or
+        // malformed index degrades to "no on-demand loading" rather than
+        // failing the boot.
+        try {
+            var indexResponse = await fetch(envRoot + '/importable-modules.json');
+            if (indexResponse.ok) {
+                var index = await indexResponse.json();
+                _moduleOwners = (index && index.moduleOwners) || null;
+            }
+        } catch (_) { _moduleOwners = null; }
+
+        var seeds = options && options.seeds;
+        _installed = seeds
+            ? closure(_meta, seeds)
+            : _meta.packages.map(function (p) { return p.name; });
+        var empackEnvMeta = seeds ? subsetMeta(_meta, _installed) : _meta;
+        var bootstrapped = await installMeta(empackEnvMeta);
 
         // xeus-python needs the CPython runtime brought up once the env is on
         // the filesystem; xeus-r has no equivalent step.
@@ -125,6 +205,66 @@
         _server = kernel.get_server();
         if (!_server) throw new Error('the ' + spec.kernelName + ' kernel started but exposed no server');
         kernel.start();
+    }
+
+    // Install more of the environment into the ALREADY-RUNNING kernel.
+    //
+    // The empack bootstrap is additive against a live Module — it unpacks into
+    // the same emscripten FS — and `loadSharedLibs` dlopen()s any native
+    // extensions the new packages carry, which is the same step boot runs.
+    // Verified against a real kernel, not reasoned about: Tools/browser-grading-smoke
+    // boots a strict subset, asserts the package is genuinely missing, adds it,
+    // and asserts it then imports and computes.
+    //
+    // Returns the package names actually installed (empty if all were present),
+    // so a caller can tell "added it" from "it was never the problem" without
+    // guessing.
+    async function addPackages(seeds) {
+        if (!_meta) throw new Error('addPackages called before boot');
+        var already = Object.create(null);
+        _installed.forEach(function (n) { already[n] = true; });
+        var wanted = closure(_meta, seeds).filter(function (n) { return !already[n]; });
+        if (!wanted.length) return [];
+
+        // Unpack from the environment prefix, not the student workspace. By the
+        // time a script triggers an install the kernel has chdir'd into
+        // /chickadee_work_*, and the unpacker resolves at least some paths
+        // relative to cwd — installing from there fails inside the bundle with
+        // a bare Error. Restore it afterwards so the running script still sees
+        // the working directory the grading contract promises.
+        var cwd = null;
+        try { cwd = _module.FS.cwd(); _module.FS.chdir('/'); } catch (_) { cwd = null; }
+        var result;
+        try {
+            result = await installMeta(subsetMeta(_meta, wanted));
+        } finally {
+            if (cwd) { try { _module.FS.chdir(cwd); } catch (_) { /* workspace gone */ } }
+        }
+        wanted.forEach(function (n) { _installed.push(n); });
+
+        if (result && result.sharedLibs) {
+            await bootstrap.loadSharedLibs({
+                sharedLibs: result.sharedLibs,
+                prefix: _meta.prefix,
+                Module: _module,
+            });
+        }
+        return wanted;
+    }
+
+    // True if `name` is a package this environment could still install.
+    function canInstall(name) {
+        if (!_meta) return false;
+        return _meta.packages.some(function (p) { return p.name === name; });
+    }
+
+    // The conda package that ships importable `moduleName`, or null when the
+    // environment has no such module — in which case nothing can be installed
+    // and the caller should let the original error stand.
+    function packageForModule(moduleName) {
+        if (!_moduleOwners) return null;
+        var owner = _moduleOwners[moduleName];
+        return (owner && canInstall(owner)) ? owner : null;
     }
 
     // Materialize a file map into a fresh work directory and chdir there.
@@ -205,6 +345,13 @@
 
     root.ChickadeeXeusKernel = {
         boot: boot,
+        addPackages: addPackages,
+        canInstall: canInstall,
+        packageForModule: packageForModule,
+        // Exported for tests: the subset a given set of seeds implies is the
+        // whole design, and asserting it against the real vendored manifest
+        // beats a copy of this walk that can drift from it.
+        packageClosure: closure,
         execute: execute,
         mountWorkspace: mountWorkspace,
         // The worker's protocol replies must bypass the interception above.

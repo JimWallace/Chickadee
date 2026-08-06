@@ -46,23 +46,24 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     static let fastPathPrefixes = [
         "/jupyterlite/build/",
         "/jupyterlite/extensions/",
-        // NOT "/jupyterlite/xeus/", though it is the obvious candidate: ~230 MB,
-        // the largest tree here, and a kernel boot fetches every package in its
-        // environment (48 files for Python, 51 for R), each paying a Fluent
-        // session lookup on the full chain that it never needs.
+        // The vendored kernel PACKAGES — the bulk of the ~230 MB xeus tree, and
+        // the reason this middleware matters most: a kernel boot fetches every
+        // package in its environment (up to 48 for Python, 51 for R), and each
+        // one used to ride the full chain and pay a Fluent session lookup it
+        // never needed. That is exactly the class-wide-rush cost the fast path
+        // exists to remove.
         //
-        // Adding it was tried and reverted. It is the only behavioural server
-        // change in the v0.5.19 Pyodide retirement, and WebKit's editor smoke
-        // failed deterministically across that commit while Chromium passed.
-        // The tree is not just package tarballs: `/jupyterlite/xeus/kernels.json`
-        // and each `<env>/<kernel>/kernel.json` are fetched during app startup,
-        // so short-circuiting them skips BundleAssetCacheMiddleware and the
-        // isolation middlewares for requests the editor makes before a kernel
-        // exists — and WebKit is the engine we deliberately serve NON-isolated,
-        // with the JupyterLite service worker enabled and intercepting fetches.
-        // Re-add it only with a green WebKit smoke, and consider scoping it to
-        // `/jupyterlite/xeus/*/kernel_packages/` so the startup JSON keeps
-        // riding the normal chain.
+        // Deliberately the `kernel_packages/` subtree and NOT `/jupyterlite/xeus/`
+        // wholesale. The wider prefix also captures `kernels.json` and each
+        // `<env>/<kernel>/kernel.json`, which the editor fetches during app
+        // STARTUP — before any kernel exists — and short-circuiting those skips
+        // BundleAssetCacheMiddleware and the isolation middlewares for the
+        // requests that bring the app up. Keeping startup JSON on the normal
+        // chain costs a handful of requests per boot and leaves the app's own
+        // bring-up exactly as it was; the tarballs, which are the volume, still
+        // take the fast path.
+        "/jupyterlite/xeus/chickadee-python/kernel_packages/",
+        "/jupyterlite/xeus/chickadee-r/kernel_packages/",
         "/vendor/",
     ]
 
