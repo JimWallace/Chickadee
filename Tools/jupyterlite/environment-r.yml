@@ -14,9 +14,14 @@
 # COST OF ADDING TO THIS LIST — measure, do not guess. There are two costs and
 # the second is the one that bites.
 #
-# 1. Boot. A kernel fetches its WHOLE environment at boot, paid on every R
-#    notebook open and every browser-graded R submission. Measured with
-#    Tools/browser-grading-smoke: 5.9s bare, 10.0s with the full tidyverse core.
+# 1. Boot — paid by EVERY user of the kernel, whether or not they use the
+#    package. The kernel fetches and mounts the whole environment on every R
+#    notebook open and every browser-graded R submission. Single-run samples from
+#    Tools/browser-grading-smoke, which are noisy enough to read as a trend and
+#    not as figures: 52 MB bare 5.9s | 74 MB (this set) 5.1s, 5.1s | 91 MB (plus
+#    ggplot2 and lubridate) 10.0s. The 74 MB pair coming in under the bare
+#    measurement is the noise floor showing; do not quote these to one decimal
+#    without re-measuring several runs.
 #
 # 2. ATTACH. `library(pkg)` is startlingly expensive under wasm. Measured in a
 #    real kernel by Tools/browser-grading-smoke, which prints per-package
@@ -32,7 +37,9 @@
 #                     forcats 2.1s, purrr 1.1s, tibble 1.0s
 #
 #    So the floor for ANY tidyverse use on a cold kernel is ~26s, and the whole
-#    set is ~58s. The default per-test time limit is 10 SECONDS, so the first
+#    set is ~58s. Unlike boot, this is paid only by a script that actually
+#    attaches something — which is why a large env is not automatically a slow
+#    one, and why the two costs have to be weighed separately. The default per-test time limit is 10 SECONDS, so the first
 #    browser-graded R test that attaches anything from here will exceed it
 #    unless the assignment raises its limit. That is a real constraint on
 #    browser-graded R, not a reason to keep the env bare — worker grading is

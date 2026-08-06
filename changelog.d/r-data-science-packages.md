@@ -30,8 +30,18 @@
   them to `Tools/jupyterlite/environment-r.yml` and raise its time limits; that
   is now a deliberate, documented choice rather than an accident.
 
-  Worth knowing before adding anything else: the tidyverse packages share a
-  dependency graph, so whichever attaches first pays for all of it. On a cold
-  kernel the floor for *any* tidyverse use is ~26s and the full set is ~58s.
-  `Tools/browser-grading-smoke` prints per-package timings, so measure rather
-  than guess.
+  Worth knowing before adding anything else, to either environment: a kernel env
+  has two costs and they fall on different people. *Boot* — fetching and mounting
+  the whole env — is paid by everyone on every notebook open and every
+  browser-graded submission. *Import* is paid only by a script that uses the
+  package, but against the 10-second default per-test limit. Neither is free and
+  the second is not proportional to size: the R tidyverse shares a dependency
+  graph, so whichever package attaches first pays for all of it (~26s cold, ~58s
+  for the set).
+
+  Both environment files now carry their measured numbers, including Python's,
+  which had none. `scikit-learn` costs 10.8s to import and `pandas` 4.8s, so
+  scikit-learn already exceeds the default per-test limit — worth knowing for
+  anyone writing a browser-graded test that uses it.
+  `Tools/browser-grading-smoke` prints per-package timings; measure there rather
+  than guessing from package counts.

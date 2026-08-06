@@ -46,3 +46,25 @@ dependencies:
   - scikit-learn
   - statsmodels
   - pillow
+
+# COST, measured — the same two-part cost the R env documents, milder here but
+# not free. Re-measure with Tools/browser-grading-smoke rather than trusting
+# these to age well.
+#
+# 1. Boot, paid by every user whether or not they import anything: the kernel
+#    fetches and mounts the whole env. Single-run samples for this 85 MB env
+#    range 8.2-10.1s, so treat it as "about nine seconds" and no finer.
+#
+# 2. Import, paid only by a script that uses the package:
+#
+#      scikit-learn 10.8s | sympy 5.9s | pandas 4.8s | matplotlib 1.3s
+#      numpy 0.9s | statsmodels 0.3s | scipy 0.1s | PIL 0.0s
+#
+#    scikit-learn alone exceeds the default 10-SECOND per-test limit, and pandas
+#    is half of it. A browser-graded test importing either needs a raised limit.
+#    (The ordering matters as it does in R: scipy measures 0.1s only because
+#    numpy and pandas came first in that run.)
+#
+# Both costs argue for restraint. The env is not a place to put things that
+# might be handy — every addition is paid at boot by everyone, and a heavy
+# import is paid against a 10s budget by whoever uses it.

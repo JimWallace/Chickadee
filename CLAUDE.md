@@ -545,16 +545,25 @@ an instructor from saving with no self-service fix. `KernelImportGuard` handles
 both languages, dispatching on file extension; R is scanned by
 `RLibraryScanner` for `library()`/`require()`/`::`.
 
-**R attach cost is the constraint on the R env, not download size.**
-`library()` is startlingly expensive under wasm and the costs are *not*
-independent — the tidyverse shares a dependency graph, so whichever package
-attaches first pays for all of it (~26s cold; the whole shipped set ~58s), and
-the rest come cheap. That is why `ggplot2` (193s alone) and `lubridate` (32s)
-are excluded from the default env despite solving fine, and why the default
-10s per-test limit is a real constraint on browser-graded R. Boot cost barely
-moved (5.9s bare → 5.1s with the tidyverse core). `Tools/browser-grading-smoke`
-prints per-package timings and asserts every declared package actually attaches
-— measure there rather than reasoning about package counts.
+**A kernel env has TWO costs, and they fall on different people. Be sparing.**
+*Boot* — fetching and mounting the whole env — is paid by everyone on every
+notebook open and every browser-graded submission, whether or not they touch the
+package. *Import/attach* is paid only by a script that uses it, but is charged
+against the default **10-second** per-test limit. Measured in real kernels:
+
+| | R | Python |
+|---|---|---|
+| boot | ~5-10s (52-91 MB; single runs, noisy) | ~8-10s (85 MB) |
+| worst single import | `ggplot2` **193s**, `lubridate` 32s | `scikit-learn` **10.8s**, `sympy` 5.9s, `pandas` 4.8s |
+
+Attach costs are **not independent**: the R tidyverse shares a dependency graph,
+so whichever package attaches first pays for all of it (~26s cold, ~58s for the
+set) and the rest come cheap. `ggplot2` and `lubridate` are excluded from the
+default R env on that basis despite solving fine; `scikit-learn` already exceeds
+the default limit in Python. `Tools/browser-grading-smoke` prints per-package
+timings and asserts every declared package actually loads — measure there rather
+than reasoning about package counts, and treat single boot numbers as a trend
+only.
 
 Building the kernels needs **micromamba on PATH plus network to
 repo.prefix.dev**. This was long documented as something *CI cannot do*, and
