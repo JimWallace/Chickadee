@@ -78,10 +78,10 @@ jobs:
       # docs/xeus-r-kernel-spike.md.
       - name: Verify the committed JupyterLite bundle is coherent
         if: steps.detect.outputs.relevant == 'true'
-        # No Pyodide may return, the waitAsync blob worker (every extension,
-        # not just one), the diagnostics collector tag, and the xeus
+        # No Pyodide may return, the diagnostics collector tag, and the xeus
         # parselmouth-fetch stub — the internal invariants a rebuild used to
-        # guarantee, asserted on the committed bytes.
+        # guarantee, asserted on the committed bytes. (The waitAsync blob-worker
+        # assertion is deliberately absent; see the note in the script.)
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
 
       # The FIPPA property — the editor kernel boots with ZERO external fetches —

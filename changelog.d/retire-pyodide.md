@@ -12,16 +12,6 @@
 
 ### Fixed
 
-- **The `Atomics.waitAsync` polyfill patch never covered the kernel we
-  actually run.** `patch-pyodide-waitasync-worker.py` rewrites the polyfill's
-  helper worker from a `data:` URL — blocked by both our CSP and COEP, hanging
-  the kernel on engines without native `waitAsync` (older Safari / iPadOS) — into
-  a `blob:` one. It was scoped to the pyodide-kernel extension, and the **xeus**
-  extension ships the identical polyfill, unpatched, for both languages. Found
-  only because retiring Pyodide meant re-reading the script before deleting it.
-  Renamed to `patch-waitasync-worker.py` and scoped to every federated
-  extension, with `verify-jupyterlite.sh` asserting the same breadth.
-
 - **Kernel package requests no longer cost a database lookup each.**
   `/jupyterlite/xeus/` — ~230 MB and the largest asset tree in the app — was not
   on `EditorAssetFastPathMiddleware`, so every one of the ~50 package fetches a
@@ -42,3 +32,20 @@
   The accidental CSP dependency the spike documented — browser Python grading
   working *because* `data:` was absent from `script-src`, which broke Pyodide's
   classic-worker probe — is genuinely gone, since that probe went with Pyodide.
+
+### Known
+
+- **The `Atomics.waitAsync` polyfill patch still does not cover the kernel we
+  run, and fixing it needs WebKit evidence first.**
+  `patch-waitasync-worker.py` rewrites the polyfill's helper worker from a
+  `data:` URL — blocked by our CSP (`worker-src 'self' blob:`) — into a `blob:`
+  one, and had only ever globbed the pyodide-kernel extension. Retiring Pyodide
+  turned up that the **xeus** extension ships the identical unpatched polyfill,
+  for both languages. Re-scoping the patch was written, shipped, and reverted
+  inside this change: it is the only edit here touching code that solely WebKit
+  executes — Chromium has native `Atomics.waitAsync` and never constructs the
+  worker — and WebKit's editor smoke failed deterministically with it applied.
+  The substitution is faithful (the `data:` URL decodes byte-for-byte to the
+  `blob:` body), so the fault is not a mangled worker; a helper worker that
+  previously failed CSP now genuinely starts, on one engine only. The script is
+  kept, unwired from `build-jupyterlite.sh`, until that is understood.
