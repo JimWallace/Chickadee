@@ -87,7 +87,7 @@ func rFetchVariable(_ variable: String, expectation: String) -> String {
     if (inherits(actual, "ck_missing")) {
         failed(paste0(
             "Variable `", variable_name, "` is not defined in the student notebook.\\n",
-            "  expected: \(expectation)"))
+            "\(GeneratedMessage.expected)\(expectation)"))
     }
     """
 }
@@ -99,8 +99,8 @@ private func rRequireDataFrame(_ expectation: String) -> String {
     if (!is.data.frame(actual)) {
         failed(paste0(
             "Variable `", variable_name, "` is not a data frame.\\n",
-            "  expected: \(expectation)\\n",
-            "  got:      ", class(actual)[[1L]]))
+            "\(GeneratedMessage.expected)\(expectation)\\n",
+            "\(GeneratedMessage.got)", class(actual)[[1L]]))
     }
     """
 }
@@ -125,8 +125,8 @@ func renderRDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
         if (actual_rows != expected_rows || actual_cols != expected_cols) {
             failed(paste0(
                 "Variable `", variable_name, "` has the wrong shape.\\n",
-                "  expected: ", expected_rows, " rows x ", expected_cols, " columns\\n",
-                "  got:      ", actual_rows, " rows x ", actual_cols, " columns"))
+                "\(GeneratedMessage.expected)", expected_rows, " rows x ", expected_cols, " columns\\n",
+                "\(GeneratedMessage.got)", actual_rows, " rows x ", actual_cols, " columns"))
         }
 
         passed(paste0("`", variable_name, "` has ", actual_rows, " rows and ", actual_cols, " columns"))
@@ -151,8 +151,8 @@ func renderRDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String
             if (length(actual_cols) != length(expected_cols) || !all(actual_cols == expected_cols)) {
                 failed(paste0(
                     "Variable `", variable_name, "` has the wrong columns.\\n",
-                    "  expected: ", chickadee_format(expected_cols), " (exact, in order)\\n",
-                    "  got:      ", chickadee_format(actual_cols)))
+                    "\(GeneratedMessage.expected)", chickadee_format(expected_cols), " (exact, in order)\\n",
+                    "\(GeneratedMessage.got)", chickadee_format(actual_cols)))
             }
             """
     case .superset:
@@ -161,8 +161,8 @@ func renderRDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String
             if (length(missing_cols) > 0L) {
                 failed(paste0(
                     "Variable `", variable_name, "` is missing expected column(s).\\n",
-                    "  missing:  ", chickadee_format(missing_cols), "\\n",
-                    "  got:      ", chickadee_format(actual_cols)))
+                    "\(GeneratedMessage.missing)", chickadee_format(missing_cols), "\\n",
+                    "\(GeneratedMessage.got)", chickadee_format(actual_cols)))
             }
             """
     }
@@ -205,15 +205,15 @@ func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> Strin
         if (nrow(actual) != nrow(expected) || ncol(actual) != ncol(expected)) {
             failed(paste0(
                 "Variable `", variable_name, "` has the wrong shape.\\n",
-                "  expected: ", nrow(expected), " rows x ", ncol(expected), " columns\\n",
-                "  got:      ", nrow(actual), " rows x ", ncol(actual), " columns"))
+                "\(GeneratedMessage.expected)", nrow(expected), " rows x ", ncol(expected), " columns\\n",
+                "\(GeneratedMessage.got)", nrow(actual), " rows x ", ncol(actual), " columns"))
         }
 
         if (!all(names(actual) == names(expected))) {
             failed(paste0(
                 "Variable `", variable_name, "` has the wrong columns.\\n",
-                "  expected: ", chickadee_format(names(expected)), "\\n",
-                "  got:      ", chickadee_format(names(actual))))
+                "\(GeneratedMessage.expected)", chickadee_format(names(expected)), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(names(actual))))
         }
 
         # Numeric columns compare within tolerance; everything else compares as
@@ -231,9 +231,9 @@ func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> Strin
                     i <- bad[[1L]]
                     failed(paste0(
                         "Column `", col, "` differs from the expected data.\\n",
-                        "  row:      ", i, "\\n",
-                        "  expected: ", chickadee_format(exp_col[[i]]), "\\n",
-                        "  got:      ", chickadee_format(got_col[[i]])))
+                        "\(GeneratedMessage.row)", i, "\\n",
+                        "\(GeneratedMessage.expected)", chickadee_format(exp_col[[i]]), "\\n",
+                        "\(GeneratedMessage.got)", chickadee_format(got_col[[i]])))
                 }
             } else {
                 exp_chr <- as.character(exp_col)
@@ -243,9 +243,9 @@ func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> Strin
                     i <- bad[[1L]]
                     failed(paste0(
                         "Column `", col, "` differs from the expected data.\\n",
-                        "  row:      ", i, "\\n",
-                        "  expected: ", chickadee_format(exp_chr[[i]]), "\\n",
-                        "  got:      ", chickadee_format(got_chr[[i]])))
+                        "\(GeneratedMessage.row)", i, "\\n",
+                        "\(GeneratedMessage.expected)", chickadee_format(exp_chr[[i]]), "\\n",
+                        "\(GeneratedMessage.got)", chickadee_format(got_chr[[i]])))
                 }
             }
         }
@@ -273,14 +273,14 @@ func renderRSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
             if (ncol(actual) != 1L) {
                 failed(paste0(
                     "Variable `", variable_name, "` should be a single vector (or a one-column frame).\\n",
-                    "  got:      a data frame with ", ncol(actual), " columns"))
+                    "\(GeneratedMessage.got)a data frame with ", ncol(actual), " columns"))
             }
             actual <- actual[[1L]]
         }
         if (!is.atomic(actual)) {
             failed(paste0(
                 "Variable `", variable_name, "` should be a vector.\\n",
-                "  got:      ", class(actual)[[1L]]))
+                "\(GeneratedMessage.got)", class(actual)[[1L]]))
         }
 
         expected_frame <- read.csv(\(JSONValue.string(sidecar).rLiteral),
@@ -292,8 +292,8 @@ func renderRSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
         if (length(actual) != length(expected)) {
             failed(paste0(
                 "Variable `", variable_name, "` has the wrong length.\\n",
-                "  expected: ", length(expected), " values\\n",
-                "  got:      ", length(actual), " values"))
+                "\(GeneratedMessage.expected)", length(expected), " values\\n",
+                "\(GeneratedMessage.got)", length(actual), " values"))
         }
 
         if (is.numeric(expected) && is.numeric(actual)) {
@@ -312,8 +312,8 @@ func renderRSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
             failed(paste0(
                 "Variable `", variable_name, "` differs from the expected values.\\n",
                 "  position: ", i, "\\n",
-                "  expected: ", chickadee_format(expected[[i]]), "\\n",
-                "  got:      ", chickadee_format(actual[[i]])))
+                "\(GeneratedMessage.expected)", chickadee_format(expected[[i]]), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(actual[[i]])))
         }
 
         passed(paste0("`", variable_name, "` matches the expected ", length(expected), " values"))

@@ -46,8 +46,8 @@ func renderRVariableExists(_ check: NotebookCheck, specHash: String) -> String {
             if (!isTRUE(\(predicate))) {
                 failed(paste0(
                     "Variable `", variable_name, "` has the wrong type.\\n",
-                    "  expected: ", expected_type_name, "\\n",
-                    "  got:      ", class(actual)[[1L]]))
+                    "\(GeneratedMessage.expected)", expected_type_name, "\\n",
+                    "\(GeneratedMessage.got)", class(actual)[[1L]]))
             }
             """
         passMessage =
@@ -119,7 +119,7 @@ func renderRFunctionExists(_ check: NotebookCheck, specHash: String) -> String {
         if (inherits(fn, "ck_missing")) {
             failed(paste0(
                 "`", fn_name, "` is not defined in the student notebook.\\n",
-                "  expected: a function named `", fn_name, "`"))
+                "\(GeneratedMessage.expected)a function named `", fn_name, "`"))
         }
         if (!is.function(fn)) {
             failed(paste0(
@@ -162,8 +162,8 @@ func renderRNumericArrayClose(_ check: NotebookCheck, specHash: String) -> Strin
         if (length(actual_num) != length(expected)) {
             failed(paste0(
                 "Variable `", variable_name, "` has the wrong length.\\n",
-                "  expected: ", length(expected), " values\\n",
-                "  got:      ", length(actual_num), " values"))
+                "\(GeneratedMessage.expected)", length(expected), " values\\n",
+                "\(GeneratedMessage.got)", length(actual_num), " values"))
         }
 
         # Mirrors numpy's allclose, including its equal_nan default: two NaNs
@@ -185,8 +185,8 @@ func renderRNumericArrayClose(_ check: NotebookCheck, specHash: String) -> Strin
             failed(paste0(
                 "Variable `", variable_name, "` is not close enough to expected.\\n",
                 "  position: ", i, "\\n",
-                "  expected: ", chickadee_format(expected[[i]]), "\\n",
-                "  got:      ", chickadee_format(actual_num[[i]]), "\\n",
+                "\(GeneratedMessage.expected)", chickadee_format(expected[[i]]), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(actual_num[[i]]), "\\n",
                 "  tolerance: atol=", atol, " rtol=", rtol))
         }
 
@@ -239,8 +239,8 @@ func renderRFigureCount(_ check: NotebookCheck, specHash: String) -> String {
         if (figure_count < minimum) {
             failed(paste0(
                 "Your notebook produced too few figures.\\n",
-                "  expected at least: ", minimum, "\\n",
-                "  got:               ", figure_count))
+                "\(GeneratedMessage.expectedAtLeast)", minimum, "\\n",
+                "\(GeneratedMessage.gotAtLeast)", figure_count))
         }
 
         passed(paste0("Your notebook produced ", figure_count, " figure(s) (minimum ", minimum, ")"))
@@ -272,8 +272,8 @@ func renderRCellContains(_ check: NotebookCheck, specHash: String) -> String {
             if (all(vapply(matched, function(s) identical(.ck_normalize(s), reference), logical(1)))) {
                 failed(paste0(
                     "The cell containing `", needle, "` is identical to the example.\\n",
-                    "  expected: a cell that contains `", needle, "` AND differs from the example\\n",
-                    "  hint:     write your own version, not a copy of the prompt's example"))
+                    "\(GeneratedMessage.expected)a cell that contains `", needle, "` AND differs from the example\\n",
+                    "\(GeneratedMessage.hint)write your own version, not a copy of the prompt's example"))
             }
             """
     } else {
@@ -296,7 +296,7 @@ func renderRCellContains(_ check: NotebookCheck, specHash: String) -> String {
         if (length(matched) == 0L) {
             failed(paste0(
                 "No code cell in your notebook matches `", needle, "`.\\n",
-                "  expected: at least one cell containing the pattern\\n",
+                "\(GeneratedMessage.expected)at least one cell containing the pattern\\n",
                 "  searched: ", length(cells), " code cell(s)"))
         }
 

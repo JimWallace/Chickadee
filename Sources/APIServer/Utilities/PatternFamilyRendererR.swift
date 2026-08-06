@@ -96,12 +96,12 @@ private func rEqualityCase(
 ) -> String {
     let ctx = rCallContext(for: family, case: c)
     let comparator = unordered ? "chickadee_unordered_equal" : "chickadee_equal"
-    let mismatchLabel = unordered ? "wrong elements" : "wrong value"
+    let mismatchLabel = unordered ? "\(GeneratedMessage.wrongElements)" : "\(GeneratedMessage.wrongValue)"
     let expectedLabel = unordered ? "the same elements as" : ""
     let expectedLine =
         expectedLabel.isEmpty
-        ? #""  expected: ", chickadee_format(expected), "\n","#
-        : #""  expected: \#(expectedLabel) ", chickadee_format(expected), "\n","#
+        ? #""\#(GeneratedMessage.expected)", chickadee_format(expected), "\n","#
+        : #""\#(GeneratedMessage.expected)\#(expectedLabel) ", chickadee_format(expected), "\n","#
     return """
         \(prelude)
 
@@ -113,10 +113,10 @@ private func rEqualityCase(
         result <- tryCatch(
             target(\(ctx.callArgs)),
             error = function(e) failed(paste0(
-                "unexpected exception\\n",
+                "\(GeneratedMessage.unexpectedException)\\n",
                 \(ctx.inputLine)
                 \(expectedLine)
-                "  error:    ", conditionMessage(e)))
+                "\(GeneratedMessage.error)", conditionMessage(e)))
         )
 
         if (!\(comparator)(result, expected)) {
@@ -124,7 +124,7 @@ private func rEqualityCase(
                 "\(mismatchLabel)\\n",
                 \(ctx.inputLine)
                 \(expectedLine)
-                "  got:      ", chickadee_format(result)))
+                "\(GeneratedMessage.got)", chickadee_format(result)))
         }
 
         passed(paste0("Returned ", chickadee_format(result)))
@@ -148,28 +148,28 @@ private func rApproximateCase(family: PatternFamily, case c: PatternCase, prelud
         result <- tryCatch(
             target(\(ctx.callArgs)),
             error = function(e) failed(paste0(
-                "unexpected exception\\n",
+                "\(GeneratedMessage.unexpectedException)\\n",
                 \(ctx.inputLine)
-                "  expected: ", chickadee_format(expected), " (±", tolerance, ")\\n",
-                "  error:    ", conditionMessage(e)))
+                "\(GeneratedMessage.expected)", chickadee_format(expected), " (±", tolerance, ")\\n",
+                "\(GeneratedMessage.error)", conditionMessage(e)))
         )
 
         if (!is.numeric(result) || length(result) != 1L) {
             failed(paste0(
-                "wrong return type\\n",
+                "\(GeneratedMessage.wrongReturnType)\\n",
                 \(ctx.inputLine)
-                "  expected: a single number close to ", chickadee_format(expected), "\\n",
-                "  got:      ", chickadee_format(result)))
+                "\(GeneratedMessage.expected)a single number close to ", chickadee_format(expected), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(result)))
         }
 
         delta <- abs(result - expected)
         if (delta > tolerance) {
             failed(paste0(
-                "value outside tolerance\\n",
+                "\(GeneratedMessage.outsideTolerance)\\n",
                 \(ctx.inputLine)
-                "  expected: ", chickadee_format(expected), " (±", tolerance, ")\\n",
-                "  got:      ", chickadee_format(result), "\\n",
-                "  delta:    ", chickadee_format(delta)))
+                "\(GeneratedMessage.expected)", chickadee_format(expected), " (±", tolerance, ")\\n",
+                "\(GeneratedMessage.got)", chickadee_format(result), "\\n",
+                "\(GeneratedMessage.delta)", chickadee_format(delta)))
         }
 
         passed(paste0("Returned ", chickadee_format(result), " (within ±", tolerance, ")"))
@@ -199,14 +199,14 @@ private func rVariableEqualityCase(
         if (inherits(actual, "ck_missing")) {
             failed(paste0(
                 "Variable `", variable_name, "` is not defined\\n",
-                "  expected: ", chickadee_format(expected)))
+                "\(GeneratedMessage.expected)", chickadee_format(expected)))
         }
 
         if (!chickadee_equal(actual, expected)) {
             failed(paste0(
-                "Variable `", variable_name, "` has the wrong value\\n",
-                "  expected: ", chickadee_format(expected), "\\n",
-                "  got:      ", chickadee_format(actual)))
+                "Variable `", variable_name, "` has the \(GeneratedMessage.wrongValue)\\n",
+                "\(GeneratedMessage.expected)", chickadee_format(expected), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(actual)))
         }
 
         passed(paste0(variable_name, " == ", chickadee_format(actual)))
@@ -231,18 +231,18 @@ private func rReturnTypeCase(family: PatternFamily, case c: PatternCase, prelude
         result <- tryCatch(
             target(\(ctx.callArgs)),
             error = function(e) failed(paste0(
-                "unexpected exception\\n",
+                "\(GeneratedMessage.unexpectedException)\\n",
                 \(ctx.inputLine)
-                "  expected: a ", expected_type_name, " return value\\n",
-                "  error:    ", conditionMessage(e)))
+                "\(GeneratedMessage.expected)a ", expected_type_name, " return value\\n",
+                "\(GeneratedMessage.error)", conditionMessage(e)))
         )
 
         if (!(\(rTypeCheckExpression(typeName: typeName, valueExpr: "result")))) {
             failed(paste0(
-                "wrong return type\\n",
+                "\(GeneratedMessage.wrongReturnType)\\n",
                 \(ctx.inputLine)
-                "  expected: ", expected_type_name, "\\n",
-                "  got:      ", class(result)[[1L]], " (value: ", chickadee_format(result), ")"))
+                "\(GeneratedMessage.expected)", expected_type_name, "\\n",
+                "\(GeneratedMessage.got)", class(result)[[1L]], " (value: ", chickadee_format(result), ")"))
         }
 
         passed(paste0("Returned a ", class(result)[[1L]]))
@@ -273,8 +273,8 @@ private func rExceptionCase(family: PatternFamily, case c: PatternCase, prelude:
                 failed(paste0(
                     "wrong error raised\\n",
                     \(ctx.inputLine)
-                    "  expected: an error matching ", wanted, "\\n",
-                    "  got:      ", classes, ": ", conditionMessage(err)))
+                    "\(GeneratedMessage.expected)an error matching ", wanted, "\\n",
+                    "\(GeneratedMessage.got)", classes, ": ", conditionMessage(err)))
             }
         """
     return """
@@ -293,7 +293,7 @@ private func rExceptionCase(family: PatternFamily, case c: PatternCase, prelude:
             failed(paste0(
                 "expected an error, but the call succeeded\\n",
                 \(ctx.inputLine)
-                "  got:      ", chickadee_format(result)))
+                "\(GeneratedMessage.got)", chickadee_format(result)))
         }\(matchBlock)
 
         passed(paste0("Raised ", class(err)[[1L]], " as expected"))
@@ -322,9 +322,9 @@ private func rPerformanceCase(family: PatternFamily, case c: PatternCase, prelud
         result <- tryCatch(
             target(\(ctx.callArgs)),
             error = function(e) failed(paste0(
-                "unexpected exception\\n",
+                "\(GeneratedMessage.unexpectedException)\\n",
                 \(ctx.inputLine)
-                "  error:    ", conditionMessage(e)))
+                "\(GeneratedMessage.error)", conditionMessage(e)))
         )
         elapsed_ms <- as.numeric(difftime(Sys.time(), started, units = "secs")) * 1000
 
@@ -332,8 +332,8 @@ private func rPerformanceCase(family: PatternFamily, case c: PatternCase, prelud
             failed(paste0(
                 "too slow\\n",
                 \(ctx.inputLine)
-                "  budget:   ", budget_ms, " ms\\n",
-                "  took:     ", round(elapsed_ms, 1), " ms\\n",
+                "\(GeneratedMessage.budget)", budget_ms, " ms\\n",
+                "\(GeneratedMessage.took)", round(elapsed_ms, 1), " ms\\n",
                 "  Hint: look for repeated work that could be done once."))
         }
 
@@ -365,17 +365,17 @@ private func rStdoutCase(family: PatternFamily, case c: PatternCase, prelude: St
         captured <- tryCatch(
             paste(capture.output(target(\(ctx.callArgs))), collapse = "\\n"),
             error = function(e) failed(paste0(
-                "unexpected exception\\n",
+                "\(GeneratedMessage.unexpectedException)\\n",
                 \(ctx.inputLine)
-                "  error:    ", conditionMessage(e)))
+                "\(GeneratedMessage.error)", conditionMessage(e)))
         )
 
         if (!identical(.ck_normalize(captured), .ck_normalize(expected_output))) {
             failed(paste0(
-                "wrong output\\n",
+                "\(GeneratedMessage.wrongOutput)\\n",
                 \(ctx.inputLine)
-                "  expected: ", chickadee_format(.ck_normalize(expected_output)), "\\n",
-                "  got:      ", chickadee_format(.ck_normalize(captured))))
+                "\(GeneratedMessage.expected)", chickadee_format(.ck_normalize(expected_output)), "\\n",
+                "\(GeneratedMessage.got)", chickadee_format(.ck_normalize(captured))))
         }
 
         passed("Printed the expected output")
@@ -432,10 +432,10 @@ func rCallContext(for family: PatternFamily, case c: PatternCase) -> RCallContex
 
     let inputLine: String
     if previewParts.isEmpty {
-        inputLine = #""  input:    (no input)\n","#
+        inputLine = #""\#(GeneratedMessage.input)(no input)\n","#
     } else {
         let joined = previewParts.joined(separator: ", \", \", ")
-        inputLine = "\"  input:    \", \(joined), \"\\n\","
+        inputLine = "\"\(GeneratedMessage.input)\", \(joined), \"\\n\","
     }
 
     return RCallContext(

@@ -60,8 +60,8 @@ func renderNumericArrayClose(_ check: NotebookCheck, specHash: String) -> String
         if actual.shape != expected.shape:
             failed(
                 f"Variable `{variable_name}` has the wrong shape.\\n"
-                f"  expected: {expected.shape}\\n"
-                f"  got:      {actual.shape}\\n"
+                f"\(GeneratedMessage.expected){expected.shape}\\n"
+                f"\(GeneratedMessage.got){actual.shape}\\n"
             )
 
         try:
@@ -145,8 +145,8 @@ func renderFigureCount(_ check: NotebookCheck, specHash: String) -> String {
         if figure_count < minimum:
             failed(
                 f"Student notebook produced too few figures.\\n"
-                f"  expected at least: {minimum}\\n"
-                f"  got:               {figure_count}\\n"
+                f"\(GeneratedMessage.expectedAtLeast){minimum}\\n"
+                f"\(GeneratedMessage.gotAtLeast){figure_count}\\n"
             )
 
         passed(f"Student notebook produced {figure_count} figure(s) (minimum {minimum})")
@@ -199,7 +199,7 @@ func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
         if not notebook_path.exists():
             errored(
                 "Student notebook source not preserved — cannot run cell-content check.\\n"
-                "  expected: _submission.ipynb in workspace\\n"
+                "\(GeneratedMessage.expected)_submission.ipynb in workspace\\n"
             )
 
         try:
@@ -224,7 +224,7 @@ func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
         if not matched_cells:
             failed(
                 f"No code cell in the notebook matches `{needle}`.\\n"
-                f"  expected: at least one cell containing the pattern\\n"
+                f"\(GeneratedMessage.expected)at least one cell containing the pattern\\n"
                 f"  searched: {len(code_cells)} code cell(s)\\n"
             )
 
@@ -238,8 +238,8 @@ func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
             if only_identical:
                 failed(
                     f"Cell containing `{needle}` is identical to the example.\\n"
-                    f"  expected: a cell that contains `{needle}` AND differs from the example\\n"
-                    f"  hint:     write your own version, not a copy of the prompt's example\\n"
+                    f"\(GeneratedMessage.expected)a cell that contains `{needle}` AND differs from the example\\n"
+                    f"\(GeneratedMessage.hint)write your own version, not a copy of the prompt's example\\n"
                 )
 
         passed(f"Found {len(matched_cells)} cell(s) containing `{needle}`")

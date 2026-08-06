@@ -42,15 +42,15 @@ func renderDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
-                f"  expected: a DataFrame with shape {expected_shape}\\n"
+                f"\(GeneratedMessage.expected)a DataFrame with shape {expected_shape}\\n"
             )
 
         shape = getattr(actual, "shape", None)
         if shape is None:
             failed(
                 f"Variable `{variable_name}` is not a DataFrame.\\n"
-                f"  expected: a DataFrame with shape {expected_shape}\\n"
-                f"  got:      {type(actual).__name__}\\n"
+                f"\(GeneratedMessage.expected)a DataFrame with shape {expected_shape}\\n"
+                f"\(GeneratedMessage.got){type(actual).__name__}\\n"
             )
 
         try:
@@ -58,14 +58,14 @@ func renderDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
         except Exception:
             failed(
                 f"Variable `{variable_name}` has an unreadable shape `{shape!r}`.\\n"
-                f"  expected: a DataFrame with shape {expected_shape}\\n"
+                f"\(GeneratedMessage.expected)a DataFrame with shape {expected_shape}\\n"
             )
 
         if actual_shape != expected_shape:
             failed(
                 f"Variable `{variable_name}` has the wrong shape.\\n"
-                f"  expected: {expected_shape}\\n"
-                f"  got:      {actual_shape}\\n"
+                f"\(GeneratedMessage.expected){expected_shape}\\n"
+                f"\(GeneratedMessage.got){actual_shape}\\n"
             )
 
         passed(f"`{variable_name}` has shape {actual_shape}")
@@ -104,8 +104,8 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
             if list(actual_columns) != expected_columns:
                 failed(
                     f"Variable `{variable_name}` has the wrong columns (exact match required).\\n"
-                    f"  expected: {expected_columns}\\n"
-                    f"  got:      {list(actual_columns)}\\n"
+                    f"\(GeneratedMessage.expected){expected_columns}\\n"
+                    f"\(GeneratedMessage.got){list(actual_columns)}\\n"
                 )
 
             passed(f"`{variable_name}` columns match exactly")
@@ -116,9 +116,9 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
             if missing:
                 failed(
                     f"Variable `{variable_name}` is missing required columns.\\n"
-                    f"  expected (subset): {expected_columns}\\n"
-                    f"  got:               {list(actual_columns)}\\n"
-                    f"  missing:           {missing}\\n"
+                    f"\(GeneratedMessage.expectedSubset){expected_columns}\\n"
+                    f"\(GeneratedMessage.gotSubset){list(actual_columns)}\\n"
+                    f"\(GeneratedMessage.missingSubset){missing}\\n"
                 )
 
             passed(f"`{variable_name}` contains all {len(expected_columns)} required column(s)")
@@ -141,15 +141,15 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
-                f"  expected columns: {expected_columns}\\n"
+                f"\(GeneratedMessage.expectedColumns){expected_columns}\\n"
             )
 
         actual_columns = getattr(actual, "columns", None)
         if actual_columns is None:
             failed(
                 f"Variable `{variable_name}` is not a DataFrame (no .columns attribute).\\n"
-                f"  expected columns: {expected_columns}\\n"
-                f"  got:              {type(actual).__name__}\\n"
+                f"\(GeneratedMessage.expectedColumns){expected_columns}\\n"
+                f"\(GeneratedMessage.gotColumns){type(actual).__name__}\\n"
             )
 
         \(comparisonBlock)
@@ -229,8 +229,8 @@ func renderDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String
         if not isinstance(actual, pd.DataFrame):
             failed(
                 f"Variable `{variable_name}` is not a DataFrame.\\n"
-                f"  expected: a DataFrame with shape {expected.shape}\\n"
-                f"  got:      {type(actual).__name__}\\n"
+                f"\(GeneratedMessage.expected)a DataFrame with shape {expected.shape}\\n"
+                f"\(GeneratedMessage.got){type(actual).__name__}\\n"
             )
 
         \(indexNormalisation)
@@ -328,8 +328,8 @@ func renderSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
         if not isinstance(actual, pd.Series):
             failed(
                 f"Variable `{variable_name}` is not a Series.\\n"
-                f"  expected: a Series of length {len(expected)}\\n"
-                f"  got:      {type(actual).__name__}\\n"
+                f"\(GeneratedMessage.expected)a Series of length {len(expected)}\\n"
+                f"\(GeneratedMessage.got){type(actual).__name__}\\n"
             )
 
         \(indexNormalisation)

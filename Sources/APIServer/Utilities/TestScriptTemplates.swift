@@ -24,7 +24,8 @@ import Foundation
 /// Given paramNames = ["bmi"] the fragments produce:
 ///   argDeclarations  → `bmi = None   # TODO: replace with input value`
 ///   callArgs         → `bmi`
-///   inputLineLiteral → `f"  input:    bmi={bmi!r}\n"`
+///   inputLineLiteral → an f-string of the `input` field label (see
+///                      `GeneratedMessage`) followed by `bmi={bmi!r}`
 ///   callReprExpr     → `{bmi!r}`
 ///
 /// For empty paramNames the literals degrade gracefully to "(no input)"
@@ -44,10 +45,10 @@ private struct RichTemplateArgs {
     /// concatenation — already quoted, with trailing `\n` escape.
     var inputLineLiteral: String {
         guard hasArgs else {
-            return #""  input:    (no input)\n""#
+            return #""\#(GeneratedMessage.input)(no input)\n""#
         }
         let preview = paramNames.map { "\($0)={\($0)!r}" }.joined(separator: ", ")
-        return "f\"  input:    \(preview)\\n\""
+        return "f\"\(GeneratedMessage.input)\(preview)\\n\""
     }
 
     /// `{x!r}, {y!r}` — used inside an outer f-string to echo the call args.
@@ -172,19 +173,19 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                     result = student_module.\(functionName)(\(rich.callArgs))
                 except Exception as ex:
                     failed(
-                        "\(functionName) raised an unexpected exception\\n"
+                        "\(functionName) raised an \(GeneratedMessage.unexpectedException)\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: {expected!r}\\n"
-                        f"  error:    {type(ex).__name__}: {ex}\\n"
+                        f"\(GeneratedMessage.expected){expected!r}\\n"
+                        f"\(GeneratedMessage.error){type(ex).__name__}: {ex}\\n"
                         "Hint: the function should return a value for this input, not raise."
                     )
 
                 if result != expected:
                     failed(
-                        "\(functionName) returned the wrong value\\n"
+                        "\(functionName) returned the \(GeneratedMessage.wrongValue)\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: {expected!r}\\n"
-                        f"  got:      {result!r}\\n"
+                        f"\(GeneratedMessage.expected){expected!r}\\n"
+                        f"\(GeneratedMessage.got){result!r}\\n"
                         "Hint: describe the correct behaviour here."
                     )
 
@@ -212,8 +213,8 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                         if expected is not None and result != expected:
                             failures.append(
                                 f"  \(functionName)({args_preview})\\n"
-                                f"    expected: {expected!r}\\n"
-                                f"    got:      {result!r}"
+                                f"  \(GeneratedMessage.expected){expected!r}\\n"
+                                f"  \(GeneratedMessage.got){result!r}"
                             )
                     except Exception as ex:
                         failures.append(
@@ -245,16 +246,16 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                     failed(
                         f"\(functionName) raised the wrong exception\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: {expected_exc.__name__}\\n"
-                        f"  got:      {type(ex).__name__}: {ex}\\n"
+                        f"\(GeneratedMessage.expected){expected_exc.__name__}\\n"
+                        f"\(GeneratedMessage.got){type(ex).__name__}: {ex}\\n"
                         "Hint: describe which inputs should trigger this exception."
                     )
                 else:
                     failed(
                         f"\(functionName) did not raise {expected_exc.__name__}\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: raises {expected_exc.__name__}\\n"
-                        f"  got:      returned {result!r}\\n"
+                        f"\(GeneratedMessage.expected)raises {expected_exc.__name__}\\n"
+                        f"\(GeneratedMessage.got)returned {result!r}\\n"
                         "Hint: describe which inputs should trigger this exception."
                     )
                 """
@@ -271,10 +272,10 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                     result = student_module.\(functionName)(\(rich.callArgs))
                 except Exception as ex:
                     failed(
-                        f"\(functionName) raised an unexpected exception\\n"
+                        f"\(functionName) raised an \(GeneratedMessage.unexpectedException)\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: a {expected_type.__name__}\\n"
-                        f"  error:    {type(ex).__name__}: {ex}\\n"
+                        f"\(GeneratedMessage.expected)a {expected_type.__name__}\\n"
+                        f"\(GeneratedMessage.error){type(ex).__name__}: {ex}\\n"
                         f"Hint: \(functionName) should return a {expected_type.__name__} for this input, not raise."
                     )
 
@@ -282,8 +283,8 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                     failed(
                         "Return type error\\n"
                         \(rich.inputLineLiteral)
-                        f"  expected: a {expected_type.__name__}\\n"
-                        f"  got:      {result!r} (type {type(result).__name__})\\n"
+                        f"\(GeneratedMessage.expected)a {expected_type.__name__}\\n"
+                        f"\(GeneratedMessage.got){result!r} (type {type(result).__name__})\\n"
                         f"Hint: \(functionName) should return a {expected_type.__name__}."
                     )
 
@@ -347,15 +348,15 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 if actual is _MISSING:
                     failed(
                         f"Variable `{variable_name}` is not defined\\n"
-                        f"  expected: {expected!r}\\n"
+                        f"\(GeneratedMessage.expected){expected!r}\\n"
                         f"Hint: create a variable named {variable_name} and assign it the expected value."
                     )
 
                 if actual != expected:
                     failed(
-                        f"Variable `{variable_name}` has the wrong value\\n"
-                        f"  expected: {expected!r}\\n"
-                        f"  got:      {actual!r}\\n"
+                        f"Variable `{variable_name}` has the \(GeneratedMessage.wrongValue)\\n"
+                        f"\(GeneratedMessage.expected){expected!r}\\n"
+                        f"\(GeneratedMessage.got){actual!r}\\n"
                         "Hint: check the value you assigned to this variable."
                     )
 

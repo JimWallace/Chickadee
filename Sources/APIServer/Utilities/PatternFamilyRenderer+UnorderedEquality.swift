@@ -48,19 +48,19 @@ func renderUnorderedEquality(
             _tb_frames = _tb.extract_tb(ex.__traceback__)
             _tb_src = ""
             if _tb_frames and _tb_frames[-1].line:
-                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+                _tb_src = f"\\n\(GeneratedMessage.source){_tb_frames[-1].line.strip()}"
             failed(
-                "unexpected exception\\n"
+                "\(GeneratedMessage.unexpectedException)\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected (any order): {expected!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if not isinstance(result, list):
             failed(
-                "wrong return type\\n"
+                "\(GeneratedMessage.wrongReturnType)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: a list (any order) like {expected!r}\\n"
-                f"  got:      {result!r} (type {type(result).__name__})\\n"            )
+                f"\(GeneratedMessage.expected)a list (any order) like {expected!r}\\n"
+                f"\(GeneratedMessage.got){result!r} (type {type(result).__name__})\\n"            )
 
         try:
             _ck_match = _ck_canon(result) == _ck_canon(expected)
@@ -69,15 +69,15 @@ func renderUnorderedEquality(
                 "could not compare result\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected (any order): {expected!r}\\n"
-                f"  got:      {result!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}\\n"            )
+                f"\(GeneratedMessage.got){result!r}\\n"
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}\\n"            )
 
         if not _ck_match:
             failed(
-                "wrong elements (order doesn't matter)\\n"
+                "\(GeneratedMessage.wrongElementsUnordered)\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected (any order): {expected!r}\\n"
-                f"  got:      {result!r}\\n"            )
+                f"\(GeneratedMessage.got){result!r}\\n"            )
 
         passed(f"Returned the expected {len(result)} element(s) (any order)")
         """

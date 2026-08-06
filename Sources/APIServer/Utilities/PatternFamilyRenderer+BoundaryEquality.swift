@@ -56,19 +56,19 @@ func renderBoundaryEquality(
             _tb_frames = _tb.extract_tb(ex.__traceback__)
             _tb_src = ""
             if _tb_frames and _tb_frames[-1].line:
-                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+                _tb_src = f"\\n\(GeneratedMessage.source){_tb_frames[-1].line.strip()}"
             failed(
-                "unexpected exception\\n"
+                "\(GeneratedMessage.unexpectedException)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
+                f"\(GeneratedMessage.expected){expected!r}\\n"
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if result != expected:
             failed(
-                "wrong value\\n"
+                "\(GeneratedMessage.wrongValue)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected!r}\\n"
-                f"  got:      {result!r}\\n"            )
+                f"\(GeneratedMessage.expected){expected!r}\\n"
+                f"\(GeneratedMessage.got){result!r}\\n"            )
 
         # v0.4.105: pass message no longer echoes the full input dict / list
         # (which can be hundreds of characters for HL7-shaped records).  The
