@@ -124,6 +124,12 @@ against the 10-second per-test limit. See
 [docs/kernel-boot-cost.md](kernel-boot-cost.md) before adding anything beyond the
 kernel itself.
 
+**Name the environment `chickadee-<lang>`.** Not cosmetic:
+`build-jupyterlite.sh` derives the module index by globbing
+`Public/jupyterlite/xeus/chickadee-*`, so an env named anything else is skipped
+silently and ships with no index at all — on-demand loading then resolves nothing
+and the authoring import guard has no package list to check against.
+
 ### 2. Vendor it
 
 Run `.github/workflows/revendor-kernels.yml` (workflow_dispatch). It installs
@@ -153,6 +159,14 @@ from the YAML would accept imports the shipped kernel cannot serve.
 
 If the language has no package ecosystem, emit an empty `moduleOwners`. On-demand
 loading then correctly does nothing.
+
+### 3b. Register it with the vendoring guard
+
+`scripts/check-xeus-vendored.sh` carries
+`expected_language = {"xpython": "python", "xr": "r"}` and iterates **that map**,
+not `kernels.json`. A third kernel that is not in it ships completely unguarded:
+a partial or botched re-vendor of your kernel passes CI. Add the entry when you
+add the env.
 
 ### 4. Write the language module
 
@@ -244,6 +258,12 @@ an uncaught error with its message on stderr, and — if the language has packag
 - **Per-extension guards go stale silently.** The `Atomics.waitAsync` patch
   globbed only the Pyodide extension for two releases while the xeus extension
   shipped the same unpatched polyfill. Glob every extension.
+- **Two places enumerate the kernels rather than discovering them**, and both
+  fail open for a kernel they have never heard of: the `chickadee-*` glob in
+  `build-jupyterlite.sh` (no module index) and `expected_language` in
+  `check-xeus-vendored.sh` (no vendoring guard). Neither errors; you simply get
+  a kernel nothing checks. Grep for your env and kernel name after vendoring and
+  confirm both mention it.
 - **Do not add a `default:` arm to a language switch.** The compiler producing
   the worklist is the entire reason the count of touched files is acceptable.
   See `docs/language-handling-review.md` §4.
