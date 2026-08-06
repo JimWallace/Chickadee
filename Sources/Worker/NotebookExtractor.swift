@@ -88,10 +88,11 @@ struct NotebookExtractor {
 /// Module-level (not private) so WorkerTests can exercise it directly.
 ///
 /// - Parameter forcedLanguage: when non-nil, every notebook is extracted to
-///   that language regardless of its own kernelspec. The worker passes `.r` for
-///   a pure-R suite (`manifestTargetsRSubmission`) so a submission whose
-///   kernelspec was rewritten by the in-browser editor still extracts to `.R`.
-///   Nil keeps the per-notebook kernelspec detection.
+///   that language regardless of its own kernelspec. The worker passes the
+///   language `manifestOwningLanguage` identified, so a submission whose
+///   kernelspec was rewritten by the in-browser editor still extracts to the
+///   source the suite can actually grade. Nil keeps the per-notebook kernelspec
+///   detection, which is what an assignment with no owning language wants.
 func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguage? = nil) throws {
     let items =
         (try? FileManager.default.contentsOfDirectory(

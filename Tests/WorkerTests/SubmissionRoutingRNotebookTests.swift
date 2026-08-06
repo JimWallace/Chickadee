@@ -56,17 +56,25 @@ import Testing
 
     @Test func detectsXeusRKernelNotebook() throws {
         try stage(Self.rNotebook)
-        #expect(submissionIsRNotebook(submissionDirectory: tmpDir, submissionFilename: "solution.ipynb"))
+        #expect(
+            submissionNotebookLanguage(
+                submissionDirectory: tmpDir, submissionFilename: "solution.ipynb") == .r)
     }
 
     @Test func detectsIRKernelNotebook() throws {
         try stage(Self.irNotebook)
-        #expect(submissionIsRNotebook(submissionDirectory: tmpDir, submissionFilename: "solution.ipynb"))
+        #expect(
+            submissionNotebookLanguage(
+                submissionDirectory: tmpDir, submissionFilename: "solution.ipynb") == .r)
     }
 
     @Test func pythonNotebookNotDetectedAsR() throws {
         try stage(Self.pythonNotebook)
-        #expect(!submissionIsRNotebook(submissionDirectory: tmpDir, submissionFilename: "solution.ipynb"))
+        // A Python notebook declares nothing non-default, so the sniff answers nil
+        // rather than "not R" — the distinction a Bool could not carry.
+        #expect(
+            submissionNotebookLanguage(
+                submissionDirectory: tmpDir, submissionFilename: "solution.ipynb") != .r)
     }
 
     @Test func rNotebookSkipsPythonNormalization() throws {
@@ -111,26 +119,26 @@ import Testing
 
     // MARK: - Manifest-authoritative language (recovers editor-mangled kernelspecs)
 
-    @Test func manifestTargetsRForPureRSuite() throws {
-        #expect(manifestTargetsRSubmission(try manifest(rOnlyManifest)))
+    @Test func manifestOwnedByRForPureRSuite() throws {
+        #expect(manifestOwningLanguage(try manifest(rOnlyManifest)) == .r)
     }
 
-    @Test func manifestDoesNotTargetRForPythonSuite() throws {
-        #expect(!manifestTargetsRSubmission(try manifest(pyOnlyManifest)))
+    @Test func manifestHasNoOwnerForForPythonSuite() throws {
+        #expect(manifestOwningLanguage(try manifest(pyOnlyManifest)) == nil)
     }
 
-    @Test func manifestDoesNotTargetRForMixedSuite() throws {
+    @Test func manifestHasNoOwnerForForMixedSuite() throws {
         // A `.py` test script means Python is in play; not a pure-R suite.
-        #expect(!manifestTargetsRSubmission(try manifest(mixedManifest)))
+        #expect(manifestOwningLanguage(try manifest(mixedManifest)) == nil)
     }
 
-    @Test func manifestDoesNotTargetRWhenRequiredPythonFilePresent() throws {
-        #expect(!manifestTargetsRSubmission(try manifest(rWithRequiredPyManifest)))
+    @Test func manifestHasNoOwnerForWhenRequiredPythonFilePresent() throws {
+        #expect(manifestOwningLanguage(try manifest(rWithRequiredPyManifest)) == nil)
     }
 
-    @Test func manifestDoesNotTargetRForShellOnlySuite() throws {
+    @Test func manifestHasNoOwnerForForShellOnlySuite() throws {
         // No `.R` script at all — leave the existing (kernelspec) detection alone.
-        #expect(!manifestTargetsRSubmission(try manifest(shellOnlyManifest)))
+        #expect(manifestOwningLanguage(try manifest(shellOnlyManifest)) == nil)
     }
 
     @Test func pythonKernelNotebookOnPureRSuiteSkipsPythonNormalization() throws {

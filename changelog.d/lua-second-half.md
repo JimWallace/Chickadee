@@ -65,3 +65,13 @@
   message, while the MCP `author_script` path accepted it. Assignment-language
   extensions now come from `AssignmentLanguage`, and an extensionless script
   with a `lua` shebang is recognised.
+- **A Lua notebook submission was normalized as a Python submission.** The
+  worker's routing asked "is this R? else Python", and its Python arm was
+  reached by falling through extension probes rather than by naming Python — so
+  a Lua assignment's `.ipynb` was turned into a Python module the Lua suite
+  could not grade. The routing now returns a `SubmissionNormalization` carrying
+  the language, `manifestOwningLanguage` generalises the old
+  `manifestTargetsRSubmission`, and the notebook sniff returns which language a
+  submission declares instead of whether it is R. Python and R behaviour is
+  unchanged, including the deliberate rule that a mixed Python+R suite keeps
+  Python's normalizer.
