@@ -117,12 +117,19 @@ than one summing 1, and R's own clock reports 0ms across nested expressions vs
 ~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
 one in a browser in CI. See `docs/r-support.md`.
 
-**Lua is the architecture test, not a teachable language yet.** `chickadee-lua`
-(19 MB, boot ~2.5s) grades `.lua` scripts in the browser and the native worker
-injects `Tools/runner-support/test_runtime.lua` beside the Python and R helpers,
-so one file serves `lua script.lua` and the kernel. But `AssignmentLanguage` is
-still `.python | .r`: there is no Lua literal renderer, pattern-family or
-notebook-check renderer, or personalization driver. Its two per-kernel quirks
+**Lua is a full assignment language as of the second-half work.**
+`chickadee-lua` (19 MB, boot ~2.5s) grades `.lua` scripts in the browser and the
+native worker injects `Tools/runner-support/test_runtime.lua` beside the Python
+and R helpers, so one file serves `lua script.lua` and the kernel.
+`AssignmentLanguage` is now `.python | .r | .lua`, with a Lua literal renderer,
+a pattern-family renderer covering all eight kinds, a notebook-check renderer
+covering four of ten, and a personalization driver. The six unsupported check
+kinds are refused at save time rather than absent: the four data-frame kinds
+need a data frame (Lua has no such type and the env ships no packages),
+`figureCount` needs a plotting library, and `astStructure` is Python-only as it
+is for R. `cellContains` additionally refuses `regex: true`, because Lua
+patterns are a different language from PCRE and a Python-authored pattern would
+quietly match the wrong thing rather than erroring. Its two per-kernel quirks
 are `os.exit` masking (R's `quit()` problem again — if it regresses, every test
 reads as a pass) and a per-script wipe of globals added since boot, since `_G`
 *is* Lua's standard library and cannot be cleared outright. Crucially, **R's two
@@ -145,10 +152,11 @@ shipped browser-graded R that no isolated engine ever ran.
 and fails on drift in either direction. It currently lists the three grading
 workers (Python, R, Lua) plus the freeze watchdog.
 
-**Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
-`AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
-`.R` graded script → `.r`; else an R notebook kernel in `{ir,r,webr,xr}` → `.r`;
-else `.python`) and every language-specific path dispatches through it — literal
+**Assignments are Python, R *or* Lua; language is first-class (`AssignmentLanguage`).**
+`AssignmentLanguage` (`.python | .r | .lua`, Core) is resolved from the manifest
+(any `.R` graded script → `.r`, any `.lua` → `.lua`; else a notebook kernel in
+that language's `notebookKernelNames` — `{ir,r,webr,xr}` for R, `{xlua,lua}` for
+Lua; else `.python`) and every language-specific path dispatches through it — literal
 rendering (`pythonLiteral`/`rLiteral`), the per-student inputs file
 (`_ck_inputs.py`/`_ck_inputs.R` via `renderInputsFile`), and the expression
 driver. Personalization is evaluated **per-language on the server**:
@@ -530,7 +538,10 @@ the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python 
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
 technology for every language. Notebook metadata is normalized to those names by
 `normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for Python
-and R; Lua is a grading substrate only and no notebook resolves to `xlua`.
+for all three. A Lua notebook resolves to `xlua` and extracts through the
+same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
+in the editor's picker, so a language that can be authored must be one that
+can be graded.
 
 **Two places enumerate the kernels rather than discovering them, and both fail
 open for one they have never heard of:** the `chickadee-*` glob in

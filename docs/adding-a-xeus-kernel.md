@@ -298,6 +298,28 @@ be **authored**. That gap is not a rough edge — it is most of the work, and
 Chickadee has now been on both sides of it. Lua reached the end of the first
 half in a day; the second half is an R-sized arc.
 
+> **Status: Lua has now finished the second half.** `AssignmentLanguage` is
+> `.python | .r | .lua`. Everything below is the runbook that produced it, and
+> the counts are what the compiler actually named. The section further down,
+> "What a half-supported language actually does", describes the state Lua was in
+> *before* this landed; it is kept because it is the measured argument for
+> finishing, not a description of current behaviour.
+>
+> Two things the Lua run added to this runbook, both learned by getting them
+> wrong first:
+>
+> * **Generalise a lesson to its neighbour.** The conformance matrix put the
+>   eval flag in the per-language adapter after `-c`/`-e` bit it, and left the
+>   availability probe hardcoded to `--version` three lines away. `lua` does not
+>   accept `--version`, so every executed assertion for Lua skipped silently and
+>   the suite reported green. When you fix a per-language hardcode, look at what
+>   sits beside it.
+> * **Run the generated code, not just the parser.** Parse checks passed on a
+>   `_ck_inputs.lua` that opened with `#` — a Python comment — because Lua skips
+>   a first line starting with `#` as a shebang. It would have broken the moment
+>   anything moved above it, and the failure mode is every per-student value
+>   reading as missing rather than anything erroring.
+
 **There is no such thing as a grading-only kernel.** A vendored kernel is
 registered in `Public/jupyterlite/xeus/kernels.json`, which means the xeus
 extension registers its kernelspec at editor startup and it becomes reachable
@@ -430,6 +452,10 @@ day one, and the smoke test supplied one as a fixture — which proved the
 Lua spent one release in the state this document now forbids — kernel vendored,
 first half done, second half not — so what that state *does* is measured rather
 than predicted. Read this before deciding to ship half.
+
+**This section is history, not current behaviour.** Lua has since finished the
+second half; it is kept because it is the evidence for the rule at the top of
+this document, and the next language will be tempted by the same shortcut.
 
 The short version: **the failure is loud where it matters and silent where it
 does not**, and the loud part is load-bearing. Do not "fix" it without replacing
