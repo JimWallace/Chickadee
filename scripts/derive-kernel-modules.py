@@ -81,38 +81,53 @@ def module_name(entry: str) -> str | None:
     return entry if entry.isidentifier() else None
 
 
-def scan_r(env_dir: pathlib.Path) -> set[str]:
-    """Package names `library()`-able from this R env's tarballs."""
+def owner_of(meta: dict) -> dict[str, str]:
+    """Tarball filename → the conda package name that ships it."""
+    return {p["filename"]: p["name"] for p in meta.get("packages", [])}
+
+
+def scan_r(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], dict[str, str]]:
+    """(`library()`-able names, name → owning conda package) from this R env."""
     packages = env_dir / "kernel_packages"
     if not packages.is_dir():
         sys.exit(f"derive-kernel-modules: no kernel_packages under {env_dir}")
+    by_file = owner_of(meta)
     found: set[str] = set()
+    owners: dict[str, str] = {}
     for archive in sorted(packages.glob("*.tar.gz")):
+        owner = by_file.get(archive.name)
         with tarfile.open(archive, "r:gz") as tar:
             for name in tar.getnames():
                 if match := R_LIBRARY.match(name):
                     entry = match.group("entry")
                     if entry and not entry.startswith("."):
                         found.add(entry)
-    return found
+                        if owner:
+                            owners.setdefault(entry, owner)
+    return found, owners
 
 
-def scan(env_dir: pathlib.Path) -> tuple[set[str], set[str]]:
-    """(package modules, stdlib modules) importable from this env's tarballs."""
+def scan(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], set[str], dict[str, str]]:
+    """(package modules, stdlib modules, module → owning conda package)."""
     packages = env_dir / "kernel_packages"
     if not packages.is_dir():
         sys.exit(f"derive-kernel-modules: no kernel_packages under {env_dir}")
 
+    by_file = owner_of(meta)
     package_modules: set[str] = set()
     stdlib_modules: set[str] = set()
+    owners: dict[str, str] = {}
 
     for archive in sorted(packages.glob("*.tar.gz")):
         is_python_itself = archive.name.startswith("python-3.")
+        owner = by_file.get(archive.name)
         with tarfile.open(archive, "r:gz") as tar:
             for name in tar.getnames():
                 if match := SITE_PACKAGES.match(name):
                     if resolved := module_name(match.group("entry")):
                         package_modules.add(resolved)
+                        if owner:
+                            owners.setdefault(resolved, owner)
                 elif is_python_itself:
                     match = STDLIB.match(name) or STDLIB_DIR.match(name)
                     if not match:
@@ -123,7 +138,7 @@ def scan(env_dir: pathlib.Path) -> tuple[set[str], set[str]]:
                     if resolved := module_name(entry):
                         stdlib_modules.add(resolved)
 
-    return package_modules, stdlib_modules
+    return package_modules, stdlib_modules, owners
 
 
 def main() -> None:
@@ -140,10 +155,18 @@ def main() -> None:
     # env's own package list rather than its directory name, so a renamed env
     # still works.
     if any(p["name"] == "r-base" for p in meta.get("packages", [])):
-        write_index(env_dir, meta, modules=sorted(scan_r(env_dir)), stdlib=[], host_python=None)
+        r_modules, r_owners = scan_r(env_dir, meta)
+        write_index(
+            env_dir,
+            meta,
+            modules=sorted(r_modules),
+            stdlib=[],
+            host_python=None,
+            module_owners=r_owners,
+        )
         return
 
-    package_modules, stdlib_from_tarball = scan(env_dir)
+    package_modules, stdlib_from_tarball, owners = scan(env_dir, meta)
     stdlib = sorted(stdlib_from_tarball | set(sys.stdlib_module_names))
 
     # The tarball supplies the env's pure-Python stdlib; `sys.stdlib_module_names`
@@ -179,6 +202,7 @@ def main() -> None:
         stdlib=stdlib,
         host_python=host_python,
         kernel_python=env_python,
+        module_owners=owners,
     )
 
 
@@ -189,6 +213,7 @@ def write_index(
     stdlib: list[str],
     host_python: str | None,
     kernel_python: str | None = None,
+    module_owners: dict[str, str] | None = None,
 ) -> None:
     """Write `importable-modules.json` for either language."""
     out = {
@@ -201,6 +226,18 @@ def write_index(
         "specs": sorted(meta.get("specs", [])),
         "packages": sorted({p["name"] for p in meta.get("packages", [])}),
         "modules": modules,
+        # Which conda package ships each importable name. The browser grader
+        # boots a SUBSET of the environment and installs the rest on demand, so
+        # when the kernel reports `ModuleNotFoundError: No module named 'X'` it
+        # needs to turn X back into a package before it can fetch anything. The
+        # mapping is a by-product of the scan above — the tarball being read IS
+        # the answer — so it costs nothing and cannot drift from the bytes.
+        #
+        # Names are import names, not distribution names: `PIL` maps to
+        # `pillow` and `matplotlib` to `matplotlib-base`, which is correct —
+        # `matplotlib-base` is the package that actually ships the module, and
+        # its closure is what has to be installed.
+        "moduleOwners": dict(sorted((module_owners or {}).items())),
         "stdlibModules": stdlib,
         # Recorded because the Python stdlib list depends on it (see above), so
         # a surprising diff has a visible cause rather than looking like drift.

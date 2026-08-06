@@ -90,6 +90,16 @@
         // xeus-r has no CPython runtime to bring up after the env unpacks;
         // xeus-python does. See xeus-kernel-shared.js.
         needsPythonRuntime: false,
+        // The subset booted before any script runs: base R and the kernel, and
+        // none of the tidyverse. Add-on packages are installed when a script
+        // attaches one.
+        //
+        // Smaller than Python's share of its env (22.2 MB of 62.1, so 36%) but
+        // the same argument: an R lab that only uses base R should not unpack
+        // stringi. Note r-stringi (14 MB) is NOT part of the bare kernel — it
+        // arrives with stringr/tidyr — so a dplyr-only assignment installs
+        // 2.4 MB rather than the whole 22.2 MB tidyverse set.
+        bootSeeds: ['xeus-r'],
         // Shared libraries the kernel dlopen()s, mapped to where they sit under
         // the env root — the `metadata.shared` block of xr/kernel.json.
         sharedLibs: {

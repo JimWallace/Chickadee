@@ -88,10 +88,8 @@ enum KernelImportGuard {
         let list = names.map { "`\($0)`" }.joined(separator: ", ")
         let plural = names.count == 1 ? "it" : "they"
         let locations = unsatisfied.map { "\($0.name) (line \($0.line))" }.joined(separator: ", ")
-        let envFile = language == .python ? "environment-python.yml" : "environment-r.yml"
-        let failure =
-            language == .python
-            ? "an ImportError" : "an error from library()"
+        let envFile = language.kernelEnvironmentFileName
+        let failure = language.missingDependencyFailureDescription
         return """
             \(filename) needs \(list), which the browser grading environment does not provide, \
             so \(plural) would fail with \(failure) for every student who submits — even though \

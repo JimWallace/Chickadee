@@ -160,7 +160,9 @@ enum PersonalizationEvaluator {
         let spawnCwd: URL
         if let supportFilesDirectory, fm.fileExists(atPath: supportFilesDirectory) {
             spawnCwd = URL(fileURLWithPath: supportFilesDirectory, isDirectory: true)
-            if language == .python { env["PYTHONPATH"] = supportFilesDirectory }
+            if let pathVariable = language.supportFilesPathEnvironmentVariable {
+                env[pathVariable] = supportFilesDirectory
+            }
         } else {
             spawnCwd = tempDir
         }

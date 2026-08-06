@@ -199,6 +199,21 @@ func manifestTargetsRSubmission(_ manifest: TestProperties) -> Bool {
     return !hasPythonSuite && !hasRequiredPython
 }
 
+// NOT compiler-enforced, and deliberately left that way for now.
+//
+// Every other `if language == .python` in the codebase became an exhaustive
+// switch (docs/language-handling-review.md §4, "bucket C"), because those were
+// asking a language a question and could be inverted into the language
+// answering it. This one cannot: it is a submission-normalization STRATEGY
+// expressed as "R, or else Python", and its Python branch is reached by
+// falling through several content and extension probes rather than by naming
+// Python.
+//
+// So a third language would be normalized as Python here, and no compiler
+// error would say so. Fixing that properly means giving each language a
+// normalization strategy — an artifact, not an edit, and squarely the
+// "irreducible per-language work" bucket. Flagged here so the next person to
+// add a language finds it at the site rather than in a document.
 func shouldNormalizePythonSubmission(
     manifest: TestProperties,
     submissionFilename: String?,

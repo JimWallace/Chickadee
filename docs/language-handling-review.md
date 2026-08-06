@@ -302,27 +302,42 @@ compilation at every site that needs an answer:
 `RunnerDaemon+JobProcessing.swift` (via the enum's strategy members),
 `ScriptInvocation.swift` (via `ScriptInterpreter`).
 
-**Bucket C — the sites the compiler will NOT find (6 sites, the real
-answer to "is the number acceptable").** Boolean-shaped language tests that
-would silently lump a third language into whichever branch it falls:
+**Bucket C — the sites the compiler will NOT find. CLOSED, except one, which
+is documented at the site.** Boolean-shaped language tests silently lump a
+third language into whichever branch it falls into, so they were converted to
+exhaustive switches — a mechanical, behaviour-free edit — to make "add a case,
+follow the compiler" literally true.
 
-- `NotebookExtractor.swift:123` — `language == .r ? "R" : "py"` (extraction
-  output extension), and `:135` — `if language == .python { … } else { R markers }`:
-  a third language gets R-style markers and the wrong mental model.
-- `SubmissionStaging.swift:124` — same ternary for
-  `legacyPreferredStudentModuleFilename`.
-- `PatternFamilyRenderer.swift:135` — `if language == .r { R guard } else { Python guard }`:
-  a third language gets Python bytes.
-- `NotebookCheckValidator.swift:39` — `if language == .r, !notebookCheckKindSupportsR(…)`:
-  a third language skips kind-support validation entirely.
-- `PersonalizationEvaluator.swift:163` — `if language == .python { PYTHONPATH }`
-  is genuinely Python-specific and fine; listed for completeness.
+The renderer and extractor sites this review originally listed
+(`NotebookExtractor`, `SubmissionStaging`'s extension ternary,
+`PatternFamilyRenderer`, `NotebookCheckValidator`) were converted during the
+#1207 R series and are exhaustive switches today. The remainder were converted
+afterwards, by inverting the question so the *language* answers it rather than
+the call site testing it — each is now a property on `AssignmentLanguage` with
+no `default:` arm:
 
-These should become exhaustive switches **now** (a mechanical, behaviour-free
-edit), so that "add a case, follow the compiler" becomes literally true. That
-is the honest answer to the brief's question: 27 files is fine *if and only
-if* the compiler produces the worklist, and today it produces all of it
-except these six lines.
+| was | is |
+|---|---|
+| `KernelImportGuard` — `== .python ? "environment-python.yml" : …` | `kernelEnvironmentFileName` |
+| `KernelImportGuard` — `== .python ? "an ImportError" : …` | `missingDependencyFailureDescription` |
+| `KernelEnvironment.provides` — `guard language == .python else { return false }` | `runnerProvidedModules` + `studentModulePrefixes` (empty for R **by fact**, not omission) |
+| `PersonalizationEvaluator` — `if language == .python { PYTHONPATH }` | `supportFilesPathEnvironmentVariable` |
+| `AssignmentLanguage.resolve` — `manifestOnly == .python` | `manifestOnly == .default` |
+
+That last one is not a renaming. The guard asks "did resolution fall back?",
+not "is this Python?"; the two answers coincide today and diverge the moment a
+third language exists, where `== .python` would stop consulting the notebook
+kernelspec for an assignment that had resolved positively — the opposite of
+what the guard wants.
+
+**The one that remains** is `shouldNormalizePythonSubmission` in
+`SubmissionStaging.swift`. It cannot be inverted the same way: it is a
+normalization *strategy* shaped as "R, or else Python", whose Python branch is
+reached by falling through content and extension probes rather than by naming
+Python. A third language would be normalized as Python with no compile error.
+Fixing it means giving each language a normalization strategy — an artifact,
+not an edit, and squarely bucket D. A comment at the function says so, so the
+next person to add a language meets it in the code rather than here.
 
 **Bucket D — irreducible per-language work (new artifacts, not edits).** No
 seam removes these; they are the feature: a `JSONValue.<x>Literal` renderer,

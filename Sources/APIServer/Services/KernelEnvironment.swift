@@ -57,19 +57,14 @@ struct KernelEnvironment: Sendable {
     ///
     /// R has no equivalent: its runtime helpers are `source()`d rather than
     /// attached, so they never appear as a `library()` call to check.
-    static let runnerProvidedPythonModules: Set<String> = [
-        "test_runtime", "sitecustomize", "_ck_inputs",
-    ]
-
-    /// Prefixes for extracted-submission modules. The concrete name depends on
-    /// what a student uploads and is unknowable while authoring.
-    static let studentModulePrefixes: [String] = ["student", "_ck_"]
-
     func provides(_ name: String) -> Bool {
         if packageModules.contains(name) || stdlibModules.contains(name) { return true }
-        guard language == .python else { return false }
-        if Self.runnerProvidedPythonModules.contains(name) { return true }
-        return Self.studentModulePrefixes.contains { name.hasPrefix($0) }
+        // Both sets live on AssignmentLanguage so a new language has to state
+        // its own answer rather than inherit whichever branch a `== .python`
+        // test dropped it into. R's are empty by fact, not omission — see the
+        // property docs.
+        if language.runnerProvidedModules.contains(name) { return true }
+        return language.studentModulePrefixes.contains { name.hasPrefix($0) }
     }
 
     // MARK: - Loading

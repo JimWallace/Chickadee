@@ -30,6 +30,9 @@ import VaporTesting
             ("jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js", "hashed-ext"),
             ("jupyterlite/extensions/@jupyterlite/kernel/install.json", "{}"),
             ("jupyterlite/files/users/5f1c0b9a-0000-0000-0000-000000000000/work.ipynb", "student-work"),
+            ("jupyterlite/xeus/chickadee-python/kernel_packages/numpy-2.5.1-py313h.tar.gz", "pkg"),
+            ("jupyterlite/xeus/kernels.json", "[]"),
+            ("jupyterlite/xeus/chickadee-python/xpython/kernel.json", "{}"),
             ("vendor/jszip.min.js", "jszip"),
         ]
         for fixture in fixtures {
@@ -116,6 +119,43 @@ import VaporTesting
                     #expect(res.headers.first(name: .cacheControl) == "no-cache")
                     #expect(res.headers.first(name: .eTag) != nil)
                 }
+            }
+        }
+    }
+
+    // The kernel packages are the volume — up to 51 requests per boot — so they
+    // take the fast path. Unhashed conda filenames keep revalidating: a
+    // re-vendor rewrites those bytes under the same name.
+    @Test func kernelPackagesAreFastPathed() async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
+            try await app.testing().test(
+                .GET, "/jupyterlite/xeus/chickadee-python/kernel_packages/numpy-2.5.1-py313h.tar.gz"
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: .cacheControl) == "no-cache")
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
+            }
+        }
+    }
+
+    // …but the kernel STARTUP JSON deliberately is not. `kernels.json` and each
+    // `kernel.json` are fetched while the editor is still coming up, before any
+    // kernel exists, and short-circuiting the chain for those skips the cache
+    // and isolation middlewares for the requests that bring the app up. The
+    // whole-tree prefix (`/jupyterlite/xeus/`) would capture them, which is why
+    // the middleware lists the `kernel_packages/` subtree instead. Asserted in
+    // both directions so a well-meaning prefix widening fails here.
+    @Test(arguments: [
+        "/jupyterlite/xeus/kernels.json",
+        "/jupyterlite/xeus/chickadee-python/xpython/kernel.json",
+    ])
+    func kernelStartupJSONStaysOnTheNormalChain(path: String) async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
+            try await app.testing().test(.GET, path) { res async in
+                #expect(res.status == .ok, "\(path) must still be served")
+                #expect(
+                    res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil,
+                    "\(path) is startup JSON and must not be short-circuited by the fast path")
             }
         }
     }

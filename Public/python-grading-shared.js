@@ -68,6 +68,12 @@
         // Unlike xeus-r, the CPython runtime has to be started once the env is
         // unpacked. See xeus-kernel-shared.js.
         needsPythonRuntime: true,
+        // The subset booted before any script runs: the interpreter and the
+        // kernel, and nothing from the data-science half. Everything else is
+        // installed on demand when a script or a submission imports it.
+        // `xeus-python` transitively pulls python, pyjs-rt, ipython and the
+        // xeus-python-shell chain, so this one name is the whole kernel.
+        bootSeeds: ['xeus-python'],
         argv: ['xeus/chickadee-python/bin/xpython.js'],
     };
 

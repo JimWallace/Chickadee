@@ -51,14 +51,48 @@ var _shared = self.ChickadeeGradingShared;
 var _py = self.ChickadeePythonGradingShared;
 var _reply = _kernel.reply;
 
+// `No module named 'X'` → X, from anywhere in a traceback. Python reports the
+// top-level name that failed to resolve, which is exactly the key moduleOwners
+// is indexed by.
+var MISSING_MODULE = /No module named '([A-Za-z_][A-Za-z0-9_]*)'/;
+
+// Python caches per-directory listings in its path finders, so a package that
+// appears in an already-scanned site-packages AFTER a failed import can stay
+// invisible. invalidate_caches() is the supported way to make it visible and
+// costs nothing. (The current kernel appears not to need it — the spike passed
+// without — but that is a timing-dependent property of emscripten's FS mtimes,
+// not a guarantee, and this is the documented fix.)
+var REFRESH_IMPORT_CACHES = 'import importlib\nimportlib.invalidate_caches()';
+
 // Grade one Python script and return RAW output { exitCode, stdout, stderr }.
 // No interpretation happens here — RunnerCore maps the exit code to a status and
 // reads the last stdout line for the shortResult, byte-for-byte as it does for
 // the native `python3` subprocess and for the Pyodide grader.
+//
+// The kernel boots with the bare interpreter (see the seeds in `init`) and gains
+// packages as scripts ask for them. The retry loop itself lives in
+// xeus-kernel-shared.js because R needs exactly the same one.
 async function runPythonScript(scriptName) {
-    var nonce = _py.makeNonce();
-    var reply = await _kernel.execute(_py.runScriptCellPython(scriptName, nonce));
-    var parsed = _py.parseRunOutput(reply.stdout, nonce);
+    var parsed = null;
+    var reply = await _kernel.runInstallingMissingPackages(
+        async function () {
+            var nonce = _py.makeNonce();
+            var attemptReply = await _kernel.execute(_py.runScriptCellPython(scriptName, nonce));
+            parsed = _py.parseRunOutput(attemptReply.stdout, nonce);
+            return attemptReply;
+        },
+        {
+            pattern: MISSING_MODULE,
+            // A failing import surfaces on the cell's stderr; if the cell never
+            // reported at all, `failure` is where the kernel put the reason.
+            textOf: function (r) { return (parsed ? parsed.stderr : '') || r.stderr || r.failure; },
+            afterInstall: REFRESH_IMPORT_CACHES,
+            onInstall: function (added) {
+                _reply({
+                    type: 'phase', phase: 'python_package_installed', packages: added.join(','),
+                });
+            },
+        });
     if (parsed) return parsed;
 
     // The cell never reported. Surface it as a substrate error (exit 2) with
@@ -75,7 +109,19 @@ self.onmessage = async function (e) {
     try {
         if (msg.type === 'init') {
             var initT0 = Date.now();
-            await _kernel.boot(_py.PYTHON_KERNEL);
+            // Boot the bare interpreter, not the whole environment. The env's
+            // data-science half is 84% of its 61 MB and most of its install
+            // time, and a given assignment uses little of it; whatever a script
+            // or a submission actually imports is added on demand below.
+            //
+            // Measured, Chromium, 3 runs, local disk (so this is untar + dlopen
+            // cost, not download — the saving survives a fully warm cache):
+            // full env 8604 ms, bare kernel 4822 ms, +numpy 4839 ms. An add into
+            // the live kernel costs 242 ms for numpy, 696 ms for pandas.
+            //
+            // env config only needs the stdlib plus the workspace's own
+            // test_runtime, so nothing here depends on the optional half.
+            await _kernel.boot(_py.PYTHON_KERNEL, { seeds: _py.PYTHON_KERNEL.bootSeeds });
             // Breadcrumbs (no `id`) — the kernel boot is the slow step, so a
             // wedge there is worth telling apart from a wedge in env setup.
             // browser-runner.js forwards these to the submit-phase telemetry.

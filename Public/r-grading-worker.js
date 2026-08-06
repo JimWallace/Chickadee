@@ -60,14 +60,51 @@ var _shared = self.ChickadeeGradingShared;
 var _r = self.ChickadeeRGradingShared;
 var _reply = _kernel.reply;
 
+// `there is no package called 'dplyr'` → dplyr. R words this identically
+// whether the script said `library(dplyr)`, `require(dplyr)` or `dplyr::f()` —
+// the last two route through loadNamespace(), which raises the same message —
+// so one pattern covers every way a script can name a package.
+//
+// R package names allow dots (`data.table`), which Python module names do not;
+// the class is widened accordingly. Underscores are NOT legal in R package
+// names and are deliberately excluded, the same reasoning RLibraryScanner uses.
+var MISSING_R_PACKAGE = /there is no package called ['‘"]([A-Za-z][A-Za-z0-9.]*)['’"]/;
+
 // Grade one R script and return RAW output { exitCode, stdout, stderr }.  No
 // interpretation happens here — RunnerCore maps the exit code to a status and
 // reads the last stdout line for the shortResult, byte-for-byte as it does for
 // the native `Rscript` subprocess.
+//
+// The kernel boots with base R only (see the seeds in `init`) and gains
+// packages as scripts attach them; the retry loop is the shared one in
+// xeus-kernel-shared.js. R needs no post-install step — `library()` re-reads
+// .libPaths() every call, so a package that has just landed is found.
+//
+// Re-running a script after each install is cheap here despite R's very
+// expensive first attach (dplyr is ~26 s, and it pays for the whole shared
+// tidyverse dependency graph): attaching a package that is ALREADY attached in
+// this session is instant, so a re-run pays only for the newly installed one.
+// Total attach cost across the retries is therefore the same as booting the
+// full env would have been.
 async function runRScript(scriptName) {
-    var nonce = _r.makeNonce();
-    var reply = await _kernel.execute(_r.runScriptR(scriptName, nonce));
-    var parsed = _r.parseRunOutput(reply.stdout, nonce);
+    var parsed = null;
+    var reply = await _kernel.runInstallingMissingPackages(
+        async function () {
+            var nonce = _r.makeNonce();
+            var attemptReply = await _kernel.execute(_r.runScriptR(scriptName, nonce));
+            parsed = _r.parseRunOutput(attemptReply.stdout, nonce);
+            return attemptReply;
+        },
+        {
+            pattern: MISSING_R_PACKAGE,
+            // evaluate's calling handlers put every message()/warning()/error on
+            // the kernel's stderr stream, so a failed attach lands there whether
+            // or not the wrapper managed to report.
+            textOf: function (r) { return r.stderr || (parsed ? parsed.stdout : '') || r.failure; },
+            onInstall: function (added) {
+                _reply({ type: 'phase', phase: 'r_package_installed', packages: added.join(',') });
+            },
+        });
     if (parsed) {
         // stdout is replayed by the wrapper (so the script's own output is
         // separable from the wrapper's report); stderr is whatever the cell
@@ -89,7 +126,10 @@ self.onmessage = async function (e) {
     try {
         if (msg.type === 'init') {
             var initT0 = Date.now();
-            await _kernel.boot(_r.R_KERNEL);
+            // Base R and the kernel only; the tidyverse is 22.2 MB of the 62.1
+            // and is installed when a script attaches something. See the
+            // bootSeeds comment in r-grading-shared.js.
+            await _kernel.boot(_r.R_KERNEL, { seeds: _r.R_KERNEL.bootSeeds });
             // Breadcrumb (no `id`) — the kernel boot is the slow step, so a
             // wedge here is worth telling apart from a wedge in file setup.
             // browser-runner.js forwards these to the submit-phase telemetry.
