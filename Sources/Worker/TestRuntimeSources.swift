@@ -822,46 +822,39 @@ let testRuntimeLua =
         return actual == expected
     end
 
-    -- Order-insensitive comparison for the unordered_equality kind: same elements,
-    -- any order. The Lua analogue of chickadee_unordered_equal in test_runtime.R,
-    -- and it takes the same shortcut for the same reason — elements are compared as
-    -- STRINGS, so a student returning 1 where the answer says 1.0 still matches,
-    -- and a table sorts against a table without needing a total order on values.
+    -- Order-insensitive comparison for the unordered_equality kind: the two arrays
+    -- hold the same elements in any order. Defined in terms of `M.equal`, greedily
+    -- pairing each actual element with an as-yet-unused expected one — so it can
+    -- NEVER disagree with `equal`, because it IS `equal`, applied pairwise.
     --
-    -- `table.sort` with a mixed-type array raises ("attempt to compare number with
-    -- string"), which is exactly the case an unordered comparison must survive, so
-    -- the mapping to strings happens before the sort rather than inside it.
+    -- The previous version keyed each element through a string rendering and sorted
+    -- the keys, which was a second, weaker notion of equality living beside the real
+    -- one. It disagreed with `equal` in both directions: `{1}` vs `{1.0}` rendered
+    -- "1" vs "1.0" and failed while `equal(1, 1.0)` passed; and `{ {"a, b"} }` vs
+    -- `{ {"a", "b"} }` rendered alike (the comma-join) and passed while they are
+    -- plainly different. Keying only reached the top level, so nested tables were
+    -- worse still. Delegating to `equal` removes the whole second notion.
     --
-    -- The sort key is NOT `M.format`, and that was a real bug when it was: Lua 5.4
-    -- prints the integer 1 as "1" and the float 1.0 as "1.0", so
-    -- `unordered_equal({1,2}, {1.0,2.0})` answered false while `M.equal(1, 1.0)`
-    -- answered true — the same submission passing `boundaryEquality` and failing
-    -- `unorderedEquality`. Numbers are normalised through `%.17g`, which collapses
-    -- the integer/float split without losing precision, and the key carries a type
-    -- tag so the number 1 and the string "1" stay distinct the way `==` says they
-    -- are.
-    local function unordered_key(value)
-        local kind = type(value)
-        if kind == "number" then
-            return "n:" .. string.format("%.17g", value)
-        end
-        return kind:sub(1, 1) .. ":" .. M.format(value)
-    end
-
+    -- Greedy matching is exact here because `equal` is an equivalence relation
+    -- (exact value equality is transitive): if an actual element equals several
+    -- expected ones they are mutually equal, so consuming any is safe. O(n^2),
+    -- which is nothing at the sizes a generated case compares.
     function M.unordered_equal(actual, expected)
         if type(actual) ~= "table" or type(expected) ~= "table" then
             return false
         end
         if #actual ~= #expected then return false end
-        local a, b = {}, {}
+        local used = {}
         for i = 1, #actual do
-            a[i] = unordered_key(actual[i])
-            b[i] = unordered_key(expected[i])
-        end
-        table.sort(a)
-        table.sort(b)
-        for i = 1, #a do
-            if a[i] ~= b[i] then return false end
+            local matched = false
+            for j = 1, #expected do
+                if not used[j] and M.equal(actual[i], expected[j]) then
+                    used[j] = true
+                    matched = true
+                    break
+                end
+            end
+            if not matched then return false end
         end
         return true
     end
