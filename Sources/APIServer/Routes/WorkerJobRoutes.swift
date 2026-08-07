@@ -310,9 +310,10 @@ struct WorkerJobRoutes: RouteCollection {
         }
 
         // The assignment's language selects how per-student inputs are rendered
-        // (`_ck_inputs.py` vs `_ck_inputs.R`) and which interpreter evaluated the
-        // expressions. Resolved from the manifest (any `.R` graded script → R);
-        // stamped on the Job so the worker materializes the right file.
+        // (`_ck_inputs.py` / `_ck_inputs.R` / `_ck_inputs.lua`) and which
+        // interpreter evaluated the expressions. Resolved from the manifest (any
+        // non-default graded script → that language, e.g. `.lua` → Lua); stamped
+        // on the Job so the worker materializes the right file.
         let language = AssignmentLanguage.resolve(for: setup, manifest: claimed.manifest)
 
         // Resolve per-student personalization inputs (issue #461) for this seed,

@@ -317,11 +317,24 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // before.
     let previousLanguage = AssignmentLanguage.resolve(for: setup, manifest: props)
     let assignmentLanguage: AssignmentLanguage = {
+        // The authored items carry the edit being applied, which may be the very
+        // first non-Python graded script — the `.R` or `.lua` that establishes
+        // the language before the manifest has recorded anything. Resolve it
+        // from the extension so the families/checks render in the right language
+        // at that moment. Any non-default language wins, in `allCases` order
+        // (R before Lua) for a deterministic answer on a mixed edit. Checking
+        // only `.r` here is what made the first `.lua` script save as Python.
+        var authoredLanguages: Set<AssignmentLanguage> = []
         for item in authoredItems ?? [] {
-            guard case .script(let raw) = item else { continue }
-            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
+            guard case .script(let raw) = item,
+                let language = AssignmentLanguage(
+                    scriptExtension: URL(fileURLWithPath: raw.script).pathExtension),
+                language != .default
+            else { continue }
+            authoredLanguages.insert(language)
         }
-        return previousLanguage
+        return AssignmentLanguage.allCases.first { authoredLanguages.contains($0) }
+            ?? previousLanguage
     }()
 
     try validateNotebookChecks(
