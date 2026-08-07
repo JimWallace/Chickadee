@@ -48,12 +48,12 @@ func renderStdoutEquality(
             _tb_frames = _tb.extract_tb(ex.__traceback__)
             _tb_src = ""
             if _tb_frames and _tb_frames[-1].line:
-                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+                _tb_src = f"\\n\(GeneratedMessage.source){_tb_frames[-1].line.strip()}"
             failed(
-                "unexpected exception\\n"
+                "\(GeneratedMessage.unexpectedException)\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected stdout: {expected!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         # Trim a single trailing newline on both sides so `print("hi")`
         # (which emits "hi\\n") matches an instructor-typed Expected of "hi".
@@ -69,8 +69,8 @@ func renderStdoutEquality(
             failed(
                 "wrong stdout\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected_norm!r}\\n"
-                f"  got:      {actual!r}\\n"            )
+                f"\(GeneratedMessage.expected){expected_norm!r}\\n"
+                f"\(GeneratedMessage.got){actual!r}\\n"            )
 
         passed(f"Printed {actual!r}")
         """

@@ -298,6 +298,28 @@ be **authored**. That gap is not a rough edge — it is most of the work, and
 Chickadee has now been on both sides of it. Lua reached the end of the first
 half in a day; the second half is an R-sized arc.
 
+> **Status: Lua has now finished the second half.** `AssignmentLanguage` is
+> `.python | .r | .lua`. Everything below is the runbook that produced it, and
+> the counts are what the compiler actually named. The section further down,
+> "What a half-supported language actually does", describes the state Lua was in
+> *before* this landed; it is kept because it is the measured argument for
+> finishing, not a description of current behaviour.
+>
+> Two things the Lua run added to this runbook, both learned by getting them
+> wrong first:
+>
+> * **Generalise a lesson to its neighbour.** The conformance matrix put the
+>   eval flag in the per-language adapter after `-c`/`-e` bit it, and left the
+>   availability probe hardcoded to `--version` three lines away. `lua` does not
+>   accept `--version`, so every executed assertion for Lua skipped silently and
+>   the suite reported green. When you fix a per-language hardcode, look at what
+>   sits beside it.
+> * **Run the generated code, not just the parser.** Parse checks passed on a
+>   `_ck_inputs.lua` that opened with `#` — a Python comment — because Lua skips
+>   a first line starting with `#` as a shebang. It would have broken the moment
+>   anything moved above it, and the failure mode is every per-student value
+>   reading as missing rather than anything erroring.
+
 **There is no such thing as a grading-only kernel.** A vendored kernel is
 registered in `Public/jupyterlite/xeus/kernels.json`, which means the xeus
 extension registers its kernelspec at editor startup and it becomes reachable
@@ -323,36 +345,58 @@ reveals the next, because a target only type-checks once its dependency does:
 
 | Pass | Layer | Sites |
 |---|---|---|
-| 1 | `Core` | 10 |
+| 1 | `Core` | 11 |
 | 2 | `RunnerCore` + `Worker` | 3 |
 | 3 | `APIServer` | 12 |
 
-That is 25 compiler-named sites. **The compiler cannot see four more**, listed
-under "What the compiler will not tell you" below — those are the ones that
-have historically shipped broken.
+That is **26** compiler-named sites, measured on the Lua run rather than
+estimated. Two notes on why your split may differ:
 
-### The 25 the compiler names
+* `Core` is 11 rather than the 10 this table first said, because
+  `notebookKernelNames` — the per-language generalisation of `rKernelNames` —
+  landed after the first count.
+* `RunnerCore` contributed **zero**, and that is not a saving. Lua's
+  `extractLua` had already landed with the browser-grading work, so the pass-2
+  sites were all in `Worker`. A language whose extraction is not pre-landed
+  pays for it here instead.
 
-**`Sources/Core/AssignmentLanguage.swift`** — the hub. Ten arms, each a real
-decision rather than a fill-in:
+**The compiler cannot see five more**, listed under "What the compiler will not
+tell you" below — those are the ones that have historically shipped broken.
 
-- `scriptExtensions` — the extension that marks the language
-- `literal(_:)` — needs a new `JSONValue.<x>Literal`
-- `inputsFileName` / `renderInputsFile` — the `_ck_inputs.<x>` contract, which
-  must match byte-for-byte what the language's `test_runtime` reads AND what
-  the browser's `personalizationInputsSource<X>` writes
-- `generatedScriptExtension` — feeds `spec_hash` and the `TestSetupCache` key
-- `kernelEnvironmentFileName`, `missingDependencyFailureDescription` — the
-  authoring rejection message
-- `runnerProvidedModules`, `studentModulePrefixes` — what the import guard must
-  not reject. **Answer these from the language, not by copying R:** R is empty
-  because it reaches its runtime with `source()`, a file read; Lua's is
-  non-empty because `require("test_runtime")` is a genuine module load. Same
-  shape, opposite answer.
-- `supportFilesPathEnvironmentVariable` — and verify it. Lua looks like it
-  wants `LUA_PATH`; it does not, because that variable takes search *patterns*
-  and the standalone interpreter already carries `./?.lua`. One command settles
-  it: `lua -e 'print(package.path)'`.
+### The 26 the compiler names
+
+**`Sources/Core/AssignmentLanguage.swift`** — the hub. The FACTS now live in one
+`LanguageDescriptor` literal per language (`Core/LanguageDescriptor.swift`), so
+most of this is one struct to write rather than eleven arms to find: display
+name, script extensions, generated extension, inputs filename, kernel aliases,
+kernel env file, missing-dependency wording, interpreter probe.
+
+That file also records why this is a descriptor on a closed enum rather than a
+protocol or a class hierarchy — short version: a closed enum makes a missing
+answer a **compile error**, and the alternatives make an omission look like a
+decision. Read it before proposing to change the shape.
+
+One judgement remains, and it replaced three:
+
+- `moduleResolution` — **how does the language reach code that is not the
+  student's?** `.fileRead` (R's `source()`) or `.byName(searchPathVariable:)`
+  (Python, Lua). From it `runnerProvidedModules`, `studentModulePrefixes` and
+  `supportFilesPathEnvironmentVariable` are all *derived*, so a new language
+  answers one question instead of three — and cannot answer them
+  inconsistently, which was possible before and had happened.
+
+  R is `.fileRead` and Lua is `.byName` for the same runtime helper, which is
+  the whole reason this must be answered from the language rather than copied
+  from the neighbour.
+- `workingDirectoryIsOnDefaultSearchPath` — the one FACT the mechanism cannot
+  supply. Lua puts `./?.lua` on `package.path` and so needs no variable set;
+  Python resolves by name just the same and does. Verify it, do not assume:
+  `lua -e 'print(package.path)'`.
+
+And two behaviours that take arguments and so stay methods: `literal(_:)` (needs
+a new `JSONValue.<x>Literal`) and `renderInputsFile(_:)` (the `_ck_inputs.<x>`
+contract, which must match byte-for-byte what the language's `test_runtime`
+reads AND what the browser's `personalizationInputsSource<X>` writes).
 
 **`Sources/RunnerCore/`** — notebook extraction. If the language flattens cells
 behind an inert comment marker (as R and Lua both do), reuse
@@ -376,30 +420,214 @@ different and keeps its own. The marker must round-trip through the language's
   (x2), `NotebookCheckValidator`, `TestScriptVariablePrepender` — small arms
 
 **Budget the renderers honestly.** `PatternFamilyRendererR.swift` is 545 lines
-and `NotebookCheckRendererR*.swift` is 650. They are the bulk of the second
-half, and they are *code that generates student-facing test code* — a subtle
-error is a wrong mark, not a crash. Do not write them without running the
-generated source against a real interpreter, which is the same rule the rest of
-this document keeps arriving at.
+and `NotebookCheckRendererR*.swift` is 650. Lua came in at 604 + 300, plus 59
+for identifier/comment helpers and 108 for the personalization runtime — about
+1,070 lines, so R's figure is a fair estimate and not a worst case. They are the
+bulk of the second half, and they are *code that generates student-facing test
+code* — a subtle error is a wrong mark, not a crash. Do not write them without
+running the generated source against a real interpreter, which is the same rule
+the rest of this document keeps arriving at.
+
+**A note on how much of that is shareable, since it is tempting to assume most
+of it.** It is less than it looks. The three renderers agree on the *sequence*
+(load, call, compare, report) and on the field labels — the labels are now
+shared, in `GeneratedMessage`, which is where a new language should get them.
+They do NOT agree on prose: `performanceThreshold` says `threshold:`/`elapsed:`
+in Python and `budget:`/`took:` in R, and `exceptionExpected` uses different
+sentences in each. Python's bytes are additionally frozen by `spec_hash`, so
+unifying the kinds into one implementation would rewrite every existing
+assignment's manifest — a product decision, not a refactor. Structure the new
+renderer like `PatternFamilyRendererR.swift` (one switch, one small body per
+kind), take the vocabulary from `GeneratedMessage`, and do not try to collapse
+the three.
 
 ### What the compiler will *not* tell you
 
-Four things, each of which has shipped broken at least once:
+**Seven** things, each of which has shipped broken at least once. Numbers 5-7
+were found during the Lua run; 5 is the most dangerous, because it is a shape
+rather than a place, and 6-7 are whole subsystems that needed no change to their
+types and so pointed at nothing.
 
-1. **The interpreter on the runner image.** `Dockerfile` installs `python3` and
-   `r-base`. A language whose binary is missing fails `env <lang>` with
-   command-not-found — and because instructor validation is enqueued as a
+1. **The interpreter on the runner image.** `Dockerfile` installs `python3`,
+   `r-base` and `lua5.4`. A language whose binary is missing fails `env <lang>`
+   with command-not-found — and because instructor validation is enqueued as a
    `kind == .validation` submission graded by the **native worker**, even a
    purely browser-graded assignment cannot be validated. This shipped with Lua.
+   `theRunnerImageProvidesEveryInterpreter` in the conformance matrix now
+   asserts it per language.
 2. **`shouldNormalizePythonSubmission`** is shaped "R, or else Python". It is
    the one language decision the compiler will not force; there is a comment at
-   the function saying so.
-3. **The generated JS constants.** `AssignmentLanguage.rKernelNames` has a copy
-   in `Public/browser-runner.js` written by `scripts/generate-js-constants.sh`.
-   A per-language set needs its own generated block.
-4. **The vendored browser wasm.** See step 7 — `RoutingExecutor` calls
-   `classifyScript` out of `Public/runner-wasm/`, so the browser disagrees with
-   the worker until it is rebuilt.
+   the function saying so. **Still true after Lua** — Lua reaches the generic
+   notebook extractor through the same predicate R does, so it behaves, but the
+   shape is unchanged and the next language should expect to fix it properly
+   rather than ride it.
+3. **The generated JS constants.** `scripts/generate-js-constants.sh` now
+   **discovers** every `<lang>KernelNames` declaration and writes a fenced
+   `<LANG>_KERNEL_NAMES` block per language, failing when one has no block to
+   write into. It used to hardcode `rKernelNames`, which meant a new language
+   generated nothing and the browser kept routing its notebooks to Python. So
+   this item is now *loud* rather than silent — but you still have to add the
+   fenced block, and the script tells you so.
+4. **The vendored browser wasm.** `RoutingExecutor` calls `classifyScript` out
+   of `Public/runner-wasm/`, so the browser disagrees with the worker until it
+   is rebuilt — and a new RunnerCore export (`extractLua`) simply does not exist
+   there until then. Rebuild in the same change:
+
+   ```bash
+   scripts/build-runner-wasm.sh
+   scripts/runnercore-source-hash.sh > Public/runner-wasm/source.sha
+   ```
+
+   It IS buildable on a normal machine, contrary to how this once read: swiftly
+   installs Swift 6.3.2 and `swift sdk install` takes the bundle pinned in
+   `wasm/wasm-sdk.pin`, both over ordinary network. Budget ~20 minutes.
+
+   Beware the window: `runner-wasm-vendor.yml` only re-vendors on **main**, so a
+   loader that *requires* a new export fails browser grading over to the native
+   worker for EVERY language until that job runs. Check new exports at their use
+   site, not in the readiness gate.
+5. **Boolean sniffs that type-check fine.** The compiler forces exhaustive
+   `switch`es. It does not force `isRNotebook(nb) ? .r : .python`, a ternary
+   that compiles perfectly however many languages exist and routes the new one
+   down the Python branch. `NotebookExtractor` had exactly this, so a Lua
+   notebook was extracted as Python.
+
+   Find them by searching for the *default* rather than for the language:
+
+   ```bash
+   grep -rn "? \.r : \.python\|== \.python ?\|isRNotebook" Sources/
+   ```
+
+   The fix is always the same: resolve positively with
+   `AssignmentLanguage.fromNotebookMetadata`, which returns the language it
+   recognised or nil for "nothing recognisable, use the default" — the
+   distinction the ternary cannot express.
+
+   The same shape appears wherever a language is *stored* rather than switched
+   on. `KernelEnvironments` had one property per language plus a subscript, and
+   only the subscript was a compile error; the loader and the struct could be
+   missed, leaving the new language with a permanently nil inventory. It is
+   keyed by language now.
+6. **Runner capability matching, in BOTH directions.** `RunnerProfileDetector`
+   hand-listed the interpreters it probes, so no runner advertised the new
+   language however it was provisioned — and that is worse than an omission,
+   because an assignment REQUIRING the language then matched no runner and
+   queued forever. `detectRequirementSuggestions` hand-listed extensions, so an
+   assignment in the new language suggested no requirement and its jobs went to
+   any runner, including one with no interpreter (every test exiting 127). Both
+   read `AssignmentLanguage` now — the probe from `allCases`, extensions from
+   the one extension table.
+
+   The probe's ARGUMENTS matter as much as its command: `--version` works for
+   python3 and R and **fails on lua**, which exits 1 with a usage message. A
+   hardcoded `--version` leaves the language undetectable even after it is added
+   to the loop.
+7. **The submission policy.** See "The submission policy" below. Nothing fails when a
+   language is missing from it; the student just gets silence instead of a
+   message.
+
+### What this model cannot see, scored against three languages it does not have
+
+The reduction above — three judgements to one plus one fact — was checked
+against Octave, Java and C++ *before* it was made, because a theory that is
+clean on three data points is exactly when it is most likely overfitted. It
+survived, but not intact, and the failures are the useful part.
+
+| language | `moduleResolution` | derives? |
+|---|---|---|
+| Python | `byName("PYTHONPATH")`, `sitecustomize` hook | yes |
+| R | `fileRead` (`source()`) | yes |
+| Lua | `byName("LUA_PATH")`, cwd already on path | yes |
+| Octave | `byName("OCTAVE_PATH")`, resolved by filename | yes — with the extra fact |
+| Java | `byName("CLASSPATH")` | yes |
+| C++ | none; `#include` is compile-time | no — see below |
+
+**Octave is why one judgement was not enough.** R is file-based and needs no
+path variable. Octave is file-based in spirit and *does* need `OCTAVE_PATH`.
+What decides it is not the mechanism but whether the default search path already
+contains the working directory — a per-implementation accident. Without the
+fourth language that would have shipped as a clean-looking derivation that was
+quietly wrong for the next language to arrive.
+
+**Two axes the model cannot represent at all.** All three current languages sit
+on the same side of both, so neither is visible in the code:
+
+1. **Interpreted vs compiled.** Every `ScriptInterpreter` case hands a *file* to
+   a *command*. Java and C++ need a build step first. Chickadee HAS one
+   (`TestProperties.makefile`), so this is not a wall — but nothing in
+   `AssignmentLanguage` knows about it, and `interpreterProbe` in particular
+   assumes a thing you can hand a file to.
+2. **Dynamically vs statically typed literals.** `literal(_:)` renders a
+   `JSONValue`, which is dynamically typed. C++ needs a type for every literal,
+   so `[1, "two"]` has no rendering at all. That is an impossibility, not a
+   judgement, and it would force this type to grow a notion of *which
+   `JSONValue` shapes can I render* — which none of the three current languages
+   need.
+
+**The reframe worth carrying forward:** a language does not have to be an
+`AssignmentLanguage` to be graded. Chickadee can grade C++ today through a `.sh`
+suite script and the `make` step, with none of this machinery. `AssignmentLanguage`
+is about AUTHORING — generated pattern families, notebook checks,
+personalization, in-browser kernels. So the first question about a candidate
+language is not "what is its module system" but **"does it want the authoring
+surface at all?"** For a compiled language the honest answer may be no, and that
+is a much cheaper place to land than half of this document.
+
+### The submission policy: what a student is guaranteed
+
+Separate from "does the language grade", and easy to skip because nothing fails
+when you do. `Sources/Worker/SubmissionPolicy.swift` states, once, what
+Chickadee promises a student about their upload — valid notebook JSON, at least
+one code cell, unsupported files warn rather than fail, no gradeable source is
+an error naming the language. Adding a language means answering
+`submissionGuaranteeExemption` for every guarantee.
+
+**It is a policy value, not a protocol, and that is deliberate.** A protocol
+scatters the policy across N conformances where it cannot be read as policy,
+and — worse — it makes opting out INVISIBLE: an empty method body or an
+inherited default is indistinguishable from a decision nobody made. That is
+precisely how R and Lua ended up with no submission validation at all while
+Python had 445 lines of it. Here an exemption is a value with a reason attached,
+the reason is greppable, and `SubmissionPolicyTests` fails on an empty one.
+
+It is also not where the variation is. Walking the upload, MIME-classifying it,
+checking a notebook parses and has code cells, warning on files that cannot be
+graded — none of those are language questions. The genuinely per-language part
+is which extractor runs and what the output is called, and that already lives in
+RunnerCore.
+
+**Most guarantees admit no exemption, on purpose.** There is no honest reason
+for an R student to get silence where a Python student gets a message; that
+difference was never decided, it was just unbuilt. `theUniversalGuaranteesHaveNoExemptions`
+enforces it, and its failure message says so. The valve exists for things
+genuinely shaped by the language — today exactly one: R and Lua skip the
+introspectable `.source.*` sidecar, because it exists for `astStructure` checks
+and those are Python-only by design, so nothing would ever read the file.
+
+One scoping rule worth knowing before you touch it: the guarantees apply to the
+**student's own notebook**, identified by filename, and not to every `.ipynb` in
+the workspace. An instructor's bundled helper may legitimately be
+markdown-only, and failing a job over one would be a regression dressed as a
+fix. The Python normalizer gets that scoping free by walking only the
+submission directory; the generic extractor walks the merged workspace, so it is
+told which file is the student's.
+
+### The browser half's own checklist
+
+The four (five) above are Swift-side. The browser has its own set, none of
+which the Swift compiler can see, and all of which the Lua run had to touch:
+
+| What | Where | Fails as |
+|---|---|---|
+| the inputs writer | `personalizationInputsSource<X>` in `<lang>-grading-shared.js` | every per-student value missing, silently |
+| the language branch that calls it | `browser-runner.js`, beside the `_ck_inputs.R` / `.py` arms | Python's file written for your language |
+| notebook extraction routing | `browser-runner.js` `extractNotebookToMap` | a `.py` file made from your notebook |
+| the page `<script>` tag | `Resources/Views/_notebook-body.leaf` | `ReferenceError` at runner load — for EVERY language |
+| each JS test harness's vm context | `Tests/BrowserRunnerJSTests/*.mjs` that build a context | the same `ReferenceError`, in tests only |
+
+That last pair is the enumeration trap again: `browser-runner.js` destructures
+its shared modules at IIFE start, so every harness that runs it has to load the
+same set the page does. Three files list that set independently.
 
 ### The done test
 
@@ -420,16 +648,44 @@ state this document exists to warn you about:
       equals the seed a graded script reads
 - [ ] `_ck_inputs.<x>` is *written* by both the worker and the browser, not
       merely readable by the runtime
+- [ ] the generated scripts are **executed**, not merely parsed — against a
+      correct submission AND a wrong one, so both the pass and the failure
+      message are seen
+- [ ] `LanguageConformanceMatrixTests` is green with the new case **and the
+      interpreter actually present**; confirm the executed half did not skip
+- [ ] `submissionGuaranteeExemption` is answered for every guarantee, and every
+      exemption carries a reason you would defend to an instructor
+- [ ] a runner ADVERTISES the language (`interpreterProbe`) and an assignment in
+      it SUGGESTS a requirement — capability matching fails in both directions
+      and the second is worse: requiring a language no runner advertises queues
+      the assignment's jobs forever
 
-That last one is a real trap: Lua's runtime could read `_ck_inputs.lua` from
-day one, and the smoke test supplied one as a fixture — which proved the
-*reader* worked and said nothing about whether anything ever wrote it.
+That fourth-from-last one is a real trap: Lua's runtime could read
+`_ck_inputs.lua` from day one, and the smoke test supplied one as a fixture —
+which proved the *reader* worked and said nothing about whether anything ever
+wrote it.
+
+The last two are the Lua run's own contribution, and both caught real defects a
+parse-only check could not:
+
+* The matrix's interpreter probe hardcoded `--version`, which `lua` rejects, so
+  every executed Lua assertion skipped **silently** and the suite reported green
+  having never run any generated Lua. The probe arguments are a per-language
+  adapter field now — but the general lesson is to prove a skip-when-absent test
+  did not skip, by breaking it once and watching it fail.
+* `_ck_inputs.lua` opened with `#`, a Python comment. It *parsed*, because Lua
+  skips a first line starting with `#` as a shebang. Executing it was the only
+  thing that could have distinguished "correct" from "accidentally survivable".
 
 ## What a half-supported language actually does
 
 Lua spent one release in the state this document now forbids — kernel vendored,
 first half done, second half not — so what that state *does* is measured rather
 than predicted. Read this before deciding to ship half.
+
+**This section is history, not current behaviour.** Lua has since finished the
+second half; it is kept because it is the evidence for the rule at the top of
+this document, and the next language will be tempted by the same shortcut.
 
 The short version: **the failure is loud where it matters and silent where it
 does not**, and the loud part is load-bearing. Do not "fix" it without replacing

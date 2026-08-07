@@ -56,6 +56,38 @@ func validateNotebookChecks(
                         + "Express this check as a hand-written .R test for now."
                 )
             }
+        case .lua:
+            if !notebookCheckKindSupportsLua(check.kind) {
+                let supported = NotebookCheckKind.allCases
+                    .filter(notebookCheckKindSupportsLua)
+                    .map(\.rawValue)
+                    .sorted()
+                    .joined(separator: ", ")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for Lua "
+                        + "assignments — supported kinds are: \(supported). "
+                        + "Express this check as a hand-written .lua test for now."
+                )
+            }
+            // Regex cell-matching is rejected here rather than approximated in
+            // the renderer. Lua patterns are a different language from PCRE —
+            // no alternation, no `{n,m}`, `%d` for `\d` — so a pattern authored
+            // against the Python or R renderer would not error under Lua, it
+            // would quietly match the wrong thing and award marks on that
+            // basis. Telling the instructor at save time is the only point at
+            // which this is fixable.
+            if check.kind == .cellContains, check.regex == true {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (cell_contains) uses regex matching, which is not "
+                        + "available for Lua assignments: Lua patterns are not compatible with the "
+                        + "regular expressions the Python and R renderers use. Turn regex off to match "
+                        + "the text literally."
+                )
+            }
         }
         guard isValidIdentifierFragment(check.id) else {
             throw Abort(

@@ -93,6 +93,7 @@ struct KernelEnvironment: Sendable {
         switch language {
         case .python: return "chickadee-python"
         case .r: return "chickadee-r"
+        case .lua: return "chickadee-lua"
         }
     }
 
@@ -115,26 +116,41 @@ struct KernelEnvironment: Sendable {
     }
 }
 
-/// Both languages' inventories, or as many as the checkout has.
+/// Every language's inventory, or as many as the checkout has.
+///
+/// Keyed by language rather than one stored property per language. The
+/// field-per-language shape needed three coordinated edits to teach it a new
+/// one — the struct, the subscript, and the loader — and only the subscript was
+/// a compiler error, so the other two could be missed and the new language
+/// would simply always have a nil inventory. That is the same "enumerated
+/// rather than discovered, fails open" shape recorded in
+/// docs/adding-a-xeus-kernel.md. Loading now iterates `allCases`.
 struct KernelEnvironments: Sendable {
-    let python: KernelEnvironment?
-    let r: KernelEnvironment?
+    private let byLanguage: [AssignmentLanguage: KernelEnvironment]
 
-    subscript(language: AssignmentLanguage) -> KernelEnvironment? {
-        switch language {
-        case .python: return python
-        case .r: return r
-        }
+    init(byLanguage: [AssignmentLanguage: KernelEnvironment]) {
+        self.byLanguage = byLanguage
     }
 
-    /// Loads both, tolerating either being absent. A missing inventory disables
-    /// the check for that language only — the correct degradation, since this is
-    /// an early warning and refusing every authoring write because a build
-    /// artifact is missing would be far worse than the gap it closes.
+    subscript(language: AssignmentLanguage) -> KernelEnvironment? {
+        byLanguage[language]
+    }
+
+    /// Loads every language, tolerating any being absent. A missing inventory
+    /// disables the check for that language only — the correct degradation,
+    /// since this is an early warning and refusing every authoring write
+    /// because a build artifact is missing would be far worse than the gap it
+    /// closes.
     static func load(publicDirectory: String) -> KernelEnvironments {
-        KernelEnvironments(
-            python: try? KernelEnvironment.load(publicDirectory: publicDirectory, language: .python),
-            r: try? KernelEnvironment.load(publicDirectory: publicDirectory, language: .r))
+        var loaded: [AssignmentLanguage: KernelEnvironment] = [:]
+        for language in AssignmentLanguage.allCases {
+            if let env = try? KernelEnvironment.load(
+                publicDirectory: publicDirectory, language: language)
+            {
+                loaded[language] = env
+            }
+        }
+        return KernelEnvironments(byLanguage: loaded)
     }
 }
 

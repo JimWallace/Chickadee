@@ -258,6 +258,30 @@ end)()`;
         return { exitCode: exitCode, stdout: text.slice(0, statusAt) };
     }
 
+    // The Lua sibling of personalizationInputsSource / ...SourceR: byte-for-byte
+    // what `AssignmentLanguage.renderInputsFile` writes for `.lua` on the
+    // server, so the browser and the native worker deliver the same file.
+    //
+    // Two details are load-bearing and both are Lua-specific:
+    //
+    // The comment leader is `--`. A `#` header happens to parse, because Lua
+    // skips a first line beginning with `#` as a shebang — but only as the FIRST
+    // line, which makes it a landmine rather than a convention.
+    //
+    // The chunk RETURNS a table and declares nothing, because `chickadee.inputs()`
+    // reads it with `loadfile` and keeps the returned value. The values may name
+    // `chickadee.NULL` (the sentinel for a JSON null inside a table, since Lua
+    // stores no `nil` in a constructor); the reader binds that name, so this
+    // file stays pure data.
+    function personalizationInputsSourceLua(personalizedInputs) {
+        const header = '-- Auto-generated per-student grading inputs (issue #461). Do not edit.';
+        const keys = Object.keys(personalizedInputs || {}).sort();
+        if (keys.length === 0) return header + '\nreturn {}\n';
+        const assignments = keys.map(
+            key => '    [' + luaStringLiteral(key) + '] = ' + personalizedInputs[key]);
+        return header + '\nreturn {\n' + assignments.join(',\n') + '\n}\n';
+    }
+
     root.ChickadeeLuaGradingShared = {
         LUA_KERNEL: LUA_KERNEL,
         SETUP_LUA: SETUP_LUA,
@@ -266,5 +290,6 @@ end)()`;
         makeNonce: makeNonce,
         runScriptLua: runScriptLua,
         parseRunOutput: parseRunOutput,
+        personalizationInputsSourceLua: personalizationInputsSourceLua,
     };
 })(typeof self !== 'undefined' ? self : globalThis);

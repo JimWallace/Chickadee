@@ -79,8 +79,14 @@ func detectRequirementSuggestions(
                 let name = (kernelspec["name"] as? String ?? "").lowercased()
                 let language = (kernelspec["language"] as? String ?? "").lowercased()
                 if name == "python" || language == "python" { addLanguage("python") }
-                if AssignmentLanguage.rKernelNames.contains(name) || language == "r" {
-                    addLanguage("r")
+                // Every non-default language's kernel aliases, from the one
+                // table — `rKernelNames` alone missed `xlua`, so a Lua notebook
+                // suggested no language requirement.
+                for candidate in AssignmentLanguage.allCases
+                where candidate.notebookKernelNames.contains(name)
+                    || candidate.notebookKernelNames.contains(language)
+                {
+                    addLanguage(candidate.capabilityName)
                 }
             }
             if let languageInfo = metadata["language_info"] as? [String: Any],
@@ -103,14 +109,20 @@ func detectRequirementSuggestions(
 
     func scanZipEntry(name: String, data: Data) {
         let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
-        switch ext {
-        case "py":
-            addLanguage("python")
-            if let source = String(data: data, encoding: .utf8) {
+        // Assignment languages are resolved through the one extension table
+        // (`AssignmentLanguage(scriptExtension:)`) rather than re-listed here.
+        // The hand-listed version had `py` and `r` and no `lua`, so a Lua
+        // assignment suggested no language requirement at all — and since the
+        // suggestion is what an instructor accepts, the assignment went out
+        // with nothing gating it onto a runner that has an interpreter.
+        if let language = AssignmentLanguage(scriptExtension: ext) {
+            addLanguage(language.capabilityName)
+            if language == .python, let source = String(data: data, encoding: .utf8) {
                 scanPythonSource(source)
             }
-        case "r":
-            addLanguage("r")
+            return
+        }
+        switch ext {
         case "sh", "bash":
             addCapability("shell-bash")
         case "zsh":

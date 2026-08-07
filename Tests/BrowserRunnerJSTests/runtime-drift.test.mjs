@@ -29,6 +29,7 @@ async function loadEmbeds() {
   const runnerSource = await fs.readFile(path.resolve('Public/browser-runner.js'), 'utf8');
   const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
   const rSharedSource = await fs.readFile(path.resolve('Public/r-grading-shared.js'), 'utf8');
+  const luaSharedSource = await fs.readFile(path.resolve('Public/lua-grading-shared.js'), 'utf8');
   const testHooks = {};
   const statusEl = { hidden: true, textContent: '', className: '' };
   const document = {
@@ -43,10 +44,11 @@ async function loadEmbeds() {
   context.window = { document };
   context.globalThis = context;
   // The shared-semantics modules first (they define ChickadeeGradingShared and
-  // ChickadeeRGradingShared), same as the page.
+  // ChickadeeRGradingShared and ChickadeeLuaGradingShared), same as the page.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
+  vm.runInContext(luaSharedSource, vmContext, { filename: 'lua-grading-shared.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
   return testHooks.exports;
 }

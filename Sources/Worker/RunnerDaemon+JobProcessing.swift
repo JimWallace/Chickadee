@@ -519,11 +519,19 @@ extension WorkerDaemon {
         stageTimings: inout JobStageTimings
     ) throws -> ([String], String?) {
         try stageTimings.measureSync("submission_prepare") {
-            if shouldNormalizePythonSubmission(
+            // A `switch` rather than `if …== .pythonModule`, so the extraction
+            // language is BOUND by the routing decision instead of re-derived
+            // here. This block used to re-ask the question twice —
+            // `targetsR ? .r : nil` for the extractor and `targetsR ? .r :
+            // .python` for the student-module hint — and both ternaries
+            // type-check for any number of languages while sending every one
+            // after R down the Python branch.
+            switch submissionNormalization(
                 manifest: manifest,
                 submissionFilename: job.submissionFilename,
-                submissionDirectory: paths.submissionDir
-            ) {
+                submissionDirectory: paths.submissionDir)
+            {
+            case .pythonModule:
                 let normalizer = SubmissionNormalizer()
                 let normalization = try normalizer.normalizePythonSubmission(
                     manifest: manifest,
@@ -532,21 +540,31 @@ extension WorkerDaemon {
                     submissionFilename: job.submissionFilename
                 )
                 return (normalization.warnings, normalization.preferredStudentModule)
-            } else {
+
+            case .extractToSource(let forcedLanguage):
                 try mergeDirectoryContents(from: paths.submissionDir, into: testSetupDir)
-                // A pure-R suite extracts every notebook to `.R` regardless of the
-                // submission's kernelspec (the in-browser editor can rewrite it) —
-                // so the student-module hint has to name the `.R` file too, or it
-                // points at a path that was never written.
-                let targetsR = manifestTargetsRSubmission(manifest)
-                try extractNotebooksToCode(
+                // A suite owned by a non-default language extracts every notebook
+                // to THAT source, regardless of the submission's kernelspec (the
+                // in-browser editor can rewrite it) — so the student-module hint
+                // has to name the same file, or it points at a path that was
+                // never written.
+                // The student's own filename is passed so the submission
+                // guarantees apply to it and not to an instructor's helper
+                // notebook sitting in the same merged workspace.
+                let warnings = try extractNotebooksToCode(
                     in: testSetupDir,
-                    forcedLanguage: targetsR ? .r : nil)
+                    forcedLanguage: forcedLanguage,
+                    studentNotebookName: job.submissionFilename.map {
+                        URL(fileURLWithPath: $0).lastPathComponent
+                    })
                 return (
-                    [],
+                    warnings,
                     preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
-                        language: targetsR ? .r : .python)
+                        // nil means the extractor trusted the notebook's own
+                        // metadata, which for an unrecognised kernel resolves to
+                        // the default — so the hint has to agree.
+                        language: forcedLanguage ?? .default)
                 )
             }
         }

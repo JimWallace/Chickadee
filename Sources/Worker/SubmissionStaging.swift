@@ -125,6 +125,7 @@ func preferredStudentModuleFilename(
         switch language {
         case .python: sourceExtension = "py"
         case .r: sourceExtension = "R"
+        case .lua: sourceExtension = "lua"
         }
         return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }
@@ -140,17 +141,21 @@ func stagedSubmissionDestination(
     return submissionDirectory.appendingPathComponent(safeName)
 }
 
-/// True when the staged submission is an **R-kernel** notebook (IRkernel `ir`,
-/// legacy `webr`, or xeus-r `xr`), which must be extracted to `.R` by
-/// `extractNotebooksToCode` rather than run through the Python normalizer.
+/// The language the staged submission's notebook positively declares, or nil
+/// when it declares nothing recognisable (or is not a notebook at all).
 ///
-/// Detection is `AssignmentLanguage.isRNotebookMetadata` — the same call
+/// Detection is `AssignmentLanguage.fromNotebookMetadata` — the same call
 /// `extractNotebooksToCode` makes, so routing and extraction cannot disagree
-/// about what an R notebook is. Resolves the named submission when it is an
+/// about what a notebook is. Resolves the named submission when it is an
 /// `.ipynb`, otherwise the first `.ipynb` staged in `submissionDirectory`
-/// (zip submissions). Any read/parse failure returns false so the caller keeps
+/// (zip submissions). Any read/parse failure returns nil, so the caller keeps
 /// its existing (Python) behaviour.
-func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?) -> Bool {
+///
+/// Generalised from `submissionIsRNotebook`, whose Bool could only mean "R, or
+/// not R" — so an xeus-lua notebook answered "not R" and was routed to Python.
+func submissionNotebookLanguage(
+    submissionDirectory: URL, submissionFilename: String?
+) -> AssignmentLanguage? {
     let notebookURL: URL? = {
         if let submissionFilename,
             URL(fileURLWithPath: submissionFilename).pathExtension.lowercased() == "ipynb"
@@ -169,117 +174,149 @@ func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?
         let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
         let meta = notebook["metadata"] as? [String: Any]
     else {
-        return false
+        return nil
     }
 
-    return AssignmentLanguage.isRNotebookMetadata(meta)
+    return AssignmentLanguage.fromNotebookMetadata(meta)
 }
 
-/// True when the manifest's graded suite is **pure R** — at least one `.R` test
-/// script and no Python (`.py` test script or required `.py` file). For such an
-/// assignment every notebook submission must be extracted to `.R`, because the
-/// tests `source()` a `.R` file and a `.py` extraction can never grade. The
-/// manifest is authoritative about the assignment's language, so it — not the
-/// submission notebook's (mangleable) kernelspec — decides. This is what lets a
-/// submission whose R kernelspec was rewritten by the in-browser editor (saved
-/// under the Pyodide/Python kernel) still grade as R, including a submission
-/// stored before the submit-time kernel fix when it is re-tested.
-func manifestTargetsRSubmission(_ manifest: TestProperties) -> Bool {
-    let hasRSuite = manifest.testSuites.contains {
-        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension) == .r
-    }
-    guard hasRSuite else { return false }
-    let hasPythonSuite = manifest.testSuites.contains {
-        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
-            == .python
+/// How a submission is prepared before the shell scripts run.
+///
+/// This replaced a `Bool` named `shouldNormalizePythonSubmission`, and the
+/// rename is the point. A boolean can only say "Python, or the other thing",
+/// so the caller had to re-derive *which* other thing with a second test —
+/// `forcedLanguage: targetsR ? .r : nil`, which type-checks forever and hands
+/// every language after R to the notebook sniff. Carrying the language in the
+/// answer removes that second decision entirely.
+enum SubmissionNormalization: Equatable, Sendable {
+    /// The Python normalizer: an `.ipynb` becomes an importable module, magics
+    /// are stripped, cells are wrapped for resilient load.
+    case pythonModule
+    /// Merge the upload and extract notebooks to source. `forcedLanguage` wins
+    /// over the submission's own kernelspec, which the in-browser editor can
+    /// silently rewrite; nil means "trust the notebook's metadata".
+    case extractToSource(forcedLanguage: AssignmentLanguage?)
+}
+
+/// The language the MANIFEST makes the owner of this submission, or nil when
+/// the manifest carries no such claim.
+///
+/// A language owns the submission when its own graded scripts are present and
+/// Python's are not, anywhere. The Python exclusion is not symmetry — it is the
+/// existing precedence, preserved deliberately: a mixed suite that ships any
+/// `.py` keeps Python's normalizer, because those Python tests need an
+/// importable module and nothing else in the routing would give them one.
+///
+/// Generalised from `manifestTargetsRSubmission`, which asked the same question
+/// about R alone. Iterating `allCases` is what makes a new language an owner
+/// the day its case exists, rather than silently falling through to Python.
+func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
+    func suiteContains(_ language: AssignmentLanguage) -> Bool {
+        manifest.testSuites.contains {
+            AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
+                == language
+        }
     }
     let hasRequiredPython = manifest.requiredFiles.contains {
         AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python
     }
-    return !hasPythonSuite && !hasRequiredPython
+    guard !suiteContains(.python), !hasRequiredPython else { return nil }
+    return AssignmentLanguage.allCases
+        .filter { $0 != .default }
+        .first(where: suiteContains)
 }
 
-// NOT compiler-enforced, and deliberately left that way for now.
-//
-// Every other `if language == .python` in the codebase became an exhaustive
-// switch (docs/language-handling-review.md §4, "bucket C"), because those were
-// asking a language a question and could be inverted into the language
-// answering it. This one cannot: it is a submission-normalization STRATEGY
-// expressed as "R, or else Python", and its Python branch is reached by
-// falling through several content and extension probes rather than by naming
-// Python.
-//
-// So a third language would be normalized as Python here, and no compiler
-// error would say so. Fixing that properly means giving each language a
-// normalization strategy — an artifact, not an edit, and squarely the
-// "irreducible per-language work" bucket. Flagged here so the next person to
-// add a language finds it at the site rather than in a document.
+/// Which normalization this submission needs.
+///
+/// The bucket-C inversion (docs/language-handling-review.md §4) applied to the
+/// one site that had resisted it. It used to read "R, or else Python", with
+/// Python reached by falling through extension and content probes rather than
+/// by being named — so a third language was normalized as Python with no
+/// compiler error, and a Lua notebook submission was turned into a Python
+/// module that the Lua suite could not grade.
+///
+/// Stated positively, the order below is: Python's explicit claims first, then
+/// another language's ownership, then the submission's own declaration, then
+/// Python's heuristics, then give up and extract generically. Steps 1, 4, 5 and
+/// 6 are Python answering "is this mine?"; steps 2 and 3 are another language
+/// answering the same question. Nothing asks "is it R?" any more.
+func submissionNormalization(
+    manifest: TestProperties,
+    submissionFilename: String?,
+    submissionDirectory: URL
+) -> SubmissionNormalization {
+    // 1. A required `.py` is an explicit demand for an importable module.
+    let requiredPythonFiles = manifest.requiredFiles.filter {
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python
+    }
+    if !requiredPythonFiles.isEmpty { return .pythonModule }
+
+    // 2. Another language owns the manifest: extract to ITS source, whatever
+    //    the submission's kernelspec says. The manifest is authoritative about
+    //    the assignment's language; the submission metadata is not, because the
+    //    in-browser editor can rewrite it.
+    if let owner = manifestOwningLanguage(manifest) {
+        return .extractToSource(forcedLanguage: owner)
+    }
+
+    let hasPythonSuite = manifest.testSuites.contains {
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
+            == .python
+    }
+
+    // 3. No Python suite, and the submission itself positively declares a
+    //    non-default language: honour that rather than treating any `.ipynb` as
+    //    Python at step 4. Generalised from the old `submissionIsRNotebook`.
+    if !hasPythonSuite,
+        let declared = submissionNotebookLanguage(
+            submissionDirectory: submissionDirectory, submissionFilename: submissionFilename),
+        declared != .default
+    {
+        return .extractToSource(forcedLanguage: declared)
+    }
+
+    // 4-6. Python's heuristics: it is the default, so it claims the shapes that
+    //      no other language has claimed by now.
+    if let submissionFilename {
+        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()
+        if pythonSubmissionExtensions.contains(ext) { return .pythonModule }
+    }
+    if hasPythonSuite { return .pythonModule }
+    if let enumerator = FileManager.default.enumerator(
+        at: submissionDirectory,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles]
+    ) {
+        for case let fileURL as URL in enumerator {
+            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            if pythonSubmissionExtensions.contains(fileURL.pathExtension.lowercased()) {
+                return .pythonModule
+            }
+        }
+    }
+
+    // 7. Nothing claimed it. Extract generically and trust the notebook.
+    return .extractToSource(forcedLanguage: nil)
+}
+
+/// Upload shapes Python claims when nothing else has. `json` is here because a
+/// notebook saved without its extension still parses as one.
+private let pythonSubmissionExtensions: Set<String> = ["py", "ipynb", "json"]
+
+/// Retained as a thin wrapper over `submissionNormalization` so existing
+/// callers and tests keep working; the routing itself no longer asks a boolean
+/// question of a three-language system.
 func shouldNormalizePythonSubmission(
     manifest: TestProperties,
     submissionFilename: String?,
     submissionDirectory: URL
 ) -> Bool {
-    let requiredPythonFiles = manifest.requiredFiles.filter {
-        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python
-    }
-    if !requiredPythonFiles.isEmpty { return true }
-
-    // A pure-R suite grades by `source()`-ing a `.R` file, so ANY notebook
-    // submission must go to the generic extractor (which, forced by the same
-    // predicate at the call site, emits `.R`) — regardless of the submission
-    // notebook's kernelspec, which an in-browser editor can silently rewrite.
-    // The manifest is authoritative about the assignment's language, so it
-    // decides here rather than the possibly-mangled submission metadata.
-    if manifestTargetsRSubmission(manifest) {
-        return false
-    }
-
-    let hasPythonSuite = manifest.testSuites.contains {
-        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
-            == .python
-    }
-
-    // A mixed suite that also ships R: an R-kernel notebook is still not a
-    // Python submission, so route it to the generic notebook extractor
-    // (`extractNotebooksToCode`, which emits `.R`) instead of the Python
-    // normalizer. This must run before the extension/content probes below,
-    // which would otherwise treat any `.ipynb` as Python.
-    if !hasPythonSuite,
-        submissionIsRNotebook(
-            submissionDirectory: submissionDirectory, submissionFilename: submissionFilename)
-    {
-        return false
-    }
-
-    if let submissionFilename {
-        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()
-        if ["py", "ipynb", "json"].contains(ext) {
-            return true
-        }
-    }
-
-    if hasPythonSuite {
-        return true
-    }
-
-    guard
-        let enumerator = FileManager.default.enumerator(
-            at: submissionDirectory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )
-    else {
-        return false
-    }
-    for case let fileURL as URL in enumerator {
-        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
-        guard values?.isRegularFile == true else { continue }
-        let ext = fileURL.pathExtension.lowercased()
-        if ["py", "ipynb", "json"].contains(ext) {
-            return true
-        }
-    }
-    return false
+    submissionNormalization(
+        manifest: manifest,
+        submissionFilename: submissionFilename,
+        submissionDirectory: submissionDirectory
+    ) == .pythonModule
 }
 
 func testSetupCacheKey(for job: Job) -> String {

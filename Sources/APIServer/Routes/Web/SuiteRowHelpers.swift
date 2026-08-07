@@ -488,9 +488,19 @@ func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {
 }
 
 func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
-    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "r", "rb", "pl", "js", "php"]
+    // Every assignment language's extension, from the one table, UNION the
+    // script languages the runner can dispatch that no assignment is authored
+    // in. The assignment half used to be hand-listed as `py` / `r`, so a `.lua`
+    // suite file uploaded through the web form was silently skipped — not
+    // rejected with a message, just dropped from the suite — while the MCP
+    // `author_script` path accepted it. A new language joins this the day its
+    // case exists.
+    let nonAssignmentScriptExtensions: Set<String> = ["sh", "bash", "zsh", "rb", "pl", "js", "php"]
+    let assignmentExtensions = Set(AssignmentLanguage.allCases.flatMap(\.scriptExtensions))
     let ext = URL(fileURLWithPath: storedName).pathExtension.lowercased()
-    if supportedExtensions.contains(ext) { return true }
+    if assignmentExtensions.contains(ext) || nonAssignmentScriptExtensions.contains(ext) {
+        return true
+    }
     guard ext.isEmpty else { return false }
     return hasRecognizedScriptShebang(file)
 }
@@ -508,6 +518,16 @@ func hasRecognizedScriptShebang(_ file: File) -> Bool {
         return true
     }
     if normalized.range(of: #"^#!.*\bpython[0-9.]*\b"#, options: .regularExpression) != nil {
+        return true
+    }
+    // `RunnerCore.classifyScriptInterpreter` already reads a `#!… lua` shebang
+    // and dispatches it, so an extensionless Lua test runs perfectly well once
+    // it is in the suite — this is only about letting it in.
+    //
+    // (Rscript is still absent here, matching `classifyScriptInterpreter`'s own
+    // gap noted in docs/language-handling-review.md §4. Harmless while
+    // instructors upload `.R` files, and out of scope for this change.)
+    if normalized.range(of: #"^#!.*\blua[0-9.]*\b"#, options: .regularExpression) != nil {
         return true
     }
     return false

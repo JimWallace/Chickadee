@@ -64,6 +64,7 @@ func renderNotebookCheck(
     switch language {
     case .python: source = handler.render(check, specHash: hash)
     case .r: source = renderRNotebookCheck(check, specHash: hash)
+    case .lua: source = renderLuaNotebookCheck(check, specHash: hash)
     }
     let displayName = check.name ?? handler.defaultLabel(check)
     let sidecars = handler.sidecars(check)

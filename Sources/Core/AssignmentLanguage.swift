@@ -11,6 +11,7 @@ import Foundation
 public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case python
     case r
+    case lua
 
     /// What an assignment resolves to when nothing about it says otherwise.
     ///
@@ -34,23 +35,16 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// while the generated copy is stale.
     public static let rKernelNames: Set<String> = ["ir", "r", "webr", "xr"]
 
-    /// Kernelspec `name` values (and `language_info.name`) that positively mark
-    /// a notebook as THIS language — the per-language generalisation
-    /// `rKernelNames` was always going to need, and the table a new language
-    /// edits instead of adding another `isXNotebookMetadata`.
+    /// Kernelspec `name` values that mark a Lua notebook. `xlua` is the
+    /// vendored xeus-lua kernel; `lua` is what `language_info.name` reports.
     ///
-    /// Python is deliberately EMPTY, and that is not an oversight. It is
-    /// `default`, reached by falling through when nothing else matched; giving
-    /// it a positive alias set would change how every existing assignment
-    /// resolves (a notebook with no kernelspec, or an unrecognised one, must
-    /// keep landing on Python). Positive detection is for the non-default
-    /// languages only.
-    public var notebookKernelNames: Set<String> {
-        switch self {
-        case .python: return []
-        case .r: return AssignmentLanguage.rKernelNames
-        }
-    }
+    /// Carried in the same generated block as `rKernelNames` in
+    /// `Public/browser-runner.js` — after editing either, run
+    /// `scripts/generate-js-constants.sh`.
+    public static let luaKernelNames: Set<String> = ["xlua", "lua"]
+
+    /// See `LanguageDescriptor.notebookKernelNames`.
+    public var notebookKernelNames: Set<String> { descriptor.notebookKernelNames }
 
     /// The language a notebook's `metadata` positively declares, or nil when it
     /// declares nothing recognisable (in which case the caller falls back to
@@ -75,18 +69,8 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         return nil
     }
 
-    /// Graded-script filename extensions (lowercased) that mark this language.
-    /// The single source of truth for the "`.R` script → R assignment" sniff,
-    /// consolidated from the resolution, worker-routing, and raw-script
-    /// inlining sites that each hand-inlined it
-    /// (docs/language-handling-review.md §4 — the same shape `rKernelNames`
-    /// was in before #1230).
-    public var scriptExtensions: Set<String> {
-        switch self {
-        case .python: return ["py"]
-        case .r: return ["r"]
-        }
-    }
+    /// See `LanguageDescriptor.scriptExtensions`.
+    public var scriptExtensions: Set<String> { descriptor.scriptExtensions }
 
     /// The language a graded-script filename extension implies, or nil for an
     /// extension that carries no language signal (`sh`, data files, …).
@@ -240,26 +224,19 @@ extension AssignmentLanguage {
         switch self {
         case .python: return value.pythonLiteral
         case .r: return value.rLiteral
+        case .lua: return value.luaLiteral
         }
     }
 
     /// Filename of the per-student grading-inputs file the worker materializes.
-    public var inputsFileName: String {
-        switch self {
-        case .python: return "_ck_inputs.py"
-        case .r: return "_ck_inputs.R"
-        }
-    }
+    /// See `LanguageDescriptor.inputsFileName`.
+    public var inputsFileName: String { descriptor.inputsFileName }
 
     /// Extension for scripts Chickadee generates (pattern-family cases,
     /// notebook checks). `.py` for Python — unchanged, so every existing
     /// generated filename, `spec_hash` and `TestSetupCache` key is stable.
-    public var generatedScriptExtension: String {
-        switch self {
-        case .python: return "py"
-        case .r: return "R"
-        }
-    }
+    /// See `LanguageDescriptor.generatedScriptExtension`.
+    public var generatedScriptExtension: String { descriptor.generatedScriptExtension }
 
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
@@ -271,7 +248,17 @@ extension AssignmentLanguage {
     /// form binds `.ck_inputs` (R forbids a leading-underscore identifier, so the
     /// variable can't be `_ck`) and omits the trailing comma R's `list()` rejects.
     public func renderInputsFile(_ values: [String: String]) -> String {
-        let header = "# Auto-generated per-student grading inputs (issue #461). Do not edit."
+        // The comment leader is per-language, and Lua's is the reason this is
+        // not one shared constant. `#` is not a Lua comment — but a Lua chunk
+        // whose FIRST line starts with `#` has that line skipped outright, a
+        // shebang accommodation. So a `#` header parsed, the round-trip test
+        // passed, and the file was one edit away from breaking: move the header
+        // down a line, or put anything above it, and the whole inputs file
+        // becomes a syntax error that surfaces as every per-student value
+        // silently reading as missing.
+        let commentLeader = self == .lua ? "--" : "#"
+        let header =
+            "\(commentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
         let keys = values.keys.sorted()
         switch self {
         case .python:
@@ -287,6 +274,26 @@ extension AssignmentLanguage {
             return "\(header)\n.ck_inputs <- list(\n"
                 + assignments.joined(separator: ",\n")
                 + "\n)\n"
+        case .lua:
+            // A chunk that RETURNS a table, because `chickadee.inputs()` reads
+            // it with `loadfile` + `pcall` and keeps the returned value. Not a
+            // global assignment: a Lua library that wrote globals would be a
+            // surprise, and the runtime's own module is a table for the same
+            // reason.
+            //
+            // A PURE DATA CHUNK — no `require`, no statements. The values may
+            // mention `chickadee.NULL`, the sentinel `JSONValue.luaLiteral`
+            // emits for a JSON null inside a table (Lua stores no `nil` in a
+            // constructor, so a hole would silently eat an authored case's
+            // positional alignment). That name is bound by the READER:
+            // `chickadee.inputs()` loads this chunk with an environment
+            // carrying the runtime, so the file itself stays dependency-free
+            // and can be written into an empty directory.
+            let assignments = keys.map {
+                "    [\(JSONValue.string($0).luaLiteral)] = \(values[$0] ?? "nil")"
+            }
+            guard !keys.isEmpty else { return "\(header)\nreturn {}\n" }
+            return "\(header)\nreturn {\n" + assignments.joined(separator: ",\n") + "\n}\n"
         }
     }
 
@@ -301,55 +308,28 @@ extension AssignmentLanguage {
 
     /// The env file a maintainer edits to add a package to this language's
     /// browser-grading kernel, named in the authoring rejection message.
-    public var kernelEnvironmentFileName: String {
-        switch self {
-        case .python: return "environment-python.yml"
-        case .r: return "environment-r.yml"
-        }
-    }
+    /// See `LanguageDescriptor.kernelEnvironmentFileName`.
+    public var kernelEnvironmentFileName: String { descriptor.kernelEnvironmentFileName }
 
     /// How a missing dependency presents to a student at grade time, phrased for
     /// the same rejection message.
+    /// See `LanguageDescriptor.missingDependencyFailureDescription`.
     public var missingDependencyFailureDescription: String {
-        switch self {
-        case .python: return "an ImportError"
-        case .r: return "an error from library()"
-        }
+        descriptor.missingDependencyFailureDescription
     }
 
-    /// Modules the RUNNER injects into the grading workspace, which are therefore
-    /// importable even though no kernel package ships them.
-    ///
-    /// Empty for R by fact, not by omission: R reaches its runtime with
-    /// `source("test_runtime.R")`, which is a file read rather than a package
-    /// load, so nothing here is `library()`-able. A third language must answer
-    /// this rather than inherit R's silence.
-    public var runnerProvidedModules: Set<String> {
-        switch self {
-        case .python: return ["test_runtime", "sitecustomize", "_ck_inputs"]
-        case .r: return []
-        }
+    /// See `LanguageDescriptor.interpreterProbe`. Kept as a tuple here because
+    /// every call site destructures it.
+    public var interpreterProbe: (command: String, versionArguments: [String]) {
+        (descriptor.interpreterProbe.command, descriptor.interpreterProbe.versionArguments)
     }
 
-    /// Prefixes of extracted-submission modules. The concrete name depends on
-    /// what a student uploads and is unknowable while authoring, so the guard
-    /// matches on prefix. Empty for R for the same reason as above.
-    public var studentModulePrefixes: [String] {
-        switch self {
-        case .python: return ["student", "_ck_"]
-        case .r: return []
-        }
-    }
+    /// See `LanguageDescriptor.displayName`.
+    public var displayName: String { descriptor.displayName }
 
-    /// Environment variable that puts the assignment's support files on this
-    /// language's module search path when the personalization driver runs.
-    /// `nil` where the language has no such mechanism.
-    public var supportFilesPathEnvironmentVariable: String? {
-        switch self {
-        case .python: return "PYTHONPATH"
-        // Rscript resolves `source()` relative to the working directory the
-        // driver already sets, so there is nothing to put on a path.
-        case .r: return nil
-        }
-    }
+    /// The name this language advertises itself under in a runner's
+    /// `languageVersions`, and the token an assignment's required-languages
+    /// list is matched against. The raw value, so the two halves cannot drift.
+    public var capabilityName: String { rawValue }
+
 }

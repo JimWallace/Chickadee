@@ -14,17 +14,42 @@ struct RunnerProfileDetector {
 
         // Run independent probes concurrently — capability detection used to
         // serialize ~5 subprocesses at every cold start.
-        async let pythonVersionOpt = detectVersion(command: "python3", arguments: ["--version"])
-        async let rVersionOpt = detectVersion(command: "R", arguments: ["--version"])
+        //
+        // Every assignment language is probed, DISCOVERED from `allCases`
+        // rather than hand-listed. The list used to be `python3` / `R` /
+        // `swift`, so a runner never advertised Lua no matter what it had
+        // installed — and an assignment that required `lua` matched no runner
+        // at all and queued forever. A new language is advertised the day its
+        // case exists.
+        async let assignmentLanguageVersions = withTaskGroup(
+            of: LanguageVersion?.self, returning: [LanguageVersion].self
+        ) { group in
+            for language in AssignmentLanguage.allCases {
+                group.addTask {
+                    let probe = language.interpreterProbe
+                    guard
+                        let version = await detectVersion(
+                            command: probe.command, arguments: probe.versionArguments)
+                    else { return nil }
+                    return LanguageVersion(language: language.capabilityName, version: version)
+                }
+            }
+            var found: [LanguageVersion] = []
+            for await result in group {
+                if let result { found.append(result) }
+            }
+            return found
+        }
+        // Swift is not an `AssignmentLanguage` — no assignment is authored in
+        // it — but a runner still advertises it, so it stays a separate probe.
         async let swiftVersionOpt = detectVersion(command: "swift", arguments: ["--version"])
         async let bashExists = commandExists("bash")
         async let zshExists = commandExists("zsh")
 
-        var languageVersions: [LanguageVersion] = []
+        var languageVersions: [LanguageVersion] = await assignmentLanguageVersions
         var capabilities: Set<RunnerCapability> = []
 
-        if let pythonVersion = await pythonVersionOpt {
-            languageVersions.append(LanguageVersion(language: "python", version: pythonVersion))
+        if languageVersions.contains(where: { $0.language == AssignmentLanguage.python.capabilityName }) {
             // Python module probes are cheap on a hit and fairly cheap on a
             // miss; run them in parallel too.
             await withTaskGroup(of: (String, Bool).self) { group in
@@ -37,9 +62,6 @@ struct RunnerProfileDetector {
                     capabilities.insert(RunnerCapability(name: module))
                 }
             }
-        }
-        if let rVersion = await rVersionOpt {
-            languageVersions.append(LanguageVersion(language: "r", version: rVersion))
         }
         if let swiftVersion = await swiftVersionOpt {
             languageVersions.append(LanguageVersion(language: "swift", version: swiftVersion))

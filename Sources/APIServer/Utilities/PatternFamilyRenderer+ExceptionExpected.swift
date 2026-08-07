@@ -41,8 +41,8 @@ func renderExceptionExpected(
             failed(
                 "expected exception was not raised\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected_exception_name}\\n"
-                f"  got:      no exception (returned {result!r})\\n"            )
+                f"\(GeneratedMessage.expected){expected_exception_name}\\n"
+                f"\(GeneratedMessage.got)no exception (returned {result!r})\\n"            )
 
         # Match by class-name MRO walk so the test doesn't need to import
         # the user's exception class in this scope.  Any class in the
@@ -54,8 +54,8 @@ func renderExceptionExpected(
             failed(
                 "wrong exception type\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected_exception_name}\\n"
-                f"  got:      {type(raised).__name__}: {raised}\\n"            )
+                f"\(GeneratedMessage.expected){expected_exception_name}\\n"
+                f"\(GeneratedMessage.got){type(raised).__name__}: {raised}\\n"            )
 
         passed(f"Raised {type(raised).__name__} as expected")
         """

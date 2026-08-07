@@ -189,5 +189,6 @@
 <script src="/notebook-preflight.js?v=#appVersion()"></script>
 <script src="/grading-shared.js?v=#appVersion()"></script>
 <script src="/r-grading-shared.js?v=#appVersion()"></script>
+<script src="/lua-grading-shared.js?v=#appVersion()"></script>
 <script src="/notebook.js?v=#appVersion()"></script>
 <script src="/browser-runner.js?v=#appVersion()" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>

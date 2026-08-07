@@ -17,23 +17,29 @@ struct NormalizationResult {
 
 enum SubmissionNormalizationError: LocalizedError {
     case mimeDetectionFailed(String)
-    case invalidPythonSubmission(String)
+    /// The upload is neither a source file for `language` nor a notebook.
+    /// Carries the language so the message names what WAS expected — the
+    /// wording said "Python" for every language, which is actively misleading
+    /// on an R or Lua assignment.
+    case invalidSubmission(String, AssignmentLanguage)
     case invalidNotebookJSON(String)
     case notebookHasNoCodeCells(String)
-    case noPythonSourcesFound
+    case noSourcesFound(AssignmentLanguage)
 
     var errorDescription: String? {
         switch self {
         case .mimeDetectionFailed(let filename):
             return "Could not detect content type for \(filename)."
-        case .invalidPythonSubmission(let filename):
-            return "Uploaded file \(filename) is not a valid Python script or Jupyter notebook."
+        case .invalidSubmission(let filename, let language):
+            return
+                "Uploaded file \(filename) is not a valid \(language.displayName) script or Jupyter notebook."
         case .invalidNotebookJSON:
             return "Notebook file appears to be invalid JSON."
         case .notebookHasNoCodeCells:
             return "Notebook file contained no code cells to grade."
-        case .noPythonSourcesFound:
-            return "No Python source files were found after submission normalisation."
+        case .noSourcesFound(let language):
+            return
+                "No \(language.displayName) source files were found after submission normalisation."
         }
     }
 }
@@ -288,15 +294,15 @@ struct SubmissionNormalizer {
     ) throws {
         guard progress.producedPythonFiles.isEmpty else { return }
         if submissionFiles.count == 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {
-            throw SubmissionNormalizationError.invalidPythonSubmission(unsupportedOnlyFilename)
+            throw SubmissionNormalizationError.invalidSubmission(unsupportedOnlyFilename, .python)
         }
         writeStructuredRunnerLog(
             event: "submission_normalization_failed",
             fields: [
                 "workspace_directory": workspaceDirectory.path,
-                "error": SubmissionNormalizationError.noPythonSourcesFound.localizedDescription,
+                "error": SubmissionNormalizationError.noSourcesFound(.python).localizedDescription,
             ])
-        throw SubmissionNormalizationError.noPythonSourcesFound
+        throw SubmissionNormalizationError.noSourcesFound(.python)
     }
 
     private func applyCompatibilityCopyIfNeeded(
@@ -337,7 +343,7 @@ struct SubmissionNormalizer {
             let data = try Data(contentsOf: fileURL)
             let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
             guard notebookExtractor.isNotebookJSONObject(notebook) else {
-                throw SubmissionNormalizationError.invalidPythonSubmission(fileURL.lastPathComponent)
+                throw SubmissionNormalizationError.invalidSubmission(fileURL.lastPathComponent, .python)
             }
             return .jupyterNotebook(data: data, notebook: notebook)
         }

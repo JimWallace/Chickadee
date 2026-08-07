@@ -65,28 +65,28 @@ func renderApproximateEquality(
             _tb_frames = _tb.extract_tb(ex.__traceback__)
             _tb_src = ""
             if _tb_frames and _tb_frames[-1].line:
-                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+                _tb_src = f"\\n\(GeneratedMessage.source){_tb_frames[-1].line.strip()}"
             failed(
-                "unexpected exception\\n"
+                "\(GeneratedMessage.unexpectedException)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected!r} (±{tolerance})\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
+                f"\(GeneratedMessage.expected){expected!r} (±{tolerance})\\n"
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if not isinstance(result, (int, float)) or isinstance(result, bool):
             failed(
-                "wrong return type\\n"
+                "\(GeneratedMessage.wrongReturnType)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: a number close to {expected!r}\\n"
-                f"  got:      {result!r} (type {type(result).__name__})\\n"            )
+                f"\(GeneratedMessage.expected)a number close to {expected!r}\\n"
+                f"\(GeneratedMessage.got){result!r} (type {type(result).__name__})\\n"            )
 
         delta = abs(result - expected)
         if delta > tolerance:
             failed(
-                "value outside tolerance\\n"
+                "\(GeneratedMessage.outsideTolerance)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected!r} (±{tolerance})\\n"
-                f"  got:      {result!r}\\n"
-                f"  delta:    {delta}\\n"            )
+                f"\(GeneratedMessage.expected){expected!r} (±{tolerance})\\n"
+                f"\(GeneratedMessage.got){result!r}\\n"
+                f"\(GeneratedMessage.delta){delta}\\n"            )
 
         # v0.4.105: see renderBoundaryEquality — drop the input echo.
         passed(f"Returned {result!r} (within ±{tolerance})")

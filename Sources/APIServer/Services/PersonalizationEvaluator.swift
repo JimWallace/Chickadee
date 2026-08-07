@@ -143,6 +143,14 @@ enum PersonalizationEvaluator {
             )
             driverURL = tempDir.appendingPathComponent("personalize_driver.R")
             interpreter = "Rscript"
+        case .lua:
+            driverSource = renderLuaDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            driverURL = tempDir.appendingPathComponent("personalize_driver.lua")
+            interpreter = "lua"
         }
         do {
             try driverSource.write(to: driverURL, atomically: true, encoding: .utf8)
@@ -292,6 +300,11 @@ enum PersonalizationEvaluator {
             }.sorted()
         case .r:
             return entries.filter { (($0 as NSString).pathExtension).lowercased() == "r" }.sorted()
+        case .lua:
+            // Like R, the driver loads these by FILE (`dofile`), not by module
+            // name, so there is no identifier to validate — any `.lua` beside
+            // the assignment is a candidate helper.
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "lua" }.sorted()
         }
     }
 
@@ -353,6 +366,88 @@ enum PersonalizationEvaluator {
                     + ".ck_json_str(.ck_deparse1(`\(e.name)`))))")
         }
         lines.append("cat(paste0(\"{\", paste(.ck_pairs, collapse = \",\"), \"}\"), \"\\n\", sep = \"\")")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Renders the Lua sibling of `renderDriverScript`. Binds `seed` from the
+    /// canonical `chickadee_seed()` (shared with the grading runtime via
+    /// `LuaPersonalizationRuntime`, so the seed the driver binds equals the seed
+    /// a grading script reads), `dofile`s each support `.lua` helper, binds the
+    /// static variables, then evaluates the expressions in declared order.
+    ///
+    /// Two differences from the R driver, both forced by Lua:
+    ///
+    /// An expression is evaluated by compiling `return (<expr>)` with `load`
+    /// rather than by assignment, because Lua has no `eval` and a chunk is the
+    /// only way to turn source text into a value. Each is compiled against an
+    /// environment carrying everything bound so far, which is what lets one
+    /// expression reference an earlier one exactly as it can in R.
+    ///
+    /// The value is emitted through `chickadee_serialize`, which produces Lua
+    /// SOURCE — the counterpart of R's `deparse`. The server writes that text
+    /// verbatim into `_ck_inputs.lua`, so a display form would not do.
+    static func renderLuaDriverScript(
+        staticVariables: [FamilyVariable],
+        expressions: [PersonalizationExpression],
+        supportFiles: [String] = []
+    ) -> String {
+        var lines: [String] = ["-- Auto-generated personalization driver.  Do not edit.", ""]
+        lines.append(LuaPersonalizationRuntime.chickadeeSeedLuaSource)
+        lines.append("")
+        lines.append(LuaPersonalizationRuntime.chickadeeSerializeLuaSource)
+        lines.append("")
+        lines.append(LuaPersonalizationRuntime.chickadeeJSONStringLuaSource)
+        lines.append("")
+        // Names the expressions can see. Seeded with the globals so an
+        // expression may call anything in the standard library, then extended
+        // with `seed`, the support helpers, the static variables, and each
+        // expression's own result as it is produced.
+        lines.append("local scope = setmetatable({}, { __index = _G })")
+        lines.append("scope.seed = chickadee_seed()")
+        lines.append("")
+        if !supportFiles.isEmpty {
+            lines.append("-- Auto-loaded support files (instructor .lua helpers +")
+            lines.append("-- the solution.ipynb code cells extracted into solution.lua).")
+            lines.append("-- A broken helper is ignored here; a missing name surfaces")
+            lines.append("-- as an error only if an expression actually references it.")
+            for name in supportFiles {
+                lines.append(
+                    "do local chunk = loadfile(\(JSONValue.string(name).luaLiteral), \"t\", scope)")
+                lines.append("   if chunk then pcall(chunk) end end")
+            }
+            lines.append("")
+        }
+        if !staticVariables.isEmpty {
+            lines.append("-- Static globals + section variables (in scope for expressions).")
+            for v in staticVariables {
+                lines.append("scope[\(JSONValue.string(v.name).luaLiteral)] = \(v.value.luaLiteral)")
+            }
+            lines.append("")
+        }
+        lines.append("-- Per-student expressions, evaluated in declared order.")
+        lines.append("local ck_names = {}")
+        for e in expressions {
+            let nameLiteral = JSONValue.string(e.name).luaLiteral
+            // The expression text is embedded as a Lua string literal, so an
+            // instructor's quotes and backslashes cannot break out of it.
+            let bodyLiteral = JSONValue.string("return (\(e.expression))").luaLiteral
+            lines.append("do")
+            lines.append("    local chunk, err = load(\(bodyLiteral), \(nameLiteral), \"t\", scope)")
+            lines.append(
+                "    if not chunk then error(\"expression \" .. \(nameLiteral) .. \": \" .. tostring(err)) end")
+            lines.append("    scope[\(nameLiteral)] = chunk()")
+            lines.append("    ck_names[#ck_names + 1] = \(nameLiteral)")
+            lines.append("end")
+        }
+        lines.append("")
+        lines.append("-- Emit one chickadee_serialize(value) per declared expression as a JSON")
+        lines.append("-- map (the LAST stdout line — earlier instructor output is ignored).")
+        lines.append("local ck_pairs = {}")
+        lines.append("for _, name in ipairs(ck_names) do")
+        lines.append("    ck_pairs[#ck_pairs + 1] = chickadee_json_str(name) .. \":\"")
+        lines.append("        .. chickadee_json_str(chickadee_serialize(scope[name]))")
+        lines.append("end")
+        lines.append("io.write(\"{\" .. table.concat(ck_pairs, \",\") .. \"}\\n\")")
         return lines.joined(separator: "\n") + "\n"
     }
 

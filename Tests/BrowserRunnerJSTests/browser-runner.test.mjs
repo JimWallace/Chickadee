@@ -16,6 +16,10 @@ const rSharedSource = await fs.readFile(
   path.resolve('Public/r-grading-shared.js'),
   'utf8',
 );
+const luaSharedSource = await fs.readFile(
+  path.resolve('Public/lua-grading-shared.js'),
+  'utf8',
+);
 
 // Shared producer/parser contract for the dependency-skip wording; the worker
 // side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
@@ -661,12 +665,14 @@ async function loadRunnerHarness(options = {}) {
   };
   context.globalThis = context;
 
-  // The two shared-semantics modules first (they define ChickadeeGradingShared
-  // and ChickadeeRGradingShared, which the runner destructures at IIFE start),
-  // then the runner — same order as _notebook-body.leaf loads them.
+  // The shared-semantics modules first (they define ChickadeeGradingShared,
+  // ChickadeeRGradingShared and ChickadeeLuaGradingShared, which the runner
+  // destructures at IIFE start), then the runner — same order as
+  // _notebook-body.leaf loads them.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
+  vm.runInContext(luaSharedSource, vmContext, { filename: 'lua-grading-shared.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
 
   return {

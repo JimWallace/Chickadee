@@ -59,13 +59,13 @@ func renderVariableEquality(
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined\\n"
-                f"  expected: {expected!r}\\n"            )
+                f"\(GeneratedMessage.expected){expected!r}\\n"            )
 
         if actual != expected:
             failed(
-                f"Variable `{variable_name}` has the wrong value\\n"
-                f"  expected: {expected!r}\\n"
-                f"  got:      {actual!r}\\n"            )
+                f"Variable `{variable_name}` has the \(GeneratedMessage.wrongValue)\\n"
+                f"\(GeneratedMessage.expected){expected!r}\\n"
+                f"\(GeneratedMessage.got){actual!r}\\n"            )
 
         passed(f"{variable_name} == {actual!r}")
         """

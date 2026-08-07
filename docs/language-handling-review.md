@@ -1,4 +1,7 @@
-# Design review: how Chickadee decides and applies "Python or R"
+# Design review: how Chickadee decides and applies an assignment language
+
+*(Written as "Python or R", before Lua made it three. The analysis is
+unchanged; §4 now carries a scorecard against the real third language.)*
 
 **What this is.** The second-opinion review requested by the
 language-handling review brief (circulated as draft PR #1234; the brief was
@@ -277,6 +280,12 @@ fix follows from the zero-callers fact:
 
 ## 4. Adding a third language: how many of the 27 files change, and where is the seam? (brief §6.4)
 
+> **Scored against the real thing.** This section was written before a third
+> language existed. Lua has since been added, so the prediction below can be
+> checked rather than trusted. It held up well; the misses are recorded at the
+> end of this section under "What the census got wrong", and the operational
+> runbook is [docs/adding-a-xeus-kernel.md](adding-a-xeus-kernel.md).
+
 Census of every `Sources/` file referencing `AssignmentLanguage`, bucketed by
 what a third language demands of it.
 
@@ -375,6 +384,57 @@ third *notebook* language generalizes it to per-language sets. And the
 non-Swift edges — `R_KERNEL_NAMES` in JS, requirement strings in
 `AssignmentRequirementHelpers`, MCP tool descriptions that say "Python or R"
 — are a checklist, not a seam; keep them in this document's orbit.
+
+> *Written before Lua; graded in "What the census got wrong" below.* The
+> `rKernelNames` generalisation did happen (`notebookKernelNames`). The
+> "checklist, not a seam" framing is the part that did not hold — the
+> compiler-invisible surface turned out to be a recurring *shape*, and the JS
+> generator that copies `rKernelNames` had to be generalised too. The MCP
+> descriptions, as it happens, never named the languages and needed nothing.
+
+### What the census got wrong
+
+Measured on the Lua run (26 compiler-named sites: 11 `Core`, 3 `Worker`, 12
+`APIServer`).
+
+**Right, and load-bearing.** Bucket A really did not change — the majority of
+the surface never learned a third language exists, which is the payoff this
+section claimed. The `init?(scriptExtension:)` / `scriptExtensions`
+consolidation it asked for had landed by then and removed exactly the five-copy
+problem it predicted. Every bucket-B site failed to compile, as designed.
+
+**Wrong in one direction that matters.** The section treats "outside the
+compiler's sight" as a short checklist — the JS constant, requirement strings,
+MCP descriptions. It is a *shape*, not a list, and the shape is the expensive
+part:
+
+* **A ternary is not a switch.** `isRNotebook(nb) ? .r : .python` compiles
+  forever and silently routes the third language into the Python branch.
+  `NotebookExtractor` had one, so a Lua notebook extracted as Python. No entry
+  in this census covers it, because the file *does* appear in bucket A —
+  language-generic by the enum, and wrong anyway.
+* **A field per language is not a switch either.** `KernelEnvironments` stored
+  `python` and `r` as properties plus a subscript. Only the subscript was a
+  compile error; the struct and its loader could be missed, leaving the new
+  language permanently nil. Keyed by language now.
+* **`rKernelNames` generalised, but its generator did not.**
+  `notebookKernelNames` became per-language as this section anticipated — while
+  `scripts/generate-js-constants.sh` went on hardcoding `rKernelNames`, so the
+  browser copy silently covered one language fewer than Swift did. The
+  generalisation and the thing that copies it have to move together.
+
+**The one item still open.** `shouldNormalizePythonSubmission` is called out
+here as the site the compiler will not force, and it is still shaped "R, or else
+Python" after Lua. Lua behaves correctly through it by reaching the generic
+notebook extractor the same way R does, so nothing is broken — but the
+prediction that it needs a per-language normalization *strategy* stands, and the
+fourth language should not expect to ride it the way the third did.
+
+**Guard hierarchy, revised.** §2's ranking (generate-and-diff beats a drift
+test) held, with one addition: a generator must **discover** what it generates
+for, and **fail** on a language it finds no home for. Hardcoding one language in
+the generator reproduces, one layer down, the exact drift the generator exists
+to prevent.
 
 ---
 

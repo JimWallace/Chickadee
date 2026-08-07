@@ -100,9 +100,9 @@ func callContext(for family: PatternFamily, case c: PatternCase) -> CallContext 
 
     let inputLineLiteral: String
     if previewParts.isEmpty {
-        inputLineLiteral = #""  input:    (no input)\n""#
+        inputLineLiteral = #""\#(GeneratedMessage.input)(no input)\n""#
     } else {
-        inputLineLiteral = "f\"  input:    \(previewParts.joined(separator: ", "))\\n\""
+        inputLineLiteral = "f\"\(GeneratedMessage.input)\(previewParts.joined(separator: ", "))\\n\""
     }
 
     return CallContext(

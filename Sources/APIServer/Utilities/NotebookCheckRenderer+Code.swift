@@ -77,7 +77,7 @@ func renderFunctionExists(_ check: NotebookCheck, specHash: String) -> String {
         if fn is _MISSING:
             failed(
                 f"`{name}` is not defined in the student notebook.\\n"
-                f"  expected: a callable named `{name}`\\n"
+                f"\(GeneratedMessage.expected)a callable named `{name}`\\n"
             )
 
         if not callable(fn):
@@ -119,8 +119,8 @@ func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
             if not (\(typeCheckExpr)):
                 failed(
                     f"Variable `{name}` has the wrong type.\\n"
-                    f"  expected: {expected_type_name}\\n"
-                    f"  got:      {type(actual).__name__}\\n"
+                    f"\(GeneratedMessage.expected){expected_type_name}\\n"
+                    f"\(GeneratedMessage.got){type(actual).__name__}\\n"
                 )
             """
         passMessage = #"f"`{name}` is defined and is a {expected_type_name}""#
@@ -145,7 +145,7 @@ func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
         if actual is _MISSING:
             failed(
                 f"Variable `{name}` is not defined in the student notebook.\\n"
-                f"  expected: a module-level variable named `{name}`\\n"
+                f"\(GeneratedMessage.expected)a module-level variable named `{name}`\\n"
             )
 
         \(typeCheck)
@@ -200,7 +200,7 @@ private let astStructureRuntimeBody: String = """
     if not notebook_path.exists():
         errored(
             "Student notebook source not preserved — cannot run AST structure check.\\n"
-            "  expected: _submission.ipynb in workspace\\n"
+            "\(GeneratedMessage.expected)_submission.ipynb in workspace\\n"
         )
 
     try:

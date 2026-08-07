@@ -62,6 +62,19 @@ enum KernelImportGuard {
             return RLibraryScanner.referencedPackages(in: source)
                 .filter { !environment.provides($0.package) && !localModules.contains($0.package) }
                 .map { Unsatisfied(name: $0.package, line: $0.line) }
+        case .lua:
+            // Unreachable in practice — `language(forFile:)` returns nil for
+            // `.lua`, so no caller builds a Lua environment to pass here. The
+            // arm exists because the switch is exhaustive on purpose, and it
+            // reports nothing because that is the only answer an EMPTY
+            // inventory supports: emscripten-forge ships no Lua library
+            // packages, so every `require` would look unsatisfiable, including
+            // the `require("test_runtime")` that opens every generated test.
+            //
+            // Reporting nothing is also the direction this guard resolves
+            // ambiguity by design: a false positive blocks an instructor from
+            // saving with no self-service fix.
+            return []
         }
     }
 

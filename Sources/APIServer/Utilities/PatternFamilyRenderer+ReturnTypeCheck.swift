@@ -41,19 +41,19 @@ func renderReturnTypeCheck(
             _tb_frames = _tb.extract_tb(ex.__traceback__)
             _tb_src = ""
             if _tb_frames and _tb_frames[-1].line:
-                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+                _tb_src = f"\\n\(GeneratedMessage.source){_tb_frames[-1].line.strip()}"
             failed(
-                "unexpected exception\\n"
+                "\(GeneratedMessage.unexpectedException)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: a {expected_type_name} return value\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
+                f"\(GeneratedMessage.expected)a {expected_type_name} return value\\n"
+                f"\(GeneratedMessage.error){type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if not (\(typeCheckExpr)):
             failed(
-                "wrong return type\\n"
+                "\(GeneratedMessage.wrongReturnType)\\n"
                 \(ctx.inputLineLiteral)
-                f"  expected: {expected_type_name}\\n"
-                f"  got:      {type(result).__name__} (value: {result!r})\\n"            )
+                f"\(GeneratedMessage.expected){expected_type_name}\\n"
+                f"\(GeneratedMessage.got){type(result).__name__} (value: {result!r})\\n"            )
 
         passed(f"Returned a {type(result).__name__}")
         """

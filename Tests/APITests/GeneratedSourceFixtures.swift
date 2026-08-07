@@ -63,7 +63,19 @@ enum GeneratedSourceFixtures {
     /// an omission an instructor discovers.
     static let notebookCheckKindExceptions: [AssignmentLanguage: Set<NotebookCheckKind>] = [
         // `astStructure` inspects a Python AST and has no meaning elsewhere.
-        .r: [.astStructure]
+        .r: [.astStructure],
+        // Lua's env is bare `xeus-lua` — emscripten-forge ships no Lua library
+        // packages at all — so the exclusions follow from the language rather
+        // than from a missing renderer:
+        //   * the four data-frame kinds need a data frame, and Lua has no such
+        //     type and no package that provides one;
+        //   * `figureCount` needs a plotting library that counts figures;
+        //   * `astStructure` is Python-only, as it is for R.
+        // The four that remain need nothing but the language itself.
+        .lua: [
+            .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality,
+            .figureCount, .astStructure,
+        ],
     ]
 
     /// The check kinds `language` is expected to render, in a stable order.
