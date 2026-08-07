@@ -66,6 +66,16 @@ func renderNotebookCheck(
     case .r: source = renderRNotebookCheck(check, specHash: hash)
     case .lua: source = renderLuaNotebookCheck(check, specHash: hash)
     case .octave: source = renderOctaveNotebookCheck(check, specHash: hash)
+    case .cpp:
+        // Unreachable through authoring — `validateKindSupport` refuses every
+        // kind for C++ (no notebook workflow to check). Kept total with a
+        // script that errors loudly rather than grades, the same backstop
+        // posture as the renderers' other unreachable arms.
+        source = """
+            #!/bin/sh
+            echo "Notebook checks are not available for C++ assignments." 1>&2
+            exit 2
+            """
     }
     let displayName = check.name ?? handler.defaultLabel(check)
     let sidecars = handler.sidecars(check)

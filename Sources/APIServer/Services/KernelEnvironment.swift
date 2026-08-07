@@ -95,6 +95,11 @@ struct KernelEnvironment: Sendable {
         case .r: return "chickadee-r"
         case .lua: return "chickadee-lua"
         case .octave: return "chickadee-octave"
+        // No such env is ever vendored (editorSupport is .uploadOnly, no
+        // kernel exists) — the name resolves to a path that does not exist,
+        // so `load(publicDirectory:)`'s try? skips it, which is the correct
+        // outcome: no inventory, no import guard, nothing to check.
+        case .cpp: return "chickadee-cpp"
         }
     }
 

@@ -174,6 +174,19 @@ func existenceGuard(
             familyID: family.id,
             timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
         )
+    case .cpp:
+        return GeneratedScript(
+            filename: generatedScriptFilename(
+                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
+                language: .cpp),
+            source: renderCppExistenceGuard(family: family, specHash: hash),
+            tier: tier,
+            points: 0,
+            displayName: label,
+            caseKey: patternExistenceGuardCaseKey,
+            familyID: family.id,
+            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
+        )
     case .python:
         break
     }
@@ -281,6 +294,11 @@ private func renderCase(
             perStudentNames: perStudentNames)
     case .octave:
         source = renderOctavePatternCase(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    case .cpp:
+        source = renderCppPatternCase(
             family: family, case: c,
             sectionVariables: sectionVariables, specHash: specHash,
             perStudentNames: perStudentNames)

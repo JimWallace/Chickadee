@@ -215,6 +215,7 @@ func extractNotebooksToCode(
         case .r: ext = "R"
         case .lua: ext = "lua"
         case .octave: ext = "m"
+        case .cpp: ext = "cpp"
         }
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
@@ -232,7 +233,7 @@ private func assembleExtractedSource(
     language: AssignmentLanguage, cells: [[String: Any]], filename: String
 ) -> String {
     switch language {
-    case .r, .lua, .octave:
+    case .r, .lua, .octave, .cpp:
         // Flattening concatenates cells, which loses the boundaries a
         // source-level check (`.cellContains`) needs.  Python keeps them
         // because `wrapCellForResilientLoad` labels each cell; the others get
@@ -254,6 +255,7 @@ private func assembleExtractedSource(
         switch language {
         case .lua: extracted = extractLua(cells: inputCells, filename: filename)
         case .octave: extracted = extractOctave(cells: inputCells, filename: filename)
+        case .cpp: extracted = extractCpp(cells: inputCells, filename: filename)
         case .r, .python: extracted = extractR(cells: inputCells, filename: filename)
         }
         return extracted.source

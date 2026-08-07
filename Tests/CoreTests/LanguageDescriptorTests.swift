@@ -35,21 +35,22 @@ import Testing
         // default, reached by falling through — so it is asserted separately.
     }
 
-    /// Every language shipped so far has a vendored kernel; the type now
-    /// permits `.uploadOnly`, so that fact needs pinning. Admitting a
-    /// kernel-less language is a deliberate act (this list changes in the
-    /// same diff, stating the decision) — not something a copied literal or
-    /// an unfinished descriptor should be able to do quietly.
-    @Test func everyCurrentLanguageVendorsAKernel() {
+    /// The kernel-less languages, pinned by name. C++ is the one deliberate
+    /// `.uploadOnly` case — no editor kernel exists because the browser
+    /// cannot run the course's real g++ toolchain, and its assignments are
+    /// upload-only by construction (docs/cpp-support.md). Any OTHER language
+    /// appearing here is an unfinished descriptor, not a decision — update
+    /// this pin in the same diff that makes it one.
+    @Test func onlyCppIsDeliberatelyKernelLess() {
         let kernelLess = AssignmentLanguage.allCases.filter {
             $0.editorSupport == .uploadOnly
         }
         #expect(
-            kernelLess.isEmpty,
+            kernelLess == [.cpp],
             """
-            \(kernelLess) vendor no editor kernel. If that is a real decision \
-            (an upload-only compiled language), update this pin in the same \
-            change; if not, the descriptor is unfinished.
+            The kernel-less language set changed: \(kernelLess). Vendoring or \
+            dropping a kernel is a stated decision — update this pin in the \
+            same change, with the reasoning.
             """)
     }
 

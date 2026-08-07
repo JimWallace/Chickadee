@@ -98,6 +98,13 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
         }
 
+        // A C++ assignment is upload-only by construction: no editor kernel
+        // exists (EditorSupport.uploadOnly), so a notebook submission mode
+        // would promise students an editor that cannot serve them.
+        if manifest.language == .cpp, manifest.submissionMode != .uploadOnly {
+            throw AppError.unprocessable(reason: cppRequiresUploadOnlyMessage)
+        }
+
         // Mode-specific validation.
         switch manifest.gradingMode {
         case .browser:

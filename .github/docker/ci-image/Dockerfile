@@ -45,7 +45,7 @@ FROM ${BASE_IMAGE}
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
         r-base python3-pandas python3-matplotlib lua5.4 octave \
-        gnuplot-nox fonts-freefont-otf \
+        gnuplot-nox fonts-freefont-otf g++ \
         nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # octave     — provides /usr/bin/octave-cli for the Octave execution-path
@@ -57,3 +57,7 @@ RUN apt-get update -qq \
 # gnuplot-nox + fonts-freefont-otf — headless figure creation for the
 #              figureCount execution tests; without them figure() errors and
 #              the tests would skip or fail for reasons unrelated to the code.
+# g++        — the C++ toolchain for the C++ execution-path suites (generated
+#              .sh wrappers compile a single TU per test) and the C++
+#              personalization-driver tests. Same silent-skip trap as the
+#              interpreters above.

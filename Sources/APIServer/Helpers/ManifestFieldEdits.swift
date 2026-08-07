@@ -59,6 +59,21 @@ let uploadModeGradingConflictMessage =
     "An upload-only assignment is graded by the native worker; it cannot use browser grading. "
     + "Switch the grading mode to \"worker\" first."
 
+/// The C++ coherence rule's message, shared by the setup-upload API and the
+/// submission-mode editor.
+let cppRequiresUploadOnlyMessage =
+    "A C++ assignment is upload-only: C++ has no editor kernel or notebook workflow, so "
+    + "submissionMode must be \"uploadOnly\"."
+
+/// Reads the recorded `language` straight from a manifest JSON string, or nil
+/// when none is recorded (or the manifest can't be parsed).
+func currentManifestLanguage(_ manifest: String?) -> String? {
+    guard let manifest,
+        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
+    else { return nil }
+    return dict["language"] as? String
+}
+
 /// Reads the `submissionMode` field straight from a manifest JSON string,
 /// defaulting to "notebook" (TestProperties' own default) when the field is
 /// absent or the manifest can't be parsed.
@@ -81,6 +96,13 @@ func setManifestSubmissionMode(
     {
         throw AppError.badRequest(
             reason: uploadModeGradingConflictMessage)
+    }
+    // The C++ coherence rule from the other direction: an instructor cannot
+    // flip a C++ assignment back to the notebook workflow it does not have.
+    if mode == SubmissionMode.notebook.rawValue,
+        currentManifestLanguage(setup.manifest) == AssignmentLanguage.cpp.rawValue
+    {
+        throw AppError.badRequest(reason: cppRequiresUploadOnlyMessage)
     }
     if currentManifestSubmissionMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { dict in

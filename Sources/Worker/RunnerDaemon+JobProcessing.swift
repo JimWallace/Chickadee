@@ -447,6 +447,7 @@ extension WorkerDaemon {
                 try writeRRuntimeHelper(in: testSetupDir)
                 try writeLuaRuntimeHelper(in: testSetupDir)
                 try writeOctaveRuntimeHelper(in: testSetupDir)
+                try writeCppRuntimeHelper(in: testSetupDir)
             }
 
             return JobPreparedWorkspace(

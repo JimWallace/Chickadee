@@ -135,6 +135,15 @@ public func extractOctave(cells: [NotebookCell], filename: String) -> ExtractedR
     extractWithCellMarkers(cells: cells, filename: filename, comment: "%")
 }
 
+/// Extract C++ from a notebook's cells — the fourth marker-based extractor,
+/// `//` being C++'s comment leader. C++ assignments are upload-only with no
+/// notebook workflow, so this path is rare (a student uploading an `.ipynb`
+/// through the upload form), but the submission guarantees hold uniformly:
+/// a notebook that arrives extracts or errors, never silently vanishes.
+public func extractCpp(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    extractWithCellMarkers(cells: cells, filename: filename, comment: "//")
+}
+
 /// The shared body of the marker-based extractors. Emits each non-empty code
 /// cell verbatim (trailing whitespace trimmed) behind a boundary comment whose
 /// number is the cell's 1-based position in the ORIGINAL notebook — a markdown

@@ -91,6 +91,12 @@ enum GeneratedSourceFixtures {
             .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality,
             .astStructure,
         ],
+        // C++ excludes ALL TEN, categorically rather than per-kind: notebook
+        // checks inspect a submitted notebook, and C++ assignments are
+        // upload-only with no notebook workflow — there is nothing for any
+        // kind to check. `NotebookCheckValidator` refuses every kind at save
+        // time with a message saying exactly that.
+        .cpp: Set(NotebookCheckKind.allCases),
     ]
 
     /// The check kinds `language` is expected to render, in a stable order.

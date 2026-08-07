@@ -1,5 +1,17 @@
 # Should C++ become an `AssignmentLanguage`? A decision memo
 
+> **Superseded in part (2026-08): C++ IS now an `AssignmentLanguage`** —
+> see [docs/cpp-support.md](cpp-support.md). The revisit condition this memo
+> priced (a course asking for generated test families) was met, and
+> measurement dissolved two of the three priced costs: single-TU inclusion
+> plus a template runtime removed the declared-type schema (§2), and making
+> the language native-only/upload-only removed the two-compiler divergence
+> (§3) rather than accepting it. What this memo still governs is the
+> **browser half**: §3's pedagogy analysis is why no xeus-cpp kernel is
+> vendored and C++ has `EditorSupport.uploadOnly`. §1's invocation analysis
+> also held — generated C++ tests are shell wrappers, and no
+> `ScriptInterpreter` case or Swift build strategy exists.
+
 *Written at the close of the Octave work (the fourth language), against the
 question the task brief posed narrowly: does the course want generated test
 families and personalization for C++, or does it want to grade C++

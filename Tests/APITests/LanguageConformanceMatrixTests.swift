@@ -81,6 +81,35 @@ import Testing
     /// quietly covering one fewer language than exists.
     static func adapter(for language: AssignmentLanguage) -> Adapter {
         switch language {
+        case .cpp:
+            // C++ has no interpreter, and its generated "scripts" are POSIX
+            // shell wrappers carrying the C++ source in a heredoc — so the
+            // glue runs through `sh -c`, the same substrate the runner uses.
+            // The availability probe goes through sh TO g++ (`sh --version`
+            // is not portable, and g++ is the real dependency); the parse
+            // check is `sh -n` over the wrapper (the C++ inside is executed,
+            // not parsed, by the execution suites); reading the inputs file
+            // compiles a two-line program against `_ck_inputs.hpp`, which
+            // carries its own includes.
+            return Adapter(
+                interpreter: "sh",
+                evalFlag: "-c",
+                versionArguments: ["-c", "g++ --version"],
+                debianPackage: "g++",
+                parseOnlyProgram: { path in
+                    "sh -n '\(path)'"
+                },
+                readInputsProgram: { key in
+                    """
+                    cat > .ck_read_inputs.cpp <<'CK_READ_EOF'
+                    #include <iostream>
+                    #include "_ck_inputs.hpp"
+                    int main() { std::cout << ck_inputs::\(key) << "\\n"; }
+                    CK_READ_EOF
+                    g++ -std=c++20 -O0 .ck_read_inputs.cpp -o .ck_read_inputs && ./.ck_read_inputs
+                    """
+                }
+            )
         case .python:
             return Adapter(
                 interpreter: "python3",
@@ -181,6 +210,17 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func everyLanguageDeclaresAUsableScriptExtension(_ language: AssignmentLanguage) {
         #expect(!language.scriptExtensions.isEmpty)
+        // C++ breaks the round-trip DELIBERATELY: its generated cases are
+        // POSIX shell wrappers (`.sh` — the compile step lives inside the
+        // script), and `.sh` must keep carrying no language signal, or every
+        // hand-written shell suite in every course would suddenly sniff as
+        // C++. The wrapper never needs to classify back: the runner runs it
+        // as the shell script it is.
+        guard language != .cpp else {
+            #expect(language.generatedScriptExtension == "sh")
+            #expect(AssignmentLanguage(scriptExtension: "sh") == nil)
+            return
+        }
         // The generated extension must be one the language claims, or a
         // generated script would not classify back to the language that made it.
         #expect(language.scriptExtensions.contains(language.generatedScriptExtension.lowercased()))
@@ -490,9 +530,21 @@ import Testing
         // exercises neither, and the Lua one in particular fails in the worst
         // way — the chunk raises, the reader's `pcall` swallows it, and EVERY
         // per-student value reads as missing rather than anything erroring.
+        // C++'s null-in-collection story is REFUSAL at save time — no C++
+        // value exists for a JSON null, and `cppRenderabilityIssue` names
+        // that at authoring — so its fixture holds a null-free array, and the
+        // refusal itself is asserted here: that refusal IS the behaviour the
+        // other languages implement with sentinels (`NA`, `chickadee.NULL`).
+        let holes: JSONValue =
+            language == .cpp
+            ? .array([.int(60), .int(20)])
+            : .array([.int(60), .null, .int(20)])
+        if language == .cpp {
+            #expect(JSONValue.array([.int(60), .null, .int(20)]).cppRenderabilityIssue != nil)
+        }
         let rendered = language.renderInputsFile([
             "threshold": language.literal(.int(42)),
-            "holes": language.literal(.array([.int(60), .null, .int(20)])),
+            "holes": language.literal(holes),
         ])
         try rendered.write(
             to: dir.appendingPathComponent(language.inputsFileName),

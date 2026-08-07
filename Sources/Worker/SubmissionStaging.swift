@@ -127,6 +127,7 @@ func preferredStudentModuleFilename(
         case .r: sourceExtension = "R"
         case .lua: sourceExtension = "lua"
         case .octave: sourceExtension = "m"
+        case .cpp: sourceExtension = "cpp"
         }
         return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }
@@ -212,6 +213,13 @@ enum SubmissionNormalization: Equatable, Sendable {
 /// about R alone. Iterating `allCases` is what makes a new language an owner
 /// the day its case exists, rather than silently falling through to Python.
 func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
+    // The RECORDED language is the strongest ownership signal, and for C++ it
+    // is the only one: a C++ suite's generated scripts are `.sh` wrappers, so
+    // there is no extension to sniff — exactly the "suite made up only of
+    // pattern families" blindness the recorded field exists to fix. Python is
+    // the default and never claims by record (nil-recorded manifests keep the
+    // sniffing behaviour below unchanged).
+    if let recorded = manifest.language, recorded != .default { return recorded }
     func suiteContains(_ language: AssignmentLanguage) -> Bool {
         manifest.testSuites.contains {
             AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)

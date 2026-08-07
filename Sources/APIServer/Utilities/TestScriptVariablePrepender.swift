@@ -57,6 +57,25 @@ enum TestScriptVariablePrepender {
                 variables
                 .map { "\(octaveIdentifier($0.name)) = \($0.value.octaveLiteral);" }
                 .joined(separator: "\n")
+        case .cpp:
+            // A C++ assignment's hand-authored graded scripts are SHELL
+            // scripts (the makefile path), so globals inline as POSIX shell
+            // assignments — scalars only. Containers have no faithful shell
+            // form; they stay reachable through `_ck_inputs.hpp` and family
+            // variables, and the comment says so rather than guessing one.
+            return
+                variables
+                .map { variable -> String in
+                    switch variable.value {
+                    case .int(let i): return "\(variable.name)=\(i)"
+                    case .double(let d): return "\(variable.name)=\(d)"
+                    case .bool(let b): return "\(variable.name)=\(b ? 1 : 0)"
+                    case .string(let s): return "\(variable.name)=\(shellSingleQuoted(s))"
+                    case .null, .array, .object:
+                        return "# \(variable.name): no shell form; read it from C++ instead"
+                    }
+                }
+                .joined(separator: "\n")
         }
     }
 

@@ -1,0 +1,123 @@
+# First-class C++ support
+
+C++ is the fifth `AssignmentLanguage` (`.cpp`) and the first with **no
+editor kernel**: `EditorSupport.uploadOnly`. Its assignments are upload-only
+(`submissionMode: "uploadOnly"`, enforced at every authoring surface) and
+grade exclusively on the native worker with the course's real g++ toolchain.
+This document is the design record; every load-bearing number in it was
+measured before the code was written.
+
+## The two-C++s decision
+
+"C++ support" conflates two different products, and the design splits them:
+
+- **Compiled C++ — this document.** The course toolchain (g++, separate
+  files, a makefile when the course teaches the build model) is the point.
+  It is an `AssignmentLanguage` for the *authoring* surface — pattern
+  families, per-student personalization, typed literals — while grading
+  rides the original shell-script contract untouched.
+- **Interactive/notebook C++ (xeus-cpp, Clang-REPL)** is a separate,
+  deliberately unbuilt product. The browser kernel would be a *different
+  compiler* than the course toolchain, and instructor validation always
+  runs on the native worker — so a browser-graded C++ would put the
+  two-compiler divergence inside the designed flow, grading something other
+  than what the course teaches. If a course ever wants notebook-based C++
+  teaching, it is its own arc with its own Phase-0 gate (kernel probe,
+  native clang-repl script contract, per-statement JIT cost), and nothing in
+  this design blocks it.
+
+The original decision memo (`docs/cpp-assignment-language-decision.md`)
+recommended against `AssignmentLanguage.cpp` outright; its revisit condition
+— a course asking for generated test families in C++ — was met, and two of
+its three priced costs dissolved under measurement (below). The memo stands
+as the record of why the *browser* half stays unbuilt.
+
+## How a generated C++ test works
+
+A generated case is a **POSIX shell script**: it locates the submission
+(`.chickadee_student_module` hint, then a glob), copies it to
+`.ck_solution.cpp`, writes its C++ source from a quoted heredoc, compiles
+**one translation unit** with g++, and `exec`s the binary — which prints the
+ordinary shortResult JSON and exits 0/1/2. Consequences, all deliberate:
+
+- **No `ScriptInterpreter` case, no build strategy in Swift.** The runner
+  sees a `.sh` suite entry and runs it like any other; the compile step
+  lives in the generated script, beside the code it builds.
+  `generatedScriptExtension` is `"sh"` — the one language whose generated
+  extension is not its own, pinned with the reasoning in the conformance
+  matrix (`.sh` must keep carrying no language signal).
+- **Single-TU inclusion dissolves the declared-type problem.** The test
+  includes `test_runtime.hpp` (the injected template runtime), optionally
+  `_ck_inputs.hpp`, then the student's file with `main` renamed
+  (`#define main ck_student_main`) so an intro "write a program" submission
+  still exposes its functions. The student's real definitions are in scope:
+  no prototype is ever declared, and overload resolution runs against what
+  they actually wrote. Literals render through CTAD-era C++
+  (`std::vector<long long>{...}`) and the runtime's template `ck::equal`
+  compares cross-type, so the memo's declared-type-per-family schema was
+  never needed.
+- **A missing function is the existence guard's own FAIL** (compile failure
+  → exit 1 with a named message), and an unexpected throw inside a guarded
+  kind is a graded failure with the shared "unexpected exception" wording —
+  never a crash.
+
+## Measured costs (probe, g++ 13.3 / Ubuntu 24.04)
+
+| what | cost |
+|---|---|
+| per-test compile, -O0 | ~0.65 s quiet, ~0.9–1.5 s under load |
+| binary run | ~2 ms |
+| -O2 (performanceThreshold only) | +~0.05 s |
+| personalization driver (compile+run one `=` expression) | ~0.29 s |
+
+All inside the default 10 s per-test limit with headroom.
+
+## Kind coverage
+
+**Pattern families: 8 of 8.** `performanceThreshold` is supportable
+*because* C++ is native-only — the two-substrate timing divergence that
+forces refusals elsewhere cannot arise; its wrapper compiles `-O2`.
+`returnTypeCheck` matches the neutral type names ("int", "float", "str",
+"bool", "list", "dict") against the value's *static* type via decltype — no
+RTTI, no mangled strings.
+
+**Notebook checks: 0 of 10, categorically.** They inspect a submitted
+notebook, and C++ assignments have no notebook workflow; every kind is
+refused at save time with a message saying exactly that.
+
+**Literals: nothing may guess a type.** Scalars render with one obvious
+type (`LL` suffix past int32; strings as `std::string(...)`); single-kind
+arrays/objects render explicitly typed; **JSON null, mixed-kind arrays,
+nested containers, and heterogeneous object values are refused at save
+time** (`JSONValue.cppRenderabilityIssue` names the reason), with an
+undefined-identifier backstop in the rendered text so a leak is a compile
+error, never a plausible wrong value. The measured trap: `std::cmp_equal`
+rejects `bool` by design, so equality promotes bools explicitly — without
+that, an authored `true` was three compile errors.
+
+**stdout capture is fd-level (dup2), not rdbuf** — printf-using students
+grade the same as cout-using ones.
+
+## Personalization
+
+`=` expressions are C++ expressions, evaluated server-side by a driver the
+evaluator runs with `sh`: the driver script compiles a generated program
+(g++, ~0.3 s) whose last stdout line maps each name to the value rendered as
+a **C++ literal**, written verbatim into `_ck_inputs.hpp` — one
+`inline const auto name = <literal>;` per input, so every value keeps its
+natural type and a missing input is a compile error (the fail-closed check
+the other runtimes do with `isKey`, earlier and louder). The seed is the
+shared Horner fold (base-16 over the hex digits, mod 2³¹−1), digit-for-digit
+the same as R/Lua/Octave, so a student's seed is one number in every
+language.
+
+## What an instructor does today
+
+Declare the language and mode in the setup zip's `test.properties.json`
+(`"language": "cpp"`, `"submissionMode": "uploadOnly"`) or flip the mode on
+the edit page; author pattern families as in any language; add hand-written
+`.sh` + makefile suites for anything families don't cover (the makefile path
+is unchanged and remains the home of build-model pedagogy). Students get the
+upload form (which lists `requiredFiles` and accepts `.cpp`/`.h`), and the
+vanity link lands there. Runners advertise C++ via the `g++ --version`
+probe; both images carry g++.

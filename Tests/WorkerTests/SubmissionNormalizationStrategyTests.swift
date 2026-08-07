@@ -20,11 +20,15 @@ import Testing
 
 @Suite struct SubmissionNormalizationStrategyTests {
 
-    static func manifest(suiteScripts: [String], requiredFiles: [String] = []) -> TestProperties {
+    static func manifest(
+        suiteScripts: [String], requiredFiles: [String] = [],
+        language: AssignmentLanguage? = nil
+    ) -> TestProperties {
         TestProperties(
             requiredFiles: requiredFiles,
             testSuites: suiteScripts.map { TestSuiteEntry(tier: .pub, script: $0) },
-            timeLimitSeconds: 10
+            timeLimitSeconds: 10,
+            language: language
         )
     }
 
@@ -45,14 +49,15 @@ import Testing
 
         let script = "publictest_a.\(language.generatedScriptExtension)"
         let result = submissionNormalization(
-            manifest: Self.manifest(suiteScripts: [script]),
+            manifest: Self.manifest(
+                suiteScripts: [script], language: language == .cpp ? .cpp : nil),
             submissionFilename: "lab.ipynb",
             submissionDirectory: dir)
 
         switch language {
         case .python:
             #expect(result == .pythonModule)
-        case .r, .lua, .octave:
+        case .r, .lua, .octave, .cpp:
             #expect(
                 result == .extractToSource(forcedLanguage: language),
                 """
@@ -71,14 +76,20 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let ext = language.generatedScriptExtension
+        // C++'s generated scripts are `.sh` (no signal, by design) — its
+        // manifest records the language and its submissions are `.cpp`.
+        let submissionExt = language == .cpp ? "cpp" : ext
         let result = submissionNormalization(
-            manifest: Self.manifest(suiteScripts: ["publictest_a.\(ext)"]),
-            submissionFilename: "solution.\(ext)",
+            manifest: Self.manifest(
+                suiteScripts: ["publictest_a.\(ext)"],
+                language: language == .cpp ? .cpp : nil),
+            submissionFilename: "solution.\(submissionExt)",
             submissionDirectory: dir)
 
         switch language {
         case .python: #expect(result == .pythonModule)
-        case .r, .lua, .octave: #expect(result == .extractToSource(forcedLanguage: language))
+        case .r, .lua, .octave, .cpp:
+            #expect(result == .extractToSource(forcedLanguage: language))
         }
     }
 

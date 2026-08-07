@@ -123,43 +123,14 @@ enum PersonalizationEvaluator {
         // reference-solution function.
         let supportEntries = supportFileEntries(in: supportFilesDirectory, language: language, fm: fm)
 
-        let driverSource: String
-        let driverURL: URL
-        let interpreter: String
-        switch language {
-        case .python:
-            driverSource = renderDriverScript(
-                staticVariables: staticVariables,
-                expressions: expressions,
-                supportModules: supportEntries
-            )
-            driverURL = tempDir.appendingPathComponent("personalize_driver.py")
-            interpreter = "python3"
-        case .r:
-            driverSource = renderRDriverScript(
-                staticVariables: staticVariables,
-                expressions: expressions,
-                supportFiles: supportEntries
-            )
-            driverURL = tempDir.appendingPathComponent("personalize_driver.R")
-            interpreter = "Rscript"
-        case .lua:
-            driverSource = renderLuaDriverScript(
-                staticVariables: staticVariables,
-                expressions: expressions,
-                supportFiles: supportEntries
-            )
-            driverURL = tempDir.appendingPathComponent("personalize_driver.lua")
-            interpreter = "lua"
-        case .octave:
-            driverSource = renderOctaveDriverScript(
-                staticVariables: staticVariables,
-                expressions: expressions,
-                supportFiles: supportEntries
-            )
-            driverURL = tempDir.appendingPathComponent("personalize_driver.m")
-            interpreter = "octave-cli"
-        }
+        let plan = Self.driverPlan(
+            language: language,
+            staticVariables: staticVariables,
+            expressions: expressions,
+            supportEntries: supportEntries)
+        let driverSource = plan.source
+        let driverURL = tempDir.appendingPathComponent(plan.filename)
+        let interpreter = plan.interpreter
         do {
             try driverSource.write(to: driverURL, atomically: true, encoding: .utf8)
         } catch {
@@ -282,6 +253,67 @@ enum PersonalizationEvaluator {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// The per-language driver: its source, the filename it is written under,
+    /// and the command that runs it. Extracted from `evaluate` for length; the
+    /// switch is the whole point (exhaustive — a new language cannot compile
+    /// without answering how its expressions are evaluated).
+    private static func driverPlan(
+        language: AssignmentLanguage,
+        staticVariables: [FamilyVariable],
+        expressions: [PersonalizationExpression],
+        supportEntries: [String]
+    ) -> (source: String, filename: String, interpreter: String) {
+        let source: String
+        let filename: String
+        let interpreter: String
+        switch language {
+        case .python:
+            source = renderDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportModules: supportEntries
+            )
+            filename = "personalize_driver.py"
+            interpreter = "python3"
+        case .r:
+            source = renderRDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.R"
+            interpreter = "Rscript"
+        case .lua:
+            source = renderLuaDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.lua"
+            interpreter = "lua"
+        case .octave:
+            source = renderOctaveDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.m"
+            interpreter = "octave-cli"
+        case .cpp:
+            // No interpreter exists, so the driver is a shell script that
+            // compiles a generated program with g++ and runs it (~0.3s per
+            // evaluation, measured). One spawn shape for all five languages.
+            source = CppPersonalizationDriver.renderDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.sh"
+            interpreter = "sh"
+        }
+        return (source, filename, interpreter)
+    }
+
     /// Discovers the support-file helpers the driver should auto-load, in the
     /// shape each language's driver expects: Python module stems for `.python`
     /// (valid identifiers, `__init__` excluded), `.R`/`.r` filenames for `.r`
@@ -319,6 +351,15 @@ enum PersonalizationEvaluator {
             // load_student uses), so a one-function-per-file helper registers
             // under its own name rather than executing as a bare body.
             return entries.filter { (($0 as NSString).pathExtension).lowercased() == "m" }.sorted()
+        case .cpp:
+            // Included by FILE into the driver's single translation unit —
+            // headers first, then sources (the extracted reference solution
+            // arrives as `solution.cpp`), sorted within each group for
+            // deterministic driver bytes.
+            let lowered = entries.map { ($0, (($0 as NSString).pathExtension).lowercased()) }
+            let headers = lowered.filter { $0.1 == "hpp" || $0.1 == "h" }.map(\.0).sorted()
+            let sources = lowered.filter { $0.1 == "cpp" }.map(\.0).sorted()
+            return headers + sources
         }
     }
 
