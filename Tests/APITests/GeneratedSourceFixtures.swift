@@ -76,6 +76,21 @@ enum GeneratedSourceFixtures {
             .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality,
             .figureCount, .astStructure,
         ],
+        // Octave keeps two of Lua's exclusions and drops the rest, each
+        // answered from the language rather than copied (they land on OPPOSITE
+        // answers for figureCount and for regex cellContains):
+        //   * the four data-frame kinds: core Octave has no data-frame type
+        //     (no `table`; the Forge `dataframe` package is not on
+        //     emscripten-forge, so neither runner could load it);
+        //   * `astStructure` is Python-only, as everywhere.
+        // `figureCount` is NOT excluded — Octave plots natively, verified in
+        // both runners (the kernel's plotly toolkit; gnuplot-nox + freefont on
+        // the images) — and `cellContains` keeps `regex: true`, because
+        // Octave's regexp is PCRE.
+        .octave: [
+            .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality,
+            .astStructure,
+        ],
     ]
 
     /// The check kinds `language` is expected to render, in a stable order.

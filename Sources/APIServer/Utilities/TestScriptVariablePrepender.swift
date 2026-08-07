@@ -52,6 +52,11 @@ enum TestScriptVariablePrepender {
                 variables
                 .map { "local \(luaIdentifier($0.name)) = \($0.value.luaLiteral)" }
                 .joined(separator: "\n")
+        case .octave:
+            return
+                variables
+                .map { "\(octaveIdentifier($0.name)) = \($0.value.octaveLiteral);" }
+                .joined(separator: "\n")
         }
     }
 

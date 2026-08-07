@@ -446,6 +446,7 @@ extension WorkerDaemon {
                 try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
                 try writeRRuntimeHelper(in: testSetupDir)
                 try writeLuaRuntimeHelper(in: testSetupDir)
+                try writeOctaveRuntimeHelper(in: testSetupDir)
             }
 
             return JobPreparedWorkspace(

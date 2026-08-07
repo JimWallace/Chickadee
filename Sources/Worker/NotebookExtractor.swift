@@ -214,53 +214,64 @@ func extractNotebooksToCode(
         case .python: ext = "py"
         case .r: ext = "R"
         case .lua: ext = "lua"
+        case .octave: ext = "m"
         }
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
-        let output: String
-        switch language {
-        case .r, .lua:
-            // Flattening concatenates cells, which loses the boundaries a
-            // source-level check (`.cellContains`) needs.  Python keeps them
-            // because `wrapCellForResilientLoad` labels each cell; R and Lua get
-            // the same information from inert marker comments, which
-            // `chickadee_student_cells()` splits on.  The assembly lives in
-            // RunnerCore (`extractR` / `extractLua`, both over one
-            // `extractWithCellMarkers`) — the same implementation the browser
-            // runner calls via wasm, so the two extractors cannot drift.
-            //
-            // One arm rather than two because the languages differ only in
-            // their comment leader, which is the parameter the shared extractor
-            // already takes.
-            let inputCells = cells.map { cell in
-                NotebookCell(
-                    cellType: (cell["cell_type"] as? String) ?? "",
-                    source: NotebookCellSources.cellSource(cell)
-                )
-            }
-            let extracted =
-                language == .lua
-                ? extractLua(cells: inputCells, filename: item.lastPathComponent)
-                : extractR(cells: inputCells, filename: item.lastPathComponent)
-            output = extracted.source
-        case .python:
-            var assembled = "# Generated from \(item.lastPathComponent)\n\n"
-            let extractor = NotebookExtractor()
-            for (index, cell) in cells.enumerated() {
-                guard cell["cell_type"] as? String == "code" else { continue }
-                var src = NotebookCellSources.cellSource(cell)
-                while src.last?.isWhitespace == true { src.removeLast() }
-                guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                let cellSource = extractor.sanitizeCellForModule(src)
-                guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                assembled +=
-                    extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
-            }
-            output = assembled
-        }
+        let output = assembleExtractedSource(
+            language: language, cells: cells, filename: item.lastPathComponent)
 
         try output.write(to: outURL, atomically: true, encoding: .utf8)
     }
     return warnings
+}
+
+/// The per-language assembly of one notebook's cells into a source module.
+private func assembleExtractedSource(
+    language: AssignmentLanguage, cells: [[String: Any]], filename: String
+) -> String {
+    switch language {
+    case .r, .lua, .octave:
+        // Flattening concatenates cells, which loses the boundaries a
+        // source-level check (`.cellContains`) needs.  Python keeps them
+        // because `wrapCellForResilientLoad` labels each cell; the others get
+        // the same information from inert marker comments, which
+        // `chickadee_student_cells()` splits on.  The assembly lives in
+        // RunnerCore (`extractR` / `extractLua` / `extractOctave`, all over one
+        // `extractWithCellMarkers`) — the same implementation the browser
+        // runner calls via wasm, so the two extractors cannot drift.
+        let inputCells = cells.map { cell in
+            NotebookCell(
+                cellType: (cell["cell_type"] as? String) ?? "",
+                source: NotebookCellSources.cellSource(cell)
+            )
+        }
+        // A switch rather than the `== .lua ? … : …` ternary this used to
+        // be: the ternary compiles forever and would have routed Octave to
+        // the R extractor (runbook item 5's shape, one size smaller).
+        let extracted: ExtractedRNotebook
+        switch language {
+        case .lua: extracted = extractLua(cells: inputCells, filename: filename)
+        case .octave: extracted = extractOctave(cells: inputCells, filename: filename)
+        case .r, .python: extracted = extractR(cells: inputCells, filename: filename)
+        }
+        return extracted.source
+    case .python:
+        var assembled = "# Generated from \(filename)\n\n"
+        let extractor = NotebookExtractor()
+        for (index, cell) in cells.enumerated() {
+            guard cell["cell_type"] as? String == "code" else { continue }
+            var src = NotebookCellSources.cellSource(cell)
+            while src.last?.isWhitespace == true { src.removeLast() }
+            guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let cellSource = extractor.sanitizeCellForModule(src)
+            guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+            assembled +=
+                extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
+        }
+        return assembled
+    }
 }

@@ -94,6 +94,23 @@ let runnerExtractLua = JSClosure { args in
 
 JSObject.global.runnerExtractLua = .object(runnerExtractLua)
 
+// Exposed to JS as `globalThis.runnerExtractOctave(cells, filename)` — the
+// third marker-based extraction (`%` comment leader), same shape and rationale
+// as `runnerExtractLua` above.
+let runnerExtractOctave = JSClosure { args in
+    guard let cellsArray = args.first?.object else { return .undefined }
+    let filename = args.count > 1 ? (args[1].string ?? "") : ""
+    let extracted = extractOctave(cells: parseNotebookCells(cellsArray), filename: filename)
+
+    guard let objectConstructor = JSObject.global.Object.function else { return .undefined }
+    let result = objectConstructor.new()
+    result.source = .string(extracted.source)
+    result.codeCellCount = .number(Double(extracted.codeCellCount))
+    return .object(result)
+}
+
+JSObject.global.runnerExtractOctave = .object(runnerExtractOctave)
+
 // Exposed to JS as `globalThis.runnerClassifyScript(name, source)` → the
 // interpreter raw value ("python", "sh", "bash", "ruby", …, "unknown"). The
 // shared "which interpreter?" decision (RunnerCore.classifyScriptInterpreter),

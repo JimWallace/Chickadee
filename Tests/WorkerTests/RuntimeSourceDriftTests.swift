@@ -74,6 +74,13 @@ import Testing
             "`testRuntimeLua` has drifted from Tools/runner-support/test_runtime.lua. Re-sync.")
     }
 
+    @Test func testRuntimeOctaveMatchesCanonical() throws {
+        let canon = try canonical("Tools/runner-support/test_runtime.m")
+        #expect(
+            normalizedCode(testRuntimeOctave, comment: "%") == normalizedCode(canon, comment: "%"),
+            "`testRuntimeOctave` has drifted from Tools/runner-support/test_runtime.m. Re-sync.")
+    }
+
     @Test func sitecustomizePyMatchesCanonical() throws {
         let canon = try canonical("Tools/runner-support/sitecustomize.py")
         #expect(

@@ -62,6 +62,12 @@ the one most likely to need substrate changes rather than just a spec.
 | xeus-lfortran | 0.64.0 | 2 | 31.5 | 6.0.5 |
 | xeus-octave | 0.7.0 | 4 | 66.9 | 6.0.2 |
 
+A caution about the xeus column, learned on the Octave run: it shows the
+**pin's minimum**, not what an env solves. xeus-octave 0.7.0 pins
+`xeus >=6.0.2,<6.1.0a0`, and the built chickadee-octave env solves xeus
+**6.0.5** — the same generation as every other env. Read the actual `depends`
+in the repodata before treating a row here as an ABI risk.
+
 Regenerate with:
 
 ```bash
@@ -974,3 +980,124 @@ script as `unsupported` while the worker beside it graded them perfectly. Build
 it in the same change (`scripts/build-runner-wasm.sh`, then refresh
 `Public/runner-wasm/source.sha`) rather than relying on the lag. Step 7 above
 should say so.
+
+## What the Octave run actually cost
+
+The fourth language, done a second time by this runbook — and the first run
+whose worklist was mostly *reading the answers off tables the audit
+generalised*. Recorded here the way the Lua section is: what held, what the
+measurements corrected, and the quirks no manifest predicted.
+
+### The headline: the invisible surface SHRANK
+
+Lua's run found seven compiler-invisible items and turned four of them into
+`allCases`-driven tables. Octave was the first test of whether that work
+generalised, and it did: capability probing, requirement suggestions, the
+web-upload extension allowlist, submission-ownership routing, the
+student-module hint, and the generated JS constants all picked Octave up the
+day its descriptor literal landed — zero edits, verified rather than assumed
+(the conformance rows were broken once on purpose and watched to fail). What
+was left by hand: the two Docker images, the runtime embed + per-workspace
+injection, and the browser half's checklist. The compiler named 19 sites
+(2 Core, 5 Worker, 12 APIServer) against Lua's 26, the difference being
+exactly the arms that became descriptor fields.
+
+### The scorecard was wrong about Octave, in the useful direction
+
+`LanguageDescriptor`'s survey table predicted Octave needs `OCTAVE_PATH` set
+because its cwd is off the default search path. Measured
+(`octave-cli --eval "path"`, and the wasm kernel agrees): `.` is the FIRST
+entry, so `workingDirectoryIsOnDefaultSearchPath` is true and no variable is
+set. The two-part shape (one judgement + one measured fact) survives on
+Python's evidence; the Octave row was an armchair answer and the table now
+records the correction. Verify the fact, never inherit it — that instruction
+existed before this run and this run is why it stays.
+
+### Both of Lua's opposite answers flipped back, each verified before claiming
+
+- `figureCount` is SUPPORTED. Plotting is core Octave, but neither runner
+  gave it away free: the wasm kernel creates figures through its built-in
+  plotly toolkit (probed: `figure(); plot(1:3)` headless, figures counted),
+  while native `octave-cli` on a bare image errors
+  "no graphics toolkits are available!" — the fix is `gnuplot-nox` +
+  `fonts-freefont-otf` (~7 MB), without which every figureCount validation
+  errors. Both images carry them now.
+- `cellContains` keeps `regex: true`. Octave's `regexp` is PCRE (`\d`,
+  alternation, `{n,m}` probed against octave-cli), so a Python-authored
+  pattern transfers — the exact property whose absence made Lua refuse.
+
+### The trap that earned its billing
+
+`[65, "bc"]` is the char array `"Abc"` — no error, one stderr warning nobody
+reads. The literal rule (`JSONValue.octaveLiteral`): `[...]` only for arrays
+of numeric/boolean scalars (JSON null admitted as `NA`, which occupies its
+slot); ANY string element, mixed kinds, nesting, objects and the empty array
+render as cells. Strings never enter `[...]` because `["ab", "cd"]` is
+`"abcd"` — the same trap in a different mask. Objects are `containers.Map`
+constructor calls (isequal compares Maps by content, insertion-order
+independent — measured), never `struct(...)`, whose cell-expansion rule turns
+`struct("a", {1, 2})` into a 1×2 struct ARRAY. The execution test grades a
+submission returning the cell (passes) against one returning the coerced char
+array (fails) so the rule stays honest.
+
+Equality sits on **isequaln**, not isequal: `NA`/NaN match themselves (an
+authored `[60, null, 20]` case must), and Octave is already type-blind across
+logical/int/double (`isequal(1, true)` is true — measured). Two Chickadee
+rules ride on top: both-empty is equal whatever the container class (`[]` vs
+`{}` vs `""` — the renderer spells an empty JSON array `{}` while students
+compute `[]`), and numeric comparison is shape-blind (`a(:)` vs `b(:)` — the
+renderer emits rows, students' arithmetic produces columns, and R's recycling
+`==` already agreed). `unordered_equal` IS `equal` applied pairwise-greedily —
+the audit-F3 lesson, applied from the start instead of learned again.
+
+### The function-file/script-file collision, resolved by one rule
+
+Octave's traditional model — one function per file, name bound to the
+FILENAME — collides with `load_student()`. The runtime evaluates the
+submission's text behind a `1;` guard instead of sourcing the file: a
+flattened notebook, a hand-written script, and a pure function file all
+register their definitions as command-line functions, the last under its OWN
+name (a function file's internal name wins over its filename, which is what a
+`require_fn("classify")` against a file called `submission.m` needs).
+Verified: `source()` on a pure function file EXECUTES the body ('x'
+undefined); the eval-with-guard defines it. Functions defined before a
+mid-file error survive (R's loader also keeps later ones — a smaller promise,
+stated in the runtime's header). Extracted notebooks stay clean cell text —
+the reader prepends the guard, so `cellContains` sees exactly the cells.
+
+### The per-kernel quirk budget: spent on nothing
+
+Budget one quirk per kernel, said this document, and Octave's turned out to
+be a pleasant zero: the standard xeus-6 boot sequence worked unmodified
+(`needsPythonRuntime: false` — the env's Python payload is plotly's baggage,
+never executed), no boot patch, no expression-yield, no stderr trap
+(`fprintf(2, ...)` reaches the kernel stream directly), and `setenv` works so
+the seed needs no overlay. A bare unmasked `exit(7)` does not even kill the
+kernel — it raises "exit exception" internally ~5 s later and the session
+survives — but masking is still mandatory because that path yields no usable
+status. The mask is the third of its kind (R's `quit()`, Lua's `os.exit`);
+`error("chickadee:exit", "%d", code)` carries the status on the error
+IDENTIFIER, which a student's own `error("text")` (empty identifier) cannot
+collide with. Isolation came almost free: the harness function's workspace
+isolates each script's variables, leaving only `global`s to clear per run.
+
+### Costs, measured
+
+| | Octave | Lua | R | Python |
+|---|---|---|---|---|
+| env on disk | **142 MB** | 19 MB | 74 MB | 85 MB |
+| kernel boot (Chromium, local disk) | **5–12 s** | 2.5–3.1 s | ~4.0 s | ~5.2 s |
+| slowest smoke script | **89 ms** | 27 ms | seconds (attach) | ~1.1 s |
+| per-statement floor | **none** (20 stmts = 1 ms) | none | ~180 ms/stmt | ~5 ms/cell |
+| packages available | **none** | none | 51 | 48 |
+
+The largest env of the four (the `octave` conda package alone is ~64 MB
+compressed) and the slowest boot, in proportion — single runs ranged 5.0 s
+(warm) to 12.1 s (cold-ish); treat the spread as the noise floor. "None" for
+packages is again the correct answer: emscripten-forge carries no Octave
+Forge packages, `pkg load statistics` fails cleanly ("package statistics is
+not installed"), and the on-demand loop provably terminates with nothing to
+install. The one native-side surprise: Ubuntu ships no CLI-only package —
+`octave` hard-depends on the Qt5 stack even with `--no-install-recommends`,
+so the interpreter costs ~338 MB installed on both images. Reported, priced,
+accepted.

@@ -1,7 +1,8 @@
 name: Re-vendor xeus kernels
 
 # Rebuilds the vendored JupyterLite bundle and its xeus kernel environments
-# (chickadee-python, chickadee-r, chickadee-lua) and commits the result.
+# (chickadee-python, chickadee-r, chickadee-lua, chickadee-octave) and commits
+# the result.
 #
 # WHY THIS EXISTS. The kernels are built by jupyterlite-xeus, which solves each
 # conda environment at build time — micromamba plus network to repo.prefix.dev.

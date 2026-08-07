@@ -83,6 +83,7 @@ jobs:
           - { language: r, mode: grading }
           - { language: python, mode: grading }
           - { language: lua, mode: grading }
+          - { language: octave, mode: grading }
           # The pattern-family editor's auto-compute, which moved onto the same
           # kernel in #1271 §A2. Its one new mechanism — rebuilding
           # runPythonAsync's last-expression return value over a protocol that

@@ -69,7 +69,10 @@ import Testing
             }
         }
         #expect(
-            exempted.sorted() == ["lua/introspectableSidecar", "r/introspectableSidecar"],
+            exempted.sorted() == [
+                "lua/introspectableSidecar", "octave/introspectableSidecar",
+                "r/introspectableSidecar",
+            ],
             "the exemption list changed: \(exempted.sorted())")
     }
 

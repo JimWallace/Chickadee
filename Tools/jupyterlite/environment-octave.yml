@@ -1,0 +1,52 @@
+# Octave editor/grading kernel (xoctave / xeus-octave), built into
+# Public/jupyterlite by scripts/build-jupyterlite.sh.
+#
+# SEPARATE from the other three env files for the same reason they are separate
+# from each other: jupyterlite-xeus packs one `kernel_packages` payload per env
+# and a kernel fetches its whole env at boot, so folding Octave into any of them
+# would make every boot of that language pay for the largest env of the four.
+#
+# THE PACKAGE SET IS THE KERNEL AND NOTHING ELSE. xeus-octave's own closure is
+# already the biggest vendored payload — the `octave` package alone is ~64 MB
+# compressed (the interpreter plus its bundled function files), 142 MB unpacked
+# on disk against 19 MB for Lua, 74 MB for R and 85 MB for Python.
+# emscripten-forge-4x carries no Octave Forge packages, so as with Lua there is
+# nothing else to add: the module index derived from these tarballs has an
+# empty `moduleOwners`, on-demand loading correctly resolves nothing, and a
+# student's `pkg load statistics` fails with the ordinary "package statistics
+# is not installed" (probed in a real kernel — it errors cleanly, no hang).
+#
+# Note the closure includes `plotly` plus a ~6 MB Python payload it drags in:
+# xeus-octave's notebook graphics toolkit renders plots by emitting Plotly
+# JSON. The Python is never executed by the kernel (the same situation as the
+# `python` package in chickadee-lua, which arrives via jupyterlab_widgets) —
+# `needsPythonRuntime` stays false in the grading worker's kernel spec.
+#
+# xeus ABI: xeus-octave 0.7.0 pins `xeus >=6.0.2,<6.1.0a0`, and the env SOLVES
+# xeus 6.0.5 — the same generation the other three envs are on and the one
+# Public/xeus-kernel-shared.js mirrors. The "6.0.2" in the kernel-survey table
+# of docs/adding-a-xeus-kernel.md is the pin's minimum, not what ships. Probed
+# on a real Chromium: the standard xeus-6 boot sequence works unmodified, with
+# no per-kernel patch (Python needed pyodide-http forced off; R needed the
+# expression-yield workaround; Octave needed nothing at boot).
+#
+# COST, measured in Tools/browser-grading-smoke's harness (Chromium, local
+# disk, single runs — read as a trend, not figures):
+#
+# 1. Boot, paid by everyone on every Octave notebook open and every
+#    browser-graded Octave submission: ~12s. The slowest of the four kernels,
+#    in proportion to the payload.
+#
+# 2. Per-statement cost: NONE. One statement 0 ms, 20 top-level statements
+#    1 ms, one expression summing 8M elements 112 ms — wall time tracks the
+#    work. Neither xeus-r's ~180 ms-per-expression yield nor xeus-python's
+#    ~5 ms cell floor applies. The slowest probed script ran in under 30 ms.
+#
+# Channel: emscripten-forge-4x. The older `emscripten-forge-dev` alias serves
+# the 3x (emscripten 3.x ABI) channel, frozen since 2026-04-09.
+name: chickadee-octave
+channels:
+  - https://repo.prefix.dev/emscripten-forge-4x
+  - https://repo.prefix.dev/conda-forge
+dependencies:
+  - xeus-octave

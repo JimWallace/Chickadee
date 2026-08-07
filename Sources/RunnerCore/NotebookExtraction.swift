@@ -125,6 +125,16 @@ public func extractLua(cells: [NotebookCell], filename: String) -> ExtractedRNot
     extractWithCellMarkers(cells: cells, filename: filename, comment: "--")
 }
 
+/// Extract Octave from a notebook's cells — the third marker-based extractor,
+/// `%` being Octave's comment leader. The flattened file is NOT given a `1;`
+/// script guard here: it is only ever executed through the grading runtime's
+/// `chickadee.load_student()`, which evaluates the text with the guard
+/// prepended, so the file on disk stays exactly the cells a `cellContains`
+/// check reads.
+public func extractOctave(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    extractWithCellMarkers(cells: cells, filename: filename, comment: "%")
+}
+
 /// The shared body of the marker-based extractors. Emits each non-empty code
 /// cell verbatim (trailing whitespace trimmed) behind a boundary comment whose
 /// number is the cell's 1-based position in the ORIGINAL notebook — a markdown
@@ -170,6 +180,12 @@ public func rCellBoundaryMarker(cellNumber: Int) -> String {
 /// pins the two against each other, as the R pair is pinned.
 public func luaCellBoundaryMarker(cellNumber: Int) -> String {
     cellBoundaryMarker(cellNumber: cellNumber, comment: "--")
+}
+
+/// The Octave counterpart, split back out by `chickadee.student_cells()` in
+/// `Tools/runner-support/test_runtime.m`.
+public func octaveCellBoundaryMarker(cellNumber: Int) -> String {
+    cellBoundaryMarker(cellNumber: cellNumber, comment: "%")
 }
 
 /// Regex the runtime uses to recognize a marker line. Kept beside the writer

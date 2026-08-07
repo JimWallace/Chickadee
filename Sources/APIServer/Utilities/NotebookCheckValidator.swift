@@ -32,63 +32,7 @@ func validateNotebookChecks(
 ) throws {
     var seenCheckIDs: Set<String> = []
     for check in checks {
-        // Reject a kind with no renderer in this assignment's language at save
-        // time. Rendering Python for an R assignment would emit a `.py` script
-        // the R suite can never run, and the failure would surface as a
-        // confusing grading error rather than an authoring mistake.
-        // Exhaustive so a future language cannot silently skip kind-support
-        // validation (docs/language-handling-review.md §4).
-        switch language {
-        case .python:
-            break
-        case .r:
-            if !notebookCheckKindSupportsR(check.kind) {
-                let supported = NotebookCheckKind.allCases
-                    .filter(notebookCheckKindSupportsR)
-                    .map(\.rawValue)
-                    .sorted()
-                    .joined(separator: ", ")
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for R "
-                        + "assignments yet — supported kinds are: \(supported). "
-                        + "Express this check as a hand-written .R test for now."
-                )
-            }
-        case .lua:
-            if !notebookCheckKindSupportsLua(check.kind) {
-                let supported = NotebookCheckKind.allCases
-                    .filter(notebookCheckKindSupportsLua)
-                    .map(\.rawValue)
-                    .sorted()
-                    .joined(separator: ", ")
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for Lua "
-                        + "assignments — supported kinds are: \(supported). "
-                        + "Express this check as a hand-written .lua test for now."
-                )
-            }
-            // Regex cell-matching is rejected here rather than approximated in
-            // the renderer. Lua patterns are a different language from PCRE —
-            // no alternation, no `{n,m}`, `%d` for `\d` — so a pattern authored
-            // against the Python or R renderer would not error under Lua, it
-            // would quietly match the wrong thing and award marks on that
-            // basis. Telling the instructor at save time is the only point at
-            // which this is fixable.
-            if check.kind == .cellContains, check.regex == true {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (cell_contains) uses regex matching, which is not "
-                        + "available for Lua assignments: Lua patterns are not compatible with the "
-                        + "regular expressions the Python and R renderers use. Turn regex off to match "
-                        + "the text literally."
-                )
-            }
-        }
+        try validateKindSupport(check, language: language)
         guard isValidIdentifierFragment(check.id) else {
             throw Abort(
                 .unprocessableEntity,
@@ -148,4 +92,72 @@ func validateNotebookChecks(
             }
         }
     }
+}
+
+/// Reject a kind with no renderer in this assignment's language at save time.
+/// Rendering Python for an R assignment would emit a `.py` script the R suite
+/// can never run, and the failure would surface as a confusing grading error
+/// rather than an authoring mistake. Exhaustive so a future language cannot
+/// silently skip kind-support validation (docs/language-handling-review.md §4).
+private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLanguage) throws {
+    switch language {
+    case .python:
+        break
+    case .r:
+        if !notebookCheckKindSupportsR(check.kind) {
+            throw unsupportedKind(
+                check, language: "R", supports: notebookCheckKindSupportsR,
+                handWrittenExtension: ".R")
+        }
+    case .lua:
+        if !notebookCheckKindSupportsLua(check.kind) {
+            throw unsupportedKind(
+                check, language: "Lua", supports: notebookCheckKindSupportsLua,
+                handWrittenExtension: ".lua")
+        }
+        // Regex cell-matching is rejected here rather than approximated in
+        // the renderer. Lua patterns are a different language from PCRE —
+        // no alternation, no `{n,m}`, `%d` for `\d` — so a pattern authored
+        // against the Python or R renderer would not error under Lua, it
+        // would quietly match the wrong thing and award marks on that
+        // basis. Telling the instructor at save time is the only point at
+        // which this is fixable.
+        if check.kind == .cellContains, check.regex == true {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Notebook check '\(check.id)' (cell_contains) uses regex matching, which is not "
+                    + "available for Lua assignments: Lua patterns are not compatible with the "
+                    + "regular expressions the Python and R renderers use. Turn regex off to match "
+                    + "the text literally."
+            )
+        }
+    case .octave:
+        if !notebookCheckKindSupportsOctave(check.kind) {
+            throw unsupportedKind(
+                check, language: "Octave", supports: notebookCheckKindSupportsOctave,
+                handWrittenExtension: ".m")
+        }
+    // No `regex: true` refusal here, deliberately: Octave's regexp is
+    // PCRE, so a pattern authored against the Python or R renderer
+    // transfers — verified against octave-cli before claiming it.
+    }
+}
+
+private func unsupportedKind(
+    _ check: NotebookCheck, language: String,
+    supports: (NotebookCheckKind) -> Bool, handWrittenExtension: String
+) -> Abort {
+    let supported = NotebookCheckKind.allCases
+        .filter(supports)
+        .map(\.rawValue)
+        .sorted()
+        .joined(separator: ", ")
+    return Abort(
+        .unprocessableEntity,
+        reason:
+            "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for "
+            + "\(language) assignments — supported kinds are: \(supported). "
+            + "Express this check as a hand-written \(handWrittenExtension) test for now."
+    )
 }

@@ -200,12 +200,12 @@ jobs:
         # swift-ci rebuild — see mirror-images.yml), degrading to the old
         # per-job install instead of failing the job.
         run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null; then
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 octave && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
@@ -285,12 +285,12 @@ jobs:
         # swift-ci rebuild — see mirror-images.yml), degrading to the old
         # per-job install instead of failing the job.
         run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null; then
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 octave && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
@@ -370,11 +370,11 @@ jobs:
         # swift-ci image; the apt-get path is the stale-image fallback (see
         # the api-tests job note).
         run: |
-          if command -v file >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null; then
+          if command -v file >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
-          apt-get update -qq && apt-get install -y --no-install-recommends file python3 lua5.4
+          apt-get update -qq && apt-get install -y --no-install-recommends file python3 lua5.4 octave
 
       - name: Run WorkerTests
         # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift

@@ -47,9 +47,9 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# Kernels via jupyterlite-xeus: xpython (Python), xr (R) and xlua (Lua), each
-# from its OWN emscripten-forge env —
-# Tools/jupyterlite/environment-{python,r,lua}.yml.
+# Kernels via jupyterlite-xeus: xpython (Python), xr (R), xlua (Lua) and
+# xoctave (Octave), each from its OWN emscripten-forge env —
+# Tools/jupyterlite/environment-{python,r,lua,octave}.yml.
 #
 # The envs are separate on purpose. jupyterlite-xeus packs one
 # `kernel_packages` payload per env and a kernel fetches its whole env at boot,
@@ -77,7 +77,7 @@ fi
 #
 # NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
 # must be passed as a bare filename, not the absolute path it was copied to.
-XEUS_ENVS=(environment-python.yml environment-r.yml environment-lua.yml)
+XEUS_ENVS=(environment-python.yml environment-r.yml environment-lua.yml environment-octave.yml)
 XEUS_ENVS_PRESENT=()
 for env_file in "${XEUS_ENVS[@]}"; do
   [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
