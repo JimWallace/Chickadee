@@ -74,6 +74,73 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
     return dict["language"] as? String
 }
 
+/// Sets the test setup's recorded `language` to `language` when it differs.
+/// Returns the effective language.
+///
+/// The recorded field is normally a *memo* of what resolution derived from the
+/// content (`manifestWithRederivedLanguage`), which is why nothing else writes
+/// it directly. An upload-only language is the case that memo cannot reach: C++
+/// has no editor kernel, so no notebook kernelspec implies it, and its generated
+/// tests are extension-free `.sh` wrappers by design — leaving a declaration as
+/// the only signal there is. Hence this setter, and hence its two guards.
+///
+/// Refuses an upload-only language while the setup is still in notebook mode:
+/// the mirror of `setManifestSubmissionMode`'s C++ guard, so the incoherent
+/// combination cannot be authored from either direction.
+///
+/// Refuses any change once generated scripts exist. A language change rewrites
+/// every generated filename (the extension is part of the name), and only the
+/// pattern-family application path knows how to re-render and clean up the old
+/// side. Rather than half-perform that here, the change is confined to a suite
+/// with nothing generated in it yet — which is where an author declares the
+/// language anyway.
+func setManifestLanguage(
+    setup: APITestSetup, to language: String, on db: any Database
+) async throws -> String {
+    guard let parsed = AssignmentLanguage(rawValue: language) else {
+        throw AppError.badRequest(reason: unknownLanguageMessage(language))
+    }
+    let current = currentManifestLanguage(setup.manifest)
+    guard current != language else { return language }
+    if case .uploadOnly = parsed.editorSupport,
+        currentManifestSubmissionMode(setup.manifest) != SubmissionMode.uploadOnly.rawValue
+    {
+        throw AppError.badRequest(reason: cppRequiresUploadOnlyMessage)
+    }
+    if manifestHasGeneratedScripts(setup.manifest) {
+        throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
+    }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        dict["language"] = language
+    }
+    return language
+}
+
+/// True when the manifest carries any generated test — a pattern-family case or
+/// a notebook check. Read off `generatedBy` rather than the family/check lists
+/// so a family that has produced no enabled case doesn't block a change that
+/// would rewrite nothing.
+func manifestHasGeneratedScripts(_ manifest: String?) -> Bool {
+    guard let manifest,
+        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any],
+        let suites = dict["testSuites"] as? [[String: Any]]
+    else { return false }
+    return suites.contains { $0["generatedBy"] != nil }
+}
+
+/// Names the languages rather than listing an enum case, so the message stays
+/// correct when a sixth language is added.
+func unknownLanguageMessage(_ given: String) -> String {
+    let known = AssignmentLanguage.allCases.map(\.rawValue).sorted().joined(separator: ", ")
+    return "Unknown assignment language \"\(given)\". Known languages: \(known)."
+}
+
+/// Shared by the MCP tool and any future surface that declares the language.
+let languageChangeAfterGenerationMessage =
+    "This assignment already has generated tests, whose filenames carry the current language's "
+    + "extension. Declare the language before authoring pattern families or notebook checks, or "
+    + "delete the generated families/checks first."
+
 /// Reads the `submissionMode` field straight from a manifest JSON string,
 /// defaulting to "notebook" (TestProperties' own default) when the field is
 /// absent or the manifest can't be parsed.

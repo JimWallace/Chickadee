@@ -240,6 +240,12 @@ enum MCPServerInstructions {
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
+        set_submission_mode (notebook editor vs upload-only hand-in), \
+        set_assignment_language (declare python/r/lua/octave/cpp — normally derived from the \
+        notebook kernel or a graded script's extension, but REQUIRED for cpp, which has neither an \
+        in-browser kernel nor a language-bearing script extension; a cpp assignment must be \
+        uploadOnly, and the language must be declared before any pattern family or notebook check \
+        is authored), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
         timeLimitSeconds override, 1–600s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
@@ -303,7 +309,8 @@ enum MCPServerInstructions {
         you can see which check failed and why before fixing the suite or solution. It is \
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
-        Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, set_dataset, \
+        Metadata-only edits (update_assignment, set_grading_mode, set_submission_mode, \
+        set_assignment_language, set_time_limit, set_dataset, \
         set_minimum_runner_version, update_achievements, the section-organization tools) never trigger \
         a regrade or a close. \
         update_global_inputs and update_section_variables re-inline the shared inputs into the \
