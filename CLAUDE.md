@@ -94,15 +94,16 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
-**Browser grading has three substrates, routed per script (#1271).**
+**Browser grading has four substrates, routed per script (#1271).**
 `RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to the
 vendored **xeus-python** kernel (`/python-grading-worker.js`), a `.R` test to
-**xeus-r** (`/r-grading-worker.js`), and a `.lua` test to **xeus-lua**
-(`/lua-grading-worker.js`), choosing with the same
+**xeus-r** (`/r-grading-worker.js`), a `.lua` test to **xeus-lua**
+(`/lua-grading-worker.js`), and a `.m` test to **xeus-octave**
+(`/octave-grading-worker.js`), choosing with the same
 `RunnerCore.classifyScript` the native worker uses to pick a subprocess command
 — and booting only the runtimes an assignment actually contains, so an R lab
 never fetches the Python env. `RunnerCore` still owns the suite loop and output
-interpretation for all three; a substrate supplies only "run this script, report
+interpretation for all four; a substrate supplies only "run this script, report
 its exit code and streams".
 
 xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
@@ -121,7 +122,7 @@ one in a browser in CI. See `docs/r-support.md`.
 `chickadee-lua` (19 MB, boot ~2.5s) grades `.lua` scripts in the browser and the
 native worker injects `Tools/runner-support/test_runtime.lua` beside the Python
 and R helpers, so one file serves `lua script.lua` and the kernel.
-`AssignmentLanguage` is now `.python | .r | .lua`, with a Lua literal renderer,
+`AssignmentLanguage` gained `.lua`, with a Lua literal renderer,
 a pattern-family renderer covering all eight kinds, a notebook-check renderer
 covering four of ten, and a personalization driver. The six unsupported check
 kinds are refused at save time rather than absent: the four data-frame kinds
@@ -139,6 +140,35 @@ directly (no `evaluate` calling-handler trap). Budget one quirk per kernel, not
 the same one. Measurements and the full postmortem:
 `docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost".
 
+**Octave is the fourth assignment language.** `AssignmentLanguage` is now
+`.python | .r | .lua | .octave`: `.m` scripts grade natively (`octave-cli`;
+the `octave` package plus `gnuplot-nox` + `fonts-freefont-otf` for headless
+figures are on both images) and in the browser via the vendored `xeus-octave`
+kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.5,
+~5–12 s boot, no per-statement cost). All eight pattern kinds render and
+execute; notebook checks cover seven of ten — `figureCount` and regex
+`cellContains` are SUPPORTED (both of Lua's opposite answers, re-measured:
+plotting is core Octave and Octave's regexp is PCRE), while the four
+data-frame kinds (no data-frame type in core Octave, no packages on the
+channel) and `astStructure` are refused at save time. The literal rule is the
+language's one silent trap: `[65, "bc"]` is the char array `"Abc"`, so
+`JSONValue.octaveLiteral` renders arrays as `[...]` only when every element
+is a numeric/boolean scalar (null → `NA`) and everything else — any string,
+mixed kinds, nesting, objects, empty — as cells, with objects as
+`containers.Map` calls. Equality is `isequaln`-based (NA/NaN match
+themselves; Octave is already type-blind across logical/int/double) plus a
+both-empty rule and shape-blind numeric comparison. `test_runtime.m` loads
+submissions by evaluating their text behind a `1;` guard, so notebooks,
+scripts and one-function-per-file submissions all register their definitions
+(the last under its own name, not its filename). The kernel needed NO
+substrate patch (the per-kernel quirk budget went unspent): `fprintf(2,…)`
+reaches the stderr stream, `setenv` works, and the `exit`/`quit` masks carry
+the status on the `chickadee:exit` error identifier. The scorecard's
+prediction that Octave needs `OCTAVE_PATH` was measured wrong — `.` is first
+on the default load path in both runners — and the LanguageDescriptor table
+records the correction. Postmortem: `docs/adding-a-xeus-kernel.md` §"What
+the Octave run actually cost".
+
 **Every worker the notebook page spawns must be in
 `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
 cross-origin isolated on Chromium/Firefox, and a worker created by a
@@ -149,20 +179,20 @@ none of the speed. The allowlist is per-path, so "same directory, same
 middleware" proves nothing about a worker not on it; that reasoning is how #1274
 shipped browser-graded R that no isolated engine ever ran.
 `IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
-and fails on drift in either direction. It currently lists the three grading
-workers (Python, R, Lua) plus the freeze watchdog.
+and fails on drift in either direction. It currently lists the four grading
+workers (Python, R, Lua, Octave) plus the freeze watchdog.
 
-**Assignments are Python, R *or* Lua; language is first-class (`AssignmentLanguage`).**
-`AssignmentLanguage` (`.python | .r | .lua`, Core) is resolved from the manifest
-(any `.R` graded script → `.r`, any `.lua` → `.lua`; else a notebook kernel in
-that language's `notebookKernelNames` — `{ir,r,webr,xr}` for R, `{xlua,lua}` for
-Lua; else `.python`) and every language-specific path dispatches through it — literal
+**Assignments are Python, R, Lua *or* Octave; language is first-class (`AssignmentLanguage`).**
+`AssignmentLanguage` (`.python | .r | .lua | .octave`, Core) is resolved from the manifest
+(any `.R` graded script → `.r`, any `.lua` → `.lua`, any `.m` → `.octave`; else
+a notebook kernel in that language's `notebookKernelNames` — `{ir,r,webr,xr}`
+for R, `{xlua,lua}` for Lua, `{xoctave,octave}` for Octave; else `.python`) and every language-specific path dispatches through it — literal
 rendering (`pythonLiteral`/`rLiteral`), the per-student inputs file
 (`_ck_inputs.py`/`_ck_inputs.R` via `renderInputsFile`), and the expression
 driver. Personalization is evaluated **per-language on the server**:
-`PersonalizationEvaluator` spawns `python3` or `Rscript` (r-base is on the
-server image), preserving the property that expression source + the solution
-never reach the runner. Base R has no bignum, so the seed is a deterministic
+`PersonalizationEvaluator` spawns `python3`, `Rscript`, `lua` or `octave-cli`
+(all on the server image), preserving the property that expression source +
+the solution never reach the runner. Base R has no bignum, so the seed is a deterministic
 Horner-fold reduction (`RPersonalizationRuntime.chickadeeSeedRSource`, shared by
 the server driver and the grading runtime so they never drift). The default is
 `.python` at every call site, so existing Python bytes are byte-for-byte
@@ -527,9 +557,10 @@ scripts/build-jupyterlite.sh
 updating kernel versions or config.
 
 **Every vendored kernel is a xeus kernel, one env each.**
-`Tools/jupyterlite/environment-python.yml`, `environment-r.yml` and
-`environment-lua.yml` declare one emscripten-forge environment each, yielding
-`xpython` (Python, xeus-python), `xr` (R, xeus-r) and `xlua` (Lua, xeus-lua);
+`Tools/jupyterlite/environment-python.yml`, `environment-r.yml`,
+`environment-lua.yml` and `environment-octave.yml` declare one
+emscripten-forge environment each, yielding `xpython` (Python, xeus-python),
+`xr` (R, xeus-r), `xlua` (Lua, xeus-lua) and `xoctave` (Octave, xeus-octave);
 `jupyter lite build` compiles them all into
 `Public/jupyterlite/xeus/`. They are **separate envs on purpose** — a kernel
 fetches its whole env at boot, so a shared env makes every Python boot pull
@@ -1156,6 +1187,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
 - `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
 - `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
+- `docs/cpp-assignment-language-decision.md` — why C++ stays on the shell-script + makefile path rather than becoming an `AssignmentLanguage`: the one-file-one-command invocation mismatch, the typed-literal impossibility, and the Clang-REPL-vs-course-toolchain pedagogy problem; the priced revisit condition
 - `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 26 compiler-named sites measured on the Lua run, the **seven** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)

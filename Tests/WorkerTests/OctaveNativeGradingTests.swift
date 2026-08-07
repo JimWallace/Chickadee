@@ -176,6 +176,43 @@ import Testing
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }
 
+    /// The extractor→runtime round trip: `extractOctave` writes the marker
+    /// lines and `chickadee.student_cells()` splits on them — executed under
+    /// the real interpreter, because the two live in different files (Swift
+    /// and test_runtime.m) with only this to hold them together.
+    @Test func extractedNotebookCellsRoundTripThroughStudentCells() async throws {
+        guard Self.octaveAvailable else { return }
+
+        let extracted = extractOctave(
+            cells: [
+                NotebookCell(cellType: "code", source: "threshold = 10;"),
+                NotebookCell(cellType: "markdown", source: "notes"),
+                NotebookCell(
+                    cellType: "code",
+                    source: "function r = classify(x)\n  r = x > 0;\nend"),
+            ],
+            filename: "lab.ipynb")
+
+        let script = """
+            chickadee = test_runtime();
+            cells = chickadee.student_cells();
+            if numel(cells) != 2
+                chickadee.failed(sprintf("expected 2 cells, got %d", numel(cells)));
+            end
+            if isempty(strfind(cells{1}, "threshold"))
+                chickadee.failed("cell 1 lost its source");
+            end
+            chickadee.passed("cells round-tripped");
+            """
+        let dir = try Self.makeWorkspace(
+            submission: extracted.source, scripts: ["publictest_cells.m": script])
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let outcomes = await Self.runSuites([Self.item("publictest_cells.m")], in: dir)
+        let outcome = try #require(outcomes.first)
+        #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
+    }
+
     /// The per-student inputs file, written and read on the native path — with
     /// a null inside a collection, the case that needs `NA` to occupy its slot.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
