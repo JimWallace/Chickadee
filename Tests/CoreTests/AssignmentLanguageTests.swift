@@ -80,4 +80,70 @@ import Testing
         )
         #expect(AssignmentLanguage.rederive(manifest: m, notebookData: nil) == .python)
     }
+
+    // MARK: - Lua resolution (the F1 regression: resolve/rederive were R-only,
+    // so a real Lua assignment resolved to Python everywhere server-side).
+
+    @Test func luaScriptImpliesLua() throws {
+        let m = try manifest(
+            #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.lua"}],"timeLimitSeconds":10}"#
+        )
+        #expect(AssignmentLanguage.resolve(manifest: m) == .lua)
+    }
+
+    @Test func luaKernelFallbackWhenNoScripts() throws {
+        let m = try manifest(
+            #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+        )
+        #expect(AssignmentLanguage.resolve(manifest: m, notebookKernelName: "xlua") == .lua)
+        #expect(AssignmentLanguage.resolve(manifest: m, notebookLanguageInfoName: "lua") == .lua)
+    }
+
+    @Test func rederive_luaNotebookKernelWinsOverRecordedPython() throws {
+        let m = try manifest(
+            #"{"schemaVersion":1,"language":"python","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+        )
+        #expect(AssignmentLanguage.rederive(manifest: m, notebookData: ipynb(kernel: "xlua")) == .lua)
+    }
+
+    @Test func rederive_luaScriptWinsOverRecordedPython() throws {
+        let m = try manifest(
+            #"{"schemaVersion":1,"language":"python","requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.lua"}],"timeLimitSeconds":10}"#
+        )
+        #expect(AssignmentLanguage.rederive(manifest: m, notebookData: ipynb(kernel: "python")) == .lua)
+    }
+
+    // MARK: - allCases-driven: the guard that would have caught F1. Every
+    // language must be resolvable from its own graded script and its own
+    // notebook kernel — no language may silently fall through to Python.
+
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyLanguageResolvesFromItsOwnGradedScript(_ language: AssignmentLanguage) throws {
+        let script = "publictest_x.\(language.generatedScriptExtension)"
+        let m = try manifest(
+            #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"\#(script)"}],"timeLimitSeconds":10}"#
+        )
+        #expect(
+            AssignmentLanguage.resolve(manifest: m) == language,
+            "a \(script) graded script must resolve to \(language), not fall through to Python")
+    }
+
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyNonDefaultLanguageResolvesFromItsOwnKernel(_ language: AssignmentLanguage) throws {
+        // Python's kernel set is deliberately empty (it is the default, reached
+        // by falling through), so only the positively-detected languages apply.
+        guard language != .default else { return }
+        let m = try manifest(
+            #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+        )
+        for kernel in language.notebookKernelNames {
+            #expect(
+                AssignmentLanguage.resolve(manifest: m, notebookKernelName: kernel) == language,
+                "kernel `\(kernel)` must resolve to \(language)")
+            #expect(
+                AssignmentLanguage.rederive(manifest: m, notebookData: ipynb(kernel: kernel))
+                    == language,
+                "rederive of a `\(kernel)` notebook must be \(language)")
+        }
+    }
 }

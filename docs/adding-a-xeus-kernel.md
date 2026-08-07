@@ -360,7 +360,7 @@ estimated. Two notes on why your split may differ:
   sites were all in `Worker`. A language whose extraction is not pre-landed
   pays for it here instead.
 
-**The compiler cannot see five more**, listed under "What the compiler will not
+**The compiler cannot see seven more**, listed under "What the compiler will not
 tell you" below — those are the ones that have historically shipped broken.
 
 ### The 26 the compiler names
@@ -495,13 +495,27 @@ types and so pointed at nothing.
    Find them by searching for the *default* rather than for the language:
 
    ```bash
-   grep -rn "? \.r : \.python\|== \.python ?\|isRNotebook" Sources/
+   grep -rn "? \.r : \.python\|== \.python ?\|isRNotebook\|hasRScript" Sources/
    ```
 
    The fix is always the same: resolve positively with
-   `AssignmentLanguage.fromNotebookMetadata`, which returns the language it
-   recognised or nil for "nothing recognisable, use the default" — the
+   `AssignmentLanguage.fromNotebookMetadata` (or the shared
+   `gradedScriptLanguage(in:)` for the suite half), which returns the language
+   it recognised or nil for "nothing recognisable, use the default" — the
    distinction the ternary cannot express.
+
+   **This bit twice, and the second instance shipped in #1282 and was caught
+   only by the follow-up audit.** `AssignmentLanguage.resolve` detected `.R`
+   scripts and `rKernelNames` by hand, and `rederive` ended in the literal
+   `isRNotebookMetadata(metadata) ? .r : .python` above — so every real Lua
+   assignment resolved to Python at all 18 `resolve(for:)` sites (families and
+   checks rendered as `.py`, the worker wrote `_ck_inputs.py`), while every Lua
+   *test* passed because it injected `.lua` explicitly. The lesson is not "add
+   another entry to this list" — it is that the grep above must actually be
+   **run**, over the hub file included, because the hub is exactly where a
+   sniff hides in plain sight. Both are now `gradedScriptLanguage(in:)` +
+   `fromNotebookMetadata`, and `AssignmentLanguageTests` has an
+   `allCases`-driven row per language that fails if any one falls through.
 
    The same shape appears wherever a language is *stored* rather than switched
    on. `KernelEnvironments` had one property per language plus a subscript, and
