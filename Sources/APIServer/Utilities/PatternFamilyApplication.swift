@@ -655,6 +655,11 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         testSuites: newConfigured,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        // Preserve the submission mode and required-files list across the
+        // family/suite rebuild, like `language` below — a fresh-dict rebuild
+        // loses anything not threaded through.
+        submissionMode: props.submissionMode.rawValue,
+        requiredFiles: props.requiredFiles,
         timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: nextFamilies,

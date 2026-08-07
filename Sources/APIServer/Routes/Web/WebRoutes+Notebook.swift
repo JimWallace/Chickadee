@@ -56,6 +56,21 @@ extension WebRoutes {
         if fileKind == .solution, !isStaff {
             throw Abort(.forbidden, reason: "The solution is only available to course staff.")
         }
+        // An upload-only assignment has no notebook workflow: send students to
+        // the upload form instead of scaffolding an empty editor (the vanity
+        // URL lands on this page, so this redirect is what makes a shared
+        // assignment link work for upload labs).  The mirror of `submitForm`'s
+        // browser-mode redirect in the other direction.  Staff keep the page —
+        // the workbench hosts its authoring panes in it — and past-submission
+        // views (`?submissionID=`) stay reachable so an uploaded `.ipynb` can
+        // still be reviewed read-only.
+        if !isStaff,
+            (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let manifest = decodeManifest(from: Data(setup.manifest.utf8)),
+            manifest.submissionMode == .uploadOnly
+        {
+            return req.redirect(to: "/testsetups/\(setupID)/submit")
+        }
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
@@ -531,14 +546,18 @@ extension WebRoutes {
         return !NotebookSubstitution.placeholderNames(in: data).isEmpty
     }
 
-    /// Decodes the manifest's `gradingMode` for the notebook template;
-    /// falls back to `.browser` whenever the manifest can't be decoded.
+    /// Decodes the manifest's *effective* grading mode for the notebook
+    /// template — the value `notebook.js` / `browser-runner.js` use to decide
+    /// whether to grade in-page.  Effective, not stored: an upload-mode
+    /// assignment must never boot the browser runner, whatever an imported
+    /// manifest claims.  Falls back to `.browser` whenever the manifest can't
+    /// be decoded.
     private func decodeManifestGradingMode(_ setup: APITestSetup) -> String {
         let data = Data(setup.manifest.utf8)
         guard let manifest = decodeManifest(from: data) else {
             return GradingMode.browser.rawValue
         }
-        return manifest.gradingMode.rawValue
+        return manifest.effectiveGradingMode.rawValue
     }
 
     // MARK: - GET /testsetups/:id/notebook/source

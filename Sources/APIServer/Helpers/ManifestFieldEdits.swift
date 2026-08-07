@@ -12,6 +12,7 @@
 // silently skipped the write), a manifest that isn't a JSON object now
 // throws — that indicates a corrupted setup, not a user error.
 
+import Core
 import Fluent
 import Foundation
 
@@ -28,12 +29,62 @@ func currentManifestGradingMode(_ manifest: String?) -> String {
 
 /// Sets the test setup's `gradingMode` to `mode` when it differs.  Returns the
 /// effective mode.
+///
+/// Refuses `browser` on an upload-mode setup: an upload assignment has no
+/// notebook page to host the browser runner, so the stored value could never
+/// execute (`TestProperties.effectiveGradingMode` would pin it to worker
+/// anyway — the refusal keeps the stored state honest rather than silently
+/// inert).  The section-adoption paths check the submission mode first and
+/// skip the sync, so this guard only fires on an explicit request.
 func setManifestGradingMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
+    if mode == GradingMode.browser.rawValue,
+        currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
+    {
+        throw AppError.badRequest(
+            reason: uploadModeGradingConflictMessage)
+    }
     if currentManifestGradingMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { dict in
             dict["gradingMode"] = mode
+        }
+    }
+    return mode
+}
+
+/// The one message both halves of the upload/browser refusal use, so the web
+/// form banner and the MCP tool error stay identical.
+let uploadModeGradingConflictMessage =
+    "An upload-only assignment is graded by the native worker; it cannot use browser grading. "
+    + "Switch the grading mode to \"worker\" first."
+
+/// Reads the `submissionMode` field straight from a manifest JSON string,
+/// defaulting to "notebook" (TestProperties' own default) when the field is
+/// absent or the manifest can't be parsed.
+func currentManifestSubmissionMode(_ manifest: String?) -> String {
+    guard let manifest,
+        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
+    else { return SubmissionMode.notebook.rawValue }
+    return (dict["submissionMode"] as? String) ?? SubmissionMode.notebook.rawValue
+}
+
+/// Sets the test setup's `submissionMode` to `mode` when it differs.  Returns
+/// the effective mode.  Refuses `upload` while the setup is browser-graded —
+/// the mirror of `setManifestGradingMode`'s guard, so the incoherent
+/// combination cannot be authored from either direction.
+func setManifestSubmissionMode(
+    setup: APITestSetup, to mode: String, on db: any Database
+) async throws -> String {
+    if mode == SubmissionMode.uploadOnly.rawValue,
+        currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
+    {
+        throw AppError.badRequest(
+            reason: uploadModeGradingConflictMessage)
+    }
+    if currentManifestSubmissionMode(setup.manifest) != mode {
+        try await mutateManifest(setup: setup, on: db) { dict in
+            dict["submissionMode"] = mode
         }
     }
     return mode

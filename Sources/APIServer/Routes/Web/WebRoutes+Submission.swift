@@ -36,6 +36,28 @@ func builtInBadgesForSubmission(
         }
 }
 
+/// The `accept` attribute for the student upload input, derived from the one
+/// language table plus the archive/notebook formats every assignment takes.
+/// The hand-listed predecessor (".zip,.ipynb,.py,.r") had gone stale twice
+/// over — it never learned `.lua` or `.m`.  The assignment's `requiredFiles`
+/// contribute their own extensions so an upload-mode assignment in a language
+/// no `AssignmentLanguage` claims (e.g. C++ sources for a makefile-graded
+/// lab) still hints the right types.  Sorted for deterministic output; a
+/// browser treats the list as a hint, not a filter, so breadth costs nothing.
+func submissionAcceptAttribute(manifest: TestProperties?) -> String {
+    var extensions: Set<String> = ["zip", "ipynb"]
+    for language in AssignmentLanguage.allCases {
+        extensions.formUnion(language.scriptExtensions)
+    }
+    for file in manifest?.requiredFiles ?? [] {
+        let ext = URL(fileURLWithPath: file).pathExtension.lowercased()
+        if !ext.isEmpty {
+            extensions.insert(ext)
+        }
+    }
+    return extensions.sorted().map { ".\($0)" }.joined(separator: ",")
+}
+
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/submit
@@ -55,9 +77,8 @@ extension WebRoutes {
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
         // Browser-graded assignments are submitted from the notebook page, not this form.
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = decodeManifest(from: manifestData),
-            manifest.gradingMode == .browser
-        {
+        let manifest = decodeManifest(from: manifestData)
+        if manifest?.effectiveGradingMode == .browser {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
         let assignment = try await APIAssignment.query(on: req.db)
@@ -74,11 +95,15 @@ extension WebRoutes {
                 return redirect
             }
         }
+        let requiredFiles = manifest?.requiredFiles ?? []
         return try await req.view.render(
             "submit",
             SubmitContext(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
+                acceptAttribute: submissionAcceptAttribute(manifest: manifest),
+                requiredFilesText: requiredFiles.isEmpty
+                    ? nil : requiredFiles.joined(separator: ", "),
                 currentUser: req.currentUserContext
             )
         ).encodeResponse(for: req)
@@ -100,7 +125,7 @@ extension WebRoutes {
         // Browser-graded assignments must be submitted from the notebook page.
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = decodeManifest(from: manifestData),
-            manifest.gradingMode == .browser
+            manifest.effectiveGradingMode == .browser
         {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }

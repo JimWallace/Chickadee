@@ -215,7 +215,7 @@ struct BrowserResultRoutes: RouteCollection {
 
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = decodeManifest(from: manifestData),
-            manifest.gradingMode == .browser
+            manifest.effectiveGradingMode == .browser
         {
             throw AppError.badRequest(
                 reason: "Browser-graded assignments must be submitted through the browser runner.")
@@ -266,7 +266,7 @@ struct BrowserResultRoutes: RouteCollection {
         // (WorkerJobRoutes filters out browser-mode submissions).
         let isWorkerMode =
             (decodeManifest(from: manifestData))
-            .map { $0.gradingMode == .worker } ?? true
+            .map { $0.effectiveGradingMode == .worker } ?? true
         if isWorkerMode {
             await ensureLocalRunnerForSubmissionIfNeeded(req: req)
         }
@@ -317,7 +317,8 @@ struct BrowserResultRoutes: RouteCollection {
         // browser kernel. Reject the inverse so a stray call can't smuggle a
         // worker-mode submission in through this path.
         let manifestData = Data(setup.manifest.utf8)
-        guard let manifest = decodeManifest(from: manifestData), manifest.gradingMode == .browser
+        guard let manifest = decodeManifest(from: manifestData),
+            manifest.effectiveGradingMode == .browser
         else {
             throw AppError.badRequest(
                 reason: "Browser failover is only for browser-graded assignments.")

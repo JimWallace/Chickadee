@@ -4,12 +4,15 @@ Submit Code
 #endexport
 #export("content"):
 <h1>Submit to #(assignmentTitle)</h1>
+#if(requiredFilesText):
+<p class="fine-print">This assignment expects the following files: <code>#(requiredFilesText)</code>. Upload a single file, or a .zip that contains all of them.</p>
+#endif
 <form class="form form--wide" id="submit-form" method="post"
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
     #csrfFormField()
     <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-controls="file-input" aria-describedby="drop-zone-help">
         <p id="drop-zone-help">Drag your file here, or press Enter/Space to choose</p>
-        <input type="file" name="files" id="file-input" accept=".zip,.ipynb,.py,.r" required>
+        <input type="file" name="files" id="file-input" accept="#(acceptAttribute)" required>
     </div>
     <p class="drop-filename" id="drop-filename"></p>
     <div>

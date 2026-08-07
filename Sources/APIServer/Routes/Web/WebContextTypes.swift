@@ -32,7 +32,8 @@ struct TestSetupRow: Encodable {
     /// (so they can keep reviewing past work).  The Upload link stays gated
     /// on `isOpen` alone — you can never submit to a closed assignment.
     let canEdit: Bool
-    let gradingMode: String  // "browser" | "worker"
+    let gradingMode: String  // "browser" | "worker" (effective — upload mode pins worker)
+    let submissionMode: String  // "notebook" | "uploadOnly"; "uploadOnly" hides the editor actions
     let hasNotebook: Bool  // false → hide Edit button (no starter notebook available)
     let submissionCount: Int
     let hasLatestSubmission: Bool
@@ -187,6 +188,14 @@ struct IndexContext: Encodable {
 struct SubmitContext: Encodable {
     let testSetupID: String
     let assignmentTitle: String
+    /// Comma-joined `accept` attribute for the file input, derived from the
+    /// language table plus this assignment's required files — see
+    /// `submissionAcceptAttribute`.
+    let acceptAttribute: String
+    /// The manifest's `requiredFiles`, comma-joined for the "include these
+    /// files" hint above the drop zone.  nil when the assignment declares
+    /// none (the hint paragraph is omitted).
+    let requiredFilesText: String?
     let currentUser: CurrentUserContext?
 }
 

@@ -292,7 +292,7 @@ struct AuthorScriptTool: ContentTool {
             // A grader-only file is only safe under worker grading — the browser
             // path ships the workspace to the student. Refuse before writing.
             if input.graderOnly == true,
-                (setup.decodedManifest()?.gradingMode ?? .worker) != .worker
+                (setup.decodedManifest()?.effectiveGradingMode ?? .worker) != .worker
             {
                 throw MCPToolError.invalidArguments(
                     tool: Self.name,
