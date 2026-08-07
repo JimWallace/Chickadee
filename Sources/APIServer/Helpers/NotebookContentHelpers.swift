@@ -163,9 +163,17 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         $0 != .default && existingName.map($0.notebookKernelNames.contains) == true
     }
 
-    if let language = matched {
-        kernelSpec["name"] = language.descriptor.jupyterLiteKernelName
-        kernelSpec["display_name"] = language.descriptor.jupyterLiteKernelDisplayName
+    // A matched language always destructures: `matched` comes from
+    // `notebookKernelNames`, which is empty for a kernel-less (upload-only)
+    // language, so nothing can match one. If that invariant ever broke, the
+    // combined condition falls through to "leave unchanged" — there is no
+    // kernel to normalize onto.
+    if let language = matched,
+        case .notebookKernel(_, let kernelName, let kernelDisplayName, _) =
+            language.editorSupport
+    {
+        kernelSpec["name"] = kernelName
+        kernelSpec["display_name"] = kernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
             // The raw value IS the language_info name (`r`, `lua`, `python`), so
@@ -177,10 +185,17 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         // A kernel no language claims → leave unchanged.
         return data
     } else {
-        // Python kernel (or missing kernelspec) → the default's vendored kernel.
+        // Python kernel (or missing kernelspec) → the default's vendored
+        // kernel. The default language always has one (guarded so the
+        // compiler agrees; leaving the notebook unchanged is the safe
+        // degradation if that ever stopped being true).
         let python = AssignmentLanguage.default
-        kernelSpec["name"] = python.descriptor.jupyterLiteKernelName
-        kernelSpec["display_name"] = python.descriptor.jupyterLiteKernelDisplayName
+        guard
+            case .notebookKernel(_, let kernelName, let kernelDisplayName, _) =
+                python.editorSupport
+        else { return data }
+        kernelSpec["name"] = kernelName
+        kernelSpec["display_name"] = kernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String)?.isEmpty != false {
             languageInfo["name"] = python.rawValue

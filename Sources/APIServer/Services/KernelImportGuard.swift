@@ -113,12 +113,19 @@ enum KernelImportGuard {
     static func message(
         for unsatisfied: [Unsatisfied], filename: String, language: AssignmentLanguage
     ) -> String {
+        // Unreachable through `check` for a kernel-less language: with no
+        // vendored kernel there is no fixed browser environment, so nothing
+        // is ever unsatisfiable. Kept total so a direct caller gets a
+        // truthful sentence rather than a crash.
+        guard
+            case .notebookKernel(let envFile, _, _, let failure) = language.editorSupport
+        else {
+            return "\(filename) is in a language with no browser grading environment."
+        }
         let names = unsatisfied.map(\.name)
         let list = names.map { "`\($0)`" }.joined(separator: ", ")
         let plural = names.count == 1 ? "it" : "they"
         let locations = unsatisfied.map { "\($0.name) (line \($0.line))" }.joined(separator: ", ")
-        let envFile = language.kernelEnvironmentFileName
-        let failure = language.missingDependencyFailureDescription
         return """
             \(filename) needs \(list), which the browser grading environment does not provide, \
             so \(plural) would fail with \(failure) for every student who submits — even though \

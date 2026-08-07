@@ -104,17 +104,22 @@ import Testing
 
         // 5. EDITOR KERNEL — the notebook this language's students open must
         //    normalize onto a kernel the editor can attach. The leg F6 broke.
+        //    A kernel-less (upload-only) language has no notebook workflow, so
+        //    this leg does not apply to it — the walk's earlier legs already
+        //    covered everything such a language does.
+        guard case .notebookKernel(_, let expectedKernel, _, _) = resolved.editorSupport else {
+            return
+        }
         let normalized = normalizeNotebookForJupyterLite(notebook(for: resolved))
         let object = try #require(
             (try? JSONSerialization.jsonObject(with: normalized)) as? [String: Any])
         let kernelspec = try #require(
             (object["metadata"] as? [String: Any])?["kernelspec"] as? [String: Any])
         #expect(
-            kernelspec["name"] as? String == resolved.descriptor.jupyterLiteKernelName,
+            kernelspec["name"] as? String == expectedKernel,
             """
             A \(resolved) notebook normalized to \(kernelspec["name"] as? String ?? "nil") rather \
-            than \(resolved.descriptor.jupyterLiteKernelName), so the editor cannot attach a \
-            kernel to it.
+            than \(expectedKernel), so the editor cannot attach a kernel to it.
             """)
     }
 
