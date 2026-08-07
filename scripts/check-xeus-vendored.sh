@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Integrity guard for the manually-vendored xeus kernels in Public/jupyterlite:
-# xpython (Python), xr (R) and xlua (Lua), each built from its own
-# emscripten-forge env.
+# xpython (Python), xr (R), xlua (Lua) and xoctave (Octave), each built from its
+# own emscripten-forge env.
 #
 # The xeus WASM kernels are built from emscripten-forge (needs micromamba +
 # network to repo.prefix.dev). The ordinary CI build does not do that, so the
@@ -40,7 +40,8 @@ if not ext.is_dir():
     fail(f"missing xeus federated extension: {ext}")
 
 # 2. kernels.json must register EVERY kernel: xpython (Python), xr (R), xlua
-#    (Lua). A vendor that drops one is a partial re-vendor, not a valid state.
+#    (Lua), xoctave (Octave). A vendor that drops one is a partial re-vendor,
+#    not a valid state.
 #
 #    This map — NOT kernels.json — is what the loop below iterates, so a kernel
 #    absent from it ships completely unguarded: a partial or botched re-vendor
@@ -51,7 +52,7 @@ if not kernels_json.is_file():
 kernels = json.loads(kernels_json.read_text())
 listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
 
-expected_language = {"xpython": "python", "xr": "r", "xlua": "lua"}
+expected_language = {"xpython": "python", "xr": "r", "xlua": "lua", "xoctave": "octave"}
 kernel_envs = {}
 loaders = []
 
@@ -124,6 +125,13 @@ for kernel_name, env_name in sorted(kernel_envs.items()):
     # deliberately not listed. r-base and numpy/pandas would be.
     if kernel_name == "xlua" and any(n.startswith(("r-base-", "numpy-", "pandas-")) for n in names):
         fail(f"xeus/{env_name} (Lua) contains r-base/numpy/pandas — the envs have been merged")
+    # Octave also legitimately carries a `python-` tarball — plotly, the
+    # kernel's notebook graphics toolkit, is a noarch Python package — so as
+    # with Lua only the other languages' payloads are evidence of a merge.
+    if kernel_name == "xoctave" and any(
+        n.startswith(("r-base-", "numpy-", "pandas-")) for n in names
+    ):
+        fail(f"xeus/{env_name} (Octave) contains r-base/numpy/pandas — the envs have been merged")
 
 print(
     f"check-xeus-vendored: OK "

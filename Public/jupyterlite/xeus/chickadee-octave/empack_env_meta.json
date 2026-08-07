@@ -1,0 +1,149 @@
+{
+  "prefix": "/",
+  "packages": [
+    {
+      "name": "python_abi",
+      "version": "3.13",
+      "build": "8_cp313",
+      "filename_stem": "python_abi-3.13-8_cp313",
+      "filename": "python_abi-3.13-8_cp313.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "emscripten-abi",
+      "version": "4.0.9",
+      "build": "h267e887_9",
+      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
+      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus-octave",
+      "version": "0.7.0",
+      "build": "h6cd6e3e_0",
+      "filename_stem": "xeus-octave-0.7.0-h6cd6e3e_0",
+      "filename": "xeus-octave-0.7.0-h6cd6e3e_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "zlib",
+        "plotly",
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0",
+        "xeus >=6.0.2,<6.1.0a0",
+        "octave >=10.3.0,<10.4.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "plotly",
+      "version": "6.9.0",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "plotly-6.9.0-pyhd8ed1ab_0",
+      "filename": "plotly-6.9.0-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "narwhals >=1.15.1",
+        "packaging",
+        "python >=3.10"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "octave",
+      "version": "10.3.0",
+      "build": "pl5321h996e327_3",
+      "filename_stem": "octave-10.3.0-pl5321h996e327_3",
+      "filename": "octave-10.3.0-pl5321h996e327_3.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "build": "pyhc364b38_0",
+      "filename_stem": "packaging-26.3-pyhc364b38_0",
+      "filename": "packaging-26.3-pyhc364b38_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.9",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "nlohmann_json-abi",
+      "version": "3.12.0",
+      "build": "h0f90c79_2",
+      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
+      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "narwhals",
+      "version": "2.24.0",
+      "build": "pyhcf101f3_0",
+      "filename_stem": "narwhals-2.24.0-pyhcf101f3_0",
+      "filename": "narwhals-2.24.0-pyhcf101f3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus",
+      "version": "6.0.5",
+      "build": "h0b0027f_0",
+      "filename_stem": "xeus-6.0.5-h0b0027f_0",
+      "filename": "xeus-6.0.5-h0b0027f_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "python",
+      "version": "3.13.1",
+      "build": "h_2efca29_11_cp313",
+      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
+      "filename": "python-3.13.1-h_2efca29_11_cp313.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python_abi 3.13.* *_cp313",
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "build": "h8b79025_0",
+      "filename_stem": "zlib-1.3.2-h8b79025_0",
+      "filename": "zlib-1.3.2-h8b79025_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    }
+  ],
+  "specs": [
+    "xeus-octave"
+  ],
+  "channels": [
+    "https://repo.prefix.dev/emscripten-forge-4x",
+    "https://repo.prefix.dev/conda-forge"
+  ]
+}

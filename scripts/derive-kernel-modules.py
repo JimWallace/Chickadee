@@ -63,6 +63,15 @@ R_LIBRARY = re.compile(r"^lib/R/library/(?P<entry>[^/]+)")
 # FIRST path component is a top-level name — matching how the Python scan treats
 # site-packages entries.
 LUA_LIBRARY = re.compile(r"^(?:share|lib)/lua/\d+\.\d+/(?P<entry>[^/]+)")
+# Octave Forge packages install under `share/octave/packages/<name>-<version>/`
+# (m-files) and `lib/octave/packages/<name>-<version>/` (compiled oct-files);
+# the `<name>` half is what `pkg load <name>` takes.
+OCTAVE_PACKAGE = re.compile(r"^(?:share|lib)/octave/packages/(?P<entry>[^/]+?)(?:-[0-9][^/]*)?/")
+# The interpreter's own bundled function files, grouped by topic directory —
+# `share/octave/<version>/m/<group>/...`. Not loadable names (they are simply
+# on the load path at start), but they are what proves an Octave index was
+# derived from real bytes when the package half is empty.
+OCTAVE_BUNDLED_GROUP = re.compile(r"^share/octave/\d[^/]*/m/(?P<entry>[^/]+)/")
 STDLIB = re.compile(r"^lib/python3\.\d+/(?P<entry>[^/]+)$")
 STDLIB_DIR = re.compile(r"^lib/python3\.\d+/(?P<entry>[^/]+)/")
 
@@ -164,6 +173,46 @@ def scan_lua(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], dict[str, str
     return found, owners
 
 
+def scan_octave(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], set[str], dict[str, str]]:
+    """(`pkg load`-able names, bundled function-file groups, name → owning package).
+
+    The loadable half is expected to come back EMPTY, as Lua's scan is:
+    emscripten-forge carries no Octave Forge packages, so there is nothing `pkg
+    load` could take and an empty `moduleOwners` is what makes the browser
+    grader's on-demand install path correctly resolve nothing. Written as a
+    real scan of the Forge install roots anyway, so a package appearing on the
+    channel is picked up with no further work.
+
+    The bundled groups (`share/octave/<ver>/m/<group>/` — elfun, statistics,
+    strings, …) fill the same role Lua's compiled-in stdlib list does: they are
+    not loadable names, but they are derived from the vendored bytes, so an
+    index that lists none of them means the scan never ran — which is exactly
+    the state check-xeus-vendored.sh exists to catch.
+    """
+    packages = env_dir / "kernel_packages"
+    if not packages.is_dir():
+        sys.exit(f"derive-kernel-modules: no kernel_packages under {env_dir}")
+    by_file = owner_of(meta)
+    found: set[str] = set()
+    bundled: set[str] = set()
+    owners: dict[str, str] = {}
+    for archive in sorted(packages.glob("*.tar.gz")):
+        owner = by_file.get(archive.name)
+        with tarfile.open(archive, "r:gz") as tar:
+            for name in tar.getnames():
+                if match := OCTAVE_PACKAGE.match(name):
+                    entry = match.group("entry")
+                    if entry and not entry.startswith("."):
+                        found.add(entry)
+                        if owner:
+                            owners.setdefault(entry, owner)
+                elif match := OCTAVE_BUNDLED_GROUP.match(name):
+                    entry = match.group("entry")
+                    if entry and not entry.startswith("."):
+                        bundled.add(entry)
+    return found, bundled, owners
+
+
 def scan(env_dir: pathlib.Path, meta: dict) -> tuple[set[str], set[str], dict[str, str]]:
     """(package modules, stdlib modules, module → owning conda package)."""
     packages = env_dir / "kernel_packages"
@@ -226,6 +275,21 @@ def main() -> None:
             stdlib=LUA_STDLIB,
             host_python=None,
             module_owners=lua_owners,
+        )
+        return
+
+    # Octave: keyed on the kernel package for the same reason as Lua — the
+    # interpreter arrives as the `octave` package, but the kernel is what makes
+    # this an Octave env rather than an env that happens to contain Octave.
+    if any(p["name"] == "xeus-octave" for p in meta.get("packages", [])):
+        octave_modules, octave_bundled, octave_owners = scan_octave(env_dir, meta)
+        write_index(
+            env_dir,
+            meta,
+            modules=sorted(octave_modules),
+            stdlib=sorted(octave_bundled),
+            host_python=None,
+            module_owners=octave_owners,
         )
         return
 

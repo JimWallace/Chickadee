@@ -40,6 +40,7 @@ ENVS = {
     "environment-python.yml": "chickadee-python",
     "environment-r.yml": "chickadee-r",
     "environment-lua.yml": "chickadee-lua",
+    "environment-octave.yml": "chickadee-octave",
 }
 
 
