@@ -390,12 +390,24 @@ private func luaPerformanceCase(
 /// `.stdoutEquality` — what the call prints, compared after trimming trailing
 /// whitespace on each line (so a stray trailing space is not a failure).
 ///
-/// Lua has no `capture.output`, so `print` and `io.write` are swapped for
-/// collectors around the call and restored afterwards. They are swapped in the
-/// STUDENT's environment table, not in `_G`: the submission is loaded with
-/// `__index = _G`, so an assignment into its own table shadows the global for
-/// the student's code while leaving the harness's own `print` untouched — which
-/// matters because `chickadee.failed` writes the result JSON with `io.write`.
+/// Lua has no `capture.output`, so `print` and `io` are swapped for collectors
+/// around the call and restored afterwards. They are swapped in the STUDENT's
+/// environment table, not in `_G`: the submission is loaded with `__index = _G`,
+/// so an assignment into its own table shadows the global for the student's code
+/// while leaving the harness's own `print` untouched — which matters because
+/// `chickadee.failed` writes the result JSON with `io.write`.
+///
+/// The `io` proxy captures every ordinary way a student prints: `print`,
+/// `io.write(...)`, `io.stdout:write(...)`, and chained `io.write(a):write(b)` —
+/// the proxy's `write` drops a leading self argument (so the method form works)
+/// and returns the handle (so chaining works), and `io.stdout` is the same
+/// handle. Earlier this swapped only a bare `io.write`, so `io.stdout:write` and
+/// chained writes escaped capture and a CORRECT submission failed with empty
+/// output. The one path still uncapturable is a student who binds
+/// `local print = print` (or `local w = io.write`) *before* the call: that is an
+/// upvalue frozen at load time, which per-call swapping cannot reach. This kind
+/// grades output produced through `print` / `io.write` / `io.stdout`, which is
+/// what an assignment using it should ask for.
 private func luaStdoutCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
@@ -427,12 +439,22 @@ private func luaStdoutCase(
             end
             captured[#captured + 1] = table.concat(parts, "\\t") .. "\\n"
         end
+
+        -- A stand-in handle used for both `io` and `io.stdout`, so print,
+        -- io.write, io.stdout:write and chained io.write(a):write(b) are all
+        -- captured. `write` drops a leading self argument (the method forms) and
+        -- returns the handle (so chaining works).
+        local ck_stdout = {}
+        function ck_stdout.write(...)
+            local n = select("#", ...)
+            local start = (n >= 1 and select(1, ...) == ck_stdout) and 2 or 1
+            for i = start, n do
+                captured[#captured + 1] = tostring((select(i, ...)))
+            end
+            return ck_stdout
+        end
         student.io = setmetatable(
-            { write = function(...)
-                for i = 1, select("#", ...) do
-                    captured[#captured + 1] = tostring((select(i, ...)))
-                end
-            end },
+            { write = ck_stdout.write, stdout = ck_stdout },
             { __index = io })
 
         local ok, result = pcall(target\(ctx.callArgsSuffix))

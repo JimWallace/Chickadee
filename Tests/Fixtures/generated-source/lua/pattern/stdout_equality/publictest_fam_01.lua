@@ -28,12 +28,22 @@ student.print = function(...)
     end
     captured[#captured + 1] = table.concat(parts, "\t") .. "\n"
 end
+
+-- A stand-in handle used for both `io` and `io.stdout`, so print,
+-- io.write, io.stdout:write and chained io.write(a):write(b) are all
+-- captured. `write` drops a leading self argument (the method forms) and
+-- returns the handle (so chaining works).
+local ck_stdout = {}
+function ck_stdout.write(...)
+    local n = select("#", ...)
+    local start = (n >= 1 and select(1, ...) == ck_stdout) and 2 or 1
+    for i = start, n do
+        captured[#captured + 1] = tostring((select(i, ...)))
+    end
+    return ck_stdout
+end
 student.io = setmetatable(
-    { write = function(...)
-        for i = 1, select("#", ...) do
-            captured[#captured + 1] = tostring((select(i, ...)))
-        end
-    end },
+    { write = ck_stdout.write, stdout = ck_stdout },
     { __index = io })
 
 local ok, result = pcall(target, x)
