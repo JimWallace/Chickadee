@@ -30,6 +30,11 @@ struct RunnerSanitizedProjectionTests {
     private let expectedRunnerVisibleKeys: Set<String> = [
         "schemaVersion",
         "gradingMode",
+        // Forwarded deliberately, like gradingMode: the runner reads neither
+        // today, but a runner-side re-read of the manifest must resolve the
+        // same effectiveGradingMode the server did — losing submissionMode
+        // would flip an upload+browser bundle back to browser there.
+        "submissionMode",
         "requiredFiles",
         "testSuites",
         "timeLimitSeconds",

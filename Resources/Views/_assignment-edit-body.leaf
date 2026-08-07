@@ -64,6 +64,14 @@
                     Due Date (optional)
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
+                <label class="form-label field-gap">
+                    Submission Method
+                    <select class="form-input" name="submissionMode" id="submissionModeSelect">
+                        <option value="notebook" #if(submissionMode == "notebook"):selected#endif>Notebook editor</option>
+                        <option value="upload" #if(submissionMode == "upload"):selected#endif>File upload only</option>
+                    </select>
+                </label>
+                <p class="card-meta fine-print">File upload only hides the notebook editor and grades every submission on the native runner. Use it for makefile-graded work (for example C++) or multi-file projects submitted as a zip.</p>
                 <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             </div>
         </div>

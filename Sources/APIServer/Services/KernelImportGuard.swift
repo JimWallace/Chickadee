@@ -147,7 +147,7 @@ enum KernelImportGuard {
             let language = language(forFile: filename),
             let environment = environments?[language],
             let manifest = setup.decodedManifest(),
-            manifest.gradingMode == .browser
+            manifest.effectiveGradingMode == .browser
         else { return }
 
         // Anything else bundled in the setup is available at run time, and is

@@ -278,8 +278,18 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         {
             sectionName = section.name
             if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
-                gradingMode = try await setManifestGradingMode(
-                    setup: setup, to: section.defaultGradingMode, on: context.db)
+                // An upload-only assignment keeps worker grading rather than
+                // adopting a browser default (which would be refused — no
+                // notebook page to grade in); the move itself still succeeds.
+                if section.defaultGradingMode == GradingMode.browser.rawValue,
+                    currentManifestSubmissionMode(setup.manifest)
+                        == SubmissionMode.upload.rawValue
+                {
+                    gradingMode = currentManifestGradingMode(setup.manifest)
+                } else {
+                    gradingMode = try await setManifestGradingMode(
+                        setup: setup, to: section.defaultGradingMode, on: context.db)
+                }
             }
         } else if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
             gradingMode = currentManifestGradingMode(setup.manifest)

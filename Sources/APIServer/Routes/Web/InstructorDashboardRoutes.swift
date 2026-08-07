@@ -665,6 +665,8 @@ struct InstructorDashboardRoutes: RouteCollection {
             achievementSignalOptions: AchievementSignalPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
+            submissionMode: manifest?.submissionMode.rawValue
+                ?? SubmissionMode.notebook.rawValue,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,

@@ -17,6 +17,29 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
     case worker
 }
 
+/// How students hand their work in.
+///
+/// - `notebook`: The JupyterLite workflow (default) — students edit in the
+///   embedded editor and submit from the notebook page; the plain upload form
+///   remains available alongside it for worker-graded assignments.
+/// - `upload`: File upload **only**. The assignment has no editor surface: the
+///   dashboard shows no Edit action, the notebook page redirects students to
+///   the upload form, and grading always happens on the native worker (see
+///   `effectiveGradingMode`). This is the mode for work the notebook workflow
+///   cannot carry — compiled languages graded through the shell-script +
+///   makefile path (e.g. C++), or multi-file projects submitted as a zip.
+///
+/// Declared, not derived: "this assignment has no starter notebook" and "this
+/// assignment is upload-only" are different states — an instructor may bundle
+/// a reference notebook with an upload assignment, or leave a notebook
+/// assignment's starter empty while drafting. Same principle as recording
+/// `language` explicitly. Default when the field is absent from JSON:
+/// `.notebook` (every manifest written before the field existed).
+public enum SubmissionMode: String, Codable, Sendable, Equatable {
+    case notebook
+    case upload
+}
+
 /// Entry for a single test in the manifest.
 /// `script` is the filename/path of a runnable test script in the test setup zip.
 /// `name` is an optional human-readable display name shown to students. When absent,
@@ -184,6 +207,9 @@ public struct PersonalizationExpression: Codable, Equatable, Sendable {
 public struct TestProperties: Codable, Equatable, Sendable {
     public let schemaVersion: Int
     public let gradingMode: GradingMode
+    /// How students hand work in — see `SubmissionMode`. `.upload` forces
+    /// native-worker grading via `effectiveGradingMode`.
+    public let submissionMode: SubmissionMode
     public let requiredFiles: [String]
     public let testSuites: [TestSuiteEntry]
     public let timeLimitSeconds: Int
@@ -282,6 +308,21 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `reservedNames` filters at each delivery point.
     public var graderOnlyFileSet: Set<String> { Set(graderOnlyFiles) }
 
+    /// The grading mode that actually applies once the submission mode is
+    /// taken into account.
+    ///
+    /// An upload-mode assignment is always graded by the native worker: there
+    /// is no notebook page hosting the browser runner, so a stored `browser`
+    /// value could never execute. Authoring surfaces refuse to store the
+    /// `upload` + `browser` combination, but a hand-crafted test-setup zip or
+    /// an imported course bundle can still carry it — consumption sites read
+    /// this property instead of `gradingMode` so the incoherent pair grades
+    /// natively rather than stranding submissions on a runner that never
+    /// loads.
+    public var effectiveGradingMode: GradingMode {
+        submissionMode == .upload ? .worker : gradingMode
+    }
+
     /// True when the manifest declares any per-student `=` expression, global
     /// or section-scoped.  Expressions are the only personalization inputs
     /// that need a per-(student, assignment) seed to resolve — use this to
@@ -351,6 +392,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
+        submissionMode: SubmissionMode = .notebook,
         requiredFiles: [String] = [],
         testSuites: [TestSuiteEntry] = [],
         timeLimitSeconds: Int = 10,
@@ -372,6 +414,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     ) {
         self.schemaVersion = schemaVersion
         self.gradingMode = gradingMode
+        self.submissionMode = submissionMode
         self.requiredFiles = requiredFiles
         self.testSuites = testSuites
         self.timeLimitSeconds = timeLimitSeconds
@@ -400,6 +443,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
         gradingMode = try c.decodeIfPresent(GradingMode.self, forKey: .gradingMode) ?? .worker
+        // Absent on every manifest written before the field existed; those all
+        // predate upload-only assignments, so they are notebook assignments.
+        submissionMode =
+            try c.decodeIfPresent(SubmissionMode.self, forKey: .submissionMode) ?? .notebook
         requiredFiles = try c.decodeIfPresent([String].self, forKey: .requiredFiles) ?? []
         testSuites = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites) ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
@@ -444,6 +491,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case gradingMode
+        case submissionMode
         case requiredFiles
         case testSuites
         case timeLimitSeconds
@@ -468,6 +516,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(schemaVersion, forKey: .schemaVersion)
         try c.encode(gradingMode, forKey: .gradingMode)
+        try c.encode(submissionMode, forKey: .submissionMode)
         try c.encode(requiredFiles, forKey: .requiredFiles)
         try c.encode(testSuites, forKey: .testSuites)
         try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
@@ -509,6 +558,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         TestProperties(
             schemaVersion: schemaVersion,
             gradingMode: gradingMode,
+            submissionMode: submissionMode,
             requiredFiles: requiredFiles,
             testSuites: testSuites,
             timeLimitSeconds: timeLimitSeconds,

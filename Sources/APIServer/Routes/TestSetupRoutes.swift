@@ -90,6 +90,14 @@ struct TestSetupRoutes: RouteCollection {
         // Validate the dependency graph (reference integrity + cycle detection).
         try validateManifestDependencies(manifest)
 
+        // The upload + browser combination is incoherent — an upload-only
+        // assignment has no notebook page to host the browser runner — and is
+        // refused here like it is on every authoring surface, so a zip-borne
+        // manifest can't smuggle it in.
+        if manifest.submissionMode == .upload, manifest.gradingMode == .browser {
+            throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
+        }
+
         // Mode-specific validation.
         switch manifest.gradingMode {
         case .browser:

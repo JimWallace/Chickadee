@@ -5,6 +5,7 @@
 // starts with `AssignmentRoutes+` for blame continuity until the next
 // rename pass.
 
+import Core
 import Fluent
 import Vapor
 
@@ -175,9 +176,16 @@ extension CourseAdminRoutes {
         // `setManifestGradingMode` with the MCP set_grading_mode tool so both
         // paths produce identical (sorted-key) manifest bytes — the
         // manifest-hash retest gate depends on that determinism.
+        //
+        // An upload-only assignment skips the sync rather than failing the
+        // move: adopting a browser default would be refused (no notebook page
+        // to grade in), and a drag into a section is not the place to surface
+        // that — the assignment simply keeps worker grading.
         if let sectionUUID = newSectionID,
             let section = try await APICourseSection.find(sectionUUID, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db),
+            !(section.defaultGradingMode == GradingMode.browser.rawValue
+                && currentManifestSubmissionMode(setup.manifest) == SubmissionMode.upload.rawValue)
         {
             _ = try await setManifestGradingMode(setup: setup, to: section.defaultGradingMode, on: req.db)
         }

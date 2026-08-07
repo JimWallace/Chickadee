@@ -267,7 +267,7 @@ extension OperationalDiagnosticsService {
                 TestProperties.self, from: Data(setup.manifest.utf8))
             // Browser-graded setups are processed by the in-browser Pyodide runner,
             // not the native worker. Exclude them from the worker queue depth metric.
-            guard manifest?.gradingMode != .browser else { continue }
+            guard manifest?.effectiveGradingMode != .browser else { continue }
             result.insert(testSetupID)
         }
         return result

@@ -72,6 +72,24 @@ extension PublishedAssignmentRoutes {
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
+        // Persist a changed submission mode before anything else touches the
+        // row: `setManifestSubmissionMode` refuses the upload + browser
+        // combination, and refusing must leave the assignment entirely
+        // unmodified — not half-saved.
+        if let requestedMode = form.submissionMode,
+            requestedMode == SubmissionMode.notebook.rawValue
+                || requestedMode == SubmissionMode.upload.rawValue
+        {
+            do {
+                _ = try await setManifestSubmissionMode(
+                    setup: setup, to: requestedMode, on: req.db)
+            } catch {
+                let q =
+                    "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(uploadModeGradingConflictMessage))"
+                return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            }
+        }
+
         try persistAssignmentNotebook(
             req: req,
             assignment: assignment,
@@ -144,6 +162,10 @@ extension PublishedAssignmentRoutes {
         let assignmentNotebookFile: File?
         let solutionNotebookFile: File?
         let gradeObjectID: String?
+        /// "notebook" | "upload" from the Submission select; nil when the
+        /// form predates the field (a stale open tab) so the stored mode is
+        /// left untouched rather than reset to the default.
+        let submissionMode: String?
         /// Set by the assignment workbench's embedded form.  Suppresses the
         /// close-on-save below; see the comment at that call site.
         let liveEdit: Bool
@@ -163,6 +185,7 @@ extension PublishedAssignmentRoutes {
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var gradeObjectID: String?
+            var submissionMode: String?
             var liveEdit: String?
         }
 
@@ -180,6 +203,8 @@ extension PublishedAssignmentRoutes {
             assignmentNotebookFile: body.assignmentNotebookFile,
             solutionNotebookFile: body.solutionNotebookFile,
             gradeObjectID: try multipartTextField(named: ["gradeObjectID"], from: req) ?? body.gradeObjectID,
+            submissionMode: try multipartTextField(named: ["submissionMode"], from: req)
+                ?? body.submissionMode,
             liveEdit: (try multipartTextField(named: ["liveEdit"], from: req) ?? body.liveEdit) != nil
         )
     }
