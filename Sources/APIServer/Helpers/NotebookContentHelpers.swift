@@ -29,6 +29,8 @@ let jupyterLitePythonKernelName = "xpython"
 let jupyterLitePythonKernelDisplayName = "Python (xeus-python)"
 let jupyterLiteRKernelName = "xr"
 let jupyterLiteRKernelDisplayName = "R (xeus-r)"
+let jupyterLiteLuaKernelName = "xlua"
+let jupyterLiteLuaKernelDisplayName = "Lua (xeus-lua)"
 
 /// Kernelspec names treated as "this is a Python notebook" when normalizing.
 ///
@@ -134,8 +136,16 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
 ///   vendored xeus-python kernel.
 /// - R notebooks (`ir`, `r`, `webr`, `xr`) →
 ///   kernelspec.name = "xr", display_name = "R (xeus-r)" — the vendored xeus-r kernel.
+/// - Lua notebooks (`xlua`, `lua`) →
+///   kernelspec.name = "xlua", display_name = "Lua (xeus-lua)" — the vendored
+///   xeus-lua kernel.
 /// - Any other explicit kernelspec → returned unchanged.
 /// - Returns original data unchanged if JSON parsing fails.
+///
+/// The non-default languages read their aliases from `notebookKernelNames`, so a
+/// new language needs an arm here as well as a descriptor — this function is one
+/// of the enumerated sites the compiler cannot flag, and it shipped without a
+/// Lua arm (see docs/lua-architecture-audit.md).
 func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     else { return data }
@@ -156,10 +166,22 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
             languageInfo["name"] = "r"
         }
         metadata["language_info"] = languageInfo
+    } else if let name = existingName, AssignmentLanguage.luaKernelNames.contains(name) {
+        // Lua notebook (`xlua`, or a bare `lua` from an import) → normalize to
+        // the vendored xeus-lua kernel. Without this arm a `lua`-named notebook
+        // fell through to "unknown → leave unchanged" and never attached xlua —
+        // the R arm existed but its Lua twin did not.
+        kernelSpec["name"] = jupyterLiteLuaKernelName
+        kernelSpec["display_name"] = jupyterLiteLuaKernelDisplayName
+        metadata["kernelspec"] = kernelSpec
+        if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
+            languageInfo["name"] = "lua"
+        }
+        metadata["language_info"] = languageInfo
     } else if let name = existingName, !name.isEmpty,
         !pythonKernelNames.contains(name)
     {
-        // Unknown non-Python, non-R kernel → leave unchanged.
+        // Unknown non-Python, non-R, non-Lua kernel → leave unchanged.
         return data
     } else {
         // Python kernel (or missing kernelspec) → normalize to xeus-python.
