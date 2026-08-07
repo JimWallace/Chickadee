@@ -32,6 +32,32 @@ is the reason `workingDirectoryIsOnDefaultSearchPath` exists as a separate fact
 (file-resolved in spirit like R, yet it *does* need `OCTAVE_PATH`). Adding it
 tests a prediction the design already made in writing.
 
+## Who pays for a new kernel — read this before the size scares you
+
+It is easy to misread CLAUDE.md's "**boot** … is paid by everyone on every
+notebook open" as meaning a new *language* taxes every student. It does not, and
+the distinction matters when weighing a 66.9 MB kernel:
+
+- That sentence is about **packages inside one env** — adding `ggplot2` to
+  `environment-r.yml` makes every *R* boot pull it "whether or not they touch the
+  package". That is why the envs are **separate on purpose**, and why
+  `check-xeus-vendored.sh` asserts they stay distinct.
+- A new *language env* is isolated by construction.
+  `RoutingExecutor.ensureReady()` in `Public/browser-runner.js` computes
+  `requiredKinds()` from the assignment's own manifest scripts and starts only
+  those substrates — "an R lab never boots the Python kernel and a Python lab
+  never fetches the 74 MB R environment". On the editor side a notebook carries
+  one kernelspec, so JupyterLite attaches one kernel.
+
+So the 66.9 MB is paid by students **on an Octave assignment**, which is the
+right shape: the cost falls on the people getting the value. What a new kernel
+does cost everyone is ~100 MB of vendored bytes in the repo and Docker image,
+build time, and ABI-pin maintenance — plus one small `<script>` tag on the
+notebook page, which is kilobytes.
+
+Weigh the size against maintenance and image bloat, then — not against student
+boot time for unrelated courses.
+
 ---
 
 # Brief 1 — Octave
