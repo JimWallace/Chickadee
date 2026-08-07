@@ -272,6 +272,32 @@ import Testing
         }
     }
 
+    /// The did-not-skip proof (audit F2). Every language's execution tests
+    /// guard on the interpreter being present and `return` silently when it is
+    /// not — which is correct on a developer laptop and a silent hole in CI,
+    /// where absence means a shipped grading path has zero coverage. `lua5.4`
+    /// shipped in #1282 without being added to the CI image, so every native
+    /// Lua test skipped while the suite reported green.
+    ///
+    /// This converts that into a hard failure: under `CI`, every interpreter
+    /// MUST answer its probe. It runs only in CI (a laptop legitimately lacks
+    /// R or Lua), so it never blocks local work — but it cannot be satisfied by
+    /// skipping.
+    @Test func noInterpreterIsSilentlyAbsentInCI() {
+        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        for language in AssignmentLanguage.allCases {
+            let probe = language.interpreterProbe
+            let (code, _) = Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            #expect(
+                code == 0,
+                """
+                \(language)'s interpreter (`\(probe.command)`) is absent in CI, so its execution \
+                tests skipped silently and its grading path has no coverage. Add it to \
+                .github/docker/ci-image/Dockerfile and the per-job apt fallback in swift-tests.yml.
+                """)
+        }
+    }
+
     // MARK: - Renderer coverage (never skipped)
 
     @Test(arguments: AssignmentLanguage.allCases)

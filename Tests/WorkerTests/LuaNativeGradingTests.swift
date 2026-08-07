@@ -37,6 +37,23 @@ import Testing
         return process.terminationStatus == 0
     }
 
+    /// The did-not-skip proof for the WorkerTests job (audit F2). Every test
+    /// below guards `luaAvailable` and returns silently when Lua is absent —
+    /// right on a laptop, a silent hole in CI. `lua5.4` shipped in #1282 without
+    /// being added to the CI image, so this whole suite skipped while reporting
+    /// green. Under `CI`, Lua MUST be present; this cannot be satisfied by
+    /// skipping.
+    @Test func luaIsPresentInCI() {
+        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        #expect(
+            Self.luaAvailable,
+            """
+            lua5.4 is absent in the CI image, so every native Lua grading test skipped silently. \
+            Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt fallback in \
+            swift-tests.yml.
+            """)
+    }
+
     /// A grading workspace shaped like the one `RunnerDaemon` materializes:
     /// the injected runtime, the student's submission, and the hint file that
     /// tells `chickadee.student_file()` which upload to grade.
