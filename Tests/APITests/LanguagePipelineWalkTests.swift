@@ -29,12 +29,24 @@ import Testing
 
 @Suite struct LanguagePipelineWalkTests {
 
-    /// A manifest whose only graded script is written in `language`, i.e. the
-    /// shape a real assignment in that language has.
+    /// A manifest whose only graded script is written in `language`, in the
+    /// minimal REAL shape that identifies that language.
+    ///
+    /// For the four kernel languages that shape is the script extension alone
+    /// — kept unrecorded here so this walk goes on guarding extension
+    /// resolution (the F1 leg). C++ is different by design: its generated
+    /// scripts are plain `.sh` precisely so the extension carries no language
+    /// signal, which means a real C++ manifest is identified by its RECORDED
+    /// `language` field and nothing else. The fixture includes the recorded
+    /// field exactly when the extension cannot answer, so a future
+    /// signal-free language takes this branch automatically.
     private func manifest(gradedScriptIn language: AssignmentLanguage) throws -> TestProperties {
         let script = "publictest_walk.\(language.generatedScriptExtension)"
+        let extensionIdentifies = language.scriptExtensions.contains(
+            language.generatedScriptExtension.lowercased())
+        let recordedField = extensionIdentifies ? "" : #""language":"\#(language.rawValue)","#
         let json = """
-            {"schemaVersion":1,"requiredFiles":[],\
+            {"schemaVersion":1,\(recordedField)"requiredFiles":[],\
             "testSuites":[{"tier":"public","script":"\(script)"}],"timeLimitSeconds":10}
             """
         return try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
@@ -77,30 +89,47 @@ import Testing
                 "\(resolved) generated \(script.filename), which is not a \(resolved) script")
         }
 
-        // 3. NOTEBOOK CHECK — every language renders at least one kind, and it
-        //    lands on the same extension.
+        // 3. NOTEBOOK CHECK — a language that supports any check kind renders
+        //    one onto its own extension. C++ supports none, categorically —
+        //    there is no notebook workflow to check — and for it this leg's
+        //    assertion is that the refusal really is the WHOLE set, not a
+        //    partial list someone forgot to finish.
         let supported = NotebookCheckKind.allCases.filter {
             !(GeneratedSourceFixtures.notebookCheckKindExceptions[resolved] ?? []).contains($0)
         }
-        let checkKind = try #require(supported.first, "\(resolved) supports no notebook check kind")
-        let check = renderNotebookCheck(GeneratedSourceFixtures.check(kind: checkKind), language: resolved)
-        #expect(
-            check.script.filename.hasSuffix(".\(resolved.generatedScriptExtension)"),
-            "\(resolved)/\(checkKind) generated \(check.script.filename)")
+        if let checkKind = supported.first {
+            let check = renderNotebookCheck(
+                GeneratedSourceFixtures.check(kind: checkKind), language: resolved)
+            #expect(
+                check.script.filename.hasSuffix(".\(resolved.generatedScriptExtension)"),
+                "\(resolved)/\(checkKind) generated \(check.script.filename)")
+        } else {
+            #expect(
+                GeneratedSourceFixtures.notebookCheckKindExceptions[resolved]?.count
+                    == NotebookCheckKind.allCases.count,
+                "\(resolved) supports no check kind, but its exclusion list is partial")
+        }
 
         // 4. PER-STUDENT INPUTS — the filename the worker writes must be the one
         //    this language's runtime reads. F5's browser twin wrote Python's.
+        //    The extension coupling holds for the interpreted languages, whose
+        //    inputs file IS source the runtime loads; C++'s is a HEADER
+        //    (`_ck_inputs.hpp`) compiled into the generated test's translation
+        //    unit beside `.sh` wrappers, so the coupling deliberately does not
+        //    hold there — the conformance matrix's compile-and-run inputs leg
+        //    proves its delivery instead.
         let inputs = resolved.renderInputsFile(["threshold": resolved.literal(.int(42))])
         #expect(!inputs.isEmpty, "\(resolved) rendered an empty inputs file")
-        #expect(
-            resolved.inputsFileName.hasSuffix(".\(resolved.generatedScriptExtension)")
-                || resolved.inputsFileName.lowercased()
+        if resolved != .cpp {
+            #expect(
+                resolved.inputsFileName.lowercased()
                     .hasSuffix(".\(resolved.generatedScriptExtension.lowercased())"),
-            """
-            \(resolved) writes \(resolved.inputsFileName), which is not a \
-            .\(resolved.generatedScriptExtension) file — the runtime loads it as source, so the \
-            extension has to match the language.
-            """)
+                """
+                \(resolved) writes \(resolved.inputsFileName), which is not a \
+                .\(resolved.generatedScriptExtension) file — the runtime loads it as source, so \
+                the extension has to match the language.
+                """)
+        }
 
         // 5. EDITOR KERNEL — the notebook this language's students open must
         //    normalize onto a kernel the editor can attach. The leg F6 broke.
