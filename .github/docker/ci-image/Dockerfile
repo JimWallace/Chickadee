@@ -26,6 +26,12 @@ FROM ${BASE_IMAGE}
 #             NotebookCheckRendererR, PersonalizationEvaluatorR, WorkerTests R
 #             normalization); without it every hasRscript guard skips silently
 #             and a shipped feature's grading path has zero CI coverage
+# lua5.4    — the Lua execution-path suites (LuaNativeGradingTests,
+#             LuaPersonalizationDriverTests, the conformance matrix's executed
+#             Lua rows); provides /usr/bin/lua via update-alternatives. Same
+#             silent-skip trap as r-base: it shipped in #1282 without this line,
+#             so every native Lua grading test guarded `luaAvailable` and skipped
+#             — the did-not-skip probes below now fail in CI if it regresses
 # python3-pandas / python3-matplotlib — NotebookCheckRuntimeState tests that
 #             exercise dataframe/plot check kinds against a real interpreter
 # nodejs/npm/ca-certificates — the browser probe jobs (editor smoke, exec-hang,
@@ -38,6 +44,6 @@ FROM ${BASE_IMAGE}
 #             editor-smoke gate went red because of an Ubuntu mirror.
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
-        r-base python3-pandas python3-matplotlib \
+        r-base python3-pandas python3-matplotlib lua5.4 \
         nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
