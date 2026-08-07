@@ -72,4 +72,68 @@ import Testing
                 "\(tool.name) readOnlyHint must agree with its required scopes")
         }
     }
+
+    // MARK: - The agent-facing copy names every language
+
+    /// The instructions are PROSE. No compiler and no `allCases` test reaches a
+    /// string literal, which makes a hand-written language list the one shape
+    /// that goes stale silently — and it did: the guide told every connecting
+    /// agent that personalization expressions are "Python source" for the whole
+    /// of R's and Lua's existence, which is a syntax error on those
+    /// assignments. `supportedLanguageNames` derives from `allCases`; this
+    /// pins that it is actually interpolated, and that no language is missing.
+    @Test func theInstructionsNameEverySupportedLanguage() {
+        for language in AssignmentLanguage.allCases {
+            #expect(
+                instructions.contains(language.displayName),
+                """
+                The initialize instructions never mention \(language.displayName), so an agent \
+                authoring for it is working from a guide that does not know it exists. The \
+                language list is derived from allCases in `supportedLanguageNames` — interpolate \
+                that rather than typing a list.
+                """)
+        }
+    }
+
+    /// The above is necessary and NOT sufficient: every language's name can
+    /// appear incidentally in unrelated prose, so it passes even if the derived
+    /// list was replaced by a hand-typed one. Verified by breaking it — swapping
+    /// both interpolations for a hardcoded "Python or R" left it green, because
+    /// another sentence happened to say "Lua". This pins the property that
+    /// actually matters: the DERIVED value is what got interpolated.
+    @Test func theDerivedLanguageListIsActuallyInterpolated() {
+        #expect(
+            instructions.contains(MCPServerInstructions.supportedLanguageNames),
+            """
+            The instructions do not contain the derived language list \
+            (\(MCPServerInstructions.supportedLanguageNames)) verbatim, which means a hand-typed \
+            list replaced it. That list is prose — no compiler reaches it — so a hand-typed one is \
+            the shape that goes stale silently the next time a language is added.
+            """)
+    }
+
+    /// The specific regression: expressions must not be described as Python.
+    @Test func expressionsAreNotDescribedAsPythonOnly() {
+        #expect(
+            !instructions.contains("expressions` (a name + Python source"),
+            """
+            The instructions describe personalization expressions as Python source. They are \
+            written in the ASSIGNMENT'S language and evaluated by that language's interpreter, so \
+            this tells an agent on an R or Lua assignment to write something that cannot run.
+            """)
+    }
+
+    /// `supportedLanguageNames` reads as prose, not as a debug dump — it is
+    /// interpolated into a sentence an agent reads.
+    @Test func theDerivedLanguageListReadsAsProse() {
+        let list = MCPServerInstructions.supportedLanguageNames
+        #expect(!list.isEmpty)
+        #expect(!list.contains("["), "\(list) looks like a collection dump, not prose")
+        for language in AssignmentLanguage.allCases {
+            #expect(list.contains(language.displayName), "\(list) omits \(language.displayName)")
+        }
+        if AssignmentLanguage.allCases.count > 1 {
+            #expect(list.contains(" or "), "\(list) does not read as a list")
+        }
+    }
 }
