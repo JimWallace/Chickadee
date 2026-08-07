@@ -169,6 +169,35 @@ on the default load path in both runners — and the LanguageDescriptor table
 records the correction. Postmortem: `docs/adding-a-xeus-kernel.md` §"What
 the Octave run actually cost".
 
+**C++ is the fifth assignment language — and the first with NO editor kernel.**
+`EditorSupport.uploadOnly` (the `LanguageDescriptor` judgement that folded the
+four kernel facts) plus `submissionMode: "uploadOnly"` (a manifest field beside
+`gradingMode`; `notebook` mode deliberately keeps the upload form beside the
+editor, so there is no third "both" value) make C++ assignments upload-only and
+native-worker-only by construction: no xeus kernel is vendored because the
+browser would grade a *different compiler* than the course's g++ — the
+two-C++s decision in `docs/cpp-support.md`. A generated case is a POSIX shell
+wrapper (heredoc C++ source → g++ one translation unit → exec the binary under
+the original shell contract): no `ScriptInterpreter` case, no build strategy in
+Swift, `generatedScriptExtension` is `"sh"` (the one language whose generated
+extension is not its own — pinned, since `.sh` must keep carrying no language
+signal). Single-TU inclusion (`#define main ck_student_main` around the
+student's file) is what dissolved the memo's declared-type problem: no
+prototype is ever declared, literals render CTAD-typed and `ck::equal` in
+`test_runtime.hpp` compares cross-type. All 8 pattern kinds execute —
+`performanceThreshold` is supportable *because* the language is native-only
+(-O2 wrapper), `returnTypeCheck` matches static types via decltype — and all
+ten notebook checks are refused categorically (no notebook workflow exists).
+Literal refusals are the language's trap-guard: JSON null, mixed arrays,
+nested containers have no C++ rendering and are refused at save time
+(`cppRenderabilityIssue`), with an undefined-identifier backstop so a leak is
+a compile error; the measured trap was `std::cmp_equal` rejecting `bool` by
+design (equality promotes bools explicitly). Personalization `=` expressions
+are C++, compiled-and-run by an `sh` driver (~0.3s, same Horner seed fold),
+delivered as typed `inline const auto` definitions in `_ck_inputs.hpp` where a
+missing input is a compile error. Per-test compile ~0.65s at -O0, measured.
+g++ rides both images and the runner capability probe.
+
 **Every worker the notebook page spawns must be in
 `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
 cross-origin isolated on Chromium/Firefox, and a worker created by a
@@ -182,8 +211,8 @@ shipped browser-graded R that no isolated engine ever ran.
 and fails on drift in either direction. It currently lists the four grading
 workers (Python, R, Lua, Octave) plus the freeze watchdog.
 
-**Assignments are Python, R, Lua *or* Octave; language is first-class (`AssignmentLanguage`).**
-`AssignmentLanguage` (`.python | .r | .lua | .octave`, Core) is resolved from the manifest
+**Assignments are Python, R, Lua, Octave *or* C++; language is first-class (`AssignmentLanguage`).**
+`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp`, Core) is resolved from the manifest
 (any `.R` graded script → `.r`, any `.lua` → `.lua`, any `.m` → `.octave`; else
 a notebook kernel in that language's `notebookKernelNames` — `{ir,r,webr,xr}`
 for R, `{xlua,lua}` for Lua, `{xoctave,octave}` for Octave; else `.python`) and every language-specific path dispatches through it — literal

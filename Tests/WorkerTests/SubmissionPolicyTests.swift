@@ -70,8 +70,8 @@ import Testing
         }
         #expect(
             exempted.sorted() == [
-                "lua/introspectableSidecar", "octave/introspectableSidecar",
-                "r/introspectableSidecar",
+                "cpp/introspectableSidecar", "lua/introspectableSidecar",
+                "octave/introspectableSidecar", "r/introspectableSidecar",
             ],
             "the exemption list changed: \(exempted.sorted())")
     }
@@ -143,8 +143,11 @@ import Testing
         let warnings = try extractNotebooksToCode(
             in: dir, forcedLanguage: language, studentNotebookName: "lab.ipynb")
 
-        // The student's notebook still extracted…
-        let produced = dir.appendingPathComponent("lab.\(language.generatedScriptExtension)")
+        // The student's notebook still extracted… (C++ extraction output is a
+        // `.cpp` source file — its GENERATED tests are `.sh` wrappers, so the
+        // two extensions differ for that one language.)
+        let sourceExtension = language == .cpp ? "cpp" : language.generatedScriptExtension
+        let produced = dir.appendingPathComponent("lab.\(sourceExtension)")
         #expect(FileManager.default.fileExists(atPath: produced.path))
         // …and the unreadable helper produced a warning rather than silence.
         #expect(
@@ -166,9 +169,10 @@ import Testing
         let warnings = try extractNotebooksToCode(
             in: dir, forcedLanguage: language, studentNotebookName: "lab.ipynb")
         #expect(warnings.isEmpty)
+        let sourceExtension = language == .cpp ? "cpp" : language.generatedScriptExtension
         #expect(
             FileManager.default.fileExists(
-                atPath: dir.appendingPathComponent("lab.\(language.generatedScriptExtension)").path))
+                atPath: dir.appendingPathComponent("lab.\(sourceExtension)").path))
     }
 
     /// Without a named student notebook — every existing caller — behaviour is

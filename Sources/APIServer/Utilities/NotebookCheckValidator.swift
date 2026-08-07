@@ -141,6 +141,18 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
     // No `regex: true` refusal here, deliberately: Octave's regexp is
     // PCRE, so a pattern authored against the Python or R renderer
     // transfers — verified against octave-cli before claiming it.
+    case .cpp:
+        // Categorical, not per-kind: notebook checks inspect a submitted
+        // notebook, and C++ assignments are upload-only with no notebook
+        // workflow — there is nothing for any kind to check. Pattern
+        // families and hand-written .sh tests are the C++ authoring surface.
+        throw Abort(
+            .unprocessableEntity,
+            reason:
+                "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not available for "
+                + "C++ assignments: C++ assignments are upload-only, so there is no submitted "
+                + "notebook to check. Use a pattern family or a hand-written .sh test instead."
+        )
     }
 }
 

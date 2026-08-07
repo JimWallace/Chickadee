@@ -119,6 +119,22 @@ import Testing
 
     @Test(arguments: AssignmentLanguage.allCases)
     func everyLanguageResolvesFromItsOwnGradedScript(_ language: AssignmentLanguage) throws {
+        // C++ is the deliberate exception: its generated scripts are `.sh`
+        // wrappers, and `.sh` must carry NO language signal (every hand-written
+        // shell suite would sniff as C++ otherwise). Its resolution signal is
+        // the RECORDED manifest language — asserted here, along with the
+        // no-signal pin for the bare script.
+        guard language != .cpp else {
+            let bare = try manifest(
+                #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
+            )
+            #expect(AssignmentLanguage.resolve(manifest: bare) == .python)
+            let recorded = try manifest(
+                #"{"schemaVersion":1,"language":"cpp","requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
+            )
+            #expect(AssignmentLanguage.resolve(manifest: recorded) == .cpp)
+            return
+        }
         let script = "publictest_x.\(language.generatedScriptExtension)"
         let m = try manifest(
             #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"\#(script)"}],"timeLimitSeconds":10}"#

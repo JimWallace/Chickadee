@@ -392,6 +392,50 @@ extension AssignmentLanguage {
                 // directory is on the default path and no OCTAVE_PATH is set.
                 workingDirectoryIsOnDefaultSearchPath: true
             )
+        case .cpp:
+            return LanguageDescriptor(
+                displayName: "C++",
+                // Marks hand-added `.cpp` suite entries as this language's.
+                // Such an entry is not directly runnable (there is no C++
+                // interpreter case, deliberately) — the runner classifies it
+                // unsupported and errors it, which is the honest outcome for
+                // a graded script that needs compiling. Generated cases are
+                // `.sh` wrappers instead; see `generatedScriptExtension`.
+                scriptExtensions: ["cpp", "h", "hpp"],
+                // The generated case IS a shell script (heredoc source →
+                // `g++` → run the binary), so it rides the original
+                // shell-script contract and the runner needs no new
+                // dispatch. Unique across languages like every other value
+                // here — no other language generates `.sh`.
+                generatedScriptExtension: "sh",
+                inputsFileName: "_ck_inputs.hpp",
+                // No notebook workflow, so no kernel aliases to claim — like
+                // Python's empty set, but for the opposite reason (nothing to
+                // detect, rather than default-by-fallthrough).
+                notebookKernelNames: [],
+                // The first language to answer this honestly: no vendored
+                // kernel, upload-only submissions, native-worker grading.
+                // The browser cannot run the course's real g++, and grading
+                // a different compiler than the course teaches is the
+                // pedagogy defect the C++ design settled on avoiding
+                // (docs/cpp-support.md).
+                editorSupport: .uploadOnly,
+                // `g++ --version` prints a version line and exits 0
+                // (verified on 13.3.0). The generated wrappers invoke the
+                // same binary, so probe and invocation cannot skew.
+                interpreterProbe: .init(command: "g++", versionArguments: ["--version"]),
+                // `#include` IS a file read — at compile time rather than
+                // run time, but the shape is R's, not Python's: nothing is
+                // name-addressable, no search-path variable exists to set,
+                // and the derivations (no runner-provided modules, no
+                // student prefixes, no path env var) are all correct for it.
+                moduleResolution: .fileRead,
+                // Quoted includes resolve relative to the INCLUDING file's
+                // directory by rule, so everything a generated test includes
+                // sits beside it and nothing needs setting. (Unused by the
+                // fileRead derivations; stated because the field must be.)
+                workingDirectoryIsOnDefaultSearchPath: true
+            )
         }
     }
 }

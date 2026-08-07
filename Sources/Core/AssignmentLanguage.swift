@@ -13,6 +13,16 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case r
     case lua
     case octave
+    /// Compiled C++ — the first language with NO editor kernel
+    /// (`EditorSupport.uploadOnly`): assignments are upload-only and grade on
+    /// the native worker exclusively, because the browser cannot run the
+    /// course's real g++ toolchain and grading a different compiler than the
+    /// course teaches would be a pedagogy defect (docs/cpp-support.md).
+    /// Generated tests are `.sh` wrappers that compile a single translation
+    /// unit (`test_runtime.hpp` + the student's file) with g++ and run the
+    /// binary under the ordinary shell-script contract — no per-language
+    /// build strategy enters Swift.
+    case cpp
 
     /// What an assignment resolves to when nothing about it says otherwise.
     ///
@@ -277,6 +287,7 @@ extension AssignmentLanguage {
         case .r: return value.rLiteral
         case .lua: return value.luaLiteral
         case .octave: return value.octaveLiteral
+        case .cpp: return value.cppLiteral
         }
     }
 
@@ -312,6 +323,7 @@ extension AssignmentLanguage {
         switch self {
         case .lua: commentLeader = "--"
         case .octave: commentLeader = "%"
+        case .cpp: commentLeader = "//"
         case .python, .r: commentLeader = "#"
         }
         let header =
@@ -368,6 +380,23 @@ extension AssignmentLanguage {
             return "\(header)\n"
                 + "ck_input_names = { " + names.joined(separator: ", ") + " };\n"
                 + "ck_input_values = { " + rendered.joined(separator: ", ") + " };\n"
+        case .cpp:
+            // A HEADER, not a map: C++ needs a type per value, and a runtime
+            // map would need one value type for all of them. Each input is its
+            // own `inline const auto` in a namespace, so every value keeps the
+            // natural type its literal has, and a generated test references
+            // `ck_inputs::name` directly — a missing input is an undefined
+            // identifier, which is the fail-closed check the other runtimes do
+            // with isKey, only earlier and louder (at compile). Input names are
+            // already validated as Python identifiers at authoring, which C++
+            // accepts; C++'s extra reserved words are refused by the cpp
+            // validator (`isValidCppIdentifier`).
+            let definitions = keys.map { "inline const auto \($0) = \(values[$0] ?? "0");" }
+            return "\(header)\n#pragma once\n#include <cmath>\n#include <limits>\n"
+                + "#include <map>\n#include <string>\n#include <vector>\n"
+                + "namespace ck_inputs {\n"
+                + definitions.map { "    \($0)\n" }.joined()
+                + "}\n"
         }
     }
 

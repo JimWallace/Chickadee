@@ -106,7 +106,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         octave \
         gnuplot-nox \
         fonts-freefont-otf \
+        g++ \
     && rm -rf /var/lib/apt/lists/*
+# g++ — the C++ toolchain the generated .sh wrappers and the C++
+# personalization driver invoke. On the SERVER image because
+# `PersonalizationEvaluator` compiles a driver per `=`-expression evaluation
+# (~0.3s each, measured); on the runner image because every generated C++
+# test compiles its single translation unit before running. ~60 MB installed.
 # `octave` provides /usr/bin/octave-cli, the binary the worker invokes for .m
 # test scripts. There is no CLI-only Debian/Ubuntu package: even with
 # --no-install-recommends, `octave` hard-depends on the Qt5 stack, so this line
