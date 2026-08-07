@@ -278,7 +278,11 @@
         if (lowerSubmissionName.endsWith('.ipynb')) {
             const notebookText = new TextDecoder().decode(submissionBytes);
             extractNotebookToMap(files, runnerCore, submissionFilename, notebookText);
-        } else if (lowerSubmissionName.endsWith('.py') || lowerSubmissionName.endsWith('.r')) {
+        } else if (['.py', '.r', '.lua'].some((ext) => lowerSubmissionName.endsWith(ext))) {
+            // The graded-script extensions (mirror AssignmentLanguage.scriptExtensions).
+            // `.lua` was missing, so a directly-uploaded .lua source got no
+            // student-module hint and test_runtime.lua's hint-only student_file()
+            // could not locate it. A new language is added here too.
             files['.chickadee_student_module'] = submissionFilename;
         }
 
@@ -303,8 +307,15 @@
             if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
                 assignmentSeed = parsed.seed;
             }
-            if (parsed && parsed.language === 'r') {
-                assignmentLanguage = 'r';
+            if (parsed && typeof parsed.language === 'string' && parsed.language) {
+                // Honour whatever language the server resolved (python/r/lua).
+                // Testing only `=== 'r'` left every Lua assignment on 'python',
+                // so the `'lua'` inputs writer below was dead code and a
+                // browser-graded Lua assignment wrote _ck_inputs.py — the Lua
+                // runtime reads _ck_inputs.lua and saw an empty table, so every
+                // per-student value went missing. The browser twin of the
+                // server-side resolve/rederive gap.
+                assignmentLanguage = parsed.language;
             }
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;

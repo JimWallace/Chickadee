@@ -7,6 +7,31 @@ new guard. Findings are ranked; **defect** means wrong marks, data loss, or
 silent failure on concrete inputs, as distinct from maintainability risk and
 taste.*
 
+## Status: all findings resolved
+
+Kept as the record of what was wrong and how it was found — the findings below
+describe `0280225`, **not** current behaviour. Every one has since been fixed:
+
+| Finding | Fixed in | What landed |
+|---|---|---|
+| F1 — `resolve`/`rederive` have no Lua arm | #1284 | one shared `gradedScriptLanguage(in:)` + `fromNotebookMetadata`; authored-items flip; `allCases` resolution rows |
+| F2 — no Lua interpreter in CI | #1285 | `lua5.4` in the ci-image + apt fallback; two did-not-skip proofs that fail rather than skip under `CI` |
+| F3 — `equal` ≠ `unordered_equal` | #1285 | `unordered_equal` reuses `equal` (greedy multiset); both embeds synced |
+| F4 — stdout capture defeated | #1285 | `io` proxy doubles as `io.stdout`, `write` is self-aware and chainable |
+| F5 — browser Lua personalization missing | #1286 | the runner honours the server's resolved language |
+| F6 — normalizer / hint / content-type Lua arms | #1286 | `xlua` normalization, `.lua` student-module hint, `text/plain` |
+
+F5 and F6 were **not** in the original findings: they came from the
+enumerated-not-discovered sweep this audit recommended, and F5 turned out to be
+a live wrong-marks defect of the same shape as F1, on the browser side. That is
+the argument for running the sweep rather than trusting the census.
+
+Two flagged sites were deliberately left alone, and both are documented at their
+call site: `KernelImportGuard.language(forFile:)` declines `.lua` (the
+`chickadee-lua` inventory is empty, so a guard would reject every `require`,
+starting with `require("test_runtime")`), and `isolatedWorkerScripts` is
+accurate today and covered by `IsolatedWorkerScriptDriftTests`.
+
 ---
 
 ## F1 — DEFECT (critical). The language dispatch never dispatches: `resolve` and `rederive` have no Lua arm, so every server-side decision for a real Lua assignment is made as Python

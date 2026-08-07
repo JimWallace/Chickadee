@@ -331,7 +331,7 @@ func contentType(for filename: String) -> HTTPMediaType {
     switch URL(fileURLWithPath: filename).pathExtension.lowercased() {
     case "ipynb", "json":
         return .json
-    case "py", "r", "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
+    case "py", "r", "lua", "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
         return .plainText
     default:
         return HTTPMediaType(type: "application", subType: "octet-stream")
