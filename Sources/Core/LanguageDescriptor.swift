@@ -58,24 +58,29 @@ import Foundation
 /// for the same shape. They are all projections of this single question, so it
 /// is asked once and they are derived.
 ///
-/// Scored against three languages this codebase does not have, to check the
-/// idea was not overfitted to the three it does:
+/// Scored against three languages this codebase did not have at the time, to
+/// check the idea was not overfitted to the three it did:
 ///
 /// | language | resolution | derives correctly? |
 /// |---|---|---|
 /// | Python | `byName("PYTHONPATH")` + a `sitecustomize` hook | yes |
 /// | R | `fileRead` (`source()`) | yes |
 /// | Lua | `byName("LUA_PATH")`, cwd already on path | yes |
-/// | Octave | `byName("OCTAVE_PATH")`, resolved by filename | yes — but see below |
+/// | Octave | `byName("OCTAVE_PATH")`, cwd already on path | yes — prediction was wrong, see below |
 /// | Java | `byName("CLASSPATH")` | yes |
 /// | C++ | none — `#include` is compile-time | n/a, and see below |
 ///
-/// **Octave is why the search-path variable needs a second input.** R is
-/// file-based and needs no variable; Octave is *also* file-based in spirit and
-/// needs `OCTAVE_PATH`. What actually decides it is not the resolution
-/// mechanism but `workingDirectoryIsOnDefaultSearchPath` — a per-implementation
-/// accident (Lua puts `./?.lua` on the path, Python and Octave do not). Hence
-/// one judgement plus one fact, not one judgement alone.
+/// **The fourth language arrived, and measurement corrected the survey.** This
+/// table originally predicted Octave needs `OCTAVE_PATH` set because its cwd
+/// is off the default path — and `octave-cli --eval "path"` shows the
+/// opposite: `.` is the FIRST entry of Octave's default load path (verified on
+/// the native 8.4 CLI and the wasm 10.3 kernel alike), so Octave lands like
+/// Lua and no variable is set. The SHAPE survives on Python's evidence — a
+/// by-name language whose cwd is genuinely off the path is real, so the
+/// mechanism alone cannot decide — but the Octave row was an armchair answer,
+/// and it is exactly why `workingDirectoryIsOnDefaultSearchPath` carries a
+/// "verify, do not assume" instruction. Hence one judgement plus one measured
+/// fact, not one judgement alone.
 ///
 /// **C++ is why this type stops here.** A compiled language reaches other code
 /// at compile time, so none of these three fields mean anything for it — but it
@@ -327,6 +332,30 @@ extension AssignmentLanguage {
                 // ends with `./?.lua;./?/init.lua`.
                 workingDirectoryIsOnDefaultSearchPath: true
             )
+        case .octave:
+            return LanguageDescriptor(
+                displayName: "Octave",
+                scriptExtensions: ["m"],
+                generatedScriptExtension: "m",
+                inputsFileName: "_ck_inputs.m",
+                notebookKernelNames: AssignmentLanguage.octaveKernelNames,
+                kernelEnvironmentFileName: "environment-octave.yml",
+                jupyterLiteKernelName: "xoctave",
+                jupyterLiteKernelDisplayName: "Octave (xeus-octave)",
+                missingDependencyFailureDescription: "an undefined-function error",
+                // `octave-cli --version` prints "GNU Octave, version N" and
+                // exits 0 (verified on 8.4.0). The worker invokes the same
+                // binary, so probe and invocation cannot skew.
+                interpreterProbe: .init(command: "octave-cli", versionArguments: ["--version"]),
+                // `chickadee = test_runtime()` IS a by-name load: the file is
+                // found through Octave's load path, not read by filename.
+                moduleResolution: .byName(searchPathVariable: "OCTAVE_PATH"),
+                // Verified rather than assumed, per this type's own rule —
+                // and the verification OVERTURNED the survey's prediction:
+                // `octave-cli --eval "path"` lists `.` first, so the working
+                // directory is on the default path and no OCTAVE_PATH is set.
+                workingDirectoryIsOnDefaultSearchPath: true
+            )
         }
     }
 }
@@ -369,8 +398,10 @@ extension AssignmentLanguage {
     ///
     /// Needs BOTH inputs: the mechanism supplies which variable exists, and
     /// `workingDirectoryIsOnDefaultSearchPath` decides whether setting it would
-    /// achieve anything. Octave is the case that proves the second is required
-    /// — file-resolved like R, yet it does need `OCTAVE_PATH`.
+    /// achieve anything. Python is the case that proves the second is required
+    /// — by-name resolution whose cwd is genuinely off the driver's path.
+    /// (Octave was predicted to be a second such case and measured not to be:
+    /// its default load path opens with `.`, so nothing needs setting.)
     public var supportFilesPathEnvironmentVariable: String? {
         switch descriptor.moduleResolution {
         case .fileRead:

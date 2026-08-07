@@ -483,6 +483,11 @@ actor WorkerDaemon {
         try testRuntimeLua.write(to: luaRuntimeURL, atomically: true, encoding: .utf8)
     }
 
+    func writeOctaveRuntimeHelper(in directory: URL) throws {
+        let octaveRuntimeURL = directory.appendingPathComponent("test_runtime.m")
+        try testRuntimeOctave.write(to: octaveRuntimeURL, atomically: true, encoding: .utf8)
+    }
+
     func writePythonRuntimeHelpers(in directory: URL) throws {
         let runtimeURL = directory.appendingPathComponent("test_runtime.py")
         try testRuntimePy.write(to: runtimeURL, atomically: true, encoding: .utf8)

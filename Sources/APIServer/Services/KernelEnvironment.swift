@@ -94,6 +94,7 @@ struct KernelEnvironment: Sendable {
         case .python: return "chickadee-python"
         case .r: return "chickadee-r"
         case .lua: return "chickadee-lua"
+        case .octave: return "chickadee-octave"
         }
     }
 

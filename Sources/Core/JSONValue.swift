@@ -145,6 +145,65 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
         luaLiteral(inTable: false)
     }
 
+    /// Deterministic Octave literal representation, suitable for embedding
+    /// inside generated `.m` test scripts and the `_ck_inputs.m` inputs file.
+    ///
+    /// The rule that matters — decided explicitly because Octave's failure
+    /// mode is SILENT: `[...]` is concatenation, so `[65, "bc"]` is not an
+    /// error but the char array `"Abc"` (numbers converted by code point, one
+    /// stderr warning nobody reads). A naive array rendering would hand a
+    /// generated test a plausible wrong value to grade against. So:
+    ///
+    ///   - an array whose elements are ALL numeric or boolean scalars
+    ///     (JSON null admitted as `NA`, Octave's missing-value double, which
+    ///     occupies its slot — `[60, NA, 20]` stays length 3) → a numeric row
+    ///     vector `[60, NA, 20]`, which is what a student's arithmetic
+    ///     produces and what `chickadee.equal` compares shape-blind;
+    ///   - EVERYTHING else — any string element, mixed kinds, nested arrays,
+    ///     objects, and the empty array — → a cell array `{...}`, the one
+    ///     Octave container that stores anything without coercing it.
+    ///     Strings are never admitted to `[...]`: `["ab", "cd"]` is the char
+    ///     concatenation `"abcd"`, the same trap with a different mask.
+    ///
+    /// Nested arrays therefore render as cells-of-rows (`{[1, 2], [3, 4]}`),
+    /// not matrices — the same decision `rLiteral` makes with lists-of-vectors,
+    /// because JSON has no matrix and inventing one would guess wrong half the
+    /// time. An author who wants matrix comparison writes a hand-authored test.
+    ///
+    /// Objects render as `containers.Map` constructor calls (verified: Octave's
+    /// isequal compares Maps by content, insertion-order-independent). Not
+    /// `struct(...)`: JSON keys need not be valid identifiers, and the struct
+    /// constructor's cell-expansion rule (`struct("a", {1, 2})` is a 1×2 struct
+    /// ARRAY) turns innocent-looking values into a different shape entirely.
+    ///
+    /// `null` at top level is `NA` too (not `[]`, which would conflate a
+    /// missing value with an empty array — `isempty(NA)` is false, so the two
+    /// stay distinguishable). Non-finite doubles use Octave's own spellings
+    /// `NaN` / `Inf` / `-Inf`.
+    public var octaveLiteral: String {
+        switch self {
+        case .null: return "NA"
+        case .bool(let b): return b ? "true" : "false"
+        case .int(let i): return String(i)
+        case .double(let d):
+            if d.isNaN { return "NaN" }
+            if d.isInfinite { return d < 0 ? "-Inf" : "Inf" }
+            let s = String(d)
+            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+        case .string(let s):
+            return encodeOctaveString(s)
+        case .array(let a):
+            let inner = a.map(\.octaveLiteral).joined(separator: ", ")
+            return isOctaveNumericArray(a) ? "[\(inner)]" : "{\(inner)}"
+        case .object(let o):
+            let pairs = o.sorted { $0.key < $1.key }
+            guard !pairs.isEmpty else { return "containers.Map()" }
+            let keys = pairs.map { encodeOctaveString($0.key) }.joined(separator: ", ")
+            let values = pairs.map { $0.value.octaveLiteral }.joined(separator: ", ")
+            return "containers.Map({\(keys)}, {\(values)})"
+        }
+    }
+
     private func luaLiteral(inTable: Bool) -> String {
         switch self {
         case .null:
@@ -194,6 +253,46 @@ private func encodeLuaString(_ s: String) -> String {
         }
     }
     return out + "\""
+}
+
+/// Octave double-quoted strings take C-style escapes. Control characters use
+/// exactly-three-digit octal (`\011`) rather than `\x`, because Octave's `\x`
+/// consumes every hex digit that follows — `"\x0abc"` would swallow four
+/// characters of payload — while octal stops at three digits by rule.
+private func encodeOctaveString(_ s: String) -> String {
+    var out = "\""
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\\": out += #"\\"#
+        case "\"": out += #"\""#
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        default:
+            if ch.value < 0x20 || ch.value == 0x7F {
+                out += String(format: "\\%03o", ch.value)
+            } else {
+                out.unicodeScalars.append(ch)
+            }
+        }
+    }
+    return out + "\""
+}
+
+/// True when every element is a numeric or boolean scalar (JSON null admitted
+/// — it renders `NA`, a double, and occupies its slot), so the array can render
+/// as an Octave numeric row vector without any silent char coercion. Strings
+/// are deliberately NOT admitted (see `octaveLiteral`), which is what makes
+/// this narrower than `isHomogeneousScalarArray`'s R rule. Empty arrays fall
+/// through to the cell rendering: nothing says what they would have held.
+private func isOctaveNumericArray(_ items: [JSONValue]) -> Bool {
+    guard !items.isEmpty else { return false }
+    return items.allSatisfy { item in
+        switch item {
+        case .null, .bool, .int, .double: return true
+        case .string, .array, .object: return false
+        }
+    }
 }
 
 private func encodePythonString(_ s: String) -> String {

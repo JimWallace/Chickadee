@@ -45,6 +45,7 @@ FROM ${BASE_IMAGE}
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
         r-base python3-pandas python3-matplotlib lua5.4 octave \
+        gnuplot-nox fonts-freefont-otf \
         nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # octave     — provides /usr/bin/octave-cli for the Octave execution-path
@@ -53,3 +54,6 @@ RUN apt-get update -qq \
 #              and skips, and "green" means nothing ever ran the generated
 #              Octave. ~338 MB installed (no CLI-only package exists — octave
 #              hard-depends on Qt5 even with --no-install-recommends).
+# gnuplot-nox + fonts-freefont-otf — headless figure creation for the
+#              figureCount execution tests; without them figure() errors and
+#              the tests would skip or fail for reasons unrelated to the code.

@@ -75,6 +75,15 @@ enum KernelImportGuard {
             // ambiguity by design: a false positive blocks an instructor from
             // saving with no self-service fix.
             return []
+        case .octave:
+            // Unreachable for the same reason as Lua — `language(forFile:)`
+            // returns nil for `.m`, deliberately: Octave has no import
+            // statement to scan (functions resolve implicitly through the load
+            // path), and the one loadable construct, `pkg load`, could only
+            // ever be refused because emscripten-forge carries no Octave Forge
+            // packages and the chickadee-octave inventory is empty. Reporting
+            // nothing keeps the guard's resolve-toward-silence rule.
+            return []
         }
     }
 

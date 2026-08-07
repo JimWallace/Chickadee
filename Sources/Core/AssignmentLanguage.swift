@@ -12,6 +12,7 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case python
     case r
     case lua
+    case octave
 
     /// What an assignment resolves to when nothing about it says otherwise.
     ///
@@ -42,6 +43,20 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// `Public/browser-runner.js` — after editing either, run
     /// `scripts/generate-js-constants.sh`.
     public static let luaKernelNames: Set<String> = ["xlua", "lua"]
+
+    /// Kernelspec `name` values that mark an Octave notebook. `xoctave` is the
+    /// vendored xeus-octave kernel; `octave` is its kernelspec `language`
+    /// (lowercased) and what `language_info.name` reports.
+    ///
+    /// Deliberately does NOT claim `matlab`: a notebook authored against a
+    /// MATLAB kernel is usually valid Octave, but claiming it would silently
+    /// reroute any MATLAB-kernel notebook an instructor uploads, and that is a
+    /// decision to take knowingly rather than inherit from an alias list.
+    ///
+    /// Carried in the same generated block as the others in
+    /// `Public/browser-runner.js` — after editing, run
+    /// `scripts/generate-js-constants.sh`.
+    public static let octaveKernelNames: Set<String> = ["xoctave", "octave"]
 
     /// See `LanguageDescriptor.notebookKernelNames`.
     public var notebookKernelNames: Set<String> { descriptor.notebookKernelNames }
@@ -261,6 +276,7 @@ extension AssignmentLanguage {
         case .python: return value.pythonLiteral
         case .r: return value.rLiteral
         case .lua: return value.luaLiteral
+        case .octave: return value.octaveLiteral
         }
     }
 
@@ -292,7 +308,12 @@ extension AssignmentLanguage {
         // down a line, or put anything above it, and the whole inputs file
         // becomes a syntax error that surfaces as every per-student value
         // silently reading as missing.
-        let commentLeader = self == .lua ? "--" : "#"
+        let commentLeader: String
+        switch self {
+        case .lua: commentLeader = "--"
+        case .octave: commentLeader = "%"
+        case .python, .r: commentLeader = "#"
+        }
         let header =
             "\(commentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
         let keys = values.keys.sorted()
@@ -330,6 +351,23 @@ extension AssignmentLanguage {
             }
             guard !keys.isEmpty else { return "\(header)\nreturn {}\n" }
             return "\(header)\nreturn {\n" + assignments.joined(separator: ",\n") + "\n}\n"
+        case .octave:
+            // Two parallel cell arrays rather than a struct or a Map literal:
+            // input names are author-chosen strings, and Octave struct field
+            // names must be identifiers, so a struct could not hold every
+            // legal name. `chickadee.inputs()` evaluates this file's TEXT
+            // (`eval(fileread(...))`) — never by its `_ck_inputs` script name
+            // — and zips the two lists into a containers.Map, so the file
+            // itself stays pure data that can be written into an empty
+            // directory and read identically by both runners.
+            let names = keys.map { JSONValue.string($0).octaveLiteral }
+            let rendered = keys.map { values[$0] ?? "NA" }
+            guard !keys.isEmpty else {
+                return "\(header)\nck_input_names = {};\nck_input_values = {};\n"
+            }
+            return "\(header)\n"
+                + "ck_input_names = { " + names.joined(separator: ", ") + " };\n"
+                + "ck_input_values = { " + rendered.joined(separator: ", ") + " };\n"
         }
     }
 

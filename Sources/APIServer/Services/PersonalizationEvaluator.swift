@@ -151,6 +151,14 @@ enum PersonalizationEvaluator {
             )
             driverURL = tempDir.appendingPathComponent("personalize_driver.lua")
             interpreter = "lua"
+        case .octave:
+            driverSource = renderOctaveDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            driverURL = tempDir.appendingPathComponent("personalize_driver.m")
+            interpreter = "octave-cli"
         }
         do {
             try driverSource.write(to: driverURL, atomically: true, encoding: .utf8)
@@ -305,6 +313,12 @@ enum PersonalizationEvaluator {
             // name, so there is no identifier to validate — any `.lua` beside
             // the assignment is a candidate helper.
             return entries.filter { (($0 as NSString).pathExtension).lowercased() == "lua" }.sorted()
+        case .octave:
+            // Loaded by file too — the driver evaluates each helper's text
+            // behind a `1;` script guard (the same trick the grading runtime's
+            // load_student uses), so a one-function-per-file helper registers
+            // under its own name rather than executing as a bare body.
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "m" }.sorted()
         }
     }
 
@@ -448,6 +462,82 @@ enum PersonalizationEvaluator {
         lines.append("        .. chickadee_json_str(chickadee_serialize(scope[name]))")
         lines.append("end")
         lines.append("io.write(\"{\" .. table.concat(ck_pairs, \",\") .. \"}\\n\")")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Renders the Octave sibling of `renderDriverScript`. Opens with a `1;`
+    /// script guard (the function definitions that follow would otherwise make
+    /// the driver a FUNCTION FILE and nothing would execute), defines the
+    /// shared personalization primitives from `OctavePersonalizationRuntime`
+    /// (so the seed it binds and the seed a graded script reads are one
+    /// implementation), loads each support `.m` helper's text behind the same
+    /// guard, binds every static variable via `octaveLiteral`, evaluates each
+    /// `= expression` in declared order, then emits — as the LAST stdout line —
+    /// a JSON map `name → chickadee_serialize(value)` (an Octave literal
+    /// string per value). The Swift return path parses that last line
+    /// identically for every language, so only the driver bytes differ.
+    static func renderOctaveDriverScript(
+        staticVariables: [FamilyVariable],
+        expressions: [PersonalizationExpression],
+        supportFiles: [String] = []
+    ) -> String {
+        var lines: [String] = [
+            "% Auto-generated personalization driver.  Do not edit.",
+            "1;",
+            "",
+        ]
+        lines.append(OctavePersonalizationRuntime.chickadeeSeedOctaveSource)
+        lines.append("")
+        lines.append(OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource)
+        lines.append("")
+        lines.append(OctavePersonalizationRuntime.chickadeeSerializeOctaveSource)
+        lines.append("")
+        lines.append("seed = chickadee_seed();")
+        lines.append("")
+        if !supportFiles.isEmpty {
+            lines.append("% Auto-loaded support files (instructor .m helpers + the")
+            lines.append("% solution.ipynb code cells extracted into solution.m). Each is")
+            lines.append("% evaluated behind a `1;` guard so a one-function-per-file helper")
+            lines.append("% registers under its own name instead of executing as a bare body.")
+            lines.append("% A broken helper is ignored here; a missing name surfaces as an")
+            lines.append("% error only if an expression actually references it.")
+            for name in supportFiles {
+                lines.append("try")
+                lines.append(
+                    "    eval([\"1;\" sprintf(\"\\n\") fileread(\(JSONValue.string(name).octaveLiteral))]);"
+                )
+                lines.append("catch")
+                lines.append("end")
+            }
+            lines.append("")
+        }
+        if !staticVariables.isEmpty {
+            lines.append("% Static globals + section variables (in scope for expressions).")
+            for v in staticVariables {
+                lines.append("\(octaveIdentifier(v.name)) = \(v.value.octaveLiteral);")
+            }
+            lines.append("")
+        }
+        lines.append("% Per-student expressions, evaluated in declared order. Each binds its")
+        lines.append("% name in this workspace, so later expressions can reference earlier ones.")
+        lines.append("ck_names = {};")
+        for e in expressions {
+            let nameLiteral = JSONValue.string(e.name).octaveLiteral
+            // The expression text is embedded as an Octave string literal, so
+            // an instructor's quotes and backslashes cannot break out of it.
+            let bodyLiteral = JSONValue.string("(\(e.expression))").octaveLiteral
+            lines.append("\(octaveIdentifier(e.name)) = eval(\(bodyLiteral));")
+            lines.append("ck_names{end + 1} = \(nameLiteral);")
+        }
+        lines.append("")
+        lines.append("% Emit one chickadee_serialize(value) per declared expression as a JSON")
+        lines.append("% map (the LAST stdout line — earlier instructor output is ignored).")
+        lines.append("ck_pairs = {};")
+        lines.append("for ck_i = 1:numel(ck_names)")
+        lines.append("    ck_pairs{end + 1} = [chickadee_escape_string(ck_names{ck_i}) \":\" ...")
+        lines.append("        chickadee_escape_string(chickadee_serialize(eval(ck_names{ck_i})))];")
+        lines.append("end")
+        lines.append("printf(\"{%s}\\n\", strjoin(ck_pairs, \",\"));")
         return lines.joined(separator: "\n") + "\n"
     }
 

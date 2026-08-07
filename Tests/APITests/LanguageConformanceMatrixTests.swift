@@ -137,6 +137,42 @@ import Testing
                     """
                 }
             )
+        case .octave:
+            return Adapter(
+                interpreter: "octave-cli",
+                evalFlag: "--eval",
+                versionArguments: ["--version"],
+                debianPackage: "octave",
+                // `__parse_file__` compiles a file without executing it —
+                // verified: a script whose body prints does not print, a
+                // mid-script `function` definition parses, and a syntax error
+                // raises catchably. It is an internal builtin (the
+                // double-underscore is Octave's own convention for those), so
+                // if a future Octave drops it this arm fails LOUDLY here
+                // rather than anything skipping.
+                parseOnlyProgram: { path in
+                    "try; __parse_file__(\(octString(path))); catch; exit(1); end"
+                },
+                readInputsProgram: { key in
+                    // Mirrors chickadee.inputs(): evaluate the file's TEXT
+                    // (never by its `_ck_inputs` script name) and zip the two
+                    // parallel cell arrays.
+                    """
+                    ck_input_names = {}; ck_input_values = {};
+                    eval(fileread("_ck_inputs.m"));
+                    ck_found = false;
+                    for ck_i = 1:numel(ck_input_names)
+                        if strcmp(ck_input_names{ck_i}, \(octString(key)))
+                            disp(ck_input_values{ck_i});
+                            ck_found = true;
+                        end
+                    end
+                    if !ck_found
+                        exit(1);
+                    end
+                    """
+                }
+            )
         }
     }
 
@@ -508,4 +544,5 @@ import Testing
     static func pythonString(_ s: String) -> String { JSONValue.string(s).pythonLiteral }
     static func rString(_ s: String) -> String { JSONValue.string(s).rLiteral }
     static func luaString(_ s: String) -> String { JSONValue.string(s).luaLiteral }
+    static func octString(_ s: String) -> String { JSONValue.string(s).octaveLiteral }
 }

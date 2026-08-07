@@ -104,6 +104,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         r-base \
         lua5.4 \
         octave \
+        gnuplot-nox \
+        fonts-freefont-otf \
     && rm -rf /var/lib/apt/lists/*
 # `octave` provides /usr/bin/octave-cli, the binary the worker invokes for .m
 # test scripts. There is no CLI-only Debian/Ubuntu package: even with
@@ -112,6 +114,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # validation working at all — without the interpreter, every Octave test exits
 # 127 and instructor validation cannot pass (the failure class #1280 fixed for
 # Lua).
+#
+# gnuplot-nox + fonts-freefont-otf (~7 MB together) are what make HEADLESS
+# figure creation work under octave-cli: without a toolkit, `figure()` errors
+# "no graphics toolkits are available!", and gnuplot without that font dies in
+# ft_text_renderer — either way every figureCount notebook check errors at
+# validation. Measured, not assumed; the wasm kernel side needs nothing (its
+# plotly toolkit is built in).
 
 # Non-root user for the application processes.
 RUN useradd --system --user-group --create-home chickadee
