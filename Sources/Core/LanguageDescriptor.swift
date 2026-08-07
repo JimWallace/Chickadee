@@ -170,6 +170,21 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// browser-grading kernel, named in the authoring rejection message.
     public let kernelEnvironmentFileName: String
 
+    /// The vendored JupyterLite kernel a notebook in this language is
+    /// normalized onto, and the friendly label shown beside it.
+    ///
+    /// `normalizeNotebookForJupyterLite` collapses every alias in
+    /// `notebookKernelNames` onto this name, so the editor can attach a kernel.
+    /// It is a descriptor field rather than a per-language constant because the
+    /// normalizer was a hand-written arm per language and shipped without a Lua
+    /// one — a `lua`-named notebook fell through "unknown → leave unchanged"
+    /// and never attached xeus-lua (docs/lua-architecture-audit.md F6).
+    ///
+    /// The display name deliberately omits the language version the kernelspec
+    /// carries, so a kernel rebuild does not churn every stored notebook.
+    public let jupyterLiteKernelName: String
+    public let jupyterLiteKernelDisplayName: String
+
     /// How a missing dependency presents to a student at grade time, phrased for
     /// that same rejection message.
     public let missingDependencyFailureDescription: String
@@ -222,6 +237,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         inputsFileName: String,
         notebookKernelNames: Set<String>,
         kernelEnvironmentFileName: String,
+        jupyterLiteKernelName: String,
+        jupyterLiteKernelDisplayName: String,
         missingDependencyFailureDescription: String,
         interpreterProbe: InterpreterProbe,
         moduleResolution: ModuleResolution,
@@ -233,6 +250,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
         self.kernelEnvironmentFileName = kernelEnvironmentFileName
+        self.jupyterLiteKernelName = jupyterLiteKernelName
+        self.jupyterLiteKernelDisplayName = jupyterLiteKernelDisplayName
         self.missingDependencyFailureDescription = missingDependencyFailureDescription
         self.interpreterProbe = interpreterProbe
         self.moduleResolution = moduleResolution
@@ -257,6 +276,8 @@ extension AssignmentLanguage {
                 inputsFileName: "_ck_inputs.py",
                 notebookKernelNames: [],
                 kernelEnvironmentFileName: "environment-python.yml",
+                jupyterLiteKernelName: "xpython",
+                jupyterLiteKernelDisplayName: "Python (xeus-python)",
                 missingDependencyFailureDescription: "an ImportError",
                 interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
                 moduleResolution: .byName(
@@ -275,6 +296,8 @@ extension AssignmentLanguage {
                 inputsFileName: "_ck_inputs.R",
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
                 kernelEnvironmentFileName: "environment-r.yml",
+                jupyterLiteKernelName: "xr",
+                jupyterLiteKernelDisplayName: "R (xeus-r)",
                 missingDependencyFailureDescription: "an error from library()",
                 interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
                 // `source("test_runtime.R")` is a file read, not a module load:
@@ -291,6 +314,8 @@ extension AssignmentLanguage {
                 inputsFileName: "_ck_inputs.lua",
                 notebookKernelNames: AssignmentLanguage.luaKernelNames,
                 kernelEnvironmentFileName: "environment-lua.yml",
+                jupyterLiteKernelName: "xlua",
+                jupyterLiteKernelDisplayName: "Lua (xeus-lua)",
                 missingDependencyFailureDescription: "an error from require()",
                 // `-v`, not `--version` — see `interpreterProbe`'s note.
                 interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),

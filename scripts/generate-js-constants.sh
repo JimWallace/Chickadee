@@ -3,8 +3,10 @@
 # Generate JS constants in Public/browser-runner.js from their canonical Swift
 # declarations, so the browser copy is machine-written instead of hand-synced.
 #
-# The browser cannot import Swift, so it needs a copy of every per-language
-# kernel-alias set on AssignmentLanguage (Sources/Core/AssignmentLanguage.swift).
+# The browser cannot import Swift, so it needs a copy of the per-language facts
+# it routes on: every kernel-alias set on AssignmentLanguage
+# (Sources/Core/AssignmentLanguage.swift), and the union of the graded-script
+# extensions on LanguageDescriptor (Sources/Core/LanguageDescriptor.swift).
 # This script owns those copies. Each lives in a fenced block:
 #
 #   // CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN
@@ -37,6 +39,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 swift_src="$repo_root/Sources/Core/AssignmentLanguage.swift"
+descriptor_src="$repo_root/Sources/Core/LanguageDescriptor.swift"
 js_src="$repo_root/Public/browser-runner.js"
 
 mode="write"
@@ -102,12 +105,54 @@ for lang in $langs; do
   mv "$tmp" "$work"
 done
 
+# --- The graded-script extensions, unioned across every descriptor -----------
+#
+# The browser decides whether a directly-uploaded file is gradeable source (and
+# so needs a `.chickadee_student_module` hint) by extension. That list was hand
+# written as `.py` / `.r` and silently omitted `.lua`, so a Lua upload got no
+# hint and test_runtime.lua — which cannot list a directory and is therefore
+# hint-only — could not find it. Generating the union from the descriptors makes
+# a new language's extension appear the day its literal does.
+extensions="$(sed -n 's/.*scriptExtensions: \[\(.*\)\],.*/\1/p' "$descriptor_src" \
+  | grep -o '"[^"]*"' | tr -d '"' | LC_ALL=C sort -u)"
+if [ -z "$extensions" ]; then
+  echo "generate-js-constants: found no scriptExtensions declarations in $descriptor_src" >&2
+  rm -f "$work"; exit 1
+fi
+if printf '%s\n' "$extensions" | grep -q '[A-Z]'; then
+  echo "generate-js-constants: scriptExtensions entries must be lowercase" >&2
+  rm -f "$work"; exit 1
+fi
+
+ext_joined="$(printf '%s\n' "$extensions" \
+  | awk -v q="'" 'NR > 1 { out = out ", " } { out = out q "." $0 q } END { print out }')"
+ext_generated="    const GRADED_SCRIPT_EXTENSIONS = [$ext_joined];"
+ext_begin="CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:BEGIN"
+ext_end="CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:END"
+for marker in "$ext_begin" "$ext_end"; do
+  if ! grep -q "$marker" "$work"; then
+    echo "generate-js-constants: missing $marker marker in $js_src." >&2
+    echo "The browser needs the graded-script extension list to decide which" >&2
+    echo "uploads get a student-module hint. Add the fenced block and re-run." >&2
+    rm -f "$work"; exit 1
+  fi
+done
+
+tmp="$(mktemp)"
+awk -v repl="$ext_generated" -v begin="$ext_begin" -v end="$ext_end" '
+  index($0, begin) { print; print repl; skipping = 1; next }
+  index($0, end)   { skipping = 0; print; next }
+  skipping { next }
+  { print }
+' "$work" > "$tmp"
+mv "$tmp" "$work"
+
 if [ "$mode" = "check" ]; then
   if cmp -s "$work" "$js_src"; then
     rm -f "$work"
-    echo "generate-js-constants: OK (browser kernel-name sets match the Swift declarations)"
+    echo "generate-js-constants: OK (browser language constants match the Swift declarations)"
   else
-    echo "generate-js-constants: Public/browser-runner.js kernel-name sets are stale." >&2
+    echo "generate-js-constants: Public/browser-runner.js language constants are stale." >&2
     echo "Run scripts/generate-js-constants.sh and commit the result." >&2
     diff -u "$js_src" "$work" >&2 || true
     rm -f "$work"
@@ -119,6 +164,6 @@ else
     echo "generate-js-constants: already up to date"
   else
     mv "$work" "$js_src"
-    echo "generate-js-constants: rewrote the kernel-name blocks"
+    echo "generate-js-constants: rewrote the generated language blocks"
   fi
 fi

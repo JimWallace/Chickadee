@@ -68,6 +68,16 @@
     const LUA_KERNEL_NAMES = ['lua', 'xlua'];
     // CHICKADEE_GENERATED:LUA_KERNEL_NAMES:END
 
+    // Filename extensions that mark a directly-uploaded file as gradeable
+    // source, so it gets a `.chickadee_student_module` hint. A GENERATED copy of
+    // the union of LanguageDescriptor.scriptExtensions — same rule as above:
+    // edit the Swift literal and re-run the script, never this line. Hand-listing
+    // them here is what omitted `.lua`, leaving a Lua upload with no hint and
+    // test_runtime.lua (which cannot list a directory) unable to find it.
+    // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:BEGIN
+    const GRADED_SCRIPT_EXTENSIONS = ['.lua', '.py', '.r'];
+    // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:END
+
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
@@ -278,11 +288,10 @@
         if (lowerSubmissionName.endsWith('.ipynb')) {
             const notebookText = new TextDecoder().decode(submissionBytes);
             extractNotebookToMap(files, runnerCore, submissionFilename, notebookText);
-        } else if (['.py', '.r', '.lua'].some((ext) => lowerSubmissionName.endsWith(ext))) {
-            // The graded-script extensions (mirror AssignmentLanguage.scriptExtensions).
-            // `.lua` was missing, so a directly-uploaded .lua source got no
-            // student-module hint and test_runtime.lua's hint-only student_file()
-            // could not locate it. A new language is added here too.
+        } else if (GRADED_SCRIPT_EXTENSIONS.some((ext) => lowerSubmissionName.endsWith(ext))) {
+            // Generated from LanguageDescriptor.scriptExtensions, so a new
+            // language's uploads get a student-module hint the day its literal
+            // lands rather than whenever someone remembers this line.
             files['.chickadee_student_module'] = submissionFilename;
         }
 

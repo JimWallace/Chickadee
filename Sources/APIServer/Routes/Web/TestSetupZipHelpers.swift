@@ -328,13 +328,19 @@ func buildFileResponse(data: Data, filename: String) -> Response {
 }
 
 func contentType(for filename: String) -> HTTPMediaType {
-    switch URL(fileURLWithPath: filename).pathExtension.lowercased() {
+    let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
+    switch ext {
     case "ipynb", "json":
         return .json
-    case "py", "r", "lua", "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
+    case "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
         return .plainText
     default:
-        return HTTPMediaType(type: "application", subType: "octet-stream")
+        // Every assignment language's own extension is text, from the one
+        // table — hand-listing them here is what served `.lua` as
+        // octet-stream, offering a download prompt instead of displaying it.
+        return AssignmentLanguage(scriptExtension: ext) != nil
+            ? .plainText
+            : HTTPMediaType(type: "application", subType: "octet-stream")
     }
 }
 

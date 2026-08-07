@@ -24,6 +24,8 @@ import Testing
         #expect(!d.generatedScriptExtension.isEmpty)
         #expect(!d.inputsFileName.isEmpty)
         #expect(!d.kernelEnvironmentFileName.isEmpty)
+        #expect(!d.jupyterLiteKernelName.isEmpty)
+        #expect(!d.jupyterLiteKernelDisplayName.isEmpty)
         #expect(!d.missingDependencyFailureDescription.isEmpty)
         #expect(!d.interpreterProbe.command.isEmpty)
         #expect(!d.interpreterProbe.versionArguments.isEmpty)
@@ -41,6 +43,8 @@ import Testing
             ("generatedScriptExtension", all.map(\.generatedScriptExtension)),
             ("inputsFileName", all.map(\.inputsFileName)),
             ("kernelEnvironmentFileName", all.map(\.kernelEnvironmentFileName)),
+            ("jupyterLiteKernelName", all.map(\.jupyterLiteKernelName)),
+            ("jupyterLiteKernelDisplayName", all.map(\.jupyterLiteKernelDisplayName)),
             ("interpreterProbe.command", all.map(\.interpreterProbe.command)),
         ]
         for (field, values) in unique {

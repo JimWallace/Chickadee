@@ -17,20 +17,16 @@ import Vapor
 /// Tiers that students cannot see in the notebook or in downloads.
 let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 
-// JupyterLite kernel identifiers used when normalizing notebook metadata.
+// The JupyterLite kernel each language normalizes onto lives on its
+// `LanguageDescriptor` (`jupyterLiteKernelName` / `jupyterLiteKernelDisplayName`),
+// not in per-language constants here. Every editor kernel is a xeus kernel built
+// from an emscripten-forge env, attached by `name`; the display names
+// deliberately omit the language version the kernelspec carries (e.g.
+// "Python 3.13 (XPython)"), so a kernel rebuild does not churn stored notebooks.
 //
-// Both editor kernels are now xeus kernels built from one emscripten-forge env
-// (Tools/jupyterlite/environment.yml): Python moved off the Pyodide kernel onto
-// xeus-python so the editor runs a single kernel technology. Attachment is by
-// `name`; the display names are friendly labels and deliberately omit the
-// language version the kernelspec carries (e.g. "Python 3.13 (XPython)"), so a
-// kernel rebuild does not churn every stored notebook's metadata.
-let jupyterLitePythonKernelName = "xpython"
-let jupyterLitePythonKernelDisplayName = "Python (xeus-python)"
-let jupyterLiteRKernelName = "xr"
-let jupyterLiteRKernelDisplayName = "R (xeus-r)"
-let jupyterLiteLuaKernelName = "xlua"
-let jupyterLiteLuaKernelDisplayName = "Lua (xeus-lua)"
+// They were free constants plus one hand-written `else if` per language, which
+// is how the Lua arm came to be missing. Reading them off the descriptor lets
+// `normalizeNotebookForJupyterLite` iterate `allCases` instead.
 
 /// Kernelspec names treated as "this is a Python notebook" when normalizing.
 ///
@@ -157,39 +153,37 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     var kernelSpec = existingKernelSpec ?? [:]
     var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
 
-    if let name = existingName, AssignmentLanguage.rKernelNames.contains(name) {
-        // R notebook (IRkernel / legacy webr / xeus-r) → normalize to the vendored xeus-r kernel.
-        kernelSpec["name"] = jupyterLiteRKernelName
-        kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
+    // DISCOVERED, not enumerated. Each non-default language claims the aliases in
+    // its own `notebookKernelNames` and normalizes onto its own descriptor's
+    // vendored kernel, so a new language needs no arm here. This was three
+    // hand-written arms and shipped without a Lua one, leaving a `lua`-named
+    // notebook on "unknown → leave unchanged" with no kernel the editor could
+    // attach (docs/lua-architecture-audit.md F6).
+    let matched = AssignmentLanguage.allCases.first {
+        $0 != .default && existingName.map($0.notebookKernelNames.contains) == true
+    }
+
+    if let language = matched {
+        kernelSpec["name"] = language.descriptor.jupyterLiteKernelName
+        kernelSpec["display_name"] = language.descriptor.jupyterLiteKernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
-            languageInfo["name"] = "r"
+            // The raw value IS the language_info name (`r`, `lua`, `python`), so
+            // the two cannot drift.
+            languageInfo["name"] = language.rawValue
         }
         metadata["language_info"] = languageInfo
-    } else if let name = existingName, AssignmentLanguage.luaKernelNames.contains(name) {
-        // Lua notebook (`xlua`, or a bare `lua` from an import) → normalize to
-        // the vendored xeus-lua kernel. Without this arm a `lua`-named notebook
-        // fell through to "unknown → leave unchanged" and never attached xlua —
-        // the R arm existed but its Lua twin did not.
-        kernelSpec["name"] = jupyterLiteLuaKernelName
-        kernelSpec["display_name"] = jupyterLiteLuaKernelDisplayName
-        metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
-            languageInfo["name"] = "lua"
-        }
-        metadata["language_info"] = languageInfo
-    } else if let name = existingName, !name.isEmpty,
-        !pythonKernelNames.contains(name)
-    {
-        // Unknown non-Python, non-R, non-Lua kernel → leave unchanged.
+    } else if let name = existingName, !name.isEmpty, !pythonKernelNames.contains(name) {
+        // A kernel no language claims → leave unchanged.
         return data
     } else {
-        // Python kernel (or missing kernelspec) → normalize to xeus-python.
-        kernelSpec["name"] = jupyterLitePythonKernelName
-        kernelSpec["display_name"] = jupyterLitePythonKernelDisplayName
+        // Python kernel (or missing kernelspec) → the default's vendored kernel.
+        let python = AssignmentLanguage.default
+        kernelSpec["name"] = python.descriptor.jupyterLiteKernelName
+        kernelSpec["display_name"] = python.descriptor.jupyterLiteKernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String)?.isEmpty != false {
-            languageInfo["name"] = "python"
+            languageInfo["name"] = python.rawValue
         }
         metadata["language_info"] = languageInfo
     }
