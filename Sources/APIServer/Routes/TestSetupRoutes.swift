@@ -94,7 +94,7 @@ struct TestSetupRoutes: RouteCollection {
         // assignment has no notebook page to host the browser runner — and is
         // refused here like it is on every authoring surface, so a zip-borne
         // manifest can't smuggle it in.
-        if manifest.submissionMode == .upload, manifest.gradingMode == .browser {
+        if manifest.submissionMode == .uploadOnly, manifest.gradingMode == .browser {
             throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
         }
 

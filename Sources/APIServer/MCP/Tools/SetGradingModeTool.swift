@@ -73,7 +73,7 @@ struct SetGradingModeTool: ContentTool {
         // Surface the upload-mode conflict as an arguments error (the shared
         // helper's own guard backstops any path that skips this check).
         if mode == GradingMode.browser.rawValue,
-            currentManifestSubmissionMode(setup.manifest) == SubmissionMode.upload.rawValue
+            currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
         {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: uploadModeGradingConflictMessage)

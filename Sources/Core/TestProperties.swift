@@ -19,15 +19,21 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 
 /// How students hand their work in.
 ///
-/// - `notebook`: The JupyterLite workflow (default) — students edit in the
-///   embedded editor and submit from the notebook page; the plain upload form
-///   remains available alongside it for worker-graded assignments.
-/// - `upload`: File upload **only**. The assignment has no editor surface: the
-///   dashboard shows no Edit action, the notebook page redirects students to
-///   the upload form, and grading always happens on the native worker (see
-///   `effectiveGradingMode`). This is the mode for work the notebook workflow
-///   cannot carry — compiled languages graded through the shell-script +
-///   makefile path (e.g. C++), or multi-file projects submitted as a zip.
+/// - `notebook`: The JupyterLite workflow (default). NOT exclusive: a
+///   worker-graded notebook assignment keeps the plain upload form alongside
+///   the editor, so a student can hand in an `.ipynb` edited offline. (A
+///   browser-graded assignment routes uploads through the notebook page's own
+///   "upload your notebook" control instead, since grading runs in the page.)
+///   There is deliberately no third "both" value — notebook already means
+///   both wherever an upload can be graded.
+/// - `uploadOnly`: File upload and nothing else. The assignment has no editor
+///   surface: the dashboard shows no Edit action, the notebook page redirects
+///   students to the upload form, and grading always happens on the native
+///   worker (see `effectiveGradingMode`). This is the mode for work the
+///   notebook workflow cannot carry — compiled languages graded through the
+///   shell-script + makefile path (e.g. C++), or multi-file projects
+///   submitted as a zip. The exclusivity is in the wire name because
+///   instructors hand-author this field in `test.properties.json`.
 ///
 /// Declared, not derived: "this assignment has no starter notebook" and "this
 /// assignment is upload-only" are different states — an instructor may bundle
@@ -37,7 +43,7 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// `.notebook` (every manifest written before the field existed).
 public enum SubmissionMode: String, Codable, Sendable, Equatable {
     case notebook
-    case upload
+    case uploadOnly
 }
 
 /// Entry for a single test in the manifest.
@@ -207,8 +213,8 @@ public struct PersonalizationExpression: Codable, Equatable, Sendable {
 public struct TestProperties: Codable, Equatable, Sendable {
     public let schemaVersion: Int
     public let gradingMode: GradingMode
-    /// How students hand work in — see `SubmissionMode`. `.upload` forces
-    /// native-worker grading via `effectiveGradingMode`.
+    /// How students hand work in — see `SubmissionMode`. `.uploadOnly`
+    /// forces native-worker grading via `effectiveGradingMode`.
     public let submissionMode: SubmissionMode
     public let requiredFiles: [String]
     public let testSuites: [TestSuiteEntry]
@@ -320,7 +326,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// natively rather than stranding submissions on a runner that never
     /// loads.
     public var effectiveGradingMode: GradingMode {
-        submissionMode == .upload ? .worker : gradingMode
+        submissionMode == .uploadOnly ? .worker : gradingMode
     }
 
     /// True when the manifest declares any per-student `=` expression, global

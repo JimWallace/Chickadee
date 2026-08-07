@@ -185,7 +185,7 @@ extension CourseAdminRoutes {
             let section = try await APICourseSection.find(sectionUUID, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db),
             !(section.defaultGradingMode == GradingMode.browser.rawValue
-                && currentManifestSubmissionMode(setup.manifest) == SubmissionMode.upload.rawValue)
+                && currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue)
         {
             _ = try await setManifestGradingMode(setup: setup, to: section.defaultGradingMode, on: req.db)
         }

@@ -23,7 +23,7 @@ import VaporTesting
 @Suite struct SubmissionModeRoutesTests {
 
     static let uploadManifest = """
-        {"schemaVersion":1,"gradingMode":"worker","submissionMode":"upload","requiredFiles":["main.cpp","util.h"],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+        {"schemaVersion":1,"gradingMode":"worker","submissionMode":"uploadOnly","requiredFiles":["main.cpp","util.h"],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
         """
     static let browserManifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
@@ -71,13 +71,13 @@ import VaporTesting
                     script: "secrettest_extra.sh", tier: "secret", order: 2,
                     dependsOn: [], points: 1, displayName: nil)))
         let afterAdd = try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
-        #expect(afterAdd.submissionMode == .upload)
+        #expect(afterAdd.submissionMode == .uploadOnly)
         #expect(afterAdd.requiredFiles == ["main.cpp", "util.h"])
 
         let removed = try #require(
             updateManifestRemovingScript(manifestJSON: added, filename: "secrettest_extra.sh"))
         let afterRemove = try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
-        #expect(afterRemove.submissionMode == .upload)
+        #expect(afterRemove.submissionMode == .uploadOnly)
         #expect(afterRemove.requiredFiles == ["main.cpp", "util.h"])
     }
 
@@ -89,7 +89,7 @@ import VaporTesting
                 id: "sm_refuse1", manifest: Self.browserManifest, on: app)
             await #expect(throws: (any Error).self) {
                 _ = try await setManifestSubmissionMode(
-                    setup: setup, to: "upload", on: app.db)
+                    setup: setup, to: "uploadOnly", on: app.db)
             }
             // Refused means untouched.
             #expect(currentManifestSubmissionMode(setup.manifest) == "notebook")
@@ -111,11 +111,11 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let setup = try await wrInsertSetup(id: "sm_set1", on: app)
             let effective = try await setManifestSubmissionMode(
-                setup: setup, to: "upload", on: app.db)
-            #expect(effective == "upload")
+                setup: setup, to: "uploadOnly", on: app.db)
+            #expect(effective == "uploadOnly")
             let reloaded = try #require(try await APITestSetup.find("sm_set1", on: app.db))
             let manifest = try #require(reloaded.decodedManifest())
-            #expect(manifest.submissionMode == .upload)
+            #expect(manifest.submissionMode == .uploadOnly)
             // The dict-level mutation must not have dropped anything.
             #expect(manifest.testSuites.count == 1)
         }
@@ -197,7 +197,7 @@ import VaporTesting
                     let html = res.body.string
                     #expect(html.contains("submissionModeSelect"))
                     #expect(
-                        html.contains(#"value="upload" selected"#),
+                        html.contains(#"value="uploadOnly" selected"#),
                         "the select should show the stored mode")
                 })
         }
@@ -234,7 +234,7 @@ import VaporTesting
                     try req.content.encode(
                         [
                             "_csrf": csrf, "assignmentName": "C++ Lab", "dueAt": "",
-                            "submissionMode": "upload",
+                            "submissionMode": "uploadOnly",
                         ],
                         as: .urlEncodedForm)
                 },
@@ -244,7 +244,7 @@ import VaporTesting
 
             let reloaded = try #require(try await APITestSetup.find("sm_save1", on: app.db))
             let manifest = try #require(reloaded.decodedManifest())
-            #expect(manifest.submissionMode == .upload)
+            #expect(manifest.submissionMode == .uploadOnly)
         }
     }
 
@@ -276,7 +276,7 @@ import VaporTesting
                     try req.content.encode(
                         [
                             "_csrf": csrf, "assignmentName": "Browser Lab", "dueAt": "",
-                            "submissionMode": "upload",
+                            "submissionMode": "uploadOnly",
                         ],
                         as: .urlEncodedForm)
                 },

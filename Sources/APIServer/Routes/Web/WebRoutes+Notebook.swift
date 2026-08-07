@@ -67,7 +67,7 @@ extension WebRoutes {
         if !isStaff,
             (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let manifest = decodeManifest(from: Data(setup.manifest.utf8)),
-            manifest.submissionMode == .upload
+            manifest.submissionMode == .uploadOnly
         {
             return req.redirect(to: "/testsetups/\(setupID)/submit")
         }

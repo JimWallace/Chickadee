@@ -224,7 +224,7 @@ struct EditAssignmentContext: Encodable {
     let achievementSignalOptions: [AchievementSignalOption]
     let brightspaceSyncEnabled: Bool
     let brightspaceGradeObjectID: String?
-    /// "notebook" | "upload" from the manifest — renders the Submission
+    /// "notebook" | "uploadOnly" from the manifest — renders the Submission
     /// select's current value in the name/due-date edit block.
     let submissionMode: String
     /// The per-assignment secret-reveal toggle: whether students may spend

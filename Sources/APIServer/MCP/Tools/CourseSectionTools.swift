@@ -283,7 +283,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
                 // notebook page to grade in); the move itself still succeeds.
                 if section.defaultGradingMode == GradingMode.browser.rawValue,
                     currentManifestSubmissionMode(setup.manifest)
-                        == SubmissionMode.upload.rawValue
+                        == SubmissionMode.uploadOnly.rawValue
                 {
                     gradingMode = currentManifestGradingMode(setup.manifest)
                 } else {

@@ -78,7 +78,7 @@ extension PublishedAssignmentRoutes {
         // unmodified — not half-saved.
         if let requestedMode = form.submissionMode,
             requestedMode == SubmissionMode.notebook.rawValue
-                || requestedMode == SubmissionMode.upload.rawValue
+                || requestedMode == SubmissionMode.uploadOnly.rawValue
         {
             do {
                 _ = try await setManifestSubmissionMode(
@@ -162,7 +162,7 @@ extension PublishedAssignmentRoutes {
         let assignmentNotebookFile: File?
         let solutionNotebookFile: File?
         let gradeObjectID: String?
-        /// "notebook" | "upload" from the Submission select; nil when the
+        /// "notebook" | "uploadOnly" from the Submission select; nil when the
         /// form predates the field (a stale open tab) so the stored mode is
         /// left untouched rather than reset to the default.
         let submissionMode: String?

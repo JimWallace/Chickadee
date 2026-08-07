@@ -1,9 +1,11 @@
 ### Added
 
-- **Assignments can be upload-only (`submissionMode: "upload"`).** A new
+- **Assignments can be upload-only (`submissionMode: "uploadOnly"`).** A new
   manifest field beside `gradingMode` declares how students hand work in:
   `notebook` (the JupyterLite workflow, the default and the behaviour of
-  every existing assignment) or `upload`, which removes the editor surface
+  every existing assignment — which keeps the upload form available on
+  worker-graded assignments, so it already covers notebooks edited offline)
+  or `uploadOnly`, which removes the editor surface
   entirely — the dashboard drops the Edit action, the notebook URL (including
   the assignment's vanity link) sends students to the upload form, and
   grading always runs on the native worker. This makes the shell-script +

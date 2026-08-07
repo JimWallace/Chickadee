@@ -23,10 +23,10 @@ import Testing
     }
 
     @Test func submissionModeRoundTrips() throws {
-        let manifest = TestProperties(submissionMode: .upload)
+        let manifest = TestProperties(submissionMode: .uploadOnly)
         let data = try JSONEncoder().encode(manifest)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
-        #expect(decoded.submissionMode == .upload)
+        #expect(decoded.submissionMode == .uploadOnly)
     }
 
     @Test func notebookByDefault() {
@@ -37,8 +37,8 @@ import Testing
     /// it would make any runner-side re-read resolve the mode differently
     /// from the server.
     @Test func runnerSanitizedPreservesSubmissionMode() {
-        let manifest = TestProperties(submissionMode: .upload)
-        #expect(manifest.runnerSanitized().submissionMode == .upload)
+        let manifest = TestProperties(submissionMode: .uploadOnly)
+        #expect(manifest.runnerSanitized().submissionMode == .uploadOnly)
     }
 
     /// The full truth table. Only the upload + browser cell differs from the
@@ -46,8 +46,8 @@ import Testing
     @Test(arguments: [
         (GradingMode.worker, SubmissionMode.notebook, GradingMode.worker),
         (GradingMode.browser, SubmissionMode.notebook, GradingMode.browser),
-        (GradingMode.worker, SubmissionMode.upload, GradingMode.worker),
-        (GradingMode.browser, SubmissionMode.upload, GradingMode.worker),
+        (GradingMode.worker, SubmissionMode.uploadOnly, GradingMode.worker),
+        (GradingMode.browser, SubmissionMode.uploadOnly, GradingMode.worker),
     ])
     func effectiveGradingModePinsUploadToWorker(
         _ stored: GradingMode, _ submission: SubmissionMode, _ expected: GradingMode

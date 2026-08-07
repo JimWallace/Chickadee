@@ -40,7 +40,7 @@ func setManifestGradingMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
     if mode == GradingMode.browser.rawValue,
-        currentManifestSubmissionMode(setup.manifest) == SubmissionMode.upload.rawValue
+        currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
     {
         throw AppError.badRequest(
             reason: uploadModeGradingConflictMessage)
@@ -76,7 +76,7 @@ func currentManifestSubmissionMode(_ manifest: String?) -> String {
 func setManifestSubmissionMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
-    if mode == SubmissionMode.upload.rawValue,
+    if mode == SubmissionMode.uploadOnly.rawValue,
         currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
     {
         throw AppError.badRequest(

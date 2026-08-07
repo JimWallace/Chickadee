@@ -33,7 +33,7 @@ struct TestSetupRow: Encodable {
     /// on `isOpen` alone — you can never submit to a closed assignment.
     let canEdit: Bool
     let gradingMode: String  // "browser" | "worker" (effective — upload mode pins worker)
-    let submissionMode: String  // "notebook" | "upload"; "upload" hides the editor actions
+    let submissionMode: String  // "notebook" | "uploadOnly"; "uploadOnly" hides the editor actions
     let hasNotebook: Bool  // false → hide Edit button (no starter notebook available)
     let submissionCount: Int
     let hasLatestSubmission: Bool
