@@ -23,14 +23,34 @@ import Testing
         #expect(!d.scriptExtensions.isEmpty)
         #expect(!d.generatedScriptExtension.isEmpty)
         #expect(!d.inputsFileName.isEmpty)
-        #expect(!d.kernelEnvironmentFileName.isEmpty)
-        #expect(!d.jupyterLiteKernelName.isEmpty)
-        #expect(!d.jupyterLiteKernelDisplayName.isEmpty)
-        #expect(!d.missingDependencyFailureDescription.isEmpty)
+        if case .notebookKernel(let env, let name, let display, let failure) = d.editorSupport {
+            #expect(!env.isEmpty)
+            #expect(!name.isEmpty)
+            #expect(!display.isEmpty)
+            #expect(!failure.isEmpty)
+        }
         #expect(!d.interpreterProbe.command.isEmpty)
         #expect(!d.interpreterProbe.versionArguments.isEmpty)
         // notebookKernelNames is deliberately empty for Python — it is the
         // default, reached by falling through — so it is asserted separately.
+    }
+
+    /// Every language shipped so far has a vendored kernel; the type now
+    /// permits `.uploadOnly`, so that fact needs pinning. Admitting a
+    /// kernel-less language is a deliberate act (this list changes in the
+    /// same diff, stating the decision) — not something a copied literal or
+    /// an unfinished descriptor should be able to do quietly.
+    @Test func everyCurrentLanguageVendorsAKernel() {
+        let kernelLess = AssignmentLanguage.allCases.filter {
+            $0.editorSupport == .uploadOnly
+        }
+        #expect(
+            kernelLess.isEmpty,
+            """
+            \(kernelLess) vendor no editor kernel. If that is a real decision \
+            (an upload-only compiled language), update this pin in the same \
+            change; if not, the descriptor is unfinished.
+            """)
     }
 
     /// The fields that must not collide across languages. A copied literal
@@ -38,13 +58,18 @@ import Testing
     /// language's submissions to the other, silently.
     @Test func theIdentifyingFieldsAreUniqueAcrossLanguages() {
         let all = AssignmentLanguage.allCases.map(\.descriptor)
+        let kernels: [(env: String, name: String, display: String)] = all.compactMap {
+            guard case .notebookKernel(let env, let name, let display, _) = $0.editorSupport
+            else { return nil }
+            return (env, name, display)
+        }
         let unique: [(String, [String])] = [
             ("displayName", all.map(\.displayName)),
             ("generatedScriptExtension", all.map(\.generatedScriptExtension)),
             ("inputsFileName", all.map(\.inputsFileName)),
-            ("kernelEnvironmentFileName", all.map(\.kernelEnvironmentFileName)),
-            ("jupyterLiteKernelName", all.map(\.jupyterLiteKernelName)),
-            ("jupyterLiteKernelDisplayName", all.map(\.jupyterLiteKernelDisplayName)),
+            ("kernel environmentFileName", kernels.map(\.env)),
+            ("kernelName", kernels.map(\.name)),
+            ("kernelDisplayName", kernels.map(\.display)),
             ("interpreterProbe.command", all.map(\.interpreterProbe.command)),
         ]
         for (field, values) in unique {
@@ -78,9 +103,7 @@ import Testing
         #expect(language.generatedScriptExtension == d.generatedScriptExtension)
         #expect(language.inputsFileName == d.inputsFileName)
         #expect(language.notebookKernelNames == d.notebookKernelNames)
-        #expect(language.kernelEnvironmentFileName == d.kernelEnvironmentFileName)
-        #expect(
-            language.missingDependencyFailureDescription == d.missingDependencyFailureDescription)
+        #expect(language.editorSupport == d.editorSupport)
         #expect(language.interpreterProbe.command == d.interpreterProbe.command)
         #expect(language.interpreterProbe.versionArguments == d.interpreterProbe.versionArguments)
     }

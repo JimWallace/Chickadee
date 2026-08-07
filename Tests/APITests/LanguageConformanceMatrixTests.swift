@@ -229,13 +229,18 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theKernelEnvironmentFileExists(_ language: AssignmentLanguage) {
         // The authoring rejection message names this file; a name that does not
-        // exist sends an instructor to a path that is not there.
+        // exist sends an instructor to a path that is not there. A kernel-less
+        // (upload-only) language names no file, so there is nothing to check —
+        // expected for that language, hence the silent return.
+        guard
+            case .notebookKernel(let environmentFileName, _, _, _) = language.editorSupport
+        else { return }
         let url = Self.repoRoot
             .appendingPathComponent("Tools/jupyterlite")
-            .appendingPathComponent(language.kernelEnvironmentFileName)
+            .appendingPathComponent(environmentFileName)
         #expect(
             FileManager.default.fileExists(atPath: url.path),
-            "\(language.kernelEnvironmentFileName) does not exist")
+            "\(environmentFileName) does not exist")
     }
 
     /// The defect that shipped with Lua: `.lua` classified to an `env lua`

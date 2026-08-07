@@ -380,17 +380,11 @@ extension AssignmentLanguage {
     // exhaustive switch here turns each of those into a compile error naming the
     // decision that has to be made. See docs/language-handling-review.md §4.
 
-    /// The env file a maintainer edits to add a package to this language's
-    /// browser-grading kernel, named in the authoring rejection message.
-    /// See `LanguageDescriptor.kernelEnvironmentFileName`.
-    public var kernelEnvironmentFileName: String { descriptor.kernelEnvironmentFileName }
-
-    /// How a missing dependency presents to a student at grade time, phrased for
-    /// the same rejection message.
-    /// See `LanguageDescriptor.missingDependencyFailureDescription`.
-    public var missingDependencyFailureDescription: String {
-        descriptor.missingDependencyFailureDescription
-    }
+    /// The kernel facts, when this language has a vendored editor kernel —
+    /// see `LanguageDescriptor.editorSupport`. Call sites that presuppose a
+    /// kernel destructure this, so a kernel-less language forces an explicit
+    /// answer there instead of inheriting a blank string.
+    public var editorSupport: EditorSupport { descriptor.editorSupport }
 
     /// See `LanguageDescriptor.interpreterProbe`. Kept as a tuple here because
     /// every call site destructures it.

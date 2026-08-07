@@ -35,7 +35,14 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func everyKernelAliasNormalizesToItsVendoredKernel(_ language: AssignmentLanguage) throws {
         guard language != .default else { return }  // Python has no positive aliases
-        let expected = language.descriptor.jupyterLiteKernelName
+        guard case .notebookKernel(_, let expected, _, _) = language.editorSupport else {
+            // A kernel-less language must claim no aliases at all — an alias
+            // with nothing to normalize onto is exactly the F6 shape.
+            #expect(
+                language.notebookKernelNames.isEmpty,
+                "\(language) claims kernel aliases but vendors no kernel")
+            return
+        }
         for alias in language.notebookKernelNames {
             #expect(
                 try kernelName(afterNormalizing: alias) == expected,
@@ -46,9 +53,14 @@ import Testing
     /// The vendored kernel names must be distinct, or two languages' notebooks
     /// would attach the same kernel — a copied descriptor literal.
     @Test func vendoredKernelNamesAreDistinct() {
-        let names = AssignmentLanguage.allCases.map(\.descriptor.jupyterLiteKernelName)
+        let facts = AssignmentLanguage.allCases.compactMap { language -> (String, String)? in
+            guard case .notebookKernel(_, let name, let display, _) = language.editorSupport
+            else { return nil }
+            return (name, display)
+        }
+        let names = facts.map(\.0)
         #expect(Set(names).count == names.count, "two languages share a vendored kernel: \(names)")
-        let labels = AssignmentLanguage.allCases.map(\.descriptor.jupyterLiteKernelDisplayName)
+        let labels = facts.map(\.1)
         #expect(Set(labels).count == labels.count, "two languages share a kernel label: \(labels)")
     }
 

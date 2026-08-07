@@ -110,6 +110,59 @@ public enum ModuleResolution: Equatable, Sendable {
     case byName(searchPathVariable: String?, interpreterHookModules: Set<String> = [])
 }
 
+/// Whether — and how — a language appears in the embedded editor.
+///
+/// THE SECOND JUDGEMENT, alongside `ModuleResolution`. Four descriptor fields
+/// used to presuppose a vendored JupyterLite kernel (the env file, the kernel
+/// name, its display label, and how a missing package presents at grade
+/// time). That was fine while it was true of every language, but it baked the
+/// assumption into the type: a language without a kernel could not be
+/// expressed at all. This enum makes the assumption a stated answer instead —
+/// and gathers the four facts behind it, so they exist exactly when a kernel
+/// does.
+///
+/// - `notebookKernel`: the language has a vendored xeus kernel; it appears in
+///   the editor's picker, notebooks normalize onto it, and browser grading
+///   can run it. Every current language answers this — which is the vendored-
+///   kernel rule ("a language is supported or it is not present",
+///   docs/adding-a-xeus-kernel.md) expressed in types.
+/// - `uploadOnly`: no kernel is vendored, deliberately. The language's
+///   assignments are upload-only (`SubmissionMode.uploadOnly`) and grade on
+///   the native worker exclusively. This is the shape for compiled languages
+///   graded through the shell-script + makefile path — the browser cannot run
+///   the course's real toolchain, and grading a *different* compiler than the
+///   course teaches is a pedagogy defect no substrate work removes (see
+///   docs/cpp-assignment-language-decision.md §3). Nothing dangles: with no
+///   kernel in the picker, the language cannot be authored in the editor, so
+///   the rule above is satisfied from the other direction.
+public enum EditorSupport: Equatable, Sendable {
+    /// A vendored kernel serves this language in the editor and the browser
+    /// grader.
+    ///
+    /// - `environmentFileName`: the env file a maintainer edits to add a
+    ///   package to the browser-grading kernel, named in the authoring
+    ///   rejection message.
+    /// - `kernelName` / `kernelDisplayName`: the vendored JupyterLite kernel a
+    ///   notebook in this language is normalized onto, and the friendly label
+    ///   shown beside it. `normalizeNotebookForJupyterLite` collapses every
+    ///   alias in `notebookKernelNames` onto `kernelName` so the editor can
+    ///   attach a kernel; the display name deliberately omits the language
+    ///   version the kernelspec carries, so a kernel rebuild does not churn
+    ///   every stored notebook.
+    /// - `missingDependencyFailureDescription`: how a missing dependency
+    ///   presents to a student at grade time, phrased for that same rejection
+    ///   message.
+    case notebookKernel(
+        environmentFileName: String,
+        kernelName: String,
+        kernelDisplayName: String,
+        missingDependencyFailureDescription: String)
+
+    /// No vendored kernel, deliberately — submissions arrive as file uploads
+    /// and grade on the native worker only.
+    case uploadOnly
+}
+
 /// Files the RUNNER writes into every grading workspace, which are therefore
 /// importable in any language that resolves modules by name.
 ///
@@ -171,28 +224,13 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// the sets would leave the generator with nothing to find.
     public let notebookKernelNames: Set<String>
 
-    /// The env file a maintainer edits to add a package to this language's
-    /// browser-grading kernel, named in the authoring rejection message.
-    public let kernelEnvironmentFileName: String
-
-    /// The vendored JupyterLite kernel a notebook in this language is
-    /// normalized onto, and the friendly label shown beside it.
-    ///
-    /// `normalizeNotebookForJupyterLite` collapses every alias in
-    /// `notebookKernelNames` onto this name, so the editor can attach a kernel.
-    /// It is a descriptor field rather than a per-language constant because the
-    /// normalizer was a hand-written arm per language and shipped without a Lua
-    /// one — a `lua`-named notebook fell through "unknown → leave unchanged"
-    /// and never attached xeus-lua (docs/lua-architecture-audit.md F6).
-    ///
-    /// The display name deliberately omits the language version the kernelspec
-    /// carries, so a kernel rebuild does not churn every stored notebook.
-    public let jupyterLiteKernelName: String
-    public let jupyterLiteKernelDisplayName: String
-
-    /// How a missing dependency presents to a student at grade time, phrased for
-    /// that same rejection message.
-    public let missingDependencyFailureDescription: String
+    /// Whether the language has a vendored editor/browser-grading kernel, and
+    /// the kernel facts when it does — see `EditorSupport`. Was four flat
+    /// fields (`kernelEnvironmentFileName`, `jupyterLiteKernelName` and its
+    /// display name, `missingDependencyFailureDescription`) that presupposed a
+    /// kernel exists; folding them behind this judgement is what lets a
+    /// kernel-less, upload-only language be expressed at all.
+    public let editorSupport: EditorSupport
 
     /// The command a runner probes to decide whether it can grade this
     /// language, with the arguments that make it print a version and exit 0.
@@ -241,10 +279,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         generatedScriptExtension: String,
         inputsFileName: String,
         notebookKernelNames: Set<String>,
-        kernelEnvironmentFileName: String,
-        jupyterLiteKernelName: String,
-        jupyterLiteKernelDisplayName: String,
-        missingDependencyFailureDescription: String,
+        editorSupport: EditorSupport,
         interpreterProbe: InterpreterProbe,
         moduleResolution: ModuleResolution,
         workingDirectoryIsOnDefaultSearchPath: Bool
@@ -254,10 +289,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.generatedScriptExtension = generatedScriptExtension
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
-        self.kernelEnvironmentFileName = kernelEnvironmentFileName
-        self.jupyterLiteKernelName = jupyterLiteKernelName
-        self.jupyterLiteKernelDisplayName = jupyterLiteKernelDisplayName
-        self.missingDependencyFailureDescription = missingDependencyFailureDescription
+        self.editorSupport = editorSupport
         self.interpreterProbe = interpreterProbe
         self.moduleResolution = moduleResolution
         self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
@@ -280,10 +312,11 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "py",
                 inputsFileName: "_ck_inputs.py",
                 notebookKernelNames: [],
-                kernelEnvironmentFileName: "environment-python.yml",
-                jupyterLiteKernelName: "xpython",
-                jupyterLiteKernelDisplayName: "Python (xeus-python)",
-                missingDependencyFailureDescription: "an ImportError",
+                editorSupport: .notebookKernel(
+                    environmentFileName: "environment-python.yml",
+                    kernelName: "xpython",
+                    kernelDisplayName: "Python (xeus-python)",
+                    missingDependencyFailureDescription: "an ImportError"),
                 interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
                 moduleResolution: .byName(
                     searchPathVariable: "PYTHONPATH",
@@ -300,10 +333,11 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "R",
                 inputsFileName: "_ck_inputs.R",
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
-                kernelEnvironmentFileName: "environment-r.yml",
-                jupyterLiteKernelName: "xr",
-                jupyterLiteKernelDisplayName: "R (xeus-r)",
-                missingDependencyFailureDescription: "an error from library()",
+                editorSupport: .notebookKernel(
+                    environmentFileName: "environment-r.yml",
+                    kernelName: "xr",
+                    kernelDisplayName: "R (xeus-r)",
+                    missingDependencyFailureDescription: "an error from library()"),
                 interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
                 // `source("test_runtime.R")` is a file read, not a module load:
                 // there is no name to resolve, so nothing is importable and no
@@ -318,10 +352,11 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "lua",
                 inputsFileName: "_ck_inputs.lua",
                 notebookKernelNames: AssignmentLanguage.luaKernelNames,
-                kernelEnvironmentFileName: "environment-lua.yml",
-                jupyterLiteKernelName: "xlua",
-                jupyterLiteKernelDisplayName: "Lua (xeus-lua)",
-                missingDependencyFailureDescription: "an error from require()",
+                editorSupport: .notebookKernel(
+                    environmentFileName: "environment-lua.yml",
+                    kernelName: "xlua",
+                    kernelDisplayName: "Lua (xeus-lua)",
+                    missingDependencyFailureDescription: "an error from require()"),
                 // `-v`, not `--version` — see `interpreterProbe`'s note.
                 interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
                 // `require("test_runtime")` IS a module load — the same shape as
@@ -339,10 +374,11 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "m",
                 inputsFileName: "_ck_inputs.m",
                 notebookKernelNames: AssignmentLanguage.octaveKernelNames,
-                kernelEnvironmentFileName: "environment-octave.yml",
-                jupyterLiteKernelName: "xoctave",
-                jupyterLiteKernelDisplayName: "Octave (xeus-octave)",
-                missingDependencyFailureDescription: "an undefined-function error",
+                editorSupport: .notebookKernel(
+                    environmentFileName: "environment-octave.yml",
+                    kernelName: "xoctave",
+                    kernelDisplayName: "Octave (xeus-octave)",
+                    missingDependencyFailureDescription: "an undefined-function error"),
                 // `octave-cli --version` prints "GNU Octave, version N" and
                 // exits 0 (verified on 8.4.0). The worker invokes the same
                 // binary, so probe and invocation cannot skew.
