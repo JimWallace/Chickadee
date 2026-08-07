@@ -81,6 +81,10 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     case .php: return envInvocation(interpreter: "php", script: script)
     case .rscript: return envInvocation(interpreter: "Rscript", script: script)
     case .lua: return envInvocation(interpreter: "lua", script: script)
+    // `octave-cli`, not `octave`: the same binary set minus any attempt to
+    // reach a display. The package that ships it is `octave` (there is no
+    // CLI-only Debian package).
+    case .octave: return envInvocation(interpreter: "octave-cli", script: script)
     case .unknown:
         if FileManager.default.isExecutableFile(atPath: script.path) {
             return ScriptInvocation(executableURL: script, arguments: [])

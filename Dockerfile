@@ -103,7 +103,15 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         python3-matplotlib \
         r-base \
         lua5.4 \
+        octave \
     && rm -rf /var/lib/apt/lists/*
+# `octave` provides /usr/bin/octave-cli, the binary the worker invokes for .m
+# test scripts. There is no CLI-only Debian/Ubuntu package: even with
+# --no-install-recommends, `octave` hard-depends on the Qt5 stack, so this line
+# costs ~338 MB installed (measured on noble). Accepted as the price of Octave
+# validation working at all — without the interpreter, every Octave test exits
+# 127 and instructor validation cannot pass (the failure class #1280 fixed for
+# Lua).
 
 # Non-root user for the application processes.
 RUN useradd --system --user-group --create-home chickadee

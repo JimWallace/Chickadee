@@ -44,6 +44,12 @@ FROM ${BASE_IMAGE}
 #             editor-smoke gate went red because of an Ubuntu mirror.
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
-        r-base python3-pandas python3-matplotlib lua5.4 \
+        r-base python3-pandas python3-matplotlib lua5.4 octave \
         nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+# octave     — provides /usr/bin/octave-cli for the Octave execution-path
+#              suites. Same silent-skip trap as r-base and lua5.4 (audit F2):
+#              without it every Octave execution test guards on availability
+#              and skips, and "green" means nothing ever ran the generated
+#              Octave. ~338 MB installed (no CLI-only package exists — octave
+#              hard-depends on Qt5 even with --no-install-recommends).
