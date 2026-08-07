@@ -8,6 +8,8 @@
 // front rather than reverse-engineering them from the tool list alone.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
 
+import Core
+
 /// The result returned from an `initialize` request.
 struct MCPInitializeResult: Encodable, Sendable {
     let protocolVersion: String
@@ -104,6 +106,22 @@ enum MCPServerInstructions {
     /// `text(withCourseGuidance:)` (see MCPCourseGuidance.swift).
     static let text = operationalGuide + "\n\n" + authoringVoice
 
+    /// The languages an assignment can be authored in, as prose ("Python, R or
+    /// Lua"), DERIVED from `AssignmentLanguage.allCases`.
+    ///
+    /// Interpolated into the guide rather than typed into it. This prose is
+    /// served to every connecting agent and no compiler or `allCases` test can
+    /// reach a string literal, so a hand-written list is the one shape that goes
+    /// stale silently — and it did: the guide told every agent that
+    /// personalization expressions are "Python source" for the whole of R's and
+    /// Lua's existence, which is a syntax error on those assignments.
+    static var supportedLanguageNames: String {
+        let names = AssignmentLanguage.allCases.map(\.displayName)
+        guard let last = names.last else { return "" }
+        guard names.count > 1 else { return last }
+        return names.dropLast().joined(separator: ", ") + " or " + last
+    }
+
     /// The operational half: domain vocabulary, the read-before-write
     /// workflow, and the validation/scope/safety rules.
     static let operationalGuide = """
@@ -120,7 +138,13 @@ enum MCPServerInstructions {
         Key concepts:
         - Course — identified by a short code (e.g. "CS136").
         - Assignment — identified by a 6-character public ID; has a title, an optional due date \
-        (ISO 8601), and an open/closed state.
+        (ISO 8601), and an open/closed state. Every assignment is authored in ONE language — \
+        \(supportedLanguageNames) — resolved from its graded scripts and its starter notebook's \
+        kernel. The language decides the extension generated tests get, which language \
+        personalization expressions are written in, and which pattern-family and notebook-check \
+        kinds are available: they are NOT uniform, and a kind a language cannot support is refused \
+        when you try to save it, with a message naming what that language does support. Author in \
+        the assignment's language, not in Python by habit.
         - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
         assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
         inside one assignment). List with list_course_sections, create with create_course_section, \
@@ -171,21 +195,27 @@ enum MCPServerInstructions {
         the hidden server-side pool), so every student explores their own data; get_support_files \
         reports the mark (isDataset / datasetSampleSize) and remove:true clears it.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
-        student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \
-        evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
+        student: literal `variables` (a name + JSON value) and `expressions` (a name + source in the \
+        ASSIGNMENT'S OWN LANGUAGE, evaluated server-side against the student's `seed`). An expression \
+        on a \(supportedLanguageNames) assignment is written in that language and evaluated by that \
+        language's interpreter — writing Python on an R or Lua assignment fails with a syntax error \
+        from that interpreter. Use get_assignment to see the language before authoring one. They \
+        inline into generated/raw tests and substitute \
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
         (same shape); get_suite returns them per section and update_section_variables replaces them. \
         Expression scope: besides `seed` and the declared variables, the solution's code cells are \
-        auto-extracted into a `solution` module and every uploaded `.py` support file is auto-imported \
-        under its module name. When an expression needs a transform the solution already implements — \
+        auto-extracted into a `solution` module and every uploaded support file in the assignment's \
+        language is made available under its own name, by that language's own loading mechanism. \
+        When an expression needs a transform the solution already implements — \
         e.g. encoding a value the student will later invert — CALL it \
-        (`solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) rather than re-implementing it \
+        (`solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)` in Python) rather than \
+        re-implementing it \
         inline. An inline re-implementation can drift from the graded code on edge cases and silently \
         mis-grade some seeds; keep one source of truth and reuse it. The `solution` auto-import is \
         best-effort — skipped when the solution uses `{{ }}` placeholders (which break its import); for \
-        those, share the function via an uploaded `.py` support module that both the solution and the \
-        expression import.
+        those, share the function via an uploaded support module in the assignment's language that \
+        both the solution and the expression load.
         - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
         competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
