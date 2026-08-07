@@ -393,6 +393,20 @@ One judgement remains, and it replaced three:
   Python resolves by name just the same and does. Verify it, do not assume:
   `lua -e 'print(package.path)'`.
 
+**Facts that used to be sites are now fields.** Three things that were
+hand-written arms per language are read off the descriptor, so writing the
+literal is the whole job:
+
+| field | what stopped being a site |
+|---|---|
+| `jupyterLiteKernelName` / `…DisplayName` | `normalizeNotebookForJupyterLite` iterates `allCases` instead of one `else if` per language — the arm that shipped without a Lua twin |
+| `scriptExtensions` | `contentType(for:)` and the browser's student-module hint both derive from it; the hint is *generated* into the JS (below) |
+| `notebookKernelNames` | resolution, the normalizer, and the browser's kernel sets all read it |
+
+The rule this encodes: **if a fact differs per language, put it on the
+descriptor and loop — do not write an arm.** An arm is invisible to the
+compiler when the next language arrives; a loop is not.
+
 And two behaviours that take arguments and so stay methods: `literal(_:)` (needs
 a new `JSONValue.<x>Literal`) and `renderInputsFile(_:)` (the `_ck_inputs.<x>`
 contract, which must match byte-for-byte what the language's `test_runtime`
@@ -468,6 +482,14 @@ types and so pointed at nothing.
    generated nothing and the browser kept routing its notebooks to Python. So
    this item is now *loud* rather than silent — but you still have to add the
    fenced block, and the script tells you so.
+
+   It also generates `GRADED_SCRIPT_EXTENSIONS` from the union of
+   `scriptExtensions` across the descriptors, which is what decides whether a
+   directly-uploaded file gets a `.chickadee_student_module` hint. That list was
+   hand-written as `.py` / `.r`, so a `.lua` upload got no hint and
+   `test_runtime.lua` — hint-only, because Lua cannot list a directory — could
+   not find it. A new language's extension now reaches the browser the day its
+   descriptor literal lands.
 4. **The vendored browser wasm.** `RoutingExecutor` calls `classifyScript` out
    of `Public/runner-wasm/`, so the browser disagrees with the worker until it
    is rebuilt — and a new RunnerCore export (`extractLua`) simply does not exist
@@ -667,6 +689,11 @@ state this document exists to warn you about:
       message are seen
 - [ ] `LanguageConformanceMatrixTests` is green with the new case **and the
       interpreter actually present**; confirm the executed half did not skip
+- [ ] `LanguagePipelineWalkTests` is green — it starts from a manifest, RESOLVES
+      the language, and walks the resolved answer through the renderers, the
+      inputs file and the editor kernel. The matrix proves each stage works when
+      handed your language; this proves the pipeline *agrees* on it. Every
+      audit defect lived in that joint, not in a stage
 - [ ] `submissionGuaranteeExemption` is answered for every guarantee, and every
       exemption carries a reason you would defend to an instructor
 - [ ] a runner ADVERTISES the language (`interpreterProbe`) and an assignment in

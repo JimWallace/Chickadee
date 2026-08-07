@@ -24,26 +24,32 @@ import Testing
         return kernelspec["name"] as? String
     }
 
-    /// The vendored kernel name each language's notebooks must normalize to.
-    /// Python is the default (missing/unknown-python → xpython).
-    static let vendored: [AssignmentLanguage: String] = [
-        .python: jupyterLitePythonKernelName,
-        .r: jupyterLiteRKernelName,
-        .lua: jupyterLiteLuaKernelName,
-    ]
-
     /// Every alias of every non-default language normalizes to that language's
     /// vendored kernel — the guard whose absence let a Lua notebook keep a
     /// `lua` kernelspec the editor cannot attach.
+    ///
+    /// The expected kernel comes from the DESCRIPTOR rather than a table here:
+    /// a hand-maintained map in the test is the same enumerated shape as the
+    /// hand-written arms this replaced, and it would need editing for a fourth
+    /// language exactly when it should be failing instead.
     @Test(arguments: AssignmentLanguage.allCases)
     func everyKernelAliasNormalizesToItsVendoredKernel(_ language: AssignmentLanguage) throws {
         guard language != .default else { return }  // Python has no positive aliases
-        let expected = try #require(Self.vendored[language])
+        let expected = language.descriptor.jupyterLiteKernelName
         for alias in language.notebookKernelNames {
             #expect(
                 try kernelName(afterNormalizing: alias) == expected,
                 "a `\(alias)` notebook must normalize to \(expected) so the editor attaches it")
         }
+    }
+
+    /// The vendored kernel names must be distinct, or two languages' notebooks
+    /// would attach the same kernel — a copied descriptor literal.
+    @Test func vendoredKernelNamesAreDistinct() {
+        let names = AssignmentLanguage.allCases.map(\.descriptor.jupyterLiteKernelName)
+        #expect(Set(names).count == names.count, "two languages share a vendored kernel: \(names)")
+        let labels = AssignmentLanguage.allCases.map(\.descriptor.jupyterLiteKernelDisplayName)
+        #expect(Set(labels).count == labels.count, "two languages share a kernel label: \(labels)")
     }
 
     @Test func luaNotebookNormalizesToXlua() throws {
