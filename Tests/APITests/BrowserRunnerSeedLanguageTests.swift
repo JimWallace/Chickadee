@@ -55,10 +55,39 @@ import Testing
                 """)
     }
 
-    /// The wire value the browser compares against: `browser-runner.js` treats
-    /// exactly `"r"` as R and anything else (including a missing field, from a
-    /// server that predates this) as Python, so the raw values must not drift.
-    @Test(arguments: [(AssignmentLanguage.python, "python"), (AssignmentLanguage.r, "r")])
+    @Test func octaveInputsFileMatchesTheBrowserRendering() {
+        // The exact strings `octave-grading-shared.test.mjs` asserts for
+        // `personalizationInputsSourceOctave` — the two implementations of the
+        // `_ck_inputs.m` bytes, pinned to each other through this shared
+        // expectation.
+        let rendered = AssignmentLanguage.octave.renderInputsFile([
+            "threshold": "42",
+            "labels": "{\"a\", \"b\"}",
+        ])
+        #expect(
+            rendered == """
+                % Auto-generated per-student grading inputs (issue #461). Do not edit.
+                ck_input_names = { "labels", "threshold" };
+                ck_input_values = { {"a", "b"}, 42 };
+
+                """)
+        #expect(
+            AssignmentLanguage.octave.renderInputsFile([:]) == """
+                % Auto-generated per-student grading inputs (issue #461). Do not edit.
+                ck_input_names = {};
+                ck_input_values = {};
+
+                """)
+    }
+
+    /// The wire value the browser compares against: `browser-runner.js`
+    /// matches these exact strings when picking which inputs file to write
+    /// (anything unrecognised, including a missing field from a server that
+    /// predates this, falls back to Python), so the raw values must not drift.
+    @Test(arguments: [
+        (AssignmentLanguage.python, "python"), (AssignmentLanguage.r, "r"),
+        (AssignmentLanguage.lua, "lua"), (AssignmentLanguage.octave, "octave"),
+    ])
     func languageRawValuesAreTheBrowserWireValues(language: AssignmentLanguage, expected: String) {
         #expect(language.rawValue == expected)
     }

@@ -20,6 +20,7 @@ const chickadeeGlobals = {
   ChickadeeGradingShared: 'readonly',
   ChickadeeRGradingShared: 'readonly',
   ChickadeeLuaGradingShared: 'readonly',
+  ChickadeeOctaveGradingShared: 'readonly',
   // Published by the vendored /vendor/xeus-bootstrap.js, importScripts'd by the
   // R grading worker.
   ChickadeeXeusBootstrap: 'readonly',

@@ -69,6 +69,8 @@ const SITECUSTOMIZE_PY = await fs.readFile(
     path.join(REPO_ROOT, 'Tools', 'runner-support', 'sitecustomize.py'), 'utf8');
 const TEST_RUNTIME_LUA = await fs.readFile(
     path.join(REPO_ROOT, 'Tools', 'runner-support', 'test_runtime.lua'), 'utf8');
+const TEST_RUNTIME_OCTAVE = await fs.readFile(
+    path.join(REPO_ROOT, 'Tools', 'runner-support', 'test_runtime.m'), 'utf8');
 
 const LANGUAGES = {
     r: {
@@ -270,6 +272,107 @@ t.passed("the workspace is fresh")
             'submission.lua':
                 'function classify(x)\n'
                 + '  if x > 0 then return "positive" else return "non-positive" end\n'
+                + 'end\n',
+        },
+        expectLabel: /label=publictest_context\b/,
+        blewUp: /this test blew up/,
+    },
+    octave: {
+        worker: '/octave-grading-worker.js',
+        // Order matters from `publictest_leak` on: the isolation fixture below
+        // asserts on what the one before it left behind.
+        scripts: [
+            'publictest_pass.m', 'publictest_fail.m', 'publictest_boom.m',
+            'publictest_context.m', 'publictest_nopackage.m',
+            'publictest_student.m', 'publictest_leak.m', 'publictest_isolation.m',
+        ],
+        files: {
+            'test_runtime.m': TEST_RUNTIME_OCTAVE,
+            // Exit 0, and a JSON footer RunnerCore reads for the shortResult.
+            // `chickadee = test_runtime();` resolves through the load path,
+            // which is what proves the mounted workspace's cwd is on it.
+            'publictest_pass.m': `chickadee = test_runtime();
+disp("checking arithmetic")
+if 7 * 191 == 1337
+  chickadee.passed("all cases passed");
+else
+  chickadee.failed("arithmetic is broken");
+end
+`,
+            // Exit 1, with the failure message on stdout.
+            'publictest_fail.m': `chickadee = test_runtime();
+chickadee.failed("expected 5, got 4");
+`,
+            // Exit 1 from an uncaught Octave error, not the helper API. Under
+            // octave-cli this writes \`error: ...\` to stderr and exits 1; the
+            // wrapper has to reproduce both, and only a kernel shows whether
+            // it did.
+            'publictest_boom.m': `chickadee = test_runtime();
+error("this test blew up")
+`,
+            // The label exists only because the wrapper masks program_name();
+            // the seed comes via setenv and the input from _ck_inputs.m.
+            'publictest_context.m': `chickadee = test_runtime();
+printf("label=%s\\n", chickadee.label());
+printf("seed=%d\\n", chickadee.seed());
+ck_in = chickadee.inputs();
+printf("input=%d\\n", ck_in("threshold"));
+chickadee.passed("context ok");
+`,
+            // A package Octave does not have must fail the ordinary way. The
+            // channel carries no Octave Forge packages at all, so as with Lua
+            // this is the only reachable half of the on-demand mechanism —
+            // the half a student's typo actually hits. It proves the retry
+            // loop terminates with nothing to install.
+            'publictest_nopackage.m': `pkg load notarealpackage
+`,
+            // The grading model: a test script loading the student's file and
+            // calling what it defined.
+            'publictest_student.m': `chickadee = test_runtime();
+env = chickadee.load_student();
+classify = chickadee.require_fn(env, "classify");
+if !chickadee.equal(classify(1), "positive")
+  chickadee.failed("classify(1) should be positive");
+end
+if !chickadee.equal(classify(-1), "non-positive")
+  chickadee.failed("classify(-1) should be non-positive");
+end
+chickadee.passed("the submission loaded and ran");
+`,
+            // The native runner gives every test a fresh process. One kernel
+            // session serves all of them; ordinary variables die with the
+            // harness call's own workspace, and globals — the one thing that
+            // outlives it — are cleared per script. These two fixtures are
+            // the only thing that can show both halves work.
+            'publictest_leak.m': `chickadee = test_runtime();
+leaked_plain = "yes";
+global leaked_global;
+leaked_global = "yes";
+chickadee.passed("left a variable and a global behind");
+`,
+            'publictest_isolation.m': `chickadee = test_runtime();
+if exist("leaked_plain", "var")
+  chickadee.failed("a plain variable from a previous test survived into this one");
+end
+global leaked_global;
+if !isempty(leaked_global)
+  chickadee.failed("a global from a previous test survived into this one");
+end
+if !strcmp(getenv("CK_SMOKE_CANARY"), "")
+  chickadee.failed("unexpected canary env");
+end
+chickadee.passed("the workspace is fresh");
+`,
+            '_ck_inputs.m': '% Auto-generated per-student grading inputs (issue #461). Do not edit.\n'
+                + 'ck_input_names = { "threshold" };\nck_input_values = { 42 };\n',
+            '.chickadee_student_module': 'submission.m',
+            'submission.m':
+                'function r = classify(x)\n'
+                + '  if x > 0\n'
+                + '    r = "positive";\n'
+                + '  else\n'
+                + '    r = "non-positive";\n'
+                + '  end\n'
                 + 'end\n',
         },
         expectLabel: /label=publictest_context\b/,
@@ -632,6 +735,45 @@ if (language === 'lua') {
         leak && leak.exitCode === 0, JSON.stringify(leak));
     check('the next script does not see it, and still has its standard library',
         isolation && isolation.exitCode === 0, JSON.stringify(isolation));
+}
+
+if (language === 'octave') {
+    // The seed is the one number that must come out the same in every
+    // substrate. Octave's fold is the same Horner reduction R and Lua use, so
+    // the expected value is checkable by hand and asserted exactly:
+    //   python3 -c "a=0
+    //   for c in 'deadbeefcafe0123': a=(a*16+int(c,16))%2147483647
+    //   print(a)"
+    check('the seed is the value the shared Horner fold produces',
+        /seed=140082950\b/.test(context.stdout), JSON.stringify(context.stdout));
+
+    // No Octave Forge packages exist on the channel, so the only reachable
+    // half of the on-demand mechanism is the terminating one — which is also
+    // the half a student's typo hits.
+    const noPackage = result.results['publictest_nopackage.m'];
+    check('a package the environment lacks still fails normally',
+        noPackage && noPackage.exitCode !== 0, JSON.stringify(noPackage));
+    check('and says so, rather than looping or going silent',
+        /notarealpackage/.test((noPackage?.stderr || '') + (noPackage?.stdout || '')),
+        JSON.stringify(noPackage?.stderr));
+
+    // The grading model: a test script loading the submission (behind the
+    // 1;-guard eval, so its function registers under its own name) and
+    // calling into it.
+    const student = result.results['publictest_student.m'];
+    check('a test can load the submission and call what it defines',
+        student && student.exitCode === 0, JSON.stringify(student));
+
+    // Each native test gets a fresh process; one kernel session serves all of
+    // these, so the wrapper has to emulate that and nothing but a kernel can
+    // show whether it does — for plain variables (the harness call's own
+    // workspace) and globals (cleared per script) alike.
+    const leakOct = result.results['publictest_leak.m'];
+    const isolationOct = result.results['publictest_isolation.m'];
+    check('the fixture that leaks a variable and a global passes',
+        leakOct && leakOct.exitCode === 0, JSON.stringify(leakOct));
+    check('the next script sees neither',
+        isolationOct && isolationOct.exitCode === 0, JSON.stringify(isolationOct));
 }
 
 const slowest = Math.max(...Object.values(result.results).map(r => r.ms));

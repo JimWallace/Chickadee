@@ -9,6 +9,7 @@
 #   scripts/browser-grading-smoke.sh                  # R on chromium
 #   scripts/browser-grading-smoke.sh python           # Python on chromium
 #   scripts/browser-grading-smoke.sh lua              # Lua on chromium
+#   scripts/browser-grading-smoke.sh octave           # Octave on chromium
 #   scripts/browser-grading-smoke.sh r webkit         # the other engine we ship to
 #
 # Chromium is pre-installed in CI and in the Claude Code environment; the

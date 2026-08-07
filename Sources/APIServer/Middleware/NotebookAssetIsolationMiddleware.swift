@@ -67,6 +67,7 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
         "/python-grading-worker.js",  // browser submission grader, Python (browser-runner.js)
         "/r-grading-worker.js",  // browser submission grader, R (browser-runner.js)
         "/lua-grading-worker.js",  // browser submission grader, Lua (browser-runner.js)
+        "/octave-grading-worker.js",  // browser submission grader, Octave (browser-runner.js)
         "/freeze-watchdog-worker.js",  // main-thread freeze failover (notebook.js)
     ]
 

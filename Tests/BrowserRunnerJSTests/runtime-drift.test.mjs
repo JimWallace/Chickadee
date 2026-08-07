@@ -30,6 +30,7 @@ async function loadEmbeds() {
   const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
   const rSharedSource = await fs.readFile(path.resolve('Public/r-grading-shared.js'), 'utf8');
   const luaSharedSource = await fs.readFile(path.resolve('Public/lua-grading-shared.js'), 'utf8');
+  const octaveSharedSource = await fs.readFile(path.resolve('Public/octave-grading-shared.js'), 'utf8');
   const testHooks = {};
   const statusEl = { hidden: true, textContent: '', className: '' };
   const document = {
@@ -49,6 +50,7 @@ async function loadEmbeds() {
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
   vm.runInContext(luaSharedSource, vmContext, { filename: 'lua-grading-shared.js' });
+  vm.runInContext(octaveSharedSource, vmContext, { filename: 'octave-grading-shared.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
   return testHooks.exports;
 }
@@ -100,6 +102,17 @@ test('embedded TEST_RUNTIME_LUA stays in sync with Tools/runner-support/test_run
     normalizeCode(embeds.TEST_RUNTIME_LUA, '--'),
     normalizeCode(canon, '--'),
     'Public/browser-runner.js TEST_RUNTIME_LUA drifted from Tools/runner-support/test_runtime.lua — '
+      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+  );
+});
+
+test('embedded TEST_RUNTIME_OCTAVE stays in sync with Tools/runner-support/test_runtime.m', async () => {
+  const embeds = await loadEmbeds();
+  const canon = await fs.readFile(path.resolve('Tools/runner-support/test_runtime.m'), 'utf8');
+  assert.equal(
+    normalizeCode(embeds.TEST_RUNTIME_OCTAVE, '%'),
+    normalizeCode(canon, '%'),
+    'Public/browser-runner.js TEST_RUNTIME_OCTAVE drifted from Tools/runner-support/test_runtime.m — '
       + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
   );
 });
