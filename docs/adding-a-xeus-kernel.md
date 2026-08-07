@@ -360,7 +360,7 @@ estimated. Two notes on why your split may differ:
   sites were all in `Worker`. A language whose extraction is not pre-landed
   pays for it here instead.
 
-**The compiler cannot see seven more**, listed under "What the compiler will not
+**The compiler cannot see eight more**, listed under "What the compiler will not
 tell you" below — those are the ones that have historically shipped broken.
 
 ### The 26 the compiler names
@@ -457,10 +457,12 @@ the three.
 
 ### What the compiler will *not* tell you
 
-**Seven** things, each of which has shipped broken at least once. Numbers 5-7
+**Eight** things, each of which has shipped broken at least once. Numbers 5-7
 were found during the Lua run; 5 is the most dangerous, because it is a shape
 rather than a place, and 6-7 are whole subsystems that needed no change to their
-types and so pointed at nothing.
+types and so pointed at nothing. Number 8 came later still, from the audit that
+followed the Lua run — it had been wrong since R shipped, through two language
+additions, because prose is the surface no guard reaches.
 
 1. **The interpreter on the runner image.** `Dockerfile` installs `python3`,
    `r-base` and `lua5.4`. A language whose binary is missing fails `env <lang>`
@@ -561,6 +563,25 @@ types and so pointed at nothing.
 7. **The submission policy.** See "The submission policy" below. Nothing fails when a
    language is missing from it; the student just gets silence instead of a
    message.
+8. **The agent-facing MCP guidance.** The `initialize` instructions
+   (`MCPServerInstructions.operationalGuide`) are PROSE served to every
+   connecting agent, and no compiler or `allCases` test reaches a string
+   literal. They told every agent that personalization expressions are "a name
+   + Python source" for the whole of R's and Lua's existence — a syntax error on
+   those assignments — and never said assignments have a language at all.
+
+   The language LIST now derives from `allCases`
+   (`MCPServerInstructions.supportedLanguageNames`, pinned by
+   `theDerivedLanguageListIsActuallyInterpolated`), so it cannot silently cover
+   fewer languages than exist. **That protects the list, not the sentences.**
+   Re-read the guide for per-language claims — grep it for `Python`, `.py`,
+   `import`, `source`, `require` — and check each is still true. One
+   hand-enumerated clause ("imported on Python, sourced on R, required on Lua")
+   was removed for exactly this reason and would have gone stale here.
+
+   Also make sure the language's REFUSED pattern-family and notebook-check kinds
+   are discoverable before a save is attempted, not only via the rejection
+   message. See issue #1290.
 
 ### What this model cannot see, scored against three languages it does not have
 
@@ -700,6 +721,51 @@ state this document exists to warn you about:
       it SUGGESTS a requirement — capability matching fails in both directions
       and the second is worse: requiring a language no runner advertises queues
       the assignment's jobs forever
+- [ ] the MCP guide is true for this language — see item 8 above
+- [ ] **the instructor walkthrough below passes, by hand, on a real server**
+
+### The last step: walk an instructor's path by hand
+
+Everything above is automated, and automation has a blind spot this step exists
+to cover. Every test in the suite hands the machinery its language
+*explicitly* — `renderPatternFamily(family, language: .lua)` — so none of them
+ever asks the question production asks: **which language does the server think
+this assignment is?** That is why Lua shipped resolving to Python with 3,143
+tests green.
+
+The evidence is in this document already. "The path an instructor actually
+takes" above was written as a post-mortem of half-supported Lua, and walking it
+found three defects — a web upload silently dropped, resolution answering
+Python, and exit 127. Two of the three survived the whole test suite. This step
+is that table promoted from post-mortem to procedure.
+
+Set up a throwaway course and author a "Hello, world!" assignment in the new
+language. **Do all four — each covers a different surface, and the ones that
+broke before are the ones a shortcut skips:**
+
+1. **Create the assignment and upload a test script through the WEB FORM** — not
+   a `.chickadee` bundle import, which bypasses `isLikelyTestSuiteFile`, the
+   allowlist that silently ate the first `.lua` upload. A dropped file shows as
+   a suite with a row missing and no error anywhere.
+2. **Author one through MCP** (`author_script`, `create_pattern_family`,
+   `author_notebook_check`). This is the only check that the guidance in item 8
+   is *true* — and the only place a refused kind's message is read by the
+   audience it is written for. Try an unsupported kind deliberately and read
+   what comes back.
+3. **Open the starter notebook in the editor and save it back.** Covers kernel
+   attachment for the new language and the write-back path
+   (`POST /testsetups/:id/notebook/save`).
+4. **Submit as a student and read the result page.** This is the one that binds
+   the rest: resolution, the runner, the inputs file, the outcome. F1 lived
+   here and nowhere else.
+
+Expect to find something. If all four are clean the language is genuinely
+supported, which is a stronger claim than a green suite.
+
+Steps 1, 2 and 4 are automatable later — a Playwright walkthrough alongside
+`Tools/editor-smoke-test` — and doing so would be a real improvement. Step 2's
+*prose* check stays human: only a reader can tell whether guidance is
+misleading.
 
 That fourth-from-last one is a real trap: Lua's runtime could read
 `_ck_inputs.lua` from day one, and the smoke test supplied one as a fixture —
