@@ -1315,6 +1315,35 @@ test('an R assignment gets _ck_inputs.R, not _ck_inputs.py', async () => {
   assert.match(String(worker.files['_ck_inputs.R']), /`threshold` = 42/);
 });
 
+test('a Lua assignment gets _ck_inputs.lua, not _ck_inputs.py', async () => {
+  // The browser twin of the server-side resolve/rederive gap: the runner only
+  // tested `parsed.language === 'r'`, so a Lua assignment stayed on 'python' and
+  // wrote _ck_inputs.py — the Lua runtime reads _ck_inputs.lua and saw an empty
+  // table, so every per-student value went silently missing.
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'publictest_a.lua': 'local chickadee = require("test_runtime")\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [{ script: 'publictest_a.lua', tier: 'public' }],
+    },
+    assignmentSeed: 'abc123',
+    assignmentLanguage: 'lua',
+    personalizedInputs: { threshold: '42' },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_lua_inputs',
+  );
+
+  const worker = harness.gradingWorkerFactory.created[0];
+  assert.equal(worker.files['_ck_inputs.py'], undefined, 'a Lua assignment must not get the Python inputs file');
+  assert.equal(worker.files['_ck_inputs.R'], undefined, 'a Lua assignment must not get the R inputs file');
+  assert.match(String(worker.files['_ck_inputs.lua']), /return \{/);
+  assert.match(String(worker.files['_ck_inputs.lua']), /\["threshold"\] = 42/);
+});
+
 test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
   // Happy path of the worker executor: one worker is spawned and re-used for
   // every python script (no terminate), pass/fail are graded from the worker's
