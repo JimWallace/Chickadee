@@ -35,6 +35,8 @@ enum MCPToolCatalog {
             RestoreAssignmentVersionTool().erased(),
             UpdateAssignmentTool().erased(),
             SetGradingModeTool().erased(),
+            SetSubmissionModeTool().erased(),
+            SetAssignmentLanguageTool().erased(),
             SetTimeLimitTool().erased(),
             SetDatasetTool().erased(),
             SetMinimumRunnerVersionTool().erased(),

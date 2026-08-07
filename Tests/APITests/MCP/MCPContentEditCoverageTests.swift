@@ -68,6 +68,13 @@ import Testing
         // Grading-mode flip; no regrade/close by design (documented in the
         // server instructions).
         "SetGradingModeTool.swift",
+        // How students hand work in (editor vs upload); the suite grades the
+        // same files either way, so nothing to close or regrade.
+        "SetSubmissionModeTool.swift",
+        // Declares the language generated tests will render in. Refused once
+        // any generated test exists, so it cannot change what an existing suite
+        // grades — the case that would warrant a close cannot arise.
+        "SetAssignmentLanguageTool.swift",
         // Time limits are enforced at run time; no content change.
         "SetTimeLimitTool.swift",
         // Minimum-runner-version gate: changes which runner may grade, not what

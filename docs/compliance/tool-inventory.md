@@ -9,7 +9,7 @@ This is a complete, one-row-per-tool inventory of the MCP capability surface,
 walked from the live registry (`MCPToolCatalog.live`,
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) down to each
 tool's handler. As of the 2026-07 refresh (plus `delete_support_file`) the content catalog
-registers **52 tools** (the table below plus the six-tool addendum), and a second,
+registers **54 tools** (the table below plus the six-tool addendum), and a second,
 admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registers
 **19 read-only tools** — inventoried in the addendum. The registries are the
 source of truth; a census re-count is required whenever either changes
@@ -58,6 +58,8 @@ source of truth; a census re-count is required whenever either changes
 | `clone_assignment` | `CloneAssignmentTool.swift:40` | source + target `assignmentPublicID`/`courseCode` | course-enrol on **both** (`:95`, `:117`) | new `APIAssignment` + `APITestSetup` |
 | `update_assignment` | `UpdateAssignmentTool.swift:47` | `assignmentPublicID` | course-enrol (`:136`) | `APIAssignment` (title/due/open-close) |
 | `set_grading_mode` | `SetGradingModeTool.swift:31` | `assignmentPublicID` | course-enrol (`:73`) | `APIAssignment` grading mode |
+| `set_submission_mode` | `SetSubmissionModeTool.swift:36` | `assignmentPublicID` | course-enrol (`:76`) | `APITestSetup` manifest (submission mode) |
+| `set_assignment_language` | `SetAssignmentLanguageTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APITestSetup` manifest (declared language) |
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |

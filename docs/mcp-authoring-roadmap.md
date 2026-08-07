@@ -52,6 +52,8 @@ The catalog:
 | `restore_assignment_version` | `content:write` | Put an assignment's content back to a recorded version (content only, never metadata); append-only — records a new version, closes + re-grades |
 | `update_assignment` | `content:write` | Metadata: title, due date, visibility (closed/preview/open) |
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
+| `set_submission_mode` | `content:write` | Set how students hand work in (`notebook` editor vs `uploadOnly`); an uploadOnly assignment is worker-graded; no regrade/close |
+| `set_assignment_language` | `content:write` | Declare the assignment's language (python/r/lua/octave/cpp). Required for cpp, which has no kernel and no language-bearing script extension to derive from; refused once generated tests exist; no regrade/close |
 | `set_time_limit` | `content:write` | Set the assignment-wide (or per-test) execution time limit; no regrade/close |
 | `set_dataset` | `content:write` | Mark a support file as a per-student dataset (per-seed row sample under the same filename) or clear the mark; no regrade/close |
 | `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |

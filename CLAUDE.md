@@ -1035,7 +1035,7 @@ browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (8 kinds) and notebook checks (10 kinds); achievements; student slip days;
 per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
-an MCP authoring surface of 52 tools plus a read-only admin-diagnostics MCP
+an MCP authoring surface of 54 tools plus a read-only admin-diagnostics MCP
 of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
 source of truth); OIDC SSO; and zero-downtime auto-deploys.
