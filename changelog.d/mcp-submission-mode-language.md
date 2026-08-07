@@ -16,3 +16,12 @@
   for. A language change is refused once generated tests exist, since every
   generated filename carries the current language's extension — declare the
   language before authoring families, which is the natural order anyway.
+
+- **`update_solution` accepts a source-file answer key.** A language with no
+  notebook workflow has no `.ipynb` to extract a solution from, so C++
+  assignments had no way to receive a reference solution — and therefore no way
+  to pass validation — even once their suite could be authored. The tool now
+  takes either `notebook` (unchanged) or `solutionFile` ({filename, content}),
+  and picks which shape is legal from the assignment's language rather than the
+  caller's preference: passing a notebook for C++ is refused, since it would be
+  stored and then grade as an empty submission at validation time.

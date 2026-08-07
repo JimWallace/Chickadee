@@ -90,6 +90,7 @@ import Testing
                 UpdateSolutionTool.name, UpdateSolutionTool.outputSchema,
                 UpdateSolutionTool.Output(
                     assignmentPublicID: "abc123", cellCount: 4,
+                    solutionFilename: "solution.ipynb",
                     validationStatus: "pending", assignmentClosed: true)
             ),
             (

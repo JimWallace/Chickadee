@@ -180,4 +180,115 @@ import Vapor
             }
         }
     }
+
+    // ── Source-file solutions (a language with no notebook workflow) ───────
+    //
+    // C++ has no `.ipynb` to extract source from, so its answer key is a file.
+    // Storing a notebook for such an assignment would grade as an empty
+    // submission — silently, and only at validation time — so the shape is
+    // decided by the assignment's language rather than by the caller.
+
+    private let cppManifest = #"""
+        {"schemaVersion":1,"gradingMode":"worker","submissionMode":"uploadOnly",\
+        "language":"cpp","testSuites":[],"timeLimitSeconds":10}
+        """#
+        .replacingOccurrences(of: "\\\n", with: "")
+
+    private func cppFixture(on app: Application) async throws -> APIAssignment {
+        let course = try await makeTestCourse(on: app, code: "CS247", name: "Software Design")
+        let courseID = try course.requireID()
+        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+        try await makeTestSetup(
+            on: app, id: "setup_cpp", courseID: courseID, manifest: cppManifest)
+        return try await makeTestAssignment(
+            on: app, testSetupID: "setup_cpp", courseID: courseID, title: "Lab")
+    }
+
+    @Test func storesASourceFileSolutionUnderItsOwnName() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await cppFixture(on: app)
+            let source = "#include <string>\nstd::string f() { return \"ok\"; }\n"
+
+            let output = try await UpdateSolutionTool().execute(
+                UpdateSolutionTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    solutionFile: .init(filename: "solution.cpp", content: source)),
+                context(app))
+
+            #expect(output.solutionFilename == "solution.cpp")
+            #expect(output.cellCount == 0)
+            #expect(output.validationStatus == "pending")
+
+            // Stored verbatim as a validation submission — the bytes the runner
+            // will compile, not a notebook wrapper around them.
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            let subID = try #require(reloaded.validationSubmissionID)
+            let sub = try #require(try await APISubmission.find(subID, on: app.db))
+            #expect(sub.kind == APISubmission.Kind.validation)
+            #expect(sub.filename?.hasSuffix(".cpp") == true)
+        }
+    }
+
+    @Test func refusesANotebookForALanguageWithNoNotebookWorkflow() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await cppFixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSolutionTool().execute(
+                    UpdateSolutionTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        notebook: try json(twoCellSolution)),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func refusesASolutionFilenameTheLanguageDoesNotRecognize() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await cppFixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSolutionTool().execute(
+                    UpdateSolutionTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        solutionFile: .init(filename: "solution.py", content: "x = 1")),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func refusesASolutionFilenameWithAPathSeparator() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await cppFixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSolutionTool().execute(
+                    UpdateSolutionTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        solutionFile: .init(filename: "../solution.cpp", content: "int f();")),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func refusesNeitherShapeAndBothShapes() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSolutionTool().execute(
+                    UpdateSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+            }
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSolutionTool().execute(
+                    UpdateSolutionTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        notebook: try json(twoCellSolution),
+                        solutionFile: .init(filename: "solution.cpp", content: "int f();")),
+                    context(app))
+            }
+        }
+    }
 }
