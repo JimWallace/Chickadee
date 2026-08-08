@@ -2,7 +2,7 @@
 //
 // The Octave half of the notebook-check renderer.
 //
-// WHICH KINDS OCTAVE SUPPORTS — seven of ten, more than Lua's four, and each
+// WHICH KINDS OCTAVE SUPPORTS — five of ten, more than Lua's four, and each
 // answered from what Octave and the vendored `chickadee-octave` env actually
 // provide rather than by copying a neighbour:
 //

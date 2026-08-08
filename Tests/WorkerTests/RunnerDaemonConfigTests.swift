@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import chickadee_runner
@@ -84,10 +85,34 @@ import Testing
         #expect(config.testSetupCacheDir == nil)
     }
 
+    /// The work root defaults to the system temp directory, so every
+    /// deployment that was already fine keeps its behaviour.
+    @Test func workRootDefaultsToTemporaryDirectory() {
+        let config = RunnerDaemonConfig.loadFromEnvironment([:])
+        #expect(config.workDir == nil)
+        #expect(config.workRoot == FileManager.default.temporaryDirectory)
+    }
+
+    /// The override exists for a runner whose temp directory is mounted
+    /// noexec, which cannot run a compiled C++ test however it is permissioned.
+    @Test func workRootHonoursOverride() {
+        let config = RunnerDaemonConfig.loadFromEnvironment([
+            "RUNNER_WORK_DIR": "/var/lib/chickadee/work"
+        ])
+        #expect(config.workDir == "/var/lib/chickadee/work")
+        #expect(config.workRoot.path == "/var/lib/chickadee/work")
+    }
+
+    @Test func emptyWorkDirTreatedAsAbsent() {
+        let config = RunnerDaemonConfig.loadFromEnvironment(["RUNNER_WORK_DIR": "   "])
+        #expect(config.workDir == nil)
+    }
+
     @Test func retryPolicyFactoriesUseConfigValues() {
         let config = RunnerDaemonConfig(
             capabilityDiscoveryEnabled: true,
             testSetupCacheDir: nil,
+            workDir: nil,
             networkRetryEnabled: true,
             retryBaseDelayMs: 500,
             retryMaxDelayMs: 45_000,

@@ -148,13 +148,24 @@ func parseLanguageChoice(_ raw: String) throws -> AssignmentLanguage? {
 ///
 /// 1. It records `languageDeclared`, so a nil language afterwards means "the
 ///    author says there is none" rather than "nobody has been asked".
-/// 2. An upload-only language sets `submissionMode` too, because the language
-///    implies it. That is what makes declare-at-creation possible for C++ at
-///    all: `setManifestLanguage` refuses an upload-only language while the setup
-///    is in notebook mode, and a brand-new assignment always is — so requiring
-///    the declaration up front would otherwise leave C++ uncreatable. It also
-///    collapses the old three-step authoring dance (grading mode, then
-///    submission mode, then language) into one answer.
+/// 2. An upload-only language sets `submissionMode` AND `gradingMode` too,
+///    because the language implies both. That is what makes declare-at-creation
+///    possible for C++ at all: `setManifestLanguage` refuses an upload-only
+///    language while the setup is in notebook mode, and a brand-new assignment
+///    always is — so requiring the declaration up front would otherwise leave
+///    C++ uncreatable. It also collapses the old three-step authoring dance
+///    (grading mode, then submission mode, then language) into one answer.
+///
+///    `gradingMode` must move with it. A new assignment defaults to `browser`,
+///    so setting only `submissionMode` left the manifest holding
+///    `uploadOnly` + `browser` — the pair `TestSetupRoutes` calls incoherent and
+///    refuses on the zip path, and that `setManifestGradingMode` and
+///    `set_submission_mode` both refuse to store. Creation was the one
+///    authoring surface that could still produce it, so a freshly created C++
+///    assignment read back `gradingMode: "browser"` from `get_assignment`.
+///    Grading itself was never wrong (`TestProperties.effectiveGradingMode`
+///    coerces upload-only to `.worker` at consumption), which is exactly why
+///    this survived: the stored value was misreported, not misused.
 func declareManifestLanguage(
     setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
 ) async throws {
@@ -167,6 +178,7 @@ func declareManifestLanguage(
         dict["language"] = language.rawValue
         if case .uploadOnly = language.editorSupport {
             dict["submissionMode"] = SubmissionMode.uploadOnly.rawValue
+            dict["gradingMode"] = GradingMode.worker.rawValue
         }
     }
 }

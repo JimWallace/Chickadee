@@ -29,7 +29,22 @@ struct GetAssignmentTool: ContentTool {
         /// How submissions are graded: "worker" (native runner) or "browser"
         /// (in-browser Pyodide). Read from the test setup's manifest
         /// (`TestProperties.gradingMode`, default "worker").
+        ///
+        /// This is `effectiveGradingMode`, not the raw stored value: an
+        /// upload-only assignment is always graded natively, so reporting a
+        /// stored "browser" here would name a path that can never run.
         let gradingMode: String
+        /// How students hand work in: "notebook" (embedded editor plus the
+        /// upload form) or "uploadOnly" (upload only, no editor). Reported
+        /// because `set_submission_mode` tells its caller to read the current
+        /// mode from this tool — which, until now, never returned it, leaving
+        /// an agent no way to see the mode it had just been told to check.
+        let submissionMode: String
+        /// The assignment's language ("python" | "r" | "lua" | "octave" |
+        /// "cpp"), or nil when the suite is plain shell scripts with no
+        /// language. Decides which pattern-family and notebook-check kinds are
+        /// available, so an authoring agent needs it before it starts.
+        let language: String?
         /// Optional minimum native-runner version required to grade this
         /// assignment (semver, e.g. "0.5.0"); null when ungated. A submission is
         /// only handed to a runner at or above this version. Worker path only.
@@ -55,8 +70,11 @@ struct GetAssignmentTool: ContentTool {
         + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
-        + "secret-tier test results; set via the assignment-update tool), and minimumRunnerVersion "
-        + "(the optional minimum native-runner version required to grade it, null when ungated)."
+        + "secret-tier test results; set via the assignment-update tool), minimumRunnerVersion "
+        + "(the optional minimum native-runner version required to grade it, null when ungated), "
+        + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
+        + "only), and language (\"python\" | \"r\" | \"lua\" | \"octave\" | \"cpp\", null for a plain "
+        + "shell-script suite) — which together decide what may be authored here."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -86,11 +104,13 @@ struct GetAssignmentTool: ContentTool {
             "sectionID": MCPSchema.string,
             "sectionName": MCPSchema.string,
             "secretRevealEnabled": MCPSchema.boolean,
+            "submissionMode": MCPSchema.string,
+            "language": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
-            .string("gradingMode"), .string("secretRevealEnabled"),
+            .string("gradingMode"), .string("secretRevealEnabled"), .string("submissionMode"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -107,7 +127,12 @@ struct GetAssignmentTool: ContentTool {
         // setup or manifest is missing.
         let manifest = (try await APITestSetup.find(assignment.testSetupID, on: context.db))?
             .decodedManifest()
-        let gradingMode = manifest?.gradingMode.rawValue ?? "worker"
+        // `effectiveGradingMode`, not `gradingMode`: an upload-only assignment
+        // grades natively whatever the stored value says, and reporting the raw
+        // field here is what made a freshly created C++ assignment look
+        // browser-graded.
+        let gradingMode = manifest?.effectiveGradingMode.rawValue ?? "worker"
+        let submissionMode = manifest?.submissionMode.rawValue ?? SubmissionMode.notebook.rawValue
 
         // Resolve the course section (assignment group) the assignment is in.
         var sectionName: String?
@@ -128,6 +153,8 @@ struct GetAssignmentTool: ContentTool {
             validationStatus: assignment.validationStatus,
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
             gradingMode: gradingMode,
+            submissionMode: submissionMode,
+            language: manifest?.language?.rawValue,
             minimumRunnerVersion: manifest?.minimumRunnerVersion,
             sectionID: assignment.sectionID?.uuidString,
             sectionName: sectionName,

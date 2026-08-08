@@ -120,4 +120,56 @@ the edit page; author pattern families as in any language; add hand-written
 is unchanged and remains the home of build-model pedagogy). Students get the
 upload form (which lists `requiredFiles` and accepts `.cpp`/`.h`), and the
 vanity link lands there. Runners advertise C++ via the `g++ --version`
-probe; both images carry g++.
+probe *plus* the compile-and-exec probe below; both images carry g++.
+
+## The runner work directory MUST allow `exec` (measured, 2026-08)
+
+C++ is the first language whose grading path **executes a file it just
+produced**. Every other language hands a script to an interpreter, so
+"the tool is installed" and "a job will run" are the same question. For C++
+they are two, and the second one has a real failure mode.
+
+The first C++ assignment ever authored end to end failed every case with:
+
+```
+publictest_bmi_exists.sh: 39: exec: ./.ck_bin_bmi_exists: Permission denied
+```
+
+The compile succeeded. The binary was `-rwxr-xr-x`, owned by the runner uid,
+with `umask 0022`. `chmod +x` changed nothing, and so did copying it
+elsewhere — because the cause is not permissions at all:
+
+```
+tmpfs /tmp tmpfs rw,nosuid,nodev,noexec,relatime,size=262144k
+```
+
+The production runner container mounts `/tmp` **`noexec`**, which is a
+common hardening default, and job workspaces were rooted there. `exec`
+returns EACCES (shell exit 126) no matter what the file mode says. Container
+root is mounted `ro`, so there was no writable exec-capable path in the
+default configuration at all — meaning **no C++ assignment could be graded in
+production**, while the same suites passed in CI, where the workspace is an
+ordinary directory.
+
+Two changes follow from it, and they are deliberately a pair:
+
+- **`RUNNER_WORK_DIR`** roots job workspaces and per-job scratch copies.
+  Point it at a writable, exec-capable path (a Docker/containerd volume is
+  exec-capable by default). It defaults to the system temp directory, which
+  preserves the previous behaviour everywhere it was already fine.
+- **The capability probe now compiles and runs a trivial program in that
+  same directory**, and a runner that cannot do both stops advertising
+  `cpp` (`LanguageDescriptor.capabilityRequiresExecutableOutput`). The
+  descriptor used to justify the version-only probe with "the generated
+  wrappers invoke the same binary, so probe and invocation cannot skew" —
+  true of `g++` itself, and irrelevant, because they skew on the step
+  *after* `g++`.
+
+The probe is what makes the misconfiguration diagnosable rather than
+mysterious. Without it a runner advertises a capability it does not have,
+`RunnerLanguageGate` routes every C++ job to it, and each dies with a
+message that reads as a broken test script — the exact symptom the gate
+exists to prevent, arriving through the one door it did not cover. With it,
+an unconfigured runner simply does not claim C++ work, which is the gate's
+documented fail-closed behaviour; `list_runners` showing no `cpp` capability
+on a host that has g++ is then the signal to set `RUNNER_WORK_DIR`.

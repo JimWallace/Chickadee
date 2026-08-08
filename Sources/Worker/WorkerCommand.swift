@@ -49,7 +49,10 @@ struct WorkerCommand: AsyncParsableCommand {
 
         let env = ProcessInfo.processInfo.environment
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
-        let runnerProfile = await RunnerProfileDetector(discoveryEnabled: config.capabilityDiscoveryEnabled).detect()
+        let runnerProfile = await RunnerProfileDetector(
+            discoveryEnabled: config.capabilityDiscoveryEnabled,
+            workRoot: config.workRoot
+        ).detect()
         guard
             let effectiveWorkerSecret = resolveWorkerSharedSecret(
                 cliWorkerSecret: workerSecret,
@@ -80,7 +83,9 @@ struct WorkerCommand: AsyncParsableCommand {
             testSetupCacheDir
             ?? config.testSetupCacheDir
             ?? TestSetupCache.defaultCacheRoot.path
-        let testSetupCache = TestSetupCache(cacheRoot: URL(fileURLWithPath: cacheDirPath))
+        let testSetupCache = TestSetupCache(
+            cacheRoot: URL(fileURLWithPath: cacheDirPath),
+            scratchRoot: config.workRoot)
 
         let daemon = WorkerDaemon(
             poller: poller,

@@ -821,6 +821,7 @@ import Testing
         boundedMakeConfig = RunnerDaemonConfig(
             capabilityDiscoveryEnabled: boundedMakeConfig.capabilityDiscoveryEnabled,
             testSetupCacheDir: nil,
+            workDir: nil,
             networkRetryEnabled: true,
             retryBaseDelayMs: 10,
             retryMaxDelayMs: 20,

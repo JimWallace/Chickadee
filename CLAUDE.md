@@ -146,7 +146,7 @@ the `octave` package plus `gnuplot-nox` + `fonts-freefont-otf` for headless
 figures are on both images) and in the browser via the vendored `xeus-octave`
 kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.5,
 ~5–12 s boot, no per-statement cost). All eight pattern kinds render and
-execute; notebook checks cover seven of ten — `figureCount` and regex
+execute; notebook checks cover five of ten — `figureCount` and regex
 `cellContains` are SUPPORTED (both of Lua's opposite answers, re-measured:
 plotting is core Octave and Octave's regexp is PCRE), while the four
 data-frame kinds (no data-frame type in core Octave, no packages on the

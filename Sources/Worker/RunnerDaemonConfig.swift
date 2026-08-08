@@ -14,6 +14,18 @@ import Foundation
 struct RunnerDaemonConfig: Sendable, Equatable {
     let capabilityDiscoveryEnabled: Bool
     let testSetupCacheDir: String?
+    /// Root directory for job workspaces and per-job scratch copies. Defaults
+    /// to the system temp directory (the historical behaviour). Override via
+    /// `RUNNER_WORK_DIR`.
+    ///
+    /// It exists because the default is not always usable: a container that
+    /// mounts `/tmp` as `tmpfs ... noexec` — which is a common hardening
+    /// default, and is what the production runner does — can write a compiled
+    /// binary there but never `exec` it. Interpreted languages do not care, so
+    /// the setting only starts to matter once a language compiles something
+    /// (C++), at which point every job dies with `Permission denied` at the
+    /// `exec` line. Point this at a writable, exec-capable path to fix it.
+    let workDir: String?
     let networkRetryEnabled: Bool
     let retryBaseDelayMs: Int
     let retryMaxDelayMs: Int
@@ -38,6 +50,7 @@ struct RunnerDaemonConfig: Sendable, Equatable {
     static let defaults = RunnerDaemonConfig(
         capabilityDiscoveryEnabled: true,
         testSetupCacheDir: nil,
+        workDir: nil,
         networkRetryEnabled: true,
         retryBaseDelayMs: 1000,
         retryMaxDelayMs: 30_000,
@@ -58,6 +71,7 @@ struct RunnerDaemonConfig: Sendable, Equatable {
                 env["RUNNER_CAPABILITY_DISCOVERY_ENABLED"], default: defaults.capabilityDiscoveryEnabled),
             testSetupCacheDir: env["RUNNER_TEST_SETUP_CACHE_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty,
+            workDir: env["RUNNER_WORK_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             networkRetryEnabled: parseBool(env["RUNNER_NETWORK_RETRY_ENABLED"], default: defaults.networkRetryEnabled),
             retryBaseDelayMs: parseInt(env["RUNNER_RETRY_BASE_DELAY_MS"], default: defaults.retryBaseDelayMs),
             retryMaxDelayMs: parseInt(env["RUNNER_RETRY_MAX_DELAY_MS"], default: defaults.retryMaxDelayMs),
@@ -71,6 +85,16 @@ struct RunnerDaemonConfig: Sendable, Equatable {
             makeTimeoutSeconds: parseInt(
                 env["RUNNER_MAKE_TIMEOUT_SECONDS"], default: defaults.makeTimeoutSeconds)
         )
+    }
+
+    /// The resolved root for job workspaces and scratch copies.
+    ///
+    /// One accessor so the capability probe and the grading path cannot pick
+    /// different directories — a probe that verified `exec` somewhere other
+    /// than where jobs actually run would be worth nothing.
+    var workRoot: URL {
+        workDir.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.temporaryDirectory
     }
 }
 

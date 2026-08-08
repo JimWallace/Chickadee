@@ -263,6 +263,24 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// it was meant to enable.
     public let workingDirectoryIsOnDefaultSearchPath: Bool
 
+    /// Whether grading this language EXECUTES a file it just produced, so that
+    /// "the tool is installed" is not the same question as "a job will run".
+    ///
+    /// False for every interpreted language: the runner spawns the interpreter
+    /// that `interpreterProbe` found and hands it a script, so a successful
+    /// probe and a successful invocation are the same act. True for C++, where
+    /// the generated wrapper compiles a binary into the working directory and
+    /// then `exec`s it — two capabilities, of which the probe tested one.
+    ///
+    /// The distinction is not theoretical. `g++ --version` succeeds on a runner
+    /// whose work directory is mounted `noexec`; the runner then advertises
+    /// `cpp`, `RunnerLanguageGate` routes every C++ job to it, and each one dies
+    /// at `exec` with `Permission denied` — a message that reads as a broken
+    /// test script and gets debugged as one. The descriptor used to claim
+    /// "probe and invocation cannot skew" because both run `g++`; they skew on
+    /// the step after `g++`.
+    public let capabilityRequiresExecutableOutput: Bool
+
     public struct InterpreterProbe: Equatable, Sendable {
         public let command: String
         public let versionArguments: [String]
@@ -282,7 +300,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         editorSupport: EditorSupport,
         interpreterProbe: InterpreterProbe,
         moduleResolution: ModuleResolution,
-        workingDirectoryIsOnDefaultSearchPath: Bool
+        workingDirectoryIsOnDefaultSearchPath: Bool,
+        capabilityRequiresExecutableOutput: Bool
     ) {
         self.displayName = displayName
         self.scriptExtensions = scriptExtensions
@@ -293,6 +312,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.interpreterProbe = interpreterProbe
         self.moduleResolution = moduleResolution
         self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
+        self.capabilityRequiresExecutableOutput = capabilityRequiresExecutableOutput
     }
 }
 
@@ -324,7 +344,10 @@ extension AssignmentLanguage {
                 // The driver runs from a temp directory with cwd set to the
                 // support-files directory, so `sys.path[0]` is the driver's
                 // directory and not the one the helpers are in.
-                workingDirectoryIsOnDefaultSearchPath: false
+                workingDirectoryIsOnDefaultSearchPath: false,
+                // Interpreted: the runner spawns the probed interpreter on a
+                // script, so probing IS invoking. Nothing is produced to execute.
+                capabilityRequiresExecutableOutput: false
             )
         case .r:
             return LanguageDescriptor(
@@ -343,7 +366,10 @@ extension AssignmentLanguage {
                 // there is no name to resolve, so nothing is importable and no
                 // guard could reject anything.
                 moduleResolution: .fileRead,
-                workingDirectoryIsOnDefaultSearchPath: true
+                workingDirectoryIsOnDefaultSearchPath: true,
+                // Interpreted: the runner spawns the probed interpreter on a
+                // script, so probing IS invoking. Nothing is produced to execute.
+                capabilityRequiresExecutableOutput: false
             )
         case .lua:
             return LanguageDescriptor(
@@ -365,7 +391,10 @@ extension AssignmentLanguage {
                 moduleResolution: .byName(searchPathVariable: "LUA_PATH"),
                 // Verified rather than assumed: `lua -e 'print(package.path)'`
                 // ends with `./?.lua;./?/init.lua`.
-                workingDirectoryIsOnDefaultSearchPath: true
+                workingDirectoryIsOnDefaultSearchPath: true,
+                // Interpreted: the runner spawns the probed interpreter on a
+                // script, so probing IS invoking. Nothing is produced to execute.
+                capabilityRequiresExecutableOutput: false
             )
         case .octave:
             return LanguageDescriptor(
@@ -390,7 +419,10 @@ extension AssignmentLanguage {
                 // and the verification OVERTURNED the survey's prediction:
                 // `octave-cli --eval "path"` lists `.` first, so the working
                 // directory is on the default path and no OCTAVE_PATH is set.
-                workingDirectoryIsOnDefaultSearchPath: true
+                workingDirectoryIsOnDefaultSearchPath: true,
+                // Interpreted: the runner spawns the probed interpreter on a
+                // script, so probing IS invoking. Nothing is produced to execute.
+                capabilityRequiresExecutableOutput: false
             )
         case .cpp:
             return LanguageDescriptor(
@@ -434,7 +466,11 @@ extension AssignmentLanguage {
                 // directory by rule, so everything a generated test includes
                 // sits beside it and nothing needs setting. (Unused by the
                 // fileRead derivations; stated because the field must be.)
-                workingDirectoryIsOnDefaultSearchPath: true
+                workingDirectoryIsOnDefaultSearchPath: true,
+                // The generated wrapper compiles a binary and `exec`s it, so a
+                // runner must be able to run what g++ writes into its work
+                // directory — not merely own a g++. See the property's doc.
+                capabilityRequiresExecutableOutput: true
             )
         }
     }
