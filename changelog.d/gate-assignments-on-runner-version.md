@@ -36,3 +36,14 @@
   advertising no profile at all (capability discovery switched off).
   `minimumRunnerVersion` remains for runner behaviour that is not observable as
   an interpreter.
+
+- **A Language dropdown on the assignment edit page.** Sits above Submission
+  Method and declares the language explicitly, for the cases derivation cannot
+  reach: a suite made only of pattern families has no script on disk to sniff,
+  and C++ has neither a notebook kernel nor a language-bearing generated
+  extension. It writes through the same shared helpers the MCP
+  `set_assignment_language` tool uses, so both surfaces share one policy and its
+  three refusals. Options are built from `AssignmentLanguage.allCases`, and the
+  list leads with "detect from the notebook or test scripts" — a recorded
+  language outranks every content signal, so without a way back the first
+  choice would be permanent.

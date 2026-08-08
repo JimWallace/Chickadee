@@ -76,18 +76,24 @@ extension PublishedAssignmentRoutes {
         // row: `setManifestSubmissionMode` refuses the upload + browser
         // combination, and refusing must leave the assignment entirely
         // unmodified — not half-saved.
-        if let requestedMode = form.submissionMode,
-            requestedMode == SubmissionMode.notebook.rawValue
-                || requestedMode == SubmissionMode.uploadOnly.rawValue
+        if let refusal = await persistSubmissionMode(
+            requested: form.submissionMode, setup: setup, on: req.db)
         {
-            do {
-                _ = try await setManifestSubmissionMode(
-                    setup: setup, to: requestedMode, on: req.db)
-            } catch {
-                let q =
-                    "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(uploadModeGradingConflictMessage))"
-                return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-            }
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(refusal))"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+        }
+
+        // Then the declared language, in that order deliberately: an upload-only
+        // language (C++) is refused while the setup is still in notebook mode,
+        // so a save that switches both at once has to apply the mode first or
+        // the pair would be rejected on its way to a coherent state.
+        if let refusal = await persistDeclaredLanguage(
+            requested: form.assignmentLanguage, setup: setup, on: req.db)
+        {
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(refusal))"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         try persistAssignmentNotebook(
@@ -166,6 +172,12 @@ extension PublishedAssignmentRoutes {
         /// form predates the field (a stale open tab) so the stored mode is
         /// left untouched rather than reset to the default.
         let submissionMode: String?
+        /// An `AssignmentLanguage` raw value from the Language select, "" for
+        /// "detect automatically", or nil when the form predates the field (a
+        /// stale open tab) so the stored language is left untouched.  The empty
+        /// string and nil mean different things here and must stay distinct:
+        /// one clears a declaration, the other is silence.
+        let assignmentLanguage: String?
         /// Set by the assignment workbench's embedded form.  Suppresses the
         /// close-on-save below; see the comment at that call site.
         let liveEdit: Bool
@@ -177,6 +189,62 @@ extension PublishedAssignmentRoutes {
         let isNotebook: Bool
     }
 
+    /// Applies the Submission select's value to the manifest, returning a
+    /// user-facing refusal reason or nil when it succeeded or there was nothing
+    /// to do.
+    ///
+    /// An unrecognised value is ignored rather than refused, which is what keeps
+    /// a stale tab posting a mode this build no longer has from failing the
+    /// whole save. The refusal it CAN produce has one cause — the upload +
+    /// browser combination — hence the single fixed message, unlike the language
+    /// helper below.
+    fileprivate func persistSubmissionMode(
+        requested: String?, setup: APITestSetup, on db: any Database
+    ) async -> String? {
+        guard let requested,
+            requested == SubmissionMode.notebook.rawValue
+                || requested == SubmissionMode.uploadOnly.rawValue
+        else { return nil }
+        do {
+            _ = try await setManifestSubmissionMode(setup: setup, to: requested, on: db)
+            return nil
+        } catch {
+            return uploadModeGradingConflictMessage
+        }
+    }
+
+    /// Applies the Language select's value to the manifest, returning a
+    /// user-facing refusal reason or nil when it succeeded or there was nothing
+    /// to do.
+    ///
+    /// `requested` distinguishes three states that must not be collapsed: nil is
+    /// the field being absent (a form posted from a tab opened before it
+    /// existed) and leaves the declaration alone; "" is the author picking
+    /// "detect automatically" and clears it; anything else declares it.
+    ///
+    /// The reason is the thrown error's own, not one fixed message: the shared
+    /// helpers have three distinct refusals — unknown language, C++ outside
+    /// upload-only mode, and a change once generated tests exist — and which one
+    /// applies is exactly what the author needs in order to act.
+    fileprivate func persistDeclaredLanguage(
+        requested: String?, setup: APITestSetup, on db: any Database
+    ) async -> String? {
+        guard let requested else { return nil }
+        do {
+            if requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                _ = try await clearManifestLanguage(setup: setup, on: db)
+            } else {
+                _ = try await setManifestLanguage(setup: setup, to: requested, on: db)
+            }
+            return nil
+        } catch {
+            // `any AbortError` rather than `AppError`, so a Vapor `Abort` thrown
+            // deeper in the manifest write surfaces its reason too.
+            return (error as? any AbortError)?.reason
+                ?? "Could not set the assignment language."
+        }
+    }
+
     fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {
         struct SaveBody: Content {
             var assignmentName: String?
@@ -186,6 +254,7 @@ extension PublishedAssignmentRoutes {
             var solutionNotebookFile: File?
             var gradeObjectID: String?
             var submissionMode: String?
+            var assignmentLanguage: String?
             var liveEdit: String?
         }
 
@@ -205,6 +274,8 @@ extension PublishedAssignmentRoutes {
             gradeObjectID: try multipartTextField(named: ["gradeObjectID"], from: req) ?? body.gradeObjectID,
             submissionMode: try multipartTextField(named: ["submissionMode"], from: req)
                 ?? body.submissionMode,
+            assignmentLanguage: try multipartTextField(named: ["assignmentLanguage"], from: req)
+                ?? body.assignmentLanguage,
             liveEdit: (try multipartTextField(named: ["liveEdit"], from: req) ?? body.liveEdit) != nil
         )
     }

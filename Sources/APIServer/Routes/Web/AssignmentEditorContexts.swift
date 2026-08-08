@@ -10,6 +10,7 @@
 // site).  Nesting is deferred — Leaf templates reference these fields
 // flat via `#(field)`, so nesting would force a template-side rewrite.
 
+import Core
 import Foundation
 
 struct NewAssignmentContext: Encodable {
@@ -227,6 +228,12 @@ struct EditAssignmentContext: Encodable {
     /// "notebook" | "uploadOnly" from the manifest — renders the Submission
     /// select's current value in the name/due-date edit block.
     let submissionMode: String
+    /// The Language select's options, in `AssignmentLanguage.allCases` order
+    /// behind the "detect automatically" entry. Built from `allCases` rather
+    /// than written out in the template so a sixth language needs no Leaf edit —
+    /// the same discovered-not-enumerated rule the kernel-alias generator and
+    /// the runner's capability probe follow.
+    let assignmentLanguageOptions: [AssignmentLanguageOption]
     /// The per-assignment secret-reveal toggle: whether students may spend
     /// their one reveal token here.  Renders the "Student Options" checkbox.
     let secretRevealEnabled: Bool
@@ -244,4 +251,36 @@ struct EditAssignmentContext: Encodable {
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
+}
+
+/// One entry in the edit page's Language select.
+struct AssignmentLanguageOption: Encodable {
+    /// An `AssignmentLanguage` raw value, or "" for the derive-it entry.
+    let value: String
+    let label: String
+    let selected: Bool
+
+    /// Builds the whole list for an assignment whose manifest records
+    /// `recorded` (nil when nothing is recorded).
+    ///
+    /// The empty-valued first entry is not cosmetic: it is what lets an author
+    /// undo a declaration. `AssignmentLanguage.resolve` treats a recorded value
+    /// as authoritative over the notebook and the suite, so a select offering
+    /// only the five real languages would make the first choice permanent.
+    static func options(recorded: String?) -> [AssignmentLanguageOption] {
+        let normalized = recorded?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let auto = AssignmentLanguageOption(
+            value: "",
+            label: "Detect from the notebook or test scripts",
+            selected: normalized == nil || AssignmentLanguage(rawValue: normalized ?? "") == nil
+        )
+        return [auto]
+            + AssignmentLanguage.allCases.map { language in
+                AssignmentLanguageOption(
+                    value: language.rawValue,
+                    label: language.displayName,
+                    selected: normalized == language.rawValue
+                )
+            }
+    }
 }
