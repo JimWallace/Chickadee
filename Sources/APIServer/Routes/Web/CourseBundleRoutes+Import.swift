@@ -423,6 +423,27 @@ private func importBundledTestSetups(
             courseID: courseID
         )
         try await setup.save(on: db)
+
+        // A bundle exported by an older build carries no language declaration,
+        // so declare one on the way in — the same thing
+        // `BackfillDeclaredLanguage` does for content already on disk, applied
+        // at the one other door assignments come through.
+        //
+        // Without this, import is a permanent source of undeclared assignments,
+        // and "undeclared" is exactly the state the worker must be able to
+        // refuse rather than guess at. A refusal that legitimate imports can
+        // trip is a refusal that has to be watered down.
+        //
+        // The notebook is already on disk above, so resolution can consult its
+        // kernel; an assignment nothing identifies is declared as having no
+        // language, which is the truthful answer for a shell-script suite.
+        if let imported = setup.decodedManifest(), imported.languageDeclared != true {
+            try await declareManifestLanguage(
+                setup: setup,
+                to: AssignmentLanguage.resolve(for: setup, manifest: imported),
+                on: db)
+        }
+
         setupIDMap[bundledSetup.bundleID] = newSetupID
         tally.testSetupsImported += 1
     }

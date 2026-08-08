@@ -442,6 +442,36 @@ import VaporTesting
         }
     }
 
+    /// A bundle exported by an older build carries no language declaration.
+    /// Import must supply one, because import is otherwise a permanent source of
+    /// undeclared assignments — and "undeclared" is precisely the state the
+    /// worker has to be able to refuse rather than guess at. A refusal that
+    /// legitimate imports can trip is one that has to be watered down.
+    @Test func importDeclaresALanguageForAnUndeclaredBundle() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let zipData = try await makeMinimalBundleZip(courseCode: "IMP_LANG")
+
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let course = try #require(
+                try await APICourse.query(on: app.db).filter(\.$code == "IMP_LANG").first())
+            let setup = try #require(
+                try await APITestSetup.query(on: app.db)
+                    .filter(\.$courseID == course.requireID()).first())
+            let manifest = try #require(setup.decodedManifest())
+
+            #expect(
+                manifest.languageDeclared == true,
+                "an imported setup must carry a declaration, whatever the bundle said")
+            // The fixture's suite is `.sh`, so the truthful declaration is "no
+            // language" — recorded as the flag with no `language` beside it,
+            // which is exactly what distinguishes it from never having asked.
+            #expect(manifest.language == nil)
+        }
+    }
+
     @Test func importMatchesExistingUser() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
