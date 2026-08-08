@@ -361,6 +361,7 @@ enum WorkerDaemonError: Error, LocalizedError {
     case makeTimedOut(target: String?, limitSeconds: Int)
     case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
     case unsafePersonalizedFilename(String)
+    case personalizedInputsWithoutLanguage(inputCount: Int)
 
     var errorDescription: String? {
         switch self {
@@ -378,6 +379,15 @@ enum WorkerDaemonError: Error, LocalizedError {
                 "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
         case .unsafePersonalizedFilename(let name):
             return "Personalized file name '\(name)' is not a bare filename; refusing to write it"
+        case .personalizedInputsWithoutLanguage(let inputCount):
+            return """
+                This job carries \(inputCount) per-student input value\(inputCount == 1 ? "" : "s") \
+                but names no assignment language, so there is no way to know what syntax to write \
+                them in. Refusing rather than guessing: the values are already source literals in \
+                the assignment's language, and rendering them into the wrong one would make every \
+                personalized test fail in a way that reads as a student mistake. Re-save the \
+                assignment so its language is recorded, then retest.
+                """
         }
     }
 }
