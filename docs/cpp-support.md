@@ -143,13 +143,35 @@ elsewhere — because the cause is not permissions at all:
 tmpfs /tmp tmpfs rw,nosuid,nodev,noexec,relatime,size=262144k
 ```
 
-The production runner container mounts `/tmp` **`noexec`**, which is a
-common hardening default, and job workspaces were rooted there. `exec`
-returns EACCES (shell exit 126) no matter what the file mode says. Container
-root is mounted `ro`, so there was no writable exec-capable path in the
-default configuration at all — meaning **no C++ assignment could be graded in
-production**, while the same suites passed in CI, where the workspace is an
-ordinary directory.
+That runner mounts `/tmp` **`noexec`**, which is a common hardening default,
+and job workspaces were rooted there. `exec` returns EACCES (shell exit 126)
+no matter what the file mode says. The same suites passed in CI, where the
+workspace is an ordinary directory.
+
+**The fleet is not uniform, and that is the real shape of the bug.** A
+later probe of the full mount table — the first one filtered it to `/` and
+`/tmp`, which is how this was missed — found the runners disagree:
+
+| runner | `/` | `/tmp` | compiled binary runs? |
+|---|---|---|---|
+| hardened | overlay `ro` | `tmpfs … noexec` | no |
+| default | overlay `rw` | *no separate mount* (on the overlay) | yes |
+
+On the second runner `/data`, `/app`, `/var/tmp`, `/home/chickadee` and the
+job working directory are all writable and exec-capable; only `/dev/shm` is
+`noexec`. So C++ grades correctly there and fails on the hardened host.
+
+The symptom therefore depends on **which runner claims the job**, and only
+looked absolute because for a while the hardened runner was the sole one new
+enough to advertise `cpp` at all — the others predated the language. Once a
+second runner upgraded, the same assignment started passing, with nothing
+about it changed. An earlier revision of this document said no C++ assignment
+could be graded in production; that was true of the moment it was measured,
+not of the system.
+
+Claim-order-dependent grading is precisely what `RunnerLanguageGate` exists
+to eliminate, which is why the fix belongs in capability discovery rather
+than in an operator runbook.
 
 Two changes follow from it, and they are deliberately a pair:
 
@@ -176,3 +198,23 @@ an unconfigured runner simply does not claim C++ work, which is the gate's
 documented fail-closed behaviour; `list_runners` showing no `cpp` capability
 on a host that has g++ is then the signal that its cache directory sits on a
 `noexec` mount.
+
+**Confirmed in production (v0.5.33).** After the hardened runner restarted on
+the release, its advertised profile dropped from
+
+```
+… "cpp 13.3.0", "lua 5.4.6", "octave 8.4.0", "python 3.12.3", "r 4.3.3" …
+```
+
+to
+
+```
+… "lua 5.4.6", "octave 8.4.0", "python 3.12.3", "r 4.3.3" …
+```
+
+g++ is still installed on that host; the probe compiled a binary into the
+work root, could not `exec` it, and the language was withheld. Every other
+capability survived, because no other language executes something it built.
+C++ work now routes deterministically to a runner that can actually run it,
+and the `noexec` mount stays exactly as hardened as it was — a supported
+configuration rather than a silent failure.
