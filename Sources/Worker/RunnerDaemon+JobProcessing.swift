@@ -459,16 +459,13 @@ extension WorkerDaemon {
                 }
             }
 
-            // Install the shared test runtime helpers for every run — one per
-            // language, unconditionally. A setup's scripts are not classified
-            // until they run, and an unused helper costs one small file write.
+            // Install the shared test runtime helpers for every run. The set is
+            // walked from `AssignmentLanguage.allCases` rather than written out
+            // here — see `writeRuntimeHelpers` for what the hand-written list
+            // cost.
             try stageTimings.measureSync("runtime_helper_setup") {
-                try writePythonRuntimeHelpers(in: testSetupDir)
+                try writeRuntimeHelpers(in: testSetupDir)
                 try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
-                try writeRRuntimeHelper(in: testSetupDir)
-                try writeLuaRuntimeHelper(in: testSetupDir)
-                try writeOctaveRuntimeHelper(in: testSetupDir)
-                try writeCppRuntimeHelper(in: testSetupDir)
             }
 
             return JobPreparedWorkspace(

@@ -88,12 +88,12 @@ struct SetAssignmentLanguageTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
         // Surface the shared helper's refusals as arguments errors; the helper
         // keeps its own guards for any path that skips this one.
-        if case .uploadOnly = parsed.editorSupport,
+        if requiresUploadOnlySubmission(parsed),
             currentManifestSubmissionMode(setup.manifest) != SubmissionMode.uploadOnly.rawValue,
             currentManifestLanguage(setup.manifest) != raw
         {
             throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: cppRequiresUploadOnlyMessage)
+                tool: Self.name, detail: requiresUploadOnlyMessage(parsed))
         }
         if currentManifestLanguage(setup.manifest) != raw,
             manifestHasGeneratedScripts(setup.manifest)

@@ -59,11 +59,43 @@ let uploadModeGradingConflictMessage =
     "An upload-only assignment is graded by the native worker; it cannot use browser grading. "
     + "Switch the grading mode to \"worker\" first."
 
-/// The C++ coherence rule's message, shared by the setup-upload API and the
-/// submission-mode editor.
-let cppRequiresUploadOnlyMessage =
-    "A C++ assignment is upload-only: C++ has no editor kernel or notebook workflow, so "
-    + "submissionMode must be \"uploadOnly\"."
+/// The upload-only-language coherence rule's message, shared by the
+/// setup-upload API, the submission-mode editor and the MCP tools.
+///
+/// A FUNCTION OF THE LANGUAGE, not a constant. It was hardcoded C++ prose — and
+/// the two call sites that had correctly generalised their *predicate* to
+/// `editorSupport` still served it verbatim, so a Racket author who tripped the
+/// rule was told about C++. The predicate and the wording have to generalise
+/// together or the rule reads as a bug in whichever language is not C++.
+func requiresUploadOnlyMessage(_ language: AssignmentLanguage) -> String {
+    "A \(language.displayName) assignment is upload-only: \(language.displayName) has no "
+        + "editor kernel or notebook workflow, so submissionMode must be \"uploadOnly\"."
+}
+
+/// True when this language has no editor kernel, so its assignments must be
+/// upload-only.
+///
+/// The one spelling of the predicate. Written out as `== .cpp` at three of its
+/// five enforcement sites until a second upload-only language shipped and none
+/// of the three covered it; `editorSupport` is exhaustive, so a seventh
+/// language cannot fail to answer it.
+func requiresUploadOnlySubmission(_ language: AssignmentLanguage) -> Bool {
+    if case .uploadOnly = language.editorSupport { return true }
+    return false
+}
+
+/// The same question asked of a manifest's recorded `language` string, for the
+/// sites that hold raw manifest JSON rather than a decoded `TestProperties`.
+/// An unrecognised or absent value is not upload-only — it is not a language
+/// this build knows, and refusing on it would block an author over a field they
+/// cannot see.
+func manifestRequiresUploadOnlySubmission(_ manifest: String?) -> AssignmentLanguage? {
+    guard let raw = currentManifestLanguage(manifest),
+        let language = AssignmentLanguage(rawValue: raw),
+        requiresUploadOnlySubmission(language)
+    else { return nil }
+    return language
+}
 
 /// Reads the recorded `language` straight from a manifest JSON string, or nil
 /// when none is recorded (or the manifest can't be parsed).
@@ -79,13 +111,14 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
 ///
 /// The recorded field is normally a *memo* of what resolution derived from the
 /// content (`manifestWithRederivedLanguage`), which is why nothing else writes
-/// it directly. An upload-only language is the case that memo cannot reach: C++
-/// has no editor kernel, so no notebook kernelspec implies it, and its generated
-/// tests are extension-free `.sh` wrappers by design — leaving a declaration as
-/// the only signal there is. Hence this setter, and hence its two guards.
+/// it directly. An upload-only language is the case that memo cannot reach: with
+/// no editor kernel there is no notebook kernelspec to imply it, and C++'s
+/// generated tests are extension-free `.sh` wrappers by design — leaving a
+/// declaration as the only signal there is. Hence this setter, and hence its two
+/// guards.
 ///
 /// Refuses an upload-only language while the setup is still in notebook mode:
-/// the mirror of `setManifestSubmissionMode`'s C++ guard, so the incoherent
+/// the mirror of `setManifestSubmissionMode`'s guard, so the incoherent
 /// combination cannot be authored from either direction.
 ///
 /// Refuses any change once generated scripts exist. A language change rewrites
@@ -102,10 +135,10 @@ func setManifestLanguage(
     }
     let current = currentManifestLanguage(setup.manifest)
     guard current != language else { return language }
-    if case .uploadOnly = parsed.editorSupport,
+    if requiresUploadOnlySubmission(parsed),
         currentManifestSubmissionMode(setup.manifest) != SubmissionMode.uploadOnly.rawValue
     {
-        throw AppError.badRequest(reason: cppRequiresUploadOnlyMessage)
+        throw AppError.badRequest(reason: requiresUploadOnlyMessage(parsed))
     }
     if manifestHasGeneratedScripts(setup.manifest) {
         throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
@@ -254,12 +287,14 @@ func setManifestSubmissionMode(
         throw AppError.badRequest(
             reason: uploadModeGradingConflictMessage)
     }
-    // The C++ coherence rule from the other direction: an instructor cannot
-    // flip a C++ assignment back to the notebook workflow it does not have.
+    // The coherence rule from the other direction: an instructor cannot flip
+    // an upload-only language back to the notebook workflow it does not have.
+    // Asked of `editorSupport` rather than spelled `== .cpp`, which is what let
+    // Racket through here.
     if mode == SubmissionMode.notebook.rawValue,
-        currentManifestLanguage(setup.manifest) == AssignmentLanguage.cpp.rawValue
+        let language = manifestRequiresUploadOnlySubmission(setup.manifest)
     {
-        throw AppError.badRequest(reason: cppRequiresUploadOnlyMessage)
+        throw AppError.badRequest(reason: requiresUploadOnlyMessage(language))
     }
     if currentManifestSubmissionMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { dict in

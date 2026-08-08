@@ -1272,7 +1272,7 @@ test('a Python assignment never boots the R kernel', async () => {
 test('test_runtime.R is written into every grading workspace', async () => {
   // An R test script opens with source("test_runtime.R"); the helper has to be
   // in the workspace the substrate materializes, exactly as the native runner's
-  // writeRRuntimeHelper puts it in the test setup directory.
+  // writeRuntimeHelpers puts it in the test setup directory.
   const harness = await loadRunnerHarness({
     zipFiles: { 'publictest_a.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n' },
     manifest: {

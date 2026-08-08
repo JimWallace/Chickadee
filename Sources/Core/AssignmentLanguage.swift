@@ -354,28 +354,8 @@ extension AssignmentLanguage {
     /// form binds `.ck_inputs` (R forbids a leading-underscore identifier, so the
     /// variable can't be `_ck`) and omits the trailing comma R's `list()` rejects.
     public func renderInputsFile(_ values: [String: String]) -> String {
-        // The comment leader is per-language, and Lua's is the reason this is
-        // not one shared constant. `#` is not a Lua comment — but a Lua chunk
-        // whose FIRST line starts with `#` has that line skipped outright, a
-        // shebang accommodation. So a `#` header parsed, the round-trip test
-        // passed, and the file was one edit away from breaking: move the header
-        // down a line, or put anything above it, and the whole inputs file
-        // becomes a syntax error that surfaces as every per-student value
-        // silently reading as missing.
-        let commentLeader: String
-        switch self {
-        case .lua: commentLeader = "--"
-        case .octave: commentLeader = "%"
-        case .cpp: commentLeader = "//"
-        // Racket's line comment. `#` is NOT one — `#` begins a reader macro
-        // (`#t`, `#lang`, `#(`), so a `#`-led header is a read error, not an
-        // ignored line. Same class of trap as Lua's shebang accommodation
-        // noted above, failing louder.
-        case .racket: commentLeader = ";"
-        case .python, .r: commentLeader = "#"
-        }
         let header =
-            "\(commentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
+            "\(lineCommentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
         let keys = values.keys.sorted()
         switch self {
         case .python:
@@ -491,6 +471,32 @@ extension AssignmentLanguage {
 
     /// See `LanguageDescriptor.displayName`.
     public var displayName: String { descriptor.displayName }
+
+    /// This language's line-comment leader.
+    ///
+    /// Lua's is why this is a per-language answer and not one shared `#`. `#` is
+    /// not a Lua comment — but a Lua chunk whose FIRST line starts with `#` has
+    /// that line skipped outright, a shebang accommodation. So a `#` header
+    /// parsed, the round-trip test passed, and the file was one edit away from
+    /// breaking: move the header down a line, or put anything above it, and the
+    /// whole inputs file becomes a syntax error that surfaces as every
+    /// per-student value silently reading as missing. Racket fails the same way
+    /// but louder — `#` there begins a reader macro (`#t`, `#lang`, `#(`), so a
+    /// `#`-led header is a read error rather than an ignored line.
+    ///
+    /// Hoisted out of `renderInputsFile`, which was its only caller until the
+    /// runtime-helper drift guard needed the same fact to tell a language's
+    /// prose from its code. A second hand-written table would have been a second
+    /// chance to give Lua a `#`.
+    public var lineCommentLeader: String {
+        switch self {
+        case .lua: return "--"
+        case .octave: return "%"
+        case .cpp: return "//"
+        case .racket: return ";"
+        case .python, .r: return "#"
+        }
+    }
 
     /// The name this language advertises itself under in a runner's
     /// `languageVersions`, and the token an assignment's required-languages
