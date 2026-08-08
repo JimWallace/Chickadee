@@ -128,6 +128,7 @@ func preferredStudentModuleFilename(
         case .lua: sourceExtension = "lua"
         case .octave: sourceExtension = "m"
         case .cpp: sourceExtension = "cpp"
+        case .racket: sourceExtension = "rkt"
         }
         return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }

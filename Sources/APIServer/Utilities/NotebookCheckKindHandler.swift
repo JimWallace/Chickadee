@@ -97,6 +97,7 @@ private func isValidIdentifier(_ value: String, language: AssignmentLanguage) ->
     case .lua: return isValidLuaIdentifier(value)
     case .octave: return isValidOctaveIdentifier(value)
     case .cpp: return isValidCppIdentifier(value)
+    case .racket: return isValidRacketIdentifier(value)
     }
 }
 
@@ -108,6 +109,7 @@ private func identifierKindName(_ language: AssignmentLanguage) -> String {
     case .lua: return "Lua identifier"
     case .octave: return "Octave identifier"
     case .cpp: return "C++ identifier"
+    case .racket: return "Racket identifier"
     }
 }
 

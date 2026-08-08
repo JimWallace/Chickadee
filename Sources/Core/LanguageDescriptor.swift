@@ -472,6 +472,53 @@ extension AssignmentLanguage {
                 // directory — not merely own a g++. See the property's doc.
                 capabilityRequiresExecutableOutput: true
             )
+        case .racket:
+            return LanguageDescriptor(
+                displayName: "Racket",
+                // `.rkt` only. `.ss` and `.scm` are Scheme's historical
+                // extensions and DrRacket still opens them, but no Waterloo
+                // course submits them and claiming an extension is how a
+                // language steals another's files — the uniqueness invariant
+                // exists for exactly that.
+                scriptExtensions: ["rkt"],
+                // Unlike C++, the generated test IS the language: Racket is
+                // interpreted, so `racket test.rkt` runs it directly under the
+                // ordinary shell-script contract. No wrapper, no build step.
+                generatedScriptExtension: "rkt",
+                inputsFileName: "_ck_inputs.rkt",
+                // No kernel exists to claim aliases for. Empty for the same
+                // reason as C++ — nothing to detect — not Python's
+                // default-by-fallthrough.
+                notebookKernelNames: [],
+                // No xeus kernel on the channel, so no editor and no notebook
+                // workflow. Contingent rather than principled: see the enum
+                // case's doc for why that difference is worth keeping.
+                editorSupport: .uploadOnly,
+                // `racket --version` prints "Welcome to Racket v8.10 [cs]."
+                // and exits 0 (measured on 8.10). The generated tests invoke
+                // the same binary, and — unlike C++ — nothing is produced to
+                // execute afterwards, so probe and invocation genuinely cannot
+                // skew here.
+                interpreterProbe: .init(command: "racket", versionArguments: ["--version"]),
+                // `(require "student.rkt")` is a FILE path, resolved relative
+                // to the requiring module — R's shape, not Python's. Nothing
+                // is name-addressable and no search-path variable applies.
+                //
+                // The test does not actually `require` the submission (an HtDP
+                // module exports nothing; see the enum case), but the
+                // resolution MECHANISM this field describes is still file
+                // reading — `dynamic-require` takes a `(file ...)` path too.
+                moduleResolution: .fileRead,
+                // Racket resolves a relative module path against the enclosing
+                // module's own directory, so a test and the submission beside
+                // it find each other with nothing set. Verified, not assumed —
+                // this is the field the Octave run proved you cannot reason
+                // your way to.
+                workingDirectoryIsOnDefaultSearchPath: true,
+                // Interpreted: the runner hands a file to `racket`. Nothing is
+                // built, so there is no second capability to prove.
+                capabilityRequiresExecutableOutput: false
+            )
         }
     }
 }

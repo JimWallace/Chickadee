@@ -62,12 +62,17 @@ enum KernelImportGuard {
             return RLibraryScanner.referencedPackages(in: source)
                 .filter { !environment.provides($0.package) && !localModules.contains($0.package) }
                 .map { Unsatisfied(name: $0.package, line: $0.line) }
-        case .cpp:
-            // Unreachable twice over: `language(forFile:)` returns nil for
-            // C++ extensions, and no chickadee-cpp inventory exists to load —
-            // a kernel-less language has no fixed browser environment for
+        case .cpp, .racket:
+            // Unreachable twice over for both: `language(forFile:)` returns nil
+            // for their extensions, and no inventory exists to load — a
+            // kernel-less language has no fixed browser environment for
             // anything to be unsatisfiable against. Reporting nothing is the
             // direction this guard resolves ambiguity by design.
+            //
+            // Racket would decline anyway even with an inventory, for Lua's
+            // reason: `require` there names collections that ship with the
+            // distribution, so a guard built from a package list would reject
+            // the standard library.
             return []
         case .lua:
             // Unreachable in practice — `language(forFile:)` returns nil for

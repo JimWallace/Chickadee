@@ -144,6 +144,22 @@ public func extractCpp(cells: [NotebookCell], filename: String) -> ExtractedRNot
     extractWithCellMarkers(cells: cells, filename: filename, comment: "//")
 }
 
+/// Extract Racket from a notebook's cells — the fifth marker-based extractor,
+/// `;` being Racket's comment leader.
+///
+/// Racket assignments are upload-only, so this path is as rare as C++'s: a
+/// student sending an `.ipynb` through the upload form. It carries the same
+/// caveat, for the same reason — the flattened file is NOT directly runnable,
+/// because a `.rkt` module needs `#lang` on its first line and this emits the
+/// provenance header there. Nothing prepends one, deliberately: guessing the
+/// dialect is exactly the silent-wrong-answer this codebase keeps paying for,
+/// and a BSL submission flattened under `#lang racket` would grade against
+/// different semantics than the student wrote. The guarantee that holds is the
+/// universal one: the notebook extracts or errors, never silently vanishes.
+public func extractRacket(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    extractWithCellMarkers(cells: cells, filename: filename, comment: ";")
+}
+
 /// The shared body of the marker-based extractors. Emits each non-empty code
 /// cell verbatim (trailing whitespace trimmed) behind a boundary comment whose
 /// number is the cell's 1-based position in the ORIGINAL notebook — a markdown

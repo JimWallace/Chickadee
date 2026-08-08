@@ -76,6 +76,15 @@ enum TestScriptVariablePrepender {
                     }
                 }
                 .joined(separator: "\n")
+        case .racket:
+            // `(define name value)` — top-level definitions in the generated
+            // test's own module. Unlike C++'s shell arm there is no scalar
+            // restriction: every JSONValue has a Racket rendering, so a list
+            // or hash global inlines as faithfully as an integer.
+            return
+                variables
+                .map { "(define \($0.name) \($0.value.racketLiteral))" }
+                .joined(separator: "\n")
         }
     }
 

@@ -35,18 +35,25 @@ import Testing
         // default, reached by falling through — so it is asserted separately.
     }
 
-    /// The kernel-less languages, pinned by name. C++ is the one deliberate
-    /// `.uploadOnly` case — no editor kernel exists because the browser
-    /// cannot run the course's real g++ toolchain, and its assignments are
-    /// upload-only by construction (docs/cpp-support.md). Any OTHER language
-    /// appearing here is an unfinished descriptor, not a decision — update
-    /// this pin in the same diff that makes it one.
-    @Test func onlyCppIsDeliberatelyKernelLess() {
+    /// The kernel-less languages, pinned by name. Two are deliberate, for
+    /// DIFFERENT reasons, and the difference is the point of pinning them:
+    ///
+    ///   * C++ — no editor kernel because the browser cannot run the course's
+    ///     real g++ toolchain, and grading a different compiler than the course
+    ///     teaches is a pedagogy defect (docs/cpp-support.md). A kernel
+    ///     appearing on the channel would NOT change this answer.
+    ///   * Racket — no Scheme-family kernel exists on emscripten-forge to
+    ///     vendor. Contingent, not principled: if one lands, this is the
+    ///     decision to revisit.
+    ///
+    /// Any OTHER language appearing here is an unfinished descriptor, not a
+    /// decision — update this pin in the same diff that makes it one.
+    @Test func kernelLessLanguagesArePinned() {
         let kernelLess = AssignmentLanguage.allCases.filter {
             $0.editorSupport == .uploadOnly
         }
         #expect(
-            kernelLess == [.cpp],
+            kernelLess == [.cpp, .racket],
             """
             The kernel-less language set changed: \(kernelLess). Vendoring or \
             dropping a kernel is a stated decision — update this pin in the \

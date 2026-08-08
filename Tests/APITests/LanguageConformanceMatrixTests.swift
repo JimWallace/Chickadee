@@ -95,9 +95,16 @@ import Testing
         let readInputsProgram: (_ key: String) -> String
     }
 
+    // swiftlint:disable function_body_length
     /// EXHAUSTIVE ON PURPOSE. A new `AssignmentLanguage` case does not compile
     /// until it supplies its glue here, which is what stops the matrix from
     /// quietly covering one fewer language than exists.
+    ///
+    /// Long by construction — a table of literals that grows ~25 lines per
+    /// language — so `function_body_length` is disabled for it locally rather
+    /// than raised for all of Tests/. Splitting it would put one language's
+    /// glue somewhere other than beside its neighbours, and this file's whole
+    /// premise is that they are readable side by side.
     static func adapter(for language: AssignmentLanguage) -> Adapter {
         switch language {
         case .cpp:
@@ -127,6 +134,31 @@ import Testing
                     int main() { std::cout << ck_inputs::\(key) << "\\n"; }
                     CK_READ_EOF
                     g++ -std=c++20 -O0 .ck_read_inputs.cpp -o .ck_read_inputs && ./.ck_read_inputs
+                    """
+                }
+            )
+        case .racket:
+            // Racket parses with `raco make`? No — that COMPILES, and would
+            // need the submission present. `racket -e` with `read` over the
+            // file's port parses it and nothing more, which is what this field
+            // asks for. The `#lang` line is part of the syntax, so the read
+            // goes through `read-language` first.
+            return Adapter(
+                interpreter: "racket",
+                evalFlag: "-e",
+                versionArguments: ["--version"],
+                debianPackage: "racket",
+                toolchainProbeCommand: "racket",
+                parseOnlyProgram: { path in
+                    """
+                    (let ([in (open-input-file \"\(path)\")])
+                      (read-language in)
+                      (let loop () (unless (eof-object? (read in)) (loop))))
+                    """
+                },
+                readInputsProgram: { key in
+                    """
+                    (displayln (hash-ref (dynamic-require \"_ck_inputs.rkt\" 'ck-inputs) \"\(key)\"))
                     """
                 }
             )
@@ -228,6 +260,7 @@ import Testing
             )
         }
     }
+    // swiftlint:enable function_body_length
 
     // MARK: - Structural invariants (never skipped)
 

@@ -83,7 +83,7 @@
     // them here is what omitted `.lua`, leaving a Lua upload with no hint and
     // test_runtime.lua (which cannot list a directory) unable to find it.
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:BEGIN
-    const GRADED_SCRIPT_EXTENSIONS = ['.cpp', '.h', '.hpp', '.lua', '.m', '.py', '.r'];
+    const GRADED_SCRIPT_EXTENSIONS = ['.cpp', '.h', '.hpp', '.lua', '.m', '.py', '.r', '.rkt'];
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:END
 
     // -------------------------------------------------------------------------

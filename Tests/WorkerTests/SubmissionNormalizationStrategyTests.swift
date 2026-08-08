@@ -57,7 +57,7 @@ import Testing
         switch language {
         case .python:
             #expect(result == .pythonModule)
-        case .r, .lua, .octave, .cpp:
+        case .r, .lua, .octave, .cpp, .racket:
             #expect(
                 result == .extractToSource(forcedLanguage: language),
                 """
@@ -88,7 +88,7 @@ import Testing
 
         switch language {
         case .python: #expect(result == .pythonModule)
-        case .r, .lua, .octave, .cpp:
+        case .r, .lua, .octave, .cpp, .racket:
             #expect(result == .extractToSource(forcedLanguage: language))
         }
     }
