@@ -79,6 +79,9 @@ struct NewAssignmentContext: Encodable {
     let requiredCapabilitiesCSV: String
     let detectedLanguages: [String]
     let detectedCapabilities: [String]
+    /// The required Language select's options, same builder the edit page
+    /// uses. Declared at creation so nothing downstream has to derive it.
+    let assignmentLanguageOptions: [AssignmentLanguageOption]
     let detectedLanguagesCSV: String
     let detectedCapabilitiesCSV: String
     let notice: String?

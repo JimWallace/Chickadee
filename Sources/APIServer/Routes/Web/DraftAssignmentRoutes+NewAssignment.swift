@@ -93,6 +93,8 @@ extension DraftAssignmentRoutes {
                 : storedState.requiredCapabilitiesCSV,
             detectedLanguages: detected.languages,
             detectedCapabilities: detected.capabilities,
+            assignmentLanguageOptions: AssignmentLanguageOption.options(
+                recorded: setup.flatMap { currentManifestLanguage($0.manifest) }),
             detectedLanguagesCSV: detected.languages.joined(separator: ", "),
             detectedCapabilitiesCSV: detected.capabilities.joined(separator: ", "),
             notice: q?.notice,
@@ -133,6 +135,23 @@ extension DraftAssignmentRoutes {
         )
         guard let setupID = setup.id else {
             throw WebAssignmentError.internalFailure(reason: "Draft test setup persisted without an id")
+        }
+
+        // Declared BEFORE the draft service runs, so pattern families and
+        // notebook checks authored in the same save render in the language the
+        // author chose rather than in one derived from a suite that does not
+        // exist yet. Empty means the field was absent (a form predating it);
+        // the select is `required`, so a real submission always carries one.
+        if !payload.assignmentLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                try await declareManifestLanguage(
+                    setup: setup, to: try parseLanguageChoice(payload.assignmentLanguage),
+                    on: req.db)
+            } catch {
+                throw WebAssignmentError.unprocessable(
+                    reason: (error as? any AbortError)?.reason
+                        ?? unknownLanguageMessage(payload.assignmentLanguage))
+            }
         }
 
         var formState = loadDraftFormState(req: req, draftID: setupID)
@@ -230,6 +249,10 @@ extension DraftAssignmentRoutes {
             try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
             ?? body.requiredCapabilitiesCSV
             ?? ""
+        let assignmentLanguage =
+            try multipartTextField(named: ["assignmentLanguage"], from: req)
+            ?? body.assignmentLanguage
+            ?? ""
 
         return NewAssignmentDraftPayload(
             assignmentName: assignmentName,
@@ -245,7 +268,8 @@ extension DraftAssignmentRoutes {
             requiredPlatform: requiredPlatform,
             requiredArchitecture: requiredArchitecture,
             requiredLanguagesCSV: requiredLanguagesCSV,
-            requiredCapabilitiesCSV: requiredCapabilitiesCSV
+            requiredCapabilitiesCSV: requiredCapabilitiesCSV,
+            assignmentLanguage: assignmentLanguage
         )
     }
 
@@ -378,6 +402,7 @@ extension DraftAssignmentRoutes {
         var requiredArchitecture: String?
         var requiredLanguagesCSV: String?
         var requiredCapabilitiesCSV: String?
+        var assignmentLanguage: String?
     }
 
     // MARK: - saveNewAssignment helpers
