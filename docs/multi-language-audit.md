@@ -100,6 +100,25 @@ direction": no error, no failed test, no runner log. An instructor authors a
 Racket assignment, clicks validate, and watches a submission sit pending with
 nothing anywhere saying why.
 
+**Confirmed on the production fleet**, via the admin diagnostics MCP at the time
+of writing. All three runners were polling; the one on **0.5.35 — the release
+that contains Racket** — advertises:
+
+```
+linux, x86_64, lua 5.4.6, octave 8.4.0, python 3.12.3, r 4.3.3,
+matplotlib, numpy, pandas, scipy, shell-bash
+```
+
+No `racket`. This is not a stale-build artifact: that runner's own version is
+the one Racket shipped in. The prediction and the deployment agree.
+
+(The same row is missing `cpp`, while the 0.5.33 runner advertises
+`cpp 13.3.0`. That is a *different* and already-understood condition — the
+`capabilityRequiresExecutableOutput` probe failing closed on a heterogeneous
+fleet, per #1303/#1304 — and it is the gate working as designed rather than a
+finding here. It is worth noting only because it means the fleet currently has
+one runner that can grade C++ and none that can grade Racket.)
+
 **The guard for this exists and stops one step short.**
 `everyLanguageProbeActuallyReportsAVersion` (conformance matrix) runs the real
 probe and asserts it exits 0. `racket --version` exits 0. The runbook's
