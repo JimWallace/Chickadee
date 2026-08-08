@@ -21,6 +21,11 @@ actor TestSetupCache {
 
     private let cacheRoot: URL
     private let maxEntries: Int
+    /// Where per-job scratch copies are made. Separate from `cacheRoot` because
+    /// the two have different requirements: the cache only needs to be
+    /// writable, while scratch is the working directory a test script runs in
+    /// and so must also permit `exec` for a compiled language.
+    private let scratchRoot: URL
 
     /// LRU order — index 0 is least-recently-used, last is most-recently-used.
     private var lruKeys: [String] = []
@@ -42,10 +47,12 @@ actor TestSetupCache {
 
     init(
         cacheRoot: URL = TestSetupCache.defaultCacheRoot,
-        maxEntries: Int = TestSetupCache.defaultMaxEntries
+        maxEntries: Int = TestSetupCache.defaultMaxEntries,
+        scratchRoot: URL = FileManager.default.temporaryDirectory
     ) {
         self.cacheRoot = cacheRoot
         self.maxEntries = maxEntries
+        self.scratchRoot = scratchRoot
         // Reconcile with what's already on disk: the LRU list used to be
         // memory-only, so entries surviving a daemon restart were never
         // tracked — they served hits but could never be evicted, growing
@@ -115,11 +122,13 @@ actor TestSetupCache {
         // the entry gone, the retry takes the populate path.
         do {
             let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
-            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            let scratch = try Self.copyToScratch(
+                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)
             return AcquireResult(directory: scratch, didHit: source.didHit)
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
-            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            let scratch = try Self.copyToScratch(
+                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)
             return AcquireResult(directory: scratch, didHit: source.didHit)
         }
     }
@@ -325,8 +334,9 @@ actor TestSetupCache {
 
     /// Copy the prepared cache entry into a fresh temporary directory that
     /// the caller owns exclusively. Static (non-isolated) — see `acquire`.
-    private static func copyToScratch(source: URL, label: String) throws -> URL {
-        let dest = FileManager.default.temporaryDirectory
+    private static func copyToScratch(source: URL, label: String, scratchRoot: URL) throws -> URL {
+        let dest =
+            scratchRoot
             .appendingPathComponent(
                 "chickadee_ts_\(label)_\(UUID().uuidString)",
                 isDirectory: true

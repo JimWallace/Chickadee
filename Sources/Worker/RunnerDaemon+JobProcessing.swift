@@ -64,7 +64,10 @@ extension WorkerDaemon {
             Task { try? await self.sendHeartbeat() }
         }
 
-        let tempRoot = FileManager.default.temporaryDirectory
+        // The configured work root, not the system temp dir: a test script's
+        // working directory must permit `exec` for a compiled language, and
+        // `/tmp` is `noexec` on a hardened container.
+        let tempRoot = workRoot
         var disk = JobDiskReadings(freeMBAtStart: freeSpaceMB(at: tempRoot))
         try ensureSufficientDiskSpace(tempRoot: tempRoot, freeDiskMBAtStart: disk.freeMBAtStart, job: job)
 

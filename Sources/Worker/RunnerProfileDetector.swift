@@ -4,6 +4,11 @@ import Foundation
 struct RunnerProfileDetector {
     let discoveryEnabled: Bool
 
+    /// Where jobs will actually run. The executable-output probe runs here and
+    /// nowhere else — verifying `exec` in a directory jobs never use would
+    /// prove nothing about the directory they do.
+    var workRoot: URL = FileManager.default.temporaryDirectory
+
     /// Wall-clock cap on any single capability probe. Keeps a broken `python3`
     /// wrapper, an NFS stall, or a hung `which` from blocking runner startup
     /// indefinitely.
@@ -31,6 +36,20 @@ struct RunnerProfileDetector {
                         let version = await detectVersion(
                             command: probe.command, arguments: probe.versionArguments)
                     else { return nil }
+                    // Owning the compiler is not the same as being able to run
+                    // what it writes. For a language whose grading path execs
+                    // its own build output, prove that here — otherwise this
+                    // runner advertises a capability it does not have, the
+                    // language gate routes every such job to it, and each dies
+                    // at `exec` with a message that reads as a broken test
+                    // script. Advertising nothing makes the job wait for a
+                    // runner that can genuinely grade it, which is what the
+                    // gate is for.
+                    if language.descriptor.capabilityRequiresExecutableOutput,
+                        await !canExecuteCompiledOutput(compiler: probe.command)
+                    {
+                        return nil
+                    }
                     return LanguageVersion(language: language.capabilityName, version: version)
                 }
             }
@@ -104,6 +123,38 @@ struct RunnerProfileDetector {
     private func detectVersion(command: String, arguments: [String]) async -> String? {
         guard let output = await run(command: command, arguments: arguments) else { return nil }
         return firstNumericVersion(in: output)
+    }
+
+    /// Compiles a trivial program into the runner's work root and runs it,
+    /// mirroring what a generated C++ wrapper does (compile into the working
+    /// directory, then `exec` the binary).
+    ///
+    /// Returns false when either step fails, including the case this exists
+    /// for: the work root is mounted `noexec`, so the compile succeeds, the
+    /// binary is `-rwxr-xr-x`, and `exec` still fails with EACCES. Failing
+    /// closed here is deliberate — an unusable capability is worse than an
+    /// absent one, because the gate trusts what a runner advertises.
+    private func canExecuteCompiledOutput(compiler: String) async -> Bool {
+        let probeDir = workRoot.appendingPathComponent(
+            "chickadee_exec_probe_\(UUID().uuidString)", isDirectory: true)
+        let fileManager = FileManager.default
+        guard
+            (try? fileManager.createDirectory(at: probeDir, withIntermediateDirectories: true))
+                != nil
+        else { return false }
+        defer { try? fileManager.removeItem(at: probeDir) }
+
+        let source = probeDir.appendingPathComponent("probe.cpp")
+        let binary = probeDir.appendingPathComponent("probe")
+        guard (try? "int main(void) { return 0; }\n".write(to: source, atomically: true, encoding: .utf8)) != nil
+        else { return false }
+
+        guard
+            await runStatus(
+                command: compiler, arguments: [source.path, "-o", binary.path]) == 0
+        else { return false }
+        // The step the version probe never took.
+        return await runStatus(command: binary.path, arguments: []) == 0
     }
 
     private func pythonImportAvailable(module: String) async -> Bool {

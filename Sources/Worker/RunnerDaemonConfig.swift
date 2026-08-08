@@ -72,6 +72,7 @@ struct RunnerDaemonConfig: Sendable, Equatable {
                 env["RUNNER_MAKE_TIMEOUT_SECONDS"], default: defaults.makeTimeoutSeconds)
         )
     }
+
 }
 
 // MARK: - Parsing helpers (file-private)

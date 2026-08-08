@@ -189,4 +189,21 @@ import Testing
             #expect(!language.studentModulePrefixes.isEmpty)
         }
     }
+
+    /// Exactly the languages whose grading path executes something it just
+    /// built must declare it — today only C++, whose generated wrapper compiles
+    /// a binary and `exec`s it. An interpreted language must NOT declare it, or
+    /// every runner would pay a compile-and-run probe at startup for a step its
+    /// grading never takes.
+    ///
+    /// Pinned because the consequence of getting it wrong is invisible until
+    /// production: a runner that skips this probe advertises a compiler it
+    /// cannot actually run output from, and every job routed to it dies at
+    /// `exec` with a message that reads as a broken test script.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func onlyCompiledLanguagesRequireExecutableOutput(_ language: AssignmentLanguage) {
+        #expect(
+            language.descriptor.capabilityRequiresExecutableOutput == (language == .cpp),
+            "\(language) disagrees with whether its grading path execs its own build output")
+    }
 }
