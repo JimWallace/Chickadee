@@ -229,31 +229,30 @@ unchanged. R pattern-family / notebook-check renderers and literal-globals
 inlined into hand-authored `.R` scripts shipped in #1207 (v0.4.636);
 `astStructure` remains the one Python-only check kind. See `docs/r-support.md`.
 
-**Gate an assignment on `minimumRunnerVersion` whenever it needs a runner-side
-feature — at authoring time, not after something breaks.** Runners are separate
-hosts that upgrade on their own schedule, so several `chickadee-runner` builds
-poll at once and some predate the release that taught the runner your feature.
-An ungated assignment goes to whichever runner polls first, so whether it grades
-correctly depends on *who answered*: it validates green because a capable runner
-happened to claim it, then fails weeks later for the one student whose job an
-older runner claims — and the symptom (exit 127, "interpreter not found", a
-suite of `error`s) reads as a broken test script and gets debugged as one. This
-has cost us repeatedly; most recently the Octave sample went out ungated against
-a fleet still running a 0.5.23 runner. Set it with MCP
-`set_minimum_runner_version` (metadata-only — no regrade, no close, no
-visibility change) or `minimumRunnerVersion` in the manifest, to the release that
-shipped support: Lua **0.5.23**, Octave **0.5.24**, C++ **0.5.27**.
-Browser-graded assignments need the gate too, because instructor validation is
-enqueued as a `kind == .validation` submission and always runs on the **native
-worker**, as does any browser submission that fails over. Capability
-requirements are **not** a substitute and fail the opposite way:
-`requiredLanguages` matches what a runner *advertises*, and
-`RunnerProfileDetector` hand-lists the interpreters it probes, so a runner built
-before your language never advertises it however the host is provisioned —
-requiring it matches no runner and queues the jobs forever. Use
-`requiredLanguages`/`requiredCapabilities` for "this host lacks a package", and
-`minimumRunnerVersion` for "this build is too old to know the feature". See
-"Authoring rule" in `docs/runner-capability-profiles.md`.
+**A runner only claims a job it can actually grade — enforced, not authored
+(`RunnerLanguageGate`).** Runners are separate hosts that upgrade on their own
+schedule, so several `chickadee-runner` builds poll at once and claim order
+decides which one grades a job. That used to make an assignment in a newer
+language nondeterministic: it validated green because a capable runner happened
+to claim it, then failed for the one student whose job an older runner claimed —
+with a symptom (exit 127, "interpreter not found") that reads as a broken test
+script and gets debugged as one. The claim seam now resolves the assignment's
+language from its manifest and refuses a runner whose advertised profile lacks
+it, so the job waits for a runner that can grade it. No authoring step: the
+manifest already knows the language, and `RunnerProfileDetector` discovers its
+probes from `AssignmentLanguage.allCases`, so every runner advertises every
+language it has and a runner whose *build* predates one advertises a profile
+without it. Two deliberate fail-opens — an assignment with no language (a plain
+`.sh` suite) and a runner advertising no profile at all (discovery switched off,
+an operator's choice; an old runner still has discovery on and is caught by the
+closed path). It catches strictly more than a version gate: a *current* runner
+whose host lacks the interpreter never advertises it either. `minimumRunnerVersion`
+(MCP `set_minimum_runner_version`, metadata-only) survives for the case this
+cannot see — runner behaviour that is not observable as an interpreter — and is
+the wrong tool for "this is a new language". Browser-graded assignments are
+covered too, since instructor validation is enqueued as a `kind == .validation`
+submission and always runs on the **native worker**. See
+`docs/runner-capability-profiles.md`.
 
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
