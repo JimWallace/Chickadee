@@ -407,4 +407,10 @@ func registerMigrations(on app: Application) {
     // in place. New table; FKs reference `users`, `courses`, `assignments`,
     // all created above, so no additional ordering constraint.
     app.migrations.add(CreateSlipDaySpends())
+
+    // Data backfill, registered LAST on purpose: it full-queries `APITestSetup`,
+    // which is only safe once every migration that adds a column to
+    // `test_setups` has already run (the #1077 boot-order hazard, inverted —
+    // here the model query is the late one rather than the column).
+    app.migrations.add(BackfillDeclaredLanguage())
 }
