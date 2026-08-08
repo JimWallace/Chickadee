@@ -38,7 +38,9 @@ import Testing
         #expect(AssignmentLanguage.resolve(manifest: m, notebookKernelName: "xr") == .r)
         #expect(AssignmentLanguage.resolve(manifest: m, notebookKernelName: "ir") == .r)
         #expect(AssignmentLanguage.resolve(manifest: m, notebookLanguageInfoName: "r") == .r)
-        #expect(AssignmentLanguage.resolve(manifest: m) == .python)
+        // No suite and no kernel name: nothing names a language, which is nil
+        // rather than Python. Conflating those two was the whole defect class.
+        #expect(AssignmentLanguage.resolve(manifest: m) == nil)
     }
 
     // MARK: - rederive (ignores the recorded language memo)
@@ -74,11 +76,15 @@ import Testing
         #expect(AssignmentLanguage.rederive(manifest: m, notebookData: ipynb(kernel: "python")) == .python)
     }
 
-    @Test func rederive_noNotebookDefaultsPython() throws {
+    /// `rederive` ignores the recorded memo by design, so a manifest that
+    /// records R but has no suite and no notebook re-derives to NOTHING — the
+    /// memo is the only thing that claimed a language, and re-derivation is
+    /// exactly the operation that refuses to trust it.
+    @Test func rederive_noNotebookResolvesToNoLanguage() throws {
         let m = try manifest(
             #"{"schemaVersion":1,"language":"r","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
         )
-        #expect(AssignmentLanguage.rederive(manifest: m, notebookData: nil) == .python)
+        #expect(AssignmentLanguage.rederive(manifest: m, notebookData: nil) == nil)
     }
 
     // MARK: - Lua resolution (the F1 regression: resolve/rederive were R-only,
@@ -123,12 +129,14 @@ import Testing
         // wrappers, and `.sh` must carry NO language signal (every hand-written
         // shell suite would sniff as C++ otherwise). Its resolution signal is
         // the RECORDED manifest language — asserted here, along with the
-        // no-signal pin for the bare script.
+        // no-signal pin for the bare script. That pin is now nil rather than
+        // Python: a `.sh`-only suite is the canonical language-less assignment,
+        // and saying so is the point of the Optional.
         guard language != .cpp else {
             let bare = try manifest(
                 #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
             )
-            #expect(AssignmentLanguage.resolve(manifest: bare) == .python)
+            #expect(AssignmentLanguage.resolve(manifest: bare) == nil)
             let recorded = try manifest(
                 #"{"schemaVersion":1,"language":"cpp","requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
             )
@@ -145,10 +153,10 @@ import Testing
     }
 
     @Test(arguments: AssignmentLanguage.allCases)
-    func everyNonDefaultLanguageResolvesFromItsOwnKernel(_ language: AssignmentLanguage) throws {
-        // Python's kernel set is deliberately empty (it is the default, reached
-        // by falling through), so only the positively-detected languages apply.
-        guard language != .default else { return }
+    func everyLanguageResolvesFromItsOwnKernel(_ language: AssignmentLanguage) throws {
+        // Python is included: it has its own `notebookKernelNames` now and
+        // resolves positively like every other language. A language with no
+        // kernel at all (C++, upload-only) has an empty set and asserts nothing.
         let m = try manifest(
             #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
         )

@@ -117,11 +117,17 @@ private func resolveNotebookForExtraction(
     // extracted as PYTHON — a silent wrong answer the compiler could not flag,
     // because `?:` on two cases type-checks perfectly well however many cases
     // exist. The general form returns the language it recognised, or nil to
-    // mean "nothing recognisable, use the default".
+    // mean "nothing recognisable".
+    //
+    // Python is named explicitly as the extraction fallback rather than
+    // inherited from a resolution default. Unlike resolution, extraction cannot
+    // answer "no language" — it has to write a file in some syntax — so an
+    // unrecognised kernel is extracted as Python, which is what this has always
+    // done. Stating it here keeps that a local, visible choice.
     let language =
         forcedLanguage
         ?? (lenient?["metadata"] as? [String: Any]).flatMap(AssignmentLanguage.fromNotebookMetadata)
-        ?? .default
+        ?? .python
 
     // For the student's own notebook the policy THROWS a message they can act
     // on; for anything else it stays lenient and merely warns, because failing

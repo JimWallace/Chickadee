@@ -213,13 +213,23 @@ enum GlobalInputsService {
         manifest: TestProperties,
         inputs: Inputs,
         testSetupsDirectory: String,
-        language: AssignmentLanguage = .python,
+        // Defaulted to nil, not to `.python`. The old `= .python` default meant
+        // an omitted argument produced a confident wrong answer for an R or Lua
+        // assignment; omitting it now produces "unknown", which lands on the
+        // same explicit fallback below as any other unknown. (Both callers pass
+        // it explicitly regardless; the default is here so the parameter count
+        // stays inside the lint threshold.)
+        language: AssignmentLanguage? = nil,
         seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
             let userID = actingUserID,
             let assignmentID = assignment.id
         else { return }
+        // See the matching line in `SectionInputsService.evaluateForActingSeed`:
+        // evaluation needs an interpreter, so a language-less assignment
+        // evaluates as Python rather than refusing.
+        let language = language ?? .python
         let seedHex = try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: seedDB)
         // Combine globals + section vars so expressions can reference the same

@@ -118,7 +118,9 @@ import Testing
         #expect(AssignmentLanguage.r.descriptor.notebookKernelNames == AssignmentLanguage.rKernelNames)
         #expect(
             AssignmentLanguage.lua.descriptor.notebookKernelNames == AssignmentLanguage.luaKernelNames)
-        #expect(AssignmentLanguage.python.descriptor.notebookKernelNames.isEmpty)
+        #expect(
+            AssignmentLanguage.python.descriptor.notebookKernelNames
+                == AssignmentLanguage.pythonKernelNames)
     }
 
     /// `capabilityName` is deliberately NOT a descriptor field: it is the token

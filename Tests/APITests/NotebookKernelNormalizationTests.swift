@@ -34,7 +34,8 @@ import Testing
     /// language exactly when it should be failing instead.
     @Test(arguments: AssignmentLanguage.allCases)
     func everyKernelAliasNormalizesToItsVendoredKernel(_ language: AssignmentLanguage) throws {
-        guard language != .default else { return }  // Python has no positive aliases
+        // Python is included: it has its own aliases now, and they must
+        // normalize onto the vendored xeus-python kernel like everyone else.
         guard case .notebookKernel(_, let expected, _, _) = language.editorSupport else {
             // A kernel-less language must claim no aliases at all — an alias
             // with nothing to normalize onto is exactly the F6 shape.

@@ -64,10 +64,10 @@ import Testing
 
     /// The reason the field exists: a suite made up only of pattern families
     /// has no `.R` script to sniff, so without a recorded language it would
-    /// resolve back to Python on every save.
+    /// resolve to nothing on every save.
     @Test func recordedLanguageWinsOverSniffingAnEmptySuite() {
         let sniffed = TestProperties(testSuites: [])
-        #expect(AssignmentLanguage.resolve(manifest: sniffed) == .python)
+        #expect(AssignmentLanguage.resolve(manifest: sniffed) == nil)
 
         let recorded = TestProperties(testSuites: [], language: .r)
         #expect(AssignmentLanguage.resolve(manifest: recorded) == .r)
@@ -136,7 +136,9 @@ import Testing
         let xrNotebook = try notebook(kernel: "xr", languageInfo: nil)
         let rInfoNotebook = try notebook(kernel: nil, languageInfo: "R")
         let pythonNotebook = try notebook(kernel: "python3", languageInfo: nil)
-        #expect(AssignmentLanguage.resolve(manifest: manifest) == .python)
+        // Manifest alone: nothing names a language. The `python3` notebook two
+        // lines down is what resolves Python POSITIVELY.
+        #expect(AssignmentLanguage.resolve(manifest: manifest) == nil)
         #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: xrNotebook) == .r)
         #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: rInfoNotebook) == .r)
         #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: pythonNotebook) == .python)
@@ -153,7 +155,7 @@ import Testing
         #expect(
             AssignmentLanguage.resolve(
                 manifest: TestProperties(testSuites: []), notebookData: Data("not json".utf8))
-                == .python)
+                == nil)
     }
 
     /// A recorded language still wins over the notebook.
@@ -169,6 +171,6 @@ import Testing
         let decoded = try JSONDecoder().decode(
             TestProperties.self, from: try #require(legacy.data(using: .utf8)))
         #expect(decoded.language == nil)
-        #expect(AssignmentLanguage.resolve(manifest: decoded) == .python)
+        #expect(AssignmentLanguage.resolve(manifest: decoded) == nil)
     }
 }

@@ -162,10 +162,13 @@ struct UpdateSolutionTool: ContentTool {
         // language, not by the caller's preference: a language with no notebook
         // workflow has no `.ipynb` to extract source from, so a notebook
         // solution would be stored and then grade as an empty submission.
+        // An assignment with no language signal keeps the notebook workflow:
+        // only `.uploadOnly` languages need a source file, and nothing that has
+        // not named itself is upload-only.
         let language =
-            setup?.decodedManifest().map {
+            setup?.decodedManifest().flatMap {
                 AssignmentLanguage.resolve(manifest: $0, notebookData: nil)
-            } ?? .default
+            } ?? .python
         let wantsSourceFile: Bool
         if case .uploadOnly = language.editorSupport {
             wantsSourceFile = true
