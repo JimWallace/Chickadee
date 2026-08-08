@@ -134,19 +134,19 @@ func withPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async th
     } catch {
         // Same SIGILL guard as `makeTestingApplication`: any throw before
         // the fixture is fully built leaves a half-initialized Application
-        // that crashes in its sync deinit.  Shutdown explicitly first.
+        // that crashes in its sync deinit.  Tear down explicitly first.
         try? FileManager.default.removeItem(atPath: tmpDir)
-        try? await app.asyncShutdown()
+        try? await app.tearDownTestApp()
         throw error
     }
 
     do {
         try await body(fixture)
         try? FileManager.default.removeItem(atPath: tmpDir)
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     } catch {
         try? FileManager.default.removeItem(atPath: tmpDir)
-        try? await app.asyncShutdown()
+        try? await app.tearDownTestApp()
         throw error
     }
 }

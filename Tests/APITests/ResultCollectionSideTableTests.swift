@@ -159,9 +159,9 @@ import VaporTesting
                     .first(decoding: AnyRow.self)
             }
         } catch {
-            try? await app.asyncShutdown()
+            try? await app.tearDownTestApp()
             throw error
         }
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     }
 }

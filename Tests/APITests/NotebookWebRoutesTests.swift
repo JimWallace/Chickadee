@@ -29,6 +29,10 @@ import VaporTesting
 
             try FileManager.default.createDirectory(
                 atPath: tmpRoot, withIntermediateDirectories: true)
+            // Recorded so the per-test `withApp` teardown removes the tree —
+            // one survived per test before #1298 (the `Resources` symlink
+            // inside is removed as a link, its target untouched).
+            app.testDataDirectory = tmpRoot
             try FileManager.default.createSymbolicLink(
                 atPath: tmpRoot + "Resources",
                 withDestinationPath: repoRoot + "/Resources"

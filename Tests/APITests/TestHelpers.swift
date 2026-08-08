@@ -219,20 +219,24 @@ func demoteToStudentEverywhere(username: String, on app: Application) async thro
 
 // MARK: - Async app lifecycle
 
-/// Runs an async test body with a Vapor application and always shuts it down.
+/// Runs an async test body with a Vapor application and always tears it down:
+/// shutdown plus removal of any temp state the harness created for it (the
+/// `makeTestApp` directory tree, the file sqlite-kit secretly backs an
+/// "in-memory" database with, the per-test Postgres schema). Safe for bare
+/// apps too — each cleanup step is a no-op when there is nothing to clean.
 func withApp(_ app: Application, _ body: (Application) async throws -> Void) async throws {
     do {
         try await body(app)
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     } catch {
-        try? await app.asyncShutdown()
+        try? await app.tearDownTestApp()
         throw error
     }
 }
 
 /// Creates a `.testing` Vapor Application and runs `setup`, returning the
 /// fully-configured app to the caller.  If `setup` throws, the partial
-/// Application is `asyncShutdown`-d before the error is rethrown.
+/// Application is torn down before the error is rethrown.
 ///
 /// This is the safe replacement for the bare pattern
 ///
@@ -253,7 +257,10 @@ func makeTestingApplication(
         try await setup(app)
         return app
     } catch {
-        try? await app.asyncShutdown()
+        // Full teardown, not just shutdown: `setup` may have configured a
+        // database (and thereby materialized sqlite-kit's fake-memory temp
+        // file) before throwing.
+        try? await app.tearDownTestApp()
         throw error
     }
 }
@@ -264,23 +271,91 @@ private struct TestDataDirectoryKey: StorageKey {
     typealias Value = String
 }
 
+private struct LeafViewsSymlinkKey: StorageKey {
+    typealias Value = String
+}
+
 extension Application {
-    /// Filesystem directory created by `makeTestApp` for this app's
-    /// results/testsetups/submissions trees. Nil if the app wasn't built
-    /// via `makeTestApp`.
+    /// Filesystem directory created for this app's results/testsetups/
+    /// submissions trees; `tearDownTestApp` removes it. `makeTestApp` sets it;
+    /// suites that build a bespoke tree instead (e.g. a fake working
+    /// directory) should record it here so their `withApp` teardown removes
+    /// the tree too. Nil for apps with no on-disk state.
     var testDataDirectory: String? {
-        storage[TestDataDirectoryKey.self]
+        get { storage[TestDataDirectoryKey.self] }
+        set { storage[TestDataDirectoryKey.self] = newValue }
     }
 
-    /// Shuts the app down and removes the temp directory created by
-    /// `makeTestApp`. Use in tearDown for any app obtained from
-    /// `makeTestApp`.
+    /// The on-disk files secretly backing this app's "in-memory" SQLite
+    /// databases. Usually zero (postgres lane, no database) or one; a test
+    /// that registers a second in-memory pool (e.g. a stand-in `.mcp` pool)
+    /// has two.
+    ///
+    /// sqlite-kit fakes `.memory` storage with a real file in the system temp
+    /// directory — SQLiteNIO is built with `SQLITE_OMIT_SHARED_CACHE`, so it
+    /// cannot offer genuinely shared in-memory databases — and acknowledges in
+    /// a comment that the file outlives the last connection. Nothing upstream
+    /// ever deletes it, so each per-test Application leaks one ~600 KB file
+    /// (#1298: ~973 MB per full suite run). We ask SQLite itself for the path
+    /// (`PRAGMA database_list`) rather than mirroring sqlite-kit's private
+    /// filename scheme, then accept only files that scheme plainly produced —
+    /// so a real `.file(path:)` database can never be swept up, even one that
+    /// happens to live in the temp directory.
+    func sqliteFakeMemoryDatabaseFiles() async -> [String] {
+        struct DatabaseListRow: Decodable {
+            let name: String
+            let file: String
+        }
+        let systemTempDir = FileManager.default.temporaryDirectory
+            .resolvingSymlinksInPath().path
+        var files: [String] = []
+        for id in databases.ids() {
+            // Dialect metadata is static — checking it opens no connection, so
+            // a registered-but-unreachable Postgres pool costs nothing here.
+            guard let sql = db(id) as? SQLDatabase, sql.dialect.name == "sqlite" else { continue }
+            guard
+                let rows = try? await sql.raw("PRAGMA database_list")
+                    .all(decoding: DatabaseListRow.self)
+            else { continue }
+            for row in rows where row.name == "main" {
+                let file = URL(fileURLWithPath: row.file).resolvingSymlinksInPath()
+                guard
+                    file.lastPathComponent.hasPrefix("sqlite-kit_memorydb-"),
+                    file.path.hasPrefix(systemTempDir)
+                else { continue }
+                files.append(file.path)
+            }
+        }
+        return files
+    }
+
+    /// Tears the app down completely: drops the per-test Postgres schema (if
+    /// any), shuts the app down, and removes every piece of temp state created
+    /// on its behalf — the `makeTestApp` directory tree, sqlite-kit's
+    /// fake-memory database files, and the Leaf views symlink. Every step is a
+    /// no-op when there is nothing to clean, so this is safe for any test app
+    /// however it was built. `withApp` calls this; use it directly only for
+    /// apps whose lifecycle `withApp` doesn't own.
     func tearDownTestApp() async throws {
+        // Collect everything that needs a live app before shutting down.
         let dir = storage[TestDataDirectoryKey.self]
+        let leafSymlink = storage[LeafViewsSymlinkKey.self]
+        let sqliteFiles = await sqliteFakeMemoryDatabaseFiles()
         try? await dropPostgresTestSchema(self)
         try await asyncShutdown()
         if let dir {
             try? FileManager.default.removeItem(atPath: dir)
+        }
+        for file in sqliteFiles {
+            // The fake-memory databases run the default rollback journal, so
+            // the sidecars exist only transiently — but removal is cheap and a
+            // crash can strand them.
+            for path in [file, file + "-journal", file + "-wal", file + "-shm"] {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+        if let leafSymlink {
+            try? FileManager.default.removeItem(atPath: leafSymlink)
         }
     }
 }
@@ -290,10 +365,11 @@ extension Application {
 /// in-memory sessions, the production migration list, Leaf views, and
 /// the full route tree mounted.
 ///
-/// Caller owns the lifecycle — pair with `app.tearDownTestApp()` in
-/// tearDown.  For unit tests that need a bare app (single-middleware
-/// isolation, custom auth modes, custom database configuration), use
-/// `Application.make(.testing)` directly.
+/// Caller owns the lifecycle — wrap the test body in `withApp(app) { ... }`
+/// (which tears the app down, temp state included) or pair the call with
+/// `app.tearDownTestApp()`.  For unit tests that need a bare app
+/// (single-middleware isolation, custom auth modes, custom database
+/// configuration), use `Application.make(.testing)` directly.
 func makeTestApp(
     prefix: String = "chickadee-test",
     authMode: AuthMode = .local,
@@ -464,6 +540,9 @@ func configureLeaf(_ app: Application) {
         try? FileManager.default.removeItem(atPath: cleanPath)
         try? FileManager.default.createSymbolicLink(atPath: cleanPath, withDestinationPath: viewsDir)
         app.leaf.configuration = LeafConfiguration(rootDirectory: cleanPath + "/")
+        // Recorded so tearDownTestApp removes the symlink — one per app adds
+        // up across a worktree session (#1298's leak class, in miniature).
+        app.storage[LeafViewsSymlinkKey.self] = cleanPath
     }
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
