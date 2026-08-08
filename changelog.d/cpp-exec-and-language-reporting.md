@@ -6,8 +6,10 @@
   were rooted — as `tmpfs ... noexec`. Every C++ test died with
   `exec: ./.ck_bin_...: Permission denied` despite a `-rwxr-xr-x` binary and a
   clean compile; the mount flag, not the file mode, was the cause. Job
-  workspaces and scratch copies now honour a new `--work-dir` flag, so an operator
-  can point them at a writable, exec-capable path.
+  workspaces and scratch copies now share the runner's existing cache directory
+  (`--test-setup-cache-dir` / `RUNNER_TEST_SETUP_CACHE_DIR`) as one work root,
+  so pointing that at a writable, exec-capable path fixes it. No new setting,
+  and the default is unchanged.
 - **A runner advertised C++ it could not run.** Capability discovery probed
   only `g++ --version`, which succeeds on a `noexec` host — so the runner
   claimed `cpp`, the language gate routed every C++ job to it, and each failed

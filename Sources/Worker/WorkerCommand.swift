@@ -41,13 +41,6 @@ struct WorkerCommand: AsyncParsableCommand {
     )
     var testSetupCacheDir: String?
 
-    @Option(
-        name: .long,
-        help:
-            "Root for job workspaces and scratch copies (default: the system temp directory). Set this when the temp directory is mounted noexec, which stops C++ grading from running the binary it compiles."
-    )
-    var workDir: String?
-
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             writeToStandardError("Error: invalid --api-base-url '\(apiBaseURL)'\n")
@@ -56,13 +49,27 @@ struct WorkerCommand: AsyncParsableCommand {
 
         let env = ProcessInfo.processInfo.environment
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
-        // One resolved root for job workspaces, scratch copies AND the
-        // executable-output probe. Sharing it is the point: a probe that
-        // verified `exec` somewhere other than where jobs actually run would
-        // prove nothing about the directory they use.
-        let workRoot =
-            workDir.map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? FileManager.default.temporaryDirectory
+
+        let cacheDirPath =
+            testSetupCacheDir
+            ?? config.testSetupCacheDir
+            ?? TestSetupCache.defaultCacheRoot.path
+        // The cache directory IS the runner's working directory: prepared test
+        // setups, the per-job scratch copies made from them, and the job
+        // workspaces all live under it. One directory, one existing setting —
+        // moving it moves everything, which is what an operator does when the
+        // default lands on a `noexec` mount and a compiled language cannot
+        // execute the binary it just built there.
+        //
+        // The same root feeds the executable-output capability probe below, so
+        // the probe cannot pass in a directory jobs never use.
+        let workRoot = URL(fileURLWithPath: cacheDirPath, isDirectory: true)
+        // Created up front because scratch copies land here directly, and
+        // `copyItem` needs the parent to exist — the system temp directory this
+        // replaced always did.
+        try FileManager.default.createDirectory(
+            at: workRoot, withIntermediateDirectories: true)
+
         let runnerProfile = await RunnerProfileDetector(
             discoveryEnabled: config.capabilityDiscoveryEnabled,
             workRoot: workRoot
@@ -93,12 +100,8 @@ struct WorkerCommand: AsyncParsableCommand {
         )
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
-        let cacheDirPath =
-            testSetupCacheDir
-            ?? config.testSetupCacheDir
-            ?? TestSetupCache.defaultCacheRoot.path
         let testSetupCache = TestSetupCache(
-            cacheRoot: URL(fileURLWithPath: cacheDirPath),
+            cacheRoot: workRoot,
             scratchRoot: workRoot)
 
         let daemon = WorkerDaemon(

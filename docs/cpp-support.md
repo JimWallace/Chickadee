@@ -153,17 +153,19 @@ ordinary directory.
 
 Two changes follow from it, and they are deliberately a pair:
 
-- **`--work-dir`** (a `chickadee-runner` flag) roots job workspaces and per-job scratch copies.
-  Point it at a writable, exec-capable path (a Docker/containerd volume is
-  exec-capable by default). It defaults to the system temp directory, which
-  preserves the previous behaviour everywhere it was already fine.
+- **The runner's existing cache directory is now its work root.** Prepared
+  test setups, the per-job scratch copies made from them, and the job
+  workspaces all live under one directory, set by the existing
+  `--test-setup-cache-dir` flag (or `RUNNER_TEST_SETUP_CACHE_DIR`). No new
+  setting was added: an operator moves one directory off the `noexec` mount
+  and everything follows. The default is unchanged
+  (`/tmp/chickadee-runner-cache`), so nothing moves on its own.
 - **The capability probe now compiles and runs a trivial program in that
-  same directory**, and a runner that cannot do both stops advertising
-  `cpp` (`LanguageDescriptor.capabilityRequiresExecutableOutput`). The
-  descriptor used to justify the version-only probe with "the generated
-  wrappers invoke the same binary, so probe and invocation cannot skew" —
-  true of `g++` itself, and irrelevant, because they skew on the step
-  *after* `g++`.
+  same root**, and a runner that cannot do both stops advertising `cpp`
+  (`LanguageDescriptor.capabilityRequiresExecutableOutput`). The descriptor
+  used to justify the version-only probe with "the generated wrappers invoke
+  the same binary, so probe and invocation cannot skew" — true of `g++`
+  itself, and irrelevant, because they skew on the step *after* `g++`.
 
 The probe is what makes the misconfiguration diagnosable rather than
 mysterious. Without it a runner advertises a capability it does not have,
@@ -172,4 +174,5 @@ message that reads as a broken test script — the exact symptom the gate
 exists to prevent, arriving through the one door it did not cover. With it,
 an unconfigured runner simply does not claim C++ work, which is the gate's
 documented fail-closed behaviour; `list_runners` showing no `cpp` capability
-on a host that has g++ is then the signal to set `--work-dir`.
+on a host that has g++ is then the signal that its cache directory sits on a
+`noexec` mount.
