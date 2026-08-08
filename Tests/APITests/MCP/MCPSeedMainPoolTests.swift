@@ -72,9 +72,9 @@ import Vapor
                 let leaked = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
                 #expect(leaked == 0, "seed bookkeeping must not touch the content (.mcp) pool")
             }
-            try await seedlessApp.asyncShutdown()
+            try await seedlessApp.tearDownTestApp()
         } catch {
-            try? await seedlessApp.asyncShutdown()
+            try? await seedlessApp.tearDownTestApp()
             throw error
         }
     }
@@ -116,9 +116,9 @@ import Vapor
                 let leaked = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
                 #expect(leaked == 0, "seed bookkeeping must not touch the content (.mcp) pool")
             }
-            try await seedlessApp.asyncShutdown()
+            try await seedlessApp.tearDownTestApp()
         } catch {
-            try? await seedlessApp.asyncShutdown()
+            try? await seedlessApp.tearDownTestApp()
             throw error
         }
     }

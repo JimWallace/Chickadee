@@ -938,8 +938,10 @@ css-vars + design-token guards too — same as the CI `format-lint` job).
     suite needs expensive shared state per-test instance (temp
     directories, Vapor app fixtures). For Vapor apps, store `let app`
     and wrap each `@Test` body in `try await withApp(app) { _ in ... }`
-    so shutdown is deterministic; the next test's `init` builds a
-    fresh app.
+    so teardown is deterministic (`withApp` runs the full
+    `tearDownTestApp`: shutdown plus removal of the app's temp
+    directories and sqlite-kit's fake-memory database file — #1298);
+    the next test's `init` builds a fresh app.
 - **`with*App` helpers** for DB-backed suite clusters
   (`withWebRoutesApp`, `withAssignmentRoutesApp`, `withPatternFamilyFixture`).
   See `Tests/APITests/WebRoutesHelpers.swift` etc. for the pattern.

@@ -20,7 +20,7 @@ import VaporTesting
             app.migrations.add(CreateWorkerNonces())
             try await app.autoMigrate()
         } catch {
-            try? await app.asyncShutdown()
+            try? await app.tearDownTestApp()
             throw error
         }
         app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)

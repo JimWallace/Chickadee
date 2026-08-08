@@ -44,6 +44,8 @@ import VaporTesting
             atPath: publicDir + "jupyterlite/files/",
             withIntermediateDirectories: true
         )
+        // Recorded so the per-test `withApp` teardown removes the tree (#1298).
+        app.testDataDirectory = tmpRoot
         // The contents routes now resolve the viewer's per-course staff status
         // through `req.db` (#417 Slice G), so the test app needs a database —
         // previously the route was filesystem-only.

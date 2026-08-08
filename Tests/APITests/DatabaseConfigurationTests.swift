@@ -240,14 +240,21 @@ struct DatabasePoolSizingTests {
     }
 
     @Test func configureDatabaseAcceptsExplicitPoolSize() async throws {
+        // A file-backed database is the caller's to clean up (`tearDownTestApp`
+        // deliberately only removes sqlite-kit's fake-memory files) — and this
+        // one exists on disk, because `configureDatabase` opens it to set WAL.
+        let dbPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-pool-\(UUID().uuidString).sqlite").path
+        defer {
+            for path in [dbPath, dbPath + "-wal", dbPath + "-shm", dbPath + "-journal"] {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
         let app = try await makeTestingApplication { app in
             try configureDatabase(
                 app,
-                settings: .sqlite(
-                    path: FileManager.default.temporaryDirectory
-                        .appendingPathComponent("chickadee-pool-\(UUID().uuidString).sqlite").path,
-                    maxConnectionsPerEventLoop: 4))
+                settings: .sqlite(path: dbPath, maxConnectionsPerEventLoop: 4))
         }
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     }
 }
