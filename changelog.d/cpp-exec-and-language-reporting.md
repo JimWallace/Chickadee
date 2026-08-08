@@ -36,8 +36,8 @@
 
 ### Changed
 
-- **Octave's notebook-check count corrected in the docs.** `CLAUDE.md` and the
-  Octave renderer's own header comment both claimed "seven of ten"; the code
-  supports five (`variableExists`, `functionExists`, `numericArrayClose`,
-  `cellContains`, `figureCount`). The surrounding prose in both places already
-  described five — only the count was wrong.
+- **Octave's notebook-check count corrected in the renderer's own header.**
+  `NotebookCheckRendererOctave.swift` opened by claiming "seven of ten" and then
+  enumerated five, three lines above the `switch` that returns true for exactly
+  those five. #1302 fixed the same stale count in `CLAUDE.md` and cited this
+  file as the authority without correcting the claim inside it.

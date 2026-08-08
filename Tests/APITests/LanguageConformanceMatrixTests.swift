@@ -27,8 +27,16 @@
 // skipped when it is absent, following the existing `hasRscript` pattern —
 // silently, because a missing R on a contributor's laptop is not a defect. The
 // STRUCTURAL half never skips, so a language can never be entirely unexamined.
-// CI has python3, r-base and lua5.4 on the image, so the executed half runs
-// there; `theRunnerImageProvidesEveryInterpreter` is what keeps that true.
+//
+// The executed half therefore only means anything where every interpreter is
+// present, which is CI. That makes the CI image a load-bearing part of this
+// matrix and a silent one: a language missing from it does not go red, it
+// stops being executed. So both images are asserted from `allCases` rather
+// than described here — `theRunnerImageProvidesEveryInterpreter` for the
+// production Dockerfile, `theCIImageAndItsProbeProvideEveryInterpreter` for the
+// swift-ci image and the swift-tests.yml probe that falls back to installing
+// it. Neither can drift; this comment deliberately names no package list,
+// because a list in prose is the thing that was wrong.
 
 import Core
 import Foundation
@@ -67,6 +75,17 @@ import Testing
         let versionArguments: [String]
         /// The Debian package that provides it, as the Dockerfile installs it.
         let debianPackage: String
+        /// The command whose presence proves this language's toolchain is
+        /// installed, as CI's dependency probe spells it.
+        ///
+        /// NOT always `interpreter`, and C++ is why it is a field rather than a
+        /// derivation: C++ is spawned through `sh`, which exists on every
+        /// machine and would make the probe vacuously true. What actually has
+        /// to be there is `g++`. It equals `debianPackage` for that one
+        /// language, which is a coincidence — deriving it from either
+        /// neighbour is the sort of "the other four agree, so" reasoning this
+        /// file exists to stop.
+        let toolchainProbeCommand: String
         /// Source that parses `path` WITHOUT executing it, exiting non-zero on
         /// a syntax error. A parse check, not a run: generated scripts expect a
         /// student submission and a runtime beside them.
@@ -96,6 +115,7 @@ import Testing
                 evalFlag: "-c",
                 versionArguments: ["-c", "g++ --version"],
                 debianPackage: "g++",
+                toolchainProbeCommand: "g++",
                 parseOnlyProgram: { path in
                     "sh -n '\(path)'"
                 },
@@ -116,6 +136,7 @@ import Testing
                 evalFlag: "-c",
                 versionArguments: ["--version"],
                 debianPackage: "python3",
+                toolchainProbeCommand: "python3",
                 parseOnlyProgram: { path in
                     "import ast,sys;ast.parse(open(\(pythonString(path))).read())"
                 },
@@ -129,6 +150,7 @@ import Testing
                 evalFlag: "-e",
                 versionArguments: ["--version"],
                 debianPackage: "r-base",
+                toolchainProbeCommand: "Rscript",
                 parseOnlyProgram: { path in "invisible(parse(\(rString(path))))" },
                 readInputsProgram: { key in
                     // Mirrors chickadee_inputs(): source into a fresh env, read
@@ -145,6 +167,7 @@ import Testing
                 evalFlag: "-e",
                 versionArguments: ["-v"],
                 debianPackage: "lua5.4",
+                toolchainProbeCommand: "lua",
                 // `loadfile` compiles without running, which is exactly the
                 // parse check wanted here — `dofile` would execute a script
                 // that expects a submission and a runtime beside it.
@@ -172,6 +195,7 @@ import Testing
                 evalFlag: "--eval",
                 versionArguments: ["--version"],
                 debianPackage: "octave",
+                toolchainProbeCommand: "octave-cli",
                 // `__parse_file__` compiles a file without executing it —
                 // verified: a script whose body prints does not print, a
                 // mid-script `function` definition parses, and a syntax error
@@ -298,6 +322,75 @@ import Testing
             The Dockerfile does not install \(package), which provides \
             \(Self.adapter(for: language).interpreter) for \(language) assignments. \
             Without it every test exits 127 and instructor validation cannot pass.
+            """)
+    }
+
+    /// Non-comment lines only, so a guard cannot be satisfied by the prose that
+    /// documents it.
+    ///
+    /// Not hypothetical tidiness: `.github/docker/ci-image/Dockerfile` names
+    /// `r-base` in four comments and one install line, so a plain
+    /// `contains("r-base")` would pass on a file that had stopped installing
+    /// it. That is the "drift guard matched its own documentation" failure
+    /// CLAUDE.md records having shipped twice, and this file's own new comments
+    /// name every package — so writing the naive check here would have
+    /// reproduced it a third time.
+    static func codeLines(of text: String) -> [Substring] {
+        text.split(separator: "\n").filter {
+            !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#")
+        }
+    }
+
+    /// The CI image and its probe have to know every language too — and unlike
+    /// the production image, this one fails SILENTLY. The executed assertions
+    /// guard on interpreter availability and skip when it is absent, so a
+    /// language missing from the swift-ci image (or from the probe that would
+    /// otherwise apt-get it) leaves CI green having executed nothing in that
+    /// language.
+    ///
+    /// R is why this exists. It was absent from both the probe and the fallback
+    /// install list in swift-tests.yml for the entire time Lua, Octave and C++
+    /// were being added to them, and nothing went red — invisible precisely
+    /// because the only symptom is a test that does not run.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func theCIImageAndItsProbeProvideEveryInterpreter(_ language: AssignmentLanguage) throws {
+        let adapter = Self.adapter(for: language)
+
+        let ciImage = try String(
+            contentsOf: Self.repoRoot.appendingPathComponent(
+                ".github/docker/ci-image/Dockerfile"), encoding: .utf8)
+        #expect(
+            Self.codeLines(of: ciImage).contains { $0.contains(adapter.debianPackage) },
+            """
+            .github/docker/ci-image/Dockerfile does not install \
+            \(adapter.debianPackage), so the swift-ci image has no \
+            \(adapter.toolchainProbeCommand) and every \(language) execution-path \
+            assertion skips. CI stays green having run none of them.
+            """)
+
+        let lines = try Self.codeLines(
+            of: String(
+                contentsOf: Self.repoRoot.appendingPathComponent(
+                    ".github/workflows/swift-tests.yml"), encoding: .utf8))
+
+        let probes = lines.filter { $0.contains("command -v ") }
+        #expect(!probes.isEmpty, "swift-tests.yml has no dependency probe to check.")
+        #expect(
+            probes.allSatisfy { $0.contains("command -v \(adapter.toolchainProbeCommand) ") },
+            """
+            A dependency probe in swift-tests.yml does not check for \
+            \(adapter.toolchainProbeCommand), so a stale swift-ci image missing \
+            \(adapter.debianPackage) goes undetected, the apt-get fallback never runs, \
+            and every \(language) execution-path assertion skips silently.
+            """)
+
+        let installs = lines.filter { $0.contains("--no-install-recommends") }
+        #expect(!installs.isEmpty, "swift-tests.yml has no fallback install to check.")
+        #expect(
+            installs.allSatisfy { $0.contains(adapter.debianPackage) },
+            """
+            A fallback install in swift-tests.yml omits \(adapter.debianPackage), so a \
+            stale swift-ci image leaves \(language) untested rather than failing.
             """)
     }
 

@@ -140,21 +140,23 @@ directly (no `evaluate` calling-handler trap). Budget one quirk per kernel, not
 the same one. Measurements and the full postmortem:
 `docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost".
 
-**Octave is the fourth assignment language.** `AssignmentLanguage` is now
-`.python | .r | .lua | .octave`: `.m` scripts grade natively (`octave-cli`;
+**Octave is the fourth assignment language.** `AssignmentLanguage` gained
+`.octave`: `.m` scripts grade natively (`octave-cli`;
 the `octave` package plus `gnuplot-nox` + `fonts-freefont-otf` for headless
 figures are on both images) and in the browser via the vendored `xeus-octave`
 kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.5,
 ~5–12 s boot, no per-statement cost). All eight pattern kinds render and
-execute; notebook checks cover five of ten — `figureCount` and regex
-`cellContains` are SUPPORTED (both of Lua's opposite answers, re-measured:
-plotting is core Octave and Octave's regexp is PCRE), while the four
-data-frame kinds (no data-frame type in core Octave, no packages on the
-channel) and `astStructure` are refused at save time. The literal rule is the
-language's one silent trap: `[65, "bc"]` is the char array `"Abc"`, so
-`JSONValue.octaveLiteral` renders arrays as `[...]` only when every element
-is a numeric/boolean scalar (null → `NA`) and everything else — any string,
-mixed kinds, nesting, objects, empty — as cells, with objects as
+execute; notebook checks cover five of ten — `variableExists`,
+`functionExists`, `numericArrayClose`, `cellContains` and `figureCount`, the
+last two being Lua's opposite answers re-measured (plotting is core Octave,
+and Octave's regexp is PCRE so `cellContains` takes `regex: true` where Lua
+refuses it) — while the four data-frame kinds (no data-frame type in core
+Octave, no packages on the channel) and `astStructure` are refused at save
+time. The literal rule is the language's one silent trap: `[65, "bc"]` is the
+char array `"Abc"`, so `JSONValue.octaveLiteral` renders arrays as `[...]`
+only when every element is a numeric/boolean scalar (null → `NA`) and
+everything else — any string, mixed kinds, nesting, objects, empty — as
+cells, with objects as
 `containers.Map` calls. Equality is `isequaln`-based (NA/NaN match
 themselves; Octave is already type-blind across logical/int/double) plus a
 both-empty rule and shape-blind numeric comparison. `test_runtime.m` loads
