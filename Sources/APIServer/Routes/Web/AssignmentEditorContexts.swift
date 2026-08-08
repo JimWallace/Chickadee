@@ -261,20 +261,23 @@ struct AssignmentLanguageOption: Encodable {
     let selected: Bool
 
     /// Builds the whole list for an assignment whose manifest records
-    /// `recorded` (nil when nothing is recorded).
+    /// `recorded` (nil when no language is recorded).
     ///
-    /// The empty-valued first entry is not cosmetic: it is what lets an author
-    /// undo a declaration. `AssignmentLanguage.resolve` treats a recorded value
-    /// as authoritative over the notebook and the suite, so a select offering
-    /// only the five real languages would make the first choice permanent.
+    /// The first entry is a DECLARATION that the assignment has no language —
+    /// a plain shell-script suite — not a request to go and detect one. That
+    /// distinction is the point of the whole change: an author picking it is
+    /// answering the question, so nothing downstream has to guess afterwards.
+    /// It doubles as the way to undo a declaration, since
+    /// `AssignmentLanguage.resolve` treats a recorded value as authoritative
+    /// over the notebook and the suite.
     static func options(recorded: String?) -> [AssignmentLanguageOption] {
         let normalized = recorded?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let auto = AssignmentLanguageOption(
-            value: "",
-            label: "Detect from the notebook or test scripts",
+        let noLanguage = AssignmentLanguageOption(
+            value: noLanguageChoice,
+            label: "None — plain shell scripts",
             selected: normalized == nil || AssignmentLanguage(rawValue: normalized ?? "") == nil
         )
-        return [auto]
+        return [noLanguage]
             + AssignmentLanguage.allCases.map { language in
                 AssignmentLanguageOption(
                     value: language.rawValue,

@@ -35,11 +35,11 @@ import VaporTesting
 
     // MARK: - Option construction (pure)
 
-    @Test func nothingRecordedSelectsTheDeriveEntry() {
+    @Test func nothingRecordedSelectsTheNoLanguageEntry() {
         let options = AssignmentLanguageOption.options(recorded: nil)
         let selected = options.filter(\.selected)
         #expect(selected.count == 1)
-        #expect(selected.first?.value.isEmpty == true)
+        #expect(selected.first?.value == noLanguageChoice)
     }
 
     @Test func aRecordedLanguageIsTheSelectedOption() {
@@ -50,10 +50,10 @@ import VaporTesting
 
     /// Defensive: a manifest carrying a language this build does not know must
     /// still render a coherent select rather than one with nothing selected.
-    @Test func anUnknownRecordedLanguageFallsBackToTheDeriveEntry() {
+    @Test func anUnknownRecordedLanguageFallsBackToTheNoLanguageEntry() {
         let selected = AssignmentLanguageOption.options(recorded: "fortran").filter(\.selected)
         #expect(selected.count == 1)
-        #expect(selected.first?.value.isEmpty == true)
+        #expect(selected.first?.value == noLanguageChoice)
     }
 
     /// Discovered, not enumerated: a sixth language appears in the select with
@@ -66,7 +66,9 @@ import VaporTesting
                 values.contains(language.rawValue),
                 "\(language) is missing from the Language select")
         }
-        #expect(values.contains(""), "the derive-it entry must always be offered")
+        #expect(
+            values.contains(noLanguageChoice),
+            "the no-language declaration must always be offered")
     }
 
     @Test func optionLabelsAreTheLanguagesDisplayNames() {
@@ -165,7 +167,7 @@ import VaporTesting
     /// The escape hatch. `resolve` treats a recorded language as authoritative
     /// over the notebook and the suite, so without this the first choice would
     /// be permanent.
-    @Test func editSaveClearsADeclarationWithTheDeriveEntry() async throws {
+    @Test func editSaveDeclaresNoLanguage() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -176,12 +178,17 @@ import VaporTesting
 
             let status = try await postEdit(
                 assignment: a,
-                fields: ["assignmentName": "Lab", "dueAt": "", "assignmentLanguage": ""],
+                fields: [
+                    "assignmentName": "Lab", "dueAt": "", "assignmentLanguage": noLanguageChoice,
+                ],
                 cookie: cookie, on: app)
             #expect(status == .seeOther)
 
             let reloaded = try #require(try await APITestSetup.find("lang_save2", on: app.db))
             #expect(currentManifestLanguage(reloaded.manifest) == nil)
+            // The flag is the point: "no language" is now an ANSWER, so this is
+            // distinguishable from an assignment nobody has declared.
+            #expect(reloaded.decodedManifest()?.languageDeclared == true)
         }
     }
 
@@ -207,9 +214,14 @@ import VaporTesting
         }
     }
 
-    // MARK: - Refusals, each with its own reason
+    // MARK: - The upload-only implication
 
-    @Test func editSaveRefusesCppWhileInNotebookMode() async throws {
+    /// Declaring C++ SETS upload-only rather than refusing without it. The
+    /// language implies the mode — C++ has no notebook workflow — and making the
+    /// declaration carry it is what lets an author answer one question instead
+    /// of performing the old three-step dance (grading mode, then submission
+    /// mode, then language, each refusal naming the next step).
+    @Test func declaringCppAlsoSetsUploadOnly() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -218,15 +230,15 @@ import VaporTesting
             let a = try await saveableAssignment(
                 id: "lang_save4", manifest: Self.plainManifest, title: "Lab", on: app)
 
-            _ = try await postEdit(
+            let status = try await postEdit(
                 assignment: a,
                 fields: ["assignmentName": "Lab", "dueAt": "", "assignmentLanguage": "cpp"],
                 cookie: cookie, on: app)
+            #expect(status == .seeOther)
 
             let reloaded = try #require(try await APITestSetup.find("lang_save4", on: app.db))
-            #expect(
-                currentManifestLanguage(reloaded.manifest) == nil,
-                "a refused declaration must leave the manifest unchanged")
+            #expect(currentManifestLanguage(reloaded.manifest) == "cpp")
+            #expect(reloaded.decodedManifest()?.submissionMode == .uploadOnly)
         }
     }
 

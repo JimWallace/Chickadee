@@ -217,10 +217,10 @@ extension PublishedAssignmentRoutes {
     /// user-facing refusal reason or nil when it succeeded or there was nothing
     /// to do.
     ///
-    /// `requested` distinguishes three states that must not be collapsed: nil is
-    /// the field being absent (a form posted from a tab opened before it
-    /// existed) and leaves the declaration alone; "" is the author picking
-    /// "detect automatically" and clears it; anything else declares it.
+    /// `requested` nil means the field was absent — a form posted from a tab
+    /// opened before it existed — and leaves the declaration alone. Anything
+    /// else is an answer, including `noLanguageChoice` ("none"), which declares
+    /// the assignment has no language rather than asking for one to be detected.
     ///
     /// The reason is the thrown error's own, not one fixed message: the shared
     /// helpers have three distinct refusals — unknown language, C++ outside
@@ -229,13 +229,20 @@ extension PublishedAssignmentRoutes {
     fileprivate func persistDeclaredLanguage(
         requested: String?, setup: APITestSetup, on db: any Database
     ) async -> String? {
-        guard let requested else { return nil }
+        guard let requested,
+            !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
         do {
-            if requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                _ = try await clearManifestLanguage(setup: setup, on: db)
-            } else {
-                _ = try await setManifestLanguage(setup: setup, to: requested, on: db)
+            let language = try parseLanguageChoice(requested)
+            // Changing the language rewrites every generated filename, so the
+            // existing guard still applies to an edit even though a declaration
+            // at creation has nothing generated to protect.
+            if manifestHasGeneratedScripts(setup.manifest),
+                currentManifestLanguage(setup.manifest) != language?.rawValue
+            {
+                throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
             }
+            try await declareManifestLanguage(setup: setup, to: language, on: db)
             return nil
         } catch {
             // `any AbortError` rather than `AppError`, so a Vapor `Abort` thrown

@@ -25,6 +25,9 @@ struct CreateAssignmentTool: ContentTool {
         let courseCode: String
         let title: String
         let notebook: JSONValue
+        /// An `AssignmentLanguage` raw value, or `"none"` for a shell-script
+        /// suite. Required — see the schema description.
+        let language: String
     }
 
     struct Output: Encodable, Sendable {
@@ -59,8 +62,21 @@ struct CreateAssignmentTool: ContentTool {
                 "description": .string(
                     "The starter notebook as .ipynb JSON (an object containing a \"cells\" array)."),
             ]),
+            "language": .object([
+                "type": .string("string"),
+                "enum": .array(
+                    AssignmentLanguage.allCases.map { .string($0.rawValue) }
+                        + [.string(noLanguageChoice)]),
+                "description": .string(
+                    "The language this assignment is authored and graded in, or \"none\" for a suite "
+                        + "of plain shell scripts. Required: the language is what every generated test "
+                        + "renders in, so it is stated rather than guessed. Declaring \"cpp\" also sets "
+                        + "submissionMode to uploadOnly, since C++ has no notebook workflow."),
+            ]),
         ]),
-        "required": .array([.string("courseCode"), .string("title"), .string("notebook")]),
+        "required": .array([
+            .string("courseCode"), .string("title"), .string("notebook"), .string("language"),
+        ]),
         "additionalProperties": .bool(false),
     ])
     static let outputSchema: JSONValue? = .object([
@@ -88,6 +104,15 @@ struct CreateAssignmentTool: ContentTool {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
         }
         try validateNotebookShape(input.notebook, tool: Self.name)
+        // Parsed BEFORE the course lookup and the setup write, so an unusable
+        // language fails without leaving a half-created assignment behind.
+        let declaredLanguage: AssignmentLanguage?
+        do {
+            declaredLanguage = try parseLanguageChoice(input.language)
+        } catch {
+            throw MCPToolError.invalidArguments(
+                tool: Self.name, detail: unknownLanguageMessage(input.language))
+        }
 
         let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
@@ -120,6 +145,9 @@ struct CreateAssignmentTool: ContentTool {
             }
             throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
         }
+
+        try await declareManifestLanguage(
+            setup: created.setup, to: declaredLanguage, on: context.db)
 
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentCreated, assignment: created.assignment,

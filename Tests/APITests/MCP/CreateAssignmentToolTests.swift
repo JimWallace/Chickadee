@@ -43,7 +43,7 @@ import Vapor
             try await enrolledCourse(on: app)
             let output = try await CreateAssignmentTool().execute(
                 CreateAssignmentTool.Input(
-                    courseCode: "CS246", title: "  New Lab  ", notebook: try json(twoCellNotebook)),
+                    courseCode: "CS246", title: "  New Lab  ", notebook: try json(twoCellNotebook), language: "python"),
                 context(app))
 
             #expect(output.title == "New Lab")
@@ -77,7 +77,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
-                        courseCode: "CS246", title: "   ", notebook: try json(twoCellNotebook)),
+                        courseCode: "CS246", title: "   ", notebook: try json(twoCellNotebook), language: "python"),
                     context(app))
             }
         }
@@ -90,7 +90,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
-                        courseCode: "NOPE99", title: "Lab", notebook: try json(twoCellNotebook)),
+                        courseCode: "NOPE99", title: "Lab", notebook: try json(twoCellNotebook), language: "python"),
                     context(app))
             }
         }
@@ -104,7 +104,7 @@ import Vapor
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
                         courseCode: "CS246", title: "Lab",
-                        notebook: try json(#"{"nbformat":4,"metadata":{}}"#)),
+                        notebook: try json(#"{"nbformat":4,"metadata":{}}"#), language: "python"),
                     context(app))
             }
         }
@@ -119,7 +119,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
-                        courseCode: "CS246", title: "Lab", notebook: try json(twoCellNotebook)),
+                        courseCode: "CS246", title: "Lab", notebook: try json(twoCellNotebook), language: "python"),
                     context(app))
             }
         }

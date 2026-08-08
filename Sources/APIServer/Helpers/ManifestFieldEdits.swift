@@ -116,6 +116,61 @@ func setManifestLanguage(
     return language
 }
 
+/// The wire value meaning "this assignment has no language — its suite is plain
+/// shell scripts". Shared by the web creation/edit selects and the MCP tools so
+/// the two surfaces cannot disagree about how the choice is spelled.
+///
+/// A reserved STRING at the surface, not an `AssignmentLanguage` case: the enum
+/// promises a literal renderer, an inputs file, pattern families and a
+/// personalization driver, none of which a shell suite has. A case would have to
+/// answer "not applicable" to all of them while silently satisfying every
+/// exhaustive switch.
+let noLanguageChoice = "none"
+
+/// Parses a creation-time or edit-time language choice into the language to
+/// record — nil for `noLanguageChoice`.
+func parseLanguageChoice(_ raw: String) throws -> AssignmentLanguage? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if trimmed == noLanguageChoice { return nil }
+    guard let parsed = AssignmentLanguage(rawValue: trimmed) else {
+        throw AppError.badRequest(reason: unknownLanguageMessage(raw))
+    }
+    return parsed
+}
+
+/// Records an author's answer to "what language is this assignment?" — the
+/// language itself, or its declared absence, plus the flag saying the question
+/// was answered at all.
+///
+/// This is the declaration primitive, distinct from `setManifestLanguage`
+/// (which edits a language on an assignment that already has content and guards
+/// accordingly). Two differences matter:
+///
+/// 1. It records `languageDeclared`, so a nil language afterwards means "the
+///    author says there is none" rather than "nobody has been asked".
+/// 2. An upload-only language sets `submissionMode` too, because the language
+///    implies it. That is what makes declare-at-creation possible for C++ at
+///    all: `setManifestLanguage` refuses an upload-only language while the setup
+///    is in notebook mode, and a brand-new assignment always is — so requiring
+///    the declaration up front would otherwise leave C++ uncreatable. It also
+///    collapses the old three-step authoring dance (grading mode, then
+///    submission mode, then language) into one answer.
+func declareManifestLanguage(
+    setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
+) async throws {
+    try await mutateManifest(setup: setup, on: db) { dict in
+        dict["languageDeclared"] = true
+        guard let language else {
+            dict.removeValue(forKey: "language")
+            return
+        }
+        dict["language"] = language.rawValue
+        if case .uploadOnly = language.editorSupport {
+            dict["submissionMode"] = SubmissionMode.uploadOnly.rawValue
+        }
+    }
+}
+
 /// Removes the recorded `language`, returning the assignment to derived
 /// resolution. Returns true when a value was actually removed.
 ///
