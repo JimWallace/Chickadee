@@ -14,7 +14,11 @@
   used it was really asking "is this Python?" and now says so, with identical
   behaviour. Sites that must produce a language regardless (notebook
   extraction, literal rendering, expression evaluation, pattern-family
-  authoring) state that locally instead of inheriting it.
+  authoring) state that locally instead of inheriting it. The browser's
+  generated copy of the kernel-alias sets gains `PYTHON_KERNEL_NAMES` to match,
+  so `browser-runner.js` identifies a Python notebook positively and its
+  unrecognised-kernel fallback is a visible branch rather than the shape of the
+  tail.
 
 ### Added
 

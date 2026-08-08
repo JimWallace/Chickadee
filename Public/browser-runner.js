@@ -72,6 +72,9 @@
     // CHICKADEE_GENERATED:OCTAVE_KERNEL_NAMES:BEGIN
     const OCTAVE_KERNEL_NAMES = ['octave', 'xoctave'];
     // CHICKADEE_GENERATED:OCTAVE_KERNEL_NAMES:END
+    // CHICKADEE_GENERATED:PYTHON_KERNEL_NAMES:BEGIN
+    const PYTHON_KERNEL_NAMES = ['python', 'python3', 'xpython'];
+    // CHICKADEE_GENERATED:PYTHON_KERNEL_NAMES:END
 
     // Filename extensions that mark a directly-uploaded file as gradeable
     // source, so it gets a `.chickadee_student_module` hint. A GENERATED copy of
@@ -1006,6 +1009,7 @@
         const isR    = R_KERNEL_NAMES.includes(ksName) || liName === 'r';
         const isLua  = LUA_KERNEL_NAMES.includes(ksName) || liName === 'lua';
         const isOctave = OCTAVE_KERNEL_NAMES.includes(ksName) || liName === 'octave';
+        const isPython = PYTHON_KERNEL_NAMES.includes(ksName) || liName === 'python';
         const stem   = filename.replace(/\.ipynb$/i, '');
 
         const cells = (notebook.cells || []).map(cell => ({
@@ -1061,15 +1065,30 @@
 
         // Python: extract via the shared RunnerCore wasm — the SAME code the
         // native worker runs (Sources/RunnerCore), instead of a JS reimplementation.
-        const result = core.extractPython(cells, filename);
+        function extractAsPython() {
+            const result = core.extractPython(cells, filename);
 
-        files[`${stem}.py`] = result.executableModule;
-        files['.chickadee_student_module'] = `${stem}.py`;
+            files[`${stem}.py`] = result.executableModule;
+            files['.chickadee_student_module'] = `${stem}.py`;
 
-        // Sidecar: the introspectable (un-exec-wrapped) source, so structural /
-        // AST NotebookChecks can read real `def`s via student_source().
-        files[`${stem}.source.py`] = result.introspectableSource;
-        files['.chickadee_student_source'] = `${stem}.source.py`;
+            // Sidecar: the introspectable (un-exec-wrapped) source, so structural /
+            // AST NotebookChecks can read real `def`s via student_source().
+            files[`${stem}.source.py`] = result.introspectableSource;
+            files['.chickadee_student_source'] = `${stem}.source.py`;
+        }
+
+        if (isPython) {
+            return extractAsPython();
+        }
+
+        // Unrecognised kernel. Extraction still has to produce a file in SOME
+        // syntax, so it falls back to Python — the same explicit choice the
+        // native NotebookExtractor makes (`?? .python`). Written as its own
+        // branch rather than left as the shape of the tail, so the fallback is
+        // visible where it happens: "we could not tell" and "this is Python"
+        // are different facts that used to share one code path here, exactly as
+        // they used to share one value in AssignmentLanguage.
+        return extractAsPython();
     }
 
     // Build the _ck_inputs.py source from per-student personalization inputs
