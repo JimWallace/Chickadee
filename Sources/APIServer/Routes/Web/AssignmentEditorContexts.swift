@@ -10,6 +10,7 @@
 // site).  Nesting is deferred — Leaf templates reference these fields
 // flat via `#(field)`, so nesting would force a template-side rewrite.
 
+import Core
 import Foundation
 
 struct NewAssignmentContext: Encodable {
@@ -78,6 +79,9 @@ struct NewAssignmentContext: Encodable {
     let requiredCapabilitiesCSV: String
     let detectedLanguages: [String]
     let detectedCapabilities: [String]
+    /// The required Language select's options, same builder the edit page
+    /// uses. Declared at creation so nothing downstream has to derive it.
+    let assignmentLanguageOptions: [AssignmentLanguageOption]
     let detectedLanguagesCSV: String
     let detectedCapabilitiesCSV: String
     let notice: String?
@@ -227,6 +231,12 @@ struct EditAssignmentContext: Encodable {
     /// "notebook" | "uploadOnly" from the manifest — renders the Submission
     /// select's current value in the name/due-date edit block.
     let submissionMode: String
+    /// The Language select's options, in `AssignmentLanguage.allCases` order
+    /// behind the "detect automatically" entry. Built from `allCases` rather
+    /// than written out in the template so a sixth language needs no Leaf edit —
+    /// the same discovered-not-enumerated rule the kernel-alias generator and
+    /// the runner's capability probe follow.
+    let assignmentLanguageOptions: [AssignmentLanguageOption]
     /// The per-assignment secret-reveal toggle: whether students may spend
     /// their one reveal token here.  Renders the "Student Options" checkbox.
     let secretRevealEnabled: Bool
@@ -244,4 +254,39 @@ struct EditAssignmentContext: Encodable {
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
+}
+
+/// One entry in the edit page's Language select.
+struct AssignmentLanguageOption: Encodable {
+    /// An `AssignmentLanguage` raw value, or "" for the derive-it entry.
+    let value: String
+    let label: String
+    let selected: Bool
+
+    /// Builds the whole list for an assignment whose manifest records
+    /// `recorded` (nil when no language is recorded).
+    ///
+    /// The first entry is a DECLARATION that the assignment has no language —
+    /// a plain shell-script suite — not a request to go and detect one. That
+    /// distinction is the point of the whole change: an author picking it is
+    /// answering the question, so nothing downstream has to guess afterwards.
+    /// It doubles as the way to undo a declaration, since
+    /// `AssignmentLanguage.resolve` treats a recorded value as authoritative
+    /// over the notebook and the suite.
+    static func options(recorded: String?) -> [AssignmentLanguageOption] {
+        let normalized = recorded?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let noLanguage = AssignmentLanguageOption(
+            value: noLanguageChoice,
+            label: "None — plain shell scripts",
+            selected: normalized == nil || AssignmentLanguage(rawValue: normalized ?? "") == nil
+        )
+        return [noLanguage]
+            + AssignmentLanguage.allCases.map { language in
+                AssignmentLanguageOption(
+                    value: language.rawValue,
+                    label: language.displayName,
+                    selected: normalized == language.rawValue
+                )
+            }
+    }
 }

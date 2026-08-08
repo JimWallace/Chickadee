@@ -65,6 +65,15 @@
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
                 <label class="form-label field-gap">
+                    Language
+                    <select class="form-input" name="assignmentLanguage" id="assignmentLanguageSelect">
+                        #for(option in assignmentLanguageOptions):
+                        <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                        #endfor
+                    </select>
+                </label>
+                <p class="card-meta fine-print">Chickadee normally works the language out from the starter notebook's kernel or a test script's extension. Declare it when there is nothing to work it out from — a suite made only of pattern families — or for C++, which has no notebook kernel and whose generated tests are shell wrappers. Declare it before adding pattern families or notebook checks: their filenames carry the language's extension, so it cannot be changed once they exist.</p>
+                <label class="form-label field-gap">
                     Submission Method
                     <select class="form-input" name="submissionMode" id="submissionModeSelect">
                         <option value="notebook" #if(submissionMode == "notebook"):selected#endif>Notebook editor</option>

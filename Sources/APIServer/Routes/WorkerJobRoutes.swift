@@ -528,17 +528,28 @@ extension WorkerJobRoutes {
                 runnerProfile: runnerProfile,
                 requirements: requirementSpec
             )
-            // Fold the manifest's optional `minimumRunnerVersion` gate into the
-            // same verdict so a version block rides the existing diagnostics /
-            // guard / blocked-candidate path.  Use the *merged* result below,
-            // not `capabilityResult`, or the diagnostics would report
-            // "compatible" while the job is actually blocked on version.
+            // Fold the manifest's optional `minimumRunnerVersion` gate and the
+            // implicit language gate into the same verdict so either block rides
+            // the existing diagnostics / guard / blocked-candidate path.  Use
+            // the *merged* result below, not `capabilityResult`, or the
+            // diagnostics would report "compatible" while the job is actually
+            // blocked.
+            //
+            // The language gate needs no authoring step: the manifest already
+            // knows what language the assignment is in and the runner already
+            // advertises what it has, so a runner that cannot grade this
+            // assignment leaves it for one that can instead of failing it.
+            let versionResult = RunnerVersionGate.evaluate(
+                runnerVersion: body.runnerVersion,
+                minimumRunnerVersion: manifest.minimumRunnerVersion
+            )
+            let languageResult = RunnerLanguageGate.evaluate(
+                runnerProfile: runnerProfile,
+                language: AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            )
             let compatibilityResult = RunnerVersionGate.combine(
-                capabilityResult,
-                RunnerVersionGate.evaluate(
-                    runnerVersion: body.runnerVersion,
-                    minimumRunnerVersion: manifest.minimumRunnerVersion
-                )
+                RunnerVersionGate.combine(capabilityResult, versionResult),
+                languageResult
             )
             await req.application.diagnostics.recordCompatibilityDecision(
                 submission: submission,

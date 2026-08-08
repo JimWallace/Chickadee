@@ -69,7 +69,13 @@ import Testing
         //    `resolved`, never `expected`, so a resolution that answers Python
         //    fails the legs below rather than quietly grading as Python.
         let props = try manifest(gradedScriptIn: expected)
-        let resolved = AssignmentLanguage.resolve(manifest: props, notebookData: nil)
+        let resolved = try #require(
+            AssignmentLanguage.resolve(manifest: props, notebookData: nil),
+            """
+            A manifest whose only graded script is a \(expected) script resolved to NO language. \
+            Resolution is Optional, and nil means "nothing here names a language" — a graded \
+            script in the language is exactly the signal that must not produce it.
+            """)
         #expect(
             resolved == expected,
             """
@@ -157,7 +163,8 @@ import Testing
     /// notebook assignment has (empty suite, nothing recorded).
     @Test(arguments: AssignmentLanguage.allCases)
     func aBrandNewNotebookAssignmentResolvesFromItsKernel(_ expected: AssignmentLanguage) throws {
-        guard expected != .default else { return }  // no positive aliases by design
+        // Python is included now — it has its own aliases. A language with no
+        // kernel at all (C++, upload-only) has an empty set and asserts nothing.
         let empty = try JSONDecoder().decode(
             TestProperties.self,
             from: Data(

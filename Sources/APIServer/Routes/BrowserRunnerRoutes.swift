@@ -180,6 +180,9 @@ struct BrowserRunnerRoutes: RouteCollection {
         var language: AssignmentLanguage?
         if let manifest = setup.decodedManifest() {
             let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+            // nil language yields no grading inputs (there is no syntax to
+            // render them in); datasets below are language-independent and
+            // still resolve.
             let resolved = AssignmentLanguage.resolve(for: setup, manifest: manifest)
             language = resolved
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(

@@ -23,7 +23,10 @@ extension AssignmentLanguage {
     /// The notebook is only read when the manifest can't answer on its own
     /// (see the `@autoclosure` on the Core overload), so this stays cheap on
     /// the worker-job and suite-save paths.
-    static func resolve(for setup: APITestSetup, manifest: TestProperties) -> AssignmentLanguage {
+    ///
+    /// nil means no signal names a language — a legal state for a plain `.sh`
+    /// suite. Callers that need a language refuse; callers that don't, ignore it.
+    static func resolve(for setup: APITestSetup, manifest: TestProperties) -> AssignmentLanguage? {
         resolve(
             manifest: manifest,
             notebookData: setup.notebookPath.flatMap { FileManager.default.contents(atPath: $0) })

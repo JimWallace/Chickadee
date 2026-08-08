@@ -373,11 +373,29 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// cases. "We inferred Python" and "this is a Python assignment" are also
     /// genuinely different states, and only one of them is safe to act on.
     ///
-    /// Nil means "written before the language was recorded" — every manifest
-    /// on disk today. `AssignmentLanguage.resolve(manifest:)` falls back to
-    /// sniffing for those, so they keep behaving exactly as before until their
-    /// next save stamps a value.
+    /// Nil means either "the author declared this assignment has no language"
+    /// or "nobody has declared anything yet" — `languageDeclared` is what
+    /// separates those. `AssignmentLanguage.resolve(manifest:)` falls back to
+    /// sniffing when nothing is recorded.
     public let language: AssignmentLanguage?
+
+    /// True when an author has actually answered "what language is this?" —
+    /// including answering "none, it is a plain shell-script suite", which is
+    /// recorded as `language == nil` alongside this flag.
+    ///
+    /// A SECOND field rather than a reserved `"none"` string in `language`,
+    /// deliberately. `language` is decoded as an `AssignmentLanguage`, and an
+    /// unrecognised enum case THROWS, so a reserved string would make every
+    /// manifest carrying it undecodable by any runner built before the string
+    /// existed — the whole manifest, not just the field. An unknown *key* is
+    /// ignored by Swift's synthesized decoding, so an old runner reads a new
+    /// manifest exactly as it reads an old one.
+    ///
+    /// Nil means undeclared: a manifest written before the field, or a
+    /// `.chickadee` bundle exported by an older build. Those keep deriving.
+    /// Everything on disk is backfilled by `BackfillDeclaredLanguage`, so an
+    /// undeclared manifest after that point came from outside this deployment.
+    public let languageDeclared: Bool?
 
     /// Optional minimum `chickadee-runner` version required to grade this
     /// assignment on the native worker path.  When set, the server only hands a
@@ -405,6 +423,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         makefile: MakefileConfig? = nil,
         starterNotebook: String? = nil,
         language: AssignmentLanguage? = nil,
+        languageDeclared: Bool? = nil,
         minimumRunnerVersion: String? = nil,
         patternFamilies: [PatternFamily] = [],
         notebookChecks: [NotebookCheck] = [],
@@ -427,6 +446,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.makefile = makefile
         self.starterNotebook = starterNotebook
         self.language = language
+        self.languageDeclared = languageDeclared
         self.minimumRunnerVersion = minimumRunnerVersion
         // `testItems` wins when supplied; otherwise synthesize it from the
         // legacy `patternFamilies` / `notebookChecks` arguments (families
@@ -461,6 +481,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // Absent on every manifest written before the language became
         // first-class; nil falls back to sniffing the suite.
         language = try c.decodeIfPresent(AssignmentLanguage.self, forKey: .language)
+        languageDeclared = try c.decodeIfPresent(Bool.self, forKey: .languageDeclared)
         minimumRunnerVersion = try c.decodeIfPresent(String.self, forKey: .minimumRunnerVersion)
         // `testItems` is the canonical unified list when present.  A legacy
         // manifest carries the separate `patternFamilies` / `notebookChecks`
@@ -504,6 +525,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case makefile
         case starterNotebook
         case language
+        case languageDeclared
         case minimumRunnerVersion
         case testItems
         case patternFamilies
@@ -531,6 +553,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // encodeIfPresent, not encode: an assignment with no recorded language
         // must produce the exact bytes it always has.
         try c.encodeIfPresent(language, forKey: .language)
+        // Also encodeIfPresent, and for a second reason beyond byte-stability:
+        // a `false` here would be meaningless. The flag records that the
+        // question was ANSWERED, so its absence is the only "not answered"
+        // state and writing `false` would be a third state nothing reads.
+        try c.encodeIfPresent(languageDeclared, forKey: .languageDeclared)
         try c.encodeIfPresent(minimumRunnerVersion, forKey: .minimumRunnerVersion)
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
@@ -574,6 +601,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
             // manifest that silently lost it here would resolve differently on
             // any path that re-sniffs from the runner-facing copy.
             language: language,
+            // Kept for the same reason, plus one of its own: it is what lets the
+            // runner tell "declared to have no language" from "nobody has
+            // declared one", which is the distinction a runner needs before it
+            // can refuse a job rather than guess at Python.
+            languageDeclared: languageDeclared,
             patternFamilies: [],
             notebookChecks: [],
             // Expressions are a server-side authoring concern — both global

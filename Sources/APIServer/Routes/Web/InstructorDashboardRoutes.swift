@@ -667,6 +667,11 @@ struct InstructorDashboardRoutes: RouteCollection {
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             submissionMode: manifest?.submissionMode.rawValue
                 ?? SubmissionMode.notebook.rawValue,
+            // Read straight off the manifest JSON, not from resolution: the
+            // select shows what is DECLARED, and resolution would fill the box
+            // in with a derived answer the author never chose.
+            assignmentLanguageOptions: AssignmentLanguageOption.options(
+                recorded: currentManifestLanguage(setup.manifest)),
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,

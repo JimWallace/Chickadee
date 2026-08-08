@@ -36,13 +36,15 @@ import Vapor
     }
 
     /// The gap this closes.  With an empty suite and no recorded language the
-    /// manifest says `.python`; the `xr` kernel is the only thing that knows
-    /// better, and it has to reach the save path or the assignment is recorded
-    /// as Python forever.
+    /// manifest names no language at all; the `xr` kernel is the only thing that
+    /// knows better, and it has to reach the save path or the assignment is
+    /// recorded wrong forever.
     @Test func firstSaveOfAnRNotebookAssignmentRecordsR() async throws {
         try await withPatternFamilyFixture { fixture in
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
-            #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: nil) == .python)
+            // nil, not `.python`: an empty suite says nothing about the
+            // language, and saying nothing used to be spelled "Python".
+            #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: nil) == nil)
 
             try await attachNotebook(fixture, kernel: "xr")
             #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .r)
@@ -71,13 +73,13 @@ import Vapor
         }
     }
 
-    /// A setup with no notebook resolves exactly as it did before, so nothing
-    /// regresses for script-only assignments.
+    /// A setup with no notebook resolves from the manifest alone: a language
+    /// when the suite names one, nil when nothing does.
     @Test func setupWithoutANotebookResolvesFromTheManifestAlone() async throws {
         try await withPatternFamilyFixture { fixture in
             #expect(fixture.setup.notebookPath == nil)
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .python)
+            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
 
             let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
             #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: rSuite) == .r)
@@ -91,12 +93,12 @@ import Vapor
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
 
             fixture.setup.notebookPath = fixture.app.testSetupsDirectory + "does-not-exist.ipynb"
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .python)
+            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
 
             let junk = fixture.app.testSetupsDirectory + "junk.ipynb"
             try Data("not a notebook".utf8).write(to: URL(fileURLWithPath: junk))
             fixture.setup.notebookPath = junk
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .python)
+            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
         }
     }
 }

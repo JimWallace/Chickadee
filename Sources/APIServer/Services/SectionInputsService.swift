@@ -163,13 +163,20 @@ enum SectionInputsService {
         sectionID: String,
         inputs: Inputs,
         seed: SeedContext,
-        language: AssignmentLanguage = .python,
+        language: AssignmentLanguage?,
         seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
             let userID = seed.actingUserID,
             let assignmentID = seed.assignmentID
         else { return }
+        // An assignment that names no language evaluates its `=` expressions as
+        // Python — the same explicit render-site fallback as
+        // `PersonalizationSubstitution.resolve`, and for the same reason:
+        // evaluation needs an interpreter, so this question cannot answer
+        // "none". Refusing instead would be circular, since inputs are often
+        // authored before the first graded script exists.
+        let language = language ?? .python
 
         let seedHex = try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: seedDB)

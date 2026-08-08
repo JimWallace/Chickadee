@@ -311,7 +311,7 @@ extension AssignmentLanguage {
                 scriptExtensions: ["py"],
                 generatedScriptExtension: "py",
                 inputsFileName: "_ck_inputs.py",
-                notebookKernelNames: [],
+                notebookKernelNames: AssignmentLanguage.pythonKernelNames,
                 editorSupport: .notebookKernel(
                     environmentFileName: "environment-python.yml",
                     kernelName: "xpython",

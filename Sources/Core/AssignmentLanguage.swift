@@ -24,15 +24,17 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// build strategy enters Swift.
     case cpp
 
-    /// What an assignment resolves to when nothing about it says otherwise.
+    /// Kernelspec `name` values that mark a Python notebook. `xpython` is the
+    /// vendored xeus-python kernel; `python3` is what classic Jupyter writes and
+    /// `python` is what `language_info.name` reports.
     ///
-    /// Named rather than written as `.python` at the comparison sites, because
-    /// those sites are asking "did resolution fall back?" and not "is this
-    /// Python?". The two questions have the same answer today and would diverge
-    /// the moment a third language existed: `manifestOnly == .python` would
-    /// stop consulting the notebook kernelspec for a Julia assignment that had
-    /// resolved positively, which is the opposite of what that guard wants.
-    public static let `default`: AssignmentLanguage = .python
+    /// Python used to have NO aliases and no positive script match, because it
+    /// was the resolution default — which made "this is Python" and "we could
+    /// not tell" the same answer, and every silent-misroute bug in this area
+    /// descended from that. Resolution is Optional now (see `resolve`), so
+    /// Python resolves positively like any other language and "we could not
+    /// tell" is `nil`.
+    public static let pythonKernelNames: Set<String> = ["python", "python3", "xpython"]
 
     /// Kernelspec `name` values (and `language_info.name`) that mark an R
     /// notebook. The single source of truth for the sniff: every Swift consumer
@@ -110,31 +112,35 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         self = match
     }
 
-    /// The non-default language whose graded script appears in `manifest`'s
-    /// suite, in `allCases` order (so a mixed R+Lua suite resolves R-first,
-    /// matching `manifestOwningLanguage`), or nil when only default-language
-    /// (or no) graded scripts are present.
+    /// The language whose graded script appears in `manifest`'s suite, in
+    /// `allCases` order (so a mixed R+Lua suite resolves R-first, matching
+    /// `manifestOwningLanguage`), or nil when the suite carries no
+    /// language-bearing script at all — a suite of plain `.sh` scripts, or an
+    /// empty one.
     ///
     /// The strongest resolution signal — the graded suite is what actually runs
     /// — and the single implementation of it, so `resolve` and `rederive` cannot
-    /// disagree about which language a `.lua`/`.R` script implies. Python is the
-    /// default and is never matched positively here; it is reached by falling
-    /// through, which is what keeps every existing Python assignment unchanged.
+    /// disagree about which language a `.lua`/`.R` script implies.
+    ///
+    /// Python is matched positively here like every other language. It used to
+    /// be skipped (`language != .default`) so that it was only ever reached by
+    /// falling through, which meant a `.py` suite and a suite with no language
+    /// at all produced the same answer. `.sh`-only suites are the case that
+    /// distinction was really protecting, and nil now says so directly.
     static func gradedScriptLanguage(in manifest: TestProperties) -> AssignmentLanguage? {
         allCases.first { language in
-            language != .default
-                && manifest.testSuites.contains {
-                    AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
-                        == language
-                }
+            manifest.testSuites.contains {
+                AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
+                    == language
+            }
         }
     }
 
     /// The language a notebook kernel name (`kernelspec.name` then
     /// `language_info.name`) declares, or nil when neither is recognised. The
     /// string-argument form of `fromNotebookMetadata`, matched against every
-    /// language's `notebookKernelNames` — Python's set is empty, so it is never
-    /// matched positively and remains the fallthrough default.
+    /// language's `notebookKernelNames` — including Python's, which is why a
+    /// Python notebook now resolves positively rather than by fallthrough.
     private static func languageFromKernelNames(
         _ kernelName: String?, _ languageInfoName: String?
     ) -> AssignmentLanguage? {
@@ -154,13 +160,24 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     ///      answer always beats sniffing, and it is what lets a suite made up
     ///      only of pattern families (no graded script to find) keep its
     ///      language;
-    ///   1. any non-default graded test script (`.R` → `.r`, `.lua` → `.lua`),
-    ///      in `allCases` order — the graded suite is the strongest signal,
-    ///      it's what actually runs;
+    ///   1. any graded test script (`.R` → `.r`, `.lua` → `.lua`, `.py` →
+    ///      `.python`), in `allCases` order — the graded suite is the strongest
+    ///      signal, it's what actually runs;
     ///   2. else a notebook kernel whose `kernelspec.name` / `language_info.name`
     ///      is in some language's `notebookKernelNames`;
-    ///   3. else `.python` — the default, so every existing assignment resolves
-    ///      exactly as today and its generated bytes stay byte-for-byte identical.
+    ///   3. else **nil** — no signal says this assignment has a language.
+    ///
+    /// nil is a legal, supported answer, NOT an error: an assignment whose suite
+    /// is plain `.sh` scripts is the system's original mode and has no language
+    /// in the `AssignmentLanguage` sense. It means "no language-specific
+    /// machinery applies" — refuse only at the operations that genuinely need a
+    /// language (rendering a literal, evaluating a per-student `=` expression,
+    /// generating a pattern family, picking an editor kernel).
+    ///
+    /// This used to answer `.python` instead of nil, which made "this is
+    /// Python" and "nothing here says anything" indistinguishable. Every silent
+    /// misroute in this area descended from that, Lua shipping green while
+    /// resolving to Python among them.
     ///
     /// Deliberately not public (docs/language-handling-review.md §3): the
     /// defaulted parameters made `resolve(manifest: props)` an easy spelling
@@ -172,10 +189,10 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         manifest: TestProperties,
         notebookKernelName: String? = nil,
         notebookLanguageInfoName: String? = nil
-    ) -> AssignmentLanguage {
+    ) -> AssignmentLanguage? {
         if let recorded = manifest.language { return recorded }
         if let scriptLanguage = gradedScriptLanguage(in: manifest) { return scriptLanguage }
-        return languageFromKernelNames(notebookKernelName, notebookLanguageInfoName) ?? .python
+        return languageFromKernelNames(notebookKernelName, notebookLanguageInfoName)
     }
 }
 
@@ -205,13 +222,14 @@ extension AssignmentLanguage {
     ///
     /// This is the only signal a *brand-new* notebook assignment has. Its suite
     /// is still empty and nothing has recorded a language yet, so
-    /// `resolve(manifest:)` alone answers `.python` — which meant an
-    /// instructor's first R `=` expression was evaluated by `python3` and
-    /// rejected with a Python `SyntaxError`, before any `.R` script existed to
-    /// give the game away.
+    /// `resolve(manifest:)` alone answers nil — and used to answer `.python`,
+    /// which meant an instructor's first R `=` expression was evaluated by
+    /// `python3` and rejected with a Python `SyntaxError`, before any `.R`
+    /// script existed to give the game away.
     ///
-    /// Falls back to the manifest-only resolution when the notebook is absent
-    /// or unparseable, so nothing regresses for assignments without one.
+    /// Returns nil when neither the manifest nor the notebook names a language;
+    /// see `resolve(manifest:notebookKernelName:notebookLanguageInfoName:)` for
+    /// why that is a legal answer rather than a failure.
     /// `notebookData` is an autoclosure because only step 2 of the precedence
     /// needs it: a recorded language or an `.R` script in the suite both
     /// outrank the kernelspec, so callers on hot paths (the worker job payload,
@@ -220,17 +238,15 @@ extension AssignmentLanguage {
     public static func resolve(
         manifest: TestProperties,
         notebookData: @autoclosure () -> Data?
-    ) -> AssignmentLanguage {
-        let manifestOnly = resolve(manifest: manifest)
-        // `== .default`, not `== .python`: the question is whether resolution
-        // fell back, so that the kernelspec is only consulted when the manifest
-        // said nothing. See the `default` declaration.
-        guard manifest.language == nil, manifestOnly == .default else { return manifestOnly }
+    ) -> AssignmentLanguage? {
+        // The kernelspec is consulted only when the manifest said nothing at
+        // all — a manifest answer of any kind outranks it.
+        if let manifestOnly = resolve(manifest: manifest) { return manifestOnly }
         guard let data = notebookData(),
             let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let metadata = notebook["metadata"] as? [String: Any]
         else {
-            return manifestOnly
+            return nil
         }
         return resolve(
             manifest: manifest,
@@ -249,25 +265,25 @@ extension AssignmentLanguage {
     /// rendering `.py` forever, because the sticky `.python` outranks the new R
     /// notebook. When the starter notebook is *replaced* the recorded value is a
     /// stale memo, not a declaration, so re-derivation must skip it. Precedence
-    /// is otherwise identical to `resolve`: a non-default graded script wins
-    /// (`.R` → `.r`, `.lua` → `.lua`), else the notebook's own kernel via
-    /// `fromNotebookMetadata`, else `.python`.
+    /// is otherwise identical to `resolve`: a graded script wins (`.R` → `.r`,
+    /// `.lua` → `.lua`, `.py` → `.python`), else the notebook's own kernel via
+    /// `fromNotebookMetadata`, else nil.
     public static func rederive(
         manifest: TestProperties,
         notebookData: @autoclosure () -> Data?
-    ) -> AssignmentLanguage {
+    ) -> AssignmentLanguage? {
         if let scriptLanguage = gradedScriptLanguage(in: manifest) { return scriptLanguage }
         guard let data = notebookData(),
             let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let metadata = notebook["metadata"] as? [String: Any]
         else {
-            return .python
+            return nil
         }
         // `fromNotebookMetadata`, not `isRNotebookMetadata(…) ? .r : .python`: the
         // ternary compiles forever and routes every non-R notebook to Python, so
         // a Lua notebook re-derived as Python. The general form returns the
-        // language it recognised, or nil to mean "use the default".
-        return fromNotebookMetadata(metadata) ?? .python
+        // language it recognised, or nil when it recognised none.
+        return fromNotebookMetadata(metadata)
     }
 }
 

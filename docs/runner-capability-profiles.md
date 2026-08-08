@@ -154,6 +154,86 @@ metadata-only edit — no regrade or close), or include it in the uploaded manif
 / a `.chickadee` course bundle. A malformed value is rejected at upload time.
 `get_suite` and `get_assignment` report the current value.
 
+### The language gate: enforced, not authored
+
+**An assignment's language is gated automatically. There is nothing to
+remember.** `RunnerLanguageGate` runs at the claim seam beside the two gates
+above: it resolves the assignment's language from its manifest, and a runner
+whose advertised profile does not list that language does not claim the job —
+it leaves it for one that does.
+
+This needs no authoring step because both halves were already there. The
+manifest knows the language (`AssignmentLanguage.resolve`), and
+`RunnerProfileDetector` discovers its probes from `AssignmentLanguage.allCases`,
+so every runner already advertises every language it has, and a runner whose
+*build* predates a language advertises a profile without it.
+
+Two fail-open cases, both deliberate:
+
+- **The assignment names no language** — a suite of plain `.sh` scripts. There
+  is no interpreter to require, and that is the system's original mode.
+- **The runner advertises no profile at all** — capability discovery is off
+  (`RUNNER_CAPABILITY_DISCOVERY_ENABLED=false`), an explicit operator choice.
+  Blocking it would stop that runner claiming anything. It costs nothing here:
+  a runner too old to know a language still has discovery on, so it is caught
+  by the closed path.
+
+Everything else is checked, and the check catches strictly more than a version
+gate would: a runner that is new enough but whose *host* lacks the interpreter
+never advertises it either, and is refused for the same reason.
+
+### `minimumRunnerVersion`: for runner behaviour that is not a language
+
+The version gate remains for the case the language gate cannot see — a suite
+that depends on runner behaviour added in release *X* which is not observable
+as an interpreter. Set `minimumRunnerVersion: X` when authoring such an
+assignment.
+
+It is **not** the right tool for "this assignment is in a new language": it is
+only a proxy for capability, and it admits a current runner on a host with no
+interpreter. The language gate handles that case directly and automatically.
+
+Why the distinction is worth keeping straight, and why testing does not catch
+getting it wrong:
+
+- **The fleet is mixed by construction.** The server auto-deploys on merge
+  ([docs/zero-downtime-deploy.md](zero-downtime-deploy.md)); runners are separate
+  hosts upgraded on their own schedule. Several `chickadee-runner` versions are
+  polling at any moment.
+- **The failure is nondeterministic, so validation does not surface it.** Claim
+  order decides which runner grades a job. An ungated assignment validates green
+  whenever a capable runner happens to poll first, and the identical assignment
+  fails for the next student whose job an older runner claims.
+- **The failure does not look like a version problem.** An old runner has no
+  interpreter for the new language, so the symptom is exit 127 / "not found" / a
+  suite of `error` outcomes. It reads as a broken test script and gets debugged
+  as one, on the assignment rather than on the fleet.
+- **Browser-graded assignments are not exempt.** Instructor validation is
+  enqueued as a `kind == .validation` submission and graded by the native worker
+  regardless of `gradingMode`, and a browser submission that fails over to the
+  worker backstop lands there too.
+
+Language support landed in Lua `0.5.23`, Octave `0.5.24`, C++ `0.5.27` — recorded
+for reference, not as gates to set by hand. The language gate derives the same
+exclusion from what each runner advertises.
+
+### Which of the three to reach for
+
+| Situation | Mechanism |
+|---|---|
+| The assignment is in a language some runners cannot run | **Nothing — `RunnerLanguageGate` handles it** |
+| The host needs a package or toolchain (numpy, a shell) | `requiredCapabilities` / `requiredLanguages` |
+| The suite needs runner behaviour that is not an interpreter | `minimumRunnerVersion` |
+
+A note on the middle row, since it used to be the recommended answer for the
+top row and is not: `requiredLanguages` matches what a runner *advertises*, and
+before the detector discovered its probes from `AssignmentLanguage.allCases` a
+runner never advertised a newly-added language however the host was provisioned
+— so requiring one matched **no** runner and queued the assignment's jobs
+forever. The Lua audit sweep fixed the detector; the language gate now applies
+the same matching automatically, so declaring the assignment's own language as
+a requirement is redundant rather than dangerous.
+
 ## Rollout And Backwards Compatibility
 
 The rollout rules are:

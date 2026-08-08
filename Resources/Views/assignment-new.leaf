@@ -51,7 +51,17 @@ Create Assignment
                     </select>
                 </label>
                 #endif
+                <label class="field-inline">
+                    Language
+                    <select class="form-input input-compact" name="assignmentLanguage"
+                            id="assignmentLanguageSelect" required>
+                        #for(option in assignmentLanguageOptions):
+                        <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                        #endfor
+                    </select>
+                </label>
             </div>
+            <p class="card-meta fine-print">Every generated test renders in this language, so it is stated here rather than worked out later. Pick "None" for a suite of plain shell scripts. Choosing C++ makes the assignment upload-only, since C++ has no notebook editor.</p>
             <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             <p id="grading-mode-hint" class="card-meta grading-mode-hint" style="display:none"></p>
         </div>

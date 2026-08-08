@@ -79,7 +79,8 @@ import VaporTesting
             requiredPlatform: "",
             requiredArchitecture: "",
             requiredLanguagesCSV: "",
-            requiredCapabilitiesCSV: ""
+            requiredCapabilitiesCSV: "",
+            assignmentLanguage: "python"
         )
     }
 
@@ -296,7 +297,8 @@ import VaporTesting
                 assignmentNotebookFile: nil, solutionNotebookFile: nil,
                 suiteFiles: [], suiteConfigRaw: nil,
                 requiredPlatform: "", requiredArchitecture: "",
-                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
+                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "",
+                assignmentLanguage: "python")
             let service = NewAssignmentDraftService(
                 req: makeSyntheticRequest(),
                 setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
@@ -316,7 +318,8 @@ import VaporTesting
                 assignmentNotebookFile: nil, solutionNotebookFile: nil,
                 suiteFiles: [], suiteConfigRaw: nil,
                 requiredPlatform: "", requiredArchitecture: "",
-                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
+                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "",
+                assignmentLanguage: "python")
             let service = NewAssignmentDraftService(
                 req: makeSyntheticRequest(),
                 setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),

@@ -31,4 +31,9 @@ struct NewAssignmentDraftPayload {
     let requiredArchitecture: String
     let requiredLanguagesCSV: String
     let requiredCapabilitiesCSV: String
+    /// The Language select's value: an `AssignmentLanguage` raw value, or
+    /// `noLanguageChoice` for a plain shell-script suite. Empty when the form
+    /// omitted it, which the publish path treats as "not answered" and
+    /// refuses rather than guessing.
+    let assignmentLanguage: String
 }

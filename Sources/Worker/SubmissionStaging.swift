@@ -216,10 +216,15 @@ func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
     // The RECORDED language is the strongest ownership signal, and for C++ it
     // is the only one: a C++ suite's generated scripts are `.sh` wrappers, so
     // there is no extension to sniff — exactly the "suite made up only of
-    // pattern families" blindness the recorded field exists to fix. Python is
-    // the default and never claims by record (nil-recorded manifests keep the
-    // sniffing behaviour below unchanged).
-    if let recorded = manifest.language, recorded != .default { return recorded }
+    // pattern families" blindness the recorded field exists to fix.
+    //
+    // Python is excluded by NAME here, not because it is a resolution default:
+    // this function is about submission-normalization *precedence*, and a
+    // recorded `.python` must keep falling through to the Python-exclusion
+    // rules below rather than claiming ownership outright. Resolution now
+    // records `.python` positively, so spelling this `!= .python` is what keeps
+    // the routing identical.
+    if let recorded = manifest.language, recorded != .python { return recorded }
     func suiteContains(_ language: AssignmentLanguage) -> Bool {
         manifest.testSuites.contains {
             AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
@@ -231,7 +236,7 @@ func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
     }
     guard !suiteContains(.python), !hasRequiredPython else { return nil }
     return AssignmentLanguage.allCases
-        .filter { $0 != .default }
+        .filter { $0 != .python }
         .first(where: suiteContains)
 }
 
@@ -274,12 +279,15 @@ func submissionNormalization(
     }
 
     // 3. No Python suite, and the submission itself positively declares a
-    //    non-default language: honour that rather than treating any `.ipynb` as
+    //    non-Python language: honour that rather than treating any `.ipynb` as
     //    Python at step 4. Generalised from the old `submissionIsRNotebook`.
+    //    Python is excluded by name because steps 4-6 are Python's own
+    //    heuristics — letting a `python3` kernelspec short-circuit to
+    //    `.extractToSource(.python)` here would skip them.
     if !hasPythonSuite,
         let declared = submissionNotebookLanguage(
             submissionDirectory: submissionDirectory, submissionFilename: submissionFilename),
-        declared != .default
+        declared != .python
     {
         return .extractToSource(forcedLanguage: declared)
     }

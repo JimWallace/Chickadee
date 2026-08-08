@@ -313,29 +313,46 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // extension it gets. Prefer the authored items when supplied — they carry
     // the edit being applied, which may be the very first `.R` test — and fall
     // back to the stored manifest (which records the language once known).
-    // Defaults to `.python`, so a Python assignment renders byte-for-byte as
-    // before.
     let previousLanguage = AssignmentLanguage.resolve(for: setup, manifest: props)
-    let assignmentLanguage: AssignmentLanguage = {
+    let resolvedLanguage: AssignmentLanguage? = {
         // The authored items carry the edit being applied, which may be the very
         // first non-Python graded script — the `.R` or `.lua` that establishes
         // the language before the manifest has recorded anything. Resolve it
         // from the extension so the families/checks render in the right language
-        // at that moment. Any non-default language wins, in `allCases` order
+        // at that moment. Any non-Python language wins, in `allCases` order
         // (R before Lua) for a deterministic answer on a mixed edit. Checking
         // only `.r` here is what made the first `.lua` script save as Python.
+        //
+        // Python is excluded by name so that adding a `.py` helper to an R
+        // assignment cannot flip the render language; the stored manifest stays
+        // authoritative in that case.
         var authoredLanguages: Set<AssignmentLanguage> = []
         for item in authoredItems ?? [] {
             guard case .script(let raw) = item,
                 let language = AssignmentLanguage(
                     scriptExtension: URL(fileURLWithPath: raw.script).pathExtension),
-                language != .default
+                language != .python
             else { continue }
             authoredLanguages.insert(language)
         }
         return AssignmentLanguage.allCases.first { authoredLanguages.contains($0) }
             ?? previousLanguage
     }()
+    // Authoring falls back to Python, deliberately and locally — this is NOT the
+    // old resolution default leaking back in.
+    //
+    // Refusing here would be circular: a pattern family is frequently the FIRST
+    // thing authored on an assignment, and generating its scripts is how the
+    // suite acquires a graded script in the first place. "Add a graded script
+    // before you can add a family" asks the instructor for the output as a
+    // precondition of the input. So when nothing names a language yet, author in
+    // Python — and note that the save RECORDS the choice into the manifest, so
+    // the ambiguity exists for exactly one save and never silently again.
+    //
+    // What the Optional buys is upstream of this line: an `.R`/`.lua`/`.m`
+    // assignment can no longer arrive here as Python by fallthrough, because
+    // those signals now resolve positively and nil means only "nothing said".
+    let assignmentLanguage = resolvedLanguage ?? .python
 
     try validateNotebookChecks(
         resolvedChecks,
@@ -369,14 +386,19 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // when the assignment changes language, under the new one too, or the
     // old-extension scripts would be stranded in the setup forever. Listing
     // only these two keeps `deletedFiles` free of names that were never written.
+    // `previousLanguage` is optional (an assignment that had no language yet),
+    // so the pair is built explicitly rather than as a set literal — which also
+    // keeps the two comprehensions below inside the type-checker's budget.
+    var oldFilenameLanguages: Set<AssignmentLanguage> = [assignmentLanguage]
+    if let previousLanguage { oldFilenameLanguages.insert(previousLanguage) }
     let oldGeneratedFilenames = Set(
-        Set([previousLanguage, assignmentLanguage]).flatMap { language in
+        oldFilenameLanguages.flatMap { language in
             props.patternFamilies.flatMap {
                 patternFamilyAllGeneratedFilenames($0, language: language)
             }
         }
     ).union(
-        Set([previousLanguage, assignmentLanguage]).flatMap { language in
+        oldFilenameLanguages.flatMap { language in
             props.notebookChecks.flatMap {
                 notebookCheckAllGeneratedFilenames($0, language: language)
             }

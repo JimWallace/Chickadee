@@ -34,13 +34,25 @@ enum PersonalizationSubstitution {
     /// `language` selects how literals are rendered (`pythonLiteral` vs
     /// `rLiteral`) and which interpreter evaluates the `=` expressions, so an R
     /// notebook's `{{name}}` placeholders receive R literals and a Python one
-    /// stays byte-for-byte identical (the default is `.python`).
+    /// stays byte-for-byte identical.
+    ///
+    /// A nil `language` renders as Python. Rendering is not the same question as
+    /// resolution: "what language is this assignment?" can honestly answer
+    /// nothing, but "what syntax do I write this literal in?" cannot — there is
+    /// no literal without a syntax. So the fallback lives HERE, one visible line
+    /// at the site that needs it, instead of inside resolution where every
+    /// caller inherited it and none could see it.
+    ///
+    /// It fires only for an assignment that names no language at all. A real R,
+    /// Lua, Octave or C++ assignment resolves positively and never reaches it —
+    /// which is the property the Optional buys.
     static func resolve(
         manifest: TestProperties,
         seedHex: String?,
         supportFilesDirectory: String?,
-        language: AssignmentLanguage = .python
+        language: AssignmentLanguage?
     ) async -> Resolution {
+        let language = language ?? .python
         // Combined static name pool — global first, then sections, so a
         // same-named section variable shadows a global (matches the runner).
         var staticVars: [FamilyVariable] = manifest.globalVariables
@@ -105,7 +117,7 @@ enum PersonalizationSubstitution {
         manifest: TestProperties,
         seedHex: String?,
         supportFilesDirectory: String?,
-        language: AssignmentLanguage = .python
+        language: AssignmentLanguage?
     ) async -> [String: String]? {
         guard let seedHex, !seedHex.isEmpty else { return nil }
         guard manifest.hasExpressions else { return nil }

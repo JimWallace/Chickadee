@@ -439,15 +439,16 @@ import Testing
                 .map(\.source).joined(separator: "\n")
                 perLanguage[language] = Set(vocabulary.filter { source.contains($0) })
             }
-            guard let reference = perLanguage[.default] else { continue }
-            for (language, used) in perLanguage where language != .default {
+            // Python is the reference wording every other language is compared
+            // against — named directly, since it is no longer "the default".
+            guard let reference = perLanguage[.python] else { continue }
+            for (language, used) in perLanguage where language != .python {
                 #expect(
                     used == reference,
                     """
-                    \(kind) uses different failure wording in \(language) than in \
-                    \(AssignmentLanguage.default). Only in \(AssignmentLanguage.default): \
-                    \(reference.subtracting(used).sorted()). Only in \(language): \
-                    \(used.subtracting(reference).sorted()).
+                    \(kind) uses different failure wording in \(language) than in Python. \
+                    Only in Python: \(reference.subtracting(used).sorted()). \
+                    Only in \(language): \(used.subtracting(reference).sorted()).
                     """)
             }
         }

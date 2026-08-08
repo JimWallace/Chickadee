@@ -564,9 +564,9 @@ extension WorkerDaemon {
                     preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
                         // nil means the extractor trusted the notebook's own
-                        // metadata, which for an unrecognised kernel resolves to
-                        // the default — so the hint has to agree.
-                        language: forcedLanguage ?? .default)
+                        // metadata, which for an unrecognised kernel falls back
+                        // to Python — so the hint has to agree.
+                        language: forcedLanguage ?? .python)
                 )
             }
         }

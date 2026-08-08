@@ -159,8 +159,14 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     // hand-written arms and shipped without a Lua one, leaving a `lua`-named
     // notebook on "unknown → leave unchanged" with no kernel the editor could
     // attach (docs/lua-architecture-audit.md F6).
+    // Python is excluded by name rather than as "the default": it now has its
+    // own `notebookKernelNames`, and matching it here would route a Python
+    // notebook through the destructuring branch instead of the Python branch
+    // below. The two produce the same kernelspec, but only the branch below
+    // also handles a MISSING kernelspec, which is the common case for a
+    // freshly-authored notebook.
     let matched = AssignmentLanguage.allCases.first {
-        $0 != .default && existingName.map($0.notebookKernelNames.contains) == true
+        $0 != .python && existingName.map($0.notebookKernelNames.contains) == true
     }
 
     // A matched language always destructures: `matched` comes from
@@ -185,11 +191,11 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         // A kernel no language claims → leave unchanged.
         return data
     } else {
-        // Python kernel (or missing kernelspec) → the default's vendored
-        // kernel. The default language always has one (guarded so the
-        // compiler agrees; leaving the notebook unchanged is the safe
-        // degradation if that ever stopped being true).
-        let python = AssignmentLanguage.default
+        // Python kernel (or missing kernelspec) → Python's vendored kernel.
+        // Python always has one (guarded so the compiler agrees; leaving the
+        // notebook unchanged is the safe degradation if that ever stopped
+        // being true).
+        let python = AssignmentLanguage.python
         guard
             case .notebookKernel(_, let kernelName, let kernelDisplayName, _) =
                 python.editorSupport
