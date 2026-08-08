@@ -307,9 +307,18 @@ func makeTestApp(
         // `appConfig` to exercise specific config branches.
         app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
 
-        let tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
-            .path
+        // The trailing slash is applied AFTER `.path`, not before. `URL.path`
+        // strips a trailing slash, so building it into the path component left
+        // `tmpDir` as `/tmp/<prefix>-<uuid>` and made every concatenation below
+        // a SIBLING of that directory rather than a child
+        // (`/tmp/<prefix>-<uuid>content-files/`). Nothing then created
+        // `tmpDir` itself, so `tearDownTestApp`'s `removeItem` was deleting a
+        // path that never existed — silently, under its `try?` — and every run
+        // leaked ~1.4 GB across ~6,900 entries. See issue #1298.
+        let tmpDir =
+            FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+            .path + "/"
         let dirs = ["results/", "testsetups/", "submissions/", "data-exports/", "content-files/"].map {
             tmpDir + $0
         }
