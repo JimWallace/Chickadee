@@ -400,10 +400,28 @@ extension WorkerDaemon {
             // owns the exact bytes (the Python form is byte-for-byte the historical
             // writer, so existing Python jobs are unchanged). The filename is
             // reserved (excluded from student-module candidates in the runtimes), so
-            // it can't be mistaken for the submission. Language is nil on payloads
-            // from an older server → `.python`, preserving legacy behaviour.
+            // it can't be mistaken for the submission.
+            //
+            // A job carrying inputs but naming no language is REFUSED rather than
+            // rendered as Python. This used to default, on the reasoning that nil
+            // meant an older server — but the two states it conflated are not
+            // equally harmless. The values arrive as source literals already
+            // rendered in the assignment's language (`repr` / `deparse`), so
+            // writing them into `_ck_inputs.py` for an R assignment does not
+            // produce an error at the boundary: it produces a file whose contents
+            // are wrong, and every personalized test then fails somewhere inside
+            // the student's own code, with a traceback that reads as their
+            // mistake and persists as their grade. Guessing is only safe where
+            // being wrong is loud, and here it is silent.
+            //
+            // Nothing legitimate reaches this. Personalization is resolved
+            // per-language on the server, so an assignment with inputs has a
+            // language by construction; a plain `.sh` suite has no language and
+            // no inputs, and never enters this branch.
             if let inputs = job.personalizedInputs, !inputs.isEmpty {
-                let language = job.language ?? .python
+                guard let language = job.language else {
+                    throw WorkerDaemonError.personalizedInputsWithoutLanguage(inputCount: inputs.count)
+                }
                 let source = language.renderInputsFile(inputs)
                 // A failed write here would make every personalized test error with
                 // a confusing missing-file traceback that looks like a student

@@ -292,7 +292,8 @@ actor WorkerDaemon {
                         return classifyHTTPRetry(statusCode: statusCode, body: body)
                     case .downloadFailed(let failedURL):
                         return .terminal("Failed to download \(failedURL.absoluteString)")
-                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename:
+                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,
+                        .personalizedInputsWithoutLanguage:
                         return .terminal(String(describing: workerError))
                     }
                 }
