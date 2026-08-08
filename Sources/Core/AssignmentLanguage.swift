@@ -24,6 +24,32 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// build strategy enters Swift.
     case cpp
 
+    /// Racket — the second upload-only language, and the first that is
+    /// upload-only WITHOUT being compiled.
+    ///
+    /// No xeus kernel exists on `emscripten-forge-4x` (measured against the
+    /// channel's repodata, which carries cpp/haskell/javascript/lfortran/lua/
+    /// ocaml/octave/python/r/sqlite and no Scheme family at all), so
+    /// `EditorSupport.uploadOnly` — but for a different reason than C++. C++
+    /// has no kernel because grading a different compiler than the course
+    /// teaches is a pedagogy defect; Racket has none because nobody has built
+    /// one. That distinction matters if a kernel ever appears: Racket's
+    /// upload-only answer is contingent, C++'s is a decision.
+    ///
+    /// It is otherwise the CHEAPEST language here: interpreted, so
+    /// `racket file.rkt` needs no build step and no `.sh` wrapper; and
+    /// dynamically typed, so `JSONValue` renders without C++'s refusal table.
+    ///
+    /// The one thing measurement changed: a generated test cannot `require`
+    /// the student's module, because an HtDP teaching-language module
+    /// (`#lang htdp/bsl`, what CS 135/115 write) exports nothing. Tests load
+    /// the submission with `dynamic-require` + `module->namespace` and
+    /// evaluate a CALL FORM rather than a bare identifier — Beginner Student
+    /// Language rejects a function reference that is not in operator position.
+    /// One mechanism serves `#lang htdp/bsl` and `#lang racket` alike, so a
+    /// generated test is byte-identical across the CS 135 and CS 136 dialects.
+    case racket
+
     /// Kernelspec `name` values that mark a Python notebook. `xpython` is the
     /// vendored xeus-python kernel; `python3` is what classic Jupyter writes and
     /// `python` is what `language_info.name` reports.
@@ -304,6 +330,7 @@ extension AssignmentLanguage {
         case .lua: return value.luaLiteral
         case .octave: return value.octaveLiteral
         case .cpp: return value.cppLiteral
+        case .racket: return value.racketLiteral
         }
     }
 
@@ -340,6 +367,11 @@ extension AssignmentLanguage {
         case .lua: commentLeader = "--"
         case .octave: commentLeader = "%"
         case .cpp: commentLeader = "//"
+        // Racket's line comment. `#` is NOT one — `#` begins a reader macro
+        // (`#t`, `#lang`, `#(`), so a `#`-led header is a read error, not an
+        // ignored line. Same class of trap as Lua's shebang accommodation
+        // noted above, failing louder.
+        case .racket: commentLeader = ";"
         case .python, .r: commentLeader = "#"
         }
         let header =
@@ -413,6 +445,26 @@ extension AssignmentLanguage {
                 + "namespace ck_inputs {\n"
                 + definitions.map { "    \($0)\n" }.joined()
                 + "}\n"
+        case .racket:
+            // A MODULE that provides one hash, which is the shape Racket makes
+            // natural and the one the runtime can read with `dynamic-require`.
+            //
+            // `#lang racket/base`, not `racket`: this file is loaded on every
+            // generated test, and `racket/base` is the small language — the
+            // full `racket` language pulls in a much larger set for values that
+            // are, by construction, literals.
+            //
+            // Unlike the student's submission, this file is OURS, so it can
+            // `provide` — the export problem that shapes everything else about
+            // Racket support does not apply here.
+            let entries = keys.map {
+                "   \(JSONValue.string($0).racketLiteral) \(values[$0] ?? "'null")"
+            }
+            let body =
+                keys.isEmpty
+                ? "(define ck-inputs (hash))"
+                : "(define ck-inputs\n  (hash\n" + entries.joined(separator: "\n") + "))"
+            return "#lang racket/base\n\(header)\n(provide ck-inputs)\n\(body)\n"
         }
     }
 

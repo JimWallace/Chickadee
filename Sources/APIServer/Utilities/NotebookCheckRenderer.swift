@@ -76,6 +76,15 @@ func renderNotebookCheck(
             echo "Notebook checks are not available for C++ assignments." 1>&2
             exit 2
             """
+    case .racket:
+        // Unreachable for the same reason as C++, and kept total the same
+        // way — but as a `.rkt` module, since Racket's generated extension is
+        // its own and the runner hands this file to `racket`.
+        source = """
+            #lang racket/base
+            (eprintf "Notebook checks are not available for Racket assignments.\\n")
+            (exit 2)
+            """
     }
     let displayName = check.name ?? handler.defaultLabel(check)
     let sidecars = handler.sidecars(check)

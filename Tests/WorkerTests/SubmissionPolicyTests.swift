@@ -72,6 +72,7 @@ import Testing
             exempted.sorted() == [
                 "cpp/introspectableSidecar", "lua/introspectableSidecar",
                 "octave/introspectableSidecar", "r/introspectableSidecar",
+                "racket/introspectableSidecar",
             ],
             "the exemption list changed: \(exempted.sorted())")
     }

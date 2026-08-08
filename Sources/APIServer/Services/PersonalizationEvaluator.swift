@@ -283,6 +283,14 @@ enum PersonalizationEvaluator {
             )
             filename = "personalize_driver.R"
             interpreter = "Rscript"
+        case .racket:
+            source = RacketPersonalizationDriver.render(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.rkt"
+            interpreter = "racket"
         case .lua:
             source = renderLuaDriverScript(
                 staticVariables: staticVariables,
@@ -340,6 +348,11 @@ enum PersonalizationEvaluator {
             }.sorted()
         case .r:
             return entries.filter { (($0 as NSString).pathExtension).lowercased() == "r" }.sorted()
+        case .racket:
+            // Loaded by FILE like R and Lua — the driver `dynamic-require`s each
+            // helper and copies its bindings into the expression namespace, so
+            // there is no module identifier to validate.
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "rkt" }.sorted()
         case .lua:
             // Like R, the driver loads these by FILE (`dofile`), not by module
             // name, so there is no identifier to validate — any `.lua` beside

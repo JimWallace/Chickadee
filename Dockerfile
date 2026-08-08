@@ -107,7 +107,14 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         gnuplot-nox \
         fonts-freefont-otf \
         g++ \
+        racket \
     && rm -rf /var/lib/apt/lists/*
+# racket — the interpreter generated .rkt tests are handed to, and the one the
+# Racket personalization driver runs under. The Debian package carries the HtDP
+# teaching-language collections (`#lang htdp/bsl`), which is what CS 135/115
+# submissions are written in — a minimal Racket would grade full Racket and
+# reject every teaching-language file, so the full package is the requirement.
+#
 # g++ — the C++ toolchain the generated .sh wrappers and the C++
 # personalization driver invoke. On the SERVER image because
 # `PersonalizationEvaluator` compiles a driver per `=`-expression evaluation

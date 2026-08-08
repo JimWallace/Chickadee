@@ -134,62 +134,43 @@ func existenceGuard(
     let label = "\(family.functionName) is defined"
     // Exhaustive so a future language cannot silently receive Python bytes
     // (docs/language-handling-review.md §4).
+    //
+    // Only the SOURCE differs per language — every arm built an identical
+    // `GeneratedScript` around it, so the shared construction is hoisted below.
+    // That kept this function inside the body-length limit at the sixth
+    // language, and makes a seventh one line rather than thirteen.
+    let source: String
     switch language {
-    case .lua:
-        return GeneratedScript(
-            filename: generatedScriptFilename(
-                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
-                language: .lua),
-            source: renderLuaExistenceGuard(family: family, specHash: hash),
-            tier: tier,
-            points: 0,
-            displayName: label,
-            caseKey: patternExistenceGuardCaseKey,
-            familyID: family.id,
-            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
-        )
-    case .r:
-        return GeneratedScript(
-            filename: generatedScriptFilename(
-                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
-                language: .r),
-            source: renderRExistenceGuard(family: family, specHash: hash),
-            tier: tier,
-            points: 0,
-            displayName: label,
-            caseKey: patternExistenceGuardCaseKey,
-            familyID: family.id,
-            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
-        )
-    case .octave:
-        return GeneratedScript(
-            filename: generatedScriptFilename(
-                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
-                language: .octave),
-            source: renderOctaveExistenceGuard(family: family, specHash: hash),
-            tier: tier,
-            points: 0,
-            displayName: label,
-            caseKey: patternExistenceGuardCaseKey,
-            familyID: family.id,
-            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
-        )
-    case .cpp:
-        return GeneratedScript(
-            filename: generatedScriptFilename(
-                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
-                language: .cpp),
-            source: renderCppExistenceGuard(family: family, specHash: hash),
-            tier: tier,
-            points: 0,
-            displayName: label,
-            caseKey: patternExistenceGuardCaseKey,
-            familyID: family.id,
-            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
-        )
-    case .python:
-        break
+    case .racket: source = renderRacketExistenceGuard(family: family, specHash: hash)
+    case .lua: source = renderLuaExistenceGuard(family: family, specHash: hash)
+    case .r: source = renderRExistenceGuard(family: family, specHash: hash)
+    case .octave: source = renderOctaveExistenceGuard(family: family, specHash: hash)
+    case .cpp: source = renderCppExistenceGuard(family: family, specHash: hash)
+    case .python: source = pythonExistenceGuardSource(family: family, specHash: hash, label: label)
     }
+    return GeneratedScript(
+        filename: generatedScriptFilename(
+            familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
+            language: language),
+        source: source,
+        tier: tier,
+        points: 0,
+        displayName: label,
+        caseKey: patternExistenceGuardCaseKey,
+        familyID: family.id,
+        // The guard applies to all the family's generated entries, so it
+        // inherits the family-level limit (the cases inherit it too unless
+        // they set their own).
+        timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
+    )
+}
+
+/// The Python existence guard's bytes. Extracted from `existenceGuard` when the
+/// sixth language arrived — unchanged text, so every pinned `spec_hash` and
+/// golden still matches.
+private func pythonExistenceGuardSource(
+    family: PatternFamily, specHash hash: String, label: String
+) -> String {
     let nameLiteral = "\"" + escapeForPythonStringLiteral(family.functionName) + "\""
     // Mirrors the `getattr(..., _MISSING)` sentinel that `variableEquality`
     // (and the function_exists notebook check) already use — `_MISSING`
@@ -212,20 +193,7 @@ func existenceGuard(
             failed(f"`{function_name}` is defined but is not a function (got {type(target).__name__}).")
         passed(f"`{function_name}` is defined")
         """
-    return GeneratedScript(
-        filename: generatedScriptFilename(
-            familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier),
-        source: source,
-        tier: tier,
-        points: 0,
-        displayName: label,
-        caseKey: patternExistenceGuardCaseKey,
-        familyID: family.id,
-        // The guard applies to all the family's generated entries, so it
-        // inherits the family-level limit (the cases inherit it too unless
-        // they set their own).
-        timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
-    )
+    return source
 }
 
 /// Stable filename for one case.  Format:
@@ -289,6 +257,11 @@ private func renderCase(
             perStudentNames: perStudentNames)
     case .lua:
         source = renderLuaPatternCase(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    case .racket:
+        source = renderRacketPatternCase(
             family: family, case: c,
             sectionVariables: sectionVariables, specHash: specHash,
             perStudentNames: perStudentNames)

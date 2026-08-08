@@ -100,6 +100,10 @@ struct KernelEnvironment: Sendable {
         // so `load(publicDirectory:)`'s try? skips it, which is the correct
         // outcome: no inventory, no import guard, nothing to check.
         case .cpp: return "chickadee-cpp"
+        // Same outcome as C++, different reason: no Scheme-family kernel
+        // exists on the channel to vendor. Resolves to a path that is not
+        // there, so no inventory loads and nothing is checked.
+        case .racket: return "chickadee-racket"
         }
     }
 

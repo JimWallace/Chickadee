@@ -153,6 +153,20 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
                 + "C++ assignments: C++ assignments are upload-only, so there is no submitted "
                 + "notebook to check. Use a pattern family or a hand-written .sh test instead."
         )
+    case .racket:
+        // Categorical for the same structural reason as C++ — upload-only, so
+        // no submitted notebook exists for any kind to inspect. The refusal is
+        // NOT a statement about Racket's expressiveness: several kinds would
+        // render fine against a notebook if one existed. If a Scheme-family
+        // kernel ever lands on the channel, this arm is what to revisit.
+        throw Abort(
+            .unprocessableEntity,
+            reason:
+                "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not available for "
+                + "Racket assignments: Racket assignments are upload-only, so there is no "
+                + "submitted notebook to check. Use a pattern family or a hand-written .rkt "
+                + "test instead."
+        )
     }
 }
 
