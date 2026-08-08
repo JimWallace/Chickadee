@@ -1226,6 +1226,17 @@ shim); and archived finished-era docs under `docs/archive/`.
 - Do not write a runner JSON protocol — the runner interprets exit codes directly.
 - Do not add per-language build strategies in Swift — test suites are plain shell scripts.
 - Do not use `@unchecked Sendable` without a comment.
+- **Do not introduce new environment variables.** This is a standing rule, not a
+  per-case judgement, and it applies to the server (`AppConfig`) and the runner
+  (`RunnerDaemonConfig`) alike. Every new env var is another thing that must be
+  set correctly in `.env.example`, `docker-compose.yml`, the systemd units, the
+  deploy runbook and the operator's head — and one that is silently absent
+  everywhere it was not added, which is the failure mode env vars are worst at
+  surfacing. Configure new runner behaviour with a **CLI flag** on
+  `chickadee-runner` (as `--sandbox` and `--max-jobs` do), derive it from
+  something already known, or make the code detect the condition at runtime.
+  If a new variable ever looks genuinely unavoidable, ask first — do not add it
+  and mention it afterwards.
 
 ---
 

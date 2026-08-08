@@ -41,6 +41,13 @@ struct WorkerCommand: AsyncParsableCommand {
     )
     var testSetupCacheDir: String?
 
+    @Option(
+        name: .long,
+        help:
+            "Root for job workspaces and scratch copies (default: the system temp directory). Set this when the temp directory is mounted noexec, which stops C++ grading from running the binary it compiles."
+    )
+    var workDir: String?
+
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             writeToStandardError("Error: invalid --api-base-url '\(apiBaseURL)'\n")
@@ -49,9 +56,16 @@ struct WorkerCommand: AsyncParsableCommand {
 
         let env = ProcessInfo.processInfo.environment
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
+        // One resolved root for job workspaces, scratch copies AND the
+        // executable-output probe. Sharing it is the point: a probe that
+        // verified `exec` somewhere other than where jobs actually run would
+        // prove nothing about the directory they use.
+        let workRoot =
+            workDir.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.temporaryDirectory
         let runnerProfile = await RunnerProfileDetector(
             discoveryEnabled: config.capabilityDiscoveryEnabled,
-            workRoot: config.workRoot
+            workRoot: workRoot
         ).detect()
         guard
             let effectiveWorkerSecret = resolveWorkerSharedSecret(
@@ -85,7 +99,7 @@ struct WorkerCommand: AsyncParsableCommand {
             ?? TestSetupCache.defaultCacheRoot.path
         let testSetupCache = TestSetupCache(
             cacheRoot: URL(fileURLWithPath: cacheDirPath),
-            scratchRoot: config.workRoot)
+            scratchRoot: workRoot)
 
         let daemon = WorkerDaemon(
             poller: poller,
@@ -98,7 +112,8 @@ struct WorkerCommand: AsyncParsableCommand {
             runnerProfile: runnerProfile,
             downloadRetryPolicy: .download(config: config),
             testSetupCache: testSetupCache,
-            config: config
+            config: config,
+            workRoot: workRoot
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"

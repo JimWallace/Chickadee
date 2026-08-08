@@ -67,7 +67,7 @@ extension WorkerDaemon {
         // The configured work root, not the system temp dir: a test script's
         // working directory must permit `exec` for a compiled language, and
         // `/tmp` is `noexec` on a hardened container.
-        let tempRoot = config.workRoot
+        let tempRoot = workRoot
         var disk = JobDiskReadings(freeMBAtStart: freeSpaceMB(at: tempRoot))
         try ensureSufficientDiskSpace(tempRoot: tempRoot, freeDiskMBAtStart: disk.freeMBAtStart, job: job)
 

@@ -153,7 +153,7 @@ ordinary directory.
 
 Two changes follow from it, and they are deliberately a pair:
 
-- **`RUNNER_WORK_DIR`** roots job workspaces and per-job scratch copies.
+- **`--work-dir`** (a `chickadee-runner` flag) roots job workspaces and per-job scratch copies.
   Point it at a writable, exec-capable path (a Docker/containerd volume is
   exec-capable by default). It defaults to the system temp directory, which
   preserves the previous behaviour everywhere it was already fine.
@@ -172,4 +172,4 @@ message that reads as a broken test script — the exact symptom the gate
 exists to prevent, arriving through the one door it did not cover. With it,
 an unconfigured runner simply does not claim C++ work, which is the gate's
 documented fail-closed behaviour; `list_runners` showing no `cpp` capability
-on a host that has g++ is then the signal to set `RUNNER_WORK_DIR`.
+on a host that has g++ is then the signal to set `--work-dir`.

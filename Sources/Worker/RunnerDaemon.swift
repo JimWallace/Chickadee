@@ -46,6 +46,10 @@ actor WorkerDaemon {
     let downloadRetryPolicy: RunnerRetryPolicy
     let testSetupCache: TestSetupCache
     let config: RunnerDaemonConfig
+    /// Root for job workspaces. Defaults to the system temp directory; set from
+    /// `--work-dir` when that directory is mounted noexec, which stops a
+    /// compiled language from running the binary it just built.
+    let workRoot: URL
     var serverConnectionLost = false
     var activeJobs = 0
 
@@ -60,7 +64,8 @@ actor WorkerDaemon {
         runnerProfile: RunnerCapabilityProfile? = nil,
         downloadRetryPolicy: RunnerRetryPolicy = .download(),
         testSetupCache: TestSetupCache = TestSetupCache(),
-        config: RunnerDaemonConfig = .loadFromEnvironment()
+        config: RunnerDaemonConfig = .loadFromEnvironment(),
+        workRoot: URL = FileManager.default.temporaryDirectory
     ) {
         self.poller = poller
         self.reporter = reporter
@@ -73,6 +78,7 @@ actor WorkerDaemon {
         self.downloadRetryPolicy = downloadRetryPolicy
         self.testSetupCache = testSetupCache
         self.config = config
+        self.workRoot = workRoot
     }
 
     func run() async throws {
