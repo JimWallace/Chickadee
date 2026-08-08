@@ -194,18 +194,26 @@ jobs:
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
-        # zip/unzip/python3 are baked into the swift-ci image, so this
-        # normally just verifies and exits.  The apt-get path remains as the
-        # fallback for a stale image (e.g. a toolchain bump before the
-        # swift-ci rebuild — see mirror-images.yml), degrading to the old
-        # per-job install instead of failing the job.
+        # These are baked into the swift-ci image, so this normally just
+        # verifies and exits.  The apt-get path remains as the fallback for a
+        # stale image (e.g. a toolchain bump before the swift-ci rebuild — see
+        # mirror-images.yml), degrading to the old per-job install instead of
+        # failing the job.
+        #
+        # EVERY graded language's interpreter belongs in BOTH the probe and the
+        # install list.  Omitting one is not caught by a red job: the
+        # execution-path suites guard on availability and skip SILENTLY, so the
+        # job stays green having executed nothing in that language.  Rscript was
+        # missing from both here — the identical silent-skip trap that r-base
+        # and lua5.4 each hit on the image itself, recorded in
+        # .github/docker/ci-image/Dockerfile.
         run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 octave g++ && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 r-base lua5.4 octave g++ && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
@@ -279,18 +287,26 @@ jobs:
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
-        # zip/unzip/python3 are baked into the swift-ci image, so this
-        # normally just verifies and exits.  The apt-get path remains as the
-        # fallback for a stale image (e.g. a toolchain bump before the
-        # swift-ci rebuild — see mirror-images.yml), degrading to the old
-        # per-job install instead of failing the job.
+        # These are baked into the swift-ci image, so this normally just
+        # verifies and exits.  The apt-get path remains as the fallback for a
+        # stale image (e.g. a toolchain bump before the swift-ci rebuild — see
+        # mirror-images.yml), degrading to the old per-job install instead of
+        # failing the job.
+        #
+        # EVERY graded language's interpreter belongs in BOTH the probe and the
+        # install list.  Omitting one is not caught by a red job: the
+        # execution-path suites guard on availability and skip SILENTLY, so the
+        # job stays green having executed nothing in that language.  Rscript was
+        # missing from both here — the identical silent-skip trap that r-base
+        # and lua5.4 each hit on the image itself, recorded in
+        # .github/docker/ci-image/Dockerfile.
         run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 lua5.4 octave g++ && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 r-base lua5.4 octave g++ && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
@@ -367,14 +383,15 @@ jobs:
         # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
         # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
         # skip) when the interpreter is absent.  Both are baked into the
-        # swift-ci image; the apt-get path is the stale-image fallback (see
-        # the api-tests job note).
+        # swift-ci image; the apt-get path is the stale-image fallback.  The
+        # graded-language interpreters follow the same all-of-them-or-silent-
+        # skip rule as the api-tests job — see that job's note.
         run: |
-          if command -v file >/dev/null && command -v python3 >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
+          if command -v file >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
-          apt-get update -qq && apt-get install -y --no-install-recommends file python3 lua5.4 octave g++
+          apt-get update -qq && apt-get install -y --no-install-recommends file python3 r-base lua5.4 octave g++
 
       - name: Run WorkerTests
         # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
