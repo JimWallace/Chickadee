@@ -727,6 +727,14 @@ state this document exists to warn you about:
       it SUGGESTS a requirement — capability matching fails in both directions
       and the second is worse: requiring a language no runner advertises queues
       the assignment's jobs forever
+- [ ] every assignment authored in the new language carries
+      `minimumRunnerVersion` set to the release that ships this work. The fleet
+      is mixed and claim order picks the runner, so an ungated assignment
+      validates green on a new runner and then fails for the student whose job
+      an old one claims — with a message that reads as a broken test script.
+      This is the version gate, NOT a capability requirement; the two fail in
+      opposite directions. See "Authoring rule" in
+      [runner-capability-profiles.md](runner-capability-profiles.md)
 - [ ] the MCP guide is true for this language — see item 8 above
 - [ ] **the instructor walkthrough below passes, by hand, on a real server**
 

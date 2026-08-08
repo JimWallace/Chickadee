@@ -154,6 +154,60 @@ metadata-only edit — no regrade or close), or include it in the uploaded manif
 / a `.chickadee` course bundle. A malformed value is rejected at upload time.
 `get_suite` and `get_assignment` report the current value.
 
+### Authoring rule: gate on the release that shipped the feature
+
+**Every assignment that depends on runner-side behaviour added in release *X*
+must carry `minimumRunnerVersion: X`, set when the assignment is authored.**
+This is written down rather than left to judgement because it is a mistake this
+project keeps repeating.
+
+Why it is not optional, and why testing does not catch it:
+
+- **The fleet is mixed by construction.** The server auto-deploys on merge
+  ([docs/zero-downtime-deploy.md](zero-downtime-deploy.md)); runners are separate
+  hosts upgraded on their own schedule. Several `chickadee-runner` versions are
+  polling at any moment.
+- **The failure is nondeterministic, so validation does not surface it.** Claim
+  order decides which runner grades a job. An ungated assignment validates green
+  whenever a capable runner happens to poll first, and the identical assignment
+  fails for the next student whose job an older runner claims.
+- **The failure does not look like a version problem.** An old runner has no
+  interpreter for the new language, so the symptom is exit 127 / "not found" / a
+  suite of `error` outcomes. It reads as a broken test script and gets debugged
+  as one, on the assignment rather than on the fleet.
+- **Browser-graded assignments are not exempt.** Instructor validation is
+  enqueued as a `kind == .validation` submission and graded by the native worker
+  regardless of `gradingMode`, and a browser submission that fails over to the
+  worker backstop lands there too.
+
+Support landed in:
+
+| Feature | Gate at |
+|---|---|
+| Lua assignments | `0.5.23` |
+| Octave assignments | `0.5.24` |
+| C++ assignments | `0.5.27` |
+
+### Why capability requirements are not a substitute
+
+The two mechanisms fail in opposite directions, and only the version gate is
+reliable for "this runner build is too old":
+
+- `requiredLanguages` matches what a runner **advertises**.
+  `RunnerProfileDetector` hand-lists the interpreters it probes, so a runner
+  built before the language existed never advertises it *however the host is
+  provisioned*. Requiring the language therefore matches **no** runner and queues
+  the assignment's jobs forever — the worse of the two failures, and the one the
+  Lua audit sweep had to fix.
+- `minimumRunnerVersion` compares against `runnerVersion`, which every runner has
+  always advertised. An old runner is excluded correctly without having to know
+  anything about the feature.
+
+Use capability requirements for "this host lacks a package or toolchain" and the
+version gate for "this build predates the feature". A new language wants the
+version gate; adding a language requirement as well is safe only once every
+runner in the fleet advertises it.
+
 ## Rollout And Backwards Compatibility
 
 The rollout rules are:
