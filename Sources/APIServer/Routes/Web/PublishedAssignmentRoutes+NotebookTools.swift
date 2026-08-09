@@ -56,11 +56,9 @@ extension PublishedAssignmentRoutes {
         // to the family's section — works on brand-new sections that
         // don't yet have any tests, which the filename-token filter
         // (v0.4.108–110) couldn't.
-        // WHICH LANGUAGE. The client sends `?language=` (the editor now knows
-        // it, from `#assignment-language-seed`); a request without it falls
-        // back to the notebook's own kernelspec, which is a far better default
-        // than assuming Python — assuming Python is what made this endpoint
-        // answer "no functions found" for every R solution ever scanned.
+        // WHICH LANGUAGE, in precedence order: the client's `?language=` (the
+        // editor knows it now, from `#assignment-language-seed`), then the
+        // notebook's own kernelspec, then Python.
         let requestedLanguage = req.query[String.self, at: "language"]
             .flatMap(AssignmentLanguage.init(rawValue:))
         let notebookLanguage: AssignmentLanguage? = {
@@ -71,8 +69,16 @@ extension PublishedAssignmentRoutes {
             else { return nil }
             return AssignmentLanguage.fromNotebookMetadata(metadata)
         }()
+        // FALL BACK TO PYTHON when neither says anything, which is this
+        // endpoint's historical contract. Refusing on "unknown" would be a
+        // regression with no upside: the languages this fix is for all declare
+        // a kernelspec (`xr`, `ir`, `xlua`, `xoctave`) and are detected, and
+        // classic Jupyter writes `python3`, so a notebook that declares nothing
+        // recognisable is a hand-crafted one that used to scan fine. The
+        // distinction being restored is between the languages we can read and
+        // the ones we cannot — not between declared and undeclared.
         let scan = scanNotebookForSectionsAndFunctions(
-            notebookData, language: requestedLanguage ?? notebookLanguage)
+            notebookData, language: requestedLanguage ?? notebookLanguage ?? .python)
 
         // Forward ALL fields the scanner produces — not just a hand-picked
         // subset.  Pre-v0.4.94 this DTO dropped `paramTypes`, `returnType`,
