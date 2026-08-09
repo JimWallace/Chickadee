@@ -195,7 +195,7 @@ Create Assignment
         <label class="req-field">
             Languages
             <input class="form-input input-sm" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="python, r">
+                   placeholder="e.g. python, r, lua, octave, cpp, racket">
         </label>
         <label class="req-field">
             Capabilities
@@ -307,6 +307,7 @@ Create Assignment
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 <script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
+<script src="/authoring-language.js?v=#appVersion()"></script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
      Now a body renderer of the unified Test Editor modal
@@ -614,7 +615,7 @@ Create Assignment
             if (scanStatus) scanStatus.textContent = 'Saving ' + checked.length + ' test(s)…';
             // POST each generated script in series to the draft scripts
             // endpoint, then hand it to suite-table.js for in-place add.
-            var ops = checked.map(function (chk) {
+            var ops = (window.chickadeeLanguageIsPython() ? checked : []).map(function (chk) {
                 var fnName   = chk.value;
                 var content  = genPyTemplate(tplType, fnName);
                 var filename = 'test_' + fnName + '.py';

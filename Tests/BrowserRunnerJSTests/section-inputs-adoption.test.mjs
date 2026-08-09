@@ -17,6 +17,10 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+// Loaded ahead of the core on the page, and the core reads the assignment's
+// scalar spellings through it. With no seed in scope it falls back to Python's,
+// which is what these fixtures assume.
+require('../../Public/authoring-language.js');
 const Core = require('../../Public/inputs-editor-core.js');
 
 // Both authoring surfaces must reach section inputs through the same modules.

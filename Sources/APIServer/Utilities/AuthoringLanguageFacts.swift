@@ -65,6 +65,16 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// empty solution. Reporting the capability lets the UI say which it is.
     let functionScanning: Bool
 
+    /// Notebook-check kinds this language cannot render, keyed by kind, with
+    /// the reason.
+    ///
+    /// The "Add Test" menu is a hardcoded list in `test-editor-modal.js` and
+    /// offered every kind on every assignment — six a Lua author could not save
+    /// and all ten a C++ or Racket author could not. The refusal existed only at
+    /// save time, which is the discoverability problem issue #1290 names. Empty
+    /// for Python, which supports all of them.
+    let unsupportedCheckKinds: [String: String]
+
     /// Whether the editor can compute a case's expected value by running the
     /// solution in the browser.
     ///
@@ -85,6 +95,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
             self.nullLiteral = nil
             self.functionScanning = false
             self.expressionEvaluation = false
+            self.unsupportedCheckKinds = [:]
             return
         }
         self.name = language.rawValue
@@ -115,6 +126,15 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         // seventh language must satisfy), and `PersonalizationEvaluator` owns
         // the second — it already spawns a per-language driver for all six, so
         // evaluation is available wherever a driver is.
+        // Derived from the same predicate the save-time refusal uses, so the
+        // menu and the rejection cannot disagree about what is available.
+        var unsupported: [String: String] = [:]
+        for kind in NotebookCheckKind.allCases {
+            if let reason = notebookCheckKindUnsupportedReason(kind, language: language) {
+                unsupported[kind.rawValue] = reason
+            }
+        }
+        self.unsupportedCheckKinds = unsupported
         self.functionScanning = notebookFunctionScanSupport(for: language).isSupported
         self.expressionEvaluation = PersonalizationEvaluator.supportsEvaluation(language)
     }

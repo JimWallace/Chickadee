@@ -150,6 +150,51 @@ import Testing
         #expect(support.unsupportedReason?.isEmpty == false)
     }
 
+    /// Unsupported notebook-check kinds are reported, and they agree exactly
+    /// with what the save-time validator refuses.
+    ///
+    /// The "Add Test" menu is a hardcoded catalog in `test-editor-modal.js`. It
+    /// offered every kind on every assignment — six a Lua author could not save,
+    /// and all ten on C++ or Racket — so the only way to discover a refusal was
+    /// to be refused (issue #1290). Deriving the menu's answer from the same
+    /// predicate is what keeps the two from disagreeing.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func unsupportedCheckKindsMatchTheValidator(_ language: AssignmentLanguage) {
+        let facts = AuthoringLanguageFacts(language)
+        for kind in NotebookCheckKind.allCases {
+            let supported = notebookCheckKindIsSupported(kind, language: language)
+            let reported = facts.unsupportedCheckKinds[kind.rawValue]
+            #expect(
+                supported == (reported == nil),
+                """
+                \(language)/\(kind): the menu says \(reported == nil ? "available" : "unavailable") \
+                and the validator says \(supported ? "supported" : "unsupported").
+                """)
+            if let reported { #expect(!reported.isEmpty, "\(language)/\(kind) has an empty reason") }
+        }
+    }
+
+    /// Python offers every kind; the two upload-only languages offer none.
+    @Test func kindAvailabilityMatchesTheLanguagesShape() {
+        #expect(AuthoringLanguageFacts(.python).unsupportedCheckKinds.isEmpty)
+        for language in [AssignmentLanguage.cpp, .racket] {
+            #expect(
+                AuthoringLanguageFacts(language).unsupportedCheckKinds.count
+                    == NotebookCheckKind.allCases.count,
+                "\(language) is upload-only, so no notebook-check kind applies")
+        }
+        // R, Lua and Octave are partial — some supported, some not. A language
+        // that answered "all" or "none" here would mean the per-kind renderer
+        // table had stopped being consulted.
+        for language in [AssignmentLanguage.r, .lua, .octave] {
+            let unsupported = AuthoringLanguageFacts(language).unsupportedCheckKinds.count
+            #expect(unsupported > 0, "\(language) should refuse some kinds")
+            #expect(
+                unsupported < NotebookCheckKind.allCases.count,
+                "\(language) should support some kinds")
+        }
+    }
+
     /// The seed is valid JSON with the keys the editor reads.
     @Test func theSeedEncodesTheKeysTheEditorReads() throws {
         let json = authoringLanguageFactsJSON(.r)

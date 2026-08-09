@@ -438,6 +438,7 @@
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 <script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
+<script src="/authoring-language.js?v=#appVersion()"></script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
      The notebook-check form is now a body renderer of the unified Test

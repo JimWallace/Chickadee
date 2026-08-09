@@ -34,6 +34,14 @@ const editorSource = await fs.readFile(
   'utf8',
 );
 
+// The editor reads its language facts through the shared module the page loads
+// ahead of it (Public/authoring-language.js). Any context that evaluates the
+// editor must evaluate that first, in the same order the template does.
+const languageModuleSource = await fs.readFile(
+  path.resolve('Public/authoring-language.js'),
+  'utf8',
+);
+
 /// Extract the array literal that follows `pyCode = ` between the
 /// snippet's BEGIN/END marker comments and `eval` it under fake values
 /// for the JS-side substitutions (`fnLit`, `argsLit`).  Returns the
@@ -250,6 +258,7 @@ test("editor IIFE executes without throwing under a stubbed DOM", () => {
   ctx.window = ctx;
   ctx.globalThis = ctx;
   assert.doesNotThrow(() => {
+    vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
     vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
   });
 });
@@ -305,6 +314,7 @@ function bootEditorWithLanguage(facts) {
   };
   ctx.window = ctx;
   ctx.globalThis = ctx;
+  vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
   vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
   return ctx;
 }
@@ -337,17 +347,67 @@ test("the editor reads its language facts from the seed, not from a table", () =
     'the Python-named identifier error is still present');
 });
 
-test("language scalar tokens are rewritten to JSON, Racket's quote included", () => {
-  // Exercised through the module's own rewriter by re-deriving it the way the
-  // editor does: token replacement BEFORE the quote swap, so Racket's `'null`
-  // survives. Asserted on the source shape because the helper is closed over
-  // inside the IIFE — what matters is the ORDER, which is the part that was
-  // wrong in the obvious implementation.
-  const idxTokens = editorSource.indexOf('scalarTokens.forEach');
-  const idxQuotes = editorSource.indexOf("out.replace(/'/g, '\"')");
-  assert.ok(idxTokens > 0 && idxQuotes > 0, 'rewriter not found');
-  assert.ok(idxTokens < idxQuotes,
-    "tokens must be rewritten before the quote swap, or Racket's 'null becomes \"null");
+/// Boot ONLY the shared language module against a seed, so its behaviour can be
+/// driven directly rather than inferred from the editor's source shape.
+function bootLanguageModule(facts) {
+  const seedEl = facts === null ? null : { textContent: JSON.stringify(facts) };
+  const ctx = {
+    console, JSON, String, RegExp, Array, Object,
+    document: { getElementById: (id) => (id === 'assignment-language-seed' ? seedEl : null) },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
+  return ctx.ChickadeeLanguage;
+}
+
+test("each language's own true/false/null spelling parses to the right value", () => {
+  const cases = [
+    ['python', { trueLiteral: 'True', falseLiteral: 'False', nullLiteral: 'None' }],
+    ['r', { trueLiteral: 'TRUE', falseLiteral: 'FALSE', nullLiteral: 'NA' }],
+    ['lua', { trueLiteral: 'true', falseLiteral: 'false', nullLiteral: 'nil' }],
+    ['racket', { trueLiteral: '#t', falseLiteral: '#f', nullLiteral: "'null" }],
+  ];
+  for (const [name, lits] of cases) {
+    const L = bootLanguageModule({ name, displayName: name, ...lits });
+    assert.equal(L.matchScalarToken(lits.trueLiteral).value, true, `${name} true`);
+    assert.equal(L.matchScalarToken(lits.falseLiteral).value, false, `${name} false`);
+    assert.equal(L.matchScalarToken(lits.nullLiteral).value, null, `${name} null`);
+    // The defect this fixes: an R author's TRUE used to fall through to the
+    // bare-string branch and be stored as the string.
+    assert.notEqual(L.matchScalarToken(lits.trueLiteral), null);
+  }
+});
+
+test("Racket's quoted null survives the repr rewrite", () => {
+  // Tokens must be rewritten BEFORE the quote swap. Swapping first turns
+  // `'null` into `"null` and loses it — the one ordering bug in this rewriter.
+  const L = bootLanguageModule({
+    name: 'racket', displayName: 'Racket',
+    trueLiteral: '#t', falseLiteral: '#f', nullLiteral: "'null",
+  });
+  assert.equal(JSON.parse(L.reprToJSON("'null")), null);
+  assert.equal(JSON.parse(L.reprToJSON('#t')), true);
+  // A token inside a collection is rewritten too, and the surrounding JSON
+  // still parses.
+  assert.deepEqual(JSON.parse(L.reprToJSON("[1, #t, 'null]")), [1, true, null]);
+});
+
+test("a C++ assignment is offered no null token", () => {
+  // Its literal(.null) is a poison identifier, not something to type.
+  const L = bootLanguageModule({
+    name: 'cpp', displayName: 'C++',
+    trueLiteral: 'true', falseLiteral: 'false', nullLiteral: null,
+  });
+  assert.equal(L.scalarTokens().length, 2);
+  assert.equal(L.matchScalarToken('nullptr'), null);
+});
+
+test("no seed falls back to Python, which is the previous behaviour", () => {
+  const L = bootLanguageModule(null);
+  assert.equal(L.matchScalarToken('True').value, true);
+  assert.equal(L.matchScalarToken('None').value, null);
+  assert.equal(L.label(), '');
 });
 
 // The shared scan-payload readers. They live in this linted module rather than

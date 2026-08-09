@@ -124,7 +124,7 @@
             if (titleEl) titleEl.textContent = 'Your browser ran low on memory';
             if (textEl) {
                 textEl.textContent =
-                    'The Python kernel stopped because your browser hit a memory limit — ' +
+                    'The notebook kernel stopped because your browser hit a memory limit \u2014 ' +
                     'common on Safari and on phones, tablets, or low-memory computers. ' +
                     'Reload to try again, or open this assignment on a laptop or desktop in ' +
                     'Chrome or Firefox. You can also submit by uploading your .ipynb file below.';
@@ -317,7 +317,7 @@
             if (titleEl) titleEl.textContent = 'The editor is taking a while to load';
             if (textEl) {
                 textEl.textContent =
-                    'In-browser Python may not work on older browsers, or on devices with limited ' +
+                    'The in-browser kernel may not work on older browsers, or on devices with limited ' +
                     'memory such as some iPads. If the editor doesn’t finish loading, a laptop or ' +
                     'desktop — or a more recent browser — may work better. You can still submit ' +
                     'by uploading your notebook (.ipynb) file below.';

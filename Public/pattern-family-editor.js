@@ -65,38 +65,10 @@
         // what will actually be generated. An assignment with no language (a
         // plain `.sh` suite), or a page that predates the seed, falls back to
         // Python's spellings, which is exactly today's behaviour.
-        var languageFacts = (function () {
-            var fallback = {
-                name: null, displayName: null,
-                trueLiteral: 'True', falseLiteral: 'False', nullLiteral: 'None',
-                functionScanning: true, expressionEvaluation: true
-            };
-            var el = document.getElementById('assignment-language-seed');
-            if (!el) return fallback;
-            var parsed;
-            try { parsed = JSON.parse(el.textContent || '{}'); } catch (_) { return fallback; }
-            if (!parsed || !parsed.name) return fallback;
-            return {
-                name: parsed.name,
-                displayName: parsed.displayName || null,
-                trueLiteral: parsed.trueLiteral || fallback.trueLiteral,
-                falseLiteral: parsed.falseLiteral || fallback.falseLiteral,
-                nullLiteral: parsed.nullLiteral || fallback.nullLiteral,
-                functionScanning: parsed.functionScanning !== false,
-                expressionEvaluation: parsed.expressionEvaluation !== false
-            };
-        })();
+        var languageFacts = ChickadeeLanguage.facts();
 
-        /// "R" / "Lua" / … , or "" when the assignment declares no language.
-        /// Used to build messages that name the language instead of naming
-        /// Python at an author who is not writing Python.
-        function languageLabel() {
-            return languageFacts.displayName || '';
-        }
-
-        // Why the last scan found nothing, when the reason is the language
-        // rather than the solution. Null means the scan genuinely ran.
-        var scanUnsupportedReason = null;
+        /// "R" / "Lua" / …, or "" when the assignment declares no language.
+        function languageLabel() { return ChickadeeLanguage.label(); }
 
         // ── State ──────────────────────────────────────────────────────────
         var familiesState = Array.isArray(config.initialFamilies)
@@ -612,56 +584,14 @@
             return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
         }
 
-        /// The scalar spellings this assignment's language uses, longest first
-        /// so a token that is a prefix of another cannot shadow it.
-        ///
-        /// Storage is language-neutral JSON — only ENTRY and DISPLAY are per
-        /// language — so this is the whole of what changes. Before it, an R
-        /// author who typed `TRUE` got the *string* `"TRUE"`: it is not JSON,
-        /// the repr fallback only rewrote Python's case-sensitive `True`, and
-        /// the bare-string branch caught it. Silently a string where a boolean
-        /// was meant, in a value that decides marks.
-        var scalarTokens = [
-            { token: languageFacts.trueLiteral,  value: true,  kind: 'bool' },
-            { token: languageFacts.falseLiteral, value: false, kind: 'bool' },
-            { token: languageFacts.nullLiteral,  value: null,  kind: 'null' }
-        ].filter(function (t) { return typeof t.token === 'string' && t.token !== ''; });
-
-        /// Match `trimmed` against a language scalar spelling, or null.
+        /// Shared with the Global/Section Inputs editors — see
+        /// Public/authoring-language.js for why these are not a local copy.
         function matchScalarToken(trimmed) {
-            for (var i = 0; i < scalarTokens.length; i++) {
-                if (scalarTokens[i].token === trimmed) {
-                    return { ok: true, value: scalarTokens[i].value, kind: scalarTokens[i].kind, strict: false };
-                }
-            }
-            return null;
+            var hit = ChickadeeLanguage.matchScalarToken(trimmed);
+            return hit ? { ok: true, value: hit.value, kind: hit.kind, strict: false } : null;
         }
 
-
-        /// Rewrites a value pasted in THIS language's own syntax into JSON.
-        ///
-        /// Was a fixed `True`/`False`/`None` + single-quote swap, so it only
-        /// ever understood Python. Tokens are rewritten BEFORE the quote swap,
-        /// because Racket spells null `'null` — swapping quotes first would
-        /// turn it into `"null` and lose it.
-        ///
-        /// Word boundaries are applied only where the token actually starts or
-        /// ends with a word character: `\bTRUE\b` is right for R, and `#t`
-        /// would never match under a leading `\b`.
-        function languageReprToJSON(trimmed) {
-            var out = trimmed;
-            scalarTokens.forEach(function (t) {
-                var esc = t.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                var pre = /^\w/.test(t.token) ? '\\b' : '';
-                var post = /\w$/.test(t.token) ? '\\b' : '';
-                var json = (t.value === null) ? 'null' : String(t.value);
-                out = out.replace(new RegExp(pre + esc + post, 'g'), json);
-            });
-            // Only when no double quotes exist already, so a string mixing an
-            // apostrophe inside double quotes is not broken.
-            if (out.indexOf('"') === -1) out = out.replace(/'/g, '"');
-            return out;
-        }
+        function languageReprToJSON(trimmed) { return ChickadeeLanguage.reprToJSON(trimmed); }
 
         /// Tries to parse `raw` the same way the server / renderer will:
         /// JSON first, then the language's own scalar spellings, then bare
