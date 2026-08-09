@@ -378,10 +378,18 @@ diff on #1308, and the rerun confirmed it.
    `/proc/self/task` thread table — which is what would settle the
    noisy-neighbour-vs-saturation question the *next* time this happens,
    rather than requiring another lucky log tail.
-2. **Instrument before re-tuning the ceiling.** Raising `timeout-minutes` on
-   the sqlite lane to match postgres' 25 would have converted this run to a
-   pass, but it also buys a wedge five more minutes of silence. Worth doing
-   *after* (1), not instead of it.
+2. **Re-tune the ceiling — but do not expect it to have saved this run.**
+   The sqlite lane is capped at 20 min against postgres' 25 despite carrying
+   the wider spread, and equalising them is defensible on the baseline alone:
+   the ordinary tail is 441 s, and 20 min leaves ~1107 s of test budget after
+   setup. What the bump does **not** do is rescue attempt 1 — that job was
+   killed at 1107 s *while still running*, so nothing establishes it would
+   have finished inside a 25-minute budget (~1407 s of test time) either. An
+   earlier draft of this note asserted it would have passed; that was
+   unsupported, and the correction is the point: this buys headroom for the
+   ordinary tail, not for a 5× starvation event. It also buys a genuine wedge
+   five more minutes of silence, which is why it belongs after (1) rather
+   than instead of it.
 3. **Finish the CLOEXEC sweep** on the three helpers above, closing the
    mechanism that turns a transient overload into a permanent one.
 

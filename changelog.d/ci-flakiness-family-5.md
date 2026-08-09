@@ -13,3 +13,9 @@
   `.timeLimit` (which cannot fire under pool saturation) and not the guard
   that can. The CLOEXEC residual in attack-order item 3 is reclassified from
   "cosmetic" accordingly.
+- **`api-tests` gets the same 25-minute CI ceiling as `api-tests-postgres`.**
+  The two run the same target; the sqlite lane had the tighter cap despite
+  the wider run-to-run spread. This buys headroom for the ordinary tail, not
+  for a starvation event — the job that prompted it was killed still running
+  at 1107 s, and nothing establishes it would have finished inside the larger
+  budget either.
