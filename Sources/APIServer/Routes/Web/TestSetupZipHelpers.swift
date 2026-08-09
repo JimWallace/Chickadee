@@ -38,8 +38,8 @@ func repackZipFromDirectory(zipPath: String, sourceDir: URL) throws {
         zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
         zip.currentDirectoryURL = sourceDir
         zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
+        zip.standardOutput = closeOnExecPipe()
+        zip.standardError = closeOnExecPipe()
         try runProcessWithEFAULTRetry(zip)
         zip.waitUntilExit()
         guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
@@ -116,9 +116,9 @@ func validateZipUploadSize(zipPath: String, limits: ZipUploadLimits = .default) 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-v", zipPath]
-        let out = Pipe()
+        let out = closeOnExecPipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        process.standardError = closeOnExecPipe()
         do {
             try runProcessWithEFAULTRetry(process)
         } catch {
@@ -174,9 +174,9 @@ func listZipEntries(zipPath: String) -> [String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-Z1", zipPath]
-        let out = Pipe()
+        let out = closeOnExecPipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        process.standardError = closeOnExecPipe()
         try runProcessWithEFAULTRetry(process)
         let captured = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
@@ -308,9 +308,9 @@ func extractZipEntry(zipPath: String, entryName: String) -> Data? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-p", zipPath, entryName]
-        let out = Pipe()
+        let out = closeOnExecPipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        process.standardError = closeOnExecPipe()
         try runProcessWithEFAULTRetry(process)
         let captured = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
