@@ -362,6 +362,28 @@ is in force) so agents can re-read them mid-session; the initialize copy is
 frozen per connection. Advisory text only — it never alters tools, scopes, or
 the admin surface.
 
+**The MCP surface reports its own languages, and holds none of their names
+(#1290).** `get_server_info` returns a `languages` payload
+(`MCPLanguageCapability`): per language, its wire token and display name, its
+script/generated/source extensions, editor-kernel-vs-upload-only, expression
+support and interpreter, and the supported/refused pattern-family and
+notebook-check kinds **with a reason for each exclusion** — the check-kind
+answers taken from `notebookCheckKindUnsupportedReason`, the same predicate the
+save-time refusal calls, so the payload cannot promise what a save would reject.
+Before it, an agent discovered that six check kinds are refused on Lua (and all
+ten on C++ and Racket) by getting rejected. Every rendering of the language list
+in agent-facing copy derives from `allCases` via `MCPLanguageProse` (display-name
+prose, wire-token prose, `"a" | "b"` schema union); no description or schema
+holds a language name. This is the SECOND fix of that defect: #1288 derived the
+one list it was looking at, and one language later five other hand-typed lists
+still stopped at `cpp` — `set_assignment_language` refusing Racket in prose while
+its derived JSON `enum` accepted it — and four tool descriptions still called
+personalization expressions "Python source", the very sentence #1288 existed to
+fix. So the guard is scoped to the whole served catalog, not to one string:
+`MCPLanguageCoverageTests` fails on any list that stops short of `allCases`
+anywhere in the instructions, tool descriptions or schemas. A seventh language
+needs no edit to any MCP prose.
+
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
 and Chickadee expands each enabled case into an ordinary Python test script

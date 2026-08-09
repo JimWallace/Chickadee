@@ -22,8 +22,9 @@ struct UpdateGlobalInputsTool: ContentTool {
         /// Replacement literal values (name + JSON value).  Required; send `[]`
         /// to clear all literals.
         let variables: [FamilyVariable]
-        /// Replacement per-student expressions (name + Python source).  Optional;
-        /// omitted leaves the request treating expressions as `[]` (cleared).
+        /// Replacement per-student expressions (name + source in the
+        /// assignment's own language).  Optional; omitted leaves the request
+        /// treating expressions as `[]` (cleared).
         let expressions: [PersonalizationExpression]?
     }
 
@@ -38,16 +39,21 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let name = "update_global_inputs"
     static let description =
         "Replace an assignment's global inputs (personalization), by its public ID. Provide the full "
-        + "desired `variables` (literal name + JSON value) and `expressions` (name + Python source "
-        + "evaluated per-student against `seed`); both lists are replaced wholesale, not merged. "
-        + "Names must be valid Python identifiers, unique across both lists and any section variable, "
+        + "desired `variables` (literal name + JSON value) and `expressions` (name + source IN THE "
+        + "ASSIGNMENT'S OWN LANGUAGE, evaluated per-student against `seed` by that language's "
+        + "interpreter — read the language from get_assignment first); both lists are replaced "
+        + "wholesale, not merged. "
+        + "Names must be valid Python identifiers, whatever the assignment's language (so no hyphens, "
+        + "even on a Racket assignment), unique across both lists and any section variable, "
         + "and `seed` is reserved. Every starter-notebook `{{placeholder}}` must match a declared name. "
         + "Each expression is eval-checked against your own seed before saving, so typos are caught here. "
         + "Prefer calling the auto-imported `solution.*` / support-module functions over re-implementing "
-        + "logic inline (e.g. `solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) — an inline copy "
+        + "logic inline (e.g. `solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)` in Python; each "
+        + "language reaches it by its own loading mechanism) — an inline copy "
         + "can diverge from what the suite grades and mis-grade some seeds. The auto-imported `solution` "
         + "module is best-effort (skipped when the solution uses `{{ }}` placeholders); for those, share "
-        + "reusable logic via an uploaded `.py` support module that both the solution and the expression import."
+        + "reusable logic via an uploaded support module in the assignment's language that both the "
+        + "solution and the expression load."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -60,10 +66,13 @@ struct UpdateGlobalInputsTool: ContentTool {
                     "properties": .object([
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("Valid Python identifier; not \"seed\"."),
+                            "description": .string(
+                                "Valid Python identifier (the rule in every language); not \"seed\"."),
                         ]),
                         "value": .object([
-                            "description": .string("Any JSON-expressible Python literal (scalar, list, dict).")
+                            "description": .string(
+                                "Any JSON value (scalar, list, object); rendered as a literal in the assignment's language."
+                            )
                         ]),
                     ]),
                     "required": .array([.string("name"), .string("value")]),
@@ -78,11 +87,14 @@ struct UpdateGlobalInputsTool: ContentTool {
                     "properties": .object([
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("Valid Python identifier; not \"seed\"."),
+                            "description": .string(
+                                "Valid Python identifier (the rule in every language); not \"seed\"."),
                         ]),
                         "expression": .object([
                             "type": .string("string"),
-                            "description": .string("Python expression; `seed` and every variable are in scope."),
+                            "description": .string(
+                                "An expression in the assignment's own language; `seed` and every variable are in scope."
+                            ),
                         ]),
                     ]),
                     "required": .array([.string("name"), .string("expression")]),

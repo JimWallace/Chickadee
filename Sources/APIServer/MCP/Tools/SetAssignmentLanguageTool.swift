@@ -3,8 +3,8 @@
 // Write tool: declare the language an assignment is authored and graded in, by
 // assignment public ID. content:write, course-scoped.
 //
-// For the four kernel languages the language is DERIVED, not declared — a
-// notebook's kernelspec or a graded script's extension answers it, and the
+// For a language with an editor kernel the language is DERIVED, not declared —
+// a notebook's kernelspec or a graded script's extension answers it, and the
 // recorded manifest field is only a memo of that. This tool exists for the case
 // derivation cannot reach: C++ has no editor kernel (so no kernelspec implies
 // it) and its generated tests are deliberately extension-free `.sh` wrappers
@@ -22,7 +22,10 @@ import Foundation
 struct SetAssignmentLanguageTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
-        /// An `AssignmentLanguage` raw value: python, r, lua, octave, cpp.
+        /// An `AssignmentLanguage` raw value. Not enumerated here — the
+        /// hand-typed copy of this list stopped at `cpp` when Racket shipped,
+        /// while the `enum` in `inputSchema` (derived) accepted it. See
+        /// `MCPLanguageProse`.
         let language: String
     }
 
@@ -36,9 +39,10 @@ struct SetAssignmentLanguageTool: ContentTool {
 
     static let name = "set_assignment_language"
     static let description =
-        "Declare the language an assignment is authored and graded in by its public ID: python, r, lua, "
-        + "octave, or cpp. For every language except cpp this is normally unnecessary — the language is "
-        + "derived from the starter notebook's kernel or a graded script's extension — but declaring it "
+        "Declare the language an assignment is authored and graded in by its public ID: "
+        + "\(MCPLanguageProse.tokens). For every language except cpp this is normally unnecessary — the "
+        + "language is derived from the starter notebook's kernel or a graded script's extension — but "
+        + "declaring it "
         + "pins a suite made only of pattern families, which has no script on disk to derive from. For "
         + "cpp it is required: C++ has no in-browser kernel and its generated tests are extension-free "
         + "shell wrappers, so nothing implies the language. A cpp assignment must already be uploadOnly "

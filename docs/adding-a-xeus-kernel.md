@@ -625,18 +625,41 @@ additions, because prose is the surface no guard reaches.
    + Python source" for the whole of R's and Lua's existence — a syntax error on
    those assignments — and never said assignments have a language at all.
 
-   The language LIST now derives from `allCases`
-   (`MCPServerInstructions.supportedLanguageNames`, pinned by
-   `theDerivedLanguageListIsActuallyInterpolated`), so it cannot silently cover
-   fewer languages than exist. **That protects the list, not the sentences.**
-   Re-read the guide for per-language claims — grep it for `Python`, `.py`,
-   `import`, `source`, `require` — and check each is still true. One
-   hand-enumerated clause ("imported on Python, sourced on R, required on Lua")
-   was removed for exactly this reason and would have gone stale here.
+   **This item has largely been retired, and how it was retired is the point.**
+   #1288 derived the instructions' language LIST from `allCases` and stopped
+   there. One language later (Racket), *five other* hand-typed lists across the
+   tool catalog were still enumerating up to `cpp` — `set_assignment_language`
+   told agents Racket was not a legal value while its own derived JSON `enum`
+   accepted it — and four tool descriptions still called personalization
+   expressions "Python source", which is the very sentence #1288 was opened to
+   fix. A guard scoped to the string someone is looking at does not protect the
+   class.
 
-   Also make sure the language's REFUSED pattern-family and notebook-check kinds
-   are discoverable before a save is attempted, not only via the rejection
-   message. See issue #1290.
+   So there is now nothing per-language for you to write:
+
+   - **Every rendering of the language list derives from `allCases`**
+     (`MCPLanguageProse`: display-name prose, wire-token prose, and the
+     `"a" | "b"` schema union). No call site holds a language name.
+   - **`get_server_info` reports a `languages` payload**
+     (`MCPLanguageCapability`) — extensions, editor-kernel-vs-upload-only,
+     expression support and interpreter, and the supported/refused
+     pattern-family and notebook-check kinds with a reason for each exclusion.
+     That answers the "refused kinds must be discoverable before a save" ask
+     from issue #1290 for every language at once, including yours. Its check-kind
+     answers come from `notebookCheckKindUnsupportedReason`, the same predicate
+     the save-time refusal calls, so the payload cannot promise what a save
+     would reject.
+   - **`MCPLanguageCoverageTests` scans the WHOLE served catalog** — the
+     instructions plus every tool's description and both schemas — and fails on
+     any list that stops short of `allCases`, on any missing derived rendering,
+     and on any surviving "Python source"/"Python expression"/"Python literal".
+
+   What is left for you is the residue no derivation reaches: a *sentence* that
+   makes a per-language claim in words. Grep the guide for `.py`, `import`,
+   `source`, `require` and check each is still true. One hand-enumerated clause
+   ("imported on Python, sourced on R, required on Lua") was removed for exactly
+   this reason. If you find yourself wanting to add a per-language fact to the
+   copy, add it to `MCPLanguageCapability` instead and let the payload carry it.
 9. **Whether the generated scripts DISPATCH.** The newest item, and the most
    direct: a generated test is only graded if `scriptInvocation` knows how to run
    it. Racket's generated `.rkt` had no `ScriptInterpreter` case and no extension
@@ -868,7 +891,10 @@ state this document exists to warn you about:
       and both halves fail open together. Verify with a runner that does NOT
       have the interpreter, not only with one that does. See
       [runner-capability-profiles.md](runner-capability-profiles.md)
-- [ ] the MCP guide is true for this language — see item 8 above
+- [ ] the MCP guide is true for this language — see item 8 above. Mostly this is
+      now `swift test --filter MCPLanguageCoverageTests` plus reading your
+      language's entry in a real `get_server_info` response; what those cannot
+      check is a *sentence* making a per-language claim in words
 - [ ] **the instructor walkthrough below passes, by hand, on a real server**
 
 ### The last step: walk an instructor's path by hand
