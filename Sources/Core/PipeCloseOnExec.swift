@@ -27,9 +27,12 @@ import Foundation
 /// answer is narrower than the issue text implies (see
 /// `Tests/CoreTests/PipeCloseOnExecTests.swift`): on Swift 6.3 / glibc 2.39
 /// both spawners this codebase uses already close inherited descriptors
-/// themselves — Foundation's `Process` leaves a child holding only fds 0/1/2,
-/// and swift-subprocess `close_range`s everything above stderr. A bare
-/// `posix_spawn` still inherits the lot. So this is defence in depth against
+/// themselves — a pipe of ours does not reach a child spawned through
+/// Foundation's `Process`, and swift-subprocess `close_range`s everything
+/// above stderr. (Stated precisely: *our pipe's write end* does not reach the
+/// child. Other inherited descriptors do, so "the child holds only fds 0/1/2"
+/// is too strong and measures false.) A bare `posix_spawn` still inherits the
+/// lot. So this is defence in depth against
 /// a spawner that does not do it, not a live bug being patched — but it costs
 /// two `fcntl`s, and having every hand-built pipe state the same invariant is
 /// what makes an exception visible.

@@ -34,7 +34,7 @@ func repackZipFromDirectory(zipPath: String, sourceDir: URL) throws {
         return
     }
     try withZipProcessLock {
-        let zip = Process()
+        let zip = makeZipProcess()
         zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
         zip.currentDirectoryURL = sourceDir
         zip.arguments = ["-q", "-r", zipPath, "."]
@@ -113,7 +113,7 @@ enum ZipUploadValidationError: Error, CustomStringConvertible {
 /// (Length, Method, Size, Cmpr, Date, Time, CRC-32) before the name.
 func validateZipUploadSize(zipPath: String, limits: ZipUploadLimits = .default) throws {
     let (status, data): (Int32, Data) = try withZipProcessLock {
-        let process = Process()
+        let process = makeZipProcess()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-v", zipPath]
         let out = closeOnExecPipe()
@@ -171,7 +171,7 @@ struct RunnerSetupPackage {
 
 func listZipEntries(zipPath: String) -> [String] {
     let result: (Int32, Data)? = try? withZipProcessLock {
-        let process = Process()
+        let process = makeZipProcess()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-Z1", zipPath]
         let out = closeOnExecPipe()
@@ -305,7 +305,7 @@ func removeScriptFromZip(zipPath: String, filename: String) throws {
 
 func extractZipEntry(zipPath: String, entryName: String) -> Data? {
     let result: (Int32, Data)? = try? withZipProcessLock {
-        let process = Process()
+        let process = makeZipProcess()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-p", zipPath, entryName]
         let out = closeOnExecPipe()

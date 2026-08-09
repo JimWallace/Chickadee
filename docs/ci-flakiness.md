@@ -1,9 +1,15 @@
 # CI flakiness — state of knowledge (2026-07-02, last extended 2026-08-09)
 
 Handoff document for the flakiness work. Families 1–3 are the original
-2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
-later**, so the header date is where this started, not where it ends. Check
-the newest families first — they are the ones still open.
+2026-07-02 body; **Families 4–6 were added later** (2026-08-05 and 2026-08-09),
+so the header date is where this started, not where it ends. Check the newest
+families first.
+
+Two of them are `api-tests` failures that look alike and are not: **Family 5**
+is a `cancelled` job at the timeout ceiling (starvation — tests still
+completing), **Family 6** is a hard SIGSEGV mid-run (an environ race in
+`Process.run()`). The conclusion string tells them apart before anything
+else does.
 
 The first snapshot (earlier on
 2026-07-02) was written while landing PRs #1138–#1142; the headline then:
@@ -445,6 +451,74 @@ regression in the change under test and is not one.
    than instead of it.
 3. **Finish the CLOEXEC sweep** on the three helpers above, closing the
    mechanism that turns a transient overload into a permanent one.
+
+---
+
+## Family 6 — `api-tests` SIGSEGV in `Process.run()` reading environ — ROOT-CAUSED & FIXED (2026-08-09)
+
+**Symptom.** `api-tests` fails (not `cancelled` — a real crash) partway
+through, with a Swift backtrace and no failing assertion:
+
+```
+*** Program crashed: Bad pointer dereference at 0x0000000000000210 ***
+Thread 5 crashed:
+  1  specialized _ProcessInfo.environment.getter  in libFoundationEssentials.so
+  2  Process.run()                                in libFoundation.so
+  3  runProcessWithEFAULTRetry(_:)                Sources/Core/ZipProcessSerialization.swift
+  4  closure #1 in listZipEntries(zipPath:)       Sources/APIServer/Routes/Web/TestSetupZipHelpers.swift
+```
+
+**Read the crashing thread, not the first familiar name in the dump.** The
+same backtrace shows `WedgeWatchdog.monitorLoop` on another thread, sitting in
+`Thread.sleep` — that is the watchdog idling, not firing, and mistaking it for
+the cause costs a wrong diagnosis on a PR that did not touch either.
+
+**Root cause.** `Process.run()` with a **nil `environment`** inherits by
+reading the global environ itself. None of the zip/unzip spawns set
+`environment`, so every one of them was an unsynchronized *reader* of a
+structure `setenv`/`unsetenv` can reallocate. Three `APITests` suites
+(`OIDCTests`, `AuthModeGatingTests`, `AuditTockRegressionTests`) mutate env,
+and Swift Testing runs them concurrently with everything else.
+
+**Why the existing mitigation could not help.** This is the same race
+`ZipProcessSerialization.swift` was written for — its header documents
+`NSPOSIXErrorDomain Code=14 "Bad address"` (EFAULT) from `Process.run()` — but
+in its *uncatchable* form. When the kernel notices the bad address, `run()`
+throws EFAULT and `runProcessWithEFAULTRetry` absorbs it. When the read walks
+a reallocated environ in user space instead, the process takes a SIGSEGV and
+there is nothing to catch or retry. The retry covers exactly half the race,
+and the half it misses is the fatal one.
+
+`withAsyncEnvLock` did not cover it either, though its own header asks for
+precisely this: "every test that mutates env vars **and every helper that
+reads them** must go through it." A zip spawn is an *undeclared* reader — the
+read happens inside Foundation, not in any helper anyone thought to wrap.
+
+**The fix.** `makeZipProcess()` in `ZipProcessSerialization.swift` returns a
+`Process` with `environment` preset from a snapshot taken **once** per process
+(a `let`, initialized under `swift_once`). A non-nil `environment` is what
+stops `run()` performing the implicit read. Contents are unchanged from what
+these spawns inherited before; only the number of racy reads changes, from one
+per spawn to one per process. All seven zip/unzip sites across
+`Core/ZipArchiver`, `TestSetupZipHelpers` and `NotebookContentHelpers` use it.
+
+**The guard.** `ZipProcessEnvironmentTests.everyZipProcessSiteUsesTheFactory`
+fails on a bare `Process()` in any of those files, because a new site would
+silently opt back into the crash while every existing test still passed. It
+matches constructions **not** preceded by an identifier character, since
+`makeZipProcess()` contains `Process()` as a substring. Verified to bite by
+reverting one site: it fails naming the file and the count. A control test
+pins that a bare `Process` really does start with a nil environment, so
+"non-nil" is a property the factory supplies rather than one Foundation was
+giving us anyway.
+
+**Residual.** Only the zip/unzip paths are converted, because those are the
+ones observed crashing and the ones that run concurrently with env-mutating
+tests. Any *other* `Process` with a nil `environment` has the same exposure in
+principle. The worker's script execution goes through `swift-subprocess`, not
+Foundation `Process`, and is not affected. If this recurs from a different
+call site, the general fix is the same one applied wider — not another retry,
+which cannot work against a segfault.
 
 ---
 

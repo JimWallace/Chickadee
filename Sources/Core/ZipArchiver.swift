@@ -111,7 +111,7 @@ public func listZipContents(zipPath: String) throws -> [String] {
     // Sync path holds the lock across read + wait too since both touch
     // the same Pipe / Process state.
     return try withZipProcessLock {
-        let proc = Process()
+        let proc = makeZipProcess()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         proc.arguments = ["-Z1", zipPath]
         // CLOEXEC before the spawn: an unrelated process started concurrently
@@ -152,7 +152,7 @@ private func runZipProcess(
         // terminationHandler runs on Foundation's queue and resumes the
         // continuation independently.
         acquireZipProcessLock()
-        let proc = Process()
+        let proc = makeZipProcess()
         proc.executableURL = URL(fileURLWithPath: executablePath)
         proc.arguments = arguments
         if let dir = workingDirectory {

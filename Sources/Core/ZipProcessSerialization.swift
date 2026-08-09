@@ -64,9 +64,44 @@ public func releaseZipProcessLock() {
     zipProcessLock.unlock()
 }
 
+/// The parent environment, read **once** for the lifetime of the process.
+///
+/// `Process.run()` with a nil `environment` inherits by reading the global
+/// environ itself, which makes every zip spawn an unsynchronized *reader* of
+/// state that `setenv`/`unsetenv` can reallocate underneath it. That is the
+/// same race as the EFAULT one below, in the form the retry cannot help with:
+/// when the kernel notices, `run()` throws EFAULT and is retried; when the
+/// read walks a reallocated environ in user space instead, the process takes
+/// a bad pointer dereference and dies. Seen 2026-08-09 on `api-tests`
+/// (`Bad pointer dereference at 0x210`, Thread 5:
+/// `_ProcessInfo.environment.getter` ← `Process.run()` ← `listZipEntries`).
+///
+/// A `let` is initialized exactly once, on first use, under `swift_once` — so
+/// every zip subprocess after that gets the snapshot with no further reads.
+/// Contents are unchanged from what these spawns inherited before; only the
+/// number of racy reads changes, from one per spawn to one per process.
+private let zipInheritedEnvironment: [String: String] = ProcessInfo.processInfo.environment
+
+/// A `Process` preconfigured for a zip/unzip spawn.
+///
+/// Use this instead of a bare `Process()` for every `/usr/bin/zip` and
+/// `/usr/bin/unzip` invocation. Setting `environment` non-nil is what stops
+/// `run()` from performing the implicit environ read described above — it is
+/// not a convenience, and a site that constructs `Process()` directly silently
+/// opts back into the crash. `ZipProcessEnvironmentTests` fails on such a site.
+public func makeZipProcess() -> Process {
+    let process = Process()
+    process.environment = zipInheritedEnvironment
+    return process
+}
+
 /// Calls `proc.run()`, retrying once after a 10 ms backoff if it throws
 /// `NSPOSIXErrorDomain` / `EFAULT` (Foundation Process race; see file
 /// header).  `proc` must not have been started yet.
+///
+/// This handles only the *throwing* form of the race. The crashing form is
+/// prevented upstream by `makeZipProcess()`, because a segfault cannot be
+/// caught and retried.
 public func runProcessWithEFAULTRetry(_ proc: Process) throws {
     do {
         try proc.run()
