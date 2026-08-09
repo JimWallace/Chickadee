@@ -266,9 +266,35 @@ struct RunnerProfileDetector {
     }
 
     private func firstNumericVersion(in raw: String) -> String? {
+        Self.firstNumericVersion(in: raw)
+    }
+
+    /// The first dotted version number in an interpreter's `--version` banner.
+    ///
+    /// INTERNAL AND STATIC so it can be tested directly. It had no test at all,
+    /// and the defect below is one only a test of the real banners finds.
+    ///
+    /// Each whitespace token is stripped of surrounding punctuation, then any
+    /// LEADING NON-DIGITS are dropped before the numeric prefix is taken. That
+    /// last step is the fix: Racket's banner is `Welcome to Racket v8.10 [cs].`
+    /// and its version token is `v8.10` — letter-led, which no other language's
+    /// is. The prefix rule alone yielded an empty match, `detectVersion`
+    /// returned nil, the runner advertised no `racket`, and `RunnerLanguageGate`
+    /// then refused EVERY runner for every Racket assignment. Jobs queued
+    /// forever with no error, no failed test and no log line — instructor
+    /// validation included.
+    ///
+    /// Dropping leading non-digits is deliberately narrower than "find any
+    /// dotted number in the token": a token still contributes at most its first
+    /// numeric run, so `1994-2022` (Lua's copyright line) and `2023-06-16` (R's
+    /// release date) stay unmatched for want of a dot, and `Lua.org` contributes
+    /// nothing for want of a digit. Every one of the six banners is pinned in
+    /// `RunnerProfileDetectorTests`.
+    static func firstNumericVersion(in raw: String) -> String? {
         for token in raw.split(whereSeparator: \.isWhitespace) {
-            let cleaned = token.trimmingCharacters(in: CharacterSet(charactersIn: ",;:()"))
-            let numericPrefix = cleaned.prefix { $0.isNumber || $0 == "." }
+            let cleaned = token.trimmingCharacters(in: CharacterSet(charactersIn: ",;:()[]"))
+            let fromFirstDigit = cleaned.drop { !$0.isNumber }
+            let numericPrefix = fromFirstDigit.prefix { $0.isNumber || $0 == "." }
             if !numericPrefix.isEmpty, numericPrefix.contains(".") {
                 return String(numericPrefix)
             }

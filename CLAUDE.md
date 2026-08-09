@@ -225,8 +225,10 @@ CS 135/115 (`#lang htdp/bsl`) and CS 136 (`#lang racket`) write; notebook checks
 are refused categorically, as for C++. The measured trap: a teaching-language
 module EXPORTS NOTHING, so a generated test loads the submission with
 `dynamic-require` + `module->namespace` and evaluates an application form rather
-than a bare identifier. See `docs/multi-language-audit.md` for the two runner
-defects still open against it.
+than a bare identifier. Its two runner defects — `.rkt` dispatching to `/bin/sh`,
+and `racket --version`'s letter-led `v8.10` defeating the runner's version parser
+— are fixed, each with an `allCases` guard; a Racket assignment still needs a
+runner new enough to carry both. See `docs/multi-language-audit.md`.
 
 **Assignments are Python, R, Lua, Octave, C++ *or* Racket; language is first-class (`AssignmentLanguage`).**
 `AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket`, Core) is resolved from the manifest

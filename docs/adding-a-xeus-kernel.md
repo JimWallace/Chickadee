@@ -606,13 +606,11 @@ additions, because prose is the surface no guard reaches.
    every job in that language queues forever, instructor validation included,
    with no error, no failed test and no log line anywhere.
 
-   The existing guard stops one step short: `everyLanguageProbeActuallyReportsAVersion`
-   asserts the probe **exits 0**, which Racket does. Assert instead that its
-   output *parses*:
-
-   ```swift
-   #expect(firstNumericVersion(in: probeOutput) != nil)
-   ```
+   The old guard stopped one step short: `everyLanguageProbeActuallyReportsAVersion`
+   asserts the probe **exits 0**, which Racket does. `RunnerProfileDetectorTests`
+   now asserts the other half — every language's real banner parses, and under
+   `CI` every probe's live output does too. Add your language's banner to its
+   pinned table.
 
    Run the probe by hand and read the banner before trusting the loop. Command,
    arguments, output format — three separate ways to be invisible to capability
@@ -653,14 +651,11 @@ additions, because prose is the surface no guard reaches.
    obvious fix.
 
    What closes it is a test in `Worker`, which depends on both:
-
-   ```swift
-   @Test(arguments: AssignmentLanguage.allCases)
-   func generatedScriptsDispatchToTheirOwnInterpreter(_ language: AssignmentLanguage) {
-       // render a family, write it, assert scriptInvocation resolves to this
-       // language's interpreter rather than the /bin/sh fallback
-   }
-   ```
+   `GeneratedScriptDispatchTests.generatedScriptsDispatchToTheirOwnInterpreter`
+   walks `allCases` and asserts each language's generated extension reaches its
+   own interpreter rather than the `/bin/sh` fallback. Its
+   `expectedInterpreter(for:)` is exhaustive, so a seventh language states its
+   answer there.
 
    C++ is the deliberate exception and shows what the test must tolerate: its
    generated case IS a `.sh` wrapper, so it dispatches as shell on purpose.

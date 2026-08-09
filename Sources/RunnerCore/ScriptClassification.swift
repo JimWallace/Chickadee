@@ -18,6 +18,7 @@ public enum ScriptInterpreter: String, Sendable, Equatable {
     case rscript
     case lua
     case octave
+    case racket
     /// No recognised extension, shebang, or Python-looking content. The caller
     /// decides the fallback (e.g. executable bit, else /bin/sh).
     case unknown
@@ -37,6 +38,7 @@ public func classifyScriptInterpreter(name: String, source: String) -> ScriptInt
     case "r": return .rscript
     case "lua": return .lua
     case "m": return .octave
+    case "rkt": return .racket
     default: break  // no / unrecognised extension → shebang, then content
     }
     if let viaShebang = interpreterFromShebang(source) {
@@ -59,6 +61,10 @@ private func interpreterFromShebang(_ source: String) -> ScriptInterpreter? {
     if containsSubstring(firstLine, "perl") { return .perl }
     if containsSubstring(firstLine, "lua") { return .lua }
     if containsSubstring(firstLine, "octave") { return .octave }
+    // Before the sh/bash checks like the rest: "racket" contains none of
+    // "sh", "bash" or "zsh", but keeping the language checks together is what
+    // stops the next addition from being ordered wrong.
+    if containsSubstring(firstLine, "racket") { return .racket }
     if containsSubstring(firstLine, "bash") { return .bash }
     if containsSubstring(firstLine, "zsh") { return .zsh }
     if containsSubstring(firstLine, "sh") { return .sh }
