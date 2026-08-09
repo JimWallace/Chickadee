@@ -149,7 +149,7 @@ struct PatternFamilyApplyResult: Equatable {
 /// `renderFamilyArtifacts`, `rawScriptOverlayWrites`); what remains
 /// inline genuinely threads state between phases (#1123).
 @discardableResult
-func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclomatic_complexity
+func applyPatternFamilies(  // swiftlint:disable:this function_body_length
     to setup: APITestSetup,
     nextFamilies: [PatternFamily],
     nextChecks: [NotebookCheck]? = nil,
@@ -376,301 +376,31 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     )
 
     // ── 4. Render generated scripts ONCE, then diff and mutate the zip ──
-    // Old-side filenames for both generators are pooled into one set so
-    // the deletion diff is computed in one shot.  Notebook checks may
-    // produce sidecar files (e.g. `_expected_<id>.csv` for
-    // `.dataFrameEquality`); both the script and the sidecars are
-    // tracked here so removing a check cleans up all of its files.
-    // The generated extension is part of the filename, so the old files must be
-    // listed under the language the *previous* manifest was written in — and,
-    // when the assignment changes language, under the new one too, or the
-    // old-extension scripts would be stranded in the setup forever. Listing
-    // only these two keeps `deletedFiles` free of names that were never written.
-    // `previousLanguage` is optional (an assignment that had no language yet),
-    // so the pair is built explicitly rather than as a set literal — which also
-    // keeps the two comprehensions below inside the type-checker's budget.
-    var oldFilenameLanguages: Set<AssignmentLanguage> = [assignmentLanguage]
-    if let previousLanguage { oldFilenameLanguages.insert(previousLanguage) }
-    let oldGeneratedFilenames = Set(
-        oldFilenameLanguages.flatMap { language in
-            props.patternFamilies.flatMap {
-                patternFamilyAllGeneratedFilenames($0, language: language)
-            }
-        }
-    ).union(
-        oldFilenameLanguages.flatMap { language in
-            props.notebookChecks.flatMap {
-                notebookCheckAllGeneratedFilenames($0, language: language)
-            }
-        }
-    )
-
-    // A family whose id is missing from `familySectionID` (defensive path
-    // below) renders with no section variables — matching its "unanchored"
-    // status.
-    let sectionVarsByID: [String: [FamilyVariable]] = Dictionary(
-        uniqueKeysWithValues: resolvedSections.map { ($0.id, $0.variables) }
-    )
-    // Every family renders exactly once, here.  Both the zip write below
-    // and the manifest rebuild (`appendFamilyConfigured`) consume these
-    // artifacts — the manifest phase used to invoke the renderer a second
-    // time per family, which wasted work and meant a renderer that ever
-    // became non-deterministic would silently desync the zip bytes from
-    // the manifest entries (#1123).
-    let artifacts = renderFamilyArtifacts(
-        families: nextFamilies,
-        familySectionID: familySectionID,
-        sectionVarsByID: sectionVarsByID,
-        globalVariables: resolvedGlobalVariables,
-        perStudentNames: perStudentExpressionNames,
-        language: assignmentLanguage
-    )
-
-    var renderedByFilename: [String: GeneratedScript] = [:]
-    for family in nextFamilies {
-        for generated in artifacts.caseScripts[family.id] ?? [] {
-            renderedByFilename[generated.filename] = generated
-        }
-        if let guardScript = artifacts.guardScripts[family.id] {
-            renderedByFilename[guardScript.filename] = guardScript
-        }
-    }
-    // Render notebook checks alongside pattern families so a single zip
-    // mutation pass writes everything.  Each check produces one `.py`
-    // file plus zero or more sidecar files (e.g. `_expected_<id>.csv`
-    // for `.dataFrameEquality`).  Sidecars don't have a `GeneratedScript`
-    // — they aren't entries in the suite — but they DO need to be in
-    // `newGeneratedFilenames` so stale ones get diffed away when a check
-    // changes kind or is removed.
-    var renderedCheckByID: [String: GeneratedScript] = [:]
-    var sidecarFilesToWrite: [String: String] = [:]
-    for check in resolvedChecks {
-        let bundle = renderNotebookCheck(check, language: assignmentLanguage)
-        renderedByFilename[bundle.script.filename] = bundle.script
-        renderedCheckByID[check.id] = bundle.script
-        for (name, content) in bundle.sidecars {
-            sidecarFilesToWrite[name] = content
-        }
-    }
-    let newGeneratedFilenames = Set(renderedByFilename.keys)
-        .union(sidecarFilesToWrite.keys)
-
-    let toDelete = oldGeneratedFilenames.subtracting(newGeneratedFilenames)
-    // Merge generated `.py` sources with check sidecars (e.g. expected
-    // CSVs) into the single write map.  applyScriptChangesToZip is
-    // bytes-agnostic — it doesn't care that some entries are Python and
-    // others are CSV.
-    var toWrite = renderedByFilename.mapValues(\.source)
-    for (name, content) in sidecarFilesToWrite {
-        toWrite[name] = content
-    }
-
-    // Slice 1: re-inline global + section variables into every raw
-    // (non-generated) Python test script (idempotent; see the helper).
-    for (filename, content) in rawScriptOverlayWrites(
-        items: itemsForOrdering,
-        generatedFilenames: Set(renderedByFilename.keys),
-        zipPath: setup.zipPath,
-        globalVariables: resolvedGlobalVariables,
-        sectionVarsByID: sectionVarsByID
-    ) {
-        toWrite[filename] = content
-    }
-
-    try applyScriptChangesToZip(
-        zipPath: setup.zipPath,
-        writes: toWrite,
-        deletions: Array(toDelete)
+    let mutations = try renderAndApplyZipMutations(
+        plan: GeneratedArtifactPlan(
+            families: nextFamilies,
+            checks: resolvedChecks,
+            familySectionID: familySectionID,
+            sections: resolvedSections,
+            globalVariables: resolvedGlobalVariables,
+            perStudentNames: perStudentExpressionNames,
+            itemsForOrdering: itemsForOrdering,
+            language: assignmentLanguage,
+            previousLanguage: previousLanguage
+        ),
+        previousProps: props,
+        zipPath: setup.zipPath
     )
 
     // ── 5. Build new `testSuites` in authored order, expanding family refs ─
-    let familyByID: [String: PatternFamily] = Dictionary(
-        uniqueKeysWithValues: nextFamilies.map { ($0.id, $0) }
+    let newConfigured = buildConfiguredSuiteEntries(
+        itemsForOrdering: itemsForOrdering,
+        families: nextFamilies,
+        checks: resolvedChecks,
+        artifacts: mutations.artifacts,
+        renderedCheckByID: mutations.renderedCheckByID,
+        deletedFilenames: mutations.deletedFilenames
     )
-    var familyFilenames: [String: [String]] = [:]
-    for f in nextFamilies {
-        familyFilenames[f.id] = f.cases
-            .filter(\.enabled)
-            .map { c in
-                generatedScriptFilename(
-                    familyID: f.id,
-                    caseKey: c.key,
-                    tier: c.resolvedTier(defaults: f.defaults)
-                )
-            }
-    }
-
-    func expandDeps(_ deps: [String]) -> [String] {
-        var out: [String] = []
-        var seen = Set<String>()
-        for d in deps {
-            if let fid = parseFamilyDepToken(d) {
-                for f in familyFilenames[fid] ?? [] {
-                    guard !toDelete.contains(f), seen.insert(f).inserted else { continue }
-                    out.append(f)
-                }
-            } else {
-                guard !toDelete.contains(d), seen.insert(d).inserted else { continue }
-                out.append(d)
-            }
-        }
-        return out
-    }
-
-    let checkByID: [String: NotebookCheck] = Dictionary(
-        uniqueKeysWithValues: resolvedChecks.map { ($0.id, $0) }
-    )
-
-    var newConfigured: [ConfiguredSuiteEntry] = []
-    var order = 0
-    var emittedFamilyIDs: Set<String> = []
-    var emittedCheckIDs: Set<String> = []
-
-    /// Emits a family's generated entries: the existence guard first (for
-    /// function-calling kinds), then one entry per enabled case wired to
-    /// `dependsOn` the guard — so a missing function fails once on the guard
-    /// and the cases auto-skip through the runner's dependency gate.  Shared
-    /// by the authored-order loop and the defensive pass below so the two
-    /// can't drift on the guard wiring.  Consumes the render-once
-    /// `artifacts`, so the manifest entries describe exactly the bytes the
-    /// zip phase wrote.
-    func appendFamilyConfigured(_ family: PatternFamily, familySection: String?) {
-        let inherited = expandDeps(family.dependsOn)
-        var guardFilename: String?
-        if let guardScript = artifacts.guardScripts[family.id] {
-            order += 1
-            guardFilename = guardScript.filename
-            // The guard inherits the family's own prerequisites; the cases
-            // chain off the guard, so prereqs → guard → cases.
-            newConfigured.append(
-                ConfiguredSuiteEntry(
-                    script: guardScript.filename,
-                    tier: guardScript.tier.rawValue,
-                    order: order,
-                    dependsOn: inherited,
-                    points: guardScript.points,
-                    displayName: guardScript.displayName,
-                    generatedBy: guardScript.familyID,
-                    sectionID: familySection,
-                    // The guard inherits the family-level time limit.
-                    timeLimitSeconds: guardScript.timeLimitSeconds
-                ))
-        }
-        for generated in artifacts.caseScripts[family.id] ?? [] {
-            order += 1
-            var combined: [String] = []
-            var seen = Set<String>()
-            // Generated-case deps are fully derived from the *current* spec:
-            // the guard first (so a missing function reports the guard as the
-            // unmet prerequisite), then the family's inherited prerequisites
-            // (deduped).  We deliberately do NOT carry the prior manifest
-            // entry's deps forward.  Doing so made a once-set family-level
-            // dependency permanently "sticky": every regeneration re-read the
-            // old generated row's deps, so clearing `family.dependsOn` (or
-            // dropping a hand-written prereq the family used to point at) could
-            // never remove it from the generated rows — leaving a dangling
-            // reference that no edit could delete, because a hand-written
-            // script is not a generated file and so never entered the
-            // `expandDeps` `toDelete` filter.
-            for d in (guardFilename.map { [$0] } ?? []) + inherited {
-                guard seen.insert(d).inserted else { continue }
-                combined.append(d)
-            }
-            // Per-test time limit is resolved by the renderer
-            // (`case.resolvedTimeLimit(defaults:)`, then normalised so a
-            // 0/negative becomes nil) and carried on `generated`.
-            newConfigured.append(
-                ConfiguredSuiteEntry(
-                    script: generated.filename,
-                    tier: generated.tier.rawValue,
-                    order: order,
-                    dependsOn: combined,
-                    points: generated.points,
-                    displayName: generated.displayName,
-                    generatedBy: generated.familyID,
-                    sectionID: familySection,
-                    timeLimitSeconds: generated.timeLimitSeconds
-                ))
-        }
-    }
-
-    for item in itemsForOrdering {
-        switch item {
-        case .script(let s):
-            order += 1
-            newConfigured.append(
-                ConfiguredSuiteEntry(
-                    script: s.script,
-                    tier: s.tier.rawValue,
-                    order: order,
-                    dependsOn: expandDeps(s.dependsOn),
-                    points: s.points,
-                    displayName: s.displayName,
-                    generatedBy: nil,
-                    sectionID: s.sectionID,
-                    hint: s.hint,
-                    timeLimitSeconds: s.timeLimitSeconds
-                ))
-
-        case .family(let fid, let familySection):
-            guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
-            emittedFamilyIDs.insert(fid)
-            appendFamilyConfigured(family, familySection: familySection)
-
-        case .check(let cid, let checkSection):
-            guard let check = checkByID[cid],
-                let generated = renderedCheckByID[cid],
-                !emittedCheckIDs.contains(cid)
-            else { continue }
-            emittedCheckIDs.insert(cid)
-            order += 1
-            let inherited = expandDeps(check.dependsOn)
-            // Per-test time limit comes from the check spec (0/negative → nil,
-            // i.e. inherit the assignment-wide default).
-            newConfigured.append(
-                ConfiguredSuiteEntry(
-                    script: generated.filename,
-                    tier: generated.tier.rawValue,
-                    order: order,
-                    dependsOn: inherited,
-                    points: generated.points,
-                    displayName: generated.displayName,
-                    generatedBy: nil,
-                    generatedByCheck: check.id,
-                    sectionID: checkSection,
-                    timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
-                ))
-        }
-    }
-
-    // Defensive: any family in `nextFamilies` that wasn't referenced by
-    // `authoredItems` still needs its generated scripts emitted (e.g. if
-    // the caller forgot to include a newly added family).
-    for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
-        emittedFamilyIDs.insert(family.id)
-        appendFamilyConfigured(family, familySection: nil)
-    }
-
-    // Same defensive pass for checks: any check not referenced by
-    // `authoredItems` still needs its generated entry emitted.
-    for check in resolvedChecks where !emittedCheckIDs.contains(check.id) {
-        guard let generated = renderedCheckByID[check.id] else { continue }
-        order += 1
-        let inherited = expandDeps(check.dependsOn)
-        newConfigured.append(
-            ConfiguredSuiteEntry(
-                script: generated.filename,
-                tier: generated.tier.rawValue,
-                order: order,
-                dependsOn: inherited,
-                points: generated.points,
-                displayName: generated.displayName,
-                generatedBy: nil,
-                generatedByCheck: check.id,
-                sectionID: nil,
-                timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
-            ))
-    }
 
     // ── 6. Rewrite and persist the manifest ─────────────────────────────
     let newManifest = try makeWorkerManifestJSON(
@@ -719,8 +449,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     try await setup.save(on: db)
 
     return PatternFamilyApplyResult(
-        writtenFiles: Array(toWrite.keys).sorted(),
-        deletedFiles: Array(toDelete).sorted(),
+        writtenFiles: mutations.writtenFilenames,
+        deletedFiles: mutations.deletedFilenames.sorted(),
         manifestBefore: oldManifest,
         manifestAfter: newManifest
     )
