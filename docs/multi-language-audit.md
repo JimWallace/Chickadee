@@ -4,11 +4,14 @@ Scope: the arc from Lua's completion (#1282) through Racket (#1305) — Octave
 (#1292), the upload-only submission mode and C++ (#1293–#1296, #1303), the
 runner language gate (#1297, #1300), and Racket (#1305). Audited at v0.5.35.
 
-The headline is narrow and specific. **The server half of this arc is in good
-shape; the runner half of the sixth language is absent.** Racket renders,
-validates, refuses the right kinds and personalizes correctly — and no
-`chickadee-runner` can claim, dispatch or execute a single Racket job. Three
-independent defects stack in exactly the order that hides the two behind them.
+**Everything below is the audit AS FOUND** — read "Status at merge" first for
+what has since changed, or you will chase defects that are fixed.
+
+The headline was narrow and specific. **The server half of this arc was in good
+shape; the runner half of the sixth language was absent.** Racket rendered,
+validated, refused the right kinds and personalized correctly — and no
+`chickadee-runner` could claim, dispatch or execute a single Racket job. Three
+independent defects stacked in exactly the order that hides the two behind them.
 
 Everything else here is smaller: one coherence rule that generalised at two of
 its five sites, a set of guards that are hand-enumerated where `allCases` was
@@ -30,16 +33,39 @@ what follows is what changed, so a later reader does not chase a fixed defect.
 - **F4** — all five enforcement sites ask `EditorSupport`, the refusal message
   is a function of the language, and `TestProperties.effectiveSubmissionMode`
   makes the incoherent pair inert wherever it arrives.
-- **F5, partly** — the script-dispatch fixture gained Lua, Octave and C++ rows
-  (it had covered neither Lua nor Octave since they shipped) plus an `allCases`
-  row-existence assertion; Racket is a named exemption until F1 lands.
-- **F6, partly** — this document exists; `CLAUDE.md` and the runbook still stop
-  at the fifth language.
+- **F5** — the script-dispatch fixture gained Lua, Octave and C++ rows (it had
+  covered neither Lua nor Octave since they shipped) plus an `allCases`
+  row-existence assertion, and Racket's row landed with the F1 fix.
+  `RunnerProfileDetector` and Racket native grading both have suites now, so the
+  coverage asymmetry the audit measured is gone.
+- **F6** — this document exists, and `CLAUDE.md` and the runbook are current: the
+  runbook gained the authoring-UI section and its counts were re-measured.
 
-**Open, and deliberately so.** F1 and F3 — Racket dispatch and the version
-parse. Held while production catches up. Nothing else in the branch depends on
-them, and F3's guard (asserting the probe's output *parses*, not merely that it
-exits 0) is the one-line change that should land with them.
+**F1 and F3 are closed too, in a follow-up.** Racket's generated `.rkt` now has
+a `ScriptInterpreter` case, an extension arm and a `racket` invocation; and
+`firstNumericVersion` drops leading non-digits before taking the numeric prefix,
+so `v8.10` parses. Each landed with the guard that would have caught it:
+
+- `GeneratedScriptDispatchTests` walks `allCases` and asserts every language's
+  generated extension reaches its own interpreter — the runbook's
+  compiler-invisible item 9. C++ is the stated exception, since its generated
+  case really is a `.sh` wrapper.
+- `RunnerProfileDetectorTests` pins all six real banners and, under `CI`, runs
+  each probe and asserts its output *parses* — not merely that it exits 0, which
+  is what the previous guard checked and what `racket --version` satisfies.
+- `RacketNativeGradingTests` executes generated `.rkt` through the real
+  interpreter, so the language meets the runbook's done test (the generated code
+  is run, not parsed) rather than being declared finished.
+- The `.racket` exemption in `ScriptDispatchContractTests` was written to come
+  out with the fix, and has; that map is empty now.
+
+Both fixes were verified by reverting each in isolation and confirming the new
+guards go red.
+
+**Still required before a Racket assignment grades in production:** the runner
+fleet must be refreshed. Dispatch and the runtime helper both live in the runner
+binary, so a runner older than this change still cannot grade Racket — and the
+`runnerVersionSkew` alert stops being informational at that point.
 
 **Found while fixing, and not in the original audit:**
 

@@ -85,6 +85,13 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     // reach a display. The package that ships it is `octave` (there is no
     // CLI-only Debian package).
     case .octave: return envInvocation(interpreter: "octave-cli", script: script)
+    // Interpreted and needing no wrapper: `racket file.rkt` runs a generated
+    // test directly under the ordinary shell-script exit-code contract.
+    // Without this arm a `.rkt` classified `.unknown`, fell through to
+    // `/bin/sh`, and exited 2 on its own leading `;` — every generated Racket
+    // test reporting `error`, in the only grading path an upload-only language
+    // has.
+    case .racket: return envInvocation(interpreter: "racket", script: script)
     case .unknown:
         if FileManager.default.isExecutableFile(atPath: script.path) {
             return ScriptInvocation(executableURL: script, arguments: [])

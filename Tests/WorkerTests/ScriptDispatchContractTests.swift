@@ -61,26 +61,21 @@ import Testing
         if first == "Rscript" { return "r" }
         if first == "lua" { return "lua" }
         if first == "octave-cli" { return "octave" }
+        if first == "racket" { return "racket" }
         if exe == "sh" || first == "bash" || first == "zsh" { return "shell" }
         return "other"
     }
 
-    /// Languages deliberately absent from the fixture, each with its reason.
+    /// Languages deliberately absent from the fixture, each with its reason —
+    /// a NAMED EXEMPTION rather than a skip, so an absence is one somebody
+    /// chose with the reason greppable beside it.
     ///
-    /// A NAMED EXEMPTION, not a skip. The same shape as
-    /// `submissionGuaranteeExemption`: an absence somebody chose, with the
-    /// reason greppable beside it, rather than an absence nobody noticed —
-    /// which is precisely how the fixture came to cover neither Lua nor Octave
-    /// for two releases.
-    static let fixtureExemptions: [AssignmentLanguage: String] = [
-        // Racket's generated `.rkt` does not classify at all today: no
-        // ScriptInterpreter case, no extension arm, so it falls through to
-        // `/bin/sh` and exits 2 on its own leading `;`. A row here would either
-        // pin that defect as expected behaviour or fail the build ahead of the
-        // fix. It comes out when dispatch lands — see F1 in
-        // docs/multi-language-audit.md.
-        .racket: "dispatch unimplemented; see docs/multi-language-audit.md F1"
-    ]
+    /// EMPTY, and that is the point. Racket sat here while its generated
+    /// `.rkt` had no `ScriptInterpreter` case and fell through to `/bin/sh`;
+    /// the exemption was written to come out WITH the fix, and it has. A
+    /// non-empty map now means someone has a language whose generated scripts
+    /// nothing pins — which is what this file exists to prevent.
+    static let fixtureExemptions: [AssignmentLanguage: String] = [:]
 
     /// Every language's generated scripts have a fixture row.
     ///
