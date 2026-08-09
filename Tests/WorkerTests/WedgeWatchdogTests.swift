@@ -1,5 +1,6 @@
 // Tests/WorkerTests/WedgeWatchdogTests.swift
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 

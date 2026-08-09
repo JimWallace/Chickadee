@@ -321,9 +321,9 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
     proc.arguments = ["-l", tmp.path]
-    let pipe = Pipe()
+    let pipe = closeOnExecPipe()
     proc.standardOutput = pipe
-    proc.standardError = Pipe()
+    proc.standardError = closeOnExecPipe()
     guard (try? proc.run()) != nil else { return false }
     let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()

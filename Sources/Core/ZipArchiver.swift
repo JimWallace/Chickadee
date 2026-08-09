@@ -114,9 +114,12 @@ public func listZipContents(zipPath: String) throws -> [String] {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         proc.arguments = ["-Z1", zipPath]
-        let outPipe = Pipe()
+        // CLOEXEC before the spawn: an unrelated process started concurrently
+        // must not inherit these write ends, or the drain below cannot reach
+        // EOF until that process exits (#1233).
+        let outPipe = closeOnExecPipe()
         proc.standardOutput = outPipe
-        proc.standardError = Pipe()  // discard
+        proc.standardError = closeOnExecPipe()  // discard
         try runProcessWithEFAULTRetry(proc)
         let data = outPipe.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()

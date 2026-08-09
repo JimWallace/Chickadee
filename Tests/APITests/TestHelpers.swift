@@ -3,6 +3,7 @@
 // Shared helpers for integration tests that involve session auth and CSRF.
 
 import CSRF
+import ChickadeeTestSupport
 import Core
 import Crypto
 import Fluent
@@ -224,13 +225,25 @@ func demoteToStudentEverywhere(username: String, on app: Application) async thro
 /// `makeTestApp` directory tree, the file sqlite-kit secretly backs an
 /// "in-memory" database with, the per-test Postgres schema). Safe for bare
 /// apps too — each cleanup step is a no-op when there is nothing to clean.
+///
+/// It is also where APITests arms `WedgeWatchdog`. This is the target's one
+/// universal test-body scope — 172 of its 315 files call it directly, about
+/// two-thirds of the target's tests, and `withWebRoutesApp` /
+/// `withAssignmentRoutesApp` funnel into it — so wrapping it means every test
+/// that starts or finishes resets the stall clock, and the watchdog stays
+/// armed exactly while test bodies are in flight. `.timeLimit`, which 33
+/// APITests files carry, cannot do this job: the trait needs a
+/// cooperative-pool thread to fire, and pool saturation is the failure being
+/// watched for (#1233; ci-flakiness Family 5).
 func withApp(_ app: Application, _ body: (Application) async throws -> Void) async throws {
-    do {
-        try await body(app)
-        try await app.tearDownTestApp()
-    } catch {
-        try? await app.tearDownTestApp()
-        throw error
+    try await WedgeWatchdog.track {
+        do {
+            try await body(app)
+            try await app.tearDownTestApp()
+        } catch {
+            try? await app.tearDownTestApp()
+            throw error
+        }
     }
 }
 

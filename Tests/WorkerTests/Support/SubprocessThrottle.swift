@@ -22,6 +22,7 @@
 // acquire a slot for `run() + port read`, then release while the server keeps
 // serving.
 
+import ChickadeeTestSupport
 import Foundation
 
 /// Runs `body` while holding one of a small, fixed number of subprocess-launch

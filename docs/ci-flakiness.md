@@ -1,6 +1,11 @@
-# CI flakiness — state of knowledge (2026-07-02, updated after the #1139 fix)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-08-09)
 
-Handoff document for the flakiness work. The first snapshot (earlier on
+Handoff document for the flakiness work. Families 1–3 are the original
+2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
+later**, so the header date is where this started, not where it ends. Check
+the newest families first — they are the ones still open.
+
+The first snapshot (earlier on
 2026-07-02) was written while landing PRs #1138–#1142; the headline then:
 **on an afternoon of loaded runners, an average PR had roughly a coin-flip
 chance of at least one flaky-job failure per full CI run**, and the only
@@ -257,6 +262,146 @@ register dump.
 
 ---
 
+## Family 5 — `api-tests` starved past its 20-minute ceiling — OBSERVED ONCE (2026-08-09), root cause open
+
+**Symptom.** `api-tests` reports **`cancelled`** and `swift-tests-gate` fails
+with `jobs not successful: api-tests`. It reads exactly like the Family 1 /
+#1233 wedge — same conclusion string, same 20-minute burn — and it is **not
+one**.
+
+**What distinguishes it from a wedge: the job was still making progress at
+the moment of the kill.** The last seconds of log show tests *completing*,
+not silence:
+
+```
+✔ Test requestJob_concurrentClaims_onlyOneSucceeds() passed after 10.517 seconds.
+✔ Test getResultsReturnsCollection() passed after 10.015 seconds.
+```
+
+A wedge produces ~18 minutes of total process silence (#1233: 254 tests
+started, 55 completed). This produced steady completions at roughly 10×
+their normal cost. The distinguishing question is therefore **"is anything
+still finishing?"**, not "did the job hit its ceiling?" — both shapes hit the
+ceiling.
+
+The second tell is in the suite wall-clocks. Three unrelated suites reported
+near-identical totals:
+
+```
+✔ Suite DraftSuiteSectionRoutesTests passed after 1083.174 seconds.
+✔ Suite OctavePatternFamilyExecutionTests passed after 1086.623 seconds.
+✔ Suite AuthModeGatingTests passed after 1086.744 seconds.
+```
+
+Every suite starting at ~t=0 and ending at ~t=1085 is one contended parallel
+pool draining, not three suites that each took 18 minutes.
+
+**The measurement.** PR #1308 (`07efab8`), both attempts of the same job on
+the same commit, ~25 minutes apart:
+
+| | attempt 1 | attempt 2 (`rerun-failed-jobs`) |
+|---|---|---|
+| `Run APITests` | **1107 s** — killed at the ceiling | **216 s** |
+| conclusion | `cancelled` | `success` |
+| runner | `GitHub Actions 1000033632` | `GitHub Actions 1000033636` |
+| setup before the step | 93 s | 92 s |
+
+No code changed between them. **216 s is below the main median**, so attempt 2
+was not a lucky fast run — attempt 1 was a >5× outlier.
+
+**Baseline** (`Run APITests` step, last 18 completed `main` runs, 2026-08-08
+to 2026-08-09):
+
+| lane | ceiling | min | median | max | spread |
+|---|---|---|---|---|---|
+| `api-tests` (sqlite) | 20 min | 204 s | 236 s | 441 s | **2.2×** |
+| `api-tests-postgres` | 25 min | 257 s | 330 s | 351 s | 1.4× |
+
+Two things fall out of that table:
+
+1. **The effective budget is the ceiling minus setup**, not the ceiling.
+   Container init + checkout + artifact restore cost ~93 s, so `Run APITests`
+   gets ~1107 s of a 1200 s job — which is exactly where attempt 1 was
+   killed.
+2. **The more variable lane has the tighter ceiling.** The sqlite lane swings
+   2.2× run-to-run and is capped at 20 min; the postgres lane is far steadier
+   and gets 25. That inversion is not deliberate, and it means the lane most
+   likely to spike is the one with the least room to.
+
+**What is NOT established.** A single observation cannot separate these, and
+the entry is written so nobody later mistakes the hypothesis for the finding:
+
+- *Ambient runner slowness / noisy neighbour.* Not excluded. The two attempts
+  ran on different runners, and 4.7× is a lot but hosted runners do vary.
+- *A saturation event of the #1233 kind that happened to recover.* The
+  identical-wall-clock signature is consistent with the pool filling; the fact
+  that tests kept completing says it never became self-sustaining. #1233's
+  analysis is explicit that the permanent form needs leaked pipe write ends to
+  postpone EOF forever — so a transient version that drains is the *expected*
+  benign relative of that bug, not evidence of it.
+
+**Why APITests is the plausible host if it is the second one.** The exposure
+that made `WorkerTests` wedge is present here and has never had the same
+treatment:
+
+- **35 of 314 `Tests/APITests/` files spawn `Process()`; 29 name a real
+  interpreter** (`python3`, `Rscript`, `lua`, `octave-cli`, `racket`, `g++`).
+  That surface grew through the 0.5.3x language work, and recently: the log
+  excerpt above shows `OctavePatternFamilyExecutionTests`, added
+  **2026-08-07** — two days before this incident.
+- **`WedgeWatchdog` is `WorkerTests`-local.** It lives in
+  `Tests/WorkerTests/Support/WedgeWatchdog.swift`; `Tests/APITests/`
+  references it **0 times** against `WorkerTests`' 6. It is the one mechanism
+  that survives pool saturation, because it runs on a dedicated OS thread.
+- **APITests has 32 files carrying `.timeLimit`** — and per #1233 that is
+  precisely the protection that *cannot* fire under saturation, since the
+  trait needs a pool thread to run. So APITests currently holds the guard
+  that doesn't work in this scenario and lacks the one that does.
+
+The CLOEXEC residual noted in "Remaining attack order" item 3 is on this
+side of the tree too: `Core/ZipArchiver`, `TestSetupZipHelpers` and
+`NotebookContentHelpers` read before waiting (the safe order) but their pipes
+still aren't CLOEXEC.
+
+**Handling for now.** Re-run the job (`/rerun-failed`, or
+`rerun-failed-jobs`). Before blaming a `cancelled` `api-tests` on the diff in
+front of you, check three things, in order: does the diff touch
+`Sources/APIServer/` or `Tests/APITests/` at all; did `api-tests-postgres`
+pass on the same commit (it runs the *same target*, and did here); and were
+tests still completing at the tail of the log. All three pointed away from the
+diff on #1308, and the rerun confirmed it.
+
+**Reproducing `APITests` locally.** Set
+`SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`, as CI does. Unbounded
+Swift Testing parallelism **SIGSEGVs** this target locally with a flood of
+AsyncKit "Connection request timed out" — a crash that looks exactly like a
+regression in the change under test and is not one.
+
+**Attack notes.** In rough order of cost:
+
+1. **Promote `WedgeWatchdog` to shared test support and arm it in APITests.**
+   **DONE** — see attack-order item 4 for what shipped and the measurements
+   behind the threshold. Turns a silent 20-minute burn into a bounded failure
+   carrying a `/proc/self/task` thread table, which is what will settle the
+   noisy-neighbour-vs-saturation question the *next* time this happens rather
+   than requiring another lucky log tail.
+2. **Re-tune the ceiling — but do not expect it to have saved this run.**
+   The sqlite lane is capped at 20 min against postgres' 25 despite carrying
+   the wider spread, and equalising them is defensible on the baseline alone:
+   the ordinary tail is 441 s, and 20 min leaves ~1107 s of test budget after
+   setup. What the bump does **not** do is rescue attempt 1 — that job was
+   killed at 1107 s *while still running*, so nothing establishes it would
+   have finished inside a 25-minute budget (~1407 s of test time) either. An
+   earlier draft of this note asserted it would have passed; that was
+   unsupported, and the correction is the point: this buys headroom for the
+   ordinary tail, not for a 5× starvation event. It also buys a genuine wedge
+   five more minutes of silence, which is why it belongs after (1) rather
+   than instead of it.
+3. **Finish the CLOEXEC sweep** on the three helpers above, closing the
+   mechanism that turns a transient overload into a permanent one.
+
+---
+
 ## Structural problems → current state
 
 1. **A bot's only re-kick was a new SHA.** Fixed: comment `/rerun-failed`
@@ -438,7 +583,52 @@ register dump.
    sleep on the return path). `Core/ZipArchiver`, `TestSetupZipHelpers`,
    and `NotebookContentHelpers` already read before waiting (the safe
    order); their pipes still aren't CLOEXEC — a cosmetic residual to fold
-   in when those files are next touched.
+   in when those files are next touched. **DONE — and the premise turned out
+   narrower than this item stated.** The three helpers are CLOEXEC'd (via
+   `Core/PipeCloseOnExec.swift`, hoisted from the worker's copy so there is
+   one implementation), but measurement says the leak is **not reachable
+   through anything Chickadee spawns today**: on Swift 6.3 / glibc 2.39 a
+   pipe of ours does not survive into a child spawned through Foundation's
+   `Process`, and swift-subprocess — the worker's spawner —
+   `close_range(…, CLOSE_RANGE_CLOEXEC)`s everything above stderr. Only a
+   bare `posix_spawn` child still inherits, which is what the behavioural
+   test has to use to demonstrate the failure at all.
+
+   So the change is defence-in-depth restoring a uniform invariant, not a
+   live bug being closed, and **the leaked-write-end mechanism cannot be the
+   cause of a Family 5 event.** An intermediate revision of this file
+   reclassified "cosmetic" as an unmeasured assumption; that reclassification
+   was itself the unmeasured thing, and the original wording was closer to
+   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pins the measurement so
+   a toolchain change that re-opens the leak is caught here rather than in a
+   wedged job. Note the precise claim: *our pipe's write end* does not reach
+   the child. Other inherited descriptors do — "the child holds only fds
+   0/1/2" is too strong and measures false.
+4. **Stall visibility in `api-tests`** (Family 5) — **DONE.**
+   `WedgeWatchdog` moved to a shared `ChickadeeTestSupport` target (a plain
+   `.target`, because a `.testTarget` cannot be depended on and SwiftPM
+   assigns each source file to exactly one target, so there is no
+   shared-`sources:` trick that does not compile two copies of the type). It
+   is armed in `APITests` at `withApp` in `TestHelpers.swift` — 172 of the
+   target's 315 files call it directly, and `withWebRoutesApp` /
+   `withAssignmentRoutesApp` funnel into it; `withPatternFamilyFixture`
+   builds its app directly and so arms itself. `WedgeWatchdogArmingTests`
+   guards against silently losing the arming.
+
+   **The 300 s threshold is measurement-backed, not guessed.** A full
+   `APITests` run at CI's `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`
+   passes with the limit forced to **30 s** — 10× tighter than shipped — while
+   individual tests in that same run reported up to **131 s of wall clock**.
+   That is the design's central distinction demonstrated: a long test is not a
+   silent process, and Family 5's steady-progress-at-10×-cost would not trip
+   it. Verified to fire by pinning every cooperative-pool thread in a blocking
+   `read(2)` inside an armed scope: the process aborted on the watchdog's own
+   thread with a `/proc/self/task` table showing four
+   `state=S wchan=anon_pipe_read` pool threads.
+
+   No new environment variable: `CHICKADEE_WORKERTESTS_STALL_SECONDS` keeps
+   its name and 300 s default even though it now covers two targets, because
+   renaming it would silently drop an existing override.
 
 ## Evidence index
 
@@ -450,3 +640,9 @@ register dump.
 - `grading-hang-probe.yml` run history — background failure rate on
   unrelated branches (2026-06-26 ×3).
 - `editor-smoke.yml` run history — 24/25 green over the trailing window.
+- PR #1308 (Family 5) — run 31316093551, `api-tests` attempt 1 job
+  93253094895 (`cancelled`, `Run APITests` 1107 s) vs attempt 2 job
+  93255901938 (`success`, 216 s) on the same commit `07efab8`.
+- `swift-tests.yml` run history on `main`, 2026-08-08 → 2026-08-09 (Family 5
+  baseline) — 18 runs, `api-tests` 204/236/441 s min/median/max against
+  `api-tests-postgres` 257/330/351 s.

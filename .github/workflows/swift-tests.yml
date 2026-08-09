@@ -168,7 +168,14 @@ jobs:
   api-tests:
     runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 20
+    # 25, matching api-tests-postgres, which runs the SAME target. This lane
+    # had the tighter ceiling despite the wider run-to-run spread (2.2x vs
+    # 1.4x over 18 main runs) — an inversion, not a decision. Note the budget
+    # the step actually gets is this minus ~95s of container init + checkout +
+    # artifact restore. See docs/ci-flakiness.md Family 5; the entry is
+    # explicit that this buys headroom for the ordinary 441s tail and would
+    # NOT have saved the 5x starvation event that prompted it.
+    timeout-minutes: 25
     container:
       # swift-ci = the mirrored toolchain + baked-in test packages (see
       # mirror-images.yml / .github/docker/ci-image); same `swift --version`,

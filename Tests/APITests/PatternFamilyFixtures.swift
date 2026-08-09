@@ -4,6 +4,7 @@
 // helper `withPatternFamilyFixture { fixture in ... }` builds the
 // app+setup pair and shuts it down deterministically.
 
+import ChickadeeTestSupport
 import Core
 import Crypto
 import Fluent
@@ -104,7 +105,18 @@ struct PFFixture {
 
 /// Builds the app + an APITestSetup pair, runs `body` against them, and
 /// shuts the app down deterministically when the body returns.
+///
+/// This is the one APITests test-body scope that does NOT funnel through
+/// `withApp` (it builds its app directly), so it arms `WedgeWatchdog` itself
+/// — otherwise a wedge whose only in-flight bodies were pattern-family ones
+/// would find the watchdog disarmed.
 func withPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async throws {
+    try await WedgeWatchdog.track {
+        try await runPatternFamilyFixture(body)
+    }
+}
+
+private func runPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async throws {
     let app = try await Application.make(.testing)
     let tmpDir = NSTemporaryDirectory() + "pattern-family-tests-\(UUID().uuidString)/"
 

@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing

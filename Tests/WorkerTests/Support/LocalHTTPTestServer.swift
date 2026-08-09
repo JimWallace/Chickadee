@@ -21,6 +21,8 @@
 //     be ignored, so the process dies at once and `waitUntilExit()` reaps it
 //     without polling.
 
+import ChickadeeTestSupport
+import Core
 import Foundation
 
 @testable import chickadee_runner

@@ -124,6 +124,28 @@ let package = Package(
             swiftSettings: strictWarnings
         ),
 
+        // MARK: - Shared test support
+        //
+        // Test-only infrastructure that more than one test target needs. It is
+        // a plain `.target` rather than a `.testTarget` because SwiftPM test
+        // targets cannot depend on one another, and it lives under `Tests/`
+        // rather than `Sources/` because nothing here ships: `WedgeWatchdog`
+        // aborts the process on a stall, which is diagnosis for CI and would
+        // be a liability in the server or the runner.
+        //
+        // The alternative shapes were both worse. Copying the file into each
+        // test target is the drift class this repo keeps paying for. Sharing
+        // via `path:`/`sources:` cannot work: SwiftPM assigns each source file
+        // to exactly one target, so the shared directory can appear in only
+        // one `sources:` list — the only way to fake it is a symlink, which
+        // compiles two independent copies of the type while reading in review
+        // as one file.
+        .target(
+            name: "ChickadeeTestSupport",
+            path: "Tests/TestSupport",
+            swiftSettings: strictWarnings
+        ),
+
         // MARK: - Tests
         .testTarget(
             name: "CoreTests",
@@ -137,6 +159,7 @@ let package = Package(
             name: "APITests",
             dependencies: [
                 .target(name: "APIServer"),
+                .target(name: "ChickadeeTestSupport"),
                 .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
@@ -151,6 +174,7 @@ let package = Package(
             dependencies: [
                 .target(name: "chickadee-runner"),
                 .target(name: "RunnerCore"),
+                .target(name: "ChickadeeTestSupport"),
             ],
             path: "Tests/WorkerTests",
             swiftSettings: strictWarnings

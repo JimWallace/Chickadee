@@ -24,6 +24,8 @@
 // env-passthrough tests in #787 to all of the suite's real-script call sites,
 // across both `UnsandboxedScriptRunner` and `SandboxedScriptRunner`.
 
+import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Synchronization
@@ -109,9 +111,7 @@ func runProcessRobustly(
 /// still receives its end; spawn file actions clear the flag on the
 /// descriptor they install.
 func makeCloexecPipe() -> Pipe {
-    let pipe = Pipe()
-    setCloseOnExec(pipe)
-    return pipe
+    closeOnExecPipe()
 }
 
 /// Deadline-bounded read-to-EOF for a test subprocess pipe — the drop-in for
