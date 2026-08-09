@@ -303,6 +303,11 @@ tolerates the extra include.
 Sharing the files table, the page skeleton, or the seed tags; decomposing
 `assignments.leaf` or `admin.leaf` under this heading.
 
+> Superseded in part: `assignments.leaf` **was** decomposed, by #1311 under
+> #1253. Section 7 records why that call changed — the reason was not the Leaf
+> rule but a ~250-line duplication inside the file that had already drifted
+> into a user-visible defect.
+
 ---
 
 ## 6. Note for `CLAUDE.md`
@@ -312,3 +317,69 @@ UNBLOCKED", which reads as though a large decomposition is waiting. It is
 worth amending to say that the decomposition itself is roughly one partial,
 and that the substantive create-versus-edit drift is JavaScript. Otherwise
 the next person inherits the same overestimate this review was asked to check.
+
+---
+
+## 7. Scored against #1253 — the shape generalises
+
+Section 5's "Not planned" list says decomposing `assignments.leaf` is out of
+scope here. #1311 did it anyway, and *why* that call changed is the useful
+part.
+
+#1253 collected four code-shape follow-ups deferred from the 0.5 cleanup, and
+they were worked in sequence (#1311, #1312, #1314, #1315, #1317). Each was
+filed as a tidiness task with a stated rationale. In three of the four the
+stated rationale was wrong — and in all four, what a diff of the code actually
+showed was the same thing this review found in the create-versus-edit
+templates: **two copies of one thing, already drifted.**
+
+| #1253 item | Filed as | What diffing the copies showed |
+|---|---|---|
+| 2 — `assignments.leaf` | "the largest template with an unspent inline-`extend` budget (the LeafKit one-partial-per-template limit)" — the limit #1266 had already retired | The sections table and the ungrouped table were ~250 whitespace-identical lines. The ungrouped copy had lost the retest action from **all three** of its status branches and the copy-student-link button from the preview branch. Because the ungrouped table is also the flat-table mode used when a course has no sections, a course that never created one showed neither action on **any** assignment. |
+| 1 — draft-assignment parameter struct | "four sites thread the same wide parameter list; a save-context struct retires all four in one refactor" | Two unrelated clusters, not one list — two functions mirror a model's own initialiser and were left alone with their existing comments. But the two that *did* share fields each built the same `/instructor/new` query string in a **different field order**, and disagreed on whether an empty `error` was emitted or omitted. Retired 2 of 4, honestly. |
+| 3 — `applyPatternFamilies` | accurate as filed | Lifting phase 5 verbatim reproduced the same over-length violation one file over — a decomposition that moved the problem. Rebuilt as a builder type, which exposed that notebook-check emission was written out **twice** (authored pass and defensive pass) where the family emit path had already been factored into a shared helper for exactly that reason. The later phases held a second instance: the raw-entry list and the ordering list were built from two copies of the same nine-field `AuthoredRawScript` rewrite. |
+| 4 — claim evaluator | "nested in the routes struct… worth doing next time the claim logic changes anyway" | Not nested — file-private top-level types, which is the same problem stated differently. The value was not the relocation but the seam: injecting the claim step made reachable a branch `atomicallyClaimSubmission`'s own doc comment describes as impossible to trigger through the HTTP endpoint. |
+
+### What to carry forward
+
+- **Diff the copies before believing the ticket.** Three of four rationales
+  pointed somewhere other than the defect. The diff found it every time, and
+  it cost minutes.
+- **A verbatim extraction is not a decomposition.** Moving 135 lines into a
+  new file leaves 135 lines. If the lift does not also change the shape — state
+  onto a type, a loop into named steps — expect the linter to say so, and
+  prefer being told by the linter over shipping it.
+- **When two call sites do the same thing, delete one rather than parameterise
+  both.** The instinct to preserve each caller's existing output byte-for-byte
+  is what produced two query builders in the first place; field order in a
+  query string is not behaviour, and a test that pins it is pinning an
+  accident.
+- **Pick an acceptance criterion that is actually well-defined.** "Zero
+  manifest-byte change" is not: `makeWorkerManifestJSON` serializes
+  dictionaries, so JSON key order varies between runs and a byte diff reports
+  hundreds of differences between a build and itself. Parse and compare
+  structurally, preserving list order where order is meaningful.
+- **Search the structure, not the document.** The ungrouped drift survived
+  because any page-wide search for the retest action passes as soon as *one*
+  row has it. The guard added in #1311 slices each row out by its
+  `data-assignment-id` and asserts within it. This is the same lesson
+  `InstructorWorkbenchRoutesTests` records for form open tags.
+
+### Why this is a 0.5 theme
+
+0.5 is a consolidation era: one copy where there were two, an abstraction
+where one is available, and otherwise tightening the surface of features that
+have been accumulating since 0.1. The drift catalogued above is not
+carelessness — it is what a feature added twice looks like a year later, once
+each copy has been touched by a different change. The 0.5 boundary work
+already carries several instances of the same correction (`grading-shared.js`
+deduplicating the browser grading semantics, the second migration
+consolidation, the pre-0.5 shim removals), and #1253 is that pass applied to
+code shape rather than to subsystems.
+
+The practical consequence for anyone picking up a "cleanup" or "code shape"
+ticket: the ticket's stated reason is a starting hypothesis, not a finding.
+Diff the copies first. If they are identical, the consolidation is safe and
+cheap. If they are not, the difference is either a deliberate variation worth
+a parameter, or a bug — and it has been in production for as long as the
+copies have existed.
