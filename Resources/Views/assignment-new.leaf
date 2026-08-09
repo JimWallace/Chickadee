@@ -597,28 +597,8 @@ Create Assignment
         })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
         .then(function (payload) {
-            // Object response (bare array still accepted for a cached older
-            // page). `unsupportedReason` is how "we cannot read this language"
-            // stops looking like "your solution defines nothing".
-            var functions = Array.isArray(payload) ? payload : ((payload && payload.functions) || []);
-            var unsupportedReason = Array.isArray(payload) ? null : (payload && payload.unsupportedReason);
-            if (unsupportedReason && scanStatus) {
-                scanStatus.textContent = unsupportedReason;
-                scannedFunctions = [];
-                if (fnChecklist) fnChecklist.innerHTML = '';
-                if (scanResults) scanResults.style.display = '';
-                return;
-            }
-            scannedFunctions = functions || [];
-            if (scanStatus) scanStatus.textContent = scannedFunctions.length === 0 ? 'No functions found.' : scannedFunctions.length + ' function(s) found.';
-            if (fnChecklist) fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
-                var id = 'fn-chk-' + fn.name;
-                var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
-                return '<label class="fn-check-item">'
-                    + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
-                    + '<code>' + escHtml(label) + '</code></label>';
-            }).join('');
-            if (scannedFunctions.length > 0 && scanResults) scanResults.style.display = '';
+            scannedFunctions = window.chickadeeApplyScanPayload(payload,
+                { status: scanStatus, checklist: fnChecklist, results: scanResults });
         })
         .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
     }

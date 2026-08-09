@@ -38,6 +38,7 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // Shared /instructor-scope utilities (used by both new + edit pages).
         r.get("script-templates", use: getScriptTemplates)
         r.post("scan-notebook", use: scanNotebook)
+        r.post(":assignmentID", "compute-expected", use: computeExpectedValue)
 
         // Script editor — inline CRUD for individual test/support files in the setup zip.
         r.get(":assignmentID", "scripts", ":filename", use: getScript)

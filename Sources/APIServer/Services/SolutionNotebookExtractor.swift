@@ -135,6 +135,87 @@ enum SolutionNotebookExtractor {
         }
     }
 
+    // MARK: - Every other language
+
+    /// Extracts a solution notebook to source in `language`, or nil when the
+    /// notebook holds no executable cells.
+    ///
+    /// WHY THIS EXISTS. `extractCodeToPython` above is Python-only, and it was
+    /// the ONLY solution extraction the server did — so `shared/<setup>/` held a
+    /// `solution.py` and nothing else. An R, Lua, Octave or Racket
+    /// personalization expression therefore could not call the reference
+    /// solution at all: `supportFileEntries` looked for `.R` / `.lua` / `.m` /
+    /// `.rkt` helpers in that directory and the solution was never among them.
+    /// The expression failed, or worse, quietly resolved a name to nothing.
+    ///
+    /// The extractors themselves already existed in RunnerCore for the worker's
+    /// submission path (`extractR` / `extractLua` / `extractOctave` /
+    /// `extractCpp` / `extractRacket`); only the server half was missing. This
+    /// reuses them, so the reference solution the evaluator loads is assembled
+    /// by the same code that assembles a student's submission.
+    static func extractCode(
+        notebookData: Data, language: AssignmentLanguage
+    ) -> (source: String, filename: String)? {
+        let filename = "solution.\(language.sourceFileExtension)"
+        if language == .python {
+            guard let py = extractCodeToPython(notebookData: notebookData) else { return nil }
+            return (py, filename)
+        }
+        guard let cells = NotebookCellSources.cells(from: notebookData) else { return nil }
+        let inputCells = cells.map { cell in
+            NotebookCell(
+                cellType: (cell["cell_type"] as? String) ?? "",
+                source: NotebookCellSources.cellSource(cell))
+        }
+        // Exhaustive so a seventh language cannot inherit another's extractor —
+        // the `isRNotebook(nb) ? .r : .python` shape one size smaller.
+        let extracted: ExtractedRNotebook
+        switch language {
+        case .r: extracted = extractR(cells: inputCells, filename: "solution.ipynb")
+        case .lua: extracted = extractLua(cells: inputCells, filename: "solution.ipynb")
+        case .octave: extracted = extractOctave(cells: inputCells, filename: "solution.ipynb")
+        case .cpp: extracted = extractCpp(cells: inputCells, filename: "solution.ipynb")
+        case .racket: extracted = extractRacket(cells: inputCells, filename: "solution.ipynb")
+        case .python: return nil  // handled above
+        }
+        guard extracted.codeCellCount > 0 else { return nil }
+        return (extracted.source, filename)
+    }
+
+    /// Writes `solution.<ext>` for `language` into `sharedDirectory`.
+    ///
+    /// The language-aware sibling of `writeSolutionPy`, with the same
+    /// precedence rule: an instructor-uploaded file of that name wins unless
+    /// `overwrite` is set.
+    @discardableResult
+    static func writeSolutionSource(
+        notebookData: Data,
+        sharedDirectory: String,
+        language: AssignmentLanguage,
+        overwrite: Bool
+    ) -> Bool {
+        // Python keeps its own path byte-for-byte: it has resilient per-cell
+        // loading and an emptiness rule the generic extractors do not share,
+        // and every existing assignment depends on those bytes.
+        if language == .python {
+            return writeSolutionPy(
+                notebookData: notebookData, sharedDirectory: sharedDirectory, overwrite: overwrite)
+        }
+        guard let extracted = extractCode(notebookData: notebookData, language: language) else {
+            return false
+        }
+        let fm = FileManager.default
+        let target = (sharedDirectory as NSString).appendingPathComponent(extracted.filename)
+        if fm.fileExists(atPath: target) && !overwrite { return false }
+        do {
+            try fm.createDirectory(atPath: sharedDirectory, withIntermediateDirectories: true)
+            try extracted.source.write(toFile: target, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // Cell-source reading (`readCellSource`) moved to
     // `Core/NotebookCellSources.swift` (`cellSource(_:)`) in v0.4.181.
 }

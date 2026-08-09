@@ -344,6 +344,9 @@ extension AssignmentLanguage {
     /// See `LanguageDescriptor.generatedScriptExtension`.
     public var generatedScriptExtension: String { descriptor.generatedScriptExtension }
 
+    /// See `LanguageDescriptor.sourceFileExtension`.
+    public var sourceFileExtension: String { descriptor.sourceFileExtension }
+
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
     /// for `.python`, R literal for `.r`). Keys are emitted in sorted order for

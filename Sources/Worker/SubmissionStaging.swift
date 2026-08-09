@@ -121,16 +121,11 @@ func preferredStudentModuleFilename(
         return submittedName
     }
     if ext == "ipynb" {
-        let sourceExtension: String
-        switch language {
-        case .python: sourceExtension = "py"
-        case .r: sourceExtension = "R"
-        case .lua: sourceExtension = "lua"
-        case .octave: sourceExtension = "m"
-        case .cpp: sourceExtension = "cpp"
-        case .racket: sourceExtension = "rkt"
-        }
-        return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
+        // One fact, read from the descriptor. This was a hand-written switch,
+        // identical to the one in NotebookExtractor and to a third the server's
+        // solution extractor was about to grow.
+        return (submittedName as NSString).deletingPathExtension + "."
+            + language.sourceFileExtension
     }
     return nil
 }

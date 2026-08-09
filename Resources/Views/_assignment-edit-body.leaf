@@ -594,7 +594,10 @@
             solutionNotebook: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/files/solution';
             },
-            scanNotebook: function () { return '/instructor/scan-notebook'; }
+            scanNotebook: function () { return '/instructor/scan-notebook'; },
+            computeExpected: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/compute-expected';
+            }
         }
     });
 })();

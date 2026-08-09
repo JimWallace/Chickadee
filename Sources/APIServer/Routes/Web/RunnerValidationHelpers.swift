@@ -82,10 +82,30 @@ func enqueueRunnerValidationSubmission(
     // student-facing path. Best-effort: failure just leaves `import solution`
     // unavailable (the prior behaviour) and never blocks the save.
     let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-    SolutionNotebookExtractor.writeSolutionPy(
-        notebookData: solutionNotebookData,
-        sharedDirectory: sharedDir,
-        overwrite: true)
+    // In the assignment's OWN language. This wrote `solution.py` and only
+    // `solution.py`, so an R, Lua, Octave or Racket expression could never call
+    // the reference solution — `supportFileEntries` looked for helpers with that
+    // language's extension and the solution was never among them. Python's bytes
+    // are unchanged; `writeSolutionSource` delegates straight to
+    // `writeSolutionPy` for it.
+    if let setup = try? await APITestSetup.find(setupID, on: req.db),
+        let manifest = setup.decodedManifest(),
+        let language = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+    {
+        SolutionNotebookExtractor.writeSolutionSource(
+            notebookData: solutionNotebookData,
+            sharedDirectory: sharedDir,
+            language: language,
+            overwrite: true)
+    } else {
+        // No resolvable language (a plain `.sh` suite, or an unreadable
+        // manifest): keep the historical Python behaviour rather than writing
+        // nothing, so nothing that worked before stops working.
+        SolutionNotebookExtractor.writeSolutionPy(
+            notebookData: solutionNotebookData,
+            sharedDirectory: sharedDir,
+            overwrite: true)
+    }
 
     return subID
 }

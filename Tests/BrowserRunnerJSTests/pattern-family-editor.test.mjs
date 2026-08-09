@@ -349,3 +349,43 @@ test("language scalar tokens are rewritten to JSON, Racket's quote included", ()
   assert.ok(idxTokens < idxQuotes,
     "tokens must be rewritten before the quote swap, or Racket's 'null becomes \"null");
 });
+
+// The shared scan-payload readers. They live in this linted module rather than
+// inline in assignment-new.leaf because template JS is neither linted nor
+// tested — and the create page's inline copy is exactly the fork that went
+// stale three ways in #1269.
+test("the scan-payload readers handle both response shapes", () => {
+  const ctx = bootEditorWithLanguage(null);
+  const read = ctx.chickadeeReadScanPayload;
+  assert.equal(typeof read, 'function', 'chickadeeReadScanPayload must be exported');
+
+  // Object shape with a reason: no functions, and the reason survives.
+  const unsupported = read({ functions: [], unsupportedReason: 'Racket is upload-only.' });
+  assert.equal(unsupported.functions.length, 0);
+  assert.equal(unsupported.unsupportedReason, 'Racket is upload-only.');
+
+  // Object shape with functions and no reason.
+  const ok = read({ functions: [{ name: 'f' }], unsupportedReason: null });
+  assert.equal(ok.functions.length, 1);
+  assert.equal(ok.unsupportedReason, null);
+
+  // Bare array — a cached older page. Must not be read as "unsupported".
+  const legacy = read([{ name: 'g' }]);
+  assert.equal(legacy.functions.length, 1);
+  assert.equal(legacy.unsupportedReason, null);
+
+  // Junk must not throw; an empty scan is the safe answer.
+  assert.equal(read(null).functions.length, 0);
+  assert.equal(read(undefined).functions.length, 0);
+});
+
+test("auto-compute routes off the Python worker for other languages", () => {
+  // The defect: the in-page evaluator is a Python kernel, so on an R assignment
+  // it computed a PYTHON answer for a value compared against R's result.
+  assert.ok(editorSource.includes('callSolutionOnServer'),
+    'a server-side compute path must exist');
+  assert.ok(/languageFacts\.name !== 'python'/.test(editorSource),
+    'callSolution must route non-Python languages away from the in-page kernel');
+  assert.ok(editorSource.includes('compute-expected') || editorSource.includes('computeExpected'),
+    'the server path must call the compute-expected endpoint');
+});

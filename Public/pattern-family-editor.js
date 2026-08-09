@@ -305,13 +305,9 @@
                 // for an empty solution and for a language the scanner cannot
                 // read. An array is still accepted so a cached older page does
                 // not break.
-                if (Array.isArray(payload)) {
-                    scanUnsupportedReason = null;
-                    scannedFunctions = payload;
-                } else {
-                    scanUnsupportedReason = (payload && payload.unsupportedReason) || null;
-                    scannedFunctions = (payload && payload.functions) || [];
-                }
+                var read = readScanPayload(payload);
+                scanUnsupportedReason = read.unsupportedReason;
+                scannedFunctions = read.functions;
                 return scannedFunctions;
             })
             .catch(function () { scannedFunctions = []; return []; });
@@ -1743,7 +1739,60 @@
         /// tuples, bytes, complex) so the instructor sees a specific
         /// reason instead of `default=str` silently storing the repr
         /// string in the Expected cell.
+        /// Auto-compute via the SERVER, in the assignment's own language.
+        ///
+        /// The browser path below is a Python kernel. It did not fail on an R,
+        /// Lua, Octave, C++ or Racket assignment — it computed a PYTHON answer
+        /// for a value that would be compared against that language's result,
+        /// which is worse than not offering it. `PersonalizationEvaluator` on
+        /// the server already evaluates in all six, so this routes there rather
+        /// than growing five more kernels into the page.
+        ///
+        /// The value comes back as a LITERAL in that language (base R and Lua
+        /// have no JSON to serialize with), so it is read with the same
+        /// language-aware parser hand-typed values go through. A composite the
+        /// parser cannot take is reported, not stored: storing a repr string
+        /// would make it compare as text at grade time.
+        function callSolutionOnServer(fnName, args, opts) {
+            var captureStdout = !!(opts && opts.captureStdout);
+            if (!urls.computeExpected) {
+                return Promise.resolve({ ok: false, error: 'Auto-compute is unavailable on this page.' });
+            }
+            return fetch(urls.computeExpected(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: JSON.stringify({
+                    functionName: fnName, args: args, captureStdout: captureStdout
+                })
+            })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject('compute failed'); })
+            .then(function (res) {
+                if (res.unsupportedReason) return { ok: false, error: res.unsupportedReason };
+                if (!res.ok) return { ok: false, error: res.error || 'The solution raised an error.' };
+                var parsed = tryParseVarValue(res.rendered);
+                if (!parsed.ok || !parsed.strict) {
+                    // Scalars round-trip; a language repr of a list or record
+                    // does not. Say so instead of storing the text.
+                    var scalar = matchScalarToken(String(res.rendered).trim());
+                    if (scalar) return { ok: true, value: scalar.value };
+                    return {
+                        ok: false,
+                        error: 'Computed ' + res.rendered + ' — enter it here in JSON.'
+                    };
+                }
+                return { ok: true, value: parsed.value };
+            })
+            .catch(function (e) { return { ok: false, error: String(e) }; });
+        }
+
         function callSolution(fnName, args, opts) {
+            // Python keeps the in-page kernel: it is faster, and its handling of
+            // a None return and of types that do not round-trip through JSON is
+            // behaviour existing assignments rely on. Every other language goes
+            // to the server, which is the only place that can answer at all.
+            if (languageFacts.name && languageFacts.name !== 'python') {
+                return callSolutionOnServer(fnName, args, opts);
+            }
             var captureStdout = !!(opts && opts.captureStdout);
             return ensureSolutionLoaded().then(function (loaded) {
                 var cellErrors = loaded.cellErrors || [];
@@ -2212,5 +2261,62 @@
         };
     }
 
+    /// Reads a `/instructor/scan-notebook` response into
+    /// `{ functions, unsupportedReason }`.
+    ///
+    /// Shared because BOTH authoring pages call that endpoint, and the create
+    /// page's copy lived inline in the template where nothing lints or tests it
+    /// — the fork that let its JS go stale three separate ways (#1269). A bare
+    /// array is still accepted so a cached older page does not break.
+    function readScanPayload(payload) {
+        if (Array.isArray(payload)) return { functions: payload, unsupportedReason: null };
+        return {
+            functions: (payload && payload.functions) || [],
+            unsupportedReason: (payload && payload.unsupportedReason) || null
+        };
+    }
+
+    /// Applies a scan response to the create page's status line and function
+    /// checklist.
+    ///
+    /// Lives here rather than inline in `assignment-new.leaf` for the reason
+    /// the inline-script guard exists: template JS is neither linted nor
+    /// tested, and this page's inline copy is exactly the fork that went stale
+    /// three ways in #1269. `els` carries the three elements it touches.
+    function applyScanPayload(payload, els) {
+        // Module scope, so the escapers come from ChickadeeUI directly rather
+        // than the aliases bound inside initPatternFamilyEditor.
+        var escHtml = ChickadeeUI.escapeHtml;
+        var escAttr = ChickadeeUI.escapeAttr;
+        var read = readScanPayload(payload);
+        var status = els && els.status;
+        var checklist = els && els.checklist;
+        var results = els && els.results;
+        if (read.unsupportedReason) {
+            if (status) status.textContent = read.unsupportedReason;
+            if (checklist) checklist.innerHTML = '';
+            return [];
+        }
+        var functions = read.functions || [];
+        if (status) {
+            status.textContent = functions.length === 0
+                ? 'No functions found.'
+                : functions.length + ' function(s) found.';
+        }
+        if (checklist) {
+            checklist.innerHTML = functions.map(function (fn) {
+                var label = fn.name + '(' + ((fn.paramNames || []).join(', ')) + ')';
+                return '<label class="fn-check-item">'
+                    + '<input type="checkbox" id="' + escAttr('fn-chk-' + fn.name) + '"'
+                    + ' value="' + escAttr(fn.name) + '" checked>'
+                    + '<code>' + escHtml(label) + '</code></label>';
+            }).join('');
+        }
+        if (functions.length > 0 && results) results.style.display = '';
+        return functions;
+    }
+
+    global.chickadeeApplyScanPayload = applyScanPayload;
+    global.chickadeeReadScanPayload = readScanPayload;
     global.initPatternFamilyEditor = initPatternFamilyEditor;
 })(window);
