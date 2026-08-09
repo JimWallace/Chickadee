@@ -107,9 +107,23 @@ public struct NotebookFunctionInfo: Codable, Sendable {
 public struct NotebookScanResult: Sendable {
     public let sectionNames: [String]
     public let functions: [NotebookFunctionScanEntry]
-    public init(sectionNames: [String], functions: [NotebookFunctionScanEntry]) {
+    /// Non-nil when the scan did not run because the assignment's language
+    /// cannot be read — see `notebookFunctionScanSupport(for:)`.
+    ///
+    /// The distinction this field exists to carry: "this solution defines no
+    /// functions" and "we cannot read this language" both produced an empty
+    /// `functions` array, so an R author was told their solution was empty.
+    /// Defaulted to nil so the raw Python scanner's own construction is
+    /// unchanged.
+    public let unsupportedReason: String?
+    public init(
+        sectionNames: [String],
+        functions: [NotebookFunctionScanEntry],
+        unsupportedReason: String? = nil
+    ) {
         self.sectionNames = sectionNames
         self.functions = functions
+        self.unsupportedReason = unsupportedReason
     }
 }
 
@@ -129,6 +143,11 @@ public struct NotebookFunctionScanEntry: Sendable {
 /// Deduplicates section names in first-appearance order.  Shares the
 /// single-cell function extractor with `scanNotebookForFunctions` so
 /// the two paths agree on what counts as a detected function.
+///
+/// THE RAW PYTHON IMPLEMENTATION. It reads `def` statements and knows no
+/// other language. Production code calls the language-aware overload
+/// `scanNotebookForSectionsAndFunctions(_:language:)` instead, which answers
+/// "cannot read this language" rather than "found nothing".
 public func scanNotebookForSectionsAndFunctions(_ notebookData: Data) -> NotebookScanResult {
     guard
         let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
@@ -366,4 +385,97 @@ private func parseReturnType(from line: String) -> String? {
     else { return nil }
     let t = String(line[range]).trimmingCharacters(in: .whitespaces)
     return t.isEmpty ? nil : t
+}
+
+// MARK: - Language support
+//
+// The scanner above reads Python `def` statements and nothing else. That was
+// fine while every assignment was Python and quietly wrong afterwards: no R,
+// Lua, Octave or Racket source contains a line beginning `def `, so the scan
+// returned no functions and the instructor read "No functions found." on a
+// perfectly good solution. Empty and unsupported are different answers and only
+// one of them is the author's problem.
+//
+// The support question is EXHAUSTIVE so a seventh language has to answer it. The
+// compiler cannot force anyone to write an R parser — what it can force is that
+// somebody decides, and that the decision is visible to the instructor instead
+// of being inherited as silence.
+
+/// Whether `scanNotebookForSectionsAndFunctions` can find function definitions
+/// written in a given language.
+public enum NotebookFunctionScanSupport: Sendable, Equatable {
+    /// The scanner reads this language's function definitions.
+    case supported
+    /// It does not, and this is what to tell the instructor. Phrased for
+    /// display: it names the language and says what would be needed, so the
+    /// message is actionable rather than a shrug.
+    case unsupported(reason: String)
+
+    public var isSupported: Bool { self == .supported }
+
+    /// The instructor-facing reason, or nil when scanning works.
+    public var unsupportedReason: String? {
+        switch self {
+        case .supported: return nil
+        case .unsupported(let reason): return reason
+        }
+    }
+}
+
+/// Whether the solution-notebook function scan works for `language`.
+///
+/// EXHAUSTIVE ON PURPOSE — this is the decision a seventh language must make.
+/// Answering `.supported` without a parser to back it reinstates exactly the
+/// silence this type exists to end, so the arm and the parser move together.
+public func notebookFunctionScanSupport(
+    for language: AssignmentLanguage?
+) -> NotebookFunctionScanSupport {
+    // No language means a plain `.sh` suite: there is no notebook workflow to
+    // scan and nothing to promise. Treated as unsupported so the caller says so
+    // rather than reporting an empty scan.
+    guard let language else {
+        return .unsupported(
+            reason: "This assignment declares no language, so there is no solution notebook to scan.")
+    }
+    switch language {
+    case .python:
+        return .supported
+    case .r, .lua, .octave:
+        // A notebook workflow exists for these — they have vendored kernels —
+        // so the gap is the PARSER, not the concept. Each needs its own
+        // definition syntax read (`f <- function(x)`, `function f(x)`,
+        // `function y = f(x)`); none of them writes `def`.
+        return .unsupported(
+            reason: """
+                Scanning a solution for function definitions is currently Python-only. \
+                The scanner reads Python `def` statements, which \(language.displayName) \
+                source does not contain. Add the family's function name and parameters by hand.
+                """)
+    case .cpp, .racket:
+        // Structural, not a missing parser: these are upload-only
+        // (`EditorSupport.uploadOnly`), so there is no solution notebook in the
+        // first place. If a kernel ever lands for one, its arm moves up.
+        return .unsupported(
+            reason: """
+                \(language.displayName) assignments are upload-only and have no solution notebook \
+                to scan. Add the family's function name and parameters by hand.
+                """)
+    }
+}
+
+/// The language-aware entry point — the one production code should call.
+///
+/// Returns an empty scan carrying `unsupportedReason` when the language cannot
+/// be read, so a caller can tell "this solution defines nothing" from "we cannot
+/// read this language" and say which. `scanNotebookForSectionsAndFunctions`
+/// remains the raw Python implementation beneath it.
+public func scanNotebookForSectionsAndFunctions(
+    _ notebookData: Data, language: AssignmentLanguage?
+) -> NotebookScanResult {
+    let support = notebookFunctionScanSupport(for: language)
+    guard support.isSupported else {
+        return NotebookScanResult(
+            sectionNames: [], functions: [], unsupportedReason: support.unsupportedReason)
+    }
+    return scanNotebookForSectionsAndFunctions(notebookData)
 }

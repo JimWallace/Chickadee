@@ -104,18 +104,19 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         case .cpp:
             self.nullLiteral = nil
         }
-        // EXHAUSTIVE, both of them. A seventh language cannot compile without
-        // stating whether these authoring aids work for it — which is the
-        // whole failure mode being fixed: the aids were Python-only and every
-        // language silently inherited them.
-        switch language {
-        case .python:
-            self.functionScanning = true
-            self.expressionEvaluation = true
-        case .r, .lua, .octave, .cpp, .racket:
-            self.functionScanning = false
-            self.expressionEvaluation = false
-        }
+        // DERIVED, not restated. These began as two hand-written bools here so
+        // that scanning and evaluation had somewhere to be answered rather than
+        // silently inherited — which was right at the time and became the same
+        // bug one level up the moment the real answers existed elsewhere. Two
+        // places to answer one question is exactly what this whole pass has
+        // been removing.
+        //
+        // `notebookFunctionScanSupport` owns the first (its switch is the one a
+        // seventh language must satisfy), and `PersonalizationEvaluator` owns
+        // the second — it already spawns a per-language driver for all six, so
+        // evaluation is available wherever a driver is.
+        self.functionScanning = notebookFunctionScanSupport(for: language).isSupported
+        self.expressionEvaluation = PersonalizationEvaluator.supportsEvaluation(language)
     }
 }
 

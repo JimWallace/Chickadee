@@ -77,6 +77,7 @@ import Testing
         #expect(facts.nullLiteral == "None")
         #expect(facts.functionScanning)
         #expect(facts.expressionEvaluation)
+        // The bools the editor previously hardcoded, reproduced exactly.
     }
 
     /// An assignment with no language gets the language-less answer, and the
@@ -86,22 +87,67 @@ import Testing
         #expect(facts.name == nil)
         #expect(facts.displayName == nil)
         #expect(facts.trueLiteral == nil)
+        // No language means no notebook to scan and no driver to evaluate with.
         #expect(!facts.functionScanning)
         #expect(!facts.expressionEvaluation)
     }
 
-    /// Function scanning and browser evaluation are claimed for Python only.
+    /// Both capability flags are DERIVED from the subsystems that own them,
+    /// not restated here.
     ///
-    /// Not a design preference — a measurement. `NotebookFunctionScanner`
-    /// matches lines beginning `def `, which no R, Lua, Octave or Racket source
-    /// produces, and the evaluator is a Python kernel. Claiming either for
-    /// another language is how the editor came to report "No functions found."
-    /// on a perfectly good R solution.
+    /// This is the assertion that keeps a second copy from growing back. The
+    /// flags began as hand-written bools in `AuthoringLanguageFacts` — honest
+    /// at the time, and the same duplication bug one level up as soon as the
+    /// real answers existed. Scanning belongs to
+    /// `notebookFunctionScanSupport`, whose exhaustive switch is the one a
+    /// seventh language must satisfy; evaluation belongs to
+    /// `PersonalizationEvaluator`, which already spawns a driver per language.
     @Test(arguments: AssignmentLanguage.allCases)
-    func pythonOnlyAidsAreClaimedForPythonOnly(_ language: AssignmentLanguage) {
+    func capabilityFlagsAreDerivedFromTheirOwners(_ language: AssignmentLanguage) {
         let facts = AuthoringLanguageFacts(language)
-        #expect(facts.functionScanning == (language == .python))
-        #expect(facts.expressionEvaluation == (language == .python))
+        #expect(facts.functionScanning == notebookFunctionScanSupport(for: language).isSupported)
+        #expect(facts.expressionEvaluation == PersonalizationEvaluator.supportsEvaluation(language))
+    }
+
+    /// Scanning a solution for function definitions is Python-only, and says
+    /// so rather than reporting an empty solution.
+    ///
+    /// Not a design preference — a measurement. The scanner matches lines
+    /// beginning `def `, which no R, Lua, Octave or Racket source produces.
+    /// Claiming it for another language is how the editor came to report "No
+    /// functions found." on a perfectly good R solution.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func onlyPythonSolutionsCanBeScanned(_ language: AssignmentLanguage) {
+        #expect(AuthoringLanguageFacts(language).functionScanning == (language == .python))
+        let support = notebookFunctionScanSupport(for: language)
+        if language == .python {
+            #expect(support.unsupportedReason == nil)
+        } else {
+            // An unsupported answer is only useful if it explains itself, and
+            // names the language it is about.
+            let reason = support.unsupportedReason ?? ""
+            #expect(!reason.isEmpty, "\(language) is unsupported with no reason given")
+            #expect(
+                reason.contains(language.displayName),
+                "the reason for \(language) does not name \(language.displayName)")
+        }
+    }
+
+    /// Expression evaluation is available in every language, because the
+    /// server's evaluator has a driver for every language.
+    ///
+    /// The editor's own evaluator was a Python kernel, so auto-compute was
+    /// Python-only while the server had already solved this six ways.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyLanguageCanEvaluateAnExpression(_ language: AssignmentLanguage) {
+        #expect(AuthoringLanguageFacts(language).expressionEvaluation)
+    }
+
+    /// An assignment with no language cannot be scanned, and says why.
+    @Test func aLanguagelessAssignmentCannotBeScanned() {
+        let support = notebookFunctionScanSupport(for: nil)
+        #expect(!support.isSupported)
+        #expect(support.unsupportedReason?.isEmpty == false)
     }
 
     /// The seed is valid JSON with the keys the editor reads.

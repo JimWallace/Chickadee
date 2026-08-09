@@ -94,6 +94,10 @@
             return languageFacts.displayName || '';
         }
 
+        // Why the last scan found nothing, when the reason is the language
+        // rather than the solution. Null means the scan genuinely ran.
+        var scanUnsupportedReason = null;
+
         // ── State ──────────────────────────────────────────────────────────
         var familiesState = Array.isArray(config.initialFamilies)
             ? config.initialFamilies.slice()
@@ -279,14 +283,37 @@
             })
             .then(function (r) { return r.ok ? r.text() : Promise.reject('No solution notebook'); })
             .then(function (text) {
-                return fetch(urls.scanNotebook(), {
+                // Tell the server which language to read. Without it the
+                // endpoint falls back to the notebook's own kernelspec, which
+                // is a better default than assuming Python but is not the
+                // assignment's declared answer.
+                var scanURL = urls.scanNotebook()
+                    + (languageFacts.name
+                        ? (urls.scanNotebook().indexOf('?') === -1 ? '?' : '&')
+                          + 'language=' + encodeURIComponent(languageFacts.name)
+                        : '');
+                return fetch(scanURL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                     body: text
                 });
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject('Scan failed'); })
-            .then(function (fns) { scannedFunctions = fns || []; return scannedFunctions; })
+            .then(function (payload) {
+                // The response is an OBJECT now. It used to be a bare array,
+                // which could only ever say "no functions" — the same answer
+                // for an empty solution and for a language the scanner cannot
+                // read. An array is still accepted so a cached older page does
+                // not break.
+                if (Array.isArray(payload)) {
+                    scanUnsupportedReason = null;
+                    scannedFunctions = payload;
+                } else {
+                    scanUnsupportedReason = (payload && payload.unsupportedReason) || null;
+                    scannedFunctions = (payload && payload.functions) || [];
+                }
+                return scannedFunctions;
+            })
             .catch(function () { scannedFunctions = []; return []; });
             return scanPromise;
         }
@@ -322,6 +349,16 @@
                 if (allowed.size === 0) allowed = null;
             }
             if (allowed && selectedName) allowed.add(selectedName);
+            // The message that was wrong for five of six languages: an R
+            // author whose solution the scanner cannot read was shown the
+            // same "no functions" state as an author with an empty solution,
+            // and nothing distinguished them.
+            if (scanUnsupportedReason) {
+                fnSelect.disabled = true;
+                fnHint.textContent = scanUnsupportedReason;
+                fnSelect.innerHTML = '<option value="">\u2014 Enter the function name below \u2014</option>';
+                return;
+            }
             fnSelect.disabled = false;
             fnHint.textContent = allowed
                 ? 'Showing functions defined under this section in the solution notebook.'

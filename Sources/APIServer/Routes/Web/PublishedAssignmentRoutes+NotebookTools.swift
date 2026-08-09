@@ -56,7 +56,23 @@ extension PublishedAssignmentRoutes {
         // to the family's section — works on brand-new sections that
         // don't yet have any tests, which the filename-token filter
         // (v0.4.108–110) couldn't.
-        let scan = scanNotebookForSectionsAndFunctions(notebookData)
+        // WHICH LANGUAGE. The client sends `?language=` (the editor now knows
+        // it, from `#assignment-language-seed`); a request without it falls
+        // back to the notebook's own kernelspec, which is a far better default
+        // than assuming Python — assuming Python is what made this endpoint
+        // answer "no functions found" for every R solution ever scanned.
+        let requestedLanguage = req.query[String.self, at: "language"]
+            .flatMap(AssignmentLanguage.init(rawValue:))
+        let notebookLanguage: AssignmentLanguage? = {
+            guard
+                let object = (try? JSONSerialization.jsonObject(with: notebookData))
+                    as? [String: Any],
+                let metadata = object["metadata"] as? [String: Any]
+            else { return nil }
+            return AssignmentLanguage.fromNotebookMetadata(metadata)
+        }()
+        let scan = scanNotebookForSectionsAndFunctions(
+            notebookData, language: requestedLanguage ?? notebookLanguage)
 
         // Forward ALL fields the scanner produces — not just a hand-picked
         // subset.  Pre-v0.4.94 this DTO dropped `paramTypes`, `returnType`,
@@ -99,7 +115,18 @@ extension PublishedAssignmentRoutes {
             )
         }
 
-        return try await results.encodeResponse(for: req)
+        // An OBJECT, not the bare array this used to return. The array could
+        // only say "no functions", which is the same answer for an empty
+        // solution and for a language the scanner cannot read — and an R author
+        // got the first message for the second reason. `unsupportedReason`
+        // carries the difference so the editor can show it.
+        struct ScanResponse: Content {
+            var functions: [FunctionResult]
+            var unsupportedReason: String?
+        }
+        return try await ScanResponse(
+            functions: results, unsupportedReason: scan.unsupportedReason
+        ).encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/:assignmentID/create-solution

@@ -98,6 +98,19 @@ enum PersonalizationEvaluator {
     /// - `expressions`: evaluated in declared order, each seeing
     ///   `seed`, every entry in `staticVariables`, and every prior
     ///   expression's value as a Python global.
+    /// Whether an expression can be evaluated for `language`.
+    ///
+    /// True for all six today: `driverPlan` is exhaustive and every arm names
+    /// an interpreter that ships on the server image. It is a function rather
+    /// than a constant so a seventh language whose driver is not yet written
+    /// has somewhere to say so — and so the authoring editor reads the answer
+    /// from the evaluator instead of keeping a second copy of it.
+    static func supportsEvaluation(_ language: AssignmentLanguage) -> Bool {
+        switch language {
+        case .python, .r, .lua, .octave, .cpp, .racket: return true
+        }
+    }
+
     static func evaluate(
         seedHex: String,
         staticVariables: [FamilyVariable],
