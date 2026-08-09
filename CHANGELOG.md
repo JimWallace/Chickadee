@@ -9,6 +9,139 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.36] - 2026-08-09
+
+### Fixed
+
+- **The pattern-family editor knows which language it is editing.**
+  `Public/pattern-family-editor.js` contained the string "language" zero times:
+  it validated Python identifiers, accepted `True`/`False`/`None`, rewrote
+  pasted values by Python's rules, and named Python in its optional-argument
+  placeholder — on R, Lua, Octave, C++ and Racket assignments alike, while the
+  server rendered the same family correctly in those languages. An R author who
+  typed the boolean true got the *string* instead, silently, in a value that
+  decides marks. Both authoring pages now seed `#assignment-language-seed` from
+  the new `AuthoringLanguageFacts`, whose scalar spellings are computed by
+  `JSONValue.literal(_:)` — the same call that renders the real generated test,
+  so the editor cannot drift from what will actually be produced. Python's facts
+  reproduce the previous hardcoded constants exactly, so Python assignments are
+  unchanged.
+- **C++ is offered no null token.** Its `literal(.null)` is the poison
+  identifier the renderer emits so a leak becomes a compile error; the editor no
+  longer offers that as something to type, matching the save-time refusal.
+
+### Fixed
+
+- **The Global and Section Inputs editors read the assignment's language.**
+  `inputs-editor-core.js` parsed values by Python's rules — `True`, `False`,
+  `None`, and a Python-repr rewrite — on all six languages, so an R instructor
+  typing the boolean true stored the *string*. These panels are where per-student
+  `=` expressions are authored, and an expression is evaluated in the
+  assignment's language, not Python. The scalar spellings now come from the same
+  shared reader the pattern-family editor uses.
+- **The "Add Test" menu no longer offers notebook-check kinds the language
+  cannot save.** It listed all ten on every assignment — six a Lua author could
+  not save, and every one of them on C++ or Racket, where there is no notebook to
+  check at all. Unsupported kinds are disabled with their reason, derived from
+  the same predicate the save-time refusal uses (issue #1290).
+- **The dashboard stops offering an editor link for a language that has none.**
+  The row reported the stored submission mode while gating Edit and Open-editor
+  on it; it now reports `effectiveSubmissionMode`, matching `effectiveGradingMode`
+  beside it. Manifest-writing sites keep the stored value.
+
+### Changed
+
+- **`Public/authoring-language.js`** is the one place the browser reads the
+  assignment's language facts, shared by the pattern-family editor, the inputs
+  editors and the test-editor modal, so "how does this language spell true" has a
+  single answer.
+- Student- and instructor-facing wording that named Python on every assignment:
+  the in-browser kernel messages, the raw-script blurb's extension list, and the
+  required-languages placeholder.
+
+### Fixed
+
+- **Auto-computing a case's expected value now runs the assignment's own
+  language.** The editor's evaluator is a Python kernel in a Web Worker, so on
+  an R, Lua, Octave, C++ or Racket assignment it did not fail — it computed a
+  *Python* answer for a value that would be compared against that language's
+  result. Non-Python assignments now call
+  `POST /instructor/:assignmentID/compute-expected`, which evaluates through
+  `PersonalizationEvaluator` (the same per-language driver that resolves every
+  per-student `=` expression). Python keeps its in-page kernel unchanged.
+- **A non-Python reference solution is extracted at all.** The server wrote only
+  `solution.py`, so an R, Lua, Octave, C++ or Racket personalization expression
+  could never call the reference solution — the evaluator looked for a helper
+  with that language's extension and the solution was never among them.
+  `SolutionNotebookExtractor` now writes `solution.<ext>` in the assignment's
+  language, reusing the RunnerCore extractors the worker already uses.
+
+### Changed
+
+- **`LanguageDescriptor.sourceFileExtension`** replaces two identical
+  hand-written switches (the worker's submission staging and its notebook
+  extractor) that a third was about to join. Distinct from
+  `generatedScriptExtension`, which for C++ is the `.sh` wrapper.
+- Automatic stdout capture is offered where a language expresses it in one
+  expression (R, Octave) and reported unavailable where it does not, instead of
+  being auto-filled with what Python printed.
+
+### Added
+
+- **Architecture audit of multi-language support (`docs/multi-language-audit.md`).**
+  Covers the arc from Lua's completion through Racket. Finds Racket ungradable on
+  the native worker via three stacking defects — generated `.rkt` tests classify
+  as unknown and run under `/bin/sh`, no Racket runtime helper is written into
+  the grading workspace, and `racket --version`'s letter-led version token
+  (`v8.10`) defeats the runner's version parser so no runner ever advertises the
+  language — plus the upload-only coherence rule still naming C++ at three of its
+  five enforcement sites. No behaviour changes; the audit is documentation only.
+
+### Fixed
+
+- **The solution-notebook scan says which language it cannot read.** It matches
+  Python `def` statements and nothing else, so an R, Lua, Octave or Racket
+  solution produced no functions and the instructor was told "No functions
+  found." — the same message an empty solution gets. `notebookFunctionScanSupport`
+  is now an exhaustive switch a seventh language must answer, the scan endpoint
+  returns the reason alongside the functions, and both authoring pages show it.
+  The scaffold asks the same question instead of no-opping by accident.
+
+### Fixed
+
+- **An upload-only language can no longer be authored into notebook mode.** The
+  rule "a language with no editor kernel must be `submissionMode: uploadOnly`"
+  was enforced at five places and spelled `== .cpp` at three of them, so a Racket
+  assignment could be flipped back to the notebook workflow from the MCP tool,
+  the web editor, or a zip-borne manifest. All five now ask
+  `EditorSupport`, and the refusal message names the language it refused instead
+  of always saying "C++".
+- **`TestProperties.effectiveSubmissionMode`** pins a kernel-less language to
+  upload mode at every consumption site, the way `effectiveGradingMode` already
+  did for `upload + browser`. A stored incoherent pair — from a hand-crafted zip,
+  an imported course bundle, or a row written before the language existed — is
+  now inert rather than a promise of an editor that cannot load.
+- **Every language's runtime helper is installed, discovered from
+  `allCases`.** The runner installed them through five hand-written calls under a
+  comment reading "one per language", which stopped being true at the sixth:
+  `test_runtime.rkt` had no embed and no write call, so a generated Racket test's
+  `(require "test_runtime.rkt")` found nothing. Adding a language now fails to
+  compile until it answers `runtimeHelperFiles(for:)`.
+
+### Changed
+
+- **Three drift guards walk `allCases` instead of naming languages.**
+  `RuntimeSourceDriftTests` was five hand-written cases and now checks every
+  language both ways — embed matches canonical, and no canonical helper goes
+  uninstalled. The script-dispatch fixture gained Lua, Octave and C++ rows (it
+  had covered neither Lua nor Octave since they shipped) plus an `allCases`
+  assertion that every language's generated extension has one, with Racket
+  carried as a named exemption until its dispatch lands.
+  `AssignmentLanguage.lineCommentLeader` is hoisted out of `renderInputsFile` so
+  the drift guard reads the same per-language fact rather than keeping a second
+  copy.
+
+
 ## [0.5.35] - 2026-08-08
 
 ### Added
