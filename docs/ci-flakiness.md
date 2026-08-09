@@ -371,13 +371,20 @@ pass on the same commit (it runs the *same target*, and did here); and were
 tests still completing at the tail of the log. All three pointed away from the
 diff on #1308, and the rerun confirmed it.
 
+**Reproducing `APITests` locally.** Set
+`SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`, as CI does. Unbounded
+Swift Testing parallelism **SIGSEGVs** this target locally with a flood of
+AsyncKit "Connection request timed out" — a crash that looks exactly like a
+regression in the change under test and is not one.
+
 **Attack notes.** In rough order of cost:
 
 1. **Promote `WedgeWatchdog` to shared test support and arm it in APITests.**
-   Turns a silent 20-minute burn into a ~6-minute failure carrying a
-   `/proc/self/task` thread table — which is what would settle the
-   noisy-neighbour-vs-saturation question the *next* time this happens,
-   rather than requiring another lucky log tail.
+   **DONE** — see attack-order item 4 for what shipped and the measurements
+   behind the threshold. Turns a silent 20-minute burn into a bounded failure
+   carrying a `/proc/self/task` thread table, which is what will settle the
+   noisy-neighbour-vs-saturation question the *next* time this happens rather
+   than requiring another lucky log tail.
 2. **Re-tune the ceiling — but do not expect it to have saved this run.**
    The sqlite lane is capped at 20 min against postgres' 25 despite carrying
    the wider spread, and equalising them is defensible on the baseline alone:
@@ -576,16 +583,52 @@ diff on #1308, and the rerun confirmed it.
    sleep on the return path). `Core/ZipArchiver`, `TestSetupZipHelpers`,
    and `NotebookContentHelpers` already read before waiting (the safe
    order); their pipes still aren't CLOEXEC — a cosmetic residual to fold
-   in when those files are next touched. **Reclassified 2026-08-09:** all
-   three are exercised by `Tests/APITests/`, which Family 5 shows has the
-   subprocess exposure and none of the stall instrumentation, so "cosmetic"
-   is an assumption about a lane nobody has measured — not a finding.
-4. **Stall visibility in `api-tests`** (Family 5) — `WedgeWatchdog` is
-   `WorkerTests`-local, so an APITests stall or starvation still burns 20
-   silent minutes and yields nothing to diagnose from. Promoting it to
-   shared test support is the cheapest way to make the next occurrence
-   self-diagnosing, and is a prerequisite for deciding whether that lane's
-   ceiling should move.
+   in when those files are next touched. **DONE — and the premise turned out
+   narrower than this item stated.** The three helpers are CLOEXEC'd (via
+   `Core/PipeCloseOnExec.swift`, hoisted from the worker's copy so there is
+   one implementation), but measurement says the leak is **not reachable
+   through anything Chickadee spawns today**: on Swift 6.3 / glibc 2.39 a
+   pipe of ours does not survive into a child spawned through Foundation's
+   `Process`, and swift-subprocess — the worker's spawner —
+   `close_range(…, CLOSE_RANGE_CLOEXEC)`s everything above stderr. Only a
+   bare `posix_spawn` child still inherits, which is what the behavioural
+   test has to use to demonstrate the failure at all.
+
+   So the change is defence-in-depth restoring a uniform invariant, not a
+   live bug being closed, and **the leaked-write-end mechanism cannot be the
+   cause of a Family 5 event.** An intermediate revision of this file
+   reclassified "cosmetic" as an unmeasured assumption; that reclassification
+   was itself the unmeasured thing, and the original wording was closer to
+   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pins the measurement so
+   a toolchain change that re-opens the leak is caught here rather than in a
+   wedged job. Note the precise claim: *our pipe's write end* does not reach
+   the child. Other inherited descriptors do — "the child holds only fds
+   0/1/2" is too strong and measures false.
+4. **Stall visibility in `api-tests`** (Family 5) — **DONE.**
+   `WedgeWatchdog` moved to a shared `ChickadeeTestSupport` target (a plain
+   `.target`, because a `.testTarget` cannot be depended on and SwiftPM
+   assigns each source file to exactly one target, so there is no
+   shared-`sources:` trick that does not compile two copies of the type). It
+   is armed in `APITests` at `withApp` in `TestHelpers.swift` — 172 of the
+   target's 315 files call it directly, and `withWebRoutesApp` /
+   `withAssignmentRoutesApp` funnel into it; `withPatternFamilyFixture`
+   builds its app directly and so arms itself. `WedgeWatchdogArmingTests`
+   guards against silently losing the arming.
+
+   **The 300 s threshold is measurement-backed, not guessed.** A full
+   `APITests` run at CI's `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`
+   passes with the limit forced to **30 s** — 10× tighter than shipped — while
+   individual tests in that same run reported up to **131 s of wall clock**.
+   That is the design's central distinction demonstrated: a long test is not a
+   silent process, and Family 5's steady-progress-at-10×-cost would not trip
+   it. Verified to fire by pinning every cooperative-pool thread in a blocking
+   `read(2)` inside an armed scope: the process aborted on the watchdog's own
+   thread with a `/proc/self/task` table showing four
+   `state=S wchan=anon_pipe_read` pool threads.
+
+   No new environment variable: `CHICKADEE_WORKERTESTS_STALL_SECONDS` keeps
+   its name and 300 s default even though it now covers two targets, because
+   renaming it would silently drop an existing override.
 
 ## Evidence index
 

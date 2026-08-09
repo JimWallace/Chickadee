@@ -7,12 +7,19 @@
 //
 // Measured while adding these tests, and worth knowing before assuming the
 // leak is live: on Swift 6.3 / glibc 2.39 BOTH spawners this codebase uses
-// already prevent it themselves. Foundation's `Process` leaves a child with
-// only fds 0/1/2, and swift-subprocess `close_range(…, CLOSE_RANGE_CLOEXEC)`s
-// everything above stderr. A child spawned by a bare `posix_spawn` still
-// inherits the lot — that is the case the helper covers, and the case the
-// behavioural test below uses, because it is the only one that can still
-// demonstrate the failure.
+// already prevent it themselves. A pipe of ours does not reach a child
+// spawned through Foundation's `Process`, and swift-subprocess
+// `close_range(…, CLOSE_RANGE_CLOEXEC)`s everything above stderr. A child
+// spawned by a bare `posix_spawn` still inherits the lot — that is the case
+// the helper covers, and the case the behavioural test below uses, because it
+// is the only one that can still demonstrate the failure.
+//
+// State that precisely. An earlier draft of this comment said a `Process`
+// child "holds only fds 0/1/2", which is too strong and measures false: other
+// inherited descriptors (e.g. sockets held by the surrounding process) do
+// survive into the child. What is established is the narrower claim the test
+// below actually asserts — OUR pipe's write end is not among them — and that
+// is the only claim the CLOEXEC argument needs.
 
 import Foundation
 import Testing
