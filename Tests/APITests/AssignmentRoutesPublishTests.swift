@@ -421,7 +421,22 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
                     redirectLocation = res.headers.first(name: .location)
-                    #expect((redirectLocation ?? "").contains("/instructor/new?draftID="))
+                    // Assert the field is present with a value, not that it
+                    // happens to come first: query-parameter order carries no
+                    // meaning, and pinning it here made unifying the two
+                    // redirect builders look like a breaking change (#1253).
+                    let location = redirectLocation ?? ""
+                    #expect(location.hasPrefix("/instructor/new?"))
+                    let query = location.drop(while: { $0 != "?" }).dropFirst()
+                    let draftIDValue =
+                        query
+                        .split(separator: "&")
+                        .first { $0.hasPrefix("draftID=") }
+                        .map { $0.dropFirst("draftID=".count) }
+                    #expect(
+                        !(draftIDValue ?? "").isEmpty,
+                        "Redirect must carry a non-empty draftID; got \(location)"
+                    )
                 })
 
             let setup = try await APITestSetup.query(on: app.db).first()
