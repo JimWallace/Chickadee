@@ -1931,6 +1931,14 @@
 
         function autoComputeRow(row) {
             if (!row || !row.parentElement) return;
+            // A language with no expression driver cannot answer this at all,
+            // and the failure would be silent in the worst direction: the row
+            // sits empty, or the server refuses and the instructor reads it as
+            // a bug in their solution.  True for all six languages today —
+            // every one has an interpreter on the server image — so this reads
+            // the fact rather than assuming it, which is the whole point of the
+            // fact existing.
+            if (!ChickadeeLanguage.canEvaluateExpressions()) return;
             // Variable-equality families don't call a function — skip.
             if (kindInput && kindInput.value === 'variable_equality') return;
             // Return-type-check expected is a type name (e.g. "DataFrame"),

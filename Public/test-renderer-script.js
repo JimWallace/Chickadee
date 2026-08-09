@@ -30,8 +30,24 @@ import {
 (function (global) {
     'use strict';
 
-    var TEMPLATE_OPTIONS = [
-        { group: 'Python', items: [
+    // Which template groups an assignment may pick from.
+    //
+    // The Python group is Python-only, and used not to be gated at all: an
+    // Octave author opened "Write a custom script" — advertised in the Add Test
+    // catalog as "your assignment's language, or .sh" — and was offered nine
+    // Python templates and a `test_correctness.py` filename. Applying one wrote
+    // Python into an Octave suite.
+    //
+    // The Shell group is offered everywhere because it IS everywhere: `.sh` is
+    // the universal test-script contract, and a shell test is a legitimate
+    // thing to hand-write in any assignment.
+    //
+    // The other five languages have no template set. That is an authoring gap,
+    // not a structural one — writing pedagogically sound R/Lua/Octave/C++/
+    // Racket equivalents of these nine is content work. Until they exist the
+    // picker offers Shell and Blank, and Blank opens an empty file with the
+    // assignment's own extension, which is the honest answer.
+    var PYTHON_TEMPLATE_GROUP = { group: 'Python', items: [
             { value: 'py:exists', label: 'Function Exists' },
             { value: 'py:correctness', label: 'Correctness (input/output pairs)' },
             { value: 'py:corner_cases', label: 'Corner Cases' },
@@ -41,17 +57,42 @@ import {
             { value: 'py:differential', label: 'Differential (reference solution)' },
             { value: 'py:variable_equality', label: 'Variable Equality' },
             { value: 'py:structural_check', label: 'Structural Check (AST properties)' }
-        ] },
-        { group: 'Shell', items: [
-            { value: 'sh:always_pass', label: 'Always Pass (placeholder)' },
-            { value: 'sh:file_exists', label: 'File Exists Check' },
-            { value: 'sh:command_output', label: 'Command Output Check' }
-        ] }
-    ];
+    ] };
+
+    var SHELL_TEMPLATE_GROUP = { group: 'Shell', items: [
+        { value: 'sh:always_pass', label: 'Always Pass (placeholder)' },
+        { value: 'sh:file_exists', label: 'File Exists Check' },
+        { value: 'sh:command_output', label: 'Command Output Check' }
+    ] };
+
+    /// The groups this assignment may pick from, in menu order.
+    function templateGroups() {
+        var language = global.ChickadeeLanguage;
+        if (!language || language.isPython()) {
+            return [PYTHON_TEMPLATE_GROUP, SHELL_TEMPLATE_GROUP];
+        }
+        return [SHELL_TEMPLATE_GROUP];
+    }
+
+    /// The extension a new test file gets when the instructor has not named
+    /// one, and the extension a chosen template forces.
+    ///
+    /// `sh:` templates are shell whatever the assignment is. Everything else
+    /// takes the assignment's own extension, which for C++ is `sh` too — its
+    /// test cases are shell wrappers, so there is no contradiction to resolve.
+    function extensionFor(templateKey) {
+        if ((templateKey || '').split(':')[0] === 'sh') return 'sh';
+        var language = global.ChickadeeLanguage;
+        return language ? language.scriptExtension() : 'py';
+    }
 
     function cfg() { return global.ChickadeeScriptRendererConfig || {}; }
 
     var langComp = new Compartment();
+    /// Syntax highlighting for the open file. Python, R and shell are the three
+    /// modes the vendored CodeMirror bundle carries; `.lua`, `.m` and `.rkt`
+    /// fall back to shell highlighting, which is wrong but harmless — adding
+    /// their modes means re-vendoring `Public/vendor/codemirror.js`.
     function langExtensionFor(filename) {
         var ext = (filename || '').split('.').pop().toLowerCase();
         if (ext === 'py') return python();
@@ -121,7 +162,10 @@ import {
             newControls = el('div', null, 'display:flex;flex-direction:column;gap:.5rem');
             var nameLabel = el('label', null, 'font-size:.85rem;display:flex;flex-direction:column;gap:.2rem');
             nameLabel.appendChild(document.createTextNode('Filename'));
-            nameInput = el('input', { type: 'text', 'class': 'form-input', placeholder: 'e.g. test_correctness.py' }, 'padding:.3rem .5rem;font-size:.85rem');
+            nameInput = el('input', {
+                type: 'text', 'class': 'form-input',
+                placeholder: 'e.g. test_correctness.' + extensionFor(null)
+            }, 'padding:.3rem .5rem;font-size:.85rem');
             nameLabel.appendChild(nameInput);
             newControls.appendChild(nameLabel);
 
@@ -130,7 +174,7 @@ import {
             tplCaption.textContent = 'Template:';
             tplRow.appendChild(tplCaption);
             templateSel = el('select', { 'class': 'form-input' }, 'padding:.25rem .5rem;font-size:.8rem;max-width:28rem');
-            TEMPLATE_OPTIONS.forEach(function (g) {
+            templateGroups().forEach(function (g) {
                 var og = el('optgroup', { label: g.group });
                 g.items.forEach(function (it) { var o = el('option', { value: it.value }); o.textContent = it.label; og.appendChild(o); });
                 templateSel.appendChild(og);
@@ -166,21 +210,20 @@ import {
             metaRow.appendChild(limitLabel);
             bodyEl.appendChild(metaRow);
 
-            // Keep the filename extension in sync with the chosen template lang.
+            // Keep the filename extension in sync with the chosen template.
+            // "Blank" leaves a name the instructor has already typed alone —
+            // it carries no language of its own.
             templateSel.addEventListener('change', function () {
-                var lang = (templateSel.value || '').split(':')[0];
+                var key = templateSel.value || '';
                 var name = (nameInput.value || '').trim();
-                if (!name) return;
-                var stem = name.replace(/\.[^.]*$/, '');
-                if (lang === 'py') nameInput.value = stem + '.py';
-                if (lang === 'sh') nameInput.value = stem + '.sh';
+                if (!name || key === 'blank') return;
+                nameInput.value = name.replace(/\.[^.]*$/, '') + '.' + extensionFor(key);
             });
             applyBtn.addEventListener('click', function () {
                 var tplKey = templateSel ? templateSel.value : 'blank';
                 var apply = function (content) {
                     if (!nameInput.value.trim()) {
-                        var lang = (tplKey || '').split(':')[0];
-                        nameInput.value = 'test_new.' + (lang === 'sh' ? 'sh' : 'py');
+                        nameInput.value = 'test_new.' + extensionFor(tplKey);
                     }
                     if (view) {
                         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });

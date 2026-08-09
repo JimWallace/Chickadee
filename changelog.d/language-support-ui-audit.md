@@ -33,3 +33,25 @@
   student-facing "the Python kernel" prose on the editor-reset and notebook
   pages were stale the same way; the placeholder is now derived from
   `AssignmentLanguage.allCases`, and the kernel prose no longer names a language.
+
+- **The custom-script editor no longer offers Python to every language.** "Write
+  a custom script" is advertised in the Add Test catalog as "your assignment's
+  language, or .sh" and then offered nine Python templates, a
+  `test_correctness.py` placeholder, and a `test_new.py` default on all six
+  languages. The Python group is now shown only on Python assignments; Shell is
+  shown everywhere because `.sh` is the universal test contract; and a new
+  file's extension comes from the assignment's own language — `sh` for C++,
+  whose test cases are shell wrappers. Template sets for R, Lua, Octave, C++ and
+  Racket do not exist yet, so those assignments get Shell and Blank; writing
+  them is content work, not a structural gap.
+
+- **The two authoring facts nothing read are now read.** `functionScanning` and
+  `expressionEvaluation` were computed server-side, parsed in the browser, and
+  consumed by no one — the create page invited a solution scan on every language
+  and reported "No functions found." where the honest answer was "this language
+  cannot be scanned", and auto-compute routed on a hand-written
+  `name !== 'python'` beside an unread capability flag. The scan panel now
+  refuses up front and names the language, and auto-compute reads the flag, so a
+  seventh language without an expression driver disables the control instead of
+  filling Expected cells from a server that refuses. `authoring-language.js`
+  gained the accessors and its first test file.

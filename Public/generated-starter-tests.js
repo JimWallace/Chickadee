@@ -50,6 +50,20 @@
 
         function setStatus(text) { if (scanStatus) scanStatus.textContent = text; }
 
+        // Say up front that the scan cannot read this language, rather than
+        // running it and reporting "No functions found." — the same answer an
+        // empty solution gives, which is how an R author was left unable to
+        // tell a limitation from a mistake.  The server says as much when
+        // asked; asking requires clicking a button that looks like it works.
+        if (!global.ChickadeeLanguage.canScanFunctions()) {
+            var scanLabel = global.ChickadeeLanguage.label();
+            if (scanBtn) scanBtn.disabled = true;
+            setStatus('Scanning a solution for functions is Python-only'
+                + (scanLabel ? ', and this is a ' + scanLabel + ' assignment' : '')
+                + '. Use "+ Add Test" in a section to add a test by hand.');
+            return;
+        }
+
         /// The template the scan already rendered for this function, or a
         /// placeholder when the scan carried none.
         function generatedTemplate(type, fnName) {
