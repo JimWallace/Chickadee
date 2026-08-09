@@ -220,6 +220,18 @@
             return noopAPI();
         }
 
+        // Name the assignment's language in the variables table header.  The
+        // static markup reads "Value (JSON or literal)" so the page is honest
+        // before this runs; it said "Python literal" to R, Lua, Octave, C++ and
+        // Racket authors, the same defect the "Python default" placeholder
+        // below had — missed because this instance lives in Leaf, not here.
+        (function () {
+            var valueHeader = document.getElementById('family-variable-value-header');
+            if (valueHeader && languageLabel()) {
+                valueHeader.textContent = 'Value (JSON / ' + languageLabel() + ' literal)';
+            }
+        })();
+
         var editingIndex = -1;   // index in familiesState; -1 when creating.
         // The modal no longer asks for tier/points — the suite table row owns
         // those.  On edit we keep the family's existing values; on create we

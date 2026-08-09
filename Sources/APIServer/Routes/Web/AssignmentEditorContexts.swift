@@ -91,6 +91,13 @@ struct NewAssignmentContext: Encodable {
     /// The required Language select's options, same builder the edit page
     /// uses. Declared at creation so nothing downstream has to derive it.
     let assignmentLanguageOptions: [AssignmentLanguageOption]
+    /// "C++ or Racket" — the languages whose assignments are upload-only,
+    /// derived so the fine print cannot name fewer of them than the rule
+    /// enforces. It named only C++ for the whole of Racket's existence.
+    let uploadOnlyLanguagesProse: String = LanguageProse.uploadOnlyDisplayNames
+    /// "python, r, lua, octave, cpp, racket" — the required-Languages input's
+    /// placeholder, derived for the same reason the select above it is.
+    let languageTokensCSV: String = LanguageProse.allTokensCSV
     let detectedLanguagesCSV: String
     let detectedCapabilitiesCSV: String
     let notice: String?
@@ -255,6 +262,10 @@ struct EditAssignmentContext: Encodable {
     /// the same discovered-not-enumerated rule the kernel-alias generator and
     /// the runner's capability probe follow.
     let assignmentLanguageOptions: [AssignmentLanguageOption]
+    /// "C++ or Racket" — see the identically-named field on
+    /// `NewAssignmentContext`. Both pages carry the same fine print and both
+    /// had gone stale the same way.
+    let uploadOnlyLanguagesProse: String = LanguageProse.uploadOnlyDisplayNames
     /// The per-assignment secret-reveal toggle: whether students may spend
     /// their one reveal token here.  Renders the "Student Options" checkbox.
     let secretRevealEnabled: Bool

@@ -70,8 +70,9 @@ struct CreateAssignmentTool: ContentTool {
                 "description": .string(
                     "The language this assignment is authored and graded in, or \"none\" for a suite "
                         + "of plain shell scripts. Required: the language is what every generated test "
-                        + "renders in, so it is stated rather than guessed. Declaring \"cpp\" also sets "
-                        + "submissionMode to uploadOnly, since C++ has no notebook workflow."),
+                        + "renders in, so it is stated rather than guessed. Declaring "
+                        + "\(LanguageProse.uploadOnlyTokens) also sets submissionMode to uploadOnly, "
+                        + "since those languages have no notebook workflow."),
             ]),
         ]),
         "required": .array([
