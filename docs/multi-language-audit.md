@@ -349,6 +349,27 @@ fails loudly at compile or on the first test run.
 
 ---
 
+## Correction: the scaffold does not corrupt language resolution
+
+An earlier reading of this audit reported that `NotebookScaffoldHelpers` writes
+`publictest_exists_<fn>.py` into a non-Python assignment and thereby flips its
+resolved language to Python. **It does not, and the claim should not be acted
+on.**
+
+`NotebookFunctionScanner` matches lines beginning `def ` at zero indentation.
+No R (`f <- function(x)`), Lua (`function f(x)`), Octave (`function y = f(x)`)
+or Racket (`(define (f x)`) source produces one, so the scan returns no
+functions, and the scaffold early-returns on `writes.isEmpty` **before** writing
+either the scripts or the manifest. It is a clean no-op.
+
+What remains is the silent-nothing symptom — the instructor reads "No functions
+found." on a perfectly good solution — which belongs to the scanner, not the
+scaffold. The residual corruption path is much narrower than described: a
+*Python* solution notebook attached to an assignment already declared
+non-Python, where a later `rederive` (triggered by replacing the notebook) would
+prefer the `.py` script over the recorded language. That is user error plus a
+second step, not the everyday path.
+
 ## Suggested order of work
 
 1. F3 (version parse) — smallest fix, and until it lands nothing else about
