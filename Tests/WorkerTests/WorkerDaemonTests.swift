@@ -1179,4 +1179,166 @@ import Testing
         let runnerInvocations = await runner.observedInvocationCount()
         #expect(runnerInvocations == 0, "ScriptRunner should not have been invoked when the submission download failed")
     }
+
+    // MARK: - Prepare-phase fetch reconciliation (docs/ci-flakiness.md, Family 4)
+
+    /// The two prepare-phase fetches run concurrently, and one leg's failure
+    /// must NOT cancel the other while it is still transferring.
+    ///
+    /// Cancelling an in-flight `URLSession.download` on Linux deadlocks:
+    /// `swift_task_cancel` holds the task's status-record lock and then
+    /// `DispatchQueue.sync`s onto the session's work queue, while that queue is
+    /// completing the same task's transfer and resuming its continuation, which
+    /// wants that lock.  The old `async let` shape performed exactly that cancel
+    /// every time the test-setup leg failed first — which is what several of
+    /// the 404 tests above do — and `worker-tests` SIGABRTed at the wedge
+    /// watchdog roughly one run in fifteen.
+    ///
+    /// The server reports what the client actually did: `completed` means every
+    /// byte was accepted, `aborted` means the transfer was torn down part-way.
+    /// This test therefore fails on the old code rather than merely being
+    /// slower on it.
+    @Test func testSetupFailureDoesNotCancelTheInFlightSubmissionDownload() async throws {
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-no-sibling-cancel-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+        let markers = try makeTempCacheRoot(named: "worker-daemon-no-sibling-cancel-markers")
+        defer { try? FileManager.default.removeItem(at: markers) }
+
+        // The test setup 404s immediately (terminal, no retries); the
+        // submission takes ~1.5 s, so the failure lands with the submission
+        // transfer unambiguously mid-flight.
+        let failServer = try await LocalHTTPTestServer.alwaysNotFound()
+        defer { failServer.stop() }
+        let slowServer = try await LocalHTTPTestServer.slowBody(
+            chunks: 15, delayMilliseconds: 100, markerDirectory: markers)
+        defer { slowServer.stop() }
+
+        let job = Job(
+            submissionID: "sub_no_sibling_cancel",
+            testSetupID: "setup_no_sibling_cancel",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(slowServer.port)/submission.zip"),
+            testSetupURL: testURL("http://127.0.0.1:\(failServer.port)/testsetup.zip"),
+            manifest: try makeManifest(),
+            submissionFilename: "submission.ipynb"
+        )
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-no-sibling-cancel",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        let reported = await waitUntil(timeoutSeconds: 30) { await reporter.snapshot().count == 1 }
+        #expect(reported, "expected a synthetic failure report for the 404 test setup")
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
+
+        #expect(
+            FileManager.default.fileExists(atPath: markers.appendingPathComponent("started").path),
+            "the submission download never started, so this test proved nothing")
+        // Polled, not sampled: the server writes `completed` one chunk-delay
+        // after the client has already seen the last byte, so an instantaneous
+        // read races it.
+        let completedPath = markers.appendingPathComponent("completed").path
+        let completed = await waitUntil(timeoutSeconds: 15) {
+            FileManager.default.fileExists(atPath: completedPath)
+        }
+        #expect(
+            completed,
+            "the test-setup failure cancelled the in-flight submission download (Family 4 trigger)")
+        #expect(
+            FileManager.default.fileExists(atPath: markers.appendingPathComponent("aborted").path) == false,
+            "the submission transfer was torn down mid-body by the sibling's failure")
+    }
+
+    /// The mirror-image property, and the one the reconciliation above must not
+    /// weaken: cancelling the daemon still stops an in-flight artifact
+    /// download rather than riding it out (#1233).  The submission transfer
+    /// here would take ~2 minutes; a daemon that ignored cancellation would
+    /// blow the 30 s bound in `awaitCancelledDaemon`, and the server's
+    /// `aborted` breadcrumb proves the transfer was actually torn down rather
+    /// than merely abandoned by a task that stopped awaiting it.
+    @Test func cancellingTheDaemonStopsTheInFlightSubmissionDownload() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-cancel-download-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-cancel-download-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+        let markers = try makeTempCacheRoot(named: "worker-daemon-cancel-download-markers")
+        defer { try? FileManager.default.removeItem(at: markers) }
+
+        // The test setup resolves normally; only the submission drips.
+        let marker = "canceldl\(UUID().uuidString.prefix(8))"
+        let setupZipPath = root.appendingPathComponent("\(marker)-setup.zip").path
+        try await makeZip(at: setupZipPath, files: [("test.sh", "#!/bin/sh\necho passed\n")])
+        let setupServer = try await LocalHTTPTestServer.staticFiles(directory: root)
+        defer { setupServer.stop() }
+        let slowServer = try await LocalHTTPTestServer.slowBody(
+            chunks: 600, delayMilliseconds: 200, markerDirectory: markers)
+        defer { slowServer.stop() }
+
+        let job = Job(
+            submissionID: "sub_\(marker)",
+            testSetupID: "setup-\(marker)",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(slowServer.port)/submission.zip"),
+            testSetupURL: testURL("http://127.0.0.1:\(setupServer.port)/\(marker)-setup.zip"),
+            manifest: try makeManifest(),
+            submissionFilename: "submission.ipynb"
+        )
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-cancel-download",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        let startedPath = markers.appendingPathComponent("started").path
+        let started = await waitUntil(timeoutSeconds: 20) {
+            FileManager.default.fileExists(atPath: startedPath)
+        }
+        #expect(started, "the submission download never started, so this test proved nothing")
+
+        // ~118 s of body is still outstanding at this point.
+        let cancelledAt = Date()
+        let shutDown = await awaitCancelledDaemon(task)
+        let shutdownSeconds = Date().timeIntervalSince(cancelledAt)
+        #expect(shutDown, "daemon rode out the in-flight submission download instead of cancelling it (#1233)")
+        #expect(
+            shutdownSeconds < 30,
+            "daemon took \(Int(shutdownSeconds))s to stop, which is not 'promptly' for a cancelled download")
+
+        let abortedPath = markers.appendingPathComponent("aborted").path
+        let aborted = await waitUntil(timeoutSeconds: 15) {
+            FileManager.default.fileExists(atPath: abortedPath)
+        }
+        #expect(aborted, "the in-flight transfer was abandoned rather than torn down (#1233)")
+        #expect(
+            FileManager.default.fileExists(atPath: markers.appendingPathComponent("completed").path) == false,
+            "a cancelled daemon must not finish transferring the artifact")
+    }
 }

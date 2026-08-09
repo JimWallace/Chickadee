@@ -209,6 +209,72 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         }
     }
 
+    /// Serves a 200 whose body is written in `chunks` 1 KiB pieces with
+    /// `delayMilliseconds` between them, so a transfer stays *in flight* for a
+    /// controllable length of time.  Two breadcrumb files in `markerDirectory`
+    /// report what the client did:
+    ///
+    ///   * `started` — written as soon as the response body begins;
+    ///   * `completed` — written only if every chunk was accepted, i.e. the
+    ///     client did **not** disconnect part-way;
+    ///   * `aborted` — written when a write fails, i.e. the client tore the
+    ///     transfer down mid-body.
+    ///
+    /// Those three are what make "was this download cancelled?" observable
+    /// from the far side of `URLSession`, which reports a cancelled transfer
+    /// and an abandoned one identically.  Used by the Family 4 regression
+    /// tests (docs/ci-flakiness.md): a sibling leg's failure must leave
+    /// `completed` behind, while cancelling the daemon must leave `aborted`.
+    static func slowBody(
+        chunks: Int,
+        delayMilliseconds: Int,
+        markerDirectory: URL
+    ) async throws -> LocalHTTPTestServer {
+        try await withSubprocessSlot {
+            try LocalHTTPTestServer(
+                pythonProgram: #"""
+                    import http.server
+                    import os
+                    import socketserver
+                    import sys
+                    import time
+
+                    chunks = int(sys.argv[1])
+                    delay = float(sys.argv[2]) / 1000.0
+                    markers = sys.argv[3]
+                    payload = b"x" * 1024
+
+                    def mark(name):
+                        with open(os.path.join(markers, name), "w") as handle:
+                            handle.write("1")
+
+                    class Handler(http.server.BaseHTTPRequestHandler):
+                        def do_GET(self):
+                            self.send_response(200)
+                            self.send_header("Content-Length", str(len(payload) * chunks))
+                            self.end_headers()
+                            mark("started")
+                            try:
+                                for _ in range(chunks):
+                                    self.wfile.write(payload)
+                                    self.wfile.flush()
+                                    time.sleep(delay)
+                            except Exception:
+                                mark("aborted")
+                                return
+                            mark("completed")
+
+                        def log_message(self, format, *args):
+                            pass
+
+                    with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+                        print(httpd.server_address[1], flush=True)
+                        httpd.serve_forever()
+                    """#,
+                extraArguments: [String(chunks), String(delayMilliseconds), markerDirectory.path])
+        }
+    }
+
     /// Returns 404 for every request — exercises the terminal (non-retryable)
     /// download-failure path.
     static func alwaysNotFound() async throws -> LocalHTTPTestServer {
