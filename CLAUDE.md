@@ -171,7 +171,7 @@ on the default load path in both runners — and the LanguageDescriptor table
 records the correction. Postmortem: `docs/adding-a-xeus-kernel.md` §"What
 the Octave run actually cost".
 
-**C++ is the fifth assignment language — and the first with NO editor kernel.**
+**C++ is the fifth assignment language — and the FIRST with no editor kernel; Racket is the second (see below).**
 `EditorSupport.uploadOnly` (the `LanguageDescriptor` judgement that folded the
 four kernel facts) plus `submissionMode: "uploadOnly"` (a manifest field beside
 `gradingMode`; `notebook` mode deliberately keeps the upload form beside the
@@ -213,8 +213,23 @@ shipped browser-graded R that no isolated engine ever ran.
 and fails on drift in either direction. It currently lists the four grading
 workers (Python, R, Lua, Octave) plus the freeze watchdog.
 
-**Assignments are Python, R, Lua, Octave *or* C++; language is first-class (`AssignmentLanguage`).**
-`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp`, Core) is resolved from the manifest
+**Racket is the sixth assignment language, and the second upload-only one.**
+No Scheme-family kernel exists on `emscripten-forge-4x` to vendor, so
+`EditorSupport.uploadOnly` — but for a *contingent* reason where C++'s is a
+decision: C++ has no kernel because grading a different compiler than the course
+teaches is a pedagogy defect, Racket has none because nobody built one. It is
+otherwise the cheapest language here: interpreted, so `racket file.rkt` needs no
+`.sh` wrapper, and dynamically typed, so `JSONValue` renders without C++'s
+refusal table. All eight pattern kinds render and execute across both dialects
+CS 135/115 (`#lang htdp/bsl`) and CS 136 (`#lang racket`) write; notebook checks
+are refused categorically, as for C++. The measured trap: a teaching-language
+module EXPORTS NOTHING, so a generated test loads the submission with
+`dynamic-require` + `module->namespace` and evaluates an application form rather
+than a bare identifier. See `docs/multi-language-audit.md` for the two runner
+defects still open against it.
+
+**Assignments are Python, R, Lua, Octave, C++ *or* Racket; language is first-class (`AssignmentLanguage`).**
+`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket`, Core) is resolved from the manifest
 (any `.R` graded script → `.r`, any `.lua` → `.lua`, any `.m` → `.octave`; else
 a notebook kernel in that language's `notebookKernelNames` — `{ir,r,webr,xr}`
 for R, `{xlua,lua}` for Lua, `{xoctave,octave}` for Octave; else `.python`) and every language-specific path dispatches through it — literal
@@ -379,6 +394,50 @@ gets. It is a **live-edit** endpoint: like `PUT /suite` and unlike the MCP
 tools, it never changes visibility, so fixing a typo mid-lab does not close the
 assignment out from under students. Re-validation still runs (debounced for the
 starter, always for a solution, since the new solution *is* what validates).
+
+**The authoring UI reads the assignment's language from ONE seed (v0.5.36).**
+The browser editors had no notion of language at all: `pattern-family-editor.js`
+contained the string "language" zero times, and `inputs-editor-core.js` had the
+identical defect, so both parsed instructor input by Python's rules — `True` /
+`False` / `None` plus a Python-repr rewrite — on every assignment. An R author
+typing the boolean true stored the **string**, silently, in a value a generated
+test then compares.
+
+`AuthoringLanguageFacts` is now encoded into an `#assignment-language-seed`
+script tag on both authoring pages, and `Public/authoring-language.js`
+(`window.ChickadeeLanguage`) is the single reader. **Every value in the seed is
+derived, never tabulated:** the scalar spellings come from
+`JSONValue.literal(_:)` — the same call that renders the real generated test, so
+the editor cannot show one spelling while the renderer emits another — kind
+availability from `notebookCheckKindIsSupported` (the predicate the save-time
+refusal uses, so the Add Test menu and the rejection cannot disagree), scan
+support from `notebookFunctionScanSupport`, and evaluation support from
+`PersonalizationEvaluator`.
+
+The consequence worth knowing before touching this: **a seventh language needs
+zero JavaScript edits.** There is no per-language list in any authoring JS, and
+the invariant is greppable (see the runbook's "The authoring UI: what you do NOT
+have to do"). If a new *fact* is needed, add a field to `AuthoringLanguageFacts`
+and derive it from whatever already owns the answer — do not answer it twice.
+Both mistakes were made and undone here: the literals were nearly generated into
+a JS table, and two capability flags shipped as hand-written bools before being
+pointed at their real owners. `AuthoringLanguageFactsTests` asserts the
+derivation.
+
+**Auto-computing a case's expected value runs on the SERVER for every language
+but Python** (`POST /instructor/:id/compute-expected`). The in-page evaluator is
+a Python kernel; on another language it did not fail, it computed a *Python*
+answer for a value compared against that language's result.
+`PersonalizationEvaluator` already evaluates in all six behind an exhaustive
+switch, so the fix was to route to it rather than grow five more kernels into the
+page. Python keeps the in-page path (faster, and its `None`-return and
+non-round-trippable-type handling is behaviour existing assignments rely on).
+Two stated limits: the drivers report values as their language's REPR (base R and
+Lua have no JSON to serialize with), so a scalar round-trips into the Expected
+cell and a composite may not — the client decides, using the same language-aware
+reader hand-typed values go through; and automatic stdout capture is offered
+where one expression expresses it (R's `capture.output`, Octave's `evalc`) and
+reported unavailable where it does not.
 
 **Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
 unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
@@ -1059,7 +1118,8 @@ Full design, runbook, and host steps:
 
 **The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
 course offering run on Chickadee and the pivot to next year's feature work.
-The system is a working client–server autograder: Python, R and Lua assignments;
+The system is a working client–server autograder: Python, R, Lua, Octave, C++
+and Racket assignments;
 browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (8 kinds) and notebook checks (10 kinds); achievements; student slip days;
@@ -1257,7 +1317,8 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
 - `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
 - `docs/cpp-assignment-language-decision.md` — why C++ stays on the shell-script + makefile path rather than becoming an `AssignmentLanguage`: the one-file-one-command invocation mismatch, the typed-literal impossibility, and the Clang-REPL-vs-course-toolchain pedagogy problem; the priced revisit condition
-- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 26 compiler-named sites measured on the Lua run, the **seven** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed
+- `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (two still open — `.rkt` dispatching to `/bin/sh`, and `racket --version`'s letter-led token defeating the runner's version parser, confirmed against the production fleet), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect
+- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 27 compiler-named switch arms across 17 files, the **nine** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy; the ninth whether the generated scripts DISPATCH at all, which the RunnerCore/Core dependency direction means the compiler probably never will see), the authoring-UI section that exists to stop you working (a seventh language needs ZERO JavaScript edits, and the failure mode is going to look for one), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
 - `docs/language-handling-review.md` — second-opinion design review of the assignment-language dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules. Written before Lua existed, so §4's prediction is now **scored against the real third language** — what held (bucket A never changed; every bucket-B site failed to compile) and what did not (the compiler-invisible surface is a recurring shape, not a checklist)

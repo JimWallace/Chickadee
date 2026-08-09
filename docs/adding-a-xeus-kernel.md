@@ -366,16 +366,45 @@ estimated. Two notes on why your split may differ:
   sites were all in `Worker`. A language whose extraction is not pre-landed
   pays for it here instead.
 
-**The compiler cannot see eight more**, listed under "What the compiler will not
-tell you" below — those are the ones that have historically shipped broken.
+**The compiler cannot see nine more**, listed under "What the compiler will not
+tell you" below — those are the ones that have historically shipped broken. One
+former member of that list is gone: the runtime helper a language's generated
+tests load is now installed from `allCases` (`runtimeHelperFiles(for:)`), so
+omitting it is a compile error rather than a silent absence. That is the shape to
+aim for whenever an item can be moved.
 
 ### The 26 the compiler names
 
 **`Sources/Core/AssignmentLanguage.swift`** — the hub. The FACTS now live in one
 `LanguageDescriptor` literal per language (`Core/LanguageDescriptor.swift`), so
-most of this is one struct to write rather than eleven arms to find: display
-name, script extensions, generated extension, inputs filename, kernel aliases,
-kernel env file, missing-dependency wording, interpreter probe.
+most of this is one struct to write rather than a dozen arms to find. The
+current fields: display name, script extensions, generated extension, **source
+file extension**, inputs filename, kernel aliases, `editorSupport`, interpreter
+probe, `moduleResolution`, `workingDirectoryIsOnDefaultSearchPath`, and
+`capabilityRequiresExecutableOutput`.
+
+Three of those are worth knowing before you write the literal, because each was
+added when a language broke on it:
+
+- **`sourceFileExtension` is not `generatedScriptExtension`.** The first is what
+  a notebook's code becomes when extracted and what `solution.<ext>` is called;
+  the second is what a *generated test* is named. They differ for C++, whose
+  generated case is a `.sh` wrapper around `.cpp` source. Neither is
+  `scriptExtensions`, which is a `Set` with no deterministic first element.
+- **`editorSupport` is a judgement, not a fact** — `.notebookKernel(...)` with
+  the four kernel facts behind it, or `.uploadOnly`. It is what lets a
+  kernel-less language be expressed at all, and answering it `.uploadOnly` makes
+  the language upload-only and native-worker-only by construction.
+- **`capabilityRequiresExecutableOutput`** — true only when grading *executes*
+  something it just built. `g++ --version` succeeds on a runner whose work
+  directory is mounted `noexec`; the compile then works and the `exec` does not.
+
+The count measured on the Lua run was 26 compiler-named sites. It is now **27
+switch arms across 17 files** — a bigger worklist, but a strictly safer one:
+every one of the additions is a compile error rather than something to discover.
+Most of the growth is the authoring surface described under "The authoring UI"
+below, which a language now gets for free precisely *because* those arms are
+forced.
 
 That file also records why this is a descriptor on a closed enum rather than a
 protocol or a class hierarchy — short version: a closed enum makes a missing
@@ -463,7 +492,7 @@ the three.
 
 ### What the compiler will *not* tell you
 
-**Eight** things, each of which has shipped broken at least once. Numbers 5-7
+**Nine** things, each of which has shipped broken at least once. Numbers 5-7
 were found during the Lua run; 5 is the most dangerous, because it is a shape
 rather than a place, and 6-7 are whole subsystems that needed no change to their
 types and so pointed at nothing. Number 8 came later still, from the audit that
@@ -566,6 +595,28 @@ additions, because prose is the surface no guard reaches.
    python3 and R and **fails on lua**, which exits 1 with a usage message. A
    hardcoded `--version` leaves the language undetectable even after it is added
    to the loop.
+
+   **And its OUTPUT FORMAT matters as much as either.** This is the third link
+   in the same chain and it cost the Racket run: `racket --version` exits 0 and
+   prints a perfectly good banner, and `RunnerProfileDetector.firstNumericVersion`
+   cannot read it. That function takes the first whitespace-token whose *numeric
+   prefix* contains a `.`; Racket's version token is `v8.10`, letter-led, and no
+   other language's is. `detectVersion` returns nil, the language is absent from
+   `languageVersions`, and `RunnerLanguageGate` then refuses every runner — so
+   every job in that language queues forever, instructor validation included,
+   with no error, no failed test and no log line anywhere.
+
+   The existing guard stops one step short: `everyLanguageProbeActuallyReportsAVersion`
+   asserts the probe **exits 0**, which Racket does. Assert instead that its
+   output *parses*:
+
+   ```swift
+   #expect(firstNumericVersion(in: probeOutput) != nil)
+   ```
+
+   Run the probe by hand and read the banner before trusting the loop. Command,
+   arguments, output format — three separate ways to be invisible to capability
+   matching, and all three have now happened.
 7. **The submission policy.** See "The submission policy" below. Nothing fails when a
    language is missing from it; the student just gets silence instead of a
    message.
@@ -588,6 +639,32 @@ additions, because prose is the surface no guard reaches.
    Also make sure the language's REFUSED pattern-family and notebook-check kinds
    are discoverable before a save is attempted, not only via the rejection
    message. See issue #1290.
+9. **Whether the generated scripts DISPATCH.** The newest item, and the most
+   direct: a generated test is only graded if `scriptInvocation` knows how to run
+   it. Racket's generated `.rkt` had no `ScriptInterpreter` case and no extension
+   arm, so it classified `.unknown`, fell back to `/bin/sh`, and exited 2 on its
+   own leading `;` — every generated test reporting `error`, in the only grading
+   path an upload-only language has.
+
+   The compiler cannot see it and, unusually, probably never will:
+   `ScriptClassification.swift` lives in `RunnerCore`, which the browser compiles
+   to wasm and which therefore has **no dependency on `Core`** — so it cannot
+   reach `AssignmentLanguage` to iterate. The dependency direction forbids the
+   obvious fix.
+
+   What closes it is a test in `Worker`, which depends on both:
+
+   ```swift
+   @Test(arguments: AssignmentLanguage.allCases)
+   func generatedScriptsDispatchToTheirOwnInterpreter(_ language: AssignmentLanguage) {
+       // render a family, write it, assert scriptInvocation resolves to this
+       // language's interpreter rather than the /bin/sh fallback
+   }
+   ```
+
+   C++ is the deliberate exception and shows what the test must tolerate: its
+   generated case IS a `.sh` wrapper, so it dispatches as shell on purpose.
+   Every other language's generated extension must reach its own interpreter.
 
 ### What this model cannot see, scored against three languages it does not have
 
@@ -692,12 +769,72 @@ That last pair is the enumeration trap again: `browser-runner.js` destructures
 its shared modules at IIFE start, so every harness that runs it has to load the
 same set the page does. Three files list that set independently.
 
+### The authoring UI: what you do NOT have to do
+
+The section that exists to stop you working. A seventh language needs **zero
+JavaScript edits** for the authoring surface — no arm, no table, no branch — and
+the failure mode this section prevents is someone going to look for one and
+adding it.
+
+That was not true until v0.5.36. `Public/pattern-family-editor.js` contained the
+string "language" zero times: it validated Python identifiers, accepted `True` /
+`False` / `None`, rewrote Python reprs, and named Python in its placeholders — on
+all six languages, while the server rendered the same family correctly in each.
+`inputs-editor-core.js` had the identical defect in the Global/Section Inputs
+panels, which is where per-student `=` expressions are authored. The concrete
+bite: an R instructor typing the boolean true stored the **string**, silently, in
+a value a generated test then compares.
+
+**How it works now.** The server encodes `AuthoringLanguageFacts` into a
+`#assignment-language-seed` script tag on both authoring pages;
+`Public/authoring-language.js` is the single reader
+(`window.ChickadeeLanguage`); every editor asks it. There is no per-language
+list in any of the authoring JS — verify with:
+
+```
+grep -nE "'(r|lua|octave|cpp|racket)'" Public/authoring-language.js Public/inputs-editor-core.js Public/pattern-family-editor.js Public/test-editor-modal.js
+```
+
+An empty result is the invariant. A hit means someone re-added the table.
+
+**Everything in the seed is DERIVED, which is why the UI follows for free:**
+
+| Fact | Derived from | So a new language… |
+|---|---|---|
+| `trueLiteral` / `falseLiteral` / `nullLiteral` | `JSONValue.literal(_:)` | is spelled the way its real generated test is spelled |
+| `unsupportedCheckKinds` | `notebookCheckKindIsSupported` — the predicate the save-time refusal uses | has its unavailable kinds disabled in the Add Test menu, with reasons |
+| `functionScanning` | `notebookFunctionScanSupport(for:)` | is told the solution scan cannot read it, instead of "No functions found." |
+| `expressionEvaluation` | `PersonalizationEvaluator.supportsEvaluation` | gets auto-compute the day its driver arm exists |
+| `displayName` | the descriptor | is named in its own messages, not told about C++ |
+
+**The rule if you need a NEW fact.** Add a field to `AuthoringLanguageFacts` and
+derive it from whatever already owns the answer. Do not tabulate it in JS, and
+do not answer it twice. Both of those were done and both had to be undone: the
+literal spellings were nearly generated into a JS table by
+`generate-js-constants.sh` (a second source of truth for something
+`JSONValue.literal` already answers), and `functionScanning` / `expressionEvaluation`
+shipped as hand-written bools in `AuthoringLanguageFacts` before being pointed at
+their real owners one commit later. `AuthoringLanguageFactsTests` asserts the
+derivation, so a second copy fails the suite.
+
+**What is still hand-written, and correctly so.** The per-language *renderers* —
+pattern families, notebook checks, the personalization driver, the grading
+runtime. Those are the irreducible per-language work this document has always
+been about. The UI is not; it is a projection of them.
+
 ### The done test
 
 The language is supported when all of these are true. Anything less is the
 state this document exists to warn you about:
 
 - [ ] `swift build` is clean with the new case and **no `default:` arm added**
+- [ ] `grep -nE "'(r|lua|octave|cpp|racket)'" Public/*editor*.js Public/authoring-language.js`
+      is empty — the authoring UI still has no per-language table
+- [ ] a generated script in the new language dispatches to its own interpreter,
+      asserted from `allCases` (invisible item 9) — not merely that it parses
+- [ ] `firstNumericVersion` parses the interpreter probe's real banner
+      (invisible item 6) — running the probe by hand is not enough; the parse is
+      the part that failed for Racket
 - [ ] the interpreter is on the runner image, and worker grading of a
       hand-authored test passes
 - [ ] instructor validation of an assignment in the language passes
