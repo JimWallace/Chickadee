@@ -193,12 +193,13 @@ extension DraftAssignmentRoutes {
         }()
         return redirectToNewAssignmentDraft(
             req: req,
-            draftID: setupID,
-            assignmentName: payload.assignmentName,
-            dueAt: payload.dueAt,
-            startsAt: payload.startsAt,
-            sectionID: payload.sectionIDRaw,
-            notice: nil,
+            form: NewAssignmentFormContext(
+                title: payload.assignmentName,
+                dueAt: payload.dueAt,
+                startsAt: payload.startsAt,
+                sectionID: payload.sectionIDRaw,
+                draftID: setupID
+            ),
             error: errorMessage
         )
     }
@@ -361,12 +362,13 @@ extension DraftAssignmentRoutes {
             guard hasEligibleRunner else {
                 return redirectToNewAssignmentDraft(
                     req: req,
-                    draftID: validated.draftID,
-                    assignmentName: validated.title,
-                    dueAt: validated.dueAtRaw,
-                    startsAt: validated.startsAtRaw,
-                    sectionID: validated.sectionIDRaw,
-                    notice: nil,
+                    form: NewAssignmentFormContext(
+                        title: validated.title,
+                        dueAt: validated.dueAtRaw,
+                        startsAt: validated.startsAtRaw,
+                        sectionID: validated.sectionIDRaw,
+                        draftID: validated.draftID
+                    ),
                     error: "No compatible active runner is available to validate this assignment."
                 )
             }
@@ -657,35 +659,13 @@ extension DraftAssignmentRoutes {
     // MARK: - POST /instructor
     // Creates a draft (isOpen: false) assignment and redirects to the validate page.
 
-    // The argument list mirrors the URL query string the redirect builds —
-    // each parameter is an independent named field on the new-assignment
-    // form, so bundling them into a struct would only push the same names
-    // one layer down without removing any.
-    // swiftlint:disable:next function_parameter_count
     private func redirectToNewAssignmentDraft(
         req: Request,
-        draftID: String,
-        assignmentName: String,
-        dueAt: String,
-        startsAt: String,
-        sectionID: String,
-        notice: String?,
-        error: String?
+        form: NewAssignmentFormContext,
+        notice: String? = nil,
+        error: String? = nil
     ) -> Response {
-        var parts: [String] = [
-            "draftID=\(urlEncode(draftID))",
-            "assignmentName=\(urlEncode(assignmentName))",
-            "dueAt=\(urlEncode(dueAt))",
-            "startsAt=\(urlEncode(startsAt))",
-            "sectionID=\(urlEncode(sectionID))",
-        ]
-        if let notice, !notice.isEmpty {
-            parts.append("notice=\(urlEncode(notice))")
-        }
-        if let error, !error.isEmpty {
-            parts.append("error=\(urlEncode(error))")
-        }
-        return req.redirect(to: "/instructor/new?\(parts.joined(separator: "&"))")
+        req.redirect(to: form.redirectURL(notice: notice, error: error))
     }
 
     private func resolveOrCreateNewAssignmentDraft(

@@ -160,16 +160,19 @@ extension DraftAssignmentRoutes {
         let startsAtRaw = form.startsAtRaw ?? ""
         let sectionIDRaw = form.sectionIDRaw ?? ""
 
+        // The bounce-back context for every redirect below.  The title is
+        // filled in from `title` rather than the raw field so a name that was
+        // only whitespace comes back empty, as it did before.
+        let formContext = NewAssignmentFormContext(
+            title: title,
+            dueAt: dueAtRaw,
+            startsAt: startsAtRaw,
+            sectionID: sectionIDRaw,
+            draftID: draftID
+        )
+
         guard !title.isEmpty else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: "",
-                    dueAt: dueAtRaw,
-                    startsAt: startsAtRaw,
-                    sectionID: sectionIDRaw,
-                    draftID: draftID,
-                    error: "Assignment name is required"
-                ))
+            return .redirect(toURL: formContext.redirectURL(error: "Assignment name is required"))
         }
 
         let suiteFiles = form.suiteFilesRaw.filter { $0.data.readableBytes > 0 }
@@ -182,7 +185,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: assignmentNotebookRaw,
             isPresent: !assignmentNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            form: formContext,
             missingError: "Assignment notebook (.ipynb) is required",
             invalidJSONError: "Assignment notebook is not valid JSON (.ipynb)"
         ) {
@@ -194,7 +197,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: solutionNotebookRaw,
             isPresent: !solutionNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            form: formContext,
             missingError: "Solution notebook (.ipynb) is required",
             invalidJSONError: "Solution notebook is not valid JSON (.ipynb)"
         ) {
@@ -278,59 +281,20 @@ extension DraftAssignmentRoutes {
     }
 
     // Returns a `.redirect` validation result if the bytes are missing
-    // or not valid JSON; otherwise nil.  Parameter count tracks the
-    // caller's distinct redirect-context strings; bundling them into a
-    // struct would just push the same names one layer down.
-    // swiftlint:disable:next function_parameter_count
+    // or not valid JSON; otherwise nil.
     private func redirectIfNotebookDataInvalid(
         data: Data,
         isPresent: Bool,
-        title: String,
-        dueAtRaw: String,
-        startsAtRaw: String,
-        sectionIDRaw: String,
-        draftID: String,
+        form: NewAssignmentFormContext,
         missingError: String,
         invalidJSONError: String
     ) -> SaveNewAssignmentValidation? {
         guard isPresent else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: missingError
-                ))
+            return .redirect(toURL: form.redirectURL(error: missingError))
         }
         guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: invalidJSONError
-                ))
+            return .redirect(toURL: form.redirectURL(error: invalidJSONError))
         }
         return nil
-    }
-
-    // MARK: - Error redirect builder
-
-    /// Builds the `/instructor/new?…` URL used to bounce the instructor
-    /// back to the new-assignment page with a user-visible error.  All
-    /// guarded fields (title, dueAt, sectionID, draftID) are preserved so
-    /// the form re-renders with the values they typed.
-    func newAssignmentErrorRedirect(
-        title: String,
-        dueAt: String,
-        startsAt: String,
-        sectionID: String,
-        draftID: String,
-        error: String
-    ) -> String {
-        let q =
-            "assignmentName=\(urlEncode(title))"
-            + "&dueAt=\(urlEncode(dueAt))"
-            + "&startsAt=\(urlEncode(startsAt))"
-            + "&sectionID=\(urlEncode(sectionID))"
-            + "&draftID=\(urlEncode(draftID))"
-            + "&error=\(urlEncode(error))"
-        return "/instructor/new?\(q)"
     }
 }
