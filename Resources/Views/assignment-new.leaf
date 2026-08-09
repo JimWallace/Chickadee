@@ -306,6 +306,7 @@ Create Assignment
      exists; the check editor module silently no-ops in that case. -->
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
+<script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
      Now a body renderer of the unified Test Editor modal

@@ -653,6 +653,12 @@ struct InstructorDashboardRoutes: RouteCollection {
             patternFamiliesJSON: patternFamiliesJSON,
             notebookChecksJSON: notebookChecksJSON,
             checkSchemaJSON: notebookCheckFormSchemaJSON(),
+            // The resolved language, so the authoring editors stop assuming
+            // Python. Resolved through the server wrapper (never
+            // `resolve(manifest:)` alone) so a brand-new notebook assignment
+            // whose only signal is its kernelspec is answered correctly.
+            assignmentLanguageJSON: authoringLanguageFactsJSON(
+                manifest.flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }),
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             sectionActionBase: "/instructor/\(idStr)/suite-sections",

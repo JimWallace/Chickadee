@@ -76,6 +76,16 @@ extension DraftAssignmentRoutes {
             patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
             notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
             checkSchemaJSON: notebookCheckFormSchemaJSON(),
+            // Same seed as the edit page, so the two authoring surfaces
+            // cannot disagree about the language. A draft with no setup yet
+            // has no language, which is the honest answer — its facts say so
+            // and the editor omits the language-specific hints.
+            assignmentLanguageJSON: authoringLanguageFactsJSON(
+                setup.flatMap { s in
+                    s.decodedManifest().flatMap {
+                        AssignmentLanguage.resolve(for: s, manifest: $0)
+                    }
+                }),
             suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
             suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
             sectionActionBase: "/instructor/new/draft/suite-sections",

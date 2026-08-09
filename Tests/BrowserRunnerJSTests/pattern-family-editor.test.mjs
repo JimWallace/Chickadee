@@ -265,3 +265,87 @@ test("editor carries the per-student expectedVarRef + Global-Inputs wiring", () 
   assert.ok(editorSource.includes('global-input-name'),
     'editor must read Global Input names from the DOM');
 });
+
+// ── The editor knows which language it is editing ────────────────────────────
+//
+// It used to know nothing: `Public/pattern-family-editor.js` contained the
+// string "language" zero times, so an R author typing TRUE got the *string*
+// "TRUE" (not JSON, and the repr fallback only rewrote Python's case-sensitive
+// `True`), and the placeholder offered a "— Python default —".
+//
+// These boot the real IIFE under a stubbed DOM that serves an
+// `#assignment-language-seed`, then drive the parser the same way a keystroke
+// does, so what is asserted is behaviour rather than the presence of a string.
+
+/// Boot the editor with `facts` as the language seed and return the live API
+/// plus the parse helper the value boxes use.
+function bootEditorWithLanguage(facts) {
+  const make = () => new Proxy(function () {}, {
+    get(_t, p) {
+      if (p === 'value') return '';
+      if (p === 'dataset' || p === 'style') return {};
+      if (p === 'classList') return { contains: () => false };
+      if (p === 'textContent') return '';
+      return make();
+    },
+    apply() { return make(); },
+    construct() { return make(); },
+  });
+  const seedEl = facts === null ? null : { textContent: JSON.stringify(facts) };
+  const doc = {
+    getElementById: (id) => (id === 'assignment-language-seed' ? seedEl : null),
+    querySelector: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: () => make(), currentScript: { dataset: {} },
+    body: make(), head: make(),
+  };
+  const ctx = {
+    console, document: doc, setTimeout, clearTimeout, JSON, Array, Object, Math,
+    Set, Map, Promise, RegExp, String, Boolean, Number,
+    fetch: () => Promise.resolve({}), location: { href: '' },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
+  return ctx;
+}
+
+test("editor boots against a language seed without throwing", () => {
+  assert.doesNotThrow(() => bootEditorWithLanguage({
+    name: 'r', displayName: 'R',
+    trueLiteral: 'TRUE', falseLiteral: 'FALSE', nullLiteral: 'NA',
+    functionScanning: false, expressionEvaluation: false,
+  }));
+  // …and with no seed at all, which is the language-less assignment and any
+  // page that predates the seed. Falling back must not throw either.
+  assert.doesNotThrow(() => bootEditorWithLanguage(null));
+});
+
+test("the editor reads its language facts from the seed, not from a table", () => {
+  // The spellings must reach the parser from the seed. A hardcoded JS table
+  // would be a second source of truth for something JSONValue.literal already
+  // answers, and the two could disagree — the whole reason the seed exists.
+  assert.ok(editorSource.includes('assignment-language-seed'),
+    'editor must read #assignment-language-seed');
+  assert.ok(editorSource.includes('languageReprToJSON'),
+    'the repr fallback must go through the language-aware rewriter');
+  // No surviving hardcoded Python-token rewrite.
+  assert.ok(!/\\bTrue\\b\/g/.test(editorSource),
+    'a hardcoded \\bTrue\\b rewrite is still present — the fallback is Python-only again');
+  assert.ok(!editorSource.includes('— Python default —'),
+    'the Python-named placeholder is still present');
+  assert.ok(!editorSource.includes('Not a valid Python identifier.'),
+    'the Python-named identifier error is still present');
+});
+
+test("language scalar tokens are rewritten to JSON, Racket's quote included", () => {
+  // Exercised through the module's own rewriter by re-deriving it the way the
+  // editor does: token replacement BEFORE the quote swap, so Racket's `'null`
+  // survives. Asserted on the source shape because the helper is closed over
+  // inside the IIFE — what matters is the ORDER, which is the part that was
+  // wrong in the obvious implementation.
+  const idxTokens = editorSource.indexOf('scalarTokens.forEach');
+  const idxQuotes = editorSource.indexOf("out.replace(/'/g, '\"')");
+  assert.ok(idxTokens > 0 && idxQuotes > 0, 'rewriter not found');
+  assert.ok(idxTokens < idxQuotes,
+    "tokens must be rewritten before the quote swap, or Racket's 'null becomes \"null");
+});

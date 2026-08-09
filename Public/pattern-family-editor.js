@@ -49,6 +49,51 @@
             throw new Error('initPatternFamilyEditor: urls must supply solutionNotebook + scanNotebook functions');
         }
 
+        // ── The assignment's language ──────────────────────────────────────
+        //
+        // This module had NO notion of language at all: it validated Python
+        // identifiers, accepted `True` / `False` / `None`, echoed Python reprs,
+        // and named Python in the optional-argument placeholder — on R, Lua, Octave,
+        // C++ and Racket assignments alike, while the server rendered the very
+        // same family correctly in those languages. The generated test was
+        // right and every hint given while authoring it was wrong.
+        //
+        // The facts come from `#assignment-language-seed`, written by
+        // `AuthoringLanguageFacts` on the server. The literal spellings in
+        // particular are COMPUTED there by `JSONValue.literal(_:)` — the same
+        // call that renders the real test — so the editor cannot drift from
+        // what will actually be generated. An assignment with no language (a
+        // plain `.sh` suite), or a page that predates the seed, falls back to
+        // Python's spellings, which is exactly today's behaviour.
+        var languageFacts = (function () {
+            var fallback = {
+                name: null, displayName: null,
+                trueLiteral: 'True', falseLiteral: 'False', nullLiteral: 'None',
+                functionScanning: true, expressionEvaluation: true
+            };
+            var el = document.getElementById('assignment-language-seed');
+            if (!el) return fallback;
+            var parsed;
+            try { parsed = JSON.parse(el.textContent || '{}'); } catch (_) { return fallback; }
+            if (!parsed || !parsed.name) return fallback;
+            return {
+                name: parsed.name,
+                displayName: parsed.displayName || null,
+                trueLiteral: parsed.trueLiteral || fallback.trueLiteral,
+                falseLiteral: parsed.falseLiteral || fallback.falseLiteral,
+                nullLiteral: parsed.nullLiteral || fallback.nullLiteral,
+                functionScanning: parsed.functionScanning !== false,
+                expressionEvaluation: parsed.expressionEvaluation !== false
+            };
+        })();
+
+        /// "R" / "Lua" / … , or "" when the assignment declares no language.
+        /// Used to build messages that name the language instead of naming
+        /// Python at an author who is not writing Python.
+        function languageLabel() {
+            return languageFacts.displayName || '';
+        }
+
         // ── State ──────────────────────────────────────────────────────────
         var familiesState = Array.isArray(config.initialFamilies)
             ? config.initialFamilies.slice()
@@ -437,7 +482,7 @@
             } else {
                 paramNames.forEach(function (_, i) {
                     // Display precedence: variable reference (`$name`) > literal
-                    // > blank (omitted / use Python default).
+                    // > blank (omitted / use the language's own default).
                     var varName = argVarRefs[i] || null;
                     var wasProvided = (argsProvided.length === 0) ? true : !!argsProvided[i];
                     var val;
@@ -452,7 +497,13 @@
                     // so the instructor can tell at a glance which cells
                     // can be left empty.
                     var hasDefault = currentParamHasDefault && currentParamHasDefault[i];
-                    var placeholder = hasDefault ? '— Python default —' : 'e.g. 18.49 or underweight';
+                    // Names the assignment's language rather than Python —
+                    // this string was shown to R, Lua, Octave, C++ and Racket
+                    // authors verbatim.
+                    var defaultHint = languageLabel()
+                        ? '\u2014 ' + languageLabel() + ' default \u2014'
+                        : '\u2014 default \u2014';
+                    var placeholder = hasDefault ? defaultHint : 'e.g. 18.49 or underweight';
                     tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
                 });
             }
@@ -506,19 +557,82 @@
             'not','or','pass','raise','return','try','while','with','yield'
         ]);
 
-        /// Is `s` a syntactically valid Python identifier (and not a
-        /// reserved keyword)?  Mirrors `isValidPythonIdentifier` in
-        /// `ManifestValidation.swift` so the client's pre-save check
-        /// matches the server's rejection criteria.
-        function isValidPythonIdentifier(s) {
+        /// Is `s` a name the SERVER will accept for a family variable or
+        /// function?
+        ///
+        /// Still Python's grammar, deliberately, because that is what the
+        /// server applies here: `PatternFamilyValidator` and the inputs
+        /// services call `isValidPythonIdentifier` for every language. Widening
+        /// the client alone would let a name through that the save then
+        /// rejects, which is worse than the wording bug this fixes.
+        ///
+        /// (The server DOES have a per-language identifier dispatch —
+        /// `isValidRIdentifier` and friends — but it is private to
+        /// `NotebookCheckKindHandler` and reaches notebook checks only.
+        /// Extending it to families is a real improvement and a real behaviour
+        /// change: `my.df` would become a legal R variable name, and `$name`
+        /// reference parsing has to be checked against a dot before that can
+        /// ship. It is not a wording fix and is not bundled with one.)
+        function isValidServerIdentifier(s) {
             if (!s) return false;
             if (PYTHON_KEYWORDS.has(s)) return false;
             return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
         }
 
+        /// The scalar spellings this assignment's language uses, longest first
+        /// so a token that is a prefix of another cannot shadow it.
+        ///
+        /// Storage is language-neutral JSON — only ENTRY and DISPLAY are per
+        /// language — so this is the whole of what changes. Before it, an R
+        /// author who typed `TRUE` got the *string* `"TRUE"`: it is not JSON,
+        /// the repr fallback only rewrote Python's case-sensitive `True`, and
+        /// the bare-string branch caught it. Silently a string where a boolean
+        /// was meant, in a value that decides marks.
+        var scalarTokens = [
+            { token: languageFacts.trueLiteral,  value: true,  kind: 'bool' },
+            { token: languageFacts.falseLiteral, value: false, kind: 'bool' },
+            { token: languageFacts.nullLiteral,  value: null,  kind: 'null' }
+        ].filter(function (t) { return typeof t.token === 'string' && t.token !== ''; });
+
+        /// Match `trimmed` against a language scalar spelling, or null.
+        function matchScalarToken(trimmed) {
+            for (var i = 0; i < scalarTokens.length; i++) {
+                if (scalarTokens[i].token === trimmed) {
+                    return { ok: true, value: scalarTokens[i].value, kind: scalarTokens[i].kind, strict: false };
+                }
+            }
+            return null;
+        }
+
+
+        /// Rewrites a value pasted in THIS language's own syntax into JSON.
+        ///
+        /// Was a fixed `True`/`False`/`None` + single-quote swap, so it only
+        /// ever understood Python. Tokens are rewritten BEFORE the quote swap,
+        /// because Racket spells null `'null` — swapping quotes first would
+        /// turn it into `"null` and lose it.
+        ///
+        /// Word boundaries are applied only where the token actually starts or
+        /// ends with a word character: `\bTRUE\b` is right for R, and `#t`
+        /// would never match under a leading `\b`.
+        function languageReprToJSON(trimmed) {
+            var out = trimmed;
+            scalarTokens.forEach(function (t) {
+                var esc = t.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                var pre = /^\w/.test(t.token) ? '\\b' : '';
+                var post = /\w$/.test(t.token) ? '\\b' : '';
+                var json = (t.value === null) ? 'null' : String(t.value);
+                out = out.replace(new RegExp(pre + esc + post, 'g'), json);
+            });
+            // Only when no double quotes exist already, so a string mixing an
+            // apostrophe inside double quotes is not broken.
+            if (out.indexOf('"') === -1) out = out.replace(/'/g, '"');
+            return out;
+        }
+
         /// Tries to parse `raw` the same way the server / renderer will:
-        /// JSON first, then Python-capitalised scalars, then bare string.
-        /// Returns `{ ok, value, kind, strict }` where `strict` is true
+        /// JSON first, then the language's own scalar spellings, then bare
+        /// string.  Returns `{ ok, value, kind, strict }` where `strict` is true
         /// when `JSON.parse` succeeded (so the parse round-trips exactly)
         /// and false when we fell back to a bare string.  Used by the
         /// inline validator to distinguish "nice typed value" from
@@ -526,11 +640,8 @@
         function tryParseVarValue(raw) {
             var trimmed = String(raw == null ? '' : raw).trim();
             if (trimmed === '') return { ok: false, value: undefined, kind: 'empty', strict: false };
-            switch (trimmed) {
-                case 'True':  return { ok: true, value: true,  kind: 'bool',   strict: false };
-                case 'False': return { ok: true, value: false, kind: 'bool',   strict: false };
-                case 'None':  return { ok: true, value: null,  kind: 'null',   strict: false };
-            }
+            var scalar = matchScalarToken(trimmed);
+            if (scalar) return scalar;
             try {
                 var v = JSON.parse(trimmed);
                 var kind =
@@ -542,16 +653,13 @@
                     (typeof v === 'string') ? 'string' : 'scalar';
                 return { ok: true, value: v, kind: kind, strict: true };
             } catch (_) {
-                // v0.4.112: Python-repr fallback for variables (matches
+                // v0.4.112: language-repr fallback for variables (matches
                 // the same conversion in coerceByType).  Pasting a
                 // dict like `{'address': {'city': 'Waterloo'}}` into a
-                // section's input value should Just Work.
+                // section's input value should Just Work — in whichever
+                // language the assignment is written.
                 if (trimmed.indexOf('"') === -1) {
-                    var pyish = trimmed
-                        .replace(/'/g, '"')
-                        .replace(/\bTrue\b/g, 'true')
-                        .replace(/\bFalse\b/g, 'false')
-                        .replace(/\bNone\b/g, 'null');
+                    var pyish = languageReprToJSON(trimmed);
                     try {
                         var v2 = JSON.parse(pyish);
                         var k2 =
@@ -651,8 +759,8 @@
             if (!name) {
                 // Empty row — silent, not an error.
                 nameEl.style.borderColor = '';
-            } else if (!isValidPythonIdentifier(name)) {
-                nameError = 'Not a valid Python identifier.';
+            } else if (!isValidServerIdentifier(name)) {
+                nameError = 'Use letters, digits and underscores, starting with a letter or underscore.';
             } else {
                 var allNames = Array.from(variablesBody.querySelectorAll('.pf-var-name'))
                     .map(function (el) { return el.value.trim(); });
@@ -702,14 +810,14 @@
             var names = new Set();
             Array.from(variablesBody ? variablesBody.querySelectorAll('.pf-var-name') : []).forEach(function (el) {
                 var n = (el.value || '').trim();
-                if (n && isValidPythonIdentifier(n)) names.add(n);
+                if (n && isValidServerIdentifier(n)) names.add(n);
             });
             (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name && isValidPythonIdentifier(v.name)) names.add(v.name);
+                if (v && v.name && isValidServerIdentifier(v.name)) names.add(v.name);
             });
             Array.from(document.querySelectorAll('.global-input-name')).forEach(function (el) {
                 var n = (el.value || '').trim();
-                if (n && isValidPythonIdentifier(n)) names.add(n);
+                if (n && isValidServerIdentifier(n)) names.add(n);
             });
             return names;
         }
@@ -789,8 +897,9 @@
                     if (opts.strict) throw new Error('Variable row ' + (i + 1) + ': name is required.');
                     return;
                 }
-                if (opts.strict && !isValidPythonIdentifier(name)) {
-                    throw new Error('Variable "' + name + '": not a valid Python identifier.');
+                if (opts.strict && !isValidServerIdentifier(name)) {
+                    throw new Error('Variable "' + name + '": use letters, digits and underscores, '
+                        + 'starting with a letter or underscore.');
                 }
                 if (rawVal === '') {
                     if (opts.strict) throw new Error('Variable "' + name + '": value is required.');
@@ -936,20 +1045,14 @@
                     try {
                         return JSON.parse(trimmed);
                     } catch (_) {
-                        // v0.4.112: Python repr (single-quoted strings,
-                        // True/False/None) is a common copy-paste source —
-                        // try a conservative single-quote → double-quote
-                        // swap (only when no double quotes already exist
-                        // so we don't break a string that contains an
-                        // apostrophe-inside-double-quotes mix) plus
-                        // True/False/None token replacement.
+                        // v0.4.112: a value pasted in the assignment's own
+                        // syntax (single-quoted strings, the language's
+                        // true/false/null spellings) is a common copy-paste
+                        // source — rewrite it to JSON conservatively.
                         if (trimmed.indexOf('"') === -1) {
-                            var pyish = trimmed
-                                .replace(/'/g, '"')
-                                .replace(/\bTrue\b/g, 'true')
-                                .replace(/\bFalse\b/g, 'false')
-                                .replace(/\bNone\b/g, 'null');
-                            try { return JSON.parse(pyish); } catch (_) { /* fall through */ }
+                            try {
+                                return JSON.parse(languageReprToJSON(trimmed));
+                            } catch (_) { /* fall through */ }
                         }
                         return parseTypedCellValue(raw);
                     }
@@ -1822,7 +1925,7 @@
             // overrides (same name) win to match render-time semantics.
             var varsNow = {};
             (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name && isValidPythonIdentifier(v.name)) {
+                if (v && v.name && isValidServerIdentifier(v.name)) {
                     varsNow[v.name] = v.value;
                 }
             });
@@ -1832,7 +1935,7 @@
                     var v = (vrow.querySelector('.pf-var-value') || {}).value;
                     if (!n) return;
                     n = n.trim();
-                    if (!isValidPythonIdentifier(n)) return;
+                    if (!isValidServerIdentifier(n)) return;
                     var parsed = tryParseVarValue(v);
                     if (parsed.kind === 'empty') return;
                     varsNow[n] = parsed.value;
