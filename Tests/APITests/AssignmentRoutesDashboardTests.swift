@@ -531,4 +531,79 @@ import VaporTesting
         }
     }
 
+    /// The sections table and the ungrouped table render the same row markup,
+    /// and before they shared one partial they had drifted: the ungrouped copy
+    /// had lost the retest form from all three of its status branches and the
+    /// copy-student-link button from the preview branch.  A course that has
+    /// never created a section renders every assignment through the ungrouped
+    /// table, so those actions were missing outright rather than only for
+    /// stragglers.
+    ///
+    /// Slices each row out by its `data-assignment-id` and asserts within that
+    /// row, rather than searching the whole document — a page-wide search
+    /// passes as soon as any *one* row carries the action.
+    @Test func ungroupedAssignmentRowsCarryEveryPublishedAction() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            // One assignment per published status; each drove a separate arm
+            // of the old chain, and `preview` is the arm that had lost two
+            // actions rather than one.
+            try await arInsertSetup(id: "setup_act_open", on: app)
+            let openA = try await arInsertAssignment(
+                testSetupID: "setup_act_open", title: "Open One",
+                isOpen: true, validationStatus: "passed", on: app)
+
+            try await arInsertSetup(id: "setup_act_closed", on: app)
+            let closedA = try await arInsertAssignment(
+                testSetupID: "setup_act_closed", title: "Closed One",
+                isOpen: false, validationStatus: "passed", on: app)
+
+            try await arInsertSetup(id: "setup_act_preview", on: app)
+            let previewA = try await arInsertAssignment(
+                testSetupID: "setup_act_preview", title: "Preview One",
+                isOpen: false, validationStatus: "passed", on: app)
+            previewA.visibility = .preview
+            try await previewA.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    for assignment in [openA, closedA, previewA] {
+                        let rowStart = try #require(
+                            html.range(of: "data-assignment-id=\"\(assignment.publicID)\""),
+                            "Expected a row for assignment \(assignment.publicID)"
+                        )
+                        let rowEnd = try #require(
+                            html.range(of: "</tr>", range: rowStart.upperBound..<html.endIndex),
+                            "Row for \(assignment.publicID) is not closed"
+                        )
+                        let row = html[rowStart.upperBound..<rowEnd.lowerBound]
+
+                        for action in ["retest", "clone", "delete"] {
+                            #expect(
+                                row.contains("action=\"/instructor/\(assignment.publicID)/\(action)\""),
+                                "Row for \(assignment.publicID) must offer the \(action) action"
+                            )
+                        }
+                        #expect(
+                            row.contains("/instructor/\(assignment.publicID)/workbench"),
+                            "Row for \(assignment.publicID) must link to the workbench"
+                        )
+                        #expect(
+                            row.contains("copyAssignmentURL("),
+                            "Row for \(assignment.publicID) must offer the copy-student-link button"
+                        )
+                    }
+                })
+
+        }
+    }
+
 }
