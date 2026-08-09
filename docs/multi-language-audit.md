@@ -16,6 +16,56 @@ available, and documentation that stops at the fifth language.
 
 ---
 
+## Status at merge
+
+This document is the audit as found. Most of it was acted on in the same branch;
+what follows is what changed, so a later reader does not chase a fixed defect.
+
+**Closed.**
+
+- **F2** — every language's runtime helper is installed from a loop over
+  `allCases` (`runtimeHelperFiles(for:)`), so `test_runtime.rkt` lands and a
+  seventh language cannot compile without answering. `RuntimeSourceDriftTests`
+  walks `allCases` in both directions.
+- **F4** — all five enforcement sites ask `EditorSupport`, the refusal message
+  is a function of the language, and `TestProperties.effectiveSubmissionMode`
+  makes the incoherent pair inert wherever it arrives.
+- **F5, partly** — the script-dispatch fixture gained Lua, Octave and C++ rows
+  (it had covered neither Lua nor Octave since they shipped) plus an `allCases`
+  row-existence assertion; Racket is a named exemption until F1 lands.
+- **F6, partly** — this document exists; `CLAUDE.md` and the runbook still stop
+  at the fifth language.
+
+**Open, and deliberately so.** F1 and F3 — Racket dispatch and the version
+parse. Held while production catches up. Nothing else in the branch depends on
+them, and F3's guard (asserting the probe's output *parses*, not merely that it
+exits 0) is the one-line change that should land with them.
+
+**Found while fixing, and not in the original audit:**
+
+- The server extracted only `solution.py`, so an R, Lua, Octave, C++ or Racket
+  personalization expression could never call the reference solution — not just
+  auto-compute, *any* expression. `SolutionNotebookExtractor` now writes
+  `solution.<ext>` per language.
+- "The extension a source file carries" was two identical hand-written switches
+  in the worker, and a third was about to be added. It is
+  `LanguageDescriptor.sourceFileExtension` now.
+- The authoring UI had no notion of language at all — `pattern-family-editor.js`
+  and `inputs-editor-core.js` both parsed instructor input by Python's rules on
+  every assignment, so an R author typing the boolean true stored the *string*.
+  Both now read `Public/authoring-language.js`, whose scalar spellings are
+  computed by the same `JSONValue.literal(_:)` that renders the real test.
+- The solution-notebook scan reported "No functions found." for languages it
+  cannot read; `notebookFunctionScanSupport` makes that an answer a seventh
+  language must give.
+- The "Add Test" menu offered every notebook-check kind on every assignment —
+  six a Lua author cannot save, all ten on C++ or Racket.
+
+The one correction to the audit's own claims is in "Correction: the scaffold does
+not corrupt language resolution" below.
+
+---
+
 ## The three that stack (Racket is not gradable)
 
 They must be read in this order, because each one masks the next. Fixing F3
