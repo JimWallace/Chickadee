@@ -106,8 +106,8 @@ enum MCPServerInstructions {
     /// `text(withCourseGuidance:)` (see MCPCourseGuidance.swift).
     static let text = operationalGuide + "\n\n" + authoringVoice
 
-    /// The languages an assignment can be authored in, as prose ("Python, R or
-    /// Lua"), DERIVED from `AssignmentLanguage.allCases`.
+    /// The languages an assignment can be authored in, as prose ("Python, R,
+    /// Lua, Octave, C++ or Racket"), DERIVED from `AssignmentLanguage.allCases`.
     ///
     /// Interpolated into the guide rather than typed into it. This prose is
     /// served to every connecting agent and no compiler or `allCases` test can
@@ -115,12 +115,12 @@ enum MCPServerInstructions {
     /// stale silently — and it did: the guide told every agent that
     /// personalization expressions are "Python source" for the whole of R's and
     /// Lua's existence, which is a syntax error on those assignments.
-    static var supportedLanguageNames: String {
-        let names = AssignmentLanguage.allCases.map(\.displayName)
-        guard let last = names.last else { return "" }
-        guard names.count > 1 else { return last }
-        return names.dropLast().joined(separator: ", ") + " or " + last
-    }
+    ///
+    /// Now a forwarding alias. The renderings moved to `MCPLanguageProse` when
+    /// it turned out the guide was not the only stale copy — the tool
+    /// descriptions had the same defect, and needed the same derived list in two
+    /// other spellings. See that type for what the second round taught.
+    static var supportedLanguageNames: String { MCPLanguageProse.displayNames }
 
     /// The operational half: domain vocabulary, the read-before-write
     /// workflow, and the validation/scope/safety rules.
@@ -198,8 +198,9 @@ enum MCPServerInstructions {
         student: literal `variables` (a name + JSON value) and `expressions` (a name + source in the \
         ASSIGNMENT'S OWN LANGUAGE, evaluated server-side against the student's `seed`). An expression \
         on a \(supportedLanguageNames) assignment is written in that language and evaluated by that \
-        language's interpreter — writing Python on an R or Lua assignment fails with a syntax error \
-        from that interpreter. Use get_assignment to see the language before authoring one. They \
+        language's interpreter — writing Python on an assignment in any other language fails with a \
+        syntax error from that interpreter. Use get_assignment to see the language before authoring \
+        one. They \
         inline into generated/raw tests and substitute \
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
@@ -234,14 +235,19 @@ enum MCPServerInstructions {
         Recommended workflow:
         1. Discover: list_courses, then list_assignments for a course. get_server_info reports the \
         deployed version and whether writes are honored — call it to confirm a feature/deploy is live \
-        (a tool call reflects the running process even if your tool list is cached).
+        (a tool call reflects the running process even if your tool list is cached). It ALSO reports \
+        `languages`: every language this deployment supports and, for each, its file extensions, \
+        whether it has an editor kernel or is upload-only, and exactly which pattern-family and \
+        notebook-check kinds it can render with the reason for every exclusion. Read that before \
+        authoring for a language you have not used here — the available kinds are not uniform, and \
+        it answers from the same predicate that refuses a save, so it cannot mislead you.
         2. Inspect before editing: get_assignment, get_suite, get_notebook, get_solution, \
         get_support_files, get_global_inputs, get_achievements. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
         set_submission_mode (notebook editor vs upload-only hand-in), \
-        set_assignment_language (declare python/r/lua/octave/cpp — normally derived from the \
+        set_assignment_language (declare \(MCPLanguageProse.tokens) — normally derived from the \
         notebook kernel or a graded script's extension, but REQUIRED for cpp, which has neither an \
         in-browser kernel nor a language-bearing script extension; a cpp assignment must be \
         uploadOnly, and the language must be declared before any pattern family or notebook check \

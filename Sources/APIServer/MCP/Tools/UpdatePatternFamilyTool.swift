@@ -34,7 +34,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// null at a position to use the literal in `args`.
         let argVarRefs: [String?]?
         /// Parallel to `args`: false at a position omits that argument so
-        /// Python's own parameter default applies.
+        /// the function's own parameter default applies.
         let argsProvided: [Bool]?
         /// Per-student expected (issue #461): the name of a global/section `=`
         /// expression whose value, resolved for the student's seed at grading
@@ -207,7 +207,8 @@ struct UpdatePatternFamilyTool: ContentTool {
                         ]),
                         "argsProvided": .object([
                             "type": .string("array"),
-                            "description": .string("Parallel to args: false omits the arg (use Python default)."),
+                            "description": .string(
+                                "Parallel to args: false omits the arg, so the function's own default applies."),
                         ]),
                         "expectedVarRef": .object([
                             "type": .string("string"),
@@ -259,7 +260,8 @@ struct UpdatePatternFamilyTool: ContentTool {
                         ]),
                         "argsProvided": .object([
                             "type": .string("array"),
-                            "description": .string("Parallel to args: false omits the arg (Python default)."),
+                            "description": .string(
+                                "Parallel to args: false omits the arg, so the function's own default applies."),
                         ]),
                         "expectedVarRef": .object([
                             "type": .string("string"),

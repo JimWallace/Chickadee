@@ -95,9 +95,14 @@ import Testing
             ),
             (
                 GetServerInfoTool.name, GetServerInfoTool.outputSchema,
+                // The REAL capability payload, not a stub: it is derived from
+                // `allCases`, so validating it here means a seventh language
+                // whose entry does not match the declared schema fails at this
+                // test rather than at an agent's client.
                 GetServerInfoTool.Output(
                     version: "0.0.0", mcpMode: "read_write",
-                    advertisedScopes: ["content:read"], writeEnabled: true)
+                    advertisedScopes: ["content:read"], writeEnabled: true,
+                    languages: MCPLanguageCapability.all)
             ),
             (
                 CloneAssignmentTool.name, CloneAssignmentTool.outputSchema,

@@ -40,10 +40,15 @@ struct GetAssignmentTool: ContentTool {
         /// mode from this tool — which, until now, never returned it, leaving
         /// an agent no way to see the mode it had just been told to check.
         let submissionMode: String
-        /// The assignment's language ("python" | "r" | "lua" | "octave" |
-        /// "cpp"), or nil when the suite is plain shell scripts with no
-        /// language. Decides which pattern-family and notebook-check kinds are
-        /// available, so an authoring agent needs it before it starts.
+        /// The assignment's `AssignmentLanguage` raw value, or nil when the
+        /// suite is plain shell scripts with no language. Decides which
+        /// pattern-family and notebook-check kinds are available, so an
+        /// authoring agent needs it before it starts — `get_server_info`
+        /// reports what each language supports.
+        ///
+        /// The legal values are deliberately NOT listed here: this doc comment
+        /// and the serialized description below both used to enumerate them by
+        /// hand, and both stopped at "cpp" when Racket shipped.
         let language: String?
         /// Optional minimum native-runner version required to grade this
         /// assignment (semver, e.g. "0.5.0"); null when ungated. A submission is
@@ -73,8 +78,9 @@ struct GetAssignmentTool: ContentTool {
         + "secret-tier test results; set via the assignment-update tool), minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
-        + "only), and language (\"python\" | \"r\" | \"lua\" | \"octave\" | \"cpp\", null for a plain "
-        + "shell-script suite) — which together decide what may be authored here."
+        + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
+        + "shell-script suite; get_server_info reports what each language supports) — which "
+        + "together decide what may be authored here."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

@@ -1,7 +1,7 @@
 // APIServer/MCP/Tools/PreviewPersonalizationTool.swift
 //
 // Read tool: previews what a student with a given seed would see for an
-// assignment's personalization — the resolved `name → Python-literal` values
+// assignment's personalization — the resolved `name → language-literal` values
 // (literals + per-seed-evaluated expressions) and a `{{placeholder}}` audit of
 // the starter notebook (which placeholders resolve, which don't).  content:read,
 // course-scoped.
@@ -9,8 +9,8 @@
 // Drives the same `PersonalizationSubstitution.resolve` the student first-open
 // path uses, so the preview matches reality. When no seed is supplied it uses
 // the acting account's own per-assignment seed (deterministic). Read-only: it
-// evaluates expressions in the sandboxed `python3` subprocess but writes
-// nothing.
+// evaluates expressions in a sandboxed subprocess running the assignment
+// language's own interpreter, but writes nothing.
 
 import Core
 import Fluent
@@ -27,7 +27,8 @@ struct PreviewPersonalizationTool: ContentTool {
     struct Output: Encodable, Sendable {
         struct ResolvedValue: Encodable, Sendable {
             let name: String
-            /// The Python literal substituted into `{{name}}`.
+            /// The literal substituted into `{{name}}`, rendered in the
+            /// assignment's own language.
             let value: String
         }
         struct Placeholders: Encodable, Sendable {

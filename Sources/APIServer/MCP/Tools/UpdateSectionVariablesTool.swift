@@ -36,8 +36,10 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let description =
         "Replace one test-suite section's personalization inputs, by assignment public ID + section "
         + "id (from get_suite). Provide the full desired `variables` (literal name + JSON value) and "
-        + "`expressions` (name + Python source evaluated per-student against `seed`); both lists are "
-        + "replaced wholesale, not merged. Names must be valid Python identifiers, unique within the "
+        + "`expressions` (name + source in the ASSIGNMENT'S OWN LANGUAGE, evaluated per-student against "
+        + "`seed` by that language's interpreter); both lists are "
+        + "replaced wholesale, not merged. Names must be valid Python identifiers whatever the "
+        + "language, unique within the "
         + "section, and must not clash with global inputs or any other section; `seed` is reserved. "
         + "Each expression is eval-checked against your own seed before saving."
     static let inputSchema: JSONValue = .object([
@@ -56,10 +58,13 @@ struct UpdateSectionVariablesTool: ContentTool {
                     "properties": .object([
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("Valid Python identifier; not \"seed\"."),
+                            "description": .string(
+                                "Valid Python identifier (the rule in every language); not \"seed\"."),
                         ]),
                         "value": .object([
-                            "description": .string("Any JSON-expressible Python literal (scalar, list, dict).")
+                            "description": .string(
+                                "Any JSON value (scalar, list, object); rendered as a literal in the assignment's language."
+                            )
                         ]),
                     ]),
                     "required": .array([.string("name"), .string("value")]),
@@ -74,11 +79,14 @@ struct UpdateSectionVariablesTool: ContentTool {
                     "properties": .object([
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("Valid Python identifier; not \"seed\"."),
+                            "description": .string(
+                                "Valid Python identifier (the rule in every language); not \"seed\"."),
                         ]),
                         "expression": .object([
                             "type": .string("string"),
-                            "description": .string("Python expression; `seed` and every variable are in scope."),
+                            "description": .string(
+                                "An expression in the assignment's own language; `seed` and every variable are in scope."
+                            ),
                         ]),
                     ]),
                     "required": .array([.string("name"), .string("expression")]),

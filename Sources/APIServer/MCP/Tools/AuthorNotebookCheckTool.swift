@@ -14,7 +14,8 @@
 // id already exists its spec is replaced, otherwise a new check row is appended
 // (contiguously within its section).  Read-modify-write through the same
 // buildSuitePayload / applySuiteEdit path the editor uses, which renders the
-// check's generated Python script AND runs the per-kind structural validation
+// check's generated script (in the assignment's language) AND runs the
+// per-kind structural validation
 // synchronously (so a malformed spec is rejected here, not silently shipped),
 // then closes a currently-open assignment and re-kicks validation — exactly like
 // the other content-edit write tools.

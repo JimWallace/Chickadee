@@ -35,7 +35,8 @@ struct CreatePatternFamilyTool: ContentTool {
         /// Parallel to `args`: `$`-less variable name for a per-student/section/
         /// family ref at that position, or null for the literal in `args`.
         let argVarRefs: [String?]?
-        /// Parallel to `args`: false omits that argument (Python default applies).
+        /// Parallel to `args`: false omits that argument, so the function's own
+        /// parameter default applies.
         let argsProvided: [Bool]?
         /// Per-student expected: name of a global/section `=` expression resolved
         /// for the student's seed at grading time (validator enforces eligible kinds).
@@ -253,7 +254,8 @@ struct CreatePatternFamilyTool: ContentTool {
                         ]),
                         "argsProvided": .object([
                             "type": .string("array"),
-                            "description": .string("Parallel to args: false omits the arg (Python default)."),
+                            "description": .string(
+                                "Parallel to args: false omits the arg, so the function's own default applies."),
                         ]),
                         "expectedVarRef": .object([
                             "type": .string("string"),

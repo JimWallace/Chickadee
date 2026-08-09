@@ -2,7 +2,8 @@
 //
 // Read tool: returns an assignment's global inputs (personalization) by public
 // ID — the literal `variables` (name + JSON value) and per-student
-// `expressions` (name + Python source).  content:read, course-scoped.  Mirrors
+// `expressions` (name + source in the assignment's own language).  content:read,
+// course-scoped.  Mirrors
 // `GET /instructor/:assignmentID/global-variables`.
 
 import Core
@@ -19,16 +20,17 @@ struct GetGlobalInputsTool: ContentTool {
         /// Literal values inlined into generated/raw tests and substituted into
         /// the starter notebook at student first-open.
         let variables: [FamilyVariable]
-        /// Python expressions evaluated per-student at notebook first-open
-        /// (`seed` + every static variable in scope).
+        /// Expressions in the assignment's own language, evaluated per-student
+        /// at notebook first-open (`seed` + every static variable in scope).
         let expressions: [PersonalizationExpression]
     }
 
     static let name = "get_global_inputs"
     static let description =
         "Get an assignment's global inputs (personalization) by public ID: the literal `variables` "
-        + "(each a name + JSON value) and the per-student `expressions` (each a name + Python source "
-        + "evaluated against the student's seed). Read-only — use this to inspect personalization "
+        + "(each a name + JSON value) and the per-student `expressions` (each a name + source in the "
+        + "assignment's own language, evaluated against the student's seed). Read-only — use this to "
+        + "inspect personalization "
         + "before editing it with update_global_inputs."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),

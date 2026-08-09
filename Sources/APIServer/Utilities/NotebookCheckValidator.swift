@@ -94,9 +94,6 @@ func validateNotebookChecks(
     }
 }
 
-/// Reject a kind with no renderer in this assignment's language at save time.
-/// Rendering Python for an R assignment would emit a `.py` script the R suite
-/// can never run, and the failure would surface as a confusing grading error
 /// Whether `language` can render `kind` — THE predicate, shared by the save-time
 /// refusal below and by the authoring UI's menu.
 ///
@@ -132,6 +129,9 @@ func notebookCheckKindUnsupportedReason(
     }
 }
 
+/// Reject a kind with no renderer in this assignment's language at save time.
+/// Rendering Python for an R assignment would emit a `.py` script the R suite
+/// can never run, and the failure would surface as a confusing grading error
 /// rather than an authoring mistake. Exhaustive so a future language cannot
 /// silently skip kind-support validation (docs/language-handling-review.md §4).
 private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLanguage) throws {

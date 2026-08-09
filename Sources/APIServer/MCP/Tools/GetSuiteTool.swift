@@ -25,7 +25,8 @@ struct GetSuiteTool: ContentTool {
             let name: String
             /// Section-scoped literal personalization values (name + JSON value).
             let variables: [FamilyVariable]
-            /// Section-scoped per-student expressions (name + Python source).
+            /// Section-scoped per-student expressions (name + source in the
+            /// assignment's own language).
             let expressions: [PersonalizationExpression]
         }
         struct Item: Encodable, Sendable {
@@ -71,7 +72,8 @@ struct GetSuiteTool: ContentTool {
             /// Full pattern-family spec — function, kind, paramNames, defaults
             /// (including the family `hint`), variables, and every case's
             /// args/expected/hint — for `kind == "family"` items. This is the
-            /// source of truth the grader renders into Python, so it reveals the
+            /// source of truth the grader renders into the assignment's
+            /// language, so it reveals the
             /// exact values each case checks and the hints students see on failure.
             let family: PatternFamily?
             /// Full notebook-check spec, for `kind == "check"` items.
