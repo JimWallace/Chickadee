@@ -195,7 +195,7 @@ Create Assignment
         <label class="req-field">
             Languages
             <input class="form-input input-sm" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="python, r">
+                   placeholder="e.g. python, r, lua, octave, cpp, racket">
         </label>
         <label class="req-field">
             Capabilities
@@ -306,6 +306,8 @@ Create Assignment
      exists; the check editor module silently no-ops in that case. -->
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
+<script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
+<script src="/authoring-language.js?v=#appVersion()"></script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
      Now a body renderer of the unified Test Editor modal
@@ -595,17 +597,9 @@ Create Assignment
             body: notebookText
         })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
-        .then(function (functions) {
-            scannedFunctions = functions || [];
-            if (scanStatus) scanStatus.textContent = scannedFunctions.length === 0 ? 'No functions found.' : scannedFunctions.length + ' function(s) found.';
-            if (fnChecklist) fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
-                var id = 'fn-chk-' + fn.name;
-                var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
-                return '<label class="fn-check-item">'
-                    + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
-                    + '<code>' + escHtml(label) + '</code></label>';
-            }).join('');
-            if (scannedFunctions.length > 0 && scanResults) scanResults.style.display = '';
+        .then(function (payload) {
+            scannedFunctions = window.chickadeeApplyScanPayload(payload,
+                { status: scanStatus, checklist: fnChecklist, results: scanResults });
         })
         .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
     }
@@ -621,7 +615,7 @@ Create Assignment
             if (scanStatus) scanStatus.textContent = 'Saving ' + checked.length + ' test(s)…';
             // POST each generated script in series to the draft scripts
             // endpoint, then hand it to suite-table.js for in-place add.
-            var ops = checked.map(function (chk) {
+            var ops = (window.ChickadeeLanguage.isPython() ? checked : []).map(function (chk) {
                 var fnName   = chk.value;
                 var content  = genPyTemplate(tplType, fnName);
                 var filename = 'test_' + fnName + '.py';

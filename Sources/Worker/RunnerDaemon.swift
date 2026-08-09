@@ -480,34 +480,23 @@ actor WorkerDaemon {
         return .passed
     }
 
-    func writeRRuntimeHelper(in directory: URL) throws {
-        let rRuntimeURL = directory.appendingPathComponent("test_runtime.R")
-        try testRuntimeR.write(to: rRuntimeURL, atomically: true, encoding: .utf8)
-    }
-
-    func writeLuaRuntimeHelper(in directory: URL) throws {
-        let luaRuntimeURL = directory.appendingPathComponent("test_runtime.lua")
-        try testRuntimeLua.write(to: luaRuntimeURL, atomically: true, encoding: .utf8)
-    }
-
-    func writeCppRuntimeHelper(in directory: URL) throws {
-        let cppRuntimeURL = directory.appendingPathComponent("test_runtime.hpp")
-        try testRuntimeCpp.write(to: cppRuntimeURL, atomically: true, encoding: .utf8)
-    }
-
-    func writeOctaveRuntimeHelper(in directory: URL) throws {
-        let octaveRuntimeURL = directory.appendingPathComponent("test_runtime.m")
-        try testRuntimeOctave.write(to: octaveRuntimeURL, atomically: true, encoding: .utf8)
-    }
-
-    func writePythonRuntimeHelpers(in directory: URL) throws {
-        let runtimeURL = directory.appendingPathComponent("test_runtime.py")
-        try testRuntimePy.write(to: runtimeURL, atomically: true, encoding: .utf8)
-
-        // Python auto-imports sitecustomize (if present on sys.path), which
-        // lets helpers be available without explicit imports in each test file.
-        let sitecustomizeURL = directory.appendingPathComponent("sitecustomize.py")
-        try sitecustomizePy.write(to: sitecustomizeURL, atomically: true, encoding: .utf8)
+    /// Installs every language's runtime helpers into the grading workspace.
+    ///
+    /// DISCOVERED from `AssignmentLanguage.allCases`, not listed. This was five
+    /// `write<Language>RuntimeHelper` functions invoked from a hand-written list
+    /// of five calls; a sixth language's helper was simply never written, and
+    /// nothing anywhere said so. Every language's helpers now land the day its
+    /// `runtimeHelperFiles(for:)` arm exists — which the compiler requires.
+    ///
+    /// Unconditional for every language, as before: a setup's scripts are not
+    /// classified until they run, so the runner does not know which language it
+    /// is about to need, and an unused helper costs one small file write.
+    /// Filenames are sorted so the writes are deterministic.
+    func writeRuntimeHelpers(in directory: URL) throws {
+        for (name, source) in allRuntimeHelperFiles().sorted(by: { $0.key < $1.key }) {
+            try source.write(
+                to: directory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
     }
 
     func writeStudentModuleHint(in directory: URL, preferredFilename: String?) throws {

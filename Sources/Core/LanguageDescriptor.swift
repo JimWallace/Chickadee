@@ -205,6 +205,20 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// language's value rewrites every assignment's manifest.
     public let generatedScriptExtension: String
 
+    /// The extension a SOURCE FILE in this language carries — what a notebook's
+    /// code becomes when it is extracted, and what `solution.<ext>` is called.
+    ///
+    /// Distinct from `generatedScriptExtension`, and C++ is why: a generated
+    /// C++ case is a `.sh` wrapper, while its extracted source is `.cpp`. It is
+    /// also distinct from `scriptExtensions`, which is a Set and has no
+    /// deterministic first element (C++ claims `cpp`, `h` and `hpp`).
+    ///
+    /// A field because it was two identical hand-written switches — the
+    /// worker's submission staging and its notebook extractor — and a third was
+    /// about to be added for the server-side solution extractor. Three copies of
+    /// one fact is the shape this file exists to stop.
+    public let sourceFileExtension: String
+
     /// Filename of the per-student grading-inputs file the worker materializes.
     /// Must match byte-for-byte what the language's `test_runtime` reads AND
     /// what the browser's `personalizationInputsSource<X>` writes.
@@ -295,6 +309,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         displayName: String,
         scriptExtensions: Set<String>,
         generatedScriptExtension: String,
+        sourceFileExtension: String,
         inputsFileName: String,
         notebookKernelNames: Set<String>,
         editorSupport: EditorSupport,
@@ -306,6 +321,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.displayName = displayName
         self.scriptExtensions = scriptExtensions
         self.generatedScriptExtension = generatedScriptExtension
+        self.sourceFileExtension = sourceFileExtension
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
         self.editorSupport = editorSupport
@@ -330,6 +346,7 @@ extension AssignmentLanguage {
                 displayName: "Python",
                 scriptExtensions: ["py"],
                 generatedScriptExtension: "py",
+                sourceFileExtension: "py",
                 inputsFileName: "_ck_inputs.py",
                 notebookKernelNames: AssignmentLanguage.pythonKernelNames,
                 editorSupport: .notebookKernel(
@@ -354,6 +371,7 @@ extension AssignmentLanguage {
                 displayName: "R",
                 scriptExtensions: ["r"],
                 generatedScriptExtension: "R",
+                sourceFileExtension: "R",
                 inputsFileName: "_ck_inputs.R",
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
                 editorSupport: .notebookKernel(
@@ -376,6 +394,7 @@ extension AssignmentLanguage {
                 displayName: "Lua",
                 scriptExtensions: ["lua"],
                 generatedScriptExtension: "lua",
+                sourceFileExtension: "lua",
                 inputsFileName: "_ck_inputs.lua",
                 notebookKernelNames: AssignmentLanguage.luaKernelNames,
                 editorSupport: .notebookKernel(
@@ -401,6 +420,7 @@ extension AssignmentLanguage {
                 displayName: "Octave",
                 scriptExtensions: ["m"],
                 generatedScriptExtension: "m",
+                sourceFileExtension: "m",
                 inputsFileName: "_ck_inputs.m",
                 notebookKernelNames: AssignmentLanguage.octaveKernelNames,
                 editorSupport: .notebookKernel(
@@ -440,6 +460,7 @@ extension AssignmentLanguage {
                 // dispatch. Unique across languages like every other value
                 // here — no other language generates `.sh`.
                 generatedScriptExtension: "sh",
+                sourceFileExtension: "cpp",
                 inputsFileName: "_ck_inputs.hpp",
                 // No notebook workflow, so no kernel aliases to claim — like
                 // Python's empty set, but for the opposite reason (nothing to
@@ -485,6 +506,7 @@ extension AssignmentLanguage {
                 // interpreted, so `racket test.rkt` runs it directly under the
                 // ordinary shell-script contract. No wrapper, no build step.
                 generatedScriptExtension: "rkt",
+                sourceFileExtension: "rkt",
                 inputsFileName: "_ck_inputs.rkt",
                 // No kernel exists to claim aliases for. Empty for the same
                 // reason as C++ — nothing to detect — not Python's

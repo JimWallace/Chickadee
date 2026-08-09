@@ -326,7 +326,35 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// natively rather than stranding submissions on a runner that never
     /// loads.
     public var effectiveGradingMode: GradingMode {
-        submissionMode == .uploadOnly ? .worker : gradingMode
+        effectiveSubmissionMode == .uploadOnly ? .worker : gradingMode
+    }
+
+    /// The submission mode that actually applies once the assignment's language
+    /// is taken into account.
+    ///
+    /// A language with no vendored editor kernel (`EditorSupport.uploadOnly` —
+    /// C++ and Racket today) has no notebook workflow at all, so a stored
+    /// `notebook` value promises students an editor that cannot serve them.
+    /// Consumption sites read this instead of `submissionMode` so the
+    /// incoherent pair sends them to the upload form rather than to a page with
+    /// no kernel behind it.
+    ///
+    /// THE SAME TWO-LAYER SHAPE AS `effectiveGradingMode`, and for the same
+    /// reason. The authoring surfaces refuse to *store* the combination, which
+    /// keeps the persisted state honest; this makes the combination *harmless*
+    /// wherever it arrives anyway — a hand-crafted test-setup zip, an imported
+    /// course bundle, a row written before the language existed.
+    ///
+    /// It also removes the need for the refusal to be spelled correctly at
+    /// every authoring site, which is what actually went wrong: the rule was
+    /// enforced at five places, generalised to `editorSupport` at two of them,
+    /// and still written `== .cpp` at the other three when a second upload-only
+    /// language shipped. Swift cannot make a missing call site a compile error;
+    /// deriving the answer here means a missed one is a tidiness bug rather
+    /// than a broken assignment.
+    public var effectiveSubmissionMode: SubmissionMode {
+        if let language, case .uploadOnly = language.editorSupport { return .uploadOnly }
+        return submissionMode
     }
 
     /// True when the manifest declares any per-student `=` expression, global

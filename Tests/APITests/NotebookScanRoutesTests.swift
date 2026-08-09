@@ -126,9 +126,16 @@ import VaporTesting
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
+                    // The response is an object now: a bare array could only
+                    // ever say "no functions", which is the same answer for an
+                    // empty solution and for a language the scanner cannot
+                    // read. A Python notebook with no functions must report
+                    // the first — an empty list and NO reason.
+                    let body = res.body.string
+                    #expect(body.contains("\"functions\":[]"), "Expected an empty functions list")
                     #expect(
-                        res.body.string.trimmingCharacters(in: .whitespacesAndNewlines) == "[]",
-                        "Expected empty array for notebook with no functions")
+                        !body.contains("unsupportedReason\":\""),
+                        "A Python notebook with no functions is empty, not unsupported")
                 }
             )
 

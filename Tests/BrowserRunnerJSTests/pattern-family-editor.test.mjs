@@ -34,6 +34,14 @@ const editorSource = await fs.readFile(
   'utf8',
 );
 
+// The editor reads its language facts through the shared module the page loads
+// ahead of it (Public/authoring-language.js). Any context that evaluates the
+// editor must evaluate that first, in the same order the template does.
+const languageModuleSource = await fs.readFile(
+  path.resolve('Public/authoring-language.js'),
+  'utf8',
+);
+
 /// Extract the array literal that follows `pyCode = ` between the
 /// snippet's BEGIN/END marker comments and `eval` it under fake values
 /// for the JS-side substitutions (`fnLit`, `argsLit`).  Returns the
@@ -250,6 +258,7 @@ test("editor IIFE executes without throwing under a stubbed DOM", () => {
   ctx.window = ctx;
   ctx.globalThis = ctx;
   assert.doesNotThrow(() => {
+    vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
     vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
   });
 });
@@ -264,4 +273,179 @@ test("editor carries the per-student expectedVarRef + Global-Inputs wiring", () 
     'editor must union Global Input names so per-student refs are not red-flagged');
   assert.ok(editorSource.includes('global-input-name'),
     'editor must read Global Input names from the DOM');
+});
+
+// ── The editor knows which language it is editing ────────────────────────────
+//
+// It used to know nothing: `Public/pattern-family-editor.js` contained the
+// string "language" zero times, so an R author typing TRUE got the *string*
+// "TRUE" (not JSON, and the repr fallback only rewrote Python's case-sensitive
+// `True`), and the placeholder offered a "— Python default —".
+//
+// These boot the real IIFE under a stubbed DOM that serves an
+// `#assignment-language-seed`, then drive the parser the same way a keystroke
+// does, so what is asserted is behaviour rather than the presence of a string.
+
+/// Boot the editor with `facts` as the language seed and return the live API
+/// plus the parse helper the value boxes use.
+function bootEditorWithLanguage(facts) {
+  const make = () => new Proxy(function () {}, {
+    get(_t, p) {
+      if (p === 'value') return '';
+      if (p === 'dataset' || p === 'style') return {};
+      if (p === 'classList') return { contains: () => false };
+      if (p === 'textContent') return '';
+      return make();
+    },
+    apply() { return make(); },
+    construct() { return make(); },
+  });
+  const seedEl = facts === null ? null : { textContent: JSON.stringify(facts) };
+  const doc = {
+    getElementById: (id) => (id === 'assignment-language-seed' ? seedEl : null),
+    querySelector: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: () => make(), currentScript: { dataset: {} },
+    body: make(), head: make(),
+  };
+  const ctx = {
+    console, document: doc, setTimeout, clearTimeout, JSON, Array, Object, Math,
+    Set, Map, Promise, RegExp, String, Boolean, Number,
+    fetch: () => Promise.resolve({}), location: { href: '' },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
+  vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
+  return ctx;
+}
+
+test("editor boots against a language seed without throwing", () => {
+  assert.doesNotThrow(() => bootEditorWithLanguage({
+    name: 'r', displayName: 'R',
+    trueLiteral: 'TRUE', falseLiteral: 'FALSE', nullLiteral: 'NA',
+    functionScanning: false, expressionEvaluation: false,
+  }));
+  // …and with no seed at all, which is the language-less assignment and any
+  // page that predates the seed. Falling back must not throw either.
+  assert.doesNotThrow(() => bootEditorWithLanguage(null));
+});
+
+test("the editor reads its language facts from the seed, not from a table", () => {
+  // The spellings must reach the parser from the seed. A hardcoded JS table
+  // would be a second source of truth for something JSONValue.literal already
+  // answers, and the two could disagree — the whole reason the seed exists.
+  assert.ok(editorSource.includes('assignment-language-seed'),
+    'editor must read #assignment-language-seed');
+  assert.ok(editorSource.includes('languageReprToJSON'),
+    'the repr fallback must go through the language-aware rewriter');
+  // No surviving hardcoded Python-token rewrite.
+  assert.ok(!/\\bTrue\\b\/g/.test(editorSource),
+    'a hardcoded \\bTrue\\b rewrite is still present — the fallback is Python-only again');
+  assert.ok(!editorSource.includes('— Python default —'),
+    'the Python-named placeholder is still present');
+  assert.ok(!editorSource.includes('Not a valid Python identifier.'),
+    'the Python-named identifier error is still present');
+});
+
+/// Boot ONLY the shared language module against a seed, so its behaviour can be
+/// driven directly rather than inferred from the editor's source shape.
+function bootLanguageModule(facts) {
+  const seedEl = facts === null ? null : { textContent: JSON.stringify(facts) };
+  const ctx = {
+    console, JSON, String, RegExp, Array, Object,
+    document: { getElementById: (id) => (id === 'assignment-language-seed' ? seedEl : null) },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
+  return ctx.ChickadeeLanguage;
+}
+
+test("each language's own true/false/null spelling parses to the right value", () => {
+  const cases = [
+    ['python', { trueLiteral: 'True', falseLiteral: 'False', nullLiteral: 'None' }],
+    ['r', { trueLiteral: 'TRUE', falseLiteral: 'FALSE', nullLiteral: 'NA' }],
+    ['lua', { trueLiteral: 'true', falseLiteral: 'false', nullLiteral: 'nil' }],
+    ['racket', { trueLiteral: '#t', falseLiteral: '#f', nullLiteral: "'null" }],
+  ];
+  for (const [name, lits] of cases) {
+    const L = bootLanguageModule({ name, displayName: name, ...lits });
+    assert.equal(L.matchScalarToken(lits.trueLiteral).value, true, `${name} true`);
+    assert.equal(L.matchScalarToken(lits.falseLiteral).value, false, `${name} false`);
+    assert.equal(L.matchScalarToken(lits.nullLiteral).value, null, `${name} null`);
+    // The defect this fixes: an R author's TRUE used to fall through to the
+    // bare-string branch and be stored as the string.
+    assert.notEqual(L.matchScalarToken(lits.trueLiteral), null);
+  }
+});
+
+test("Racket's quoted null survives the repr rewrite", () => {
+  // Tokens must be rewritten BEFORE the quote swap. Swapping first turns
+  // `'null` into `"null` and loses it — the one ordering bug in this rewriter.
+  const L = bootLanguageModule({
+    name: 'racket', displayName: 'Racket',
+    trueLiteral: '#t', falseLiteral: '#f', nullLiteral: "'null",
+  });
+  assert.equal(JSON.parse(L.reprToJSON("'null")), null);
+  assert.equal(JSON.parse(L.reprToJSON('#t')), true);
+  // A token inside a collection is rewritten too, and the surrounding JSON
+  // still parses.
+  assert.deepEqual(JSON.parse(L.reprToJSON("[1, #t, 'null]")), [1, true, null]);
+});
+
+test("a C++ assignment is offered no null token", () => {
+  // Its literal(.null) is a poison identifier, not something to type.
+  const L = bootLanguageModule({
+    name: 'cpp', displayName: 'C++',
+    trueLiteral: 'true', falseLiteral: 'false', nullLiteral: null,
+  });
+  assert.equal(L.scalarTokens().length, 2);
+  assert.equal(L.matchScalarToken('nullptr'), null);
+});
+
+test("no seed falls back to Python, which is the previous behaviour", () => {
+  const L = bootLanguageModule(null);
+  assert.equal(L.matchScalarToken('True').value, true);
+  assert.equal(L.matchScalarToken('None').value, null);
+  assert.equal(L.label(), '');
+});
+
+// The shared scan-payload readers. They live in this linted module rather than
+// inline in assignment-new.leaf because template JS is neither linted nor
+// tested — and the create page's inline copy is exactly the fork that went
+// stale three ways in #1269.
+test("the scan-payload readers handle both response shapes", () => {
+  const ctx = bootEditorWithLanguage(null);
+  const read = ctx.chickadeeReadScanPayload;
+  assert.equal(typeof read, 'function', 'chickadeeReadScanPayload must be exported');
+
+  // Object shape with a reason: no functions, and the reason survives.
+  const unsupported = read({ functions: [], unsupportedReason: 'Racket is upload-only.' });
+  assert.equal(unsupported.functions.length, 0);
+  assert.equal(unsupported.unsupportedReason, 'Racket is upload-only.');
+
+  // Object shape with functions and no reason.
+  const ok = read({ functions: [{ name: 'f' }], unsupportedReason: null });
+  assert.equal(ok.functions.length, 1);
+  assert.equal(ok.unsupportedReason, null);
+
+  // Bare array — a cached older page. Must not be read as "unsupported".
+  const legacy = read([{ name: 'g' }]);
+  assert.equal(legacy.functions.length, 1);
+  assert.equal(legacy.unsupportedReason, null);
+
+  // Junk must not throw; an empty scan is the safe answer.
+  assert.equal(read(null).functions.length, 0);
+  assert.equal(read(undefined).functions.length, 0);
+});
+
+test("auto-compute routes off the Python worker for other languages", () => {
+  // The defect: the in-page evaluator is a Python kernel, so on an R assignment
+  // it computed a PYTHON answer for a value compared against R's result.
+  assert.ok(editorSource.includes('callSolutionOnServer'),
+    'a server-side compute path must exist');
+  assert.ok(/languageFacts\.name !== 'python'/.test(editorSource),
+    'callSolution must route non-Python languages away from the in-page kernel');
+  assert.ok(editorSource.includes('compute-expected') || editorSource.includes('computeExpected'),
+    'the server path must call the compute-expected endpoint');
 });

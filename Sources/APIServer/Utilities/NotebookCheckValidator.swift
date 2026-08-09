@@ -97,6 +97,41 @@ func validateNotebookChecks(
 /// Reject a kind with no renderer in this assignment's language at save time.
 /// Rendering Python for an R assignment would emit a `.py` script the R suite
 /// can never run, and the failure would surface as a confusing grading error
+/// Whether `language` can render `kind` — THE predicate, shared by the save-time
+/// refusal below and by the authoring UI's menu.
+///
+/// It existed only inside `validateKindSupport`, so the "Add Test" menu had no
+/// way to ask: it offered all ten kinds on every assignment, six of which a Lua
+/// author could not save and ALL of which a C++ or Racket author could not.
+/// Discovering that by being refused is the thing issue #1290 is about.
+func notebookCheckKindIsSupported(_ kind: NotebookCheckKind, language: AssignmentLanguage) -> Bool {
+    switch language {
+    case .python: return true
+    case .r: return notebookCheckKindSupportsR(kind)
+    case .lua: return notebookCheckKindSupportsLua(kind)
+    case .octave: return notebookCheckKindSupportsOctave(kind)
+    case .cpp, .racket:
+        // Categorical, not per-kind: these are upload-only, so there is no
+        // submitted notebook for any kind to inspect.
+        return false
+    }
+}
+
+/// Why `language` cannot render `kind`, or nil when it can. Phrased for a menu
+/// tooltip — short, and it names the language.
+func notebookCheckKindUnsupportedReason(
+    _ kind: NotebookCheckKind, language: AssignmentLanguage
+) -> String? {
+    guard !notebookCheckKindIsSupported(kind, language: language) else { return nil }
+    switch language {
+    case .cpp, .racket:
+        return "\(language.displayName) assignments are upload-only, so there is no submitted "
+            + "notebook to check."
+    case .r, .lua, .octave, .python:
+        return "Not available for \(language.displayName) assignments."
+    }
+}
+
 /// rather than an authoring mistake. Exhaustive so a future language cannot
 /// silently skip kind-support validation (docs/language-handling-review.md §4).
 private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLanguage) throws {

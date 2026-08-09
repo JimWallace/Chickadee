@@ -98,11 +98,16 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
         }
 
-        // A C++ assignment is upload-only by construction: no editor kernel
-        // exists (EditorSupport.uploadOnly), so a notebook submission mode
-        // would promise students an editor that cannot serve them.
-        if manifest.language == .cpp, manifest.submissionMode != .uploadOnly {
-            throw AppError.unprocessable(reason: cppRequiresUploadOnlyMessage)
+        // An assignment in a language with no editor kernel is upload-only
+        // by construction (EditorSupport.uploadOnly), so a notebook submission
+        // mode would promise students an editor that cannot serve them.  Asked
+        // of `editorSupport`, not `== .cpp`: this is the zip-borne path, and
+        // spelling it as one language is how a Racket manifest declaring
+        // `notebook` was smuggled past the check this comment claims to be.
+        if let language = manifest.language, requiresUploadOnlySubmission(language),
+            manifest.submissionMode != .uploadOnly
+        {
+            throw AppError.unprocessable(reason: requiresUploadOnlyMessage(language))
         }
 
         // Mode-specific validation.

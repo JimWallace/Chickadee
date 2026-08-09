@@ -8,6 +8,12 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+// The page loads this ahead of the core, and the core reads the assignment's
+// scalar spellings through it. With no `#assignment-language-seed` in scope —
+// which is this test's situation, and a language-less assignment's — it falls
+// back to Python's spellings, so the assertions below are also the proof that
+// the fallback is the previous behaviour.
+require('../../Public/authoring-language.js');
 const Core = require('../../Public/inputs-editor-core.js');
 
 test('classifyValue: expressions are signalled by a leading =', () => {

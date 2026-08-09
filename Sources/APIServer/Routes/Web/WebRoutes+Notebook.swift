@@ -67,7 +67,11 @@ extension WebRoutes {
         if !isStaff,
             (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let manifest = decodeManifest(from: Data(setup.manifest.utf8)),
-            manifest.submissionMode == .uploadOnly
+            // `effectiveSubmissionMode`, not the stored value: an assignment in
+            // a language with no editor kernel has no notebook workflow however
+            // its manifest is spelled, so it redirects even if some authoring
+            // path let `notebook` be stored.
+            manifest.effectiveSubmissionMode == .uploadOnly
         {
             return req.redirect(to: "/testsetups/\(setupID)/submit")
         }

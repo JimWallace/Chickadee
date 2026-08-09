@@ -31,6 +31,10 @@
     { "name": "do_setup",                  "content": "#!/usr/bin/env bash\necho hi\n",                   "kind": "shell",  "note": "extensionless + env-bash shebang" },
 
     { "name": "test_stats.R",              "content": "print(1)\n",                                       "kind": "r",      "note": "uppercase .R extension" },
-    { "name": "test_stats.r",              "content": "print(1)\n",                                       "kind": "r",      "note": "lowercase .r extension" }
+    { "name": "test_stats.r",              "content": "print(1)\n",                                       "kind": "r",      "note": "lowercase .r extension" },
+
+    { "name": "test_stats.lua",            "content": "print(1)\n",                                       "kind": "lua",    "note": "Lua's generated and hand-authored extension" },
+    { "name": "test_stats.m",              "content": "disp(1)\n",                                        "kind": "octave", "note": ".m is Octave here; the runner spawns octave-cli, never MATLAB" },
+    { "name": "publictest_fam_01.sh",      "content": "cat > t.cpp <<'EOF'\nint main(){}\nEOF\ng++ t.cpp\n", "kind": "shell",  "note": "C++'s generated case is a POSIX shell wrapper — .sh must keep carrying no language signal" }
   ]
 }

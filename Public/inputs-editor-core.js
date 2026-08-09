@@ -9,10 +9,16 @@
 // names, their persistence endpoint, and how they report save results.
 //
 // A row's Value cell is one of two kinds, picked by prefix:
-//   - "literal"     : `42`, `"hello"`, `[1, 2, 3]`, `{"k": 1}`, `True`
-//                     Parsed via tryParseLiteral (JSON + Python shortcuts).
+//   - "literal"     : `42`, `"hello"`, `[1, 2, 3]`, `{"k": 1}`, and the
+//                     assignment language's own spelling of true/false/null.
+//                     Parsed via tryParseLiteral (JSON + that language's
+//                     scalar spellings), shared with the pattern-family editor
+//                     through Public/authoring-language.js.
 //   - "expression"  : starts with `=`, e.g. `= seed % 26`.
-//                     Evaluated server-side per-student with `seed` bound.
+//                     Evaluated server-side per-student with `seed` bound —
+//                     IN THE ASSIGNMENT'S LANGUAGE, by the driver
+//                     PersonalizationEvaluator spawns for it. An expression is
+//                     not Python unless the assignment is.
 //
 // Both editors persist `{ variables: [...], expressions: [...] }`.
 
@@ -21,13 +27,27 @@
 
     var RESERVED_NAMES = { 'seed': true };
 
+    /// Is `s` a name the SERVER will accept for an input?
+    ///
+    /// Still Python's grammar, deliberately: `GlobalInputsService` and
+    /// `SectionInputsService` call `isValidPythonIdentifier` for every language,
+    /// so widening the client alone would let a name through that the save then
+    /// rejects. The name of this function is the only Python-specific thing that
+    /// should remain visible, and it is not shown to anyone.
+    ///
+    /// (A per-language identifier dispatch does exist server-side —
+    /// `isValidRIdentifier` and friends — but it is private to
+    /// `NotebookCheckKindHandler` and reaches notebook checks only. Extending it
+    /// to inputs is a real behaviour change: `my.df` becomes a legal R name, and
+    /// `$name` reference parsing has to be checked against a dot first.)
     function isValidPyIdent(s) {
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
     }
 
     /// Classifies a row's Value cell.  Returns one of:
     ///   { kind: 'empty' }
-    ///   { kind: 'expression', expression: '<python>' } (+ empty: true when bare `=`)
+    ///   { kind: 'expression', expression: '<source in the assignment's language>' }
+    ///                                       (+ empty: true when bare `=`)
     ///   { kind: 'literal',    value: <JSON-able>, strict: true|false }
     function classifyValue(raw) {
         var t = String(raw == null ? '' : raw);
@@ -46,19 +66,21 @@
     /// Parses a literal value cell.  Returns { ok, value, strict } or
     /// { ok: false }.  One implementation for both panels so the on-disk
     /// JSON shape is identical.
+    ///
+    /// The scalar spellings are the ASSIGNMENT'S, not Python's. This accepted
+    /// `True` / `False` / `None` on every language, so an R instructor typing
+    /// the boolean true fell through to the bare-string branch and stored the
+    /// STRING — silently, in a value a generated test then compares. Python's
+    /// spellings still parse when the assignment is Python (or declares no
+    /// language), so nothing that worked before stops working.
     function tryParseLiteral(t) {
         if (!t) return { ok: false };
-        if (t === 'True')  return { ok: true, value: true,  strict: true };
-        if (t === 'False') return { ok: true, value: false, strict: true };
-        if (t === 'None')  return { ok: true, value: null,  strict: true };
+        var scalar = ChickadeeLanguage.matchScalarToken(t);
+        if (scalar) return { ok: true, value: scalar.value, strict: true };
         try { return { ok: true, value: JSON.parse(t), strict: true }; }
         catch (_) { /* fall through */ }
         if (t.indexOf('"') === -1) {
-            var pyish = t.replace(/'/g, '"')
-                         .replace(/\bTrue\b/g, 'true')
-                         .replace(/\bFalse\b/g, 'false')
-                         .replace(/\bNone\b/g, 'null');
-            try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
+            try { return { ok: true, value: JSON.parse(ChickadeeLanguage.reprToJSON(t)), strict: false }; }
             catch (_) { /* fall through */ }
         }
         return { ok: true, value: t, strict: false };

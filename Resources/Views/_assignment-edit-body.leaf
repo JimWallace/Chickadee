@@ -437,6 +437,8 @@
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
+<script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
+<script src="/authoring-language.js?v=#appVersion()"></script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
      The notebook-check form is now a body renderer of the unified Test
@@ -593,7 +595,10 @@
             solutionNotebook: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/files/solution';
             },
-            scanNotebook: function () { return '/instructor/scan-notebook'; }
+            scanNotebook: function () { return '/instructor/scan-notebook'; },
+            computeExpected: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/compute-expected';
+            }
         }
     });
 })();

@@ -87,10 +87,10 @@ struct SetSubmissionModeTool: ContentTool {
                 tool: Self.name, detail: uploadModeGradingConflictMessage)
         }
         if parsed == .notebook,
-            currentManifestLanguage(setup.manifest) == AssignmentLanguage.cpp.rawValue
+            let language = manifestRequiresUploadOnlySubmission(setup.manifest)
         {
             throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: cppRequiresUploadOnlyMessage)
+                tool: Self.name, detail: requiresUploadOnlyMessage(language))
         }
         let effective = try await setManifestSubmissionMode(
             setup: setup, to: mode, on: context.db)

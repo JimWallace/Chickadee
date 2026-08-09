@@ -93,7 +93,7 @@
         figure_count:          'Check that the notebook produces at least N matplotlib figures.',
         cell_contains:         'Check that the submission source contains a given substring or regex.',
         ast_structure:         'Check that the code uses (or avoids) constructs like loops, recursion, imports.',
-        script:                'Write a raw .py / .sh / .r test script by hand in the code editor.'
+        script:                'Write a raw test script by hand in the code editor — your assignment\u2019s language, or .sh.'
     };
 
     // Shared error-message extractor (Public/chickadee-ui.js, #1126) —
@@ -150,10 +150,27 @@
             'width:min(960px,96vw);max-height:92vh;display:flex;flex-direction:column;' +
             'box-shadow:0 8px 32px rgba(0,0,0,.25)';
 
+        // A kind this assignment's language cannot render is DISABLED with its
+        // reason, not hidden. The menu offered all ten check kinds on every
+        // assignment — six a Lua author could not save, and every one of them on
+        // C++ or Racket — so the only way to find out was to be refused at save
+        // (issue #1290). Disabling teaches; hiding would just make the menu
+        // shorter and leave the instructor wondering.
+        //
+        // Only `check` kinds are ever filtered. All eight pattern kinds render
+        // in all six languages, so a `family` item is always offered.
+        function unsupportedReason(it) {
+            if (it.mechanism !== 'check') return null;
+            return (global.ChickadeeLanguage
+                && global.ChickadeeLanguage.checkKindUnsupportedReason(it.value)) || null;
+        }
         var optionsHTML = CATALOG.map(function (g) {
             var opts = g.items.map(function (it) {
+                var reason = unsupportedReason(it);
                 return '<option value="' + escAttr(it.value) + '" data-mechanism="' +
-                    escAttr(it.mechanism) + '">' + escHtml(it.label) + '</option>';
+                    escAttr(it.mechanism) + '"' +
+                    (reason ? ' disabled title="' + escAttr(reason) + '"' : '') + '>' +
+                    escHtml(it.label) + (reason ? ' \u2014 unavailable' : '') + '</option>';
             }).join('');
             return '<optgroup label="' + escAttr(g.group) + '">' + opts + '</optgroup>';
         }).join('');

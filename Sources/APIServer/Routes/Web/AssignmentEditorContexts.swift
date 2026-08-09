@@ -53,6 +53,15 @@ struct NewAssignmentContext: Encodable {
     /// from this rather than hand-coded in the template.  Static across
     /// assignments.
     let checkSchemaJSON: String
+    /// The assignment language's authoring facts (`authoringLanguageFactsJSON`),
+    /// embedded as the `assignment-language-seed` script tag.
+    ///
+    /// The pattern-family editor had NO notion of language at all — it
+    /// validated Python identifiers, parsed `True`/`False`/`None`, and echoed
+    /// Python reprs on an R lab. This is the one channel that tells it which
+    /// language it is editing; without it the JS could not gate on the language
+    /// even if it wanted to.
+    let assignmentLanguageJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  Same shape
     /// the edit page emits — `suite-table.js` parses it once at page load
     /// as the initial state of the unified items list, and every subsequent
@@ -200,6 +209,15 @@ struct EditAssignmentContext: Encodable {
     /// embedded as the `check-schema` seed.  Drives the generic
     /// schema-driven check editor.  Static across assignments.
     let checkSchemaJSON: String
+    /// The assignment language's authoring facts (`authoringLanguageFactsJSON`),
+    /// embedded as the `assignment-language-seed` script tag.
+    ///
+    /// The pattern-family editor had NO notion of language at all — it
+    /// validated Python identifiers, parsed `True`/`False`/`None`, and echoed
+    /// Python reprs on an R lab. This is the one channel that tells it which
+    /// language it is editing; without it the JS could not gate on the language
+    /// even if it wanted to.
+    let assignmentLanguageJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  The editor JS
     /// parses it once at page load as the initial state of the unified
     /// items list; every subsequent mutation is a PUT whose response

@@ -49,6 +49,36 @@
             throw new Error('initPatternFamilyEditor: urls must supply solutionNotebook + scanNotebook functions');
         }
 
+        // ── The assignment's language ──────────────────────────────────────
+        //
+        // This module had NO notion of language at all: it validated Python
+        // identifiers, accepted `True` / `False` / `None`, echoed Python reprs,
+        // and named Python in the optional-argument placeholder — on R, Lua, Octave,
+        // C++ and Racket assignments alike, while the server rendered the very
+        // same family correctly in those languages. The generated test was
+        // right and every hint given while authoring it was wrong.
+        //
+        // The facts come from `#assignment-language-seed`, written by
+        // `AuthoringLanguageFacts` on the server. The literal spellings in
+        // particular are COMPUTED there by `JSONValue.literal(_:)` — the same
+        // call that renders the real test — so the editor cannot drift from
+        // what will actually be generated. An assignment with no language (a
+        // plain `.sh` suite), or a page that predates the seed, falls back to
+        // Python's spellings, which is exactly today's behaviour.
+        var languageFacts = ChickadeeLanguage.facts();
+
+        // Why the last scan found nothing, when the reason is the language
+        // rather than the solution. Null means the scan genuinely ran.
+        //
+        // This declaration was lost when the private language reader above was
+        // replaced by the shared module, leaving three assignments to an
+        // undeclared name — a ReferenceError under 'use strict', on every scan.
+        // No test covered it; eslint's no-undef did.
+        var scanUnsupportedReason = null;
+
+        /// "R" / "Lua" / …, or "" when the assignment declares no language.
+        function languageLabel() { return ChickadeeLanguage.label(); }
+
         // ── State ──────────────────────────────────────────────────────────
         var familiesState = Array.isArray(config.initialFamilies)
             ? config.initialFamilies.slice()
@@ -234,14 +264,33 @@
             })
             .then(function (r) { return r.ok ? r.text() : Promise.reject('No solution notebook'); })
             .then(function (text) {
-                return fetch(urls.scanNotebook(), {
+                // Tell the server which language to read. Without it the
+                // endpoint falls back to the notebook's own kernelspec, which
+                // is a better default than assuming Python but is not the
+                // assignment's declared answer.
+                var scanURL = urls.scanNotebook()
+                    + (languageFacts.name
+                        ? (urls.scanNotebook().indexOf('?') === -1 ? '?' : '&')
+                          + 'language=' + encodeURIComponent(languageFacts.name)
+                        : '');
+                return fetch(scanURL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                     body: text
                 });
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject('Scan failed'); })
-            .then(function (fns) { scannedFunctions = fns || []; return scannedFunctions; })
+            .then(function (payload) {
+                // The response is an OBJECT now. It used to be a bare array,
+                // which could only ever say "no functions" — the same answer
+                // for an empty solution and for a language the scanner cannot
+                // read. An array is still accepted so a cached older page does
+                // not break.
+                var read = readScanPayload(payload);
+                scanUnsupportedReason = read.unsupportedReason;
+                scannedFunctions = read.functions;
+                return scannedFunctions;
+            })
             .catch(function () { scannedFunctions = []; return []; });
             return scanPromise;
         }
@@ -277,6 +326,16 @@
                 if (allowed.size === 0) allowed = null;
             }
             if (allowed && selectedName) allowed.add(selectedName);
+            // The message that was wrong for five of six languages: an R
+            // author whose solution the scanner cannot read was shown the
+            // same "no functions" state as an author with an empty solution,
+            // and nothing distinguished them.
+            if (scanUnsupportedReason) {
+                fnSelect.disabled = true;
+                fnHint.textContent = scanUnsupportedReason;
+                fnSelect.innerHTML = '<option value="">\u2014 Enter the function name below \u2014</option>';
+                return;
+            }
             fnSelect.disabled = false;
             fnHint.textContent = allowed
                 ? 'Showing functions defined under this section in the solution notebook.'
@@ -437,7 +496,7 @@
             } else {
                 paramNames.forEach(function (_, i) {
                     // Display precedence: variable reference (`$name`) > literal
-                    // > blank (omitted / use Python default).
+                    // > blank (omitted / use the language's own default).
                     var varName = argVarRefs[i] || null;
                     var wasProvided = (argsProvided.length === 0) ? true : !!argsProvided[i];
                     var val;
@@ -452,7 +511,13 @@
                     // so the instructor can tell at a glance which cells
                     // can be left empty.
                     var hasDefault = currentParamHasDefault && currentParamHasDefault[i];
-                    var placeholder = hasDefault ? '— Python default —' : 'e.g. 18.49 or underweight';
+                    // Names the assignment's language rather than Python —
+                    // this string was shown to R, Lua, Octave, C++ and Racket
+                    // authors verbatim.
+                    var defaultHint = languageLabel()
+                        ? '\u2014 ' + languageLabel() + ' default \u2014'
+                        : '\u2014 default \u2014';
+                    var placeholder = hasDefault ? defaultHint : 'e.g. 18.49 or underweight';
                     tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
                 });
             }
@@ -506,19 +571,40 @@
             'not','or','pass','raise','return','try','while','with','yield'
         ]);
 
-        /// Is `s` a syntactically valid Python identifier (and not a
-        /// reserved keyword)?  Mirrors `isValidPythonIdentifier` in
-        /// `ManifestValidation.swift` so the client's pre-save check
-        /// matches the server's rejection criteria.
-        function isValidPythonIdentifier(s) {
+        /// Is `s` a name the SERVER will accept for a family variable or
+        /// function?
+        ///
+        /// Still Python's grammar, deliberately, because that is what the
+        /// server applies here: `PatternFamilyValidator` and the inputs
+        /// services call `isValidPythonIdentifier` for every language. Widening
+        /// the client alone would let a name through that the save then
+        /// rejects, which is worse than the wording bug this fixes.
+        ///
+        /// (The server DOES have a per-language identifier dispatch —
+        /// `isValidRIdentifier` and friends — but it is private to
+        /// `NotebookCheckKindHandler` and reaches notebook checks only.
+        /// Extending it to families is a real improvement and a real behaviour
+        /// change: `my.df` would become a legal R variable name, and `$name`
+        /// reference parsing has to be checked against a dot before that can
+        /// ship. It is not a wording fix and is not bundled with one.)
+        function isValidServerIdentifier(s) {
             if (!s) return false;
             if (PYTHON_KEYWORDS.has(s)) return false;
             return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
         }
 
+        /// Shared with the Global/Section Inputs editors — see
+        /// Public/authoring-language.js for why these are not a local copy.
+        function matchScalarToken(trimmed) {
+            var hit = ChickadeeLanguage.matchScalarToken(trimmed);
+            return hit ? { ok: true, value: hit.value, kind: hit.kind, strict: false } : null;
+        }
+
+        function languageReprToJSON(trimmed) { return ChickadeeLanguage.reprToJSON(trimmed); }
+
         /// Tries to parse `raw` the same way the server / renderer will:
-        /// JSON first, then Python-capitalised scalars, then bare string.
-        /// Returns `{ ok, value, kind, strict }` where `strict` is true
+        /// JSON first, then the language's own scalar spellings, then bare
+        /// string.  Returns `{ ok, value, kind, strict }` where `strict` is true
         /// when `JSON.parse` succeeded (so the parse round-trips exactly)
         /// and false when we fell back to a bare string.  Used by the
         /// inline validator to distinguish "nice typed value" from
@@ -526,11 +612,8 @@
         function tryParseVarValue(raw) {
             var trimmed = String(raw == null ? '' : raw).trim();
             if (trimmed === '') return { ok: false, value: undefined, kind: 'empty', strict: false };
-            switch (trimmed) {
-                case 'True':  return { ok: true, value: true,  kind: 'bool',   strict: false };
-                case 'False': return { ok: true, value: false, kind: 'bool',   strict: false };
-                case 'None':  return { ok: true, value: null,  kind: 'null',   strict: false };
-            }
+            var scalar = matchScalarToken(trimmed);
+            if (scalar) return scalar;
             try {
                 var v = JSON.parse(trimmed);
                 var kind =
@@ -542,16 +625,13 @@
                     (typeof v === 'string') ? 'string' : 'scalar';
                 return { ok: true, value: v, kind: kind, strict: true };
             } catch (_) {
-                // v0.4.112: Python-repr fallback for variables (matches
+                // v0.4.112: language-repr fallback for variables (matches
                 // the same conversion in coerceByType).  Pasting a
                 // dict like `{'address': {'city': 'Waterloo'}}` into a
-                // section's input value should Just Work.
+                // section's input value should Just Work — in whichever
+                // language the assignment is written.
                 if (trimmed.indexOf('"') === -1) {
-                    var pyish = trimmed
-                        .replace(/'/g, '"')
-                        .replace(/\bTrue\b/g, 'true')
-                        .replace(/\bFalse\b/g, 'false')
-                        .replace(/\bNone\b/g, 'null');
+                    var pyish = languageReprToJSON(trimmed);
                     try {
                         var v2 = JSON.parse(pyish);
                         var k2 =
@@ -651,8 +731,8 @@
             if (!name) {
                 // Empty row — silent, not an error.
                 nameEl.style.borderColor = '';
-            } else if (!isValidPythonIdentifier(name)) {
-                nameError = 'Not a valid Python identifier.';
+            } else if (!isValidServerIdentifier(name)) {
+                nameError = 'Use letters, digits and underscores, starting with a letter or underscore.';
             } else {
                 var allNames = Array.from(variablesBody.querySelectorAll('.pf-var-name'))
                     .map(function (el) { return el.value.trim(); });
@@ -702,14 +782,14 @@
             var names = new Set();
             Array.from(variablesBody ? variablesBody.querySelectorAll('.pf-var-name') : []).forEach(function (el) {
                 var n = (el.value || '').trim();
-                if (n && isValidPythonIdentifier(n)) names.add(n);
+                if (n && isValidServerIdentifier(n)) names.add(n);
             });
             (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name && isValidPythonIdentifier(v.name)) names.add(v.name);
+                if (v && v.name && isValidServerIdentifier(v.name)) names.add(v.name);
             });
             Array.from(document.querySelectorAll('.global-input-name')).forEach(function (el) {
                 var n = (el.value || '').trim();
-                if (n && isValidPythonIdentifier(n)) names.add(n);
+                if (n && isValidServerIdentifier(n)) names.add(n);
             });
             return names;
         }
@@ -789,8 +869,9 @@
                     if (opts.strict) throw new Error('Variable row ' + (i + 1) + ': name is required.');
                     return;
                 }
-                if (opts.strict && !isValidPythonIdentifier(name)) {
-                    throw new Error('Variable "' + name + '": not a valid Python identifier.');
+                if (opts.strict && !isValidServerIdentifier(name)) {
+                    throw new Error('Variable "' + name + '": use letters, digits and underscores, '
+                        + 'starting with a letter or underscore.');
                 }
                 if (rawVal === '') {
                     if (opts.strict) throw new Error('Variable "' + name + '": value is required.');
@@ -936,20 +1017,14 @@
                     try {
                         return JSON.parse(trimmed);
                     } catch (_) {
-                        // v0.4.112: Python repr (single-quoted strings,
-                        // True/False/None) is a common copy-paste source —
-                        // try a conservative single-quote → double-quote
-                        // swap (only when no double quotes already exist
-                        // so we don't break a string that contains an
-                        // apostrophe-inside-double-quotes mix) plus
-                        // True/False/None token replacement.
+                        // v0.4.112: a value pasted in the assignment's own
+                        // syntax (single-quoted strings, the language's
+                        // true/false/null spellings) is a common copy-paste
+                        // source — rewrite it to JSON conservatively.
                         if (trimmed.indexOf('"') === -1) {
-                            var pyish = trimmed
-                                .replace(/'/g, '"')
-                                .replace(/\bTrue\b/g, 'true')
-                                .replace(/\bFalse\b/g, 'false')
-                                .replace(/\bNone\b/g, 'null');
-                            try { return JSON.parse(pyish); } catch (_) { /* fall through */ }
+                            try {
+                                return JSON.parse(languageReprToJSON(trimmed));
+                            } catch (_) { /* fall through */ }
                         }
                         return parseTypedCellValue(raw);
                     }
@@ -1603,7 +1678,60 @@
         /// tuples, bytes, complex) so the instructor sees a specific
         /// reason instead of `default=str` silently storing the repr
         /// string in the Expected cell.
+        /// Auto-compute via the SERVER, in the assignment's own language.
+        ///
+        /// The browser path below is a Python kernel. It did not fail on an R,
+        /// Lua, Octave, C++ or Racket assignment — it computed a PYTHON answer
+        /// for a value that would be compared against that language's result,
+        /// which is worse than not offering it. `PersonalizationEvaluator` on
+        /// the server already evaluates in all six, so this routes there rather
+        /// than growing five more kernels into the page.
+        ///
+        /// The value comes back as a LITERAL in that language (base R and Lua
+        /// have no JSON to serialize with), so it is read with the same
+        /// language-aware parser hand-typed values go through. A composite the
+        /// parser cannot take is reported, not stored: storing a repr string
+        /// would make it compare as text at grade time.
+        function callSolutionOnServer(fnName, args, opts) {
+            var captureStdout = !!(opts && opts.captureStdout);
+            if (!urls.computeExpected) {
+                return Promise.resolve({ ok: false, error: 'Auto-compute is unavailable on this page.' });
+            }
+            return fetch(urls.computeExpected(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: JSON.stringify({
+                    functionName: fnName, args: args, captureStdout: captureStdout
+                })
+            })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject('compute failed'); })
+            .then(function (res) {
+                if (res.unsupportedReason) return { ok: false, error: res.unsupportedReason };
+                if (!res.ok) return { ok: false, error: res.error || 'The solution raised an error.' };
+                var parsed = tryParseVarValue(res.rendered);
+                if (!parsed.ok || !parsed.strict) {
+                    // Scalars round-trip; a language repr of a list or record
+                    // does not. Say so instead of storing the text.
+                    var scalar = matchScalarToken(String(res.rendered).trim());
+                    if (scalar) return { ok: true, value: scalar.value };
+                    return {
+                        ok: false,
+                        error: 'Computed ' + res.rendered + ' — enter it here in JSON.'
+                    };
+                }
+                return { ok: true, value: parsed.value };
+            })
+            .catch(function (e) { return { ok: false, error: String(e) }; });
+        }
+
         function callSolution(fnName, args, opts) {
+            // Python keeps the in-page kernel: it is faster, and its handling of
+            // a None return and of types that do not round-trip through JSON is
+            // behaviour existing assignments rely on. Every other language goes
+            // to the server, which is the only place that can answer at all.
+            if (languageFacts.name && languageFacts.name !== 'python') {
+                return callSolutionOnServer(fnName, args, opts);
+            }
             var captureStdout = !!(opts && opts.captureStdout);
             return ensureSolutionLoaded().then(function (loaded) {
                 var cellErrors = loaded.cellErrors || [];
@@ -1822,7 +1950,7 @@
             // overrides (same name) win to match render-time semantics.
             var varsNow = {};
             (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name && isValidPythonIdentifier(v.name)) {
+                if (v && v.name && isValidServerIdentifier(v.name)) {
                     varsNow[v.name] = v.value;
                 }
             });
@@ -1832,7 +1960,7 @@
                     var v = (vrow.querySelector('.pf-var-value') || {}).value;
                     if (!n) return;
                     n = n.trim();
-                    if (!isValidPythonIdentifier(n)) return;
+                    if (!isValidServerIdentifier(n)) return;
                     var parsed = tryParseVarValue(v);
                     if (parsed.kind === 'empty') return;
                     varsNow[n] = parsed.value;
@@ -2072,5 +2200,62 @@
         };
     }
 
+    /// Reads a `/instructor/scan-notebook` response into
+    /// `{ functions, unsupportedReason }`.
+    ///
+    /// Shared because BOTH authoring pages call that endpoint, and the create
+    /// page's copy lived inline in the template where nothing lints or tests it
+    /// — the fork that let its JS go stale three separate ways (#1269). A bare
+    /// array is still accepted so a cached older page does not break.
+    function readScanPayload(payload) {
+        if (Array.isArray(payload)) return { functions: payload, unsupportedReason: null };
+        return {
+            functions: (payload && payload.functions) || [],
+            unsupportedReason: (payload && payload.unsupportedReason) || null
+        };
+    }
+
+    /// Applies a scan response to the create page's status line and function
+    /// checklist.
+    ///
+    /// Lives here rather than inline in `assignment-new.leaf` for the reason
+    /// the inline-script guard exists: template JS is neither linted nor
+    /// tested, and this page's inline copy is exactly the fork that went stale
+    /// three ways in #1269. `els` carries the three elements it touches.
+    function applyScanPayload(payload, els) {
+        // Module scope, so the escapers come from ChickadeeUI directly rather
+        // than the aliases bound inside initPatternFamilyEditor.
+        var escHtml = ChickadeeUI.escapeHtml;
+        var escAttr = ChickadeeUI.escapeAttr;
+        var read = readScanPayload(payload);
+        var status = els && els.status;
+        var checklist = els && els.checklist;
+        var results = els && els.results;
+        if (read.unsupportedReason) {
+            if (status) status.textContent = read.unsupportedReason;
+            if (checklist) checklist.innerHTML = '';
+            return [];
+        }
+        var functions = read.functions || [];
+        if (status) {
+            status.textContent = functions.length === 0
+                ? 'No functions found.'
+                : functions.length + ' function(s) found.';
+        }
+        if (checklist) {
+            checklist.innerHTML = functions.map(function (fn) {
+                var label = fn.name + '(' + ((fn.paramNames || []).join(', ')) + ')';
+                return '<label class="fn-check-item">'
+                    + '<input type="checkbox" id="' + escAttr('fn-chk-' + fn.name) + '"'
+                    + ' value="' + escAttr(fn.name) + '" checked>'
+                    + '<code>' + escHtml(label) + '</code></label>';
+            }).join('');
+        }
+        if (functions.length > 0 && results) results.style.display = '';
+        return functions;
+    }
+
+    global.chickadeeApplyScanPayload = applyScanPayload;
+    global.chickadeeReadScanPayload = readScanPayload;
     global.initPatternFamilyEditor = initPatternFamilyEditor;
 })(window);

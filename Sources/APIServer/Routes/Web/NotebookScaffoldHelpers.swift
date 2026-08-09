@@ -82,7 +82,14 @@ func autoScaffoldFromSolutionNotebook(
         return (0, 0)
     }
 
-    let scan = scanNotebookForSectionsAndFunctions(notebookData)
+    // Language-aware: the scaffold writes PYTHON scripts, so it must not run
+    // for a language whose functions this scanner cannot read. It already
+    // no-opped for those in practice (no R/Lua/Octave/Racket source contains a
+    // line beginning `def `, so nothing was ever found), but by accident rather
+    // than by decision — the honest version asks.
+    let scanLanguage =
+        setup.decodedManifest().flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }
+    let scan = scanNotebookForSectionsAndFunctions(notebookData, language: scanLanguage)
     // Nothing useful to scaffold if no functions were found.  Still add
     // the sections (they're cheap) so the instructor can drop their own
     // scripts in.  But with zero functions there's also little value —

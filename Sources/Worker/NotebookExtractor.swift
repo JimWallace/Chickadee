@@ -215,15 +215,9 @@ func extractNotebooksToCode(
         // scripts Chickadee *generates* (pattern cases, notebook checks) where the
         // filename feeds `spec_hash`. Extraction output is a different concern and
         // must not be coupled to it.
-        let ext: String
-        switch language {
-        case .python: ext = "py"
-        case .r: ext = "R"
-        case .lua: ext = "lua"
-        case .octave: ext = "m"
-        case .cpp: ext = "cpp"
-        case .racket: ext = "rkt"
-        }
+        // From the descriptor — see `sourceFileExtension`. Was a hand-written
+        // switch identical to SubmissionStaging's.
+        let ext = language.sourceFileExtension
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 

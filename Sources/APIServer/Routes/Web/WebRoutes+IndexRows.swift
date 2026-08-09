@@ -374,7 +374,15 @@ extension WebRoutes {
             isOpen: isOpenForThisUser,
             canEdit: canEdit,
             gradingMode: props?.effectiveGradingMode.rawValue ?? GradingMode.worker.rawValue,
-            submissionMode: props?.submissionMode.rawValue ?? SubmissionMode.notebook.rawValue,
+            // EFFECTIVE, matching `gradingMode` beside it. The dashboard gates
+            // its Edit and Open-editor actions on this, and a language with no
+            // vendored kernel has no editor to open however the manifest is
+            // spelled — the notebook route already redirects such a request, so
+            // offering the link only led somewhere else. The manifest-writing
+            // sites keep the STORED value: they round-trip the field, and
+            // substituting the effective one there would silently rewrite it.
+            submissionMode: props?.effectiveSubmissionMode.rawValue
+                ?? SubmissionMode.notebook.rawValue,
             hasNotebook: hasNotebook,
             submissionCount: submissionCount,
             hasLatestSubmission: latestSubmission != nil,
