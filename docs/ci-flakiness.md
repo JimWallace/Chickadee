@@ -209,7 +209,7 @@ chromium failure is treated as real, first time.
 
 ---
 
-## Family 4 — `worker-tests` SIGABRT via the wedge watchdog (URLSession cancel deadlock) — OPEN, upstream
+## Family 4 — `worker-tests` SIGABRT via the wedge watchdog (URLSession cancel deadlock) — MITIGATED first-party; root cause still upstream
 
 **Symptom.** `worker-tests` fails (not cancelled) after ~5 minutes with
 `exited with unexpected signal code 6`. The crashing thread is
@@ -247,18 +247,64 @@ feature branch (run 31029658951, job 92390500832) with identical stacks.
 `main` was otherwise green on 14 of its 15 preceding runs, so the rate is
 low but real.
 
-**Handling for now.** Re-run the failed job — `/rerun-failed` on the PR, or
-`rerun-failed-jobs`. Before blaming a red `worker-tests` on the diff in front
-of you, check the dump for `WedgeWatchdog.abortWedgedProcess` plus a
+**Diagnosis confirmed, and sharpened (2026-08-09, Swift 6.3, this container).**
+A standalone `swiftc` harness reproduces it on demand, and `gdb -p` on the
+wedged process shows exactly the two stacks above. Two refinements the original
+entry did not state, both load-bearing:
+
+- The two threads are contending over **the same task's** status-record lock.
+  Foundation's `URLSession` has one `workQueue` per session, so the canceller
+  (`swift_task_cancel` → `withStatusRecordLock` → `CancelState.cancel` →
+  `URLSessionTask.cancel` → `DispatchQueue.sync`) blocks on a queue that the
+  multi-handle is already occupying inside `completeTask` →
+  `urlProtocolDidFinishLoading` → `CheckedContinuation.resume` →
+  `flagAsAndEnqueueOnExecutor` → `withStatusRecordLock`, waiting for the lock
+  the canceller holds. Same task, opposite order — a plain AB-BA.
+- It is therefore **not specific to `async let`**. Any cancellation of a task
+  suspended in `URLSession.download` that is completing at that instant can hit
+  it. `async let` was simply the site that did it on a schedule.
+
+**Fix shipped (first-party mitigation only).** The prepare phase's two fetches
+now both report a `Result` and are **both always awaited**
+(`fetchJobArtifacts` in `RunnerDaemon+JobProcessing.swift`), so one leg's
+failure can no longer leave the scope with the other still transferring. The
+submission download stays a *structured child* of the job task, so cancelling
+the daemon still tears an in-flight transfer down — the #1233 property is
+untouched, and `cancellingTheDaemonStopsTheInFlightSubmissionDownload` pins it
+end to end (the server writes an `aborted` breadcrumb, which is the only way to
+tell a cancelled transfer from an abandoned one from outside `URLSession`).
+`testSetupFailureDoesNotCancelTheInFlightSubmissionDownload` pins the new
+property and fails on the old code rather than merely being slower on it.
+
+Sequencing the two fetches was the other candidate and was rejected: it removes
+the same trigger but serialises a network fetch against a network-or-copy on
+every job, and it does not remove any cancellation site the reconciliation
+leaves behind — so it costs throughput for no additional coverage.
+
+**Measured.** In-repo harness: 300 jobs against an always-404 server, 4 slots.
+Before: 4 wedges in 8 runs (a wedge starves the cooperative pool so completely
+that the harness's own progress poll stops running). After: 0 wedges in 16 runs
+/ 4,800 jobs. Standalone harness, same shape without the repo: 10 wedges in 10
+runs before, 0 in 13 runs / 88,000 iterations after.
+
+**What is NOT fixed.** The upstream bug is untouched, and four sites still
+cancel an in-flight `URLSession` transfer. Three are the deliberate ones
+cancellation is *for*: cancelling the job task (which propagates into the
+submission download), `TestSetupCache.detachWaiter` cancelling the shared
+populate task once its last waiter leaves (#1233), and
+`withThrowingDiscardingTaskGroup` in `daemon.run()` cancelling the sibling
+worker loops when one takes a terminal poll error. The fourth is incidental and
+was left alone deliberately: `process(_:)`'s `defer` cancels the per-job
+heartbeat task, which may be mid-POST. That loop sleeps 30 s between ~1 ms
+requests, so the window is ~10⁻³ of a job rather than every failed one, and
+closing it means letting the loop finish cooperatively (up to 30 s of lingering
+task per job) — worth doing only if this family reappears.
+
+**Handling if it reappears.** Re-run the failed job — `/rerun-failed` on the
+PR, or `rerun-failed-jobs`. Before blaming a red `worker-tests` on the diff in
+front of you, check the dump for `WedgeWatchdog.abortWedgedProcess` plus a
 `CancelState.cancel` / `withStatusRecordLock` pair; that combination is this
 family, not the change under test.
-
-**Attack notes.** A real fix is upstream. First-party mitigation would be to
-stop cancelling in-flight downloads: sequence the two fetches instead of
-racing them under `async let`, or give each its own detached task whose
-failure does not cancel its sibling. Neither has been attempted — this entry
-records the diagnosis so the next person does not re-derive it from a
-register dump.
 
 ---
 

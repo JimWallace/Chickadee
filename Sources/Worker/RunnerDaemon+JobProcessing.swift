@@ -43,6 +43,14 @@ struct JobDiskReadings {
     var workdirPeakBytes: Int?
 }
 
+/// Outcome of the two concurrent prepare-phase artifact fetches.  Both legs
+/// are `Result`s rather than `throws` on purpose — see `fetchJobArtifacts`.
+struct JobArtifactFetch {
+    let submission: Result<Void, Error>
+    let testSetup: Result<TestSetupCache.AcquireResult, Error>
+    let testSetupAcquireMilliseconds: Int
+}
+
 extension WorkerDaemon {
 
     // MARK: - Job processing
@@ -313,6 +321,71 @@ extension WorkerDaemon {
         )
     }
 
+    /// Runs the submission download and the test-setup acquire concurrently,
+    /// and returns what each one did.  The test setup is served from the LRU
+    /// cache: on a hit the cached directory is copied into a fresh scratch
+    /// location; on a miss it is downloaded, unzipped, committed to cache,
+    /// then copied.
+    ///
+    /// BOTH legs report a `Result` and BOTH are always awaited, so neither
+    /// one's failure can leave this scope while the other is still
+    /// transferring.  That is not a style choice.  Leaving an `async let`
+    /// scope early cancels the sibling child, and cancelling an in-flight
+    /// `URLSession.download` on Linux deadlocks: `swift_asyncLet_finish` →
+    /// `swift_task_cancel` takes the child task's status-record lock and then
+    /// `DispatchQueue.sync`s onto the session's work queue, while that same
+    /// work queue is completing the child's transfer and resuming its
+    /// continuation — which needs the very lock the canceller is holding.
+    /// Neither side moves and the cooperative pool fills up behind them
+    /// (Family 4 in docs/ci-flakiness.md; `worker-tests` SIGABRTing at the
+    /// wedge watchdog's five-minute mark).  Several tests point both URLs at a
+    /// 404 server, which made the racing shape hit it routinely.
+    ///
+    /// Deliberate cancellation is deliberately NOT weakened.  The download
+    /// stays a *structured child* of the job task, so cancelling the daemon
+    /// still tears an in-flight submission transfer down — exactly as
+    /// cancelling an `acquire` still cancels the shared populate task once its
+    /// last waiter detaches (#1233).  What is removed is only the incidental
+    /// cancellation one leg's failure used to inflict on the other.
+    private func fetchJobArtifacts(job: Job, paths: JobWorkspacePaths) async -> JobArtifactFetch {
+        async let submissionDownload: Result<Void, Error> = {
+            do {
+                try await self.download(url: job.submissionURL, to: paths.submissionZip)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }()
+
+        let testSetupAcquireStartedAt = Date()
+        let cacheKey = testSetupCacheKey(for: job)
+        let testSetup: Result<TestSetupCache.AcquireResult, Error>
+        do {
+            testSetup = .success(
+                try await testSetupCache.acquire(testSetupID: cacheKey) {
+                    let stagingZip = paths.workDir.appendingPathComponent("testsetup.zip")
+                    let stagingDir = paths.workDir.appendingPathComponent(
+                        "testsetup_staging", isDirectory: true)
+                    try FileManager.default.createDirectory(
+                        at: stagingDir, withIntermediateDirectories: true)
+                    try await self.download(url: job.testSetupURL, to: stagingZip)
+                    try await extractZipArchive(zipPath: stagingZip.path, into: stagingDir)
+                    return stagingDir
+                })
+        } catch {
+            testSetup = .failure(error)
+        }
+        let acquireMilliseconds = Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000)
+
+        // Reached on every path, including both failures — this join is what
+        // keeps either leg from ever being cancelled by the other's throw.
+        return JobArtifactFetch(
+            submission: await submissionDownload,
+            testSetup: testSetup,
+            testSetupAcquireMilliseconds: acquireMilliseconds
+        )
+    }
+
     /// Downloads + unzips the submission and test setup, stages the
     /// submission into the test workspace, runs the optional `make` step,
     /// and installs the runtime helpers.  Returns a `JobPreparedWorkspace`
@@ -322,27 +395,19 @@ extension WorkerDaemon {
         paths: JobWorkspacePaths,
         stageTimings: inout JobStageTimings
     ) async throws -> JobPreparedWorkspace {
-        // Download submission and acquire the prepared test setup concurrently.
-        // The test setup is served from the LRU cache: on a hit the cached
-        // directory is copied into a fresh scratch location; on a miss it is
-        // downloaded, unzipped, committed to cache, then copied.
-        let submissionDownloadStartedAt = Date()
-        async let submissionDownload: Void = download(url: job.submissionURL, to: paths.submissionZip)
+        let fetchStartedAt = Date()
+        let fetched = await fetchJobArtifacts(job: job, paths: paths)
+        let submissionOutcome = fetched.submission
 
-        let testSetupAcquireStartedAt = Date()
-        let cacheKey = testSetupCacheKey(for: job)
-        let acquireResult = try await testSetupCache.acquire(testSetupID: cacheKey) {
-            let stagingZip = paths.workDir.appendingPathComponent("testsetup.zip")
-            let stagingDir = paths.workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
-            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-            try await self.download(url: job.testSetupURL, to: stagingZip)
-            try await extractZipArchive(zipPath: stagingZip.path, into: stagingDir)
-            return stagingDir
-        }
+        // A failed acquire produced no scratch directory, so there is nothing
+        // to clean up and nothing to report from the submission leg; its error
+        // is the job's error, matching the pre-reconciliation ordering where
+        // `acquire` was awaited first.
+        let acquireResult = try fetched.testSetup.get()
         let testSetupDir = acquireResult.directory
         stageTimings.record(
             "test_setup_acquire",
-            milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000)
+            milliseconds: fetched.testSetupAcquireMilliseconds
         )
         stageTimings.testSetupCacheHit = acquireResult.didHit
 
@@ -354,10 +419,10 @@ extension WorkerDaemon {
         // leaks a fully-prepared test-setup dir in /tmp (#1106; disk-fill has
         // taken prod down once already).
         do {
-            try await submissionDownload
+            try submissionOutcome.get()
             stageTimings.record(
                 "submission_download",
-                milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
+                milliseconds: Int(Date().timeIntervalSince(fetchStartedAt) * 1000)
             )
 
             let manifest = job.manifest
