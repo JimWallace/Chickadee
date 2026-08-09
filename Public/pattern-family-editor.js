@@ -67,6 +67,15 @@
         // Python's spellings, which is exactly today's behaviour.
         var languageFacts = ChickadeeLanguage.facts();
 
+        // Why the last scan found nothing, when the reason is the language
+        // rather than the solution. Null means the scan genuinely ran.
+        //
+        // This declaration was lost when the private language reader above was
+        // replaced by the shared module, leaving three assignments to an
+        // undeclared name — a ReferenceError under 'use strict', on every scan.
+        // No test covered it; eslint's no-undef did.
+        var scanUnsupportedReason = null;
+
         /// "R" / "Lua" / …, or "" when the assignment declares no language.
         function languageLabel() { return ChickadeeLanguage.label(); }
 

@@ -17,6 +17,9 @@ import js from '@eslint/js';
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
+  // Public/authoring-language.js — the assignment's language facts, read by
+  // every authoring editor.
+  ChickadeeLanguage: 'readonly',
   ChickadeeGradingShared: 'readonly',
   ChickadeeRGradingShared: 'readonly',
   ChickadeeLuaGradingShared: 'readonly',

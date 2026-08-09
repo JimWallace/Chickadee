@@ -135,8 +135,6 @@
         return !name || name === 'python';
     }
 
-    global.chickadeeLanguageIsPython = isPython;
-
     global.ChickadeeLanguage = {
         isPython: isPython,
         facts: facts,
