@@ -17,8 +17,8 @@ Reset notebook editor
         <h1>Editor reset</h1>
         <p class="reset-lead">
             Your browser&rsquo;s cached notebook-editor data has been cleared.
-            Reopen your assignment and the Python kernel will start from a clean
-            slate. Your submitted work is safe &mdash; only unsaved local edits
+            Reopen your assignment and the notebook kernel will start from a
+            clean slate. Your submitted work is safe &mdash; only unsaved local edits
             sitting in this browser were cleared, and you are still logged in.
         </p>
     </div>
@@ -29,7 +29,7 @@ Reset notebook editor
 #else:
     <h1>Reset the notebook editor</h1>
     <p class="reset-lead">
-        If the in-browser notebook editor keeps spinning and the Python kernel
+        If the in-browser notebook editor keeps spinning and the kernel
         never finishes loading, resetting clears the editor&rsquo;s cached data
         in <strong>this browser</strong> so it can boot from a clean slate. It is
         the same as &ldquo;Clear site data&rdquo; in your browser settings, scoped

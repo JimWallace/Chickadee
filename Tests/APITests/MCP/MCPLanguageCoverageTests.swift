@@ -130,6 +130,57 @@ import Testing
         }
     }
 
+    // MARK: - A predicate-defined SUBSET is never named short either
+
+    /// The blind spot the guard above documents and accepts.
+    ///
+    /// `staleLanguageLists()` filters single-language "lists" out on purpose,
+    /// because "a cpp assignment must be uploadOnly" is legitimate prose and
+    /// not a stale enumeration. It was legitimate right up until Racket became
+    /// the second upload-only language, at which point that exact sentence —
+    /// in four tool descriptions and the instructions — was a one-item list
+    /// that should have had two, and nothing here could see it. The enforcement
+    /// predicate (`requiresUploadOnlySubmission`) had picked Racket up
+    /// immediately, because it asks `editorSupport` rather than naming C++.
+    ///
+    /// So this guard is scoped to a SENTENCE rather than to the catalog: any
+    /// sentence about upload-only that names one upload-only language must name
+    /// all of them. Sentence-scoped because the catalog as a whole legitimately
+    /// mentions each language alone in a dozen unrelated places.
+    @Test func noSentenceNamesSomeUploadOnlyLanguagesButNotOthers() {
+        let uploadOnly = AssignmentLanguage.allCases.filter(requiresUploadOnlySubmission)
+        // A one-language answer makes the guard vacuous rather than wrong —
+        // there is no subset to get wrong. It starts biting at two, which is
+        // where the defect appeared.
+        guard uploadOnly.count > 1 else { return }
+        for sentence in Self.sentences(of: Self.servedText) {
+            let lowered = sentence.lowercased()
+            guard lowered.contains("uploadonly") || lowered.contains("upload-only") else { continue }
+            let named = uploadOnly.filter {
+                lowered.contains($0.rawValue.lowercased())
+                    || lowered.contains($0.displayName.lowercased())
+            }
+            guard !named.isEmpty, named.count < uploadOnly.count else { continue }
+            let missing = uploadOnly.filter { !named.contains($0) }
+            Issue.record(
+                """
+                A served MCP sentence about upload-only names \
+                \(named.map(\.displayName).joined(separator: ", ")) but not \
+                \(missing.map(\.displayName).joined(separator: ", ")), which \
+                `requiresUploadOnlySubmission` treats identically. Interpolate \
+                `LanguageProse.uploadOnlyTokens` / `.uploadOnlyDisplayNames` instead of naming a \
+                language. Sentence: "\(sentence.trimmingCharacters(in: .whitespacesAndNewlines))"
+                """)
+        }
+    }
+
+    /// Split on sentence-ending punctuation. Crude on purpose: a false split
+    /// can only make the guard check a shorter span, never invent a failure,
+    /// and JSON-encoded schema text has no reliable sentence structure anyway.
+    private static func sentences(of text: String) -> [String] {
+        text.split(whereSeparator: { $0 == "." || $0 == "\n" }).map(String.init)
+    }
+
     // MARK: - Expressions are never described as Python
 
     /// The specific regression #1288 named, generalized from the instructions

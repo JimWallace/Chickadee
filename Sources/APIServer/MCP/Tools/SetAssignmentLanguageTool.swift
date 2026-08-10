@@ -40,12 +40,14 @@ struct SetAssignmentLanguageTool: ContentTool {
     static let name = "set_assignment_language"
     static let description =
         "Declare the language an assignment is authored and graded in by its public ID: "
-        + "\(MCPLanguageProse.tokens). For every language except cpp this is normally unnecessary — the "
+        + "\(MCPLanguageProse.tokens). For every language except "
+        + "\(LanguageProse.mustDeclareTokens) this is normally unnecessary — the "
         + "language is derived from the starter notebook's kernel or a graded script's extension — but "
         + "declaring it "
         + "pins a suite made only of pattern families, which has no script on disk to derive from. For "
-        + "cpp it is required: C++ has no in-browser kernel and its generated tests are extension-free "
-        + "shell wrappers, so nothing implies the language. A cpp assignment must already be uploadOnly "
+        + "\(LanguageProse.mustDeclareTokens) it is required: its generated tests are shell wrappers "
+        + "carrying no language extension, so nothing in the suite implies the language. A "
+        + "\(LanguageProse.uploadOnlyTokens) assignment must already be uploadOnly "
         + "(set_submission_mode) — this tool refuses otherwise. Because a language change rewrites every "
         + "generated filename, declare the language BEFORE authoring pattern families or notebook checks; "
         + "the tool refuses a change once generated tests exist. Read the current language from "
@@ -59,7 +61,8 @@ struct SetAssignmentLanguageTool: ContentTool {
                 "enum": .array(
                     AssignmentLanguage.allCases.map { .string($0.rawValue) }),
                 "description": .string(
-                    "The assignment's language. cpp additionally requires submissionMode uploadOnly."),
+                    "The assignment's language. \(LanguageProse.uploadOnlyTokens) additionally "
+                        + "require submissionMode uploadOnly."),
             ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("language")]),

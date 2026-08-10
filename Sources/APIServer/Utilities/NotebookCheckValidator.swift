@@ -129,6 +129,38 @@ func notebookCheckKindUnsupportedReason(
     }
 }
 
+/// Why `language` cannot use the form field `field` on `kind`, or nil when it
+/// can.
+///
+/// The FIELD-level sibling of `notebookCheckKindUnsupportedReason`, and it
+/// exists because a kind being available does not make all of its options
+/// available. `cellContains` is supported on Lua; `cellContains` with
+/// `regex: true` is not, and that refusal lived only at save time — the kind
+/// map the Add Test menu reads is keyed by kind, so nothing could express it.
+/// A Lua author ticked a box whose save was guaranteed to fail. That is the
+/// same discoverability defect #1290 fixed one level up, one level down.
+///
+/// Returns nil for every other field, and is asked generically by the form
+/// schema builder so a second field-level refusal has somewhere to go.
+func notebookCheckFieldUnsupportedReason(
+    _ field: String, kind: NotebookCheckKind, language: AssignmentLanguage
+) -> String? {
+    guard kind == .cellContains, field == "regex" else { return nil }
+    switch language {
+    case .python, .r, .octave, .cpp, .racket:
+        // R and Octave both take a pattern authored against the Python
+        // renderer: Octave's regexp is PCRE (verified against octave-cli
+        // before claiming it) and R's engine accepts the same constructs.
+        // C++ and Racket never reach here — the kind itself is refused.
+        return nil
+    case .lua:
+        return "Lua patterns are not compatible with the regular expressions the Python and R "
+            + "renderers use — no alternation, no {n,m}, %d for \\d — so a pattern authored "
+            + "against them would not error under Lua, it would quietly match the wrong thing. "
+            + "Turn regex off to match the text literally."
+    }
+}
+
 /// Reject a kind with no renderer in this assignment's language at save time.
 /// Rendering Python for an R assignment would emit a `.py` script the R suite
 /// can never run, and the failure would surface as a confusing grading error
@@ -150,21 +182,25 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
                 check, language: "Lua", supports: notebookCheckKindSupportsLua,
                 handWrittenExtension: ".lua")
         }
-        // Regex cell-matching is rejected here rather than approximated in
-        // the renderer. Lua patterns are a different language from PCRE —
-        // no alternation, no `{n,m}`, `%d` for `\d` — so a pattern authored
-        // against the Python or R renderer would not error under Lua, it
-        // would quietly match the wrong thing and award marks on that
-        // basis. Telling the instructor at save time is the only point at
-        // which this is fixable.
-        if check.kind == .cellContains, check.regex == true {
+        // Regex cell-matching is rejected rather than approximated in the
+        // renderer: a pattern authored against the Python or R renderer would
+        // not error under Lua, it would quietly match the wrong thing and
+        // award marks on that basis.
+        //
+        // The REASON now comes from `notebookCheckFieldUnsupportedReason`, so
+        // the authoring form can disable the checkbox with the same words this
+        // refusal uses. Save time used to be the only point at which an
+        // instructor learned this, which made it the only point at which it was
+        // fixable — after they had written the pattern.
+        if check.regex == true,
+            let reason = notebookCheckFieldUnsupportedReason(
+                "regex", kind: check.kind, language: .lua)
+        {
             throw Abort(
                 .unprocessableEntity,
                 reason:
-                    "Notebook check '\(check.id)' (cell_contains) uses regex matching, which is not "
-                    + "available for Lua assignments: Lua patterns are not compatible with the "
-                    + "regular expressions the Python and R renderers use. Turn regex off to match "
-                    + "the text literally."
+                    "Notebook check '\(check.id)' (\(check.kind.rawValue)) uses regex matching, "
+                    + "which is not available for Lua assignments: \(reason)"
             )
         }
     case .octave:

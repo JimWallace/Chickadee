@@ -75,6 +75,18 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// for Python, which supports all of them.
     let unsupportedCheckKinds: [String: String]
 
+    /// The extension a NEW hand-written test in this assignment should get.
+    ///
+    /// `generatedScriptExtension` is exactly the right answer, and not by
+    /// coincidence: it is each language's own extension except for C++, where
+    /// it is `sh` because the runner has no C++ build strategy and a C++ test
+    /// case is a shell wrapper. A hand-written test faces that same dispatch.
+    ///
+    /// The custom-script editor defaulted every filename to `.py` — offering an
+    /// Octave author `test_correctness.py` under a heading promising "your
+    /// assignment's language".
+    let scriptExtension: String?
+
     /// Whether a case's expected value can be computed by running the solution
     /// at all — in the browser for Python, on the server for everything else.
     ///
@@ -103,6 +115,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
             self.trueLiteral = nil
             self.falseLiteral = nil
             self.nullLiteral = nil
+            self.scriptExtension = nil
             self.functionScanning = false
             self.expressionEvaluation = false
             self.unsupportedCheckKinds = [:]
@@ -110,6 +123,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         }
         self.name = language.rawValue
         self.displayName = language.displayName
+        self.scriptExtension = language.generatedScriptExtension
         self.trueLiteral = language.literal(.bool(true))
         self.falseLiteral = language.literal(.bool(false))
         // A language that has no null value gets NO null token. C++ is the one:

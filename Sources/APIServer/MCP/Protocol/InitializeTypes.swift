@@ -248,8 +248,9 @@ enum MCPServerInstructions {
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
         set_submission_mode (notebook editor vs upload-only hand-in), \
         set_assignment_language (declare \(MCPLanguageProse.tokens) — normally derived from the \
-        notebook kernel or a graded script's extension, but REQUIRED for cpp, which has neither an \
-        in-browser kernel nor a language-bearing script extension; a cpp assignment must be \
+        notebook kernel or a graded script's extension, but REQUIRED for \
+        \(LanguageProse.mustDeclareTokens), whose generated tests are shell wrappers carrying no \
+        language-bearing extension; a \(LanguageProse.uploadOnlyTokens) assignment must be \
         uploadOnly, and the language must be declared before any pattern family or notebook check \
         is authored), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \

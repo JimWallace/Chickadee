@@ -220,6 +220,18 @@
             return noopAPI();
         }
 
+        // Name the assignment's language in the variables table header.  The
+        // static markup reads "Value (JSON or literal)" so the page is honest
+        // before this runs; it said "Python literal" to R, Lua, Octave, C++ and
+        // Racket authors, the same defect the "Python default" placeholder
+        // below had — missed because this instance lives in Leaf, not here.
+        (function () {
+            var valueHeader = document.getElementById('family-variable-value-header');
+            if (valueHeader && languageLabel()) {
+                valueHeader.textContent = 'Value (JSON / ' + languageLabel() + ' literal)';
+            }
+        })();
+
         var editingIndex = -1;   // index in familiesState; -1 when creating.
         // The modal no longer asks for tier/points — the suite table row owns
         // those.  On edit we keep the family's existing values; on create we
@@ -1919,6 +1931,14 @@
 
         function autoComputeRow(row) {
             if (!row || !row.parentElement) return;
+            // A language with no expression driver cannot answer this at all,
+            // and the failure would be silent in the worst direction: the row
+            // sits empty, or the server refuses and the instructor reads it as
+            // a bug in their solution.  True for all six languages today —
+            // every one has an interpreter on the server image — so this reads
+            // the fact rather than assuming it, which is the whole point of the
+            // fact existing.
+            if (!ChickadeeLanguage.canEvaluateExpressions()) return;
             // Variable-equality families don't call a function — skip.
             if (kindInput && kindInput.value === 'variable_equality') return;
             // Return-type-check expected is a type name (e.g. "DataFrame"),

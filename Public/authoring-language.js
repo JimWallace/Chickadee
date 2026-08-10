@@ -28,6 +28,7 @@
         trueLiteral: 'True',
         falseLiteral: 'False',
         nullLiteral: 'None',
+        scriptExtension: 'py',
         functionScanning: true,
         expressionEvaluation: true,
         unsupportedCheckKinds: {}
@@ -52,6 +53,7 @@
             // No null token at all is a legitimate answer — C++ has no null
             // value, and its renderer emits a poison identifier rather than one.
             nullLiteral: parsed.nullLiteral || null,
+            scriptExtension: parsed.scriptExtension || PYTHON_FALLBACK.scriptExtension,
             functionScanning: parsed.functionScanning !== false,
             expressionEvaluation: parsed.expressionEvaluation !== false,
             unsupportedCheckKinds: parsed.unsupportedCheckKinds || {}
@@ -135,6 +137,34 @@
         return !name || name === 'python';
     }
 
+    /// The extension a new hand-written test should get: `py`, `R`, `lua`,
+    /// `m`, `rkt`, or `sh` for C++.
+    function scriptExtension() {
+        return facts().scriptExtension || 'py';
+    }
+
+    /// Whether scanning the solution notebook for function definitions can
+    /// work here at all.
+    ///
+    /// Read this BEFORE offering the scan, not after running it. The scan does
+    /// report its own reason when asked, but a control that invites a click and
+    /// then explains itself is worse than one that explains itself first.
+    function canScanFunctions() {
+        return facts().functionScanning !== false;
+    }
+
+    /// Whether a case's expected value can be computed by running the solution.
+    ///
+    /// True for all six languages today — every one has an interpreter on the
+    /// server image, so `PersonalizationEvaluator` can answer. It is read
+    /// rather than assumed because the failure it guards is silent: a seventh
+    /// language whose driver is not yet written reports false here, and an
+    /// unread flag would leave the editor auto-filling Expected cells from a
+    /// server that refuses.
+    function canEvaluateExpressions() {
+        return facts().expressionEvaluation !== false;
+    }
+
     global.ChickadeeLanguage = {
         isPython: isPython,
         facts: facts,
@@ -142,6 +172,9 @@
         label: label,
         scalarTokens: scalarTokens,
         matchScalarToken: matchScalarToken,
-        reprToJSON: reprToJSON
+        reprToJSON: reprToJSON,
+        scriptExtension: scriptExtension,
+        canScanFunctions: canScanFunctions,
+        canEvaluateExpressions: canEvaluateExpressions
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

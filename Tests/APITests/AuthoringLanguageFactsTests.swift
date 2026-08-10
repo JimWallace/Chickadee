@@ -139,6 +139,26 @@ import Testing
         }
     }
 
+    /// The extension a new hand-written test gets is the language's own, and
+    /// is derived rather than tabulated.
+    ///
+    /// `generatedScriptExtension` is the right owner, and C++ is why: its test
+    /// cases are shell wrappers, so the answer there is `sh` and not `cpp`, and
+    /// a hand-written C++ test faces exactly the same runner dispatch. Reading
+    /// any other source — `scriptExtensions.first`, a table here — would offer
+    /// an extension the runner does not execute.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func theNewScriptExtensionIsTheGeneratedOne(_ language: AssignmentLanguage) {
+        #expect(AuthoringLanguageFacts(language).scriptExtension == language.generatedScriptExtension)
+    }
+
+    /// A language-less assignment gets no extension to offer. The editor falls
+    /// back to `py`, which is what a plain `.sh` suite's authors saw before any
+    /// of this and is not worth changing.
+    @Test func aLanguagelessAssignmentOffersNoScriptExtension() {
+        #expect(AuthoringLanguageFacts(nil).scriptExtension == nil)
+    }
+
     /// Expression evaluation is available in every language, because the
     /// server's evaluator has a driver for every language.
     ///

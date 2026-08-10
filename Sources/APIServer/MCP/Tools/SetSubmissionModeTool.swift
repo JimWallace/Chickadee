@@ -33,8 +33,9 @@ struct SetSubmissionModeTool: ContentTool {
     static let description =
         "Set how students hand work in for an assignment by its public ID: \"notebook\" (the embedded "
         + "editor, with the upload form beside it) or \"uploadOnly\" (file upload only, no editor). Use "
-        + "uploadOnly for a language with no in-browser kernel — C++ assignments must be uploadOnly, and "
-        + "set_assignment_language refuses C++ until they are. An uploadOnly assignment is always graded "
+        + "uploadOnly for a language with no in-browser kernel — \(LanguageProse.uploadOnlyTokens) "
+        + "assignments must be uploadOnly, and set_assignment_language refuses them until they are. "
+        + "An uploadOnly assignment is always graded "
         + "by the native worker, so switch the grading mode to \"worker\" first (set_grading_mode); this "
         + "tool refuses the browser combination rather than storing a value that could never execute. "
         + "Read the current mode from get_assignment."
