@@ -65,7 +65,7 @@ jobs:
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/lua-grading-|Public/python-eval-|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
+          if echo "$changed" | grep -Eq '^(Public/r-grading-|Public/python-grading-|Public/lua-grading-|Public/python-eval-|Public/r-eval-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
@@ -91,6 +91,12 @@ jobs:
           # value, and auto-compute quietly stops filling anything in. Only a
           # real kernel shows that.
           - { language: python, mode: eval }
+          # The R half of in-page auto-compute. Its snippets are one top-level
+          # expression each (a xeus-lite performance constraint), they report
+          # behind a nonce, and the escaper has to be seeded before any of them
+          # runs — each of which fails SILENTLY when wrong. Only a real kernel
+          # shows that.
+          - { language: r, mode: eval }
     steps:
       - uses: actions/checkout@v4
 

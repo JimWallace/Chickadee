@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "The Lua literal contract, asserted by BOTH implementations of it.",
+    "See Tests/Fixtures/r-literal-contract.json for why two exist.",
+    "",
+    "The Lua-specific trap this pins: `null`. Lua spells it `nil`, and a `nil`",
+    "inside a table constructor is NOT STORED — `{60, nil, 20}` loses its middle",
+    "slot, `ipairs` stops at the hole, and `#t` is unspecified. So null renders",
+    "`nil` only at top level, and the `chickadee.NULL` sentinel inside any table.",
+    "A renderer that misses that distinction produces a table of the wrong length",
+    "and grades against it.",
+    "",
+    "NaN and the infinities are absent because JSON cannot express them; the",
+    "Swift-only unit tests cover those arms."
+  ],
+  "cases": [
+    { "name": "null at top level", "json": null, "lua": "nil" },
+    { "name": "true", "json": true, "lua": "true" },
+    { "name": "false", "json": false, "lua": "false" },
+    { "name": "zero", "json": 0, "lua": "0" },
+    { "name": "positive int", "json": 42, "lua": "42" },
+    { "name": "negative int", "json": -7, "lua": "-7" },
+    { "name": "double", "json": 2.5, "lua": "2.5" },
+    { "name": "negative double", "json": -0.125, "lua": "-0.125" },
+
+    { "name": "empty string", "json": "", "lua": "\"\"" },
+    { "name": "plain string", "json": "hello", "lua": "\"hello\"" },
+    { "name": "string with quote", "json": "he said \"hi\"", "lua": "\"he said \\\"hi\\\"\"" },
+    { "name": "string with backslash", "json": "a\\b", "lua": "\"a\\\\b\"" },
+    { "name": "string with newline", "json": "a\nb", "lua": "\"a\\nb\"" },
+    { "name": "string with tab", "json": "a\tb", "lua": "\"a\\tb\"" },
+    { "name": "string with control char", "json": "a\u0001b", "lua": "\"a\\001b\"" },
+    { "name": "string with delete char", "json": "a\u007fb", "lua": "\"a\\127b\"" },
+    { "name": "string with unicode", "json": "café", "lua": "\"café\"" },
+
+    { "name": "empty array", "json": [], "lua": "{}" },
+    { "name": "numeric array", "json": [1, 2, 3], "lua": "{1, 2, 3}" },
+    { "name": "string array", "json": ["a", "b"], "lua": "{\"a\", \"b\"}" },
+    {
+      "name": "array with null keeps its slot",
+      "json": [60, null, 20],
+      "lua": "{60, chickadee.NULL, 20}"
+    },
+    { "name": "mixed array", "json": [1, "a"], "lua": "{1, \"a\"}" },
+    { "name": "nested array", "json": [[1, 2]], "lua": "{{1, 2}}" },
+
+    { "name": "empty object", "json": {}, "lua": "{}" },
+    {
+      "name": "object sorted keys",
+      "json": { "b": 2, "a": 1 },
+      "lua": "{[\"a\"] = 1, [\"b\"] = 2}"
+    },
+    {
+      "name": "object with reserved-word key",
+      "json": { "end": 1 },
+      "lua": "{[\"end\"] = 1}"
+    },
+    {
+      "name": "object with null value",
+      "json": { "a": null },
+      "lua": "{[\"a\"] = chickadee.NULL}"
+    },
+    {
+      "name": "nested object",
+      "json": { "outer": { "inner": [1, 2] } },
+      "lua": "{[\"outer\"] = {[\"inner\"] = {1, 2}}}"
+    }
+  ]
+}

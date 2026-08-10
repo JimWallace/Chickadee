@@ -350,6 +350,49 @@ extension AssignmentLanguage {
     /// See `LanguageDescriptor.lineCommentPrefix`.
     public var lineCommentPrefix: String { descriptor.lineCommentPrefix }
 
+    /// Source the in-page auto-compute worker must prepend before it can report
+    /// a value, or nil when the language needs nothing.
+    ///
+    /// Two jobs, both already solved elsewhere and therefore NOT re-solved here:
+    /// turning a value into round-trippable text (Lua and Octave have no
+    /// built-in form; `deparse` and `repr` are builtins for R and Python), and
+    /// escaping that text into the JSON payload the worker prints behind its
+    /// per-run nonce.
+    ///
+    /// Every piece of this is an existing Core constant, shared with the server
+    /// driver and the grading runtime, so the in-page and server paths cannot
+    /// disagree about what a value looks like.
+    ///
+    /// A NOTE ON THE ENCODING, because I got this wrong once. I first planned a
+    /// nonce-framed plaintext payload instead of JSON, to avoid pushing a string
+    /// escaper into three languages — and the tree does carry two rival R
+    /// encoders (a `gsub` one in the grading runtime, and the char-by-char one
+    /// below, written because the first trips over replacement-string backslash
+    /// rules). But the escapers already EXIST for all three languages as
+    /// constants, so framing bought nothing and cost a second payload encoding
+    /// beside Python's, with a second parser to match. The eval protocol stays
+    /// exactly the one `python-eval-worker.js` speaks.
+    public var autoComputeRuntimeSource: String? {
+        switch self {
+        case .python:
+            // `repr` serializes and the snippet builds its payload with
+            // Python's own `json` module. Nothing to prepend.
+            return nil
+        case .r:
+            // `deparse` serializes; only the escaper is needed.
+            return RPersonalizationRuntime.chickadeeJSONStringRSource
+        case .lua:
+            return LuaPersonalizationRuntime.chickadeeSerializeLuaSource + "\n\n"
+                + LuaPersonalizationRuntime.chickadeeJSONStringLuaSource
+        case .octave:
+            return OctavePersonalizationRuntime.chickadeeSerializeOctaveSource + "\n\n"
+                + OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource
+        case .cpp, .racket:
+            // No kernel, so no in-page worker to prepend anything to.
+            return nil
+        }
+    }
+
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
     /// for `.python`, R literal for `.r`). Keys are emitted in sorted order for

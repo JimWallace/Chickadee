@@ -22,13 +22,18 @@
 //
 // Loading: classic script (importScripts). Requires /python-grading-shared.js
 // first, whose `makeNonce` and kernel spec are reused rather than duplicated —
-// one definition of which kernel "the Python kernel" means.
+// one definition of which kernel "the Python kernel" means; and
+// /eval-protocol-shared.js, which owns the nonce framing now that more than one
+// language reports through it.
 // Exposes exactly one global: ChickadeePythonEvalShared.
 
 (function (root) {
     'use strict';
 
     var grading = root.ChickadeePythonGradingShared;
+    // The nonce framing is language-neutral and shared with the other
+    // in-page evaluators; only the SNIPPETS below are Python.
+    var protocol = root.ChickadeeEvalProtocol;
 
     // Run one solution-notebook cell, reporting whether it raised.
     //
@@ -102,31 +107,11 @@
             .join('\n');
     }
 
-    /// The payload a cell printed behind `nonce`, or null when it never
-    /// reported — a kernel that died mid-cell, or output the nonce never
-    /// reached. Callers treat null as a substrate failure rather than a result.
-    function parseEvalOutput(stdoutText, nonce) {
-        var text = String(stdoutText == null ? '' : stdoutText);
-        var marker = '\n' + nonce + ':';
-        var at = text.lastIndexOf(marker);
-        if (at < 0) return null;
-        var from = at + marker.length;
-        var end = text.indexOf('\n', from);
-        var line = end < 0 ? text.slice(from) : text.slice(from, end);
-        var payload;
-        try { payload = JSON.parse(line); } catch (_) { return null; }
-        if (!payload || typeof payload !== 'object') return null;
-        return {
-            value: typeof payload.value === 'string' ? payload.value : null,
-            error: typeof payload.error === 'string' ? payload.error : null,
-        };
-    }
-
     root.ChickadeePythonEvalShared = {
         PYTHON_KERNEL: grading.PYTHON_KERNEL,
         makeNonce: grading.makeNonce,
         loadCellPython: loadCellPython,
         runExpressionPython: runExpressionPython,
-        parseEvalOutput: parseEvalOutput,
+        parseEvalOutput: protocol.parseEvalOutput,
     };
 })(typeof self !== 'undefined' ? self : globalThis);

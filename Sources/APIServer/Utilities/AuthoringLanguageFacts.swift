@@ -115,6 +115,15 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// language cannot claim in-page evaluation without saying what runs it.
     let autoComputeWorker: String?
 
+    /// Source the in-page worker prepends before it can report a value, or nil
+    /// when the language needs none.
+    ///
+    /// Seeded rather than baked into the worker so Lua's and Octave's value
+    /// serializers have ONE definition, shared with the server driver and the
+    /// grading runtime. A copy in the worker could disagree about what a value
+    /// looks like, and the instructor would never see which one was wrong.
+    let autoComputeRuntimeSource: String?
+
     /// Facts for `language`, or the language-less answer when it is nil.
     init(_ language: AssignmentLanguage?) {
         guard let language else {
@@ -127,6 +136,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
             self.functionScanning = false
             self.expressionEvaluation = false
             self.autoComputeWorker = nil
+            self.autoComputeRuntimeSource = nil
             self.unsupportedCheckKinds = [:]
             return
         }
@@ -174,6 +184,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         case .inPageKernel(let workerScript): self.autoComputeWorker = workerScript
         case .serverDriver: self.autoComputeWorker = nil
         }
+        self.autoComputeRuntimeSource = language.autoComputeRuntimeSource
     }
 }
 

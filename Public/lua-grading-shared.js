@@ -104,13 +104,70 @@
     // literal.  Only used for names Chickadee itself controls (script names,
     // the seed, the nonce), but escaping keeps a surprising filename from
     // breaking the wrapper's parse.
+    /// A Lua string literal for `value`.
+    ///
+    /// Byte-identical to `encodeLuaString` in Sources/Core/JSONValue.swift,
+    /// including the decimal `\\ddd` escape for control characters and DEL that
+    /// an earlier version omitted — a literal newline inside a quoted Lua string
+    /// is a syntax error, so nothing below 0x20 may pass through. Pinned by
+    /// Tests/Fixtures/lua-literal-contract.json, which both implementations read.
     function luaStringLiteral(value) {
-        return '"' + String(value)
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t') + '"';
+        var out = '"';
+        var text = String(value);
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            var code = text.charCodeAt(i);
+            if (ch === '\\') out += '\\\\';
+            else if (ch === '"') out += '\\"';
+            else if (ch === '\n') out += '\\n';
+            else if (ch === '\r') out += '\\r';
+            else if (ch === '\t') out += '\\t';
+            else if (code < 0x20 || code === 0x7f) {
+                // Decimal, not hex: `\\xNN` is Lua 5.2+, this works in 5.1 too.
+                out += '\\' + String(code).padStart(3, '0');
+            } else out += ch;
+        }
+        return out + '"';
+    }
+
+    /// Renders a JSON value as Lua source.
+    ///
+    /// A SECOND IMPLEMENTATION of `JSONValue.luaLiteral`, for the reason
+    /// `rLiteral` in r-grading-shared.js is: in-page auto-compute calls a
+    /// solution with arguments the instructor typed but has not saved, so there
+    /// is no server round-trip in which the server could render them. Neither
+    /// side owns the expectations — Tests/Fixtures/lua-literal-contract.json
+    /// does, and both read it.
+    ///
+    /// THE `inTable` DISTINCTION IS THE WHOLE TRAP. Lua spells null `nil`, and a
+    /// `nil` inside a table constructor is not stored at all: `{60, nil, 20}`
+    /// loses its middle slot, `ipairs` stops at the hole, and `#t` is
+    /// unspecified. So null is `nil` only at top level — where a function call
+    /// does accept it positionally — and the `chickadee.NULL` sentinel anywhere
+    /// inside a table.
+    function luaLiteral(value, inTable) {
+        if (value === null || value === undefined) return inTable ? 'chickadee.NULL' : 'nil';
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') {
+            if (Number.isNaN(value)) return '(0/0)';
+            if (!Number.isFinite(value)) return value < 0 ? '(-1/0)' : '(1/0)';
+            // Lua 5.4 distinguishes integers from floats. JS has one number
+            // type, so integrality decides -- the same split the server's JSON
+            // decode makes between `.int` and `.double`.
+            return String(value);
+        }
+        if (typeof value === 'string') return luaStringLiteral(value);
+        if (Array.isArray(value)) {
+            return '{' + value.map(function (v) { return luaLiteral(v, true); }).join(', ') + '}';
+        }
+        var keys = Object.keys(value).sort();
+        var pairs = keys.map(function (k) {
+            // Every key is bracketed and quoted: a JSON key may be a Lua
+            // reserved word (`end`, `then`, `nil`) or contain characters no
+            // identifier can.
+            return '[' + luaStringLiteral(k) + '] = ' + luaLiteral(value[k], true);
+        });
+        return '{' + pairs.join(', ') + '}';
     }
 
     // The one-time cell that installs the harness into the kernel's Lua state.
@@ -286,6 +343,7 @@ end)()`;
         LUA_KERNEL: LUA_KERNEL,
         SETUP_LUA: SETUP_LUA,
         luaStringLiteral: luaStringLiteral,
+        luaLiteral: luaLiteral,
         assignmentSeedLua: assignmentSeedLua,
         makeNonce: makeNonce,
         runScriptLua: runScriptLua,

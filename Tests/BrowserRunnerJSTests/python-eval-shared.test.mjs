@@ -24,6 +24,10 @@ context.globalThis = context;
 const vmContext = vm.createContext(context);
 vm.runInContext(await load('Public/grading-shared.js'), vmContext,
   { filename: 'grading-shared.js' });
+// The nonce framing moved into its own module when a second in-page evaluator
+// (R) needed the same parser; python-eval-shared delegates to it.
+vm.runInContext(await load('Public/eval-protocol-shared.js'), vmContext,
+  { filename: 'eval-protocol-shared.js' });
 vm.runInContext(await load('Public/python-grading-shared.js'), vmContext,
   { filename: 'python-grading-shared.js' });
 vm.runInContext(await load('Public/python-eval-shared.js'), vmContext,

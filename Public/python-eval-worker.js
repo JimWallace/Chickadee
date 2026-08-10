@@ -44,6 +44,7 @@ var _search = self.location.search || '';
 importScripts('/vendor/xeus-bootstrap.js' + _search);
 importScripts('/xeus-kernel-shared.js' + _search);
 importScripts('/grading-shared.js' + _search);
+importScripts('/eval-protocol-shared.js' + _search);
 importScripts('/python-grading-shared.js' + _search);
 importScripts('/python-eval-shared.js' + _search);
 

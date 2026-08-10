@@ -1670,7 +1670,10 @@
                 // 30s is generous (legitimate heavy imports, large
                 // pandas reads) while still bounded.  On timeout we
                 // terminate the worker; the next attempt re-loads.
-                return workerSend({ type: 'loadCells', cells: cells }, LOAD_TIMEOUT_MS);
+                return workerSend({
+                    type: 'loadCells', cells: cells,
+                    runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
+                }, LOAD_TIMEOUT_MS);
             })
             .then(function (data) {
                 return { cellErrors: data.cellErrors || [] };
@@ -1749,6 +1752,33 @@
             .catch(function (e) { return { ok: false, error: String(e) }; });
         }
 
+        /// Turns a failed auto-compute into the shape the UI reads.
+        ///
+        /// Shared by the Python `run` path and the structured `call` path every
+        /// other in-page kernel uses, so an R author gets the same explanation
+        /// a Python author does — including the part that matters most: when a
+        /// function is missing, WHY it is missing.
+        function describeCallFailure(err, cellErrors) {
+            if (err && err.message === '__chickadee_timeout__') {
+                return { ok: false, timedOut: true,
+                         error: 'timed out after ' + (TIMEOUT_MS / 1000) + 's' };
+            }
+            var msg = (err && err.message)
+                ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop()
+                : String(err);
+            // When the function isn't found, fold the first solution-load error
+            // into the message so the instructor sees *why* it never landed —
+            // typical case: an earlier cell raised. R says "object '<name>' not
+            // found" where Python says "not defined", so both are matched.
+            var missing = msg
+                && (msg.indexOf('not defined') >= 0 || msg.indexOf('not found') >= 0);
+            if (missing && (cellErrors || []).length > 0) {
+                var first = cellErrors[0];
+                msg += ' (cell ' + (first.index + 1) + ' failed: ' + first.message + ')';
+            }
+            return { ok: false, error: msg || 'error' };
+        }
+
         function callSolution(fnName, args, opts) {
             // IN-PAGE WHEREVER A KERNEL EXISTS, and the language seed decides
             // which — not a name check here.
@@ -1764,6 +1794,30 @@
                 return callSolutionOnServer(fnName, args, opts);
             }
             var captureStdout = !!(opts && opts.captureStdout);
+            // A NON-PYTHON in-page kernel takes the structured request and
+            // builds its own snippet, because rendering arguments into that
+            // language belongs in that language's module — not here, where
+            // the Python snippet below is assembled.
+            //
+            // Python keeps the `run` path: its snippet handles a None return
+            // and types that do not round-trip through JSON in ways existing
+            // assignments rely on.
+            if (!ChickadeeLanguage.isPython()) {
+                return ensureSolutionLoaded().then(function (loaded) {
+                    var cellErrors = loaded.cellErrors || [];
+                    return workerSend({
+                        type: 'call',
+                        functionName: fnName,
+                        args: args,
+                        captureStdout: captureStdout,
+                        runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
+                    }, TIMEOUT_MS)
+                    .then(function (data) { return { ok: true, value: data.result }; })
+                    .catch(function (err) {
+                        return { ok: false, error: describeCallFailure(err, cellErrors) };
+                    });
+                });
+            }
             return ensureSolutionLoaded().then(function (loaded) {
                 var cellErrors = loaded.cellErrors || [];
                 var argsJSON = JSON.stringify(args);
@@ -1857,7 +1911,10 @@
                     ].join('\n');
                     // PYODIDE_SNIPPET_END: value
                 }
-                return workerSend({ type: 'run', code: pyCode }, TIMEOUT_MS).then(function (data) {
+                return workerSend({
+                    type: 'run', code: pyCode,
+                    runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
+                }, TIMEOUT_MS).then(function (data) {
                     var parsed = JSON.parse(data.result);
                     if (parsed && parsed.__chickadee_kind__ === 'none') {
                         return { ok: true, value: null, returnedNone: true };
@@ -1866,24 +1923,7 @@
                         return { ok: false, unsupported: parsed.reason || 'unknown' };
                     }
                     return { ok: true, value: parsed.value, returnedNone: false };
-                }).catch(function (err) {
-                    if (err && err.message === '__chickadee_timeout__') {
-                        return { ok: false, timedOut: true,
-                                 error: 'timed out after ' + (TIMEOUT_MS / 1000) + 's' };
-                    }
-                    var msg = (err && err.message)
-                        ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop()
-                        : String(err);
-                    // When the function isn't found, fold the first
-                    // solution-load error into the message so the
-                    // instructor sees *why* the function never landed
-                    // in globals — typical case: an earlier cell raised.
-                    if (msg && msg.indexOf('not defined') >= 0 && cellErrors.length > 0) {
-                        var first = cellErrors[0];
-                        msg += ' (cell ' + (first.index + 1) + ' failed: ' + first.message + ')';
-                    }
-                    return { ok: false, error: msg || 'error' };
-                });
+                }).catch(function (err) { return describeCallFailure(err, cellErrors); });
             }).catch(function (err) {
                 // Solution-load failures (no-solution, empty-solution,
                 // network, load-timeout).  These come *before* any

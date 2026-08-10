@@ -409,7 +409,7 @@ enum PersonalizationEvaluator {
         lines.append("")
         // JSON string encoder (char-by-char; avoids gsub replacement-escaping
         // ambiguity so backslash/quote-heavy deparse output encodes correctly).
-        lines.append(rJSONStringEncoderSource)
+        lines.append(RPersonalizationRuntime.chickadeeJSONStringRSource)
         lines.append("")
         lines.append("seed <- chickadee_seed()")
         lines.append("")
@@ -607,30 +607,6 @@ enum PersonalizationEvaluator {
         lines.append("printf(\"{%s}\\n\", strjoin(ck_pairs, \",\"));")
         return lines.joined(separator: "\n") + "\n"
     }
-
-    /// Base-R JSON string encoder used by the R driver's output stage. Encodes
-    /// char-by-char (`utf8ToInt`/`intToUtf8`) so it never trips over `gsub`'s
-    /// replacement-string backslash rules — deparse output is quote-heavy and
-    /// occasionally backslash-heavy, and this must round-trip through
-    /// `JSONSerialization` on the Swift side.
-    private static let rJSONStringEncoderSource = #"""
-        .ck_json_str <- function(x) {
-            if (length(x) != 1L) x <- paste(as.character(x), collapse = "")
-            x <- as.character(x)
-            codes <- utf8ToInt(x)
-            if (length(codes) == 0L) return("\"\"")
-            out <- vapply(codes, function(cp) {
-                if (cp == 34L) "\\\""
-                else if (cp == 92L) "\\\\"
-                else if (cp == 10L) "\\n"
-                else if (cp == 13L) "\\r"
-                else if (cp == 9L)  "\\t"
-                else if (cp < 32L)  sprintf("\\u%04x", cp)
-                else intToUtf8(cp)
-            }, character(1L))
-            paste0("\"", paste(out, collapse = ""), "\"")
-        }
-        """#
 
     /// Same identifier predicate the editor JS uses.  Used to filter
     /// support-file names down to legal Python module names.

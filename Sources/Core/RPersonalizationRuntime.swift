@@ -49,4 +49,36 @@ public enum RPersonalizationRuntime {
             }
         }
         """#
+
+    /// Base-R JSON string encoder, shared by the personalization driver and the
+    /// in-page auto-compute worker.
+    ///
+    /// Encodes char-by-char (`utf8ToInt`/`intToUtf8`) so it never trips over
+    /// `gsub`'s replacement-string backslash rules — deparse output is
+    /// quote-heavy and occasionally backslash-heavy, and this must round-trip
+    /// through `JSONSerialization` on the Swift side.
+    ///
+    /// PUBLIC, and hoisted out of `PersonalizationEvaluator` where it was
+    /// private, because a second consumer arrived. Note there is a THIRD R
+    /// encoder in `TestRuntimeSources.swift` using exactly the `gsub` approach
+    /// this one exists to avoid; it serves the grading runtime's own narrower
+    /// payloads. Prefer this one for anything carrying deparse output.
+    public static let chickadeeJSONStringRSource = #"""
+        .ck_json_str <- function(x) {
+            if (length(x) != 1L) x <- paste(as.character(x), collapse = "")
+            x <- as.character(x)
+            codes <- utf8ToInt(x)
+            if (length(codes) == 0L) return("\"\"")
+            out <- vapply(codes, function(cp) {
+                if (cp == 34L) "\\\""
+                else if (cp == 92L) "\\\\"
+                else if (cp == 10L) "\\n"
+                else if (cp == 13L) "\\r"
+                else if (cp == 9L)  "\\t"
+                else if (cp < 32L)  sprintf("\\u%04x", cp)
+                else intToUtf8(cp)
+            }, character(1L))
+            paste0("\"", paste(out, collapse = ""), "\"")
+        }
+        """#
 }
