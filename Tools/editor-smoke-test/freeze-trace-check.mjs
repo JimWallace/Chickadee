@@ -78,6 +78,47 @@ async function buildSetupZip() {
   const zip = new JSZip();
   const code = (src) => ({ cell_type: "code", source: [src], metadata: {}, outputs: [], execution_count: null });
   const md = (src) => ({ cell_type: "markdown", source: [src], metadata: {} });
+  // FREEZE_BIG_NOTEBOOK=1: approximate a real end-of-term lab document — many
+  // cells with chunky SAVED outputs (streams, HTML tables, a base64 image),
+  // so document-size-scaled work (serialization, whole-notebook scans, full
+  // reflows) costs what it costs in production, without running anything.
+  if (process.env.FREEZE_BIG_NOTEBOOK === "1") {
+    const cells = [md("## Practice lab — reopened with saved outputs\n")];
+    const fakePng = "iVBORw0KGgoAAAANSUhEUg" + "A".repeat(60_000) + "==";
+    const tableRows = Array.from({ length: 300 }, (_, r) =>
+      `<tr><td>${r}</td><td>${(r * 1.37).toFixed(2)}</td><td>${(r % 7)}</td><td>c${r}</td></tr>`).join("");
+    for (let i = 0; i < 45; i++) {
+      const outputs = [];
+      outputs.push({ output_type: "stream", name: "stdout", text: [`step ${i}\n`.repeat(40)] });
+      if (i % 3 === 0) {
+        outputs.push({
+          output_type: "execute_result", execution_count: i + 1, metadata: {},
+          data: { "text/html": [`<table>${tableRows}</table>`], "text/plain": ["<table>"] },
+        });
+      }
+      if (i % 5 === 0) {
+        outputs.push({
+          output_type: "display_data", metadata: {},
+          data: { "image/png": fakePng, "text/plain": ["<Figure>"] },
+        });
+      }
+      cells.push({
+        cell_type: "code",
+        source: [`x${i} = ${i} * 2\nprint('step ${i}')\n`],
+        metadata: {}, outputs, execution_count: i + 1,
+      });
+    }
+    zip.file(
+      "assignment.ipynb",
+      JSON.stringify({
+        nbformat: 4, nbformat_minor: 5,
+        metadata: { kernelspec: { name: "python", display_name: "Python" } },
+        cells,
+      })
+    );
+    zip.file("test_public.py", 'print("public test ok")\n');
+    return zip.generateAsync({ type: "nodebuffer" });
+  }
   const cells = [
     md("## Blood pressure lab\n"),
     code("import numpy as np\nimport pandas as pd\nimport matplotlib.pyplot as plt\n"),
