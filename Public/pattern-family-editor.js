@@ -1670,7 +1670,10 @@
                 // 30s is generous (legitimate heavy imports, large
                 // pandas reads) while still bounded.  On timeout we
                 // terminate the worker; the next attempt re-loads.
-                return workerSend({ type: 'loadCells', cells: cells }, LOAD_TIMEOUT_MS);
+                return workerSend({
+                    type: 'loadCells', cells: cells,
+                    runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
+                }, LOAD_TIMEOUT_MS);
             })
             .then(function (data) {
                 return { cellErrors: data.cellErrors || [] };
@@ -1857,7 +1860,10 @@
                     ].join('\n');
                     // PYODIDE_SNIPPET_END: value
                 }
-                return workerSend({ type: 'run', code: pyCode }, TIMEOUT_MS).then(function (data) {
+                return workerSend({
+                    type: 'run', code: pyCode,
+                    runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
+                }, TIMEOUT_MS).then(function (data) {
                     var parsed = JSON.parse(data.result);
                     if (parsed && parsed.__chickadee_kind__ === 'none') {
                         return { ok: true, value: null, returnedNone: true };
