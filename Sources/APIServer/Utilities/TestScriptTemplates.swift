@@ -14,6 +14,7 @@
 // Sources/Worker/TestRuntimeSources.swift and Tools/runner-support/test_runtime.py
 // (enforced by TestScriptTemplatesTests.testTemplates_useOnlyKnownRequireFunctionKwargs).
 
+import Core
 import Foundation
 
 // MARK: - Rich-feedback argument rendering
@@ -482,7 +483,21 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
 // MARK: - Shell template generation
 
 /// Returns a shell test script for the given template type.
-func shellTestScript(type: ShellTestTemplateType) -> String {
+/// A shell test-script scaffold, with the assignment's language filled in.
+///
+/// These three are offered on EVERY language, because `.sh` is the universal
+/// test contract — and their bodies named Python: `FILE="solution.py"` and
+/// `python3 -c "import solution; …"`. So a non-Python author was handed three
+/// templates, all wrong for them, which is worse than being handed none. The
+/// filename comes from `sourceFileExtension` and the invocation from
+/// `interpreterProbe`, so no new per-language table exists to go stale.
+///
+/// nil keeps Python, which is the previous output byte-for-byte and the right
+/// answer for a suite that declares no language.
+func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage? = nil) -> String {
+    let language = language ?? .python
+    let solutionFile = "solution.\(language.sourceFileExtension)"
+
     switch type {
 
     case .alwaysPass:
@@ -497,7 +512,7 @@ func shellTestScript(type: ShellTestTemplateType) -> String {
         return """
             #!/bin/sh
             # Test: a required file exists in the working directory
-            FILE="solution.py"  # TODO: change to the expected filename
+            FILE="\(solutionFile)"  # TODO: change to the expected filename
             if [ -f "$FILE" ]; then
                 echo "File $FILE found"
                 exit 0
@@ -510,9 +525,9 @@ func shellTestScript(type: ShellTestTemplateType) -> String {
     case .commandOutput:
         return """
             #!/bin/sh
-            # Test: a command's stdout matches an expected value
+            # Test: the submission's stdout matches an expected value
             EXPECTED="expected output"  # TODO: replace with the expected output
-            ACTUAL=$(python3 -c "import solution; print(solution.main())" 2>&1)
+            \(runSubmissionShellFragment(language: language, solutionFile: solutionFile))
             if [ "$ACTUAL" = "$EXPECTED" ]; then
                 echo "Output matches"
                 exit 0
@@ -522,6 +537,29 @@ func shellTestScript(type: ShellTestTemplateType) -> String {
             fi
             """
     }
+}
+
+/// The shell lines that run the submission and leave its output in `$ACTUAL`.
+///
+/// Two shapes, chosen by `capabilityRequiresExecutableOutput` — the fact that
+/// already means "grading this language builds something before running it".
+/// Asking it here rather than switching on `.cpp` keeps the one judgement in
+/// one place; a seventh compiled language gets the compile form for free.
+private func runSubmissionShellFragment(
+    language: AssignmentLanguage, solutionFile: String
+) -> String {
+    let interpreter = language.descriptor.interpreterProbe.command
+    guard language.descriptor.capabilityRequiresExecutableOutput else {
+        // Run the file directly. This replaced a Python-only
+        // `python3 -c "import solution; print(solution.main())"`, which had no
+        // general form — and running the submission and comparing its stdout is
+        // the more common shape anyway.
+        return #"ACTUAL=$(\#(interpreter) \#(solutionFile) 2>&1)"#
+    }
+    return """
+        \(interpreter) -O2 -o ./ck_solution \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
+        ACTUAL=$(./ck_solution 2>&1)
+        """
 }
 
 // MARK: - JSON representation for the browser
@@ -538,7 +576,9 @@ struct TestTemplateInfo: Codable {
 
 /// Returns all template types as `TestTemplateInfo` values for the given function.
 /// Used by the scan-notebook and template-picker endpoints.
-func allTemplateInfos(functionName: String, paramNames: [String]) -> [TestTemplateInfo] {
+func allTemplateInfos(
+    functionName: String, paramNames: [String], language: AssignmentLanguage? = nil
+) -> [TestTemplateInfo] {
     let pyTypes = PythonTestTemplateType.allCases.map { t in
         TestTemplateInfo(
             id: t.rawValue,
@@ -554,7 +594,7 @@ func allTemplateInfos(functionName: String, paramNames: [String]) -> [TestTempla
             displayName: t.displayName,
             description: t.displayName,
             language: "shell",
-            content: shellTestScript(type: t)
+            content: shellTestScript(type: t, language: language)
         )
     }
     return pyTypes + shTypes

@@ -82,19 +82,19 @@ func autoScaffoldFromSolutionNotebook(
         return (0, 0)
     }
 
-    // Language-aware: the scaffold writes PYTHON scripts, so it must not run
-    // for a language whose functions this scanner cannot read. It already
-    // no-opped for those in practice (no R/Lua/Octave/Racket source contains a
-    // line beginning `def `, so nothing was ever found), but by accident rather
-    // than by decision — the honest version asks.
+    // Language-aware: the generated "exists" scripts are PYTHON, so they must
+    // not be written for a language whose functions this scanner cannot read.
+    // The SECTIONS are a different question — a `## ` header is markdown, not
+    // code — and the scan now answers the two separately.
     let scanLanguage =
         setup.decodedManifest().flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }
     let scan = scanNotebookForSectionsAndFunctions(notebookData, language: scanLanguage)
-    // Nothing useful to scaffold if no functions were found.  Still add
-    // the sections (they're cheap) so the instructor can drop their own
-    // scripts in.  But with zero functions there's also little value —
-    // bail out to keep the manifest minimal.
-    guard !scan.functions.isEmpty else { return (0, 0) }
+    // Sections are worth scaffolding on their own. This used to bail whenever
+    // no functions were found, which denied section scaffolding to every
+    // language the scanner cannot read — collateral from a limitation that
+    // applies only to function extraction — and to a Python solution that
+    // organises its work in headers without defining top-level functions.
+    guard !scan.functions.isEmpty || !scan.sectionNames.isEmpty else { return (0, 0) }
 
     // 1. Assign a stable UUID per section (server-generated; clients
     //    get it back via GET /suite).
@@ -126,11 +126,13 @@ func autoScaffoldFromSolutionNotebook(
         }
         newSuites.append(testDict)
     }
-    guard !writes.isEmpty else { return (scan.sectionNames.count, 0) }
-
     // 3. Write the scaffold files into the zip (idempotent — if the file
-    //    somehow already exists, the same content overwrites).
-    try applyScriptChangesToZip(zipPath: zipPath, writes: writes, deletions: [])
+    //    somehow already exists, the same content overwrites).  Skipped when
+    //    there are none, which is the ordinary case for a language whose
+    //    functions cannot be scanned; the sections below are still written.
+    if !writes.isEmpty {
+        try applyScriptChangesToZip(zipPath: zipPath, writes: writes, deletions: [])
+    }
 
     // 4. Rewrite the manifest with sections + testSuites populated.
     //    Preserve every other field the manifest already had (gradingMode,
@@ -145,8 +147,48 @@ func autoScaffoldFromSolutionNotebook(
     return (scan.sectionNames.count, writes.count)
 }
 
-func defaultNotebookData(title: String) -> Data {
+/// Refusal shown when a notebook is scaffolded for a language that has none.
+///
+/// Phrased for an instructor looking at a button that should not have been
+/// offered — so it says what to do instead, not just what went wrong.
+let uploadOnlyNotebookScaffoldMessage =
+    "This assignment's language has no in-browser notebook editor, so there is no notebook to "
+    + "create. Students submit files, and the reference solution is uploaded as a source file "
+    + "rather than authored as a notebook."
+
+/// A blank starter notebook in `language`.
+///
+/// THE KERNELSPEC IS DERIVED. This hardcoded `xpython` / `Python
+/// (xeus-python)` / `"language": "python"` for every language, and is called
+/// from four sites that had no language to pass. So an instructor who selected
+/// R and clicked "Create assignment notebook" got a Python notebook: the
+/// assignment still resolved R, because a recorded manifest language outranks
+/// the kernelspec, and the result was generated `.R` tests beside an editor
+/// booting `xpython`. On a draft with no recorded language the kernelspec is
+/// the ONLY signal, and `normalizeNotebookForJupyterLite` maps a missing one to
+/// Python — so the wrong answer was also a sticky one.
+///
+/// nil means the assignment declares no language (a plain `.sh` suite), which
+/// keeps Python: the previous behaviour, and the only defensible default when
+/// nothing names a language.
+///
+/// Returns nil for an upload-only language. C++ and Racket have no notebook
+/// workflow at all, and scaffolding one would promise students an editor that
+/// cannot serve them — the same refusal `submissionMode` already enforces,
+/// moved to the point where the file would be written.
+func defaultNotebookData(title: String, language: AssignmentLanguage? = nil) -> Data? {
     let safeTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
+    let kernel: (name: String, displayName: String, languageName: String)
+    switch (language ?? .python).editorSupport {
+    case .notebookKernel(_, let kernelName, let kernelDisplayName, _):
+        kernel = (kernelName, kernelDisplayName, (language ?? .python).rawValue)
+    case .uploadOnly:
+        return nil
+    }
+    // The starter cell's comment is the language's own — `#` was written into
+    // every notebook, which is a comment in Python, R and Octave and not in
+    // Lua. Same fact, same owner as the raw-script banner.
+    let starterComment = (language ?? .python).lineCommentPrefix
     let json = """
         {
           "cells": [
@@ -160,17 +202,17 @@ func defaultNotebookData(title: String) -> Data {
               "execution_count": null,
               "metadata": {},
               "outputs": [],
-              "source": ["# Student solution starts here\\n"]
+              "source": ["\(starterComment) Student solution starts here\\n"]
             }
           ],
           "metadata": {
             "kernelspec": {
-              "display_name": "Python (xeus-python)",
-              "language": "python",
-              "name": "xpython"
+              "display_name": "\(kernel.displayName)",
+              "language": "\(kernel.languageName)",
+              "name": "\(kernel.name)"
             },
             "language_info": {
-              "name": "python"
+              "name": "\(kernel.languageName)"
             }
           },
           "nbformat": 4,

@@ -445,4 +445,108 @@ struct NotebookFunctionScannerTests {
             #expect(r.functions[i].sectionName == "Challenge: Answering Questions with a Patient Database")
         }
     }
+
+    // MARK: - Section names survive an unreadable language
+
+    /// A `## ` header is markdown. The scanner not being able to read a
+    /// language's function definitions says nothing about its headers, and
+    /// returning an empty `sectionNames` alongside the refusal denied suite
+    /// -section scaffolding to five languages as collateral.
+    @Test(arguments: [AssignmentLanguage.cpp, .racket])
+    func sectionNamesAreReportedEvenWhenFunctionsCannotBeRead(_ language: AssignmentLanguage) {
+        let nb = sectionedNotebook([
+            ("md", "## Warm Up"),
+            ("code", "f <- function(a) a\n"),
+            ("md", "## Challenge"),
+            ("code", "g <- function(b) b\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: language)
+        #expect(r.sectionNames == ["Warm Up", "Challenge"])
+        // The functions are still refused, with a reason — that half is
+        // unchanged and is what `unsupportedReason` is for.
+        #expect(r.functions.isEmpty)
+        #expect(r.unsupportedReason?.isEmpty == false)
+    }
+
+    /// Python is unaffected: it reads both.
+    @Test func pythonStillReportsBothHalves() {
+        let nb = sectionedNotebook([
+            ("md", "## Warm Up"),
+            ("code", "def foo(a):\n    return a\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: .python)
+        #expect(r.sectionNames == ["Warm Up"])
+        #expect(r.functions.map(\.info.name) == ["foo"])
+        #expect(r.unsupportedReason == nil)
+    }
+
+    // MARK: - Per-language definition parsers
+
+    /// R: `name <- function(a, b = 2)`, plus the `=` spelling.
+    @Test func rDefinitionsAreParsed() {
+        let nb = sectionedNotebook([
+            ("md", "## Warm Up"),
+            ("code", "classify_bmi <- function(bmi, units = \"metric\") {\n  bmi\n}\n"),
+            ("code", "second = function(x) x + 1\n"),
+            ("code", "  indented <- function(x) x\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: .r)
+        #expect(r.functions.map(\.info.name) == ["classify_bmi", "second"])
+        let first = r.functions[0].info
+        #expect(first.paramNames == ["bmi", "units"])
+        #expect(first.paramHasDefault == [false, true])
+        // R has no parameter annotations, so no types are claimed — the same
+        // state an un-annotated Python function produces.
+        #expect(first.paramTypes == [nil, nil])
+        #expect(!first.hasTypeHints)
+        #expect(r.functions[0].sectionName == "Warm Up")
+    }
+
+    /// Lua: all three definition forms. `local function` is the idiom, so
+    /// missing it would miss most real definitions.
+    @Test func luaDefinitionsAreParsedInAllThreeForms() {
+        let nb = sectionedNotebook([
+            ("code", "function plain(a, b)\nend\n"),
+            ("code", "local function scoped(c)\nend\n"),
+            ("code", "assigned = function(d)\nend\n"),
+            // A method definition is not callable by bare identifier, so it is
+            // deliberately not matched.
+            ("code", "function M.method(e)\nend\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: .lua)
+        #expect(r.functions.map(\.info.name) == ["plain", "scoped", "assigned"])
+        #expect(r.functions[0].info.paramNames == ["a", "b"])
+    }
+
+    /// Octave: the return-variable forms are why it cannot share R's pattern —
+    /// the function name is not the first identifier on the line.
+    @Test func octaveDefinitionsAreParsedIncludingReturnVariables() {
+        let nb = sectionedNotebook([
+            ("code", "function bare(a)\nend\n"),
+            ("code", "function y = single(b, c)\nend\n"),
+            ("code", "function [y, z] = multiple(d)\nend\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: .octave)
+        #expect(r.functions.map(\.info.name) == ["bare", "single", "multiple"])
+        #expect(r.functions[1].info.paramNames == ["b", "c"])
+        #expect(r.functions[2].info.paramNames == ["d"])
+    }
+
+    /// A language's parser must not read another's syntax. An R notebook
+    /// scanned as Lua should find nothing rather than something wrong.
+    @Test func aParserDoesNotReadAnotherLanguagesSyntax() {
+        let rSource = sectionedNotebook([("code", "f <- function(x) x\n")])
+        #expect(scanNotebookForSectionsAndFunctions(rSource, language: .lua).functions.isEmpty)
+        #expect(scanNotebookForSectionsAndFunctions(rSource, language: .python).functions.isEmpty)
+        let pySource = sectionedNotebook([("code", "def f(x):\n    return x\n")])
+        #expect(scanNotebookForSectionsAndFunctions(pySource, language: .r).functions.isEmpty)
+    }
+
+    /// Private names are excluded in every language, as they always were in
+    /// Python — the traversal owns that rule, not the per-language parse.
+    @Test func privateNamesAreExcludedInEveryLanguage() {
+        let nb = sectionedNotebook([("code", "_hidden <- function(x) x\nshown <- function(y) y\n")])
+        let r = scanNotebookForSectionsAndFunctions(nb, language: .r)
+        #expect(r.functions.map(\.info.name) == ["shown"])
+    }
 }

@@ -109,18 +109,24 @@ import Testing
         #expect(facts.expressionEvaluation == PersonalizationEvaluator.supportsEvaluation(language))
     }
 
-    /// Scanning a solution for function definitions is Python-only, and says
-    /// so rather than reporting an empty solution.
+    /// Solutions can be scanned in every language that HAS a solution.
     ///
-    /// Not a design preference — a measurement. The scanner matches lines
-    /// beginning `def `, which no R, Lua, Octave or Racket source produces.
-    /// Claiming it for another language is how the editor came to report "No
-    /// functions found." on a perfectly good R solution.
+    /// This asserted Python-only, which was true while the scanner read `def `
+    /// and nothing else. R, Lua and Octave now have their own definition
+    /// parsers; C++ and Racket remain unsupported for a structural reason —
+    /// they are upload-only, so there is no solution notebook to scan — and
+    /// that arm still has to explain itself.
     @Test(arguments: AssignmentLanguage.allCases)
-    func onlyPythonSolutionsCanBeScanned(_ language: AssignmentLanguage) {
-        #expect(AuthoringLanguageFacts(language).functionScanning == (language == .python))
+    func everyLanguageWithASolutionNotebookCanBeScanned(_ language: AssignmentLanguage) {
+        let hasNotebookWorkflow: Bool
+        switch language.editorSupport {
+        case .notebookKernel: hasNotebookWorkflow = true
+        case .uploadOnly: hasNotebookWorkflow = false
+        }
+        #expect(AuthoringLanguageFacts(language).functionScanning == hasNotebookWorkflow)
+
         let support = notebookFunctionScanSupport(for: language)
-        if language == .python {
+        if hasNotebookWorkflow {
             #expect(support.unsupportedReason == nil)
         } else {
             // An unsupported answer is only useful if it explains itself, and
@@ -206,6 +212,9 @@ import Testing
         #expect(object["falseLiteral"] as? String == "FALSE")
         // R's JSON null is NA, not NULL — a NULL vanishes from a list().
         #expect(object["nullLiteral"] as? String == "NA")
-        #expect(object["functionScanning"] as? Bool == false)
+        // R gained a definition parser (`f <- function(x)`), so the seed now
+        // reports scanning as available. Kept as an explicit assertion rather
+        // than deleted: this key is what the create page's scan panel reads.
+        #expect(object["functionScanning"] as? Bool == true)
     }
 }

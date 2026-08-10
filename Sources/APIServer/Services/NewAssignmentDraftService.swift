@@ -74,6 +74,17 @@ struct NewAssignmentDraftService {
         return trimmed.isEmpty ? "New Assignment" : trimmed
     }
 
+    /// The language a notebook scaffolded by this draft should carry.
+    ///
+    /// Available because the route declares the payload's language into the
+    /// manifest BEFORE dispatching an action here — the same ordering that lets
+    /// pattern families render in the chosen language on the first save. So by
+    /// the time "create assignment notebook" runs, the manifest already knows,
+    /// and the scaffold no longer has to assume Python.
+    var scaffoldLanguage: AssignmentLanguage? {
+        setup.decodedManifest().flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }
+    }
+
     // MARK: - Dispatcher
 
     /// Dispatches `payload.action` to the matching per-action method.
@@ -114,7 +125,11 @@ struct NewAssignmentDraftService {
     // MARK: - Notebook actions
 
     mutating func createAssignmentNotebook() async throws {
-        let data = defaultNotebookData(title: notebookTitle)
+        // nil = an upload-only language, which has no notebook workflow to
+        // scaffold into. Refused rather than silently written, so the button
+        // cannot promise students an editor that cannot serve them.
+        guard let data = defaultNotebookData(title: notebookTitle, language: scaffoldLanguage)
+        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let dir = try ensureDraftNotebookDirectory(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
         let path = dir + "assignment.ipynb"
@@ -173,7 +188,10 @@ struct NewAssignmentDraftService {
     }
 
     mutating func createSolutionNotebook() async throws {
-        let data = defaultNotebookData(title: "\(notebookTitle) Solution")
+        guard
+            let data = defaultNotebookData(
+                title: "\(notebookTitle) Solution", language: scaffoldLanguage)
+        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let path = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
         _ = try ensureDraftNotebookDirectory(
@@ -198,15 +216,18 @@ struct NewAssignmentDraftService {
     /// title suffix " Solution" when the assignment notebook isn't
     /// readable yet — same fallback the assignment-scoped variant uses.
     mutating func createSolutionFromAssignment() async throws {
-        let sourceData: Data = {
-            if let path = setup.notebookPath,
+        let existing: Data? = {
+            guard let path = setup.notebookPath,
                 let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)),
                 !bytes.isEmpty
-            {
-                return bytes
-            }
-            return defaultNotebookData(title: "\(notebookTitle) Solution")
+            else { return nil }
+            return bytes
         }()
+        guard
+            let sourceData = existing
+                ?? defaultNotebookData(
+                    title: "\(notebookTitle) Solution", language: scaffoldLanguage)
+        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let normalized = normalizeNotebookForJupyterLite(sourceData)
         let path = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)

@@ -21,12 +21,18 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getScriptTemplates(req: Request) async throws -> Response {
+        // The shell templates name a solution file and an interpreter, so they
+        // need the assignment's language. The editor knows it (from
+        // `#assignment-language-seed`) and passes it; an absent parameter keeps
+        // Python, which is what this endpoint returned before it asked.
+        let language = req.query[String.self, at: "language"]
+            .flatMap(AssignmentLanguage.init(rawValue:))
         var templates: [String: String] = [:]
         for type in PythonTestTemplateType.allCases {
             templates["py:\(type.rawValue)"] = pythonTestScript(type: type)
         }
         for type in ShellTestTemplateType.allCases {
-            templates["sh:\(type.rawValue)"] = shellTestScript(type: type)
+            templates["sh:\(type.rawValue)"] = shellTestScript(type: type, language: language)
         }
         return try await templates.encodeResponse(for: req)
     }
@@ -129,9 +135,18 @@ extension PublishedAssignmentRoutes {
         struct ScanResponse: Content {
             var functions: [FunctionResult]
             var unsupportedReason: String?
+            /// The `## ` headers found, whatever the language.
+            ///
+            /// Reported even when `unsupportedReason` is set: a section name is
+            /// markdown, not code, so the reason the functions could not be
+            /// read does not apply to it. The editor can offer sections to an
+            /// R or Lua author while still saying why the function list is
+            /// empty.
+            var sectionNames: [String]
         }
         return try await ScanResponse(
-            functions: results, unsupportedReason: scan.unsupportedReason
+            functions: results, unsupportedReason: scan.unsupportedReason,
+            sectionNames: scan.sectionNames
         ).encodeResponse(for: req)
     }
 
@@ -146,9 +161,20 @@ extension PublishedAssignmentRoutes {
 
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
 
-        let sourceData =
-            (try? notebookData(for: setup))
-            ?? defaultNotebookData(title: "\(assignment.title) Solution")
+        // The assignment notebook when there is one; otherwise a blank starter
+        // IN THIS ASSIGNMENT'S LANGUAGE. The fallback used to be Python
+        // unconditionally, so an R assignment with no notebook yet got a
+        // solution scaffolded around `xpython`. An upload-only language has no
+        // notebook to scaffold at all and is refused.
+        let language = setup.decodedManifest().flatMap {
+            AssignmentLanguage.resolve(for: setup, manifest: $0)
+        }
+        guard
+            let sourceData = (try? notebookData(for: setup))
+                ?? defaultNotebookData(title: "\(assignment.title) Solution", language: language)
+        else {
+            throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage)
+        }
         let normalized = normalizeNotebookForJupyterLite(sourceData)
 
         let draftPath = draftSolutionNotebookPath(

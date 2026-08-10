@@ -474,10 +474,11 @@ import VaporTesting
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try defaultNotebookData(title: "Draft Finalize").write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Draft Finalize")).write(to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try defaultNotebookData(title: "Draft Finalize Solution").write(to: URL(fileURLWithPath: solutionPath))
+            try #require(defaultNotebookData(title: "Draft Finalize Solution")).write(
+                to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(
                 id: setupID,
@@ -562,10 +563,11 @@ import VaporTesting
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try defaultNotebookData(title: "Generated Suite").write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Generated Suite")).write(to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try defaultNotebookData(title: "Generated Suite Solution").write(to: URL(fileURLWithPath: solutionPath))
+            try #require(defaultNotebookData(title: "Generated Suite Solution")).write(
+                to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(
                 id: setupID,
@@ -682,10 +684,11 @@ import VaporTesting
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try defaultNotebookData(title: "Runner Gate").write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Runner Gate")).write(to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try defaultNotebookData(title: "Runner Gate Solution").write(to: URL(fileURLWithPath: solutionPath))
+            try #require(defaultNotebookData(title: "Runner Gate Solution")).write(
+                to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(
                 id: setupID,
