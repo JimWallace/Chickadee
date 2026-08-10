@@ -507,12 +507,21 @@ func buildHintByFilename(_ props: TestProperties) -> [String: String] {
     for entry in props.testSuites where !entry.isGenerated {
         record(entry.script, entry.hint)
     }
+    // The assignment's own language. The `record` above also keys on the
+    // extension-stripped stem, and `runnerOutcomeTestName` reports that stem,
+    // so the join survived this being Python-only — but only by accident of
+    // which of the two keys the lookup happens to use. Naming the language
+    // makes the filename key correct as well, so the map is not one refactor
+    // of `outcomeTestName` away from silently losing every hint on every
+    // non-Python assignment.
+    let language = AssignmentLanguage.resolve(manifest: props, notebookData: nil) ?? .python
     for f in props.patternFamilies {
         for c in f.cases where c.enabled {
             record(
                 generatedScriptFilename(
                     familyID: f.id, caseKey: c.key,
-                    tier: c.resolvedTier(defaults: f.defaults)),
+                    tier: c.resolvedTier(defaults: f.defaults),
+                    language: language),
                 c.resolvedHint(defaults: f.defaults))
         }
     }

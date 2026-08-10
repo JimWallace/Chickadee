@@ -122,6 +122,15 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
 
     let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
     let checkByID = Dictionary(uniqueKeysWithValues: props.notebookChecks.map { ($0.id, $0) })
+    // The assignment's own language, not Python's. These filenames are matched
+    // against the `dependsOn` values already persisted in the manifest, and a
+    // persisted dep carries the language's real extension — so computing `.py`
+    // names here meant the superset test below never matched on an R, Lua,
+    // Octave, C++ or Racket assignment, and the editor showed a family's
+    // expanded filenames where every Python assignment showed one `family:<id>`
+    // row. No notebook is read: a persisted manifest records its language, and
+    // a suite with generated entries has scripts to resolve from either way.
+    let language = AssignmentLanguage.resolve(manifest: props, notebookData: nil) ?? .python
     var familyFilenames: [String: Set<String>] = [:]
     for f in props.patternFamilies {
         familyFilenames[f.id] = Set(
@@ -131,7 +140,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
                     generatedScriptFilename(
                         familyID: f.id,
                         caseKey: c.key,
-                        tier: c.resolvedTier(defaults: f.defaults)
+                        tier: c.resolvedTier(defaults: f.defaults),
+                        language: language
                     )
                 })
     }

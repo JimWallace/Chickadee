@@ -24,7 +24,7 @@ import Testing
 // exhaustive on `AssignmentLanguage`, so a language cannot be absent from this
 // guard without failing to compile the thing it is absent from.
 //
-// The comment marker is per-language and read from `lineCommentLeader` for the
+// The comment marker is per-language and read from `lineCommentPrefix` for the
 // same reason: `#` for Python and R, `--` for Lua, `%` for Octave, `//` for C++,
 // `;` for Racket. A normalizer that only knew `#` would compare Lua's prose as
 // if it were code — not wrong, exactly, but it would fail the suite over a
@@ -73,8 +73,8 @@ import Testing
         for (filename, embedded) in helpers.sorted(by: { $0.key < $1.key }) {
             let canon = try Self.canonical("Tools/runner-support/\(filename)")
             #expect(
-                normalizedCode(embedded, comment: language.lineCommentLeader)
-                    == normalizedCode(canon, comment: language.lineCommentLeader),
+                normalizedCode(embedded, comment: language.lineCommentPrefix)
+                    == normalizedCode(canon, comment: language.lineCommentPrefix),
                 """
                 The \(language) embed of \(filename) in \
                 Sources/Worker/TestRuntimeSources.swift has drifted from \

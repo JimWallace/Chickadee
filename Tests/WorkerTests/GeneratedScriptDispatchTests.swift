@@ -66,7 +66,7 @@ import Testing
         let url = dir.appendingPathComponent(filename)
         // A comment in the language's own leader, so nothing is classified by
         // accident of a shebang the real generated files do not carry.
-        try "\(language.lineCommentLeader) Test: generated\n".write(
+        try "\(language.lineCommentPrefix) Test: generated\n".write(
             to: url, atomically: true, encoding: .utf8)
 
         let invocation = scriptInvocation(for: url)

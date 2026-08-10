@@ -34,7 +34,15 @@ let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 /// round-trips as Python rather than falling through to the "unknown kernel →
 /// leave unchanged" branch; `python`/`python3` cover notebooks authored against
 /// the former Pyodide kernel and anything imported from desktop Jupyter.
-let pythonKernelNames: Set<String> = ["python", "python3", "xpython"]
+///
+/// READ off the descriptor, not typed out. It was a hand-written copy of
+/// `AssignmentLanguage.python.notebookKernelNames`, spelled identically and
+/// with no guard tying the two together — so a new Python kernel alias added
+/// where every other language's aliases live would leave this list one short,
+/// and a notebook naming it would take the "unknown kernel → leave unchanged"
+/// branch and reach the editor with no kernel attached. The one list this file
+/// had that no test could see.
+let pythonKernelNames: Set<String> = AssignmentLanguage.python.notebookKernelNames
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {

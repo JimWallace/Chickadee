@@ -315,8 +315,20 @@ func validatePatternFamilies(
     //    script's filename.  "Hand-written" = manifest entry with neither
     //    generator set (mirrors `TestSuiteEntry.isGenerated`).
     let rawScripts = Set(testSuites.filter { !$0.isGenerated }.map(\.script))
+    // EVERY language's filenames, matching what the notebook-check collision
+    // check beside this one already does (`notebookCheckFilenameCollisions`).
+    // This asked only for Python's, so on an R assignment it compared
+    // `publictest_bmi_01.py` against a suite full of `.R` scripts and could
+    // never collide — the check was inert in five of the six languages. This
+    // function has no language in scope and its callers have no reason to grow
+    // one for a collision test: asking across `allCases` cannot miss, and the
+    // only cost of the extra breadth is asking an instructor to rename a file
+    // whose name a different language's rendering would have claimed.
     for family in families {
-        for filename in patternFamilyAllGeneratedFilenames(family) where rawScripts.contains(filename) {
+        let candidates = AssignmentLanguage.allCases.flatMap {
+            patternFamilyAllGeneratedFilenames(family, language: $0)
+        }
+        for filename in candidates where rawScripts.contains(filename) {
             throw Abort(
                 .unprocessableEntity,
                 reason:

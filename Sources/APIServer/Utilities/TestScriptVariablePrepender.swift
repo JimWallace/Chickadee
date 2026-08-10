@@ -126,8 +126,11 @@ enum TestScriptVariablePrepender {
     /// the marker is also the sentinel, so the block could not be stripped and
     /// re-saving compounded it.
     ///
-    /// Python, R and Octave keep byte-identical output, so no existing script
-    /// changes.
+    /// Python and R keep byte-identical output, so no existing script of
+    /// theirs changes. Octave moved from `#` to `%` when this fact stopped
+    /// being answered twice — both parse there, `%` is what the rest of the
+    /// Octave corpus uses, and an existing `#` banner is still recognised
+    /// because `allBannerComments` carries the legacy spelling unconditionally.
     static func rawScriptBannerComment(language: AssignmentLanguage = .python) -> String {
         language.lineCommentPrefix + rawScriptBannerBody
     }

@@ -270,6 +270,81 @@ import Vapor
 
     // MARK: - family:<id> dependency expansion
 
+    /// The same expansion, in a language that is not Python — parameterised
+    /// over `allCases` so a seventh language is covered by existing.
+    ///
+    /// THE DEFECT THIS PINS. `buildConfiguredSuiteEntries` computed the
+    /// filenames a `family:<id>` token expands to by calling
+    /// `generatedScriptFilename` with no language argument, taking the
+    /// `.python` default — while the suite entries beside them were rendered
+    /// WITH the language. So an R assignment persisted
+    /// `dependsOn: ["publictest_bmi_category_01.py"]` next to a suite entry
+    /// named `publictest_bmi_category_01.R`, and the dependency named a file
+    /// that does not exist: a family prerequisite silently did nothing in five
+    /// of the six languages.
+    ///
+    /// It went unseen because the test above — the only one covering this
+    /// path — is Python, where the bug is invisible by construction. That is
+    /// the shape `RawScriptVariableInliningTests` records for the banner
+    /// defect too: coverage that exercised precisely the set where the bug
+    /// does not appear.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func apply_expandsFamilyRefToTheAssignmentsOwnExtension(
+        _ language: AssignmentLanguage
+    ) async throws {
+        try await withPatternFamilyFixture { fixture in
+            // Declare the language on the manifest — step 0 of resolution, and
+            // what a real save records. Patched into the JSON rather than set
+            // on the decoded value, because `TestProperties.language` is a
+            // `let` (it is wire format, not a mutable field).
+            let raw = Data(fixture.setup.manifest.utf8)
+            var dict = try #require(
+                try JSONSerialization.jsonObject(with: raw) as? [String: Any])
+            dict["language"] = language.rawValue
+            fixture.setup.manifest = try #require(
+                String(
+                    bytes: try JSONSerialization.data(withJSONObject: dict), encoding: .utf8))
+            try await fixture.setup.save(on: fixture.app.db)
+
+            let followup = "publictest_followup.\(language.generatedScriptExtension)"
+            try updateScriptInZip(
+                zipPath: fixture.setup.zipPath, filename: followup,
+                content: "\(language.lineCommentPrefix) followup\n")
+
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [pfBMIFamily()],
+                authoredItems: [
+                    .script(
+                        AuthoredRawScript(
+                            script: followup, tier: .pub, points: 1, displayName: nil,
+                            dependsOn: ["family:bmi_category"])),
+                    .family(id: "bmi_category"),
+                ],
+                on: fixture.app.db
+            )
+
+            let saved = try pfDecodeManifest(fixture.setup.manifest)
+            let entry = try #require(saved.testSuites.first { $0.script == followup })
+            #expect(!entry.dependsOn.isEmpty, "the family token must expand to something")
+
+            // The real assertion: every expanded dependency names a script the
+            // suite actually contains. Comparing against the suite rather than
+            // against a hand-built expected list is what makes this a test of
+            // the invariant and not a second copy of the naming rule.
+            let generated = Set(saved.testSuites.map(\.script))
+            for dep in entry.dependsOn {
+                #expect(
+                    generated.contains(dep),
+                    """
+                    \(language.displayName): dependsOn names '\(dep)', which is not in the \
+                    persisted suite \(generated.sorted()). A dependency on a file that does not \
+                    exist never resolves, so the prerequisite silently does nothing.
+                    """)
+            }
+        }
+    }
+
     /// When a raw script declares `dependsOn: ["family:bmi_category"]`, the
     /// persisted manifest that reaches the runner must have that token
     /// expanded to the family's actual enabled generated filenames — the
