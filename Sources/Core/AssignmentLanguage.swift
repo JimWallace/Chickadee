@@ -350,6 +350,35 @@ extension AssignmentLanguage {
     /// See `LanguageDescriptor.lineCommentPrefix`.
     public var lineCommentPrefix: String { descriptor.lineCommentPrefix }
 
+    /// Source the in-page auto-compute worker must prepend before it can report
+    /// a value, or nil when the language needs nothing.
+    ///
+    /// Only Lua and Octave need anything: their values have no built-in
+    /// round-trippable text form, so the worker reuses the SAME serializer the
+    /// server driver and the grading runtime use rather than growing a third
+    /// copy. R and Python need nothing — `deparse` and `repr` are builtins.
+    ///
+    /// Note what is deliberately NOT here: a JSON string encoder. The eval
+    /// protocol frames its payload with a per-run nonce instead of encoding it,
+    /// so no language has to escape anything. That matters because the codebase
+    /// already carries TWO different R JSON encoders — a `gsub`-based one in the
+    /// grading runtime and a char-by-char one in the personalization driver,
+    /// written because the first trips over replacement-string backslash rules.
+    /// A third copy in a worker would have been the worst of them.
+    public var autoComputeRuntimeSource: String? {
+        switch self {
+        case .python, .r:
+            return nil
+        case .lua:
+            return LuaPersonalizationRuntime.chickadeeSerializeLuaSource
+        case .octave:
+            return OctavePersonalizationRuntime.chickadeeSerializeOctaveSource
+        case .cpp, .racket:
+            // No kernel, so no in-page worker to prepend anything to.
+            return nil
+        }
+    }
+
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
     /// for `.python`, R literal for `.r`). Keys are emitted in sorted order for

@@ -297,4 +297,40 @@ import Testing
         #expect(inPage.count >= 1, Comment(rawValue: note))
         #expect(inPage.count <= kernelLanguages.count)
     }
+
+    /// A language whose values have no built-in round-trippable text form must
+    /// bring a serializer, and it must be the SAME one the server driver and
+    /// the grading runtime use.
+    ///
+    /// Identity assertions, not content assertions: a copied serializer would
+    /// pass a "looks about right" check and then disagree about a value in a
+    /// way only an instructor comparing two runs would notice.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func theInPageSerializerIsTheOneTheServerAlreadyUses(_ language: AssignmentLanguage) {
+        switch language {
+        case .lua:
+            #expect(
+                language.autoComputeRuntimeSource
+                    == LuaPersonalizationRuntime.chickadeeSerializeLuaSource)
+        case .octave:
+            #expect(
+                language.autoComputeRuntimeSource
+                    == OctavePersonalizationRuntime.chickadeeSerializeOctaveSource)
+        case .python, .r:
+            // `repr` and `deparse` are builtins; nothing to prepend.
+            #expect(language.autoComputeRuntimeSource == nil)
+        case .cpp, .racket:
+            // No kernel, so no in-page worker to prepend anything to.
+            #expect(language.autoComputeRuntimeSource == nil)
+        }
+    }
+
+    /// Whatever a language brings must be non-trivial if it brings anything —
+    /// an empty string would satisfy "supplies a serializer" while supplying
+    /// nothing, which is the claim-without-implementation shape again.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func aSuppliedRuntimeSourceIsNotEmpty(_ language: AssignmentLanguage) {
+        guard let source = language.autoComputeRuntimeSource else { return }
+        #expect(source.count > 32, "\(language.displayName) supplies an implausibly short runtime")
+    }
 }
