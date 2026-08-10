@@ -72,7 +72,7 @@ struct CheckFormField: Encodable {
     let name: String
     let control: CheckFormControl
     let valueType: CheckFormValueType
-    let label: String
+    var label: String
     var required: Bool = false
     var placeholder: String?
     var help: String?
@@ -83,6 +83,16 @@ struct CheckFormField: Encodable {
     /// Reset/default value for text/number/select controls (the literal the
     /// input is seeded with when authoring a brand-new check).
     var defaultValue: String?
+    /// Why this assignment's language cannot use this field, or nil when it
+    /// can. Set by `notebookCheckFormSchema(language:)` from
+    /// `notebookCheckFieldUnsupportedReason`, the same predicate the save-time
+    /// refusal reads, so the form and the rejection cannot disagree.
+    ///
+    /// The field is still RENDERED when this is set — disabled, with the reason
+    /// beside it. Hiding it would answer "why can I not do this here?" with
+    /// silence, which is the failure mode the kind-level version of this
+    /// already fixed.
+    var unsupportedReason: String?
 }
 
 /// The full schema: common fields rendered once for every kind, plus the
@@ -228,7 +238,7 @@ private let cellContainsFormFields: [CheckFormField] = [
         required: true, placeholder: ".groupby("),
     CheckFormField(
         name: "regex", control: .checkbox, valueType: .bool,
-        label: "Interpret as Python regex", defaultChecked: false),
+        label: "Interpret as a regular expression", defaultChecked: false),
     CheckFormField(
         name: "mustDifferFrom", control: .textarea, valueType: .optionalRawString,
         label:
@@ -279,21 +289,49 @@ private let astStructureFormFields: [CheckFormField] = [
 
 /// The complete schema, built by mapping every `NotebookCheckKind` to its
 /// declared fields plus the common fields.
-func notebookCheckFormSchema() -> NotebookCheckFormSchema {
+///
+/// `language` annotates fields their language cannot use, and names the
+/// language in labels that used to name Python. Pass nil for an assignment that
+/// declares no language: nothing is annotated, which is the pre-language
+/// behaviour and the right answer for a plain `.sh` suite.
+func notebookCheckFormSchema(language: AssignmentLanguage? = nil) -> NotebookCheckFormSchema {
     var kinds: [String: [CheckFormField]] = [:]
     for kind in NotebookCheckKind.allCases {
-        kinds[kind.rawValue] = formFields(for: kind)
+        kinds[kind.rawValue] = formFields(for: kind).map { field in
+            var annotated = field
+            annotated.label = localizedLabel(field, kind: kind, language: language)
+            if let language {
+                annotated.unsupportedReason = notebookCheckFieldUnsupportedReason(
+                    field.name, kind: kind, language: language)
+            }
+            return annotated
+        }
     }
     return NotebookCheckFormSchema(common: commonCheckFormFields, kinds: kinds)
+}
+
+/// A field label with the assignment's language in it where the label names a
+/// language at all.
+///
+/// One field does: the `cell_contains` regex checkbox read "Interpret as Python
+/// regex" on R and Octave assignments, whose engines are their own. The rest are
+/// returned unchanged, so this is a rewrite point rather than a second label
+/// table.
+private func localizedLabel(
+    _ field: CheckFormField, kind: NotebookCheckKind, language: AssignmentLanguage?
+) -> String {
+    guard kind == .cellContains, field.name == "regex" else { return field.label }
+    guard let language else { return "Interpret as a regular expression" }
+    return "Interpret as a \(language.displayName) regular expression"
 }
 
 /// The schema serialised to a JSON object literal for the
 /// `<script id="check-schema">` seed.  `"{}"` on the (unreachable) encode
 /// failure so the page still renders.
-func notebookCheckFormSchemaJSON() -> String {
+func notebookCheckFormSchemaJSON(language: AssignmentLanguage? = nil) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    guard let data = try? encoder.encode(notebookCheckFormSchema()),
+    guard let data = try? encoder.encode(notebookCheckFormSchema(language: language)),
         let json = String(data: data, encoding: .utf8)
     else { return "{}" }
     return json

@@ -61,9 +61,11 @@ enum MCPLanguageProse {
     }
 
     /// `["a", "b", "c"]` → `"a, b or c"`; a one-element list is itself.
+    ///
+    /// Shared with `LanguageProse`, which renders the PREDICATE-defined subsets
+    /// (the upload-only languages, so far) this type's whole-catalog renderings
+    /// do not cover.
     private static func prose(_ items: [String]) -> String {
-        guard let last = items.last else { return "" }
-        guard items.count > 1 else { return last }
-        return items.dropLast().joined(separator: ", ") + " or " + last
+        LanguageProse.list(items)
     }
 }

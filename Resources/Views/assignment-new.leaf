@@ -61,7 +61,7 @@ Create Assignment
                     </select>
                 </label>
             </div>
-            <p class="card-meta fine-print">Every generated test renders in this language, so it is stated here rather than worked out later. Pick "None" for a suite of plain shell scripts. Choosing C++ makes the assignment upload-only, since C++ has no notebook editor.</p>
+            <p class="card-meta fine-print">Every generated test renders in this language, so it is stated here rather than worked out later. Pick "None" for a suite of plain shell scripts. Choosing #(uploadOnlyLanguagesProse) makes the assignment upload-only, since those languages have no notebook editor.</p>
             <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             <p id="grading-mode-hint" class="card-meta grading-mode-hint" style="display:none"></p>
         </div>
@@ -195,7 +195,7 @@ Create Assignment
         <label class="req-field">
             Languages
             <input class="form-input input-sm" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="e.g. python, r, lua, octave, cpp, racket">
+                   placeholder="e.g. #(languageTokensCSV)">
         </label>
         <label class="req-field">
             Capabilities
@@ -416,16 +416,17 @@ Create Assignment
      mode a ReferenceError, so its POST never went out at all. -->
 #endif
 
+<!-- The Generate Starter Tests panel.  Loaded unconditionally, because the
+     panel's own init is in the form-level block below and runs whether or not
+     a draft exists yet — with no draft it reports that one is needed. -->
+<script src="/generated-starter-tests.js?v=#appVersion()"></script>
+
 <!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->
 <script>
 (function () {
     'use strict';
 
     var csrfToken = ChickadeeUI.getCsrfToken();
-
-    // Shared implementations (Public/chickadee-ui.js, loaded from base.leaf).
-    var escHtml = ChickadeeUI.escapeHtml;
-    var escAttr = ChickadeeUI.escapeAttr;
 
     // ── Notebook upload buttons ────────────────────────────────────────
     // Open hidden file pickers, then submit the main form to the draft
@@ -539,107 +540,22 @@ Create Assignment
         });
     })();
 
-    // ── Generate Tests from Solution ──────────────────────────────────
-    // Each generated script is POSTed to the draft scripts endpoint and
-    // then handed to suite-table.js via `chickadeeAddExistingSuiteScript`
-    // so it appears in the appropriate section's tbody without a reload.
-    var scanBtn         = document.getElementById('scan-solution-btn');
-    var scanStatus      = document.getElementById('scan-status');
-    var scanResults     = document.getElementById('scan-results');
-    var fnChecklist     = document.getElementById('fn-checklist');
-    var genTplSelect    = document.getElementById('gen-template-select');
-    var addGenTestsBtn  = document.getElementById('add-gen-tests-btn');
-    var genPanel        = document.getElementById('gen-tests-panel');
-    var scannedFunctions = [];
-
-    #if(solutionNotebook):
-    if (genPanel) genPanel.style.display = '';
-    #endif
-
-    function genPyTemplate(type, fnName) {
-        var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
-        if (fn && Array.isArray(fn.templates)) {
-            var key = type.indexOf(':') === -1 ? type : type.split(':')[1];
-            var tpl = fn.templates.find(function (t) { return t.id === key; });
-            if (tpl && typeof tpl.content === 'string') return tpl.content;
-        }
-        return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
-    }
-
-    if (scanBtn) {
-        scanBtn.addEventListener('click', function () {
-            var solInput = document.getElementById('solution-notebook-file-input');
-            #if(solutionNotebook):
-            if (!solInput || solInput.files.length === 0) {
-                fetch('/instructor/new/draft/solution-notebook?draftID=#(draftID)', { headers: { 'x-csrf-token': csrfToken } })
-                    .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
-                    .then(function (text) { runScan(text); })
-                    .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
-                return;
-            }
-            #endif
-            if (!solInput || solInput.files.length === 0) {
-                if (scanStatus) scanStatus.textContent = 'Upload a solution notebook first.';
-                return;
-            }
-            var reader = new FileReader();
-            reader.onload = function (e) { runScan(e.target.result); };
-            reader.readAsText(solInput.files[0]);
-        });
-    }
-
-    function runScan(notebookText) {
-        if (scanStatus) scanStatus.textContent = 'Scanning…';
-        if (scanResults) scanResults.style.display = 'none';
-        fetch('/instructor/scan-notebook', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: notebookText
-        })
-        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
-        .then(function (payload) {
-            scannedFunctions = window.chickadeeApplyScanPayload(payload,
-                { status: scanStatus, checklist: fnChecklist, results: scanResults });
-        })
-        .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
-    }
-
-    if (addGenTestsBtn) {
-        addGenTestsBtn.addEventListener('click', function () {
-            #if(draftID):
-            var draftID = #rawJSON(draftIDJSON);
-            if (!draftID) { if (scanStatus) scanStatus.textContent = 'No draft to save into.'; return; }
-            var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
-            var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
-            if (checked.length === 0) { if (scanStatus) scanStatus.textContent = 'Select at least one function.'; return; }
-            if (scanStatus) scanStatus.textContent = 'Saving ' + checked.length + ' test(s)…';
-            // POST each generated script in series to the draft scripts
-            // endpoint, then hand it to suite-table.js for in-place add.
-            var ops = (window.ChickadeeLanguage.isPython() ? checked : []).map(function (chk) {
-                var fnName   = chk.value;
-                var content  = genPyTemplate(tplType, fnName);
-                var filename = 'test_' + fnName + '.py';
-                return fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                    body: JSON.stringify({ filename: filename, content: content, tier: 'public', points: 1, isTest: true })
-                }).then(function (r) {
-                    return r.ok ? r.json() : r.text().then(function (t) { return Promise.reject(t || ('HTTP ' + r.status)); });
-                }).then(function (data) {
-                    if (window.chickadeeAddExistingSuiteScript) window.chickadeeAddExistingSuiteScript(data);
-                });
-            });
-            Promise.all(ops).then(function () {
-                if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
-                if (scanResults) scanResults.style.display = 'none';
-            }).catch(function (err) {
-                if (scanStatus) scanStatus.textContent = 'Could not add generated tests: ' + err;
-            });
-            #else:
-            if (scanStatus) scanStatus.textContent = 'Upload a notebook first to start a draft.';
-            #endif
-        });
-    }
+    // ── Generate Starter Tests ────────────────────────────────────────
+    // The flow itself lives in /generated-starter-tests.js so it is linted
+    // and testable; only the page's own facts are passed in from here.
+    initGeneratedStarterTests({
+        csrfToken: csrfToken,
+        #if(draftID):
+        draftID: #rawJSON(draftIDJSON),
+        #else:
+        draftID: null,
+        #endif
+        #if(solutionNotebook):
+        solutionNotebookURL: '/instructor/new/draft/solution-notebook?draftID=#(draftID)'
+        #else:
+        solutionNotebookURL: null
+        #endif
+    });
 
     // ── UWaterloo important-date proximity warning ────────────────────
     (function () {

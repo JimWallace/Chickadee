@@ -68,14 +68,14 @@
                         <tr>
                             <th class="fv-valid-col" aria-label="Valid"></th>
                             <th class="fv-name-col">Name</th>
-                            <th>Value (JSON / Python literal)</th>
+                            <th id="family-variable-value-header">Value (JSON or literal)</th>
                             <th class="fv-action-col"></th>
                         </tr>
                     </thead>
                     <tbody id="family-variables-body"></tbody>
                 </table>
                 <p class="card-meta family-empty-note" id="family-variables-empty">
-                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
+                    Define a name and a value (e.g. a list or a mapping) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
                 </p>
             </div>
 

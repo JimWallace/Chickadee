@@ -52,6 +52,9 @@
         if (field.control === 'checkbox') {
             var cb = el('input', { type: 'checkbox', 'data-field': field.name });
             if (field.defaultChecked) cb.checked = true;
+            // Unusable in this language: uncheckable, and never checked by
+            // default, so the value the form reads back is the one that saves.
+            if (field.unsupportedReason) { cb.disabled = true; cb.checked = false; }
             return cb;
         }
         var input = el('input', {
@@ -67,9 +70,16 @@
     }
 
     function renderField(field) {
-        var help = field.help ? (function () {
+        // A field this assignment's language cannot use is DISABLED and
+        // explained, not hidden. The reason comes from the same predicate the
+        // save-time refusal reads, so an instructor cannot be told one thing
+        // here and another on save -- which is exactly what happened to a Lua
+        // author ticking `cell_contains` regex, whose save was guaranteed to
+        // fail with a message they only saw afterwards.
+        var reasonText = field.unsupportedReason || null;
+        var help = (field.help || reasonText) ? (function () {
             var p = el('p', { 'class': 'card-meta' }, 'font-size:.72rem;margin:0');
-            p.textContent = field.help;
+            p.textContent = reasonText || field.help;
             return p;
         })() : null;
         if (field.control === 'checkbox') {
@@ -118,6 +128,13 @@
 
     function writeField(control, field, value) {
         var vt = field.valueType;
+        // A stored value for a field this language cannot use does not get
+        // restored into a disabled control -- that would produce a check the
+        // instructor can neither save (the server refuses it) nor fix (the
+        // control is disabled). Clearing it makes re-saving the recovery path,
+        // and the reason is displayed directly beneath. Reachable for a check
+        // authored before its language was declared, or carried in by a clone.
+        if (field.unsupportedReason) { defaultField(control, field); return; }
         if (vt === 'bool') { control.checked = (value != null) ? !!value : !!field.defaultChecked; return; }
         if (vt === 'enum') { control.value = (value != null) ? value : (field.defaultValue || ''); return; }
         if (vt === 'stringList' || vt === 'numberList') { control.value = Array.isArray(value) ? value.join('\n') : ''; return; }
@@ -126,8 +143,11 @@
     }
 
     function defaultField(control, field) {
-        if (field.control === 'checkbox') { control.checked = !!field.defaultChecked; return; }
-        control.value = field.defaultValue || '';
+        if (field.control === 'checkbox') {
+            control.checked = field.unsupportedReason ? false : !!field.defaultChecked;
+            return;
+        }
+        control.value = field.unsupportedReason ? '' : (field.defaultValue || '');
     }
 
     function generateID(kind, name) {

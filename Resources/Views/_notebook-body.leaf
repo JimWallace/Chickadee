@@ -131,7 +131,7 @@
 <div id="nb-device-warning" class="nb-device-warning" role="note" hidden>
     <span class="nb-device-warning-text">
         This device may be low on memory for the in-browser editor. If the
-        notebook gets slow or the Python kernel stops, try a laptop or desktop
+        notebook gets slow or the kernel stops, try a laptop or desktop
         in Chrome or Firefox.
     </span>
     <button type="button" id="nb-device-warning-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
