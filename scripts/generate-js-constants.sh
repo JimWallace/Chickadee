@@ -163,14 +163,26 @@ mv "$tmp" "$work"
 # generator that decided which languages "matter" would be one more list to keep
 # current.
 names_file="$(mktemp)"
+# The language token is anchored on the `<lang>Descriptor` stored property each
+# descriptor literal is bound to, because that is the only per-language ANCHOR
+# in this file that is also part of the literal it names.
+#
+# It used to anchor on `case .<lang>:` instead, and that broke the day the
+# descriptors moved from switch arms to stored properties — a change that was
+# semantically neutral and still left the switch in place, so every `case .x:`
+# line the parser was looking for was still there, just no longer followed by a
+# literal. It paired the LAST case with the FIRST `inputsFileName` and emitted
+# `{ racket: '_ck_inputs.py' }`: one plausible-looking row instead of six, which
+# is precisely the "browser writes a file the runtime does not read" failure
+# this generator exists to prevent, in a new costume.
+#
 # POSIX awk only — the CI runner has mawk, which does not take gawk's
 # three-argument match().
 awk '
-  /case \.[a-zA-Z]+:/ {
-    if (match($0, /case \.[a-zA-Z]+:/)) {
-      token = substr($0, RSTART, RLENGTH)
-      sub(/^case \./, "", token)
-      sub(/:$/, "", token)
+  /private static let [a-zA-Z]+Descriptor = LanguageDescriptor\(/ {
+    if (match($0, /let [a-zA-Z]+Descriptor/)) {
+      token = substr($0, RSTART + 4, RLENGTH - 4)
+      sub(/Descriptor$/, "", token)
       lang = token
     }
   }
@@ -183,6 +195,21 @@ awk '
 ' "$descriptor_src" | LC_ALL=C sort > "$names_file"
 if [ ! -s "$names_file" ]; then
   echo "generate-js-constants: found no inputsFileName declarations in $descriptor_src" >&2
+  rm -f "$work" "$names_file"; exit 1
+fi
+
+# EVERY language, or fail. The emptiness check above was the only guard, and a
+# partial parse is not empty — it is a table that looks right and is missing
+# five of six languages. This compares what was parsed against the enum's own
+# case count, so the next refactor of the descriptor's shape stops the
+# generator instead of quietly shrinking the table.
+declared_langs="$(grep -c '^ *case [a-z][a-zA-Z]*$' "$swift_src")"
+parsed_langs="$(wc -l < "$names_file" | tr -d ' ')"
+if [ "$parsed_langs" -ne "$declared_langs" ]; then
+  echo "generate-js-constants: parsed $parsed_langs inputsFileName entries from" >&2
+  echo "$descriptor_src, but AssignmentLanguage declares $declared_langs cases." >&2
+  echo "The parser anchors the language token on a 'private static let <lang>Descriptor'" >&2
+  echo "line; if that shape changed, update the awk block above to match it." >&2
   rm -f "$work" "$names_file"; exit 1
 fi
 
