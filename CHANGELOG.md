@@ -9,6 +9,161 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.56] - 2026-08-10
+
+### Fixed
+
+- **A browser-graded submission can no longer be lost because a badge failed.**
+  This is the `grading-probe` intermittent, closed after three sightings.
+
+  The window was exact: the breadcrumb trail reached `suite_done` — graded,
+  passed — then the POST 500'd, and the page went on polling
+  `GET /api/v1/submissions/:id` and getting 200 for its full budget. That is the
+  tell. The submission row existed and the result did not, so something between
+  the two threw, and in the probe's configuration exactly one thing there could:
+  `awardFirstToSubmitRecords`, an unguarded read-then-write that ran *before*
+  the result was saved.
+
+  Why it threw at all is the part that made this hard to place. sqlite-nio
+  installs a busy handler that retries forever, so ordinary lock contention
+  never surfaces — which is why "set a `busy_timeout`" is the wrong fix and why
+  reading the configuration for a missing one finds nothing. What a busy handler
+  cannot cover is `SQLITE_BUSY_SNAPSHOT`: a WAL read snapshot made stale by
+  another connection's commit, which SQLite returns immediately because waiting
+  cannot help. Every badge helper is read-then-write, the shape that hits it,
+  and the page's own polling supplies the concurrent commits.
+
+  The Pathfinder award now runs after the result is stored, alongside the class
+  records, in an extracted `awardBrowserResultBadges`. Both go through a
+  best-effort wrapper: `withTransientDatabaseLockRetry` first, then log and
+  continue. A class badge is worth an ordinary amount; a student's grade is not
+  worth losing for one.
+
+  `BrowserResultSideEffectOrderTests` pins the ordering and the wrapper, and
+  reproduces the original failure when the order is reinstated.
+
+### Added
+
+- **The two `LanguageDescriptor` fields that state facts about a real
+  interpreter are now measured against one.** Most of the descriptor is
+  normative — it decides something and the code obeys — but
+  `interpreterProbe` and `workingDirectoryIsOnDefaultSearchPath` are claims
+  about the outside world, true or false independently of what the descriptor
+  says, and nothing checked them. Both have already been wrong in ways that
+  produced no error: `--version` on lua exits 1, so no runner ever advertised
+  Lua and an assignment requiring it queued forever; and the Octave search-path
+  answer was, in the field's own words, "an armchair answer".
+
+  The probe test reproduces the Lua failure exactly when the arguments are
+  reverted. The search-path test measures the observable consequence rather than
+  parsing a path listing: a module in one directory, the script that loads it by
+  name in another, run with the working directory set to the module's and the
+  search-path variable removed.
+
+  That two-directory separation is the whole measurement. Collapsing it
+  disagreed with a *correct* descriptor twice while the test was being written —
+  put the module beside the script and every language looks alike, because a
+  language that puts the script's directory on its path finds it too, which is a
+  different fact. Python is the case that distinguishes them. Neither descriptor
+  value was changed; both disagreements were the test's fault, which is worth
+  recording because the tempting move on a red measurement is to trust the
+  measurement.
+
+### Changed
+
+- **"Write a custom script" now names what it is competing with.** Eight of the
+  nine Python script templates were retired because they duplicated a
+  pattern-family kind in a worse form, and the ninth is now a kind too — which
+  left the custom-script option looking like the ordinary way to write a test.
+  Selecting it lists the first-class types available on this assignment,
+  derived from the catalog's own family entries rather than from a second list,
+  so a tenth kind appears there the day it is added.
+
+  This closes the last open item in `docs/authoring-parity.md`: every retired
+  template now has a named equivalent, `differential` included.
+
+### Documentation
+
+- **`docs/adding-a-xeus-kernel.md` covers the parity half.** The runbook took a
+  language as far as *working* and stopped; a language can pass every item in
+  its done test and still be one an instructor quietly avoids. It now carries a
+  parity checklist that separates what a seventh language gets **free** from
+  `allCases` — all nine pattern kinds, both Add Test renderings, the authoring
+  UI, the whole MCP surface, the browser inputs filename, the vendoring guard —
+  from the four things that remain genuinely per-language, each with a decision
+  to record rather than a box to tick.
+
+  Also added, all learned the expensive way this cycle: the in-page auto-compute
+  half a kernel language owes the editor, with the descriptor entry deliberately
+  **last** because one naming a worker that does not exist makes the editor spawn
+  a 404 and auto-compute stop silently; a per-kernel eval-quirk table, because
+  each of the three kernels needed a different shape rule and none inherited its
+  neighbour's; and the per-language literal traps, where three of four are the
+  same shape — a null-ish value silently changing a container's length — and all
+  three needed different rules.
+
+### Added
+
+- **A ninth pattern-family kind: `differential`.** It grades a submission
+  against an instructor-written reference implementation instead of a tabulated
+  expected value — each case supplies only inputs, and the expected value is
+  whatever the reference returns at grade time. It renders and executes in all
+  six languages.
+
+  This was the one thing the retired custom-script templates could do that no
+  kind could. It earns its place where enumerating expected values is the hard
+  part: a function over a large or awkward input space, or one whose right
+  answer is easier to *write* than to *tabulate*. Per-student `$name` argument
+  refs work, so the reference computes each student's expected value rather than
+  the author tabulating one per student.
+
+  Two things to know before reaching for it, both stated in the kind's own
+  documentation and in the MCP tool description:
+
+  The reference is rendered into the generated test, so on a **browser-graded**
+  assignment it reaches the student's browser along with every other test script
+  — browser grading runs the suite locally, so it must. Chickadee does not
+  refuse or warn: whether a reference implementation is a secret is the
+  instructor's judgement, and for many assignments it plainly is not. Worker
+  grading is the answer when it is.
+
+  And it grades *agreement*, not correctness. A wrong reference makes a wrong
+  test that passes for whoever reproduces the same mistake.
+
+  A reference that raises is reported as `errored`, not `failed` — a student
+  cannot make it raise except through inputs the instructor chose, so blaming
+  their submission would send them to debug the wrong code. In C++ the reference
+  is compiled with the test, so one that does not compile is a build failure
+  instead, which lands on the instructor at validation.
+
+### Fixed
+
+- **The MCP surface no longer holds a hand-typed list of pattern kinds.** Three
+  places did — the `initialize` instructions, the `create_pattern_family`
+  description, and that tool's JSON `enum` — and adding a kind made all three
+  wrong at once, telling an agent the kind does not exist while
+  `get_server_info`, which derives its list from `allCases`, reported that it
+  does. `MCPPatternKindProse` now renders all three from `PatternKind.allCases`
+  behind an exhaustive switch, so a tenth kind does not compile until it says
+  what it is and then needs no copy edits at all. The sibling of
+  `MCPLanguageProse`, for the same reason and after the same finding.
+
+- **A family's fields no longer depend on being remembered.** Two paths rebuilt
+  a `PatternFamily` field by field — the suite-edit path when the editor sends a
+  row-level dependency, and `update_pattern_family` — and both dropped anything
+  not listed. That already happened once, to `variables`: an `argVarRefs`
+  reference failed validation on the next save of a family the author had not
+  touched. There is now one `replacingDependsOn` copy beside the property list,
+  pinned by a `Mirror`-based test that fails when any stored property does not
+  survive.
+
+- **The family editor's kind `<select>` is covered by the catalog guard**, which
+  previously reached only the two lists in `test-editor-modal.js`. A kind
+  missing from the template can be created from the Add Test menu but never
+  switched to on an existing family — a gap that reads as "not supported yet"
+  rather than as a bug.
+
+
 ## [0.5.55] - 2026-08-10
 
 ### Fixed
