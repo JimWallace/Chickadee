@@ -52,10 +52,19 @@ enum SupportedBrowserMatrix {
 
     /// Minimum supported MAJOR version per engine. Seeded from the UWaterloo LEARN
     /// / D2L baseline (latest stable ≈ Sept 2025). Bump as the supported line moves.
-    static let minimumChrome = 140  // Chrome / Chromium (Blink), incl. Android
-    static let minimumEdge = 140  // Edge (Blink)
-    static let minimumFirefox = 143  // Firefox (Gecko), incl. Android
-    static let minimumSafari = 26  // Safari / WebKit (desktop + iOS; Apple year-versioning)
+    /// A `nil` floor means the engine is never version-warned.
+    static let minimumChrome: Int? = 140  // Chrome / Chromium (Blink), incl. Android
+    static let minimumEdge: Int? = 140  // Edge (Blink)
+    static let minimumFirefox: Int? = 143  // Firefox (Gecko), incl. Android
+    /// Safari / WebKit (desktop + iOS) is deliberately floorless. The D2L-seeded
+    /// floor (26 — Apple's year-numbering jumped 18 → 26 in 2025) warned a large
+    /// *working* population: Safari tracks the OS, so 16–18 stay common, and
+    /// production telemetry on the xeus editor (Aug 2026) showed 17.3–18.6 all
+    /// booting and grading fine on the deliberate WebKit service-worker path
+    /// while generating every below-matrix beacon. A WebKit that genuinely
+    /// cannot run the editor is caught where it fails: the runtime capability
+    /// probe, the slow-boot notice, and the server-side grading failover.
+    static let minimumSafari: Int? = nil  // Safari / WebKit (desktop + iOS)
 
     // MARK: - Assessment
 
@@ -108,7 +117,13 @@ enum SupportedBrowserMatrix {
 
     // MARK: - Helpers
 
-    private static func classify(engine: String, version: Int?, floor: Int) -> BrowserSupportAssessment {
+    private static func classify(engine: String, version: Int?, floor: Int?) -> BrowserSupportAssessment {
+        guard let floor else {
+            // A floorless engine (Safari/WebKit) is supported at any version —
+            // there is no line to fall below, so no warning ever renders.
+            return BrowserSupportAssessment(
+                tier: .supported, engine: engine, majorVersion: version, minimumSupported: nil)
+        }
         guard let version else {
             // Known engine but unparseable version → don't nag; let the runtime
             // probe + failover decide.

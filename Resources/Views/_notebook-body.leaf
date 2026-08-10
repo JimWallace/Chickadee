@@ -121,8 +121,8 @@
 <div id="nb-browser-support-warning" class="nb-device-warning" role="note" hidden>
     <span class="nb-device-warning-text">
         Your browser may not be fully supported. Chickadee works best on the same
-        browsers as LEARN &mdash; Safari&nbsp;26+, Chrome&nbsp;140+, Edge&nbsp;140+,
-        or Firefox&nbsp;143+. You can keep working: if in-browser testing
+        browsers as LEARN &mdash; Chrome&nbsp;140+, Edge&nbsp;140+,
+        Firefox&nbsp;143+, or Safari. You can keep working: if in-browser testing
         doesn&rsquo;t run, your submission is still graded on our servers, and you
         can always submit by uploading your <code>.ipynb</code> file.
     </span>
