@@ -126,6 +126,67 @@ import Testing
         }
     }
 
+    /// BOTH renderings of the catalog consult the per-language support
+    /// predicate.
+    ///
+    /// There are two, and only one used to. The modal's `<select>` disabled a
+    /// kind the assignment's language cannot support (#1290); the "+ Add Test"
+    /// dropdown built from the same catalog did not — and for a `family` or
+    /// `check` kind that dropdown does not open the modal at all, it calls
+    /// `chickadeeAddInlineTest` and authors the row in place. So the select's
+    /// disabled options guarded a path an instructor no longer takes, and a Lua
+    /// author picking "DataFrame has the right shape" went straight to an inline
+    /// row for a kind Lua refuses at save time.
+    ///
+    /// Asserted by reading each function's body rather than by searching the
+    /// file: the predicate's name appears in the comments above both of them,
+    /// so a whole-file search would have been satisfied by the prose while the
+    /// menu stayed unguarded.
+    @Test func bothCatalogRenderersConsultTheSupportPredicate() throws {
+        let source = try Self.modalSource()
+        for function in ["addTestMenuHTML"] {
+            let body = try Self.functionBody(source, named: function)
+            #expect(
+                body.contains("unsupportedReason("),
+                """
+                \(function) in Public/test-editor-modal.js builds catalog entries without \
+                consulting unsupportedReason, so it offers kinds this assignment's language \
+                refuses at save time.
+                """)
+        }
+        // The select is built inline rather than in a named function, so it is
+        // pinned by the shape of what it emits.
+        #expect(
+            source.contains("var optionsHTML = CATALOG.map("),
+            "the modal's type select is no longer built from CATALOG — re-point this guard")
+        #expect(source.contains("var reason = unsupportedReason(it);"))
+    }
+
+    /// The body of `function NAME() { … }`, brace-walked so a nested literal
+    /// cannot end the slice early.
+    private static func functionBody(_ source: String, named name: String) throws -> String {
+        let declaration = "function \(name)() {"
+        let start = try #require(
+            source.range(of: declaration),
+            "\(name) is not declared in test-editor-modal.js")
+        var depth = 1
+        var index = start.upperBound
+        var body = ""
+        while index < source.endIndex, depth > 0 {
+            let character = source[index]
+            if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 { break }
+            }
+            body.append(character)
+            index = source.index(after: index)
+        }
+        #expect(depth == 0, "\(name)'s body is never closed")
+        return body
+    }
+
     /// Every catalog entry has a description. The map is parallel to the
     /// catalog and keyed by the same value, so a kind added to one and not the
     /// other shows an instructor a blank explanation — visibly empty, but only

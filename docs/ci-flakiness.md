@@ -191,6 +191,32 @@ Two things follow:
    evidence of a separate, rarer, server-side intermittent on the result POST,
    which nobody has looked at yet.
 
+**Third sighting (2026-08-10, PR #1326, run 31392463877) — same result-POST
+500, and the reason nobody has looked at it is now fixed.** Identical shape to
+the second: `suite_done [n=1]` at 2,102 ms, `result_posting`, then
+`submit_failed [2,462; … 500 …]`, iteration 10 of 12, the other eleven green.
+The PR's diff reaches neither `BrowserResultRoutes.swift` nor any server path —
+it changes a browser inputs-filename lookup, two test files, and a shell
+generator.
+
+What this sighting adds is why the previous two produced no diagnosis.
+`run-smoke.sh` dumps `tail -40` of the server log on failure, added
+specifically so "a server-side 500 (e.g. a SQLite `database is locked`) is
+visible in CI". It cannot be, on this failure: after the submit 500s the page
+keeps polling `GET /api/v1/submissions/:id` for the probe's full 300 s budget,
+so the last 40 lines are several hundred INFO polls and the 500's own line has
+scrolled away. Every triage of this family has been reasoning from breadcrumbs
+because the evidence was being discarded at the moment it was collected. The
+script now greps the whole log for error-level lines *before* printing the
+tail, so the next sighting names its cause.
+
+A hypothesis worth checking against that output when it arrives, not before:
+`submitBrowserResult` wraps the submission insert and the result save in
+`withTransientDatabaseLockRetry` — someone has already met SQLite lock 500s on
+this endpoint — but `awardFirstToSubmitRecords`, `flagResultForBrightSpaceSync`
+and the class-records writes in the same handler are not wrapped. If the next
+log line reads `database is locked`, that is where to look.
+
 **Root cause** of Family 2 remains the exec-hang investigation's to close —
 continue from the probe's `grading breadcrumbs:` per-phase timings on an
 iteration whose trail stops before `suite_done`.

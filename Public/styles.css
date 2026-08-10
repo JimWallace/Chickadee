@@ -1699,6 +1699,17 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: var(--gray-100);
     outline: none;
 }
+/* A kind this assignment's language cannot support. Shown rather than hidden,
+   for the reason the modal's select shows it: disabling teaches, hiding just
+   makes the menu shorter and leaves the instructor wondering. The title
+   attribute carries the reason. */
+.add-test-item:disabled {
+    color: var(--gray-500);
+    cursor: not-allowed;
+}
+.add-test-item:disabled:hover, .add-test-item:disabled:focus {
+    background: none;
+}
 
 /* Inline editor (accordion) hosted in a detail row beneath a suite/achievement
    row.  Shared by the suite editor (suite-table.js) and the achievements editor

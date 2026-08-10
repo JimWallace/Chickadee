@@ -92,7 +92,18 @@ node "${SMOKE_CHECK:-editor-check.mjs}" "http://127.0.0.1:$PORT"
 check_rc=$?
 set -e
 if [ "$check_rc" -ne 0 ]; then
-  echo "run-smoke: check failed (rc=$check_rc) — server log tail:" >&2
+  # The error lines FIRST, from the whole log, because the tail below often
+  # cannot show them. When a submit 500s the page keeps polling the submission
+  # for the probe's full 300 s budget, so by the time the check gives up the
+  # last 40 lines are several hundred INFO polls and the 500 that caused the
+  # failure has scrolled away — which is exactly what happened on the third
+  # sighting of the result-POST intermittent (docs/ci-flakiness.md, Family 2's
+  # "not the exec-hang" note). The tail is kept: it is the right view when the
+  # server died or never got that far.
+  echo "run-smoke: check failed (rc=$check_rc) — server errors:" >&2
+  grep -aE '\[ (ERROR|CRITICAL|WARNING) \]|status_code: 5[0-9][0-9]' "$LOG" \
+    | tail -40 >&2 || true
+  echo "run-smoke: server log tail:" >&2
   tail -40 "$LOG" >&2 || true
 fi
 exit "$check_rc"

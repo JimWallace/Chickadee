@@ -31,3 +31,19 @@
   availability agrees with the save-time validator; this pins the prior question
   that one assumes, that the kind is in the menu at all. It also fails on an
   entry the server would refuse, and on one with no description.
+
+- **The "+ Add Test" dropdown now disables kinds the assignment's language
+  cannot support**, as the modal's type select already did. The two are built
+  from the same catalog and only one consulted the support predicate — and for a
+  pattern family or notebook check the dropdown does not open the modal at all,
+  it authors the row in place, so the select's disabled options were guarding a
+  path instructors no longer take. A Lua author picking "DataFrame has the right
+  shape" went straight to an inline row for a kind Lua refuses at save time.
+
+- **A failing smoke probe now prints the server's error lines, not only the log
+  tail.** The tail exists so a server-side 500 is visible in CI, and on the
+  failure it most needs to explain it cannot be: after a submit 500s the page
+  polls the submission for the probe's full 300-second budget, so the last 40
+  lines are several hundred INFO polls and the 500 has scrolled away. Three
+  sightings of the result-POST intermittent have been triaged from breadcrumbs
+  alone for this reason.
