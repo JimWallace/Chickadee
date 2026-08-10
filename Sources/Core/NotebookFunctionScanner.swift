@@ -284,72 +284,33 @@ private func extractTopLevelFunctions(
 
 /// One definition line, in `language`, or nil when the line is not one.
 ///
-/// EXHAUSTIVE, so a seventh language answers it rather than silently scanning
-/// as Python. Written as a switch of small parsers rather than a table of
-/// regexes and capture indices: the four syntaxes are not one shape with
-/// different tokens. Octave puts return variables BEFORE the name
-/// (`function [a, b] = f(x)`), Lua has three definition forms, and R's is an
-/// assignment whose right-hand side is a `function` literal. A table
-/// expressive enough for all of them is a parser generator; one that is not
-/// silently misses definitions, which is the failure mode this whole
-/// supported/unsupported apparatus exists to end.
+/// The syntax comes from `LanguageDescriptor.functionScan`, which CARRIES the
+/// patterns rather than claiming a capability implemented elsewhere. A seventh
+/// language either supplies them or declares `noSolutionNotebook`; there is no
+/// answer that compiles and does nothing.
 private func parseDefinition(
     _ line: String, bodyLines: [String], language: AssignmentLanguage
 ) -> NotebookFunctionInfo? {
-    switch language {
-    case .python: return parseFunctionDef(line, bodyLines: bodyLines)
-    case .r: return parseRFunctionDef(line)
-    case .lua: return parseLuaFunctionDef(line)
-    case .octave: return parseOctaveFunctionDef(line)
-    case .cpp, .racket:
-        // Upload-only: there is no solution notebook, so this is unreachable
-        // through `scanNotebookForSectionsAndFunctions(_:language:)`, which
-        // refuses before calling here.
+    switch language.descriptor.functionScan {
+    case .pythonDefStatements:
+        // The only syntax whose parser recovers more than a name and
+        // parameters: annotations, defaults, return type and a docstring,
+        // because Python is the only one of the six that writes them.
+        return parseFunctionDef(line, bodyLines: bodyLines)
+    case .definitionPatterns(let patterns):
+        for pattern in patterns {
+            if let info = parseAssignmentStyleDefinition(line, pattern: pattern) { return info }
+        }
+        return nil
+    case .noSolutionNotebook:
+        // Upload-only: unreachable through the language-aware entry point,
+        // which refuses before reaching here.
         return nil
     }
 }
 
-/// `name <- function(a, b = 2)`, and the `=` and `assign()` spellings.
-///
-/// No type information: R has no parameter annotations, so `paramTypes` is
-/// all-nil and `hasTypeHints` false. That is the same state an un-annotated
-/// Python function already produces, and the editor already falls back to
-/// untyped JSON parsing for it.
-private func parseRFunctionDef(_ line: String) -> NotebookFunctionInfo? {
-    let pattern = #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
-    return parseAssignmentStyleDefinition(line, pattern: pattern)
-}
-
-/// `function f(a, b)`, `local function f(a, b)`, and `f = function(a, b)`.
-///
-/// The `local` form matters: it is the Lua idiom, so omitting it would miss
-/// most real definitions. Method syntax (`function M.f(x)` / `function M:f(x)`)
-/// is deliberately not matched — a dotted name is not something a generated
-/// test can call by bare identifier.
-private func parseLuaFunctionDef(_ line: String) -> NotebookFunctionInfo? {
-    let declaration = #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
-    if let info = parseAssignmentStyleDefinition(line, pattern: declaration) { return info }
-    let assignment = #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#
-    return parseAssignmentStyleDefinition(line, pattern: assignment)
-}
-
-/// `function f(a)`, `function y = f(a)`, `function [y, z] = f(a)`.
-///
-/// The return-variable forms are why Octave cannot share R's or Lua's pattern:
-/// the name is not the first identifier on the line. Return variables are
-/// parsed only far enough to skip them — the editor needs the callable name and
-/// its parameters.
-private func parseOctaveFunctionDef(_ line: String) -> NotebookFunctionInfo? {
-    let withReturns =
-        #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"#
-        + #"([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
-    if let info = parseAssignmentStyleDefinition(line, pattern: withReturns) { return info }
-    let bare = #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
-    return parseAssignmentStyleDefinition(line, pattern: bare)
-}
-
-/// Shared machinery for the three: a regex whose group 1 is the function name
-/// and group 2 is the raw parameter list.
+/// One `definitionPatterns` alternative: a regex whose group 1 is the function
+/// name and group 2 is the raw parameter list.
 ///
 /// `parseParams` is reused verbatim. Its `x = 0` default-stripping is correct
 /// for all three (R and Lua and Octave all spell defaults with `=`), and its
@@ -531,26 +492,13 @@ public func notebookFunctionScanSupport(
         return .unsupported(
             reason: "This assignment declares no language, so there is no solution notebook to scan.")
     }
-    switch language {
-    case .python:
+    // DERIVED from the descriptor's syntax, which carries the patterns. There
+    // is no separate list of "languages we can scan" to fall out of step with
+    // the parsers — supplying patterns IS declaring support.
+    switch language.descriptor.functionScan {
+    case .pythonDefStatements, .definitionPatterns:
         return .supported
-    case .r, .lua, .octave:
-        // Each has its own parser now — `f <- function(x)`, `function f(x)` (and
-        // Lua's `local function` and `f = function` forms), and Octave's
-        // `function [y, z] = f(x)`, whose name is not the first identifier on
-        // the line. See `parseDefinition`.
-        //
-        // What they do NOT supply is type information: none of the three has
-        // parameter annotations, so `paramTypes` is all-nil and `hasTypeHints`
-        // is false. That is the same state an un-annotated Python function
-        // already produces, and the editor already handles it by falling back
-        // to untyped JSON parsing — so partial fidelity here is a real answer,
-        // not a broken one.
-        return .supported
-    case .cpp, .racket:
-        // Structural, not a missing parser: these are upload-only
-        // (`EditorSupport.uploadOnly`), so there is no solution notebook in the
-        // first place. If a kernel ever lands for one, its arm moves up.
+    case .noSolutionNotebook:
         return .unsupported(
             reason: """
                 \(language.displayName) assignments are upload-only and have no solution notebook \

@@ -213,4 +213,88 @@ import Testing
             language.descriptor.capabilityRequiresExecutableOutput == (language == .cpp),
             "\(language) disagrees with whether its grading path execs its own build output")
     }
+
+    // MARK: - The normative fields
+
+    /// A language that claims it can be scanned must SUPPLY the patterns.
+    ///
+    /// This is the point of putting the syntax in the descriptor rather than a
+    /// `Bool` beside a parser somewhere else: the earlier shape let a
+    /// capability be claimed and not implemented, and the instructor found out
+    /// by being told their solution was empty. An empty pattern list is that
+    /// same lie in a new spelling, so it fails here.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func aScannableLanguageSuppliesItsPatterns(_ language: AssignmentLanguage) {
+        switch language.descriptor.functionScan {
+        case .pythonDefStatements:
+            #expect(language == .python, "only Python has the def-statement parser")
+        case .definitionPatterns(let patterns):
+            #expect(!patterns.isEmpty, "\(language.displayName) claims scanning with no patterns")
+            for pattern in patterns {
+                #expect(
+                    (try? NSRegularExpression(pattern: pattern)) != nil,
+                    "\(language.displayName) has an uncompilable definition pattern: \(pattern)")
+                // Group 1 is the name and group 2 the parameter list — the
+                // contract `parseAssignmentStyleDefinition` reads them by.
+                let regex = try? NSRegularExpression(pattern: pattern)
+                #expect(
+                    (regex?.numberOfCaptureGroups ?? 0) >= 2,
+                    "\(language.displayName) pattern needs a name and a params group: \(pattern)")
+            }
+        case .noSolutionNotebook:
+            // Only legitimate for a language with no notebook workflow at all.
+            switch language.editorSupport {
+            case .uploadOnly: break
+            case .notebookKernel:
+                let message =
+                    "\(language.displayName) has an editor kernel but declares no solution "
+                    + "notebook to scan"
+                Issue.record(Comment(rawValue: message))
+            }
+        }
+    }
+
+    /// A language that claims in-page auto-compute must name the worker, and
+    /// only a language with a kernel may claim it.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func autoComputeSubstrateMatchesWhetherAKernelExists(_ language: AssignmentLanguage) {
+        switch (language.descriptor.autoCompute, language.editorSupport) {
+        case (.inPageKernel(let worker), .notebookKernel):
+            #expect(worker.hasPrefix("/"), "the worker path must be absolute: \(worker)")
+            #expect(worker.hasSuffix(".js"), "the worker must be a script: \(worker)")
+        case (.inPageKernel(let worker), .uploadOnly):
+            Issue.record(
+                Comment(
+                    rawValue:
+                        "\(language.displayName) has no kernel but claims the in-page worker "
+                        + "\(worker)"))
+        case (.serverDriver, _):
+            // Legitimate two ways: no kernel exists (C++, Racket), or the
+            // worker has not been written yet (R, Lua, Octave — see the
+            // descriptor's PENDING note). Both are honest; claiming a worker
+            // that does not exist is not.
+            break
+        }
+    }
+
+    /// Every language with a kernel is one flip away from in-page evaluation.
+    ///
+    /// Not an assertion about today's values — a reminder of the target, so the
+    /// three PENDING entries are visible as a countdown rather than settling in
+    /// as the answer.
+    @Test func theInPageAutoComputeCountdownIsVisible() {
+        let kernelLanguages = AssignmentLanguage.allCases.filter {
+            if case .notebookKernel = $0.editorSupport { return true }
+            return false
+        }
+        let inPage = kernelLanguages.filter {
+            if case .inPageKernel = $0.descriptor.autoCompute { return true }
+            return false
+        }
+        let note =
+            "at least Python evaluates in-page; if this drops to zero the editor lost its "
+            + "in-browser evaluator entirely"
+        #expect(inPage.count >= 1, Comment(rawValue: note))
+        #expect(inPage.count <= kernelLanguages.count)
+    }
 }

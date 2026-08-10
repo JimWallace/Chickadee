@@ -107,6 +107,14 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// change.
     let expressionEvaluation: Bool
 
+    /// The in-page worker that computes an expected value, or nil when this
+    /// language has no kernel and the server evaluates instead.
+    ///
+    /// From `AutoComputeSubstrate`, which carries the worker path — so the
+    /// editor cannot spawn a script the descriptor does not name, and a
+    /// language cannot claim in-page evaluation without saying what runs it.
+    let autoComputeWorker: String?
+
     /// Facts for `language`, or the language-less answer when it is nil.
     init(_ language: AssignmentLanguage?) {
         guard let language else {
@@ -118,6 +126,7 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
             self.scriptExtension = nil
             self.functionScanning = false
             self.expressionEvaluation = false
+            self.autoComputeWorker = nil
             self.unsupportedCheckKinds = [:]
             return
         }
@@ -161,6 +170,10 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         self.unsupportedCheckKinds = unsupported
         self.functionScanning = notebookFunctionScanSupport(for: language).isSupported
         self.expressionEvaluation = PersonalizationEvaluator.supportsEvaluation(language)
+        switch language.descriptor.autoCompute {
+        case .inPageKernel(let workerScript): self.autoComputeWorker = workerScript
+        case .serverDriver: self.autoComputeWorker = nil
+        }
     }
 }
 

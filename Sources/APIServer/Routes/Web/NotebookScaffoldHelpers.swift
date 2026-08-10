@@ -51,10 +51,9 @@ func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> St
     return fileName
 }
 
-/// Runs a section-aware scan over `notebookData` and, if the test setup
-/// looks "fresh" (no existing sections, no existing test scripts), writes
-/// one `publictest_exists_<fn>.py` scaffold per detected function into
-/// the zip and updates the manifest to declare the sections + entries.
+/// Runs a section-aware scan over `notebookData` and, if the test setup looks
+/// "fresh" (no existing sections, no existing test scripts), declares the
+/// notebook's `## ` headers as suite sections.
 ///
 /// Silently no-ops if the setup already has sections or test entries —
 /// instructors who've manually arranged things shouldn't get clobbered
@@ -106,33 +105,17 @@ func autoScaffoldFromSolutionNotebook(
         sectionDicts.append(["id": id, "name": name])
     }
 
-    // 2. Generate one "exists" test script per detected function.
-    //    Skip shadowed redefinitions — Python's last-def-wins semantics
-    //    means the earlier function isn't reachable at test time.
-    var writes: [String: String] = [:]
-    var newSuites: [[String: Any]] = []
-    for entry in scan.functions where !entry.info.isShadowed {
-        let fn = entry.info.name
-        let filename = "publictest_exists_\(fn).py"
-        guard writes[filename] == nil else { continue }  // dedup by filename
-        writes[filename] = pythonTestScript(type: .exists, functionName: fn)
-        var testDict: [String: Any] = [
-            "tier": "public",
-            "script": filename,
-            "name": "\(fn) exists",
-        ]
-        if let sectionName = entry.sectionName, let sid = sectionIDByName[sectionName] {
-            testDict["sectionID"] = sid
-        }
-        newSuites.append(testDict)
-    }
-    // 3. Write the scaffold files into the zip (idempotent — if the file
-    //    somehow already exists, the same content overwrites).  Skipped when
-    //    there are none, which is the ordinary case for a language whose
-    //    functions cannot be scanned; the sections below are still written.
-    if !writes.isEmpty {
-        try applyScriptChangesToZip(zipPath: zipPath, writes: writes, deletions: [])
-    }
+    // 2. NO PER-FUNCTION SCRIPTS. This used to write one
+    //    `publictest_exists_<fn>.py` per detected function, from the `exists`
+    //    template — which was removed along with the seven other Python
+    //    templates a pattern-family kind already covers. The existence guard it
+    //    generated is emitted automatically by every family, in all six
+    //    languages, so the scaffold was seeding a Python script to do a job the
+    //    first-class construct does better and everywhere.
+    //
+    //    Sections are still scaffolded, which is the part of this flow that was
+    //    always language-neutral and always useful.
+    let newSuites: [[String: Any]] = []
 
     // 4. Rewrite the manifest with sections + testSuites populated.
     //    Preserve every other field the manifest already had (gradingMode,
@@ -144,7 +127,7 @@ func autoScaffoldFromSolutionNotebook(
     setup.manifest = newManifest
     try await setup.save(on: db)
 
-    return (scan.sectionNames.count, writes.count)
+    return (scan.sectionNames.count, 0)
 }
 
 /// Refusal shown when a notebook is scaffolded for a language that has none.

@@ -439,13 +439,28 @@ test("the scan-payload readers handle both response shapes", () => {
   assert.equal(read(undefined).functions.length, 0);
 });
 
-test("auto-compute routes off the Python worker for other languages", () => {
-  // The defect: the in-page evaluator is a Python kernel, so on an R assignment
-  // it computed a PYTHON answer for a value compared against R's result.
+test("auto-compute picks its substrate from the language seed", () => {
+  // The original defect: the in-page evaluator was a Python kernel, so on an R
+  // assignment it computed a PYTHON answer for a value compared against R's
+  // result. The first fix routed every non-Python language to the server by
+  // testing `name !== 'python'` — which fixed the wrong answer and then became
+  // the wrong RULE, because the editor exists for in-browser verification and a
+  // language with a kernel should evaluate in the browser.
+  //
+  // So this asserts the seam rather than either rule: which worker runs comes
+  // from the descriptor, and the server is the fallback for a language that
+  // declares none.
   assert.ok(editorSource.includes('callSolutionOnServer'),
     'a server-side compute path must exist');
-  assert.ok(/languageFacts\.name !== 'python'/.test(editorSource),
-    'callSolution must route non-Python languages away from the in-page kernel');
   assert.ok(editorSource.includes('compute-expected') || editorSource.includes('computeExpected'),
     'the server path must call the compute-expected endpoint');
+  assert.ok(/ChickadeeLanguage\.autoComputeWorker\(\)/.test(editorSource),
+    'the worker must come from the language seed, not from a name check here');
+
+  // No hardcoded worker path. A literal `/x-eval-worker.js` in this file is the
+  // shape that made auto-compute Python-only: the editor reached for one
+  // kernel by name and no seed could redirect it.
+  const hardcodedWorker = /['"]\/[a-z-]*eval-worker\.js['"]/.exec(editorSource);
+  assert.equal(hardcodedWorker, null,
+    `the editor must not name a worker itself (found ${hardcodedWorker && hardcodedWorker[0]})`);
 });
