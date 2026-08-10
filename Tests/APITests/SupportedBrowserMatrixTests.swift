@@ -21,10 +21,19 @@ import Testing
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0",
         // Desktop Firefox at floor (143).
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:143.0) Gecko/20100101 Firefox/143.0",
-        // Desktop Safari at the floor (Version/26).
+        // Desktop Safari, current (Version/26).
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
-        // iOS Safari at the floor (Version/26).
+        // iOS Safari, current (Version/26).
         "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+        // Safari is floorless: the versions production telemetry showed working
+        // on the xeus editor's WebKit service-worker path must never warn.
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+        // iOS / iPadOS WebKit is floorless on the same basis (all iOS browsers
+        // are WKWebView, so the branded CriOS name still classifies as Safari).
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/149.0.0.0 Mobile/15E148 Safari/604.1",
         // Android Chrome above floor.
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
     ])
@@ -36,14 +45,6 @@ import Testing
     // MARK: - Unsupported (known engine, below floor)
 
     @Test(arguments: [
-        // The reported repro: desktop Safari 18.2 (< 26).
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
-        // iOS Safari 17.5 (< 26).
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-        // iPadOS Safari 18 (< 26).
-        "Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1",
-        // iOS Chrome (CriOS) with no Version/ token — falls back to the iOS OS major (18 < 26).
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/149.0.0.0 Mobile/15E148 Safari/604.1",
         // Desktop Chrome below floor (139 < 140).
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
         // Desktop Edge below floor (Edg/139).
@@ -74,17 +75,33 @@ import Testing
         #expect(!SupportedBrowserMatrix.isUnsupported(userAgent: nil))
     }
 
+    // MARK: - Safari is floorless (no version warning, ever)
+
+    @Test func safariHasNoVersionFloor() {
+        // Even an ancient WebKit is never version-warned: the warning was
+        // measured to flag a working population (xeus editor, Aug 2026), and a
+        // genuinely-broken engine is caught by the runtime probe + failover.
+        let a = SupportedBrowserMatrix.assess(
+            userAgent:
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Safari/605.1.15"
+        )
+        #expect(a.tier == .supported)
+        #expect(a.engine == "Safari")
+        #expect(a.majorVersion == 12)
+        #expect(a.minimumSupported == nil)
+    }
+
     // MARK: - Assessment detail (for the banner copy + telemetry)
 
     @Test func reportsEngineVersionAndFloorForAnUnsupportedBrowser() {
         let a = SupportedBrowserMatrix.assess(
             userAgent:
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15"
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:142.0) Gecko/20100101 Firefox/142.0"
         )
         #expect(a.tier == .unsupported)
-        #expect(a.engine == "Safari")
-        #expect(a.majorVersion == 18)
-        #expect(a.minimumSupported == SupportedBrowserMatrix.minimumSafari)
+        #expect(a.engine == "Firefox")
+        #expect(a.majorVersion == 142)
+        #expect(a.minimumSupported == SupportedBrowserMatrix.minimumFirefox)
     }
 
     @Test func aKnownEngineWithAnUnparseableVersionIsUnknownNotUnsupported() {

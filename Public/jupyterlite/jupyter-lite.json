@@ -7,6 +7,7 @@
     "contentsAllJsonFile": "all.json",
     "defaultKernelName": "xpython",
     "disabledExtensions": [
+      "@jupyter-notebook/notebook-extension:scroll-output",
       "@jupyterlite/application-extension:service-worker-manager"
     ],
     "faviconUrl": "./lab/favicon.ico",

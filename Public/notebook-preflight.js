@@ -298,12 +298,13 @@
     // Driven by notebook.js's WebKit slow-boot watchdog: if the editor hasn't
     // reported a healthy kernel within the window, reveal the .ipynb-upload
     // fallback panel with a polite, plain-English message WITHOUT hiding the
-    // editor. Some older engines (notably Safari 18.x and low-memory iPads)
-    // never finish booting the comlink + service-worker editor; rather than
-    // strand the student on a spinner, we surface the upload path and suggest a
-    // different device — while leaving the editor visible so a merely-slow-but-
-    // healthy boot still works (so this can never hide a working editor). Gated
-    // by `_failureShown` so a real failure (which DOES hide the editor) wins.
+    // editor. Some devices (notably low-memory iPads) never finish booting the
+    // editor; rather than strand the student on a spinner, we surface the
+    // upload path and suggest a different device — while leaving the editor
+    // visible so a merely-slow-but-healthy boot still works (so this can never
+    // hide a working editor). Gated by `_failureShown` so a real failure
+    // (which DOES hide the editor) wins. (The pre-xeus editor also stalled on
+    // Safari 18.x; the xeus editor boots fine there — Aug 2026 telemetry.)
 
     let _slowNoticeShown = false;
     function showSlowEditorNotice() {

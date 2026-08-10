@@ -32,10 +32,11 @@ const notebookSource = await fs.readFile(
 function loadCollector({ executionStatus, jpCount = 0, kernelError = false, bodyText = '' } = {}) {
   const posted = [];
   const hooks = {};
+  const winListeners = {};
   const win = {
     location: { origin: 'https://example.test' },
     parent: { postMessage(payload, origin) { posted.push({ payload, origin }); } },
-    addEventListener() {},
+    addEventListener(type, fn) { (winListeners[type] = winListeners[type] || []).push(fn); },
   };
   // Mock the JupyterLite shell DOM the collector reads (this build exposes no
   // window.jupyterapp): the execution indicator's data-status, the kernel-status
@@ -69,7 +70,7 @@ function loadCollector({ executionStatus, jpCount = 0, kernelError = false, body
   };
   context.globalThis = context;
   vm.runInNewContext(collectorSource, context, { filename: 'jl-kernel-diagnostics.js' });
-  return { posted, exports: hooks.exports };
+  return { posted, exports: hooks.exports, winListeners };
 }
 
 test('collector posts boot_start to the parent on load, same-origin', () => {
@@ -135,6 +136,24 @@ test('collector reportError caps at MAX_ERRORS distinct errors', () => {
   for (let i = 0; i < 12; i++) exports.reportError('src' + i, 'msg' + i);
   const errs = posted.filter(p => p.payload.kind === 'kernel_error');
   assert.equal(errs.length, 8);   // MAX_ERRORS
+});
+
+test('collector suppresses the benign JupyterLab insertWidget layout race', () => {
+  // The boot-time `this.layout.insertWidget`-on-null rejection fires on
+  // essentially every load and never affects the boot; it must not reach the
+  // kernel_error pipeline, while any other rejection still must.
+  const { posted, winListeners } = loadCollector();
+  const dispatchRejection = (message) => {
+    for (const fn of winListeners.unhandledrejection || []) fn({ reason: { message } });
+  };
+  dispatchRejection("Cannot read properties of null (reading 'insertWidget')");        // Chromium
+  dispatchRejection("null is not an object (evaluating 'this.layout.insertWidget')");  // WebKit
+  assert.equal(posted.filter(p => p.payload.kind === 'kernel_error').length, 0);
+  dispatchRejection('InvalidStateError: Drive IndexedDB open failed');
+  const errs = posted.filter(p => p.payload.kind === 'kernel_error');
+  assert.equal(errs.length, 1);
+  assert.equal(errs[0].payload.source, 'unhandledrejection');
+  assert.equal(errs[0].payload.message, 'InvalidStateError: Drive IndexedDB open failed');
 });
 
 test('collector trackUnhealthy ignores a transient unknown but flags a sustained one', () => {

@@ -118,11 +118,28 @@
         }, true);
     } catch (_) { /* ignore */ }
 
+    // JupyterLab's boot-time layout race — `this.layout.insertWidget` called
+    // while the layout is still null — rejects on essentially every editor
+    // load in every engine and never affects the boot (kernel_idle follows;
+    // production showed ~1 such rejection per editor_ready for a full month,
+    // 96% of all kernel_error rows). Dropped at the source so kernel_error
+    // stays a real-failure signal. Matched on the property name, which both
+    // the Chromium ("Cannot read properties of null (reading 'insertWidget')")
+    // and WebKit ("null is not an object (evaluating
+    // 'this.layout.insertWidget')") phrasings carry; Firefox's generic
+    // "this.layout is null" is too anonymous to match safely and stays
+    // reported.
+    function isBenignLayoutRace(message) {
+        return String(message || '').indexOf('insertWidget') !== -1;
+    }
+
     try {
         window.addEventListener('unhandledrejection', function (e) {
             try {
                 var reason = e && e.reason;
-                reportError('unhandledrejection', (reason && reason.message) || String(reason || 'unhandledrejection'));
+                var message = (reason && reason.message) || String(reason || 'unhandledrejection');
+                if (isBenignLayoutRace(message)) return;
+                reportError('unhandledrejection', message);
             } catch (_) { /* ignore */ }
         });
     } catch (_) { /* ignore */ }
@@ -403,6 +420,7 @@
             reportError: reportError, trackUnhealthy: trackUnhealthy,
             trackExecHang: trackExecHang, executionStatusRaw: executionStatusRaw,
             bootContext: bootContext, idleMessage: idleMessage,
+            isBenignLayoutRace: isBenignLayoutRace,
         };
     } catch (_) { /* ignore */ }
 })();
