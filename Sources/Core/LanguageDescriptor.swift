@@ -185,6 +185,73 @@ private let studentSubmissionModulePrefixes: [String] = [
 /// Read it through `AssignmentLanguage.descriptor`. Adding a language means
 /// writing one of these — and the compiler will not let you omit a field, so
 /// every fact has to be answered.
+/// How this language's function definitions are read out of a solution
+/// notebook — the IMPLEMENTATION, not a claim that one exists.
+///
+/// WHY THE PATTERNS LIVE HERE. The first version of multi-language scanning put
+/// a `Bool` on `AuthoringLanguageFacts` and the parser somewhere else, which is
+/// the shape that had already drifted once: a capability can be claimed and not
+/// supplied, and nothing catches it until an instructor is told their solution
+/// is empty. Carrying the patterns makes the claim and the implementation the
+/// same object — a seventh language either writes them or says
+/// `noSolutionNotebook`, and there is no third answer that compiles.
+///
+/// I ARGUED AGAINST THIS AND WAS WRONG. The case against a pattern table was
+/// that the four syntaxes are not one shape with different tokens — Octave puts
+/// return variables before the name, Lua has three definition forms, R's is an
+/// assignment whose right-hand side is a `function` literal. That is all true,
+/// and it turned out not to matter: written out, every one of them reduces to
+/// an ordered list of alternatives whose first group is the name and second is
+/// the parameter list. Python is the single exception, and it is called out as
+/// its own case rather than bent into the table.
+public enum FunctionScanSyntax: Equatable, Sendable {
+
+    /// Python's `def` statements, read by the full parser — the only one that
+    /// also recovers type annotations, defaults, the return type and a
+    /// docstring, because Python is the only one of the six that writes them.
+    case pythonDefStatements
+
+    /// Ordered regex alternatives, first match wins. Capture group 1 must be
+    /// the function name and group 2 the raw parameter list.
+    ///
+    /// No type information is recovered, because none of these languages has
+    /// parameter annotations to recover. That is the same state an un-annotated
+    /// Python function already produces and the editor already handles.
+    case definitionPatterns([String])
+
+    /// The language has no solution notebook to scan, because it has no
+    /// notebook workflow at all (`EditorSupport.uploadOnly`).
+    ///
+    /// Structural, not a missing parser — which is why the reason is derived
+    /// from `editorSupport` rather than written out per language.
+    case noSolutionNotebook
+}
+
+/// Where a pattern-family case's expected value is computed by running the
+/// instructor's solution.
+///
+/// IN-PAGE WHEREVER A KERNEL EXISTS. Not chosen by grading mode: the editor's
+/// job is in-browser authoring and verification, and making an author wait on a
+/// server round-trip to see what their solution returns defeats it. An
+/// instructor can tolerate a lazy kernel boot — the worker is spawned on first
+/// use, not on page load — and in exchange the value is computed by the same
+/// kernel that will grade a browser-graded submission.
+public enum AutoComputeSubstrate: Equatable, Sendable {
+
+    /// A vendored xeus kernel, run in the named Web Worker.
+    case inPageKernel(workerScript: String)
+
+    /// No kernel is vendored for this language, so the server's interpreter
+    /// evaluates it (`PersonalizationEvaluator`).
+    ///
+    /// Both languages here are upload-only, and for the same reason they have
+    /// no kernel: C++ by decision (grading a different compiler than the course
+    /// teaches is a pedagogy defect), Racket by circumstance (no Scheme-family
+    /// kernel exists on the channel). If one ever gains a kernel, this arm is
+    /// what changes.
+    case serverDriver
+}
+
 public struct LanguageDescriptor: Equatable, Sendable {
 
     /// How the language is written in prose a STUDENT reads — an error about
@@ -232,6 +299,13 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// Exhaustive like the rest of this type, so a seventh language answers it
     /// rather than inheriting Python's.
     public let lineCommentPrefix: String
+
+    /// How this language's definitions are read out of a solution notebook.
+    /// See `FunctionScanSyntax` — it carries the patterns, not a claim.
+    public let functionScan: FunctionScanSyntax
+
+    /// Where a case's expected value is computed. See `AutoComputeSubstrate`.
+    public let autoCompute: AutoComputeSubstrate
 
     /// Filename of the per-student grading-inputs file the worker materializes.
     /// Must match byte-for-byte what the language's `test_runtime` reads AND
@@ -325,6 +399,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         generatedScriptExtension: String,
         sourceFileExtension: String,
         lineCommentPrefix: String,
+        functionScan: FunctionScanSyntax,
+        autoCompute: AutoComputeSubstrate,
         inputsFileName: String,
         notebookKernelNames: Set<String>,
         editorSupport: EditorSupport,
@@ -338,6 +414,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.generatedScriptExtension = generatedScriptExtension
         self.sourceFileExtension = sourceFileExtension
         self.lineCommentPrefix = lineCommentPrefix
+        self.functionScan = functionScan
+        self.autoCompute = autoCompute
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
         self.editorSupport = editorSupport
@@ -364,6 +442,8 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "py",
                 sourceFileExtension: "py",
                 lineCommentPrefix: "#",
+                functionScan: .pythonDefStatements,
+                autoCompute: .inPageKernel(workerScript: "/python-eval-worker.js"),
                 inputsFileName: "_ck_inputs.py",
                 notebookKernelNames: AssignmentLanguage.pythonKernelNames,
                 editorSupport: .notebookKernel(
@@ -390,6 +470,22 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "R",
                 sourceFileExtension: "R",
                 lineCommentPrefix: "#",
+                functionScan: .definitionPatterns([
+                    #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
+                ]),
+                // PENDING ITS WORKER. This language has a vendored kernel, so
+                // the target answer is `.inPageKernel` — the editor's job is
+                // in-browser verification, and an author should not wait on a
+                // server round-trip to see what their solution returns. It says
+                // `.serverDriver` only because `/r-eval-worker.js` does not exist
+                // yet; declaring the kernel before writing the worker would have
+                // the editor spawn a 404 and auto-compute would silently stop.
+                //
+                // Flipping it is one line here, one worker mirroring
+                // `python-eval-worker.js` on this language's existing
+                // `*-grading-shared.js`, and one row in the browser-grading
+                // smoke matrix.
+                autoCompute: .serverDriver,
                 inputsFileName: "_ck_inputs.R",
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
                 editorSupport: .notebookKernel(
@@ -414,6 +510,23 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "lua",
                 sourceFileExtension: "lua",
                 lineCommentPrefix: "--",
+                functionScan: .definitionPatterns([
+                    #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+                    #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#,
+                ]),
+                // PENDING ITS WORKER. This language has a vendored kernel, so
+                // the target answer is `.inPageKernel` — the editor's job is
+                // in-browser verification, and an author should not wait on a
+                // server round-trip to see what their solution returns. It says
+                // `.serverDriver` only because `/lua-eval-worker.js` does not exist
+                // yet; declaring the kernel before writing the worker would have
+                // the editor spawn a 404 and auto-compute would silently stop.
+                //
+                // Flipping it is one line here, one worker mirroring
+                // `python-eval-worker.js` on this language's existing
+                // `*-grading-shared.js`, and one row in the browser-grading
+                // smoke matrix.
+                autoCompute: .serverDriver,
                 inputsFileName: "_ck_inputs.lua",
                 notebookKernelNames: AssignmentLanguage.luaKernelNames,
                 editorSupport: .notebookKernel(
@@ -441,6 +554,23 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "m",
                 sourceFileExtension: "m",
                 lineCommentPrefix: "#",
+                functionScan: .definitionPatterns([
+                    #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+                    #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+                ]),
+                // PENDING ITS WORKER. This language has a vendored kernel, so
+                // the target answer is `.inPageKernel` — the editor's job is
+                // in-browser verification, and an author should not wait on a
+                // server round-trip to see what their solution returns. It says
+                // `.serverDriver` only because `/octave-eval-worker.js` does not exist
+                // yet; declaring the kernel before writing the worker would have
+                // the editor spawn a 404 and auto-compute would silently stop.
+                //
+                // Flipping it is one line here, one worker mirroring
+                // `python-eval-worker.js` on this language's existing
+                // `*-grading-shared.js`, and one row in the browser-grading
+                // smoke matrix.
+                autoCompute: .serverDriver,
                 inputsFileName: "_ck_inputs.m",
                 notebookKernelNames: AssignmentLanguage.octaveKernelNames,
                 editorSupport: .notebookKernel(
@@ -482,6 +612,8 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "sh",
                 sourceFileExtension: "cpp",
                 lineCommentPrefix: "//",
+                functionScan: .noSolutionNotebook,
+                autoCompute: .serverDriver,
                 inputsFileName: "_ck_inputs.hpp",
                 // No notebook workflow, so no kernel aliases to claim — like
                 // Python's empty set, but for the opposite reason (nothing to
@@ -529,6 +661,8 @@ extension AssignmentLanguage {
                 generatedScriptExtension: "rkt",
                 sourceFileExtension: "rkt",
                 lineCommentPrefix: ";",
+                functionScan: .noSolutionNotebook,
+                autoCompute: .serverDriver,
                 inputsFileName: "_ck_inputs.rkt",
                 // No kernel exists to claim aliases for. Empty for the same
                 // reason as C++ — nothing to detect — not Python's

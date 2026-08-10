@@ -1541,7 +1541,12 @@
         function getWorker() {
             if (_worker) return _worker;
             var version = (document.querySelector('meta[name="app-version"]') || {}).content || '';
-            var workerURL = '/python-eval-worker.js' + (version ? '?v=' + encodeURIComponent(version) : '');
+            // WHICH worker comes from the language seed, not from this file.
+            // It was hardcoded to the Python one, which is why auto-compute
+            // could only ever be in-page for Python.
+            var workerScript = ChickadeeLanguage.autoComputeWorker();
+            if (!workerScript) return null;
+            var workerURL = workerScript + (version ? '?v=' + encodeURIComponent(version) : '');
             _worker = new Worker(workerURL);
             _worker.addEventListener('message', function (e) {
                 var data = e.data || {};
@@ -1585,6 +1590,14 @@
             return new Promise(function (resolve, reject) {
                 var id = _nextRequestId++;
                 var worker = getWorker();
+                // Unreachable through `callSolution`, which routes to the
+                // server when the language declares no in-page worker. Guarded
+                // anyway so a future caller gets a rejection rather than a
+                // TypeError on `worker.postMessage`.
+                if (!worker) {
+                    reject(new Error('This language has no in-page evaluator.'));
+                    return;
+                }
                 var timer = null;
                 if (timeoutMs && timeoutMs > 0) {
                     timer = setTimeout(function () {
@@ -1737,11 +1750,17 @@
         }
 
         function callSolution(fnName, args, opts) {
-            // Python keeps the in-page kernel: it is faster, and its handling of
-            // a None return and of types that do not round-trip through JSON is
-            // behaviour existing assignments rely on. Every other language goes
-            // to the server, which is the only place that can answer at all.
-            if (languageFacts.name && languageFacts.name !== 'python') {
+            // IN-PAGE WHEREVER A KERNEL EXISTS, and the language seed decides
+            // which — not a name check here.
+            //
+            // This read `name !== 'python'` and sent every other language to
+            // the server, which was true when the in-page evaluator was the
+            // only kernel the editor could boot. It is the wrong rule for an
+            // editor whose job is in-browser authoring and verification: an
+            // author changing a case should see what their solution returns
+            // without a server round-trip. The languages with no kernel
+            // (C++, Racket) declare `serverDriver` and still route there.
+            if (!ChickadeeLanguage.autoComputeWorker()) {
                 return callSolutionOnServer(fnName, args, opts);
             }
             var captureStdout = !!(opts && opts.captureStdout);
