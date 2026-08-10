@@ -12,6 +12,14 @@ layer underneath it, and about four defects the audit missed.
 **Read the "deliberately open" section before proposing work here.** Several of
 these gaps are correct as they stand, and have been re-litigated more than once.
 
+**Status: the work list at the end is complete.** Every numbered item shipped
+between 2026-08-10 and the `differential` kind. What remains in this document is
+the *reasoning* — which gaps were defects, which are correct refusals, and why —
+because that is what a seventh language will need. If you are adding one, the
+parity checklist lives in
+[adding-a-xeus-kernel.md](adding-a-xeus-kernel.md#parity-what-supported-is-not-the-same-as);
+this document is the evidence behind it.
+
 ---
 
 ## The measured state

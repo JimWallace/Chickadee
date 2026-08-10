@@ -37,3 +37,23 @@
 
   This closes the last open item in `docs/authoring-parity.md`: every retired
   template now has a named equivalent, `differential` included.
+
+### Documentation
+
+- **`docs/adding-a-xeus-kernel.md` covers the parity half.** The runbook took a
+  language as far as *working* and stopped; a language can pass every item in
+  its done test and still be one an instructor quietly avoids. It now carries a
+  parity checklist that separates what a seventh language gets **free** from
+  `allCases` — all nine pattern kinds, both Add Test renderings, the authoring
+  UI, the whole MCP surface, the browser inputs filename, the vendoring guard —
+  from the four things that remain genuinely per-language, each with a decision
+  to record rather than a box to tick.
+
+  Also added, all learned the expensive way this cycle: the in-page auto-compute
+  half a kernel language owes the editor, with the descriptor entry deliberately
+  **last** because one naming a worker that does not exist makes the editor spawn
+  a 404 and auto-compute stop silently; a per-kernel eval-quirk table, because
+  each of the three kernels needed a different shape rule and none inherited its
+  neighbour's; and the per-language literal traps, where three of four are the
+  same shape — a null-ish value silently changing a container's length — and all
+  three needed different rules.

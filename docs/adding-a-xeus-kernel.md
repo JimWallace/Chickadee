@@ -287,15 +287,42 @@ an uncaught error with its message on stderr, and — if the language has packag
 - **Per-extension guards go stale silently.** The `Atomics.waitAsync` patch
   globbed only the Pyodide extension for two releases while the xeus extension
   shipped the same unpatched polyfill. Glob every extension.
-- **Two places enumerate the kernels rather than discovering them**, and both
-  fail open for a kernel they have never heard of: the `chickadee-*` glob in
-  `build-jupyterlite.sh` (no module index) and `expected_language` in
-  `check-xeus-vendored.sh` (no vendoring guard). Neither errors; you simply get
-  a kernel nothing checks. Grep for your env and kernel name after vendoring and
-  confirm both mention it.
+- **One place still enumerates the kernels rather than discovering them**: the
+  `chickadee-*` glob in `build-jupyterlite.sh`, which decides who gets a module
+  index. It does not error; you simply get a kernel nothing checks. Name your
+  env `chickadee-<language>` and confirm the glob picked it up after vendoring.
+
+  Its twin is closed. `expected_language` in `check-xeus-vendored.sh` was a
+  literal map under a comment admitting that a kernel absent from it shipped
+  completely unguarded — so a partial or botched re-vendor of it passed CI in
+  silence. It now derives the expected set from
+  `editorSupport.notebookKernel(kernelName:)`, so **your kernel is guarded the
+  day your descriptor names it**, and a vendored kernel no language claims is an
+  error rather than dead weight in a 100 MB payload.
 - **Do not add a `default:` arm to a language switch.** The compiler producing
   the worklist is the entire reason the count of touched files is acceptable.
   See `docs/language-handling-review.md` §4.
+- **Every language's literal renderer has exactly one trap, and it is never the
+  same one.** Find yours before writing the renderer, and make it the first case
+  in the shared fixture. What the four have cost so far:
+
+  | Language | The trap | What it produces if missed |
+  |---|---|---|
+  | R | a `NULL` VANISHES from a `list()` | a list of the wrong length |
+  | Lua | a `nil` is not stored in a table constructor | a table of the wrong length; `ipairs` stops at the hole |
+  | Octave | `[...]` concatenates and coerces — `[65, "bc"]` is the char array `"Abc"` | a string where the author wrote a list |
+  | C++ | no rendering exists for null, mixed arrays or nesting | refused at save time, by design |
+
+  Three of the four are the same *shape* — a null-ish value silently changing a
+  container's length — and all three needed a different rule. Do not assume the
+  neighbour's answer; the R and Lua fixes look alike and the Octave one is
+  unrelated.
+- **Identifier rules are not interchangeable either.** The differential kind's
+  reference is `ck_ref_<function>` rather than `_ck_ref_<function>`, which every
+  other harness name in this codebase would suggest, because **R forbids a
+  leading-underscore identifier** — the same rule that makes the per-student
+  inputs file bind `.ck_inputs` rather than `_ck`. Any name an instructor types
+  has to be legal in all of them at once.
 
 ## The second half: making the language *supported*
 
@@ -778,7 +805,7 @@ which the Swift compiler can see, and all of which the Lua run had to touch:
 | What | Where | Fails as |
 |---|---|---|
 | the inputs writer | `personalizationInputsSource<X>` in `<lang>-grading-shared.js` | every per-student value missing, silently |
-| the language branch that calls it | `browser-runner.js`, beside the `_ck_inputs.R` / `.py` arms | Python's file written for your language |
+| the language's entry in `INPUTS_WRITERS` | `browser-runner.js` | Python's writer used for your language |
 | notebook extraction routing | `browser-runner.js` `extractNotebookToMap` | a `.py` file made from your notebook |
 | the page `<script>` tag | `Resources/Views/_notebook-body.leaf` | `ReferenceError` at runner load — for EVERY language |
 | each JS test harness's vm context | `Tests/BrowserRunnerJSTests/*.mjs` that build a context | the same `ReferenceError`, in tests only |
@@ -786,6 +813,82 @@ which the Swift compiler can see, and all of which the Lua run had to touch:
 That last pair is the enumeration trap again: `browser-runner.js` destructures
 its shared modules at IIFE start, so every harness that runs it has to load the
 same set the page does. Three files list that set independently.
+
+**Two rows of this table have since been closed, and the difference is worth
+copying.** The *inputs filename* used to be its own row — four string literals
+in an if/else whose final branch wrote Python's, which is exactly how a
+browser-graded Lua assignment came to write `_ck_inputs.py` while the Lua
+runtime read `_ck_inputs.lua`. It is now generated from
+`LanguageDescriptor.inputsFileName` by `generate-js-constants.sh`, so a seventh
+language gets its filename for free. What could NOT be generated is the writer
+itself — the four renderers live in the browser with no Swift counterpart to
+derive from — so `BrowserInputsWriterCoverageTests` pins the table to exactly
+the languages with an editor kernel instead. That is the general shape: generate
+what has an owner, guard what does not, and never leave a fallback that silently
+answers Python.
+
+### The other browser half: in-page auto-compute
+
+A kernel language owes the editor an **eval worker** as well as a grading
+worker. Auto-compute — filling in a case's expected value by running the
+instructor's solution — runs in the page for every language that has a kernel,
+and routes to the server only for the two that do not (C++, Racket).
+`OctaveAutoComputeRuntimeTests` pins that correspondence over `allCases`, so a
+seventh kernel language shipping on the server driver is a red test rather than
+a quiet gap.
+
+Four pieces, in this order. **The order is the point** — the descriptor entry
+comes last, because a descriptor naming a worker that does not exist makes the
+editor spawn a 404 and auto-compute stop with no message at all.
+
+1. **A literal renderer in the browser**, `<lang>Literal` in
+   `<lang>-grading-shared.js`. Auto-compute calls the solution with arguments
+   the instructor has typed but not saved, so there is no round-trip in which
+   the server could render them. This is a second implementation of
+   `JSONValue.<lang>Literal` and that is allowed here for the reason
+   `personalizationInputsSource<X>` is: the browser cannot call Swift. What
+   makes it safe is that **neither side owns the expectations** — both read
+   `Tests/Fixtures/<lang>-literal-contract.json`, the arrangement
+   `output-contract.json` already uses to pin RunnerCore's native and wasm
+   builds together. Write the fixture first; it is where the language's literal
+   trap gets pinned (see the table below).
+2. **`<lang>-eval-shared.js`** — the snippets. `loadCell`, `runExpression`,
+   `callFunction`. Arguments are rendered here, by the renderer above.
+3. **`<lang>-eval-worker.js`** — mirrors `python-eval-worker.js` exactly; the
+   message protocol is identical across languages, so the editor's client code
+   does not change. Every message may carry `runtimeSource`, seeded from
+   `AssignmentLanguage.autoComputeRuntimeSource` so the serializer that reports
+   a value is the one the personalization driver uses rather than a copy.
+4. **A smoke row** `{ language: <x>, mode: eval }`, and only then the
+   descriptor's `.inPageKernel(workerScript:)`.
+
+Cheaper than the smoke and worth writing first: an **execution test** under a
+plain interpreter (`Tests/BrowserRunnerJSTests/<lang>-eval-execution.test.mjs`).
+It runs the real seeded runtime with each snippet `load`ed as its own chunk, and
+it catches a syntax error or a wrong helper name in seconds rather than in a
+browser. Both existing ones found real defects that shape assertions had not.
+
+**Budget one eval quirk per kernel, and do not expect it to be the last one's.**
+This is the same lesson the grading half taught — R's expensive rules turned out
+to be xeus-r properties — and the eval workers repeated it exactly:
+
+| Kernel | Its quirk | Cost of missing it |
+|---|---|---|
+| xeus-r | yields ~180 ms between top-level expressions | every snippet must be ONE `local({…})`; a statement list is ~4× slower per keystroke |
+| xeus-lua | every cell is its own chunk, so `local` does not persist; and its `return <cell>` probe mis-reads a cell opening with `local` | the seeded runtime's helpers vanish; snippets must be ONE call expression |
+| xeus-octave | a cell defining `function` must not START with it | the boot cell is read as a function file and the runtime never registers — hence `1;` |
+
+Octave's is the instructive one: it cost **no substrate patch at all** on the
+grading side, and still needed a shape rule here. Neither of R's two rules
+applies to it, and Lua's chunk-scoping does not either. Measure your kernel;
+inheriting the neighbour's constraints is as wrong as inheriting none.
+
+The non-substrate traps found the same way, all in one language each: Octave's
+`str2func` resolves a **built-in over a command-line function of the same
+name** (so a solution defining `area` was silently graded against Octave's
+plotting function — call by name, not by handle); Octave has no C-style
+ternary; and `ck::errored`-style error reporting goes to **stderr**, so a test
+harness reading only stdout cannot tell a failure's message from an empty one.
 
 ### The authoring UI: what you do NOT have to do
 
@@ -896,6 +999,64 @@ state this document exists to warn you about:
       language's entry in a real `get_server_info` response; what those cannot
       check is a *sentence* making a per-language claim in words
 - [ ] **the instructor walkthrough below passes, by hand, on a real server**
+- [ ] **the parity checklist below is answered** — the done test above says the
+      language *works*; parity says an instructor authoring in it is not a
+      second-class citizen
+
+### Parity: what "supported" is not the same as
+
+The list above is a floor. A language can pass every item and still be one an
+instructor quietly avoids, because parity is a different question: **can they
+author the same things, the same way, as a Python author?** That question was
+asked across the whole six-language surface in 2026-08
+([authoring-parity.md](authoring-parity.md)) and the answer was four live
+defects, none of which the done test would have caught. Ask it about your
+language deliberately.
+
+The good news is most of it is now free. These follow from `allCases` and need
+no per-language work at all:
+
+| Capability | How your language gets it |
+|---|---|
+| all 9 pattern-family kinds | the compiler names each renderer arm; there is no opt-out |
+| the Add Test menu, both renderings | `TestEditorCatalogCoverageTests` — the catalog is per-KIND, not per-language |
+| the authoring UI's literals, scan and eval flags | `AuthoringLanguageFacts`, all derived — **zero JavaScript edits** |
+| MCP tool descriptions, schemas, `get_server_info` | `MCPLanguageProse` / `MCPPatternKindProse` / `MCPLanguageCapability`, all from `allCases` |
+| the per-student inputs FILENAME in the browser | generated by `generate-js-constants.sh` |
+| the vendoring guard | derived from your descriptor's `kernelName` |
+
+What is left is genuinely per-language, and each has a decision to record
+rather than a box to tick:
+
+1. **Notebook-check kinds.** Not uniform, and not expected to be — Lua supports
+   4 of 10, Octave 5, and both are *correct*. What matters is that every
+   exclusion is a stated reason in `notebookCheckKindUnsupportedReason`, because
+   that predicate is what the save-time refusal, the Add Test menu and
+   `get_server_info` all read. An unsupported kind must be a recorded decision,
+   not an omission an instructor discovers by being rejected.
+2. **In-page auto-compute**, if you vendored a kernel. See the section above.
+   The rule is not negotiable in one direction: a language with a kernel that
+   routes to the server driver fails `OctaveAutoComputeRuntimeTests`.
+3. **A solution-notebook function parser** (`FunctionScanSyntax`). Without it
+   the Add Test flow cannot offer the author their own function names. Section
+   scaffolding does NOT depend on it — that split is deliberate, and conflating
+   them is defect 3 in the parity audit.
+4. **Custom-script templates: write none.** This is the item most likely to be
+   done wrong by being done. Nine Python templates were retired because eight
+   duplicated a pattern kind in a worse form and the ninth became one; writing
+   your language a set would be a second implementation of renderers that
+   already exist. The three *shell* templates are language-neutral and already
+   yours.
+
+**The measured claims are measured, so do not reason about them.**
+`interpreterProbe` and `workingDirectoryIsOnDefaultSearchPath` are the two
+descriptor fields that state facts about a real interpreter rather than
+decisions, and `LanguageDescriptorMeasurementTests` runs the interpreter to
+check both. Write your best answer and let the test correct you. Both fields
+have already been wrong from reasoning — `--version` on lua exits 1, and the
+Octave search-path row was an armchair answer — and when the test was written
+its own first two disagreements were *the test's* fault, not the descriptor's.
+On a red measurement, suspect the measurement first.
 
 ### The last step: walk an instructor's path by hand
 
