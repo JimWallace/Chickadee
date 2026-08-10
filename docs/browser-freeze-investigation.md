@@ -153,6 +153,45 @@ step is a frame-global queue that batches all reads before all writes — not
 done now, because 0.56 s at laptop-equivalent throttle sits ~14x under the
 8 s watchdog line.
 
+## Follow-up, same evening: the 58 s-anchored stall is a second, distinct mechanism
+
+The mitigation's effects were visible in production within hours (zero
+`kernel_error` rows and zero `below_matrix` warnings across the post-deploy
+editor loads, run-all sessions clean). But an evening burst of 12
+`page_unresponsive` beacons arrived on the FIXED build — spread one per
+session across many review labs on exam eve, stopping after ~2 h. A recovered
+sample reads `stalled_ms=8832` at 58.8 s after `boot_start`: the same ±1 s
+anchor as the pre-fix events. Five production stalls across pre-fix and
+post-fix builds now share that anchor — too synchronized to be student-paced
+activity, and NOT explained by the run-all rendering stall (which struck at
+whatever moment the heavy cells executed).
+
+Hunting it directly came back clean: a 45-cell, ~1.5 MB saved-output notebook
+(`FREEZE_BIG_NOTEBOOK=1`), 6x CPU throttle, no run-all, a 100 ms report
+threshold, watched 186 s from load — worst main-thread task 0.12 s, nothing at
+all near t=58 s, no heartbeat gaps. That is the fourth instrumented
+environment (idle-small, run-all-small twice, idle-big) in which the page's
+own JavaScript is quiet at the 58 s mark, and the vendored bundles contain no
+40–55 s timer (the only `interval:` constants are the two exonerated 61 s
+polls, measured at ~1 ms).
+
+Working conclusion: the 58 s-anchored stall is client-environmental — a
+fixed-offset-from-load cost on struggling student machines that a clean
+container cannot reproduce. Candidates that fit the shape (Chromium-skewed,
+fixed offset, machine-dependent): antivirus scanning the ~85 MB of kernel-env
+bytes the browser writes to storage right after boot, memory-pressure/swap on
+loaded laptops, or extension DOM scans. The affected cohort's kernel boots
+ran 10–33 s that evening (5–20x the container), consistent with machines
+under duress. Every stall self-recovered; no funnel or submission was
+affected.
+
+If the beacons persist at a rate that matters, the next lever is to make
+production name the culprit itself: Chromium's JS Self-Profiling API can run a
+low-overhead sampler on the student page and attach the stall window's hot
+frames to a follow-up diagnostic when the freeze watchdog's heartbeat
+resumes — one occurrence would then settle whether it is page code, an
+extension, GC, or IO.
+
 ## If it comes back
 
 `page_unresponsive` beacons carry the page-build version; check byAppVersion
@@ -165,12 +204,14 @@ SMOKE_CHECK=freeze-trace-check.mjs ./run-smoke.sh
 ```
 
 Knobs: `FREEZE_THROTTLE` (default 3x), `FREEZE_WATCH_MS` (default 150 s),
-`FREEZE_RUN_ALL=0` to watch an idle editor, `FREEZE_STALL_MS` for the
+`FREEZE_RUN_ALL=0` to watch an idle editor, `FREEZE_BIG_NOTEBOOK=1` to seed a
+large reopened-lab notebook with saved outputs, `FREEZE_STALL_MS` for the
 long-task report threshold. It prints long tasks with attribution, heartbeat
 gaps, any real watchdog beacons, and the dominant profile stacks inside each
 stall, and saves the raw `.cpuprofile`.
 
-Residual candidates the mitigation does not cover: genuine memory-pressure
-freezes on low-RAM machines with several kernel tabs (the preflight low-memory
-hint and the wasm-crash recovery own that), and any future upstream regression
-of the same shape — which now has a named tracer pointed at it.
+Residual candidates the mitigation does not cover: the 58 s-anchored
+environmental stall above, genuine memory-pressure freezes on low-RAM
+machines with several kernel tabs (the preflight low-memory hint and the
+wasm-crash recovery own that), and any future upstream regression of the same
+shape — which now has a named tracer pointed at it.
