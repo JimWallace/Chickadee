@@ -47,3 +47,16 @@
   lines are several hundred INFO polls and the 500 has scrolled away. Three
   sightings of the result-POST intermittent have been triaged from breadcrumbs
   alone for this reason.
+
+- **The vendored-kernel guard derives its expected kernels from the language
+  descriptors** instead of a literal map. `check-xeus-vendored.sh` carried
+  `{"xpython": "python", "xr": "r", …}` under a comment that admitted the
+  consequence in as many words: a kernel absent from the map shipped completely
+  unguarded, so a partial or botched re-vendor of it passed CI silently. That is
+  the "enumerated rather than discovered, fails open" shape
+  `docs/adding-a-xeus-kernel.md` names, sitting in the script whose whole job is
+  catching a bad vendor. It now reads
+  `editorSupport.notebookKernel(kernelName:)`, so a seventh language with a
+  kernel is checked the day its descriptor names one, an upload-only language
+  contributes nothing, and a vendored kernel no language claims is an error
+  rather than dead weight.
