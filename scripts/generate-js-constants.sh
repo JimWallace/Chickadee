@@ -147,6 +147,70 @@ awk -v repl="$ext_generated" -v begin="$ext_begin" -v end="$ext_end" '
 ' "$work" > "$tmp"
 mv "$tmp" "$work"
 
+# --- The per-student inputs filename, per language --------------------------
+#
+# The browser writes the per-student inputs file into the grading workspace, and
+# the filename it writes must be the one that language's test_runtime reads —
+# `LanguageDescriptor.inputsFileName`. It was hand-written as four string
+# literals, which is how a browser-graded Lua assignment came to write
+# `_ck_inputs.py`: the Lua runtime read `_ck_inputs.lua`, found nothing, and
+# every per-student value silently went missing. Right marks impossible, no
+# error anywhere.
+#
+# The language token is the enum case, which is exactly what the seed endpoint
+# reports, so the JS looks the name up by the value it already has. Every case
+# is emitted, including the upload-only ones that never reach a browser: a
+# generator that decided which languages "matter" would be one more list to keep
+# current.
+names_file="$(mktemp)"
+# POSIX awk only — the CI runner has mawk, which does not take gawk's
+# three-argument match().
+awk '
+  /case \.[a-zA-Z]+:/ {
+    if (match($0, /case \.[a-zA-Z]+:/)) {
+      token = substr($0, RSTART, RLENGTH)
+      sub(/^case \./, "", token)
+      sub(/:$/, "", token)
+      lang = token
+    }
+  }
+  /inputsFileName: "/ {
+    if (lang != "" && match($0, /"[^"]+"/)) {
+      print lang, substr($0, RSTART + 1, RLENGTH - 2)
+      lang = ""
+    }
+  }
+' "$descriptor_src" | LC_ALL=C sort > "$names_file"
+if [ ! -s "$names_file" ]; then
+  echo "generate-js-constants: found no inputsFileName declarations in $descriptor_src" >&2
+  rm -f "$work" "$names_file"; exit 1
+fi
+
+inputs_joined="$(awk -v q="'" 'NR > 1 { out = out ", " } { out = out $1 ": " q $2 q } END { print out }' \
+  "$names_file")"
+rm -f "$names_file"
+inputs_generated="    const INPUTS_FILE_NAMES = { $inputs_joined };"
+inputs_begin="CHICKADEE_GENERATED:INPUTS_FILE_NAMES:BEGIN"
+inputs_end="CHICKADEE_GENERATED:INPUTS_FILE_NAMES:END"
+for marker in "$inputs_begin" "$inputs_end"; do
+  if ! grep -q "$marker" "$work"; then
+    echo "generate-js-constants: missing $marker marker in $js_src." >&2
+    echo "The browser needs the per-student inputs filename for each language, or it" >&2
+    echo "writes a file that language's test_runtime does not read. Add the fenced" >&2
+    echo "block and re-run." >&2
+    rm -f "$work"; exit 1
+  fi
+done
+
+tmp="$(mktemp)"
+awk -v repl="$inputs_generated" -v begin="$inputs_begin" -v end="$inputs_end" '
+  index($0, begin) { print; print repl; skipping = 1; next }
+  index($0, end)   { skipping = 0; print; next }
+  skipping { next }
+  { print }
+' "$work" > "$tmp"
+mv "$tmp" "$work"
+
 if [ "$mode" = "check" ]; then
   if cmp -s "$work" "$js_src"; then
     rm -f "$work"

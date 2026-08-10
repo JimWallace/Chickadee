@@ -58,6 +58,27 @@
     const { personalizationInputsSourceLua } = ChickadeeLuaGradingShared;
     const { personalizationInputsSourceOctave } = ChickadeeOctaveGradingShared;
 
+    // Which renderer writes the per-student inputs file, by language token.
+    //
+    // The RENDERER is genuinely per-language — four different wrappers around
+    // values the server already rendered as literals. The FILENAME is not:
+    // that is `LanguageDescriptor.inputsFileName`, generated below. Keeping the
+    // two apart is the point. They were one hand-written pair of strings, and a
+    // browser-graded Lua assignment wrote `_ck_inputs.py` while the Lua runtime
+    // read `_ck_inputs.lua` — every per-student value silently missing, no
+    // error anywhere.
+    //
+    // Keyed by the four languages with an editor kernel, which are exactly the
+    // languages a browser grades. `BrowserInputsWriterCoverageTests` fails if
+    // that stops being true — a fifth kernel language missing from here would
+    // fall back to Python's writer and reproduce the Lua bug exactly.
+    const INPUTS_WRITERS = {
+        python: personalizationInputsSource,
+        r: personalizationInputsSourceR,
+        lua: personalizationInputsSourceLua,
+        octave: personalizationInputsSourceOctave,
+    };
+
     // Kernelspec names that mark an R notebook. The browser cannot import
     // Swift, so this is a GENERATED copy of AssignmentLanguage.rKernelNames
     // (Sources/Core/AssignmentLanguage.swift), written by
@@ -85,6 +106,17 @@
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:BEGIN
     const GRADED_SCRIPT_EXTENSIONS = ['.cpp', '.h', '.hpp', '.lua', '.m', '.py', '.r', '.rkt'];
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:END
+
+    // The per-student inputs file each language's test_runtime reads. A
+    // GENERATED copy of LanguageDescriptor.inputsFileName, keyed by the enum
+    // case — which is the token the seed endpoint reports, so the lookup needs
+    // no translation. Same rule as above: edit the Swift literal and re-run the
+    // script, never this line. Every language is emitted, including the
+    // upload-only ones a browser never grades; deciding here which languages
+    // "matter" would be one more list to keep current.
+    // CHICKADEE_GENERATED:INPUTS_FILE_NAMES:BEGIN
+    const INPUTS_FILE_NAMES = { cpp: '_ck_inputs.hpp', lua: '_ck_inputs.lua', octave: '_ck_inputs.m', python: '_ck_inputs.py', r: '_ck_inputs.R', racket: '_ck_inputs.rkt' };
+    // CHICKADEE_GENERATED:INPUTS_FILE_NAMES:END
 
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
@@ -356,15 +388,12 @@
         // what the pre-#1271 browser runner did, and it left every
         // personalized R test reading an empty chickadee_inputs().
         if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
-            if (assignmentLanguage === 'r') {
-                files['_ck_inputs.R'] = personalizationInputsSourceR(personalizedInputs);
-            } else if (assignmentLanguage === 'lua') {
-                files['_ck_inputs.lua'] = personalizationInputsSourceLua(personalizedInputs);
-            } else if (assignmentLanguage === 'octave') {
-                files['_ck_inputs.m'] = personalizationInputsSourceOctave(personalizedInputs);
-            } else {
-                files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
-            }
+            // Python on an unrecognised token, unchanged. It is unreachable in a
+            // consistent deployment — this file is served by the same build that
+            // resolved the language — and the coverage test is what keeps a new
+            // kernel language from reaching it.
+            const language = INPUTS_WRITERS[assignmentLanguage] ? assignmentLanguage : 'python';
+            files[INPUTS_FILE_NAMES[language]] = INPUTS_WRITERS[language](personalizedInputs);
         }
 
         // 4. Fetch manifest from server (test.properties.json is not in the zip;
