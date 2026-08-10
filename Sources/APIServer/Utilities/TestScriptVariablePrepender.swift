@@ -58,24 +58,17 @@ enum TestScriptVariablePrepender {
                 .map { "\(octaveIdentifier($0.name)) = \($0.value.octaveLiteral);" }
                 .joined(separator: "\n")
         case .cpp:
-            // A C++ assignment's hand-authored graded scripts are SHELL
-            // scripts (the makefile path), so globals inline as POSIX shell
-            // assignments — scalars only. Containers have no faithful shell
-            // form; they stay reachable through `_ck_inputs.hpp` and family
-            // variables, and the comment says so rather than guessing one.
-            return
-                variables
-                .map { variable -> String in
-                    switch variable.value {
-                    case .int(let i): return "\(variable.name)=\(i)"
-                    case .double(let d): return "\(variable.name)=\(d)"
-                    case .bool(let b): return "\(variable.name)=\(b ? 1 : 0)"
-                    case .string(let s): return "\(variable.name)=\(shellSingleQuoted(s))"
-                    case .null, .array, .object:
-                        return "# \(variable.name): no shell form; read it from C++ instead"
-                    }
-                }
-                .joined(separator: "\n")
+            // Nothing, and the empty answer is the correct one — see
+            // `supportsRawScriptInlining`, which stops this being reached.
+            //
+            // This arm used to emit POSIX SHELL assignments, on the reasoning
+            // that a C++ assignment's graded scripts are `.sh` wrappers. True,
+            // but it made the arm unreachable-or-wrong: a `.sh` file resolves
+            // to no language at all (no language claims that extension), so the
+            // only way in was a hand-added `.cpp`/`.h`/`.hpp` suite entry —
+            // which would have received shell assignments inside a C++ file.
+            // No caller ever passed `.cpp` here.
+            return ""
         case .racket:
             // `(define name value)` — top-level definitions in the generated
             // test's own module. Unlike C++'s shell arm there is no scalar
@@ -96,12 +89,61 @@ enum TestScriptVariablePrepender {
         return decls.isEmpty ? "" : decls + "\n\n"
     }
 
-    /// Marker line written above the prepended assignments in raw
-    /// instructor-uploaded `.py` test scripts.  Used both as a "do not
-    /// edit" cue for the reader and as a sentinel for `stripExistingBlock`
-    /// so re-prepending stays idempotent across saves.
-    static let rawScriptBannerComment =
-        "# === Chickadee inputs: name = value, prepended at save time. Do not edit. ==="
+    /// Whether a hand-written test script in `language` can host an inlined
+    /// variable block at all.
+    ///
+    /// False for C++ alone, and not as a limitation — as a fact about what a
+    /// graded C++ "script" is. C++ test cases are `.sh` wrappers that compile a
+    /// translation unit; a bare `.cpp` in the suite is not something the runner
+    /// executes, so there is no point at which an inlined declaration would be
+    /// read. Inputs reach C++ through `_ck_inputs.hpp` instead.
+    ///
+    /// Exhaustive, so a seventh language answers it rather than inheriting an
+    /// assumption.
+    static func supportsRawScriptInlining(_ language: AssignmentLanguage) -> Bool {
+        switch language {
+        case .python, .r, .lua, .octave, .racket: return true
+        case .cpp: return false
+        }
+    }
+
+    /// The banner text, without its comment marker.  Shared by every
+    /// language's banner so `stripExistingBlock` can recognise all of them.
+    private static let rawScriptBannerBody =
+        " === Chickadee inputs: name = value, prepended at save time. Do not edit. ==="
+
+    /// Marker line written above the prepended assignments in a raw
+    /// instructor-uploaded test script.  Used both as a "do not edit" cue for
+    /// the reader and as a sentinel for `stripExistingBlock` so re-prepending
+    /// stays idempotent across saves.
+    ///
+    /// COMMENTED IN THE SCRIPT'S OWN LANGUAGE.  This was a single `#`-prefixed
+    /// constant for every language, which is a comment in Python, R, Octave and
+    /// shell and a syntax error in the other three: `#` is Lua's length
+    /// operator, starts a Racket reader form, and is a C++ preprocessor
+    /// directive.  A Lua or Racket assignment with global inputs plus a
+    /// hand-written test produced a file the interpreter refused to load — and
+    /// the marker is also the sentinel, so the block could not be stripped and
+    /// re-saving compounded it.
+    ///
+    /// Python, R and Octave keep byte-identical output, so no existing script
+    /// changes.
+    static func rawScriptBannerComment(language: AssignmentLanguage = .python) -> String {
+        language.lineCommentPrefix + rawScriptBannerBody
+    }
+
+    /// Every spelling of the banner, for recognition rather than emission.
+    ///
+    /// Includes the legacy `#` form unconditionally, so a Lua or Racket script
+    /// that already carries a broken block gets it stripped on the next save
+    /// instead of accumulating a second one. That is the only recovery path
+    /// those files have — the block cannot be removed by hand without also
+    /// removing the instructor's own first line if they have already tried.
+    private static var allBannerComments: [String] {
+        var banners = AssignmentLanguage.allCases.map { $0.lineCommentPrefix + rawScriptBannerBody }
+        banners.append("#" + rawScriptBannerBody)
+        return banners
+    }
 
     /// Prepends `variables` to the body of a raw Python test script.
     /// Preserves a leading shebang line on line 1.  Idempotent: any
@@ -123,25 +165,33 @@ enum TestScriptVariablePrepender {
         guard !variables.isEmpty else { return stripped }
 
         let decls = emit(variables, language: language)
+        let banner = rawScriptBannerComment(language: language)
 
-        // Detect a leading shebang so we can keep it on line 1.
-        if stripped.hasPrefix("#!") {
+        // A line that must stay first keeps line 1, and the block goes under it.
+        //
+        // Two of these exist. A shebang is the familiar one. Racket's `#lang`
+        // is the other, and it is a STRONGER constraint than the shebang: a
+        // `#lang` line does not merely prefer to be first, it opens the module
+        // whose body the declarations belong to. `(define …)` written above it
+        // is a read error no comment placement can rescue — so for Racket this
+        // branch is not a nicety, it is the only correct placement.
+        if stripped.hasPrefix("#!") || stripped.hasPrefix("#lang") {
             let lines = stripped.split(
                 separator: "\n",
                 maxSplits: 1,
                 omittingEmptySubsequences: false)
-            let shebang = String(lines.first ?? "")
+            let prologue = String(lines.first ?? "")
             let rest = lines.count > 1 ? String(lines[1]) : ""
             return [
-                shebang,
-                rawScriptBannerComment,
+                prologue,
+                banner,
                 decls,
                 "",
                 rest,
             ].joined(separator: "\n")
         }
         return [
-            rawScriptBannerComment,
+            banner,
             decls,
             "",
             stripped,
@@ -153,12 +203,13 @@ enum TestScriptVariablePrepender {
     /// first blank line that follows.  Returns `body` unchanged when
     /// no banner is present.
     static func stripExistingBlock(_ body: String) -> String {
-        guard body.contains(rawScriptBannerComment) else { return body }
+        let banners = Set(allBannerComments)
+        guard banners.contains(where: body.contains) else { return body }
         var lines =
             body
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
-        guard let startIdx = lines.firstIndex(of: rawScriptBannerComment) else {
+        guard let startIdx = lines.firstIndex(where: { banners.contains($0) }) else {
             return body
         }
         // Walk forward to find the blank line that closes the block.
@@ -189,7 +240,8 @@ enum TestScriptVariablePrepender {
     ) -> String {
         guard
             let language = AssignmentLanguage(
-                scriptExtension: (filename as NSString).pathExtension)
+                scriptExtension: (filename as NSString).pathExtension),
+            supportsRawScriptInlining(language)
         else { return content }
         let sectionID: String?
         if let explicitSectionID {

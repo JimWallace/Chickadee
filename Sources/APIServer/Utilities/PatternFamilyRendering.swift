@@ -71,15 +71,24 @@ func rawScriptOverlayWrites(
         // raw script to clash with a family-generated name), the family
         // version wins — skip the raw-script overlay.
         guard !generatedFilenames.contains(filename) else { continue }
-        // A raw script's extension names its language: `.py` gets Python
-        // literals, `.R`/`.r` gets R ones. Anything else (a shell script, a
-        // data file) has no literal syntax to inline into and is left alone.
-        let scriptLanguage: AssignmentLanguage?
-        switch (filename as NSString).pathExtension.lowercased() {
-        case "py": scriptLanguage = .python
-        case "r": scriptLanguage = .r
-        default: scriptLanguage = nil
-        }
+        // A raw script's extension names its language. Resolved through
+        // `AssignmentLanguage(scriptExtension:)` — the same call the MCP
+        // `author_script` and single-script save paths already used.
+        //
+        // This was a hand-written switch on `py` and `r` with `default: nil`,
+        // written when those were the only two languages. Lua, Octave, Racket
+        // and C++ fell to the default, so a hand-written test in any of them
+        // silently received NO global or section variables through this path
+        // while the other two paths delivered them — the same feature present
+        // or absent depending on which button the instructor pressed.
+        let scriptLanguage: AssignmentLanguage? = {
+            guard
+                let language = AssignmentLanguage(
+                    scriptExtension: (filename as NSString).pathExtension),
+                TestScriptVariablePrepender.supportsRawScriptInlining(language)
+            else { return nil }
+            return language
+        }()
         let sectionVars = s.sectionID.flatMap { sectionVarsByID[$0] } ?? []
         if let provided = s.content {
             // Declarative content from the payload (the PUT /suite channel

@@ -219,6 +219,20 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// one fact is the shape this file exists to stop.
     public let sourceFileExtension: String
 
+    /// How this language opens a single-line comment: `#`, `--`, `;` or `//`.
+    ///
+    /// A FACT, and one that used to be assumed. `TestScriptVariablePrepender`
+    /// wrote a `#`-prefixed banner above the inputs it inlines into a
+    /// hand-written test, in every language — correct for Python, R, Octave and
+    /// shell, and a syntax error in the other three. `#` is Lua's length
+    /// operator, starts a Racket reader form, and is a C++ preprocessor
+    /// directive, so a Lua or Racket assignment with global inputs plus a
+    /// hand-written test produced a file its interpreter refused to load.
+    ///
+    /// Exhaustive like the rest of this type, so a seventh language answers it
+    /// rather than inheriting Python's.
+    public let lineCommentPrefix: String
+
     /// Filename of the per-student grading-inputs file the worker materializes.
     /// Must match byte-for-byte what the language's `test_runtime` reads AND
     /// what the browser's `personalizationInputsSource<X>` writes.
@@ -310,6 +324,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         scriptExtensions: Set<String>,
         generatedScriptExtension: String,
         sourceFileExtension: String,
+        lineCommentPrefix: String,
         inputsFileName: String,
         notebookKernelNames: Set<String>,
         editorSupport: EditorSupport,
@@ -322,6 +337,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.scriptExtensions = scriptExtensions
         self.generatedScriptExtension = generatedScriptExtension
         self.sourceFileExtension = sourceFileExtension
+        self.lineCommentPrefix = lineCommentPrefix
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
         self.editorSupport = editorSupport
@@ -347,6 +363,7 @@ extension AssignmentLanguage {
                 scriptExtensions: ["py"],
                 generatedScriptExtension: "py",
                 sourceFileExtension: "py",
+                lineCommentPrefix: "#",
                 inputsFileName: "_ck_inputs.py",
                 notebookKernelNames: AssignmentLanguage.pythonKernelNames,
                 editorSupport: .notebookKernel(
@@ -372,6 +389,7 @@ extension AssignmentLanguage {
                 scriptExtensions: ["r"],
                 generatedScriptExtension: "R",
                 sourceFileExtension: "R",
+                lineCommentPrefix: "#",
                 inputsFileName: "_ck_inputs.R",
                 notebookKernelNames: AssignmentLanguage.rKernelNames,
                 editorSupport: .notebookKernel(
@@ -395,6 +413,7 @@ extension AssignmentLanguage {
                 scriptExtensions: ["lua"],
                 generatedScriptExtension: "lua",
                 sourceFileExtension: "lua",
+                lineCommentPrefix: "--",
                 inputsFileName: "_ck_inputs.lua",
                 notebookKernelNames: AssignmentLanguage.luaKernelNames,
                 editorSupport: .notebookKernel(
@@ -421,6 +440,7 @@ extension AssignmentLanguage {
                 scriptExtensions: ["m"],
                 generatedScriptExtension: "m",
                 sourceFileExtension: "m",
+                lineCommentPrefix: "#",
                 inputsFileName: "_ck_inputs.m",
                 notebookKernelNames: AssignmentLanguage.octaveKernelNames,
                 editorSupport: .notebookKernel(
@@ -461,6 +481,7 @@ extension AssignmentLanguage {
                 // here — no other language generates `.sh`.
                 generatedScriptExtension: "sh",
                 sourceFileExtension: "cpp",
+                lineCommentPrefix: "//",
                 inputsFileName: "_ck_inputs.hpp",
                 // No notebook workflow, so no kernel aliases to claim — like
                 // Python's empty set, but for the opposite reason (nothing to
@@ -507,6 +528,7 @@ extension AssignmentLanguage {
                 // ordinary shell-script contract. No wrapper, no build step.
                 generatedScriptExtension: "rkt",
                 sourceFileExtension: "rkt",
+                lineCommentPrefix: ";",
                 inputsFileName: "_ck_inputs.rkt",
                 // No kernel exists to claim aliases for. Empty for the same
                 // reason as C++ — nothing to detect — not Python's
