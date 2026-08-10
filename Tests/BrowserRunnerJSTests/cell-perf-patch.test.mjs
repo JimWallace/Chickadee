@@ -160,7 +160,7 @@ test('the coalesced frame callback runs the auto-collapse check too', () => {
 });
 
 test('re-patching is idempotent — the method is never double-wrapped', () => {
-  const { tryPatch, findCodeCellPrototype } = loadPatch();
+  const { tryPatch } = loadPatch();
   const world = makeEditorWorld({ cellCount: 1 });
   assert.equal(tryPatch(world.win, world.raf), true);
   const wrappedOnce = world.proto.updatePromptOverlayIcon;
