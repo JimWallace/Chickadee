@@ -109,6 +109,13 @@ jobs:
           # its two helpers as globals, because every kernel cell is its own
           # chunk and a `local` does not survive one. Both fail silently.
           - { language: lua, mode: eval }
+          # The Octave half. Its boot cell needs the `1;` script guard or its
+          # function definitions never register (a script FILE accepts them
+          # either way, so no local test can show this), and a command-line
+          # function must be called by NAME — `str2func` hands back a BUILT-IN
+          # of the same name, which is how a solution defining `area` would
+          # silently be graded against Octave's plotting function.
+          - { language: octave, mode: eval }
     steps:
       - uses: actions/checkout@v4
 

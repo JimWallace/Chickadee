@@ -1,0 +1,83 @@
+{
+  "_comment": [
+    "The Octave literal contract, asserted by BOTH implementations of it.",
+    "See Tests/Fixtures/r-literal-contract.json for why two exist.",
+    "",
+    "The Octave-specific trap this pins: `[65, \"bc\"]` is not a two-element",
+    "list, it is the CHAR ARRAY \"Abc\" — square brackets concatenate, and a",
+    "number beside a string is coerced to its character. So an array renders",
+    "`[...]` only when every element is a numeric or boolean scalar, and",
+    "everything else — any string, any mixing, any nesting, and the empty array",
+    "— renders as a cell `{...}`. A renderer that reached for `[...]` by default",
+    "would silently hand the solution a string where the author wrote a list.",
+    "",
+    "The second pin is escaping. Control characters take EXACTLY-THREE-DIGIT",
+    "OCTAL, not `\\x`: Octave's `\\x` consumes every hex digit that follows, so",
+    "`\"\\x0abc\"` swallows four characters of payload, while octal stops at three",
+    "by rule.",
+    "",
+    "NaN and the infinities are absent because JSON cannot express them; the",
+    "Swift-only unit tests cover those arms."
+  ],
+  "cases": [
+    { "name": "null at top level", "json": null, "octave": "NA" },
+    { "name": "true", "json": true, "octave": "true" },
+    { "name": "false", "json": false, "octave": "false" },
+    { "name": "zero", "json": 0, "octave": "0" },
+    { "name": "positive int", "json": 42, "octave": "42" },
+    { "name": "negative int", "json": -7, "octave": "-7" },
+    { "name": "double", "json": 2.5, "octave": "2.5" },
+    { "name": "negative double", "json": -0.125, "octave": "-0.125" },
+
+    { "name": "empty string", "json": "", "octave": "\"\"" },
+    { "name": "plain string", "json": "hello", "octave": "\"hello\"" },
+    { "name": "string with quote", "json": "he said \"hi\"", "octave": "\"he said \\\"hi\\\"\"" },
+    { "name": "string with backslash", "json": "a\\b", "octave": "\"a\\\\b\"" },
+    { "name": "string with newline", "json": "a\nb", "octave": "\"a\\nb\"" },
+    { "name": "string with tab", "json": "a\tb", "octave": "\"a\\tb\"" },
+    { "name": "string with control char", "json": "a\u0001b", "octave": "\"a\\001b\"" },
+    { "name": "string with delete char", "json": "a\u007fb", "octave": "\"a\\177b\"" },
+    { "name": "string with unicode", "json": "café", "octave": "\"café\"" },
+
+    {
+      "name": "empty array is a cell, not an empty matrix",
+      "json": [],
+      "octave": "{}"
+    },
+    { "name": "numeric array", "json": [1, 2, 3], "octave": "[1, 2, 3]" },
+    { "name": "boolean array", "json": [true, false], "octave": "[true, false]" },
+    {
+      "name": "null keeps its slot in a numeric array",
+      "json": [60, null, 20],
+      "octave": "[60, NA, 20]"
+    },
+    {
+      "name": "string array is a cell",
+      "json": ["a", "b"],
+      "octave": "{\"a\", \"b\"}"
+    },
+    {
+      "name": "THE TRAP: a number beside a string is a cell, never brackets",
+      "json": [65, "bc"],
+      "octave": "{65, \"bc\"}"
+    },
+    { "name": "nested array is a cell", "json": [[1, 2]], "octave": "{[1, 2]}" },
+
+    { "name": "empty object", "json": {}, "octave": "containers.Map()" },
+    {
+      "name": "object sorted keys",
+      "json": { "b": 2, "a": 1 },
+      "octave": "containers.Map({\"a\", \"b\"}, {1, 2})"
+    },
+    {
+      "name": "object with null value",
+      "json": { "a": null },
+      "octave": "containers.Map({\"a\"}, {NA})"
+    },
+    {
+      "name": "nested object",
+      "json": { "outer": { "inner": [1, 2] } },
+      "octave": "containers.Map({\"outer\"}, {containers.Map({\"inner\"}, {[1, 2]})})"
+    }
+  ]
+}

@@ -351,11 +351,15 @@ jobs:
       - name: Lint first-party frontend JS
         run: scripts/eslint.sh
 
-      # The Lua auto-compute snippets are EXECUTED, not just shape-checked
-      # (lua-eval-execution.test.mjs). That suite skips silently without an
-      # interpreter, so a missing package here would look like a pass.
-      - name: Install Lua
-        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      # The Lua and Octave auto-compute snippets are EXECUTED, not just
+      # shape-checked (*-eval-execution.test.mjs). Those suites skip silently
+      # without an interpreter, so a missing package here would look like a
+      # pass — each asserts its interpreter is present when CI is set.
+      # --no-install-recommends keeps Octave from pulling a desktop stack.
+      - name: Install Lua and Octave
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lua5.4 octave
 
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs

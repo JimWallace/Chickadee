@@ -417,8 +417,18 @@ import Testing
             and every \(language) execution-path assertion skips silently.
             """)
 
-        let installs = lines.filter { $0.contains("--no-install-recommends") }
-        #expect(!installs.isEmpty, "swift-tests.yml has no fallback install to check.")
+        // The fallback installs are the ones the PROBE guards — the `apt-get`
+        // that runs when `command -v` says the image is stale. Identified by
+        // that pairing rather than by `--no-install-recommends` alone, which
+        // also matches unrelated installs: the browser-runner-tests job
+        // installs lua5.4 and octave for the eval-snippet execution suites, on
+        // a plain ubuntu runner with no swift-ci image and no reason to carry
+        // r-base or racket. Matching it here demanded every language be
+        // installed in a job that needs two of them.
+        let installs = lines.filter {
+            $0.contains("--no-install-recommends") && $0.contains("apt-get update")
+        }
+        #expect(!installs.isEmpty, "swift-tests.yml has no probe-guarded fallback install.")
         #expect(
             installs.allSatisfy { $0.contains(adapter.debianPackage) },
             """
