@@ -22,7 +22,8 @@ func renderBoundaryEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableDecls = combinedVariableDecls(
+        sectionVariables: sectionVariables, family: family, language: .python)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     // Per-student inputs (arg refs + the expected ref that resolve to a

@@ -38,7 +38,8 @@ func renderApproximateEquality(
     // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
     let toleranceLiteral = JSONValue.double(tolerance).pythonLiteral
 
-    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableDecls = combinedVariableDecls(
+        sectionVariables: sectionVariables, family: family, language: .python)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     // Per-student inputs (arg refs + the expected ref that resolve to a

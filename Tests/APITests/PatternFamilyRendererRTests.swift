@@ -110,7 +110,7 @@ import Testing
     @Test func pythonOutputIsUnchangedByDefault() throws {
         let fam = family(
             kind: .boundaryEquality, cases: [onlyCase([.int(2)], expected: .int(4))])
-        let defaultScripts = renderPatternFamily(fam)
+        let defaultScripts = renderPatternFamily(fam, language: .python)
         let explicitPython = renderPatternFamily(fam, language: .python)
         #expect(defaultScripts == explicitPython)
 

@@ -25,7 +25,8 @@ func renderReturnTypeCheck(
     // `.variableExists` renderer (PythonScriptHelpers.swift).
     let typeCheckExpr = pythonTypeCheckExpression(typeName: typeName, valueExpr: "result")
 
-    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableDecls = combinedVariableDecls(
+        sectionVariables: sectionVariables, family: family, language: .python)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """

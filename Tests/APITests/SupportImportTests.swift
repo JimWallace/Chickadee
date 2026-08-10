@@ -123,7 +123,7 @@ import Testing
             seedHex: "0005",
             staticVariables: [],
             expressions: [PersonalizationExpression(name: "x", expression: "solution.double(seed)")],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // seed = 5; solution.double(5) = 10.
         #expect(result["x"] == "10")
@@ -158,7 +158,7 @@ import Testing
                 PersonalizationExpression(name: "a", expression: "solution.triple(seed)"),
                 PersonalizationExpression(name: "b", expression: "solution.quad(seed)"),
             ],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // seed = 4 → triple 12, quad 16; the broken middle cell is skipped.
         #expect(result["a"] == "12")
@@ -192,7 +192,7 @@ import Testing
             seedHex: "0007",
             staticVariables: [],
             expressions: [PersonalizationExpression(name: "x", expression: "helpers.double(seed)")],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // seed = 7; double(7) = 14.
         #expect(result["x"] == "14")
@@ -210,7 +210,7 @@ import Testing
                     name: "pick",
                     expression: "open('quotes.txt').read().splitlines()[seed % 3]")
             ],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // seed = 1; index 1 = "beta".
         #expect(result["pick"] == "'beta'")
@@ -227,7 +227,7 @@ import Testing
             seedHex: "0003",
             staticVariables: [],
             expressions: [PersonalizationExpression(name: "y", expression: "working.f(seed)")],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         #expect(ok["y"] == "4")
 
@@ -237,7 +237,7 @@ import Testing
                 seedHex: "0003",
                 staticVariables: [],
                 expressions: [PersonalizationExpression(name: "z", expression: "broken.f(seed)")],
-                supportFilesDirectory: tempDir.path
+                supportFilesDirectory: tempDir.path, language: .python
             )
             Issue.record("Expected nonZeroExit on broken-module reference")
         } catch PersonalizationEvaluatorError.nonZeroExit(_, let stderr) {
@@ -263,7 +263,7 @@ import Testing
                     value: .array([.int(1), .int(2), .int(3)]))
             ],
             expressions: [PersonalizationExpression(name: "first", expression: "helpers[0]")],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // helpers refers to the static list, not the imported module.
         #expect(result["first"] == "1")
@@ -307,7 +307,7 @@ import Testing
                     name: "ciphertext",
                     expression: "cipher.encode(plaintext, shift)"),
             ],
-            supportFilesDirectory: tempDir.path
+            supportFilesDirectory: tempDir.path, language: .python
         )
         // seed = 0x00ff = 255.  255 % 3 = 0 → plaintext = "hello".
         // 255 % 26 = 21.  encode("hello", 21):

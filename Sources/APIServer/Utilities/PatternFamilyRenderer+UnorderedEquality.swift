@@ -21,7 +21,8 @@ func renderUnorderedEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableDecls = combinedVariableDecls(
+        sectionVariables: sectionVariables, family: family, language: .python)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     let preamble = personalizationPreambleForCase(c, perStudentNames: perStudentNames)

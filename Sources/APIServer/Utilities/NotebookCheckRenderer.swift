@@ -15,7 +15,7 @@ import Foundation
 /// pattern-family files ("test_") so a glance at the zip listing tells
 /// you which generator produced the file; the runner doesn't care.
 func generatedCheckFilename(
-    checkID: String, tier: TestTier, language: AssignmentLanguage = .python
+    checkID: String, tier: TestTier, language: AssignmentLanguage
 ) -> String {
     "\(tierFilenamePrefix(tier))check_\(checkID).\(language.generatedScriptExtension)"
 }
@@ -41,7 +41,7 @@ struct GeneratedCheck: Equatable {
 /// when diffing old/new specs so stale sidecars get cleaned up alongside
 /// the test scripts.  Mirrors `patternFamilyAllGeneratedFilenames`.
 func notebookCheckAllGeneratedFilenames(
-    _ check: NotebookCheck, language: AssignmentLanguage = .python
+    _ check: NotebookCheck, language: AssignmentLanguage
 ) -> [String] {
     var out = [generatedCheckFilename(checkID: check.id, tier: check.tier, language: language)]
     // Sidecars are language-neutral data (the expected-values CSV), so the
@@ -56,7 +56,7 @@ func notebookCheckAllGeneratedFilenames(
 /// covering the data-frame kinds, with the rest gated at save time by
 /// `notebookCheckKindSupportsR`.
 func renderNotebookCheck(
-    _ check: NotebookCheck, language: AssignmentLanguage = .python
+    _ check: NotebookCheck, language: AssignmentLanguage
 ) -> GeneratedCheck {
     let hash = notebookCheckSpecHash(check)
     let handler = notebookCheckKindHandler(for: check.kind)

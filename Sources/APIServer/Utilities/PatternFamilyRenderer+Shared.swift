@@ -120,11 +120,19 @@ func callContext(for family: PatternFamily, case c: PatternCase) -> CallContext 
 /// variable with the same name shadows a section variable, which shadows
 /// a global — that's the intended precedence ("family > section > global").
 /// Empty string when no variables.
+///
+/// Takes the language explicitly. It used to inherit `emit`'s `.python`
+/// default, which was true of every caller — the eight files below are the
+/// Python arm of `renderCase` — but true by circumstance rather than by
+/// statement, and there is nothing in the signature that would have stopped a
+/// non-Python renderer from calling it and silently getting Python
+/// declarations.
 func combinedVariableDecls(
     sectionVariables: [FamilyVariable],
-    family: PatternFamily
+    family: PatternFamily,
+    language: AssignmentLanguage
 ) -> String {
-    TestScriptVariablePrepender.emit(sectionVariables + family.variables)
+    TestScriptVariablePrepender.emit(sectionVariables + family.variables, language: language)
 }
 
 /// The two-line header every generated case starts with:

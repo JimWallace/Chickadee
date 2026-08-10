@@ -51,7 +51,7 @@ func renderPatternFamily(
     sectionVariables: [FamilyVariable] = [],
     globalVariables: [FamilyVariable] = [],
     perStudentNames: Set<String> = [],
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) -> [GeneratedScript] {
     // Pre-combine globals and section vars into a single "scope" list so the
     // existing render-* helpers stay parameterised on a single prepend list.
@@ -73,7 +73,7 @@ func renderPatternFamily(
 /// Used when diffing old/new specs so we can detect stale files that need
 /// deleting, even for cases that were previously disabled.
 func patternFamilyAllGeneratedFilenames(
-    _ family: PatternFamily, language: AssignmentLanguage = .python
+    _ family: PatternFamily, language: AssignmentLanguage
 ) -> [String] {
     var names = family.cases.map { c in
         generatedScriptFilename(
@@ -123,7 +123,7 @@ func existenceGuard(
     for family: PatternFamily,
     sectionVariables: [FamilyVariable] = [],
     globalVariables: [FamilyVariable] = [],
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) -> GeneratedScript? {
     guard patternKindHandler(for: family.kind).requiresFunctionName,
         family.cases.contains(where: \.enabled)
@@ -203,7 +203,7 @@ private func pythonExistenceGuardSource(
 /// `.python`, so every existing filename (and therefore every `spec_hash` and
 /// `TestSetupCache` key) is unchanged.
 func generatedScriptFilename(
-    familyID: String, caseKey: String, tier: TestTier, language: AssignmentLanguage = .python
+    familyID: String, caseKey: String, tier: TestTier, language: AssignmentLanguage
 ) -> String {
     "\(tierFilenamePrefix(tier))test_\(familyID)_\(caseKey).\(language.generatedScriptExtension)"
 }
@@ -238,7 +238,7 @@ private func renderCase(
     sectionVariables: [FamilyVariable],
     specHash: String,
     perStudentNames: Set<String>,
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) -> GeneratedScript {
     // Python routes through the per-kind handlers (bytes are pinned by
     // spec_hash / TestSetupCache and must never change); R has its own

@@ -112,7 +112,7 @@ import Vapor
             #expect(existingFamilies.count == 1, "family must survive into the existing manifest")
 
             // Nuke generated files from the zip (simulating the full zip rewrite).
-            for f in patternFamilyAllGeneratedFilenames(existingFamilies[0]) {
+            for f in patternFamilyAllGeneratedFilenames(existingFamilies[0], language: .python) {
                 try? removeScriptFromZip(zipPath: fixture.setup.zipPath, filename: f)
             }
             fixture.setup.manifest = try makeWorkerManifestJSON(

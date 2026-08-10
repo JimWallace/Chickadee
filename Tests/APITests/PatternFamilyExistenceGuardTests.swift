@@ -20,7 +20,7 @@ import Vapor
 
     @Test func existenceGuard_isNilForVariableEqualityAndEmptyFamilies() throws {
         // variableEquality self-guards each case; no separate guard.
-        #expect(existenceGuard(for: pfNotebookVariablesFamily()) == nil)
+        #expect(existenceGuard(for: pfNotebookVariablesFamily(), language: .python) == nil)
 
         // No enabled cases → nothing to gate → nil.
         let allDisabled = PatternFamily(
@@ -31,11 +31,11 @@ import Vapor
                     key: "01", label: "a", args: [.int(1)], expected: .int(1), enabled: false)
             ]
         )
-        #expect(existenceGuard(for: allDisabled) == nil)
+        #expect(existenceGuard(for: allDisabled, language: .python) == nil)
     }
 
     @Test func existenceGuard_isZeroPointAndCarriesFamilyDefaultTier() throws {
-        let g = try #require(existenceGuard(for: pfBMIFamily()))
+        let g = try #require(existenceGuard(for: pfBMIFamily(), language: .python))
         #expect(g.points == 0, "the guard gates, it doesn't grade")
         #expect(g.caseKey == patternExistenceGuardCaseKey)
         #expect(g.tier == .pub)
@@ -48,7 +48,7 @@ import Vapor
 
     @Test func existenceGuard_followsFamilyDefaultTierIntoFilename() throws {
         let secretFamily = pfBMIFamily(tier: .secret)
-        let g = try #require(existenceGuard(for: secretFamily))
+        let g = try #require(existenceGuard(for: secretFamily, language: .python))
         #expect(g.tier == .secret)
         #expect(g.filename == "secrettest_bmi_category_exists.py")
     }
@@ -56,12 +56,12 @@ import Vapor
     // MARK: - Generated guard actually grades
 
     @Test func existenceGuard_sourceIsValidPython() throws {
-        let g = try #require(existenceGuard(for: pfBMIFamily()))
+        let g = try #require(existenceGuard(for: pfBMIFamily(), language: .python))
         try pfAssertValidPythonSyntax(g.source, label: "existence guard")
     }
 
     @Test func existenceGuard_passesWhenDefinedFailsOtherwise() throws {
-        let body = try #require(existenceGuard(for: pfBMIFamily())).source
+        let body = try #require(existenceGuard(for: pfBMIFamily(), language: .python)).source
         // Defined + callable → pass.
         #expect(
             try pfRunGeneratedCase(

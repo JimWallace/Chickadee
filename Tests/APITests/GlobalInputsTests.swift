@@ -20,12 +20,12 @@ import Testing
     // MARK: - TestScriptVariablePrepender
 
     @Test func prepender_emit_emptyListYieldsEmptyString() {
-        #expect(TestScriptVariablePrepender.emit([]).isEmpty)
+        #expect(TestScriptVariablePrepender.emit([], language: .python).isEmpty)
     }
 
     @Test func prepender_emit_singleVariable() {
         let vars = [FamilyVariable(name: "x", value: .int(12))]
-        #expect(TestScriptVariablePrepender.emit(vars) == "x = 12")
+        #expect(TestScriptVariablePrepender.emit(vars, language: .python) == "x = 12")
     }
 
     @Test func prepender_emit_multipleVariablesInOrder() {
@@ -33,34 +33,34 @@ import Testing
             FamilyVariable(name: "x", value: .int(1)),
             FamilyVariable(name: "y", value: .string("hi")),
         ]
-        #expect(TestScriptVariablePrepender.emit(vars) == "x = 1\ny = \"hi\"")
+        #expect(TestScriptVariablePrepender.emit(vars, language: .python) == "x = 1\ny = \"hi\"")
     }
 
-    @Test func prepender_emitBlock_emptyYieldsEmpty() {
-        #expect(TestScriptVariablePrepender.emitBlock([]).isEmpty)
+    @Test func prepender_emit_emptyYieldsEmpty() {
+        #expect(TestScriptVariablePrepender.emit([], language: .python).isEmpty)
     }
 
-    @Test func prepender_emitBlock_addsTrailingBlankLine() {
+    @Test func prepender_emit_rendersDeclarations() {
         let vars = [FamilyVariable(name: "x", value: .int(1))]
-        #expect(TestScriptVariablePrepender.emitBlock(vars) == "x = 1\n\n")
+        #expect(TestScriptVariablePrepender.emit(vars, language: .python) == "x = 1")
     }
 
     @Test func prepender_prependToRawScript_emptyVariablesReturnsBodyUnchanged() {
         let body = "import os\nprint('hi')\n"
-        #expect(TestScriptVariablePrepender.prependToRawScript(body, variables: []) == body)
+        #expect(TestScriptVariablePrepender.prependToRawScript(body, variables: [], language: .python) == body)
     }
 
     @Test func prepender_prependToRawScript_addsBannerAndDecls() {
         let body = "import os\nprint('hi')\n"
         let result = TestScriptVariablePrepender.prependToRawScript(
             body,
-            variables: [FamilyVariable(name: "x", value: .int(7))]
+            variables: [FamilyVariable(name: "x", value: .int(7))], language: .python
         )
-        #expect(result.contains(TestScriptVariablePrepender.rawScriptBannerComment()))
+        #expect(result.contains(TestScriptVariablePrepender.rawScriptBannerComment(language: .python)))
         #expect(result.contains("x = 7"))
         #expect(result.contains("import os"))
         // Banner appears before the original body.
-        if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment()),
+        if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment(language: .python)),
             let importRange = result.range(of: "import os")
         {
             #expect(bannerRange.upperBound < importRange.lowerBound)
@@ -73,7 +73,7 @@ import Testing
         let body = "#!/usr/bin/env python3\nimport os\n"
         let result = TestScriptVariablePrepender.prependToRawScript(
             body,
-            variables: [FamilyVariable(name: "x", value: .int(1))]
+            variables: [FamilyVariable(name: "x", value: .int(1))], language: .python
         )
         // Shebang must stay on line 1.
         let firstLine = result.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
@@ -87,18 +87,18 @@ import Testing
         let body = "import os\nprint('hi')\n"
         let firstPass = TestScriptVariablePrepender.prependToRawScript(
             body,
-            variables: [FamilyVariable(name: "x", value: .int(1))]
+            variables: [FamilyVariable(name: "x", value: .int(1))], language: .python
         )
         let secondPass = TestScriptVariablePrepender.prependToRawScript(
             firstPass,
-            variables: [FamilyVariable(name: "x", value: .int(2))]
+            variables: [FamilyVariable(name: "x", value: .int(2))], language: .python
         )
         // Old value gone, new value present, banner appears once.
         #expect(secondPass.contains("x = 1") == false)
         #expect(secondPass.contains("x = 2"))
         let bannerOccurrences =
             secondPass.components(
-                separatedBy: TestScriptVariablePrepender.rawScriptBannerComment()
+                separatedBy: TestScriptVariablePrepender.rawScriptBannerComment(language: .python)
             ).count - 1
         #expect(bannerOccurrences == 1, "banner should appear exactly once after re-prepending")
     }
@@ -107,14 +107,14 @@ import Testing
         let body = "import os\nprint('hi')\n"
         let prepended = TestScriptVariablePrepender.prependToRawScript(
             body,
-            variables: [FamilyVariable(name: "x", value: .int(1))]
+            variables: [FamilyVariable(name: "x", value: .int(1))], language: .python
         )
         // Caller decides there are no inputs anymore — block should be removed.
         let stripped = TestScriptVariablePrepender.prependToRawScript(
             prepended,
-            variables: []
+            variables: [], language: .python
         )
-        #expect(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment()) == false)
+        #expect(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment(language: .python)) == false)
         #expect(stripped.contains("x = 1") == false)
         #expect(stripped.contains("import os"))
     }

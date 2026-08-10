@@ -199,7 +199,7 @@ func pfDecodeManifest(_ json: String) throws -> TestProperties {
 /// so order/diff assertions can reference the guard without hard-coding the
 /// `_exists` convention in every test.
 func pfGuardFilename(_ familyID: String, tier: TestTier = .pub) -> String {
-    generatedScriptFilename(familyID: familyID, caseKey: patternExistenceGuardCaseKey, tier: tier)
+    generatedScriptFilename(familyID: familyID, caseKey: patternExistenceGuardCaseKey, tier: tier, language: .python)
 }
 
 func pfAssertValidPythonSyntax(_ source: String, label: String) throws {

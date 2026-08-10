@@ -24,14 +24,19 @@ import Testing
         #expect(bundle.script.source.contains("is.data.frame(actual)"))
     }
 
-    /// Python output must be untouched — its bytes feed spec_hash /
-    /// TestSetupCache keys.
-    @Test func pythonOutputIsUnchangedByDefault() {
+    /// Python still renders Python.
+    ///
+    /// This used to assert `renderNotebookCheck(check)` equalled
+    /// `renderNotebookCheck(check, language: .python)` — that the defaulted
+    /// call and the explicit one agreed. There is no defaulted call any more:
+    /// the `= .python` default is gone from every renderer, so the comparison
+    /// would now be a call against itself. What is left is what the assertion
+    /// was really for.
+    @Test func pythonRendersItsOwnFilenameAndRuntime() {
         let check = NotebookCheck(
             id: "shape1", kind: .dataFrameShape, tier: .pub, points: 1,
             variable: "patients", expectedRows: 3, expectedCols: 2)
-        #expect(renderNotebookCheck(check) == renderNotebookCheck(check, language: .python))
-        let py = renderNotebookCheck(check)
+        let py = renderNotebookCheck(check, language: .python)
         #expect(py.script.filename == "publiccheck_shape1.py")
         #expect(py.script.source.contains("student_main_state()"))
     }
@@ -69,8 +74,8 @@ import Testing
         let check = NotebookCheck(
             id: "k1", kind: kind, tier: .pub, points: 1, variable: "x",
             expectedArray: [1.0, 2.0], minFigures: 2, expectedArity: 1, expectedType: "numeric")
-        #expect(renderNotebookCheck(check) == renderNotebookCheck(check, language: .python))
-        #expect(renderNotebookCheck(check).script.filename == "publiccheck_k1.py")
+        // Was a defaulted-vs-explicit comparison; see the note above.
+        #expect(renderNotebookCheck(check, language: .python).script.filename == "publiccheck_k1.py")
         #expect(renderNotebookCheck(check, language: .r).script.filename == "publiccheck_k1.R")
     }
 

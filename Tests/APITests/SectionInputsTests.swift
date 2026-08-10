@@ -97,7 +97,7 @@ import Testing
             expressions: [
                 // Imagine this came from a section's expressions list.
                 PersonalizationExpression(name: "pick", expression: "quotes[seed % len(quotes)]")
-            ]
+            ], language: .python
         )
         // seed = 0x0010 = 16; 16 % 3 = 1; quotes[1] = "beta".
         #expect(result["pick"] == "'beta'")

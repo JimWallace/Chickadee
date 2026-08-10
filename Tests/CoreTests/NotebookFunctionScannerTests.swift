@@ -9,6 +9,18 @@ import Testing
 
 struct NotebookFunctionScannerTests {
 
+    /// The Python function scan, as a flat `[NotebookFunctionInfo]`.
+    ///
+    /// These assertions used to call `scanNotebookForFunctions(_:)`, a public
+    /// Python-only entry point with no way to be told a language and no
+    /// production caller left — this suite was the only thing holding it alive.
+    /// It is gone; the behaviour it covered (parameter capture, type hints,
+    /// docstrings, shadowing) belongs to the scan that actually runs, so these
+    /// tests exercise that one through this shim.
+    private func scanFunctions(_ notebookData: Data) -> [NotebookFunctionInfo] {
+        scanNotebookForSectionsAndFunctions(notebookData, parsing: .python).functions.map(\.info)
+    }
+
     // MARK: - Helpers
 
     /// Builds a minimal .ipynb JSON with a single code cell.
@@ -69,16 +81,16 @@ struct NotebookFunctionScannerTests {
             """
             {"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}
             """.utf8)
-        #expect(scanNotebookForFunctions(nb).isEmpty)
+        #expect(scanFunctions(nb).isEmpty)
     }
 
     @Test func invalidJSON() {
-        #expect(scanNotebookForFunctions(Data("not json".utf8)).isEmpty)
+        #expect(scanFunctions(Data("not json".utf8)).isEmpty)
     }
 
     @Test func singleSimpleFunction() {
         let nb = notebook(code: "def foo(a, b):\n    return a + b\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].name == "foo")
         #expect(fns[0].paramNames == ["a", "b"])
@@ -88,7 +100,7 @@ struct NotebookFunctionScannerTests {
 
     @Test func functionWithTypeHints() {
         let nb = notebook(code: "def bar(x: int, y: str) -> bool:\n    return True\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].name == "bar")
         #expect(fns[0].paramNames == ["x", "y"])
@@ -101,7 +113,7 @@ struct NotebookFunctionScannerTests {
 
     @Test func functionWithReturnTypeHintOnly() {
         let nb = notebook(code: "def baz(n) -> list:\n    return []\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].hasTypeHints)
         #expect(fns[0].paramTypes == [nil])
@@ -111,7 +123,7 @@ struct NotebookFunctionScannerTests {
     @Test func functionWithMixedAnnotations() {
         // Partial type hints: `a: int` and `b` untyped, default on `b`.
         let nb = notebook(code: "def mix(a: int, b = 5) -> float:\n    return float(a + b)\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramNames == ["a", "b"])
         #expect(fns[0].paramTypes == ["int", nil])
@@ -121,7 +133,7 @@ struct NotebookFunctionScannerTests {
     @Test func functionWithDefaultKeepsType() {
         // `x: int = 0` — type must survive even when a default value is present.
         let nb = notebook(code: "def with_default(x: int = 0) -> int:\n    return x\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns[0].paramTypes == ["int"])
         #expect(fns[0].returnType == "int")
     }
@@ -131,7 +143,7 @@ struct NotebookFunctionScannerTests {
         // can mark defaulted columns as optional (empty cell ⇒ use Python
         // default at test time).
         let nb = notebook(code: "def check(dob: str, currentDate: str = \"20260301\") -> bool:\n    return True\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramHasDefault == [false, true])
         #expect(fns[0].paramTypes == ["str", "str"])
@@ -139,14 +151,14 @@ struct NotebookFunctionScannerTests {
 
     @Test func paramHasDefaultEmptyWhenNoParams() {
         let nb = notebook(code: "def nothing():\n    return 1\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns[0].paramHasDefault.isEmpty)
     }
 
     @Test func functionWithoutAnyAnnotations() {
         // Baseline: no hints at all → paramTypes is [nil] per name, returnType nil.
         let nb = notebook(code: "def plain(a, b):\n    return a + b\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns[0].paramTypes == [nil, nil])
         #expect(fns[0].returnType == nil)
         #expect(!fns[0].hasTypeHints)
@@ -154,14 +166,14 @@ struct NotebookFunctionScannerTests {
 
     @Test func functionWithDocstring() {
         let nb = notebook(code: "def greet(name):\n    \"\"\"Greet someone.\"\"\"\n    return 'Hi ' + name\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].hasDocstring)
     }
 
     @Test func privateFunctionExcluded() {
         let nb = notebook(code: "def _helper(x):\n    pass\ndef public_fn(x):\n    pass\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].name == "public_fn")
     }
@@ -208,7 +220,7 @@ struct NotebookFunctionScannerTests {
                 "def tax(price: float) -> float:\n    return price * 1.13\n"
                 + "def tax(price: float, exempt: bool, extra: bool) -> float:\n    return price\n"
         )
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 2)
         #expect(fns[0].name == "tax" && fns[0].isShadowed)
         #expect(fns[1].name == "tax" && !fns[1].isShadowed)
@@ -220,35 +232,35 @@ struct NotebookFunctionScannerTests {
     @Test func selfAndClsExcluded() {
         let nb = notebook(code: "def method(self, x, y):\n    pass\n")
         // Top-level def with self — unusual but the scanner just strips self
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramNames == ["x", "y"])
     }
 
     @Test func noParameters() {
         let nb = notebook(code: "def get_count():\n    return 0\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramNames.isEmpty)
     }
 
     @Test func varargsExcluded() {
         let nb = notebook(code: "def variadic(a, *args, **kwargs):\n    pass\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramNames == ["a"])
     }
 
     @Test func defaultValueStripped() {
         let nb = notebook(code: "def increment(n, step=1):\n    return n + step\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].paramNames == ["n", "step"])
     }
 
     @Test func multipleFunctionsInOneCell() {
         let nb = notebook(code: "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 2)
         #expect(fns[0].name == "add")
         #expect(fns[1].name == "subtract")
@@ -260,7 +272,7 @@ struct NotebookFunctionScannerTests {
             "x = 1  # not a function",
             "def bar(y):\n    return y\n",
         ])
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.count == 2)
         #expect(fns[0].name == "foo")
         #expect(fns[1].name == "bar")
@@ -269,7 +281,7 @@ struct NotebookFunctionScannerTests {
     @Test func indentedFunctionNotTopLevel() {
         // Class methods or nested functions — indented, not top-level.
         let nb = notebook(code: "class MyClass:\n    def method(self, x):\n        pass\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.isEmpty, "Indented method should not be treated as top-level")
     }
 
@@ -288,12 +300,12 @@ struct NotebookFunctionScannerTests {
               "nbformat_minor": 5
             }
             """
-        #expect(scanNotebookForFunctions(Data(json.utf8)).isEmpty)
+        #expect(scanFunctions(Data(json.utf8)).isEmpty)
     }
 
     @Test func paramCount() {
         let nb = notebook(code: "def triple(a, b, c):\n    pass\n")
-        let fns = scanNotebookForFunctions(nb)
+        let fns = scanFunctions(nb)
         #expect(fns.first?.paramCount == 3)
     }
 
@@ -313,7 +325,7 @@ struct NotebookFunctionScannerTests {
               "nbformat_minor": 5
             }
             """
-        let fns = scanNotebookForFunctions(Data(json.utf8))
+        let fns = scanFunctions(Data(json.utf8))
         #expect(fns.count == 1)
         #expect(fns[0].name == "greet")
     }
@@ -355,7 +367,7 @@ struct NotebookFunctionScannerTests {
             ("md", "## Challenge"),
             ("code", "def bar(b):\n    return b\n\ndef baz(c):\n    return c\n"),
         ])
-        let r = scanNotebookForSectionsAndFunctions(nb)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
         #expect(r.sectionNames == ["Warm Up", "Challenge"])
         #expect(r.functions.map(\.info.name) == ["foo", "bar", "baz"])
         #expect(r.functions.map(\.sectionName) == ["Warm Up", "Challenge", "Challenge"])
@@ -367,7 +379,7 @@ struct NotebookFunctionScannerTests {
             ("md", "## Later Section"),
             ("code", "def after_section():\n    pass\n"),
         ])
-        let r = scanNotebookForSectionsAndFunctions(nb)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
         #expect(r.sectionNames == ["Later Section"])
         #expect(r.functions.count == 2)
         #expect(r.functions[0].sectionName == nil)
@@ -381,7 +393,7 @@ struct NotebookFunctionScannerTests {
             ("md", "## Shared"),  // same title used again later — dedupes
             ("code", "def b():\n    pass\n"),
         ])
-        let r = scanNotebookForSectionsAndFunctions(nb)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
         #expect(r.sectionNames == ["Shared"])
         #expect(r.functions.map(\.sectionName) == ["Shared", "Shared"])
     }
@@ -398,7 +410,7 @@ struct NotebookFunctionScannerTests {
             ("md", "## Real Section"),
             ("code", "def actual():\n    pass\n"),
         ])
-        let r = scanNotebookForSectionsAndFunctions(nb)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
         #expect(r.sectionNames == ["Real Section"])
         // First two functions appear before any `## ` — no section.
         #expect(r.functions.map(\.sectionName) == [nil, nil, "Real Section"])
@@ -424,7 +436,7 @@ struct NotebookFunctionScannerTests {
             ("code", "def averageAge(patients):\n    pass\n"),
             ("code", "def countOverWeightPatients(patients):\n    pass\n"),
         ])
-        let r = scanNotebookForSectionsAndFunctions(nb)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
         #expect(
             r.sectionNames == [
                 "Warm Up: Patient Record as Dictionary",

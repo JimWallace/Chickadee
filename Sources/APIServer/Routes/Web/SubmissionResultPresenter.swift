@@ -526,7 +526,9 @@ func buildHintByFilename(_ props: TestProperties) -> [String: String] {
         }
     }
     for chk in props.notebookChecks {
-        record(generatedCheckFilename(checkID: chk.id, tier: chk.tier), chk.hint)
+        record(
+            generatedCheckFilename(checkID: chk.id, tier: chk.tier, language: language),
+            chk.hint)
     }
     return map
 }

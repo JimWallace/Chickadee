@@ -60,8 +60,8 @@ import Vapor
 
     @Test func rendererIsDeterministic() throws {
         let family = pfBMIFamily()
-        let first = renderPatternFamily(family)
-        let second = renderPatternFamily(family)
+        let first = renderPatternFamily(family, language: .python)
+        let second = renderPatternFamily(family, language: .python)
         #expect(first == second, "Same input must produce byte-identical output")
     }
 
@@ -77,13 +77,13 @@ import Vapor
             functionName: "bmi_category", paramNames: ["bmi"],
             cases: cases
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         #expect(rendered.count == 2)
         #expect(rendered.map(\.caseKey).contains(cases[1].key) == false)
     }
 
     @Test func rendererFilenameFormat() throws {
-        let rendered = renderPatternFamily(pfBMIFamily())
+        let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         #expect(rendered[0].filename == "publictest_bmi_category_01.py")
         #expect(rendered[1].filename == "publictest_bmi_category_02.py")
         #expect(rendered[2].filename == "publictest_bmi_category_03.py")
@@ -99,13 +99,13 @@ import Vapor
                 PatternCase(key: "b", label: "secret", args: [.int(2)], expected: .int(2), tier: .secret),
             ]
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         #expect(rendered[0].filename == "publictest_mix_a.py")
         #expect(rendered[1].filename == "secrettest_mix_b.py")
     }
 
     @Test func rendererSourceContainsRichFeedbackElements() throws {
-        let rendered = renderPatternFamily(pfBMIFamily())
+        let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         let src = rendered[0].source
         // Test: label first so test_runtime's label picker finds it.
         #expect(src.hasPrefix("# Test: BMI < 18.5 is underweight\n"))
@@ -142,7 +142,7 @@ import Vapor
                     hint: "override hint"),
             ]
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         #expect(!rendered[0].source.contains("Hint:"))
         #expect(!rendered[0].source.contains("default hint"))
         #expect(!rendered[1].source.contains("Hint:"))
@@ -150,7 +150,7 @@ import Vapor
     }
 
     @Test func rendererDisplayNameMatchesCaseLabel() throws {
-        let rendered = renderPatternFamily(pfBMIFamily())
+        let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         #expect(rendered[0].displayName == "BMI < 18.5 is underweight")
     }
 
@@ -167,7 +167,7 @@ import Vapor
     @Test func renderedSourceIsValidPythonSyntax() throws {
         // ast.parse rejects syntactically invalid Python, catches
         // quote-escape mishaps in the renderer.
-        let rendered = renderPatternFamily(pfBMIFamily())
+        let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         for generated in rendered {
             try pfAssertValidPythonSyntax(generated.source, label: generated.filename)
         }
@@ -196,7 +196,7 @@ import Vapor
                 )
             ]
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         #expect(rendered.count == 1)
         let src = rendered[0].source
 
@@ -228,7 +228,7 @@ import Vapor
                 )
             ]
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         let src = rendered[0].source
         #expect(
             src.contains("three_args(a, c=c)"),
@@ -242,7 +242,7 @@ import Vapor
     /// renderer must treat that as "all args provided" — same output as
     /// before.  No behaviour change for existing families.
     @Test func renderer_emptyArgsProvided_behavesAsAllProvided() throws {
-        let rendered = renderPatternFamily(pfBMIFamily())
+        let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         let src = rendered[0].source
         #expect(src.contains("bmi = 18.49"))
         #expect(src.contains("bmi_category(bmi)"))
@@ -273,7 +273,7 @@ import Vapor
             ],
             variables: [FamilyVariable(name: "patients", value: patients)]
         )
-        let rendered = renderPatternFamily(family)
+        let rendered = renderPatternFamily(family, language: .python)
         #expect(rendered.count == 1)
         let src = rendered[0].source
 
@@ -451,7 +451,7 @@ import Vapor
 
     @Test func rendererEmitsPerStudentPreambleAndExpectedRef() throws {
         let scripts = renderPatternFamily(
-            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"], language: .python)
         let src = try #require(scripts.first).source
         // The full generated script (preamble + body) must be valid Python.
         try pfAssertValidPythonSyntax(src, label: "adults_01")
@@ -480,7 +480,7 @@ import Vapor
     /// drift on either side is caught here.
     @Test func perStudentScriptGradesAgainstCkInputsAtRuntime() throws {
         let scripts = renderPatternFamily(
-            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"], language: .python)
         let body = try #require(scripts.first).source
 
         // Byte-for-byte the shape `RunnerDaemon+JobProcessing` emits: a `_ck`
@@ -506,7 +506,7 @@ import Vapor
     @Test func rendererOmitsPreambleWhenNoPerStudentRefs() throws {
         // A normal family renders unchanged even when the assignment declares
         // per-student names the family doesn't reference.
-        let scripts = renderPatternFamily(pfBMIFamily(), perStudentNames: ["patients"])
+        let scripts = renderPatternFamily(pfBMIFamily(), perStudentNames: ["patients"], language: .python)
         let src = try #require(scripts.first).source
         #expect(!src.contains("_ck_inputs.py"))
         #expect(!src.contains("Personalization input"))
@@ -573,7 +573,7 @@ import Vapor
     /// answer.
     @Test func variableEqualityEmitsPerStudentPreambleAndExpectedRef() throws {
         let scripts = renderPatternFamily(
-            perStudentVariableFamily(), perStudentNames: ["sd_expected"])
+            perStudentVariableFamily(), perStudentNames: ["sd_expected"], language: .python)
         let src = try #require(scripts.first).source
         try pfAssertValidPythonSyntax(src, label: "sd_01")
         #expect(src.contains("_ck_inputs.py"))
@@ -598,9 +598,9 @@ import Vapor
         // Rendered with and without a per-student name in scope: neither case
         // references one, so both must be identical, and neither may carry a
         // preamble.
-        let bare = try #require(renderPatternFamily(family).first).source
+        let bare = try #require(renderPatternFamily(family, language: .python).first).source
         let withNames = try #require(
-            renderPatternFamily(family, perStudentNames: ["unrelated"]).first
+            renderPatternFamily(family, perStudentNames: ["unrelated"], language: .python).first
         ).source
         #expect(bare == withNames)
         #expect(!bare.contains("_ck_inputs.py"))
@@ -669,7 +669,7 @@ import Vapor
 
     @Test func approximateRendererEmitsPerStudentPreambleAndExpectedRef() throws {
         let scripts = renderPatternFamily(
-            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"], language: .python)
         let src = try #require(scripts.first).source
         try pfAssertValidPythonSyntax(src, label: "avg_01")
         #expect(src.contains("_ck_inputs.py"))
@@ -688,14 +688,15 @@ import Vapor
         let family = PatternFamily(
             id: "sq", name: "Square", kind: .approximateEquality,
             functionName: "square", paramNames: ["x"], cases: [c])
-        let src = try #require(renderPatternFamily(family, perStudentNames: ["patients"]).first).source
+        let src = try #require(renderPatternFamily(family, perStudentNames: ["patients"], language: .python).first)
+            .source
         #expect(!src.contains("_ck_inputs.py"))
         #expect(src.contains("expected = 4.0"))
     }
 
     @Test func perStudentApproxGradesAgainstCkInputsAtRuntime() throws {
         let scripts = renderPatternFamily(
-            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"], language: .python)
         let body = try #require(scripts.first).source
         let ckInputs = """
             # Auto-generated per-student grading inputs (issue #461). Do not edit.
@@ -732,7 +733,8 @@ import Vapor
     }
 
     @Test func unorderedRendererEmitsCanonicalComparison() throws {
-        let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: [], language: .python).first)
+            .source
         try pfAssertValidPythonSyntax(src, label: "pick_01")
         #expect(src.contains("_ck_canon"))
         #expect(src.contains("sort_keys=True"))
@@ -740,7 +742,8 @@ import Vapor
     }
 
     @Test func unorderedGradesOrderInsensitivelyAtRuntime() throws {
-        let body = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        let body = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: [], language: .python).first)
+            .source
         // Same elements, original (different) order → pass: order is ignored.
         let reordered = "def pick(xs):\n    return list(xs)"
         let sortedFn = "def pick(xs):\n    return sorted(xs)"
@@ -754,7 +757,7 @@ import Vapor
 
     @Test func unorderedPerStudentGradesAtRuntime() throws {
         let scripts = renderPatternFamily(
-            unorderedPerStudentFamily(), perStudentNames: ["patients", "matches"])
+            unorderedPerStudentFamily(), perStudentNames: ["patients", "matches"], language: .python)
         let body = try #require(scripts.first).source
         // `matches` lists the two 'A' patients in a different order than the
         // student's filter will produce — order-insensitive compare → pass.

@@ -19,7 +19,7 @@ import Vapor
     // MARK: - approximateEquality kind
 
     @Test func renderer_approxEquality_emitsToleranceComparison() throws {
-        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.05))
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.05), language: .python)
         #expect(rendered.count == 2)
         let src = rendered[0].source
         #expect(
@@ -34,7 +34,7 @@ import Vapor
     }
 
     @Test func renderer_approxEquality_defaultToleranceAppliedWhenNil() throws {
-        let rendered = renderPatternFamily(pfApproxFamily(tolerance: nil))
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: nil), language: .python)
         let src = rendered[0].source
         // 1e-6 renders as Swift's "1e-06" via String(Double) — either form
         // is acceptable as a Python float literal.
@@ -44,7 +44,7 @@ import Vapor
     }
 
     @Test func renderer_approxEquality_isValidPython() throws {
-        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.01))
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.01), language: .python)
         for g in rendered {
             try pfAssertValidPythonSyntax(g.source, label: g.filename)
         }
@@ -89,7 +89,7 @@ import Vapor
     /// Fixture: a 2-case variable-equality family.  `functionName` is
     /// irrelevant (validation skips it) — we use a placeholder.
     @Test func variableEqualityRendererChecksModuleAttr() throws {
-        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily(), language: .python)
         #expect(rendered.count == 2)
         let src = rendered[0].source
         #expect(src.hasPrefix("# Test: beats equals 5\n"))
@@ -104,13 +104,13 @@ import Vapor
     }
 
     @Test func variableEqualityRendererFilenameFormat() throws {
-        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily(), language: .python)
         #expect(rendered[0].filename == "publictest_notebook_variables_01.py")
         #expect(rendered[1].filename == "publictest_notebook_variables_02.py")
     }
 
     @Test func variableEqualityRenderedSourceIsValidPython() throws {
-        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily(), language: .python)
         for script in rendered {
             try pfAssertValidPythonSyntax(script.source, label: script.filename)
         }
@@ -193,7 +193,7 @@ import Vapor
     // MARK: - stdoutEquality
 
     @Test func stdoutEqualityRendererBasicShape() throws {
-        let rendered = renderPatternFamily(pfHelloPrintsFamily())
+        let rendered = renderPatternFamily(pfHelloPrintsFamily(), language: .python)
         #expect(rendered.count == 1)
         let src = rendered[0].source
         #expect(src.hasPrefix("# Test: prints greeting\n"))
@@ -207,7 +207,7 @@ import Vapor
     }
 
     @Test func stdoutEqualityRendererFilenameFormat() throws {
-        let rendered = renderPatternFamily(pfHelloPrintsFamily())
+        let rendered = renderPatternFamily(pfHelloPrintsFamily(), language: .python)
         #expect(rendered[0].filename == "publictest_hello_prints_01.py")
     }
 
@@ -219,7 +219,7 @@ import Vapor
         // source still carries the trailing \n that the instructor
         // typed.
         let fam = pfHelloPrintsFamily(expected: "a\nb\n")
-        let rendered = renderPatternFamily(fam)
+        let rendered = renderPatternFamily(fam, language: .python)
         let src = rendered[0].source
         #expect(src.contains(#"expected = "a\nb\n""#))
         try pfAssertValidPythonSyntax(src, label: rendered[0].filename)

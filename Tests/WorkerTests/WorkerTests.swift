@@ -619,10 +619,12 @@ import Testing
     /// A notebook is extracted to its assignment's source language, so an R
     /// job's hint has to name the `.R` file. Naming `.py` (the pre-fix
     /// behaviour) pointed at a path that was never written.
+    ///
+    /// The first assertion here used to omit `language:` entirely, pinning the
+    /// `.python` default. That default is gone — every caller states its
+    /// language — so the assertion that pinned it is gone with it rather than
+    /// being rewritten into a duplicate of the one below it.
     @Test func preferredStudentModuleFilenameIsLanguageAware() {
-        #expect(
-            preferredStudentModuleFilename(submissionFilename: "analysis.ipynb")
-                == "analysis.py")
         #expect(
             preferredStudentModuleFilename(
                 submissionFilename: "analysis.ipynb", language: .python) == "analysis.py")
@@ -631,12 +633,14 @@ import Testing
                 == "analysis.R")
         // A source upload is already the module, whatever the assignment's language.
         #expect(
-            preferredStudentModuleFilename(submissionFilename: "warmup.py") == "warmup.py")
+            preferredStudentModuleFilename(submissionFilename: "warmup.py", language: .python)
+                == "warmup.py")
         #expect(
             preferredStudentModuleFilename(submissionFilename: "warmup.R", language: .r)
                 == "warmup.R")
-        #expect(preferredStudentModuleFilename(submissionFilename: "data.csv") == nil)
-        #expect(preferredStudentModuleFilename(submissionFilename: nil) == nil)
+        #expect(
+            preferredStudentModuleFilename(submissionFilename: "data.csv", language: .python) == nil)
+        #expect(preferredStudentModuleFilename(submissionFilename: nil, language: .python) == nil)
     }
 
     // MARK: - ExponentialBackoff

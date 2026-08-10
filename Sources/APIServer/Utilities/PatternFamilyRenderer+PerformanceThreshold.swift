@@ -24,7 +24,8 @@ func renderPerformanceThreshold(
     }()
     let thresholdLiteral = JSONValue.double(thresholdMs).pythonLiteral
 
-    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableDecls = combinedVariableDecls(
+        sectionVariables: sectionVariables, family: family, language: .python)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
