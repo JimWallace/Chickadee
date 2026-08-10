@@ -306,18 +306,24 @@ import Testing
     /// pass a "looks about right" check and then disagree about a value in a
     /// way only an instructor comparing two runs would notice.
     @Test(arguments: AssignmentLanguage.allCases)
-    func theInPageSerializerIsTheOneTheServerAlreadyUses(_ language: AssignmentLanguage) {
+    func theInPageSerializerIsTheOneTheServerAlreadyUses(_ language: AssignmentLanguage) throws {
         switch language {
         case .lua:
-            #expect(
-                language.autoComputeRuntimeSource
-                    == LuaPersonalizationRuntime.chickadeeSerializeLuaSource)
+            let lua = try #require(language.autoComputeRuntimeSource)
+            #expect(lua.contains(LuaPersonalizationRuntime.chickadeeSerializeLuaSource))
+            #expect(lua.contains(LuaPersonalizationRuntime.chickadeeJSONStringLuaSource))
         case .octave:
+            let octave = try #require(language.autoComputeRuntimeSource)
+            #expect(octave.contains(OctavePersonalizationRuntime.chickadeeSerializeOctaveSource))
+            #expect(octave.contains(OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource))
+        case .r:
+            // `deparse` serializes; only the escaper is needed — and it is the
+            // char-by-char one, not the `gsub` one in the grading runtime.
             #expect(
                 language.autoComputeRuntimeSource
-                    == OctavePersonalizationRuntime.chickadeeSerializeOctaveSource)
-        case .python, .r:
-            // `repr` and `deparse` are builtins; nothing to prepend.
+                    == RPersonalizationRuntime.chickadeeJSONStringRSource)
+        case .python:
+            // `repr` plus Python's own `json` module. Nothing to prepend.
             #expect(language.autoComputeRuntimeSource == nil)
         case .cpp, .racket:
             // No kernel, so no in-page worker to prepend anything to.
