@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Integrity guard for the manually-vendored xeus kernels in Public/jupyterlite:
-# xpython (Python), xr (R), xlua (Lua) and xoctave (Octave), each built from its
-# own emscripten-forge env.
+# Integrity guard for the manually-vendored xeus kernels in Public/jupyterlite —
+# one env per language, each named by that language's LanguageDescriptor. Which
+# kernels it expects is DERIVED from those descriptors rather than listed here,
+# so the guard follows the language set instead of trailing it.
 #
 # The xeus WASM kernels are built from emscripten-forge (needs micromamba +
 # network to repo.prefix.dev). The ordinary CI build does not do that, so the
@@ -21,12 +22,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${1:-$ROOT_DIR/Public/jupyterlite}"
 
-python3 - "$BUILD_DIR" <<'PY'
+python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'
 import json
 import pathlib
+import re
 import sys
 
 build = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
 
 
 def fail(msg: str) -> None:
@@ -39,20 +42,59 @@ ext = build / "extensions" / "@jupyterlite" / "xeus-extension"
 if not ext.is_dir():
     fail(f"missing xeus federated extension: {ext}")
 
-# 2. kernels.json must register EVERY kernel: xpython (Python), xr (R), xlua
-#    (Lua), xoctave (Octave). A vendor that drops one is a partial re-vendor,
-#    not a valid state.
+# 2. kernels.json must register EVERY kernel a language claims. A vendor that
+#    drops one is a partial re-vendor, not a valid state.
 #
-#    This map — NOT kernels.json — is what the loop below iterates, so a kernel
-#    absent from it ships completely unguarded: a partial or botched re-vendor
-#    of it passes CI silently. Add an entry whenever you add an env.
+#    THE EXPECTED SET IS DERIVED, NOT LISTED. It used to be a literal map here,
+#    with a comment admitting the consequence: a kernel absent from it shipped
+#    completely unguarded, so a partial or botched re-vendor passed CI silently
+#    — the "enumerated rather than discovered, fails open" shape recorded in
+#    docs/adding-a-xeus-kernel.md, in the script whose whole job is catching a
+#    bad vendor. It is now read out of LanguageDescriptor, which already names
+#    each language's kernel in `editorSupport: .notebookKernel(kernelName:)`.
+#
+#    That makes the guard follow the language set by construction: a seventh
+#    language with a kernel is checked the day its descriptor names one, and an
+#    upload-only language contributes nothing because it declares no kernel.
+def derive_expected_kernels():
+    source = (root / "Sources" / "Core" / "LanguageDescriptor.swift").read_text()
+    expected = {}
+    language = None
+    for line in source.splitlines():
+        case_match = re.search(r"case \.([A-Za-z]+):", line)
+        if case_match:
+            language = case_match.group(1)
+            continue
+        name_match = re.search(r'kernelName:\s*"([^"]+)"', line)
+        if name_match and language is not None:
+            expected[name_match.group(1)] = language
+            language = None
+    return expected
+
+
+expected_language = derive_expected_kernels()
+if not expected_language:
+    fail(
+        "could not read any kernelName out of Sources/Core/LanguageDescriptor.swift — "
+        "the vendored kernels would go completely unchecked"
+    )
+
 kernels_json = build / "xeus" / "kernels.json"
 if not kernels_json.is_file():
     fail(f"missing {kernels_json} — the vendored xeus kernels are absent")
 kernels = json.loads(kernels_json.read_text())
 listed = sorted(k.get("kernel") for k in kernels if isinstance(k, dict))
 
-expected_language = {"xpython": "python", "xr": "r", "xlua": "lua", "xoctave": "octave"}
+# A kernel shipped in the tree that NO language claims. Harmless to a student —
+# nothing routes to it — but it is dead weight in a ~100 MB vendored payload and
+# it is the tell for a rename that landed on one side only.
+unclaimed = sorted(set(listed) - set(expected_language))
+if unclaimed:
+    fail(
+        f"kernels.json registers {unclaimed}, which no AssignmentLanguage claims via "
+        "editorSupport.notebookKernel — either a language's kernelName was renamed "
+        "without a re-vendor, or the env should not have been vendored"
+    )
 kernel_envs = {}
 loaders = []
 

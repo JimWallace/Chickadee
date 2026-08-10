@@ -361,12 +361,25 @@
         // modal. (The catalog lives here in JS, so the menu is built client-side
         // rather than templated; sections are added via full-page reload, so a
         // one-time upgrade at init covers every button.)
+        //
+        // The menu applies `unsupportedReason` exactly as the modal's select
+        // does, and that is not belt-and-braces. For a `check` or `family` kind
+        // this menu does NOT open the modal — it calls `chickadeeAddInlineTest`
+        // and authors the row in place — so the select's disabled options
+        // guarded a path an instructor no longer takes. A Lua author picking
+        // "DataFrame has the right shape" here went straight to an inline row
+        // for a kind Lua refuses at save time: the #1290 experience, in the
+        // sibling renderer of the code that fixed it.
         function addTestMenuHTML() {
             return CATALOG.map(function (g) {
                 var items = g.items.map(function (it) {
-                    return '<button type="button" class="add-test-item" data-kind="'
-                        + escAttr(it.value) + '" data-mechanism="' + escAttr(it.mechanism)
-                        + '">' + escHtml(it.label) + '</button>';
+                    var reason = unsupportedReason(it);
+                    return '<button type="button" class="add-test-item"'
+                        + (reason ? ' disabled title="' + escAttr(reason) + '"' : '')
+                        + ' data-kind="' + escAttr(it.value)
+                        + '" data-mechanism="' + escAttr(it.mechanism) + '">'
+                        + escHtml(it.label) + (reason ? ' \u2014 unavailable' : '')
+                        + '</button>';
                 }).join('');
                 return '<div class="add-test-group"><div class="add-test-group-label">'
                     + escHtml(g.group) + '</div>' + items + '</div>';
@@ -399,6 +412,10 @@
         document.body.addEventListener('click', function (e) {
             var item = e.target && e.target.closest && e.target.closest('.add-test-item');
             if (!item) return;
+            // A disabled button does not dispatch click in any current browser,
+            // so this is the belt to that suspenders — cheap, and the cost of
+            // being wrong is authoring a kind the save will refuse.
+            if (item.disabled) return;
             e.preventDefault();
             var menu = item.closest('.add-test-menu');
             var sid = menu ? (menu.getAttribute('data-section-id') || '') : '';
