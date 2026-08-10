@@ -114,14 +114,6 @@ struct BrowserResultRoutes: RouteCollection {
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
         let attemptNumber = submission.attemptNumber ?? 1
 
-        // First-to-submit records (Pathfinder): notebook submissions are the
-        // dominant flow, but only the zip-upload handler used to award this —
-        // browser-graded assignments never had a Pathfinder (audit A2).
-        if let userID = caller.id {
-            try await awardFirstToSubmitRecords(
-                setup: setup, userID: userID, submissionID: subID, on: req.db)
-        }
-
         // Persist the browser result, tagged source="browser".  The browser
         // builds its collection before it knows the server-authoritative attempt
         // number, so it always stamps attemptNumber=1 (and isFirstPassSuccess for
@@ -157,27 +149,9 @@ struct BrowserResultRoutes: RouteCollection {
 
         req.logger.info("Browser result stored for \(subID)")
 
-        // Class records (Trailblazer / fastest / fewest-attempts) on a 100%
-        // browser grade.  These were only awarded in the worker report handler,
-        // so browser-graded assignments never awarded any record unless a
-        // retest or the failover backstop happened to route through a worker
-        // (audit A2).  Same rounded-percent gate and student-role guard as
-        // `ResultRoutes`; the reconciled collection carries the
-        // server-authoritative attempt number.
-        if reconciled.buildStatus == .passed,
-            let userID = caller.id,
-            gradePercent(from: reconciled) == 100
-        {
-            try await awardClassBadgesFor100Percent(
-                testSetupID: body.testSetupID,
-                userID: userID,
-                submissionID: subID,
-                executionTimeMs: reconciled.executionTimeMs,
-                attemptNumber: attemptNumber,
-                disabled: BuiltInAchievements.disabled(in: setup),
-                on: req.db
-            )
-        }
+        await awardBrowserResultBadges(
+            req: req, setup: setup, userID: caller.id, submissionID: subID,
+            reconciled: reconciled, attemptNumber: attemptNumber)
 
         // Update the student's server-side working copy with what they just
         // submitted. Without this, the working copy stays as the blank starter
@@ -197,6 +171,89 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         return BrowserResultResponse(submissionID: subID)
+    }
+
+    /// Everything a stored browser result triggers that is NOT the grade.
+    ///
+    /// Extracted so the ordering is visible at the call site: the result is
+    /// saved, and only then does any of this run. See the notes inside.
+    private func awardBrowserResultBadges(
+        req: Request, setup: APITestSetup, userID: UUID?, submissionID subID: String,
+        reconciled: TestOutcomeCollection, attemptNumber: Int
+    ) async {
+        // ── Everything below here is a SIDE EFFECT, and none of it may fail
+        // the submission. ────────────────────────────────────────────────────
+        //
+        // The grade is stored as of the line above. Anything that throws after
+        // it turns a submission that graded perfectly into a 500 the browser
+        // reports as "Failed to submit results" — while the row sits in the
+        // database, so the page polls it forever and never renders a result.
+        // That is the documented `grading-probe` intermittent
+        // (docs/ci-flakiness.md, Family 2's "not the exec-hang" note): three
+        // sightings, each with `suite_done` reached and the POST 500ing after.
+        //
+        // The Pathfinder award used to run BEFORE the result save, which is
+        // what made the window lossy rather than merely noisy — the submission
+        // row existed and the result did not. It moved down here.
+        //
+        // Why these throw at all, when SQLite is meant to wait: sqlite-nio
+        // installs a busy handler that retries forever, so ordinary contention
+        // never surfaces. What it cannot cover is `SQLITE_BUSY_SNAPSHOT` — a
+        // WAL read snapshot that has gone stale because another connection
+        // committed in between — which SQLite returns IMMEDIATELY, bypassing
+        // the handler, because waiting cannot help. Only starting the
+        // transaction again can, which is what `withTransientDatabaseLockRetry`
+        // does. Every badge helper here is read-then-write, the exact shape
+        // that hits it, and the page's own result polling supplies the
+        // concurrent commits.
+        //
+        // Retried first (a transient race should still award the badge), and
+        // logged rather than thrown if it survives the retries. A class badge
+        // is worth an ordinary amount; a student's grade is not worth losing
+        // for one.
+        func bestEffort(_ what: String, _ work: () async throws -> Void) async {
+            do {
+                try await withTransientDatabaseLockRetry(on: req.db) { try await work() }
+            } catch {
+                req.logger.warning(
+                    "browser_result_side_effect_failed \(what) for \(subID): \(error)")
+            }
+        }
+
+        // First-to-submit records (Pathfinder): notebook submissions are the
+        // dominant flow, but only the zip-upload handler used to award this —
+        // browser-graded assignments never had a Pathfinder (audit A2).
+        if let userID {
+            await bestEffort("first_to_submit") {
+                try await awardFirstToSubmitRecords(
+                    setup: setup, userID: userID, submissionID: subID, on: req.db)
+            }
+        }
+
+        // Class records (Trailblazer / fastest / fewest-attempts) on a 100%
+        // browser grade.  These were only awarded in the worker report handler,
+        // so browser-graded assignments never awarded any record unless a
+        // retest or the failover backstop happened to route through a worker
+        // (audit A2).  Same rounded-percent gate and student-role guard as
+        // `ResultRoutes`; the reconciled collection carries the
+        // server-authoritative attempt number.
+        if reconciled.buildStatus == .passed,
+            let userID,
+            gradePercent(from: reconciled) == 100
+        {
+            await bestEffort("class_badges") {
+                try await awardClassBadgesFor100Percent(
+                    testSetupID: setup.id ?? "",
+                    userID: userID,
+                    submissionID: subID,
+                    executionTimeMs: reconciled.executionTimeMs,
+                    attemptNumber: attemptNumber,
+                    disabled: BuiltInAchievements.disabled(in: setup),
+                    on: req.db
+                )
+            }
+        }
+
     }
 
     // MARK: - POST /api/v1/submissions/runner-submit
