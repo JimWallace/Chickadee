@@ -214,7 +214,7 @@ would turn a one-line vocabulary change into a 54-file edit.
 | `performance` | `performanceThreshold` | all 6 |
 | `variable_equality` | `variableEquality` | all 6 |
 | `structural_check` | the `astStructure` notebook check | Python only, by nature |
-| `differential` | none | — |
+| `differential` | `differential` (shipped as the ninth kind) | all 6 |
 
 **CodeMirror modes for Lua, Octave and Racket.** Requires re-vendoring
 `Public/vendor/codemirror.js`; the payoff is syntax colour.
@@ -246,5 +246,8 @@ would turn a one-line vocabulary change into a 54-file edit.
    expressive enough for all of them is a parser generator; one that is not will
    silently miss definitions, which is the failure mode this whole apparatus
    exists to end.
-6. **Close the template row in writing.** Put the cross-reference table above in
-   the Add Test picker on non-Python assignments, derived from the kind list.
+6. **Close the template row in writing.** *(done.)* Selecting "Write a custom
+   script" now names the first-class types it is competing with, derived from
+   the catalog's own family entries rather than from a second list — so a ninth
+   kind appears there the day it is added. The cross-reference table above is
+   complete: every template has an equivalent, `differential` included.
