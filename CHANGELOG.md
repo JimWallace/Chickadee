@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.57] - 2026-08-10
+
+### Added
+
+- **The freeze tracer can seed a large reopened-lab notebook (`FREEZE_BIG_NOTEBOOK=1`).** Forty-five cells with chunky saved outputs (streams, HTML tables, a base64 figure, ~1.5 MB total), so document-size-scaled work costs what it costs in production without executing anything. Used to clear the page's own JavaScript of the 58 s-anchored `page_unresponsive` stalls that persisted on the fixed build — `docs/browser-freeze-investigation.md` records the follow-up: that stall is a second, distinct, client-environmental mechanism (same ±1 s anchor across pre- and post-fix builds; quiet main thread at the 58 s mark in four instrumented environments), self-recovering and affecting no submission.
+
+
 ## [0.5.56] - 2026-08-10
 
 ### Fixed
