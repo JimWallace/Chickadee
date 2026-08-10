@@ -42,7 +42,8 @@
                 { value: 'return_type_check',     mechanism: 'family', label: 'Returns the right type' },
                 { value: 'exception_expected',    mechanism: 'family', label: 'Raises the right error' },
                 { value: 'stdout_equality',       mechanism: 'family', label: 'Prints the right output' },
-                { value: 'performance_threshold', mechanism: 'family', label: 'Runs within a time budget' }
+                { value: 'performance_threshold', mechanism: 'family', label: 'Runs within a time budget' },
+                { value: 'differential',          mechanism: 'family', label: 'Matches a reference implementation' }
             ]
         },
         {
@@ -82,6 +83,7 @@
         exception_expected:    'Check that the function raises the expected exception for given inputs.',
         stdout_equality:       'Check what the function prints to stdout for given inputs.',
         performance_threshold: 'Check that the function completes within a millisecond budget.',
+        differential:          'Compare the student’s function against a reference implementation you write — you supply the inputs, the reference supplies each expected value.',
         variable_exists:       'Check that a notebook variable is defined (optionally of a given type).',
         variable_equality:     'Check that a notebook variable equals an expected value.',
         function_exists:       'Check that a function is defined and callable (optionally with a given arity).',
@@ -268,8 +270,39 @@
             }
         }
 
+        /// What the custom-script option is competing with, named.
+        ///
+        /// The nine Python script templates were retired because eight of them
+        /// duplicated a pattern-family kind in a worse form — a one-shot text
+        /// dump the instructor then owns forever, against a family that is
+        /// server-rendered, spec-hashed, re-renders when a case changes, and is
+        /// checked at save time. Offering both taught authors to reach for the
+        /// fallback, and on a non-Python assignment the fallback was the one
+        /// that only worked in Python.
+        ///
+        /// Retiring them left "Write a custom script" looking like the ordinary
+        /// way to write a test. This says what it is instead. DERIVED from the
+        /// catalog's own family entries, so a ninth kind appears here the day it
+        /// is added and no list needs updating.
+        function scriptAlternativesNote() {
+            var available = [];
+            CATALOG.forEach(function (g) {
+                g.items.forEach(function (it) {
+                    if (it.mechanism === 'family' && !unsupportedReason(it)) {
+                        available.push(it.label.toLowerCase());
+                    }
+                });
+            });
+            if (!available.length) return '';
+            return ' Most function tests are better written as one of the types above ('
+                + available.join('; ') + ') — those render in this assignment’s language, '
+                + 're-render when you change a case, and are checked when you save.';
+        }
+
         function refreshDescription() {
-            descEl.textContent = DESCRIPTIONS[typeSelect.value] || '';
+            var text = DESCRIPTIONS[typeSelect.value] || '';
+            if (typeSelect.value === 'script') text += scriptAlternativesNote();
+            descEl.textContent = text;
         }
 
         // ── Open / close ─────────────────────────────────────────────────────

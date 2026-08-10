@@ -12,6 +12,14 @@ layer underneath it, and about four defects the audit missed.
 **Read the "deliberately open" section before proposing work here.** Several of
 these gaps are correct as they stand, and have been re-litigated more than once.
 
+**Status: the work list at the end is complete.** Every numbered item shipped
+between 2026-08-10 and the `differential` kind. What remains in this document is
+the *reasoning* — which gaps were defects, which are correct refusals, and why —
+because that is what a seventh language will need. If you are adding one, the
+parity checklist lives in
+[adding-a-xeus-kernel.md](adding-a-xeus-kernel.md#parity-what-supported-is-not-the-same-as);
+this document is the evidence behind it.
+
 ---
 
 ## The measured state
@@ -184,6 +192,18 @@ auto-compute is first used, not on every visit as this claimed.
 R shipped first, then Lua, then Octave. Every kernel language now computes in
 the page; only C++ and Racket route to the server, because neither has a kernel.
 
+**The `differential` template — SHIPPED as a ninth pattern kind.** The table
+below said it was "the only template with no pattern-family equivalent, and it
+is reachable with a family plus auto-compute". The second half was the weaker
+claim: auto-compute fills in an expected value for a case an author has already
+enumerated, which is exactly the work a differential test exists to avoid. It is
+now `PatternKind.differential`, rendering in all six languages, computing each
+case's expected value by running the instructor's reference at grade time.
+
+The template survives it, deliberately: it is a one-shot text dump the
+instructor then owns, so an already-applied one has no link back to the enum and
+nothing would migrate if it were removed.
+
 **Per-language custom-script template sets.** Seven of the nine Python templates
 are already available in every language as pattern-family kinds, in a better
 form: server-rendered, spec-hashed, re-renderable, and pinned by execution
@@ -202,7 +222,7 @@ would turn a one-line vocabulary change into a 54-file edit.
 | `performance` | `performanceThreshold` | all 6 |
 | `variable_equality` | `variableEquality` | all 6 |
 | `structural_check` | the `astStructure` notebook check | Python only, by nature |
-| `differential` | none | — |
+| `differential` | `differential` (shipped as the ninth kind) | all 6 |
 
 **CodeMirror modes for Lua, Octave and Racket.** Requires re-vendoring
 `Public/vendor/codemirror.js`; the payoff is syntax colour.
@@ -234,5 +254,8 @@ would turn a one-line vocabulary change into a 54-file edit.
    expressive enough for all of them is a parser generator; one that is not will
    silently miss definitions, which is the failure mode this whole apparatus
    exists to end.
-6. **Close the template row in writing.** Put the cross-reference table above in
-   the Add Test picker on non-Python assignments, derived from the kind list.
+6. **Close the template row in writing.** *(done.)* Selecting "Write a custom
+   script" now names the first-class types it is competing with, derived from
+   the catalog's own family entries rather than from a second list — so a ninth
+   kind appears there the day it is added. The cross-reference table above is
+   complete: every template has an equivalent, `differential` included.

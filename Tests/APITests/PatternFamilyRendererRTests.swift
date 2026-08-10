@@ -215,14 +215,41 @@ import Testing
 
     private func single(
         kind: PatternKind, functionName: String, paramNames: [String],
-        args: [JSONValue], expected: JSONValue, defaults: PatternDefaults = PatternDefaults()
+        args: [JSONValue], expected: JSONValue, defaults: PatternDefaults = PatternDefaults(),
+        referenceImplementation: String? = nil
     ) -> GeneratedScript {
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: kind, functionName: functionName,
             paramNames: paramNames, defaults: defaults,
-            cases: [PatternCase(key: "01", label: "Case 1", args: args, expected: expected)])
+            cases: [PatternCase(key: "01", label: "Case 1", args: args, expected: expected)],
+            referenceImplementation: referenceImplementation)
         // swiftlint:disable:next force_unwrapping
         return renderPatternFamily(fam, language: .r).first!
+    }
+
+    /// `.differential` end to end: the reference computes each expected value.
+    @Test func differentialGradesAgainstTheReference() throws {
+        guard Self.hasRscript else { return }
+        let script = single(
+            kind: .differential, functionName: "double_it", paramNames: ["x"],
+            args: [.int(21)], expected: .null,
+            referenceImplementation: "ck_ref_double_it <- function(x) x * 2")
+        #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 0)
+        #expect(try run(script: script, submission: "double_it <- function(x) x + 2\n") == 1)
+    }
+
+    /// A reference that STOPS is the instructor's bug: exit 2 (errored), not 1.
+    /// A student cannot make it raise except through inputs the instructor
+    /// chose, and "your function is wrong" would send them to debug the wrong
+    /// code.
+    @Test func differentialBlamesTheReferenceWhenTheReferenceStops() throws {
+        guard Self.hasRscript else { return }
+        let script = single(
+            kind: .differential, functionName: "double_it", paramNames: ["x"],
+            args: [.int(21)], expected: .null,
+            referenceImplementation:
+                "ck_ref_double_it <- function(x) stop(\"reference is broken\")")
+        #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 2)
     }
 
     @Test func boundaryEqualityPassesAndFails() throws {

@@ -13,6 +13,7 @@
 //   family-kind, family-function, family-params, family-function-select,
 //   family-function-hint, family-function-label,
 //   family-default-hint, family-default-tolerance, family-tolerance-label,
+//   family-reference-implementation, family-reference-label,
 //   family-cases-header, family-cases-body, family-cases-empty,
 //   add-case-btn, family-section-name-label.
 //
@@ -207,6 +208,8 @@
         var defaultHintInput = document.getElementById('family-default-hint');
         var toleranceInput   = document.getElementById('family-default-tolerance');
         var toleranceLabel   = document.getElementById('family-tolerance-label');
+        var referenceInput   = document.getElementById('family-reference-implementation');
+        var referenceLabel   = document.getElementById('family-reference-label');
         var functionLabel    = document.getElementById('family-function-label');
         var casesHeader      = document.getElementById('family-cases-header');
         var casesBody        = document.getElementById('family-cases-body');
@@ -480,6 +483,13 @@
             var expectedHeader = currentReturnType
                 ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
+            // A differential family authors no expected value — the reference
+            // computes one per case. The column stays (the row layout is
+            // positional) and says so instead.
+            if (kindInput && kindInput.value === 'differential') {
+                expectedHeader = 'Expected <span style="color:var(--gray-500);font-weight:normal">'
+                    + '(computed by the reference)</span>';
+            }
             th.push('<th>' + expectedHeader + '</th>');
             th.push('<th>Hint <span style="color:var(--gray-500);font-weight:normal">(optional)</span></th>');
             th.push('<th style="width:4rem"></th>');
@@ -1272,6 +1282,13 @@
             if (toleranceLabel) {
                 toleranceLabel.style.display = (kind === 'approximate_equality') ? 'flex' : 'none';
             }
+            // `differential` is the one kind carrying SOURCE. Its expected
+            // values are computed by the reference at grade time, which is why
+            // the Expected column re-labels itself below rather than being
+            // filled in.
+            if (referenceLabel) {
+                referenceLabel.style.display = (kind === 'differential') ? 'flex' : 'none';
+            }
             // Variable-equality families don't target a function — hide the
             // function dropdown entirely and replace its role in the data
             // model with `paramNames = ["variable"]`.
@@ -1337,6 +1354,9 @@
                 defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
                 var tol = family.defaults && family.defaults.tolerance;
                 toleranceInput.value = (tol == null) ? '' : String(tol);
+                if (referenceInput) {
+                    referenceInput.value = family.referenceImplementation || '';
+                }
                 preselectedFn = family.functionName || '';
                 familyVariables = Array.isArray(family.variables)
                     ? family.variables.map(function (v) { return { name: v.name, value: v.value }; })
@@ -1354,6 +1374,7 @@
                 editingPoints = 1;
                 defaultHintInput.value = '';
                 toleranceInput.value = '';
+                if (referenceInput) referenceInput.value = '';
                 familyVariables = [];
                 // New family: pull section context from the per-section
                 // "+ New Family" toolbar's stashed target id (set in
@@ -1451,7 +1472,13 @@
                 defaults: defaults,
                 cases: cases,
                 variables: familyVariables.slice(),
-                dependsOn: existingDependsOn
+                dependsOn: existingDependsOn,
+                // Sent only for the kind that reads it, so switching a family
+                // away from differential drops the source rather than carrying
+                // an invisible copy that reappears on switching back.
+                referenceImplementation: (kind === 'differential' && referenceInput)
+                    ? (referenceInput.value || '').trim() || null
+                    : null
             };
         }
 

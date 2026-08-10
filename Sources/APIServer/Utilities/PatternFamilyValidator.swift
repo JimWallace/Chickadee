@@ -140,7 +140,11 @@ private func validateFamilyVariablesAndArgRefs(
 /// `perStudentArgCapableKindsDescription` must name the same set.
 private func kindSupportsPerStudentArgRefs(_ kind: PatternKind) -> Bool {
     switch kind {
-    case .boundaryEquality, .approximateEquality, .unorderedEquality: return true
+    // `.differential` builds its call from `args` exactly as the equality
+    // kinds do, so a bound name reaches both the student's function and the
+    // reference — which is the point: the reference computes THIS student's
+    // expected value rather than the author tabulating one per student.
+    case .boundaryEquality, .approximateEquality, .unorderedEquality, .differential: return true
     case .variableEquality, .returnTypeCheck, .exceptionExpected,
         .performanceThreshold, .stdoutEquality:
         return false
@@ -160,7 +164,10 @@ private func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
     switch kind {
     case .boundaryEquality, .approximateEquality, .unorderedEquality, .variableEquality:
         return true
-    case .returnTypeCheck, .exceptionExpected, .performanceThreshold, .stdoutEquality:
+    // `.differential` authors no expected value at all — the reference
+    // computes it — so there is nothing for a per-student expected ref to bind.
+    case .returnTypeCheck, .exceptionExpected, .performanceThreshold, .stdoutEquality,
+        .differential:
         return false
     }
 }
@@ -168,7 +175,7 @@ private func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
 /// Human-readable list of the kinds `kindSupportsPerStudentRefs` allows, for
 /// validation error messages.  Keep in lockstep with the switch above.
 private let perStudentArgCapableKindsDescription =
-    "boundary_equality, approximate_equality, and unordered_equality"
+    "boundary_equality, approximate_equality, unordered_equality, and differential"
 
 private let perStudentExpectedCapableKindsDescription =
     "boundary_equality, approximate_equality, unordered_equality, and variable_equality"

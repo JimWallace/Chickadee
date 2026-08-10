@@ -21,10 +21,39 @@ import Foundation
 
 enum GeneratedSourceFixtures {
 
-    /// One plausible family per kind.
-    static func family(kind: PatternKind) -> PatternFamily {
+    /// A reference implementation of `classify(x)` in each language, for
+    /// `.differential` — the one kind whose family carries source.
+    ///
+    /// This is why `family(kind:)` takes a language at all. Every other kind's
+    /// fixture is language-agnostic: `args` and `expected` are JSON, and the
+    /// renderer turns them into that language's literals. A reference
+    /// implementation cannot be, because it IS source. Six spellings of the
+    /// same trivial function, each returning 1 whatever it is given, so the
+    /// golden diffs stay about the harness around them.
+    ///
+    /// Each must define `ck_ref_classify` — the name the renderer calls, and
+    /// the one the validator makes an instructor supply.
+    static let differentialReference: [AssignmentLanguage: String] = [
+        .python: "def ck_ref_classify(x):\n    return 1",
+        .r: "ck_ref_classify <- function(x) 1",
+        .lua: "function ck_ref_classify(x)\n    return 1\nend",
+        .octave: "function r = ck_ref_classify(x)\n  r = 1;\nend",
+        .cpp: "int ck_ref_classify(double x) { return 1; }",
+        .racket: "(define (ck_ref_classify x) 1)",
+    ]
+
+    /// One plausible family per kind, in `language`.
+    ///
+    /// The language matters for exactly one kind — see `differentialReference`.
+    /// It defaults to Python so the call sites that render a language-agnostic
+    /// kind stay unchanged.
+    static func family(kind: PatternKind, language: AssignmentLanguage = .python) -> PatternFamily {
         let example: PatternCase
         switch kind {
+        case .differential:
+            // No `expected`: this kind computes it from the reference, and an
+            // authored one would be ignored. `.null` says that out loud.
+            example = PatternCase(key: "01", label: "d", args: [.double(18.49)], expected: .null)
         case .variableEquality:
             example = PatternCase(key: "01", label: "v", args: [.string("total")], expected: .int(3))
         case .returnTypeCheck:
@@ -45,7 +74,9 @@ enum GeneratedSourceFixtures {
         }
         return PatternFamily(
             id: "fam", name: "Family", kind: kind,
-            functionName: "classify", paramNames: ["x"], cases: [example])
+            functionName: "classify", paramNames: ["x"], cases: [example],
+            referenceImplementation: kind == .differential
+                ? differentialReference[language] : nil)
     }
 
     /// One plausible check per kind, carrying the fields those kinds read.

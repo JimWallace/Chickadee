@@ -62,6 +62,8 @@ func renderCppPatternCase(
         body = cppPerformanceBody(target: target, context: context, c: c)
     case .stdoutEquality:
         body = cppStdoutBody(target: target, context: context, c: c)
+    case .differential:
+        body = cppDifferentialBody(family: family, context: context, c: c)
     }
 
     let source = [
@@ -70,6 +72,9 @@ func renderCppPatternCase(
         context.usesInputs ? cppInputsInclude : "",
         cppStudentInclude,
         cppVariableDecls(sectionVariables: sectionVariables, family: family),
+        // The reference is a file-scope definition, so it goes beside the
+        // student's translation unit rather than inside main().
+        family.kind == .differential ? cppReferenceBlock(family) : "",
         "int main() {",
         cppIndent(context.declBlock + body),
         "}",
@@ -294,6 +299,61 @@ private func cppCallContext(
 }
 
 // MARK: - Kind bodies
+
+/// The reference call, in its own try/catch so a throwing reference is reported
+/// as a broken TEST rather than a broken submission. `auto expected` is declared
+/// outside the try (and default-initialised) so the comparison below can see it;
+/// `ck::errored` is `[[noreturn]]`, so the uninitialised path is unreachable.
+private func cppDifferentialExpected(family: PatternFamily, context: CppCallContext) -> String {
+    """
+    decltype(\(family.differentialReferenceName)(\(context.callArgs))) expected{};
+    try {
+        expected = \(family.differentialReferenceName)(\(context.callArgs));
+    } catch (const std::exception& ck_ref_e) {
+        ck::errored(std::string("\(GeneratedMessage.referenceFailed)\\n")
+            + \(context.inputLine)
+            + "\(GeneratedMessage.error)" + ck_ref_e.what());
+    }
+    """
+}
+
+/// The instructor's reference implementation at file scope, above `main()`.
+private func cppReferenceBlock(_ family: PatternFamily) -> String {
+    [
+        cppComment("Instructor's reference implementation, rendered verbatim."),
+        family.referenceImplementation ?? "",
+    ].joined(separator: "\n")
+}
+
+/// `.differential` — compares the student's function against the instructor's
+/// reference. See `PatternKind.differential`.
+///
+/// C++ differs from the interpreted languages in one way worth knowing: the
+/// reference is COMPILED with the test, so a reference that does not compile is
+/// a build failure — the collection's `buildStatus` fails and no case runs at
+/// all — rather than a per-case `errored`. That is louder, and it lands on the
+/// instructor at validation, which is where a broken reference should land.
+///
+/// A reference that compiles but THROWS gets its own try/catch rather than
+/// riding the shared guard. Under the shared one it would report as
+/// "unexpected exception", which is the student-failure message: the same
+/// misattribution the other five languages avoid by reporting `errored`.
+private func cppDifferentialBody(
+    family: PatternFamily, context: CppCallContext, c: PatternCase
+) -> String {
+    cppGuarded(
+        """
+        \(cppDifferentialExpected(family: family, context: context))
+        auto result = \(family.functionName)(\(context.callArgs));
+        if (!ck::equal(result, expected)) {
+            ck::failed(std::string("\(GeneratedMessage.wrongValue)\\n")
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)" + ck::format(expected) + "\\n"
+                + "\(GeneratedMessage.got)" + ck::format(result));
+        }
+        ck::passed("\(GeneratedMessage.returned)" + ck::format(result));
+        """, inputLine: context.inputLine)
+}
 
 private func cppEqualityBody(
     target: String, context: CppCallContext, c: PatternCase, unordered: Bool

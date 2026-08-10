@@ -520,7 +520,8 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func everyPatternKindRendersInEveryLanguage(_ language: AssignmentLanguage) {
         for kind in PatternKind.allCases {
-            let scripts = renderPatternFamily(GeneratedSourceFixtures.family(kind: kind), language: language)
+            let scripts = renderPatternFamily(
+                GeneratedSourceFixtures.family(kind: kind, language: language), language: language)
             #expect(!scripts.isEmpty, "\(language)/\(kind) rendered no scripts")
             for script in scripts {
                 #expect(
@@ -570,7 +571,8 @@ import Testing
             var perLanguage: [AssignmentLanguage: Set<String>] = [:]
             for language in AssignmentLanguage.allCases {
                 let source = renderPatternFamily(
-                    GeneratedSourceFixtures.family(kind: kind), language: language
+                    GeneratedSourceFixtures.family(kind: kind, language: language),
+                    language: language
                 )
                 .map(\.source).joined(separator: "\n")
                 perLanguage[language] = Set(vocabulary.filter { source.contains($0) })
@@ -604,7 +606,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         for kind in PatternKind.allCases {
-            let family = GeneratedSourceFixtures.family(kind: kind)
+            let family = GeneratedSourceFixtures.family(kind: kind, language: language)
             // The cases AND the auto-generated existence guard. The guard was
             // missed at first, and the omission was invisible: it is produced by
             // `existenceGuard(for:)` rather than by `renderPatternFamily`, so

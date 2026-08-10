@@ -34,9 +34,14 @@ import Testing
 
     /// Runs a rendered wrapper in a workspace holding the canonical runtime,
     /// the submission, and the student hint. Returns (exitCode, stdout).
+    /// Returns stderr as well as stdout, because they carry different halves
+    /// of the contract: `ck::failed` writes its JSON to stdout, while
+    /// `ck::errored` writes to stderr — which is what becomes `longResult`.
+    /// A test that only read stdout could not tell a reference failure's
+    /// message from an empty one.
     static func execute(
         script: String, submission: String, inputs: String? = nil
-    ) throws -> (code: Int32, stdout: String) {
+    ) throws -> (code: Int32, stdout: String, stderr: String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-cpprender-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -63,23 +68,30 @@ import Testing
         process.arguments = ["test.sh"]
         process.currentDirectoryURL = dir
         let out = Pipe()
+        let err = Pipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        process.standardError = err
         try process.run()
         let data = out.fileHandleForReading.readDataToEndOfFile()
+        let errData = err.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        return (
+            process.terminationStatus,
+            String(data: data, encoding: .utf8) ?? "",
+            String(data: errData, encoding: .utf8) ?? ""
+        )
     }
 
     static func family(
         _ kind: PatternKind, function: String = "f", expected: JSONValue,
-        args: [JSONValue] = [.int(3)]
+        args: [JSONValue] = [.int(3)], reference: String? = nil
     ) -> PatternFamily {
         PatternFamily(
             id: "fam", name: "Family", kind: kind,
             functionName: function, paramNames: ["x"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
-            cases: [PatternCase(key: "01", label: "case", args: args, expected: expected)])
+            cases: [PatternCase(key: "01", label: "case", args: args, expected: expected)],
+            referenceImplementation: reference)
     }
 
     static func render(_ family: PatternFamily, perStudent: Set<String> = []) -> String {
@@ -100,6 +112,44 @@ import Testing
             script: script, submission: "int f(int x) { return x + x; }\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains("wrong value"))
+    }
+
+    /// `.differential` end to end. The reference is COMPILED into the same
+    /// translation unit as the student's code, so this is the one language
+    /// where a reference that does not compile is a build failure rather than a
+    /// per-case result — worth executing rather than assuming.
+    @Test func differentialGradesAgainstTheReference() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(
+                .differential, expected: .null,
+                reference: "int ck_ref_f(int x) { return x * x; }"))
+        let good = try Self.execute(
+            script: script, submission: "int f(int x) { return x * x; }\n")
+        #expect(good.code == 0, "\(good.stdout)")
+        let bad = try Self.execute(
+            script: script, submission: "int f(int x) { return x + x; }\n")
+        #expect(bad.code == 1)
+        #expect(bad.stdout.contains("wrong value"))
+    }
+
+    /// A THROWING reference is the instructor's bug: exit 2 (errored), not 1.
+    /// Under the shared try/catch it would have reported "unexpected
+    /// exception", the student-failure message — the misattribution the other
+    /// five languages avoid, which is why C++ gives the reference call its own
+    /// handler.
+    @Test func differentialBlamesTheReferenceWhenTheReferenceThrows() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(
+                .differential, expected: .null,
+                reference: """
+                    int ck_ref_f(int) { throw std::runtime_error("reference is broken"); }
+                    """))
+        let result = try Self.execute(
+            script: script, submission: "int f(int x) { return x * x; }\n")
+        #expect(result.code == 2, "\(result.stderr)")
+        #expect(result.stderr.contains("the reference implementation raised"))
     }
 
     @Test func unorderedEqualityIgnoresOrderOnly() throws {

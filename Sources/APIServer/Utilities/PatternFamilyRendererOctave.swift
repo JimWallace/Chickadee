@@ -66,6 +66,8 @@ func renderOctavePatternCase(
         return octavePerformanceCase(family: family, case: c, prelude: prelude)
     case .stdoutEquality:
         return octaveStdoutCase(family: family, case: c, prelude: prelude)
+    case .differential:
+        return octaveDifferentialCase(family: family, case: c, prelude: prelude)
     }
 }
 
@@ -104,6 +106,62 @@ func renderOctaveExistenceGuard(family: PatternFamily, specHash: String) -> Stri
 
 /// `.boundaryEquality` / `.unorderedEquality` — call the function, compare the
 /// return value (exactly, or ignoring order).
+/// `.differential` — compares the student's function against the instructor's
+/// reference implementation, rendered verbatim above the call.
+///
+/// The reference is a `function … end` block in a generated `.m` file, which is
+/// legal because the header's `chickadee = test_runtime();` already made the
+/// file a SCRIPT. A generated test that opened with the reference would be read
+/// as a function file and nothing in it would run — the same rule the eval
+/// worker's `1;` boot guard exists for.
+///
+/// A failure IN THE REFERENCE is `errored`, not `failed`: a student cannot make
+/// it raise except through inputs the instructor chose, so the outcome is a
+/// broken test and telling the student their function is wrong would send them
+/// to debug the wrong code.
+private func octaveDifferentialCase(
+    family: PatternFamily, case c: PatternCase, prelude: String
+) -> String {
+    let ctx = octaveCallContext(for: family, case: c)
+    let reference = family.referenceImplementation ?? ""
+    return """
+        \(prelude)
+
+        \(ctx.declBlock)
+        % Instructor's reference implementation, rendered verbatim.
+        \(reference)
+
+        try
+            expected = \(family.differentialReferenceName)(\(ctx.callArgs));
+        catch err
+            chickadee.errored(["\(GeneratedMessage.referenceFailed)\\n" ...
+                \(ctx.inputLine)
+                "\(GeneratedMessage.error)" err.message]);
+        end
+
+        student = chickadee.load_student();
+        target = chickadee.require_fn(student, \(JSONValue.string(family.functionName).octaveLiteral));
+
+        try
+            result = target(\(ctx.callArgs));
+        catch err
+            chickadee.failed(["\(GeneratedMessage.unexpectedException)\\n" ...
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)" chickadee.format(expected) "\\n" ...
+                "\(GeneratedMessage.error)" err.message]);
+        end
+
+        if !chickadee.equal(result, expected)
+            chickadee.failed(["\(GeneratedMessage.wrongValue)\\n" ...
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)" chickadee.format(expected) "\\n" ...
+                "\(GeneratedMessage.got)" chickadee.format(result)]);
+        end
+
+        chickadee.passed(["Returned " chickadee.format(result)]);
+        """
+}
+
 private func octaveEqualityCase(
     family: PatternFamily, case c: PatternCase, prelude: String, unordered: Bool
 ) -> String {

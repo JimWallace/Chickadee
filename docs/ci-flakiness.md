@@ -120,7 +120,7 @@ to honour: session isolation before anything else can fail, a group-wide kill
 rather than a per-pid one, no unbounded wait anywhere on a cooperative-pool
 thread, and an environment that *replaces* rather than augments the parent's.
 
-## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open
+## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open; the result-POST 500 that shares its counter is CLOSED
 
 **Symptom.** The grading-hang probe (`grading-hang-probe.yml`) boots the
 real server + notebook page 12 times per engine and counts grading hangs;
@@ -210,12 +210,39 @@ because the evidence was being discarded at the moment it was collected. The
 script now greps the whole log for error-level lines *before* printing the
 tail, so the next sighting names its cause.
 
-A hypothesis worth checking against that output when it arrives, not before:
-`submitBrowserResult` wraps the submission insert and the result save in
-`withTransientDatabaseLockRetry` — someone has already met SQLite lock 500s on
-this endpoint — but `awardFirstToSubmitRecords`, `flagResultForBrightSpaceSync`
-and the class-records writes in the same handler are not wrapped. If the next
-log line reads `database is locked`, that is where to look.
+**CLOSED (2026-08-10), without needing that log line.** The hypothesis above
+was right about the location and wrong about the mechanism, and the mechanism is
+why it took three sightings.
+
+The window is exact. `suite_done` was reached, the POST 500'd, and the page then
+polled `GET /api/v1/submissions/:id` and got **200** for its full budget — so
+the SUBMISSION row existed and the RESULT did not. Something between the two
+threw. In the probe's configuration exactly one thing there could:
+`awardFirstToSubmitRecords`, an unguarded read-then-write. Its neighbour
+`flagResultForBrightSpaceSync` only reads, and returns immediately when no
+BrightSpace credentials are configured — the smoke's case.
+
+**Why it threw at all is the part that was not obvious.** sqlite-nio installs a
+busy handler that returns 1 forever (`SQLiteConnection.open`), so ordinary lock
+contention never surfaces as an error — which is why "set a `busy_timeout`" is
+the wrong fix, and why reading the handler for a missing timeout finds nothing.
+What a busy handler cannot cover is `SQLITE_BUSY_SNAPSHOT`: a WAL read snapshot
+made stale by another connection's commit. SQLite returns it IMMEDIATELY,
+bypassing the handler, because waiting cannot help — only restarting the
+transaction can. Every badge helper is read-then-write, the exact shape that
+hits it, and the page's own result polling supplies the concurrent commits.
+
+The fix is two changes, and the second is the one that matters:
+
+1. The Pathfinder award moved BELOW the result save. It was the only reason the
+   window was lossy rather than merely noisy.
+2. Every side effect after the result now runs through a `bestEffort` wrapper —
+   `withTransientDatabaseLockRetry` first, then log and continue. A class badge
+   is worth an ordinary amount; a student's grade is not worth losing for one.
+
+`BrowserResultSideEffectOrderTests` pins both, and reproduces the original
+failure when the order is reinstated. The `run-smoke.sh` error-line change from
+the same PR stays useful for the next intermittent, which will not be this one.
 
 **Root cause** of Family 2 remains the exec-hang investigation's to close —
 continue from the probe's `grading breadcrumbs:` per-phase timings on an

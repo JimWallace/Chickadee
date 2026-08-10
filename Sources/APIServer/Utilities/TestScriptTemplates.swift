@@ -39,9 +39,16 @@ import Foundation
 /// | `variable_equality` | `variableEquality` |
 /// | `structural_check` | the `astStructure` notebook check |
 ///
-/// `differential` stays because nothing supersedes it yet — no pattern kind
-/// compares a submission against a reference implementation. It is the
-/// candidate for a ninth kind, and this enum should empty out when that lands.
+/// `differential` is now superseded too, by `PatternKind.differential` — the
+/// ninth kind, which renders in all six languages and computes each case's
+/// expected value by running the instructor's reference.
+///
+/// The template survives it deliberately, and this enum is not empty. Removing
+/// it would break every assignment that already applied it: a template is a
+/// one-shot text dump the instructor then owns, so their script is a plain
+/// authored test with no `generatedBy` link back to here. Nothing would migrate;
+/// the option would simply stop being offered while the scripts it wrote kept
+/// grading. A new differential test should be a family.
 enum PythonTestTemplateType: String, CaseIterable {
     case differential
 
