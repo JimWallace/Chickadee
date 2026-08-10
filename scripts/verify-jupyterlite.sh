@@ -86,40 +86,46 @@ if data_worker_chunks:
         "run scripts/patch-waitasync-worker.py (build-jupyterlite.sh does this)."
     )
 
-# The in-iframe kernel-boot diagnostics collector must be injected into the
-# kernel-bearing editor documents (scripts/patch-jupyterlite-diagnostics.py). A
-# `jupyter lite build` regenerates these index.html files and would drop the
-# <script> tag; without it the collector never runs and the kernel boot is
-# invisible again. Assert it's present so a rebuild that forgets the patch fails
-# here, not silently in front of a student. The tag carries a ?v=<hash> derived
-# from the collector's bytes (cache-buster); assert the hash matches the current
-# script so a stale tag — which would serve students an old cached collector
-# after the script changed — fails here, not silently in the browser.
+# Chickadee's in-iframe scripts must be injected into their editor documents
+# (scripts/patch-jupyterlite-diagnostics.py): the kernel-boot diagnostics
+# collector (notebooks + repl — without it the kernel boot is invisible again)
+# and the cell-perf coalescer (notebooks — without it the per-output forced
+# reflow returns and the freeze watchdog starts firing again). A `jupyter lite
+# build` regenerates these index.html files and would drop the <script> tags.
+# Assert each tag is present so a rebuild that forgets the patch fails here,
+# not silently in front of a student. Every tag carries a ?v=<hash> derived
+# from its script's bytes (cache-buster); assert the hash matches the current
+# script so a stale tag — which would serve students an old cached copy after
+# the script changed — fails here, not silently in the browser.
 import hashlib
 import re
 
-diag_source = build_dir.parent / "jl-kernel-diagnostics.js"
-if not diag_source.is_file():
-    fail(f"missing kernel-diagnostics collector source: {diag_source}")
-expected_hash = hashlib.sha256(diag_source.read_bytes()).hexdigest()[:8]
-expected_tag = f'<script src="/jl-kernel-diagnostics.js?v={expected_hash}"></script>'
-diag_tag_re = re.compile(r'<script src="/jl-kernel-diagnostics\.js\?v=([0-9a-f]+)"></script>')
-for rel in ("notebooks/index.html", "repl/index.html"):
-    index_path = build_dir / rel
-    if not index_path.is_file():
-        fail(f"missing editor document: {index_path}")
-    found = diag_tag_re.search(index_path.read_text())
-    if not found:
-        fail(
-            f"{rel} is missing the cache-busted kernel-diagnostics collector tag — "
-            "run scripts/patch-jupyterlite-diagnostics.py (build-jupyterlite.sh does this)."
-        )
-    if found.group(1) != expected_hash:
-        fail(
-            f"{rel} has a stale kernel-diagnostics cache-buster "
-            f"(?v={found.group(1)}, expected ?v={expected_hash}) — the collector changed "
-            "but the tag was not re-patched; run scripts/patch-jupyterlite-diagnostics.py."
-        )
+for script_name, indexes in (
+    ("jl-kernel-diagnostics.js", ("notebooks/index.html", "repl/index.html")),
+    ("jl-cell-perf-patch.js", ("notebooks/index.html",)),
+):
+    script_source = build_dir.parent / script_name
+    if not script_source.is_file():
+        fail(f"missing injected-script source: {script_source}")
+    expected_hash = hashlib.sha256(script_source.read_bytes()).hexdigest()[:8]
+    tag_pattern = re.compile(
+        r'<script src="/' + re.escape(script_name) + r'\?v=([0-9a-f]+)"></script>')
+    for rel in indexes:
+        index_path = build_dir / rel
+        if not index_path.is_file():
+            fail(f"missing editor document: {index_path}")
+        found = tag_pattern.search(index_path.read_text())
+        if not found:
+            fail(
+                f"{rel} is missing the cache-busted {script_name} tag — "
+                "run scripts/patch-jupyterlite-diagnostics.py (build-jupyterlite.sh does this)."
+            )
+        if found.group(1) != expected_hash:
+            fail(
+                f"{rel} has a stale {script_name} cache-buster "
+                f"(?v={found.group(1)}, expected ?v={expected_hash}) — the script changed "
+                "but the tag was not re-patched; run scripts/patch-jupyterlite-diagnostics.py."
+            )
 
 # The vendored xeus extension must not fetch the parselmouth conda->pip mapping
 # from raw.githubusercontent.com at module load (scripts/patch-xeus-extension.py

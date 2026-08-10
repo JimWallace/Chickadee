@@ -4,6 +4,7 @@
     "defaultKernelName": "xpython",
     "fullLabextensionsUrl": "./extensions",
     "disabledExtensions": [
+      "@jupyter-notebook/notebook-extension:scroll-output",
       "@jupyterlite/application-extension:service-worker-manager"
     ],
     "federated_extensions": [],
