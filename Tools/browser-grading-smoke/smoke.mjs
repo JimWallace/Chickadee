@@ -559,6 +559,26 @@ const EVAL_PROBES = {
         },
         expression: 'classify(30)',
     },
+    octave: {
+        worker: '/octave-eval-worker.js',
+        cells: [
+            'function r = classify(bmi)\n if bmi < 18.5\n  r = "under";\n else\n  r = "ok";\n end\nend',
+            'this_name_does_not_exist()',
+            'function r = area(rad)\n r = round(pi * rad * rad * 100) / 100;\nend',
+            'function n = count(items)\n n = numel(items);\nend',
+        ],
+        calls: {
+            call: { functionName: 'classify', args: [18.49] },
+            later: { functionName: 'area', args: [2] },
+            stringArg: { functionName: 'count', args: ['abcd'] },
+            // THE OCTAVE TRAP. `[65, "bc"]` is the char array "Abc" — three
+            // characters — so a renderer reaching for brackets would answer 3
+            // where the author wrote a two-element list.
+            mixedArray: { functionName: 'count', args: [[65, 'bc']] },
+            missing: { functionName: 'no_such_function', args: [] },
+        },
+        expression: 'classify(30)',
+    },
 };
 
 const kernelEvalProbePage = (probe, runtimeSource) => `<!doctype html><meta charset="utf-8"><title>auto-compute smoke</title>
@@ -723,6 +743,18 @@ const EVAL_EXPECTATIONS = {
             // stores no nil, so a renderer that emitted one here would hand the
             // solution a two-element table and this would answer 2.
             nullSlot: ['a null inside a table argument keeps its slot', '3'],
+        },
+        expression: '"ok"',
+    },
+    octave: {
+        cellError: /undefined/i,
+        results: {
+            call: ['a call returns its value as an Octave literal', '"under"'],
+            later: ['a function defined after the failing cell is callable', '12.57'],
+            stringArg: ['a string argument round-trips', '4'],
+            // THE OCTAVE TRAP, executed on a real kernel: brackets would make
+            // this the char array "Abc" and answer 3.
+            mixedArray: ['a mixed array argument is a cell, not a char array', '2'],
         },
         expression: '"ok"',
     },

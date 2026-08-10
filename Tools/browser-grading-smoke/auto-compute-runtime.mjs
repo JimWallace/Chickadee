@@ -24,6 +24,13 @@ const COMPOSITION = {
         file: 'Sources/Core/RPersonalizationRuntime.swift',
         constants: ['chickadeeJSONStringRSource'],
     },
+    octave: {
+        file: 'Sources/Core/OctavePersonalizationRuntime.swift',
+        constants: [
+            'chickadeeSerializeOctaveSource',
+            'chickadeeEscapeStringOctaveSource',
+        ],
+    },
     lua: {
         file: 'Sources/Core/LuaPersonalizationRuntime.swift',
         constants: [

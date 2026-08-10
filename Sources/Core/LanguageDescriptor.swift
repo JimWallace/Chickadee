@@ -534,19 +534,7 @@ extension AssignmentLanguage {
                     #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
                     #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
                 ]),
-                // PENDING ITS WORKER. This language has a vendored kernel, so
-                // the target answer is `.inPageKernel` — the editor's job is
-                // in-browser verification, and an author should not wait on a
-                // server round-trip to see what their solution returns. It says
-                // `.serverDriver` only because `/octave-eval-worker.js` does not exist
-                // yet; declaring the kernel before writing the worker would have
-                // the editor spawn a 404 and auto-compute would silently stop.
-                //
-                // Flipping it is one line here, one worker mirroring
-                // `python-eval-worker.js` on this language's existing
-                // `*-grading-shared.js`, and one row in the browser-grading
-                // smoke matrix.
-                autoCompute: .serverDriver,
+                autoCompute: .inPageKernel(workerScript: "/octave-eval-worker.js"),
                 inputsFileName: "_ck_inputs.m",
                 notebookKernelNames: AssignmentLanguage.octaveKernelNames,
                 editorSupport: .notebookKernel(

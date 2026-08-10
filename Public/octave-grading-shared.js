@@ -96,17 +96,89 @@
     // is in xeus-octave's own transitive closure (plotly drags in the Python
     // payload), so a seed list would select all eleven and save nothing.
 
-    // Escape a JS string for embedding in Octave source as a double-quoted
-    // literal.  Only used for names Chickadee itself controls (script names,
-    // the seed, the nonce), but escaping keeps a surprising filename from
-    // breaking the wrapper's parse.
+    /// An Octave double-quoted string literal for `value`.
+    ///
+    /// Byte-identical to `encodeOctaveString` in Sources/Core/JSONValue.swift,
+    /// including the EXACTLY-THREE-DIGIT OCTAL escape for control characters and
+    /// DEL that an earlier version omitted. Octal rather than `\\x` is not a
+    /// style choice: Octave's `\\x` consumes every hex digit that follows, so
+    /// `"\\x0abc"` swallows four characters of payload, while octal stops at
+    /// three by rule. Pinned by Tests/Fixtures/octave-literal-contract.json,
+    /// which both implementations read.
+    ///
+    /// This used to escape only the five common characters, which was enough
+    /// while its callers were names Chickadee controls (script names, the seed,
+    /// the nonce). `octaveLiteral` below hands it instructor and student text,
+    /// where a raw control character would end the string mid-literal.
     function octaveStringLiteral(value) {
-        return '"' + String(value)
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t') + '"';
+        var out = '"';
+        var text = String(value);
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            var code = text.charCodeAt(i);
+            if (ch === '\\') out += '\\\\';
+            else if (ch === '"') out += '\\"';
+            else if (ch === '\n') out += '\\n';
+            else if (ch === '\r') out += '\\r';
+            else if (ch === '\t') out += '\\t';
+            else if (code < 0x20 || code === 0x7f) {
+                out += '\\' + code.toString(8).padStart(3, '0');
+            } else out += ch;
+        }
+        return out + '"';
+    }
+
+    /// True when every element is a numeric or boolean scalar (JSON null
+    /// admitted — it renders `NA`, a double, and occupies its slot), so the
+    /// array can render as an Octave row vector without any silent char
+    /// coercion. Strings are deliberately NOT admitted — see `octaveLiteral`.
+    /// An empty array falls through to the cell rendering: nothing says what it
+    /// would have held.
+    function isOctaveNumericArray(items) {
+        if (items.length === 0) return false;
+        return items.every(function (item) {
+            return item === null || item === undefined
+                || typeof item === 'boolean' || typeof item === 'number';
+        });
+    }
+
+    /// Renders a JSON value as Octave source.
+    ///
+    /// A SECOND IMPLEMENTATION of `JSONValue.octaveLiteral`, for the reason
+    /// `rLiteral` and `luaLiteral` are: in-page auto-compute calls a solution
+    /// with arguments the instructor typed but has not saved, so there is no
+    /// server round-trip in which the server could render them. Neither side
+    /// owns the expectations — Tests/Fixtures/octave-literal-contract.json does,
+    /// and both read it.
+    ///
+    /// THE BRACKETS-VS-BRACES SPLIT IS THE WHOLE TRAP. `[...]` in Octave
+    /// concatenates rather than collecting, and a number beside a string is
+    /// coerced to its character: `[65, "bc"]` is the char array `"Abc"`, not a
+    /// two-element list. So brackets are used only when every element is a
+    /// numeric or boolean scalar; anything else — any string, any mixing, any
+    /// nesting, the empty array — is a cell.
+    function octaveLiteral(value) {
+        if (value === null || value === undefined) return 'NA';
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') {
+            if (Number.isNaN(value)) return 'NaN';
+            if (!Number.isFinite(value)) return value < 0 ? '-Inf' : 'Inf';
+            return String(value);
+        }
+        if (typeof value === 'string') return octaveStringLiteral(value);
+        if (Array.isArray(value)) {
+            var inner = value.map(octaveLiteral).join(', ');
+            return isOctaveNumericArray(value) ? '[' + inner + ']' : '{' + inner + '}';
+        }
+        var keys = Object.keys(value).sort();
+        if (keys.length === 0) return 'containers.Map()';
+        // A Map is built from two cells, not from pairs: containers.Map takes
+        // all the keys and then all the values.
+        return 'containers.Map({'
+            + keys.map(octaveStringLiteral).join(', ')
+            + '}, {'
+            + keys.map(function (k) { return octaveLiteral(value[k]); }).join(', ')
+            + '})';
     }
 
     // The one-time cell that installs the harness into the kernel's session.
@@ -260,6 +332,7 @@
         OCTAVE_KERNEL: OCTAVE_KERNEL,
         SETUP_OCTAVE: SETUP_OCTAVE,
         octaveStringLiteral: octaveStringLiteral,
+        octaveLiteral: octaveLiteral,
         assignmentSeedOctave: assignmentSeedOctave,
         makeNonce: makeNonce,
         runScriptOctave: runScriptOctave,

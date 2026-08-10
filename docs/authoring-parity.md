@@ -25,10 +25,12 @@ these gaps are correct as they stand, and have been re-litigated more than once.
 | Solution function scan | yes | no | no | no | n/a | n/a |
 
 **Both bottom rows have since moved.** The scan row was closed by the parity
-work (R, Lua and Octave parsers behind `FunctionScanSyntax`), and auto-compute
-now reads *in-page kernel* for Python, R and Lua, with Octave the last kernel
-language still on the server driver. The table is left as measured so the
-sections below, which argue from it, still read straight.
+work (R, Lua and Octave parsers behind `FunctionScanSyntax`), and the
+auto-compute row reads *in-page kernel* for every language that has an editor
+kernel — Python, R, Lua and Octave. The two on the server driver are C++ and
+Racket, which have no kernel to run; `OctaveAutoComputeRuntimeTests` pins that
+correspondence, so the split cannot quietly become a gap again. The table is
+left as measured so the sections below, which argue from it, still read straight.
 
 Two rows mislead as stated:
 
@@ -179,8 +181,8 @@ round-trip — a kernel boot the author waits for once is a better trade than a
 round-trip they pay for on every case. The boot is also lazy: it happens when
 auto-compute is first used, not on every visit as this claimed.
 
-R shipped first, then Lua; Octave is the one kernel language still on the server
-driver.
+R shipped first, then Lua, then Octave. Every kernel language now computes in
+the page; only C++ and Racket route to the server, because neither has a kernel.
 
 **Per-language custom-script template sets.** Seven of the nine Python templates
 are already available in every language as pattern-family kinds, in a better
