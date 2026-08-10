@@ -24,6 +24,12 @@ these gaps are correct as they stand, and have been re-litigated more than once.
 | Auto-compute expected | in-page kernel | server | server | server | server | server |
 | Solution function scan | yes | no | no | no | n/a | n/a |
 
+**Both bottom rows have since moved.** The scan row was closed by the parity
+work (R, Lua and Octave parsers behind `FunctionScanSyntax`), and auto-compute
+now reads *in-page kernel* for Python, R and Lua, with Octave the last kernel
+language still on the server driver. The table is left as measured so the
+sections below, which argue from it, still read straight.
+
 Two rows mislead as stated:
 
 - **Templates.** Three *shell* templates are offered on every language, but
@@ -163,10 +169,18 @@ asserted against. The old reason to move it (retiring `Public/pyodide`) no
 longer applies; that worker already migrated. **CLAUDE.md's roadmap note listing
 `pyodide-worker.js` as a Pyodide blocker is stale.**
 
-**In-page kernels for R/Lua/Octave auto-compute.** Five more kernel boots on the
-edit page, paid by every author on every visit, to close a fidelity gap those
-languages do not have — their kernels ship bare, so there is no package-version
-surface to diverge on.
+**In-page kernels for R/Lua/Octave auto-compute — OVERRULED, and the reasoning
+above is why it was worth writing down.** The argument here weighed only
+fidelity, and on fidelity it is correct: those kernels ship bare, so there is no
+package-version surface for a server driver to diverge on. It weighed the wrong
+thing. The edit page exists to support in-browser authoring, and an author
+changing a case should see what their solution returns without a server
+round-trip — a kernel boot the author waits for once is a better trade than a
+round-trip they pay for on every case. The boot is also lazy: it happens when
+auto-compute is first used, not on every visit as this claimed.
+
+R shipped first, then Lua; Octave is the one kernel language still on the server
+driver.
 
 **Per-language custom-script template sets.** Seven of the nine Python templates
 are already available in every language as pattern-family kinds, in a better

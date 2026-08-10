@@ -105,4 +105,49 @@ public enum LuaPersonalizationRuntime {
             return '"' .. s .. '"'
         end
         """#
+
+    /// The `chickadee.NULL` sentinel VALUE, as Lua source.
+    ///
+    /// Lua has no missing-value scalar and a bare `nil` in a table constructor
+    /// is not stored at all, so `JSONValue.luaLiteral` emits `chickadee.NULL`
+    /// for a null inside any table — which requires something to exist under
+    /// that name wherever a rendered literal is evaluated.
+    ///
+    /// Two places evaluate them: the grading runtime (`test_runtime.lua`, which
+    /// binds this as `M.NULL`) and the in-page auto-compute worker (which has no
+    /// `test_runtime` loaded and binds it as `chickadee.NULL` directly). Only
+    /// the expression is shared, because the two bind it differently.
+    ///
+    /// Compared by identity, so nothing a student can construct equals it.
+    public static let chickadeeNullSentinelLuaSource =
+        #"setmetatable({}, { __tostring = function() return "NULL" end })"#
+
+    /// What the in-page auto-compute worker must define before it evaluates a
+    /// rendered Lua literal: the `chickadee` table carrying the sentinel.
+    ///
+    /// The grading path gets this from `require("test_runtime")`. The eval
+    /// worker loads no such module — it evaluates the instructor's solution
+    /// cells and nothing else — so without this a null inside any argument
+    /// would index a nil `chickadee` and report as a confusing solution error.
+    public static let chickadeeNullTableLuaSource = """
+        chickadee = chickadee or {}
+        chickadee.NULL = chickadee.NULL or \(chickadeeNullSentinelLuaSource)
+        """
+
+    /// Re-binds the two helper functions above as globals.
+    ///
+    /// `chickadee_serialize` and `chickadee_json_str` are declared `local`,
+    /// which is right for the server driver — one script, one chunk, and a
+    /// driver that leaks globals into an instructor's expression scope would be
+    /// a surprise. In a kernel it is not enough: EVERY CELL IS ITS OWN CHUNK, so
+    /// a `local` declared while seeding the runtime is gone by the time the
+    /// first snippet runs, and the snippet's call reads as "attempt to call a
+    /// nil value" — a per-cell error rather than the substrate failure it is.
+    ///
+    /// This tail runs inside the same chunk as the declarations, which is the
+    /// only place the locals are still in scope.
+    public static let chickadeeAutoComputeExportsLuaSource = """
+        _G.chickadee_serialize = chickadee_serialize
+        _G.chickadee_json_str = chickadee_json_str
+        """
 }

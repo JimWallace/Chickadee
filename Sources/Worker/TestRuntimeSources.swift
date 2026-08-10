@@ -801,7 +801,7 @@ let testRuntimeLua =
     -- emits `chickadee.NULL` and is what requires this to exist under that name).
     --
     -- Compared by identity, so nothing a student can construct is equal to it.
-    M.NULL = setmetatable({}, { __tostring = function() return "NULL" end })
+    M.NULL = \#(LuaPersonalizationRuntime.chickadeeNullSentinelLuaSource)
 
     -- Exact equality, with Lua 5.4's integer/float split handled the way a student
     -- would expect: 1 and 1.0 are the same answer. `==` already says so for

@@ -382,8 +382,21 @@ extension AssignmentLanguage {
             // `deparse` serializes; only the escaper is needed.
             return RPersonalizationRuntime.chickadeeJSONStringRSource
         case .lua:
-            return LuaPersonalizationRuntime.chickadeeSerializeLuaSource + "\n\n"
-                + LuaPersonalizationRuntime.chickadeeJSONStringLuaSource
+            // Four pieces, and the order matters. The sentinel comes first: a
+            // rendered argument may mention `chickadee.NULL`, and the eval
+            // worker loads no `test_runtime` to bind it. The exports come last,
+            // because they are the only place the two `local` declarations
+            // above are still in scope.
+            //
+            // `Tools/browser-grading-smoke` rebuilds this list from the same
+            // constants; `LuaAutoComputeRuntimeTests` fails if a fifth piece is
+            // added here without updating it.
+            return [
+                LuaPersonalizationRuntime.chickadeeNullTableLuaSource,
+                LuaPersonalizationRuntime.chickadeeSerializeLuaSource,
+                LuaPersonalizationRuntime.chickadeeJSONStringLuaSource,
+                LuaPersonalizationRuntime.chickadeeAutoComputeExportsLuaSource,
+            ].joined(separator: "\n\n")
         case .octave:
             return OctavePersonalizationRuntime.chickadeeSerializeOctaveSource + "\n\n"
                 + OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource
