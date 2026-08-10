@@ -30,34 +30,29 @@ import {
 (function (global) {
     'use strict';
 
-<<<<<<< HEAD
     // Which template groups an assignment may pick from.
     //
     // The Python group is Python-only, and used not to be gated at all: an
     // Octave author opened "Write a custom script" — advertised in the Add Test
-    // catalog as "your assignment's language, or .sh" — and was offered nine
-    // Python templates and a `test_correctness.py` filename. Applying one wrote
-    // Python into an Octave suite.
+    // catalog as "your assignment's language, or .sh" — and was offered Python
+    // templates and a `test_correctness.py` filename. Applying one wrote Python
+    // into an Octave suite.
     //
     // The Shell group is offered everywhere because it IS everywhere: `.sh` is
     // the universal test-script contract, and a shell test is a legitimate
     // thing to hand-write in any assignment.
     //
-    // The other five languages have no template set. That is an authoring gap,
-    // not a structural one — writing pedagogically sound R/Lua/Octave/C++/
-    // Racket equivalents of these nine is content work. Until they exist the
-    // picker offers Shell and Blank, and Blank opens an empty file with the
-    // assignment's own extension, which is the honest answer.
+    // The Python group is down to ONE. The other eight duplicated a
+    // pattern-family kind that renders in all six languages, in a better form,
+    // and offering both taught authors to reach for the fallback — the one that
+    // only works in Python. `differential` survives because nothing supersedes
+    // it yet.
+    //
+    // So the other five languages get Shell and Blank, and Blank opens an empty
+    // file with the assignment's own extension. That is a smaller gap than it
+    // looks: the tests those templates wrote are pattern families now.
     var PYTHON_TEMPLATE_GROUP = { group: 'Python', items: [
-            { value: 'py:exists', label: 'Function Exists' },
-            { value: 'py:correctness', label: 'Correctness (input/output pairs)' },
-            { value: 'py:corner_cases', label: 'Corner Cases' },
-            { value: 'py:exception', label: 'Exception Handling' },
-            { value: 'py:type_check', label: 'Return Type Check' },
-            { value: 'py:performance', label: 'Performance / Runtime' },
-            { value: 'py:differential', label: 'Differential (reference solution)' },
-            { value: 'py:variable_equality', label: 'Variable Equality' },
-            { value: 'py:structural_check', label: 'Structural Check (AST properties)' }
+        { value: 'py:differential', label: 'Differential (reference solution)' }
     ] };
 
     var SHELL_TEMPLATE_GROUP = { group: 'Shell', items: [
@@ -86,22 +81,6 @@ import {
         var language = global.ChickadeeLanguage;
         return language ? language.scriptExtension() : 'py';
     }
-=======
-    var TEMPLATE_OPTIONS = [
-        // Python's template set is down to one. The other eight duplicated a
-        // pattern-family kind that renders in all six languages, in a better
-        // form, and offering both taught authors to reach for the fallback.
-        // `differential` has no first-class equivalent yet.
-        { group: 'Python', items: [
-            { value: 'py:differential', label: 'Differential (reference solution)' }
-        ] },
-        { group: 'Shell', items: [
-            { value: 'sh:always_pass', label: 'Always Pass (placeholder)' },
-            { value: 'sh:file_exists', label: 'File Exists Check' },
-            { value: 'sh:command_output', label: 'Command Output Check' }
-        ] }
-    ];
->>>>>>> 4cba87e (refactor(templates): retire the eight script templates pattern families replaced)
 
     function cfg() { return global.ChickadeeScriptRendererConfig || {}; }
 
