@@ -146,7 +146,13 @@ import {
 
     function fetchTemplates() {
         if (templateCache) return Promise.resolve(templateCache);
-        return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
+        // The shell templates name a solution file and an interpreter, so the
+        // server needs the assignment's language to render them. Without it
+        // every language was handed `solution.py` and `python3`.
+        var language = global.ChickadeeLanguage && global.ChickadeeLanguage.facts().name;
+        var url = '/instructor/script-templates'
+            + (language ? '?language=' + encodeURIComponent(language) : '');
+        return fetch(url, { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
             .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
             .then(function (data) { templateCache = data; return data; });
     }

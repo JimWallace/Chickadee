@@ -56,10 +56,44 @@ final class AssignmentHelpersUtilityTests {
     }
 
     @Test func defaultNotebookDataEmbedsAssignmentTitle() throws {
-        let data = defaultNotebookData(title: "Lab \"1\"")
+        let data = try #require(defaultNotebookData(title: "Lab \"1\""))
         let json = try #require(String(data: data, encoding: .utf8))
         #expect(json.contains(#"# Lab \"1\""#))
         #expect(json.contains(#""nbformat": 4"#))
+    }
+
+    /// A scaffolded notebook carries the ASSIGNMENT'S kernel, not Python's.
+    ///
+    /// This hardcoded `xpython` for every language, and the four call sites had
+    /// no language to pass. Selecting R and clicking "Create assignment
+    /// notebook" produced a Python notebook — and on a draft with no recorded
+    /// language the kernelspec is the only signal there is, so the wrong answer
+    /// was sticky.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func scaffoldedNotebooksCarryTheirLanguagesKernel(_ language: AssignmentLanguage) throws {
+        guard case .notebookKernel(_, let kernelName, let displayName, _) = language.editorSupport
+        else {
+            // Upload-only: there is no notebook workflow, so no notebook.
+            #expect(defaultNotebookData(title: "Lab", language: language) == nil)
+            return
+        }
+        let data = try #require(defaultNotebookData(title: "Lab", language: language))
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains("\"name\": \"\(kernelName)\""))
+        #expect(json.contains("\"display_name\": \"\(displayName)\""))
+        #expect(json.contains("\"language\": \"\(language.rawValue)\""))
+        // The starter cell is commented in the language too — `#` is not a Lua
+        // comment, and this cell is the first thing a student sees.
+        #expect(json.contains("\(language.lineCommentPrefix) Student solution starts here"))
+    }
+
+    /// No declared language keeps Python, which is what a plain `.sh` suite
+    /// produced before any of this and is the only defensible default when
+    /// nothing names a language.
+    @Test func aLanguagelessScaffoldStaysPython() throws {
+        let data = try #require(defaultNotebookData(title: "Lab", language: nil))
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains("\"name\": \"xpython\""))
     }
 
     @Test func contentTypeMapsKnownTextAndNotebookTypes() {

@@ -327,7 +327,7 @@ import VaporTesting
             // `scheduleValidationAfterSuiteEdit` returns early before
             // reaching the runner pre-check.
             let solutionPath = app.submissionsDirectory + "no_runner_solution.ipynb"
-            try defaultNotebookData(title: "Solution").write(to: URL(fileURLWithPath: solutionPath))
+            try #require(defaultNotebookData(title: "Solution")).write(to: URL(fileURLWithPath: solutionPath))
             let validation = APISubmission(
                 id: "sub_no_runner_validation",
                 testSetupID: setupID,

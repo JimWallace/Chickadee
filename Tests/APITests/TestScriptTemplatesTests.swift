@@ -1,3 +1,4 @@
+import Core
 import Fluent
 // Tests/CoreTests/TestScriptTemplatesTests.swift
 import Foundation
@@ -367,6 +368,45 @@ import Testing
         #expect(s.contains("EXPECTED"))
         #expect(s.contains("ACTUAL"))
 
+    }
+
+    /// The three shell templates are offered on EVERY language, and named
+    /// Python in their bodies: `FILE="solution.py"` and
+    /// `python3 -c "import solution; …"`. A non-Python author was handed three
+    /// templates, all wrong for them — worse than being handed none.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func shellTemplatesNameTheAssignmentsLanguage(_ language: AssignmentLanguage) {
+        let fileExists = shellTestScript(type: .fileExists, language: language)
+        #expect(fileExists.contains("solution.\(language.sourceFileExtension)"))
+
+        let commandOutput = shellTestScript(type: .commandOutput, language: language)
+        #expect(commandOutput.contains(language.descriptor.interpreterProbe.command))
+        #expect(commandOutput.contains("solution.\(language.sourceFileExtension)"))
+
+        guard language != .python else { return }
+        // No Python left anywhere in another language's scaffold.
+        for template in [fileExists, commandOutput] {
+            #expect(!template.contains("solution.py"))
+            #expect(!template.contains("python3"))
+        }
+    }
+
+    /// A compiled language builds before it runs, so its scaffold compiles
+    /// first. Chosen by `capabilityRequiresExecutableOutput` — the fact that
+    /// already means exactly this — rather than by naming C++.
+    @Test func aCompiledLanguagesShellTemplateCompilesBeforeRunning() {
+        let cpp = shellTestScript(type: .commandOutput, language: .cpp)
+        #expect(cpp.contains("g++"))
+        #expect(cpp.contains("-o ./ck_solution"))
+        #expect(cpp.contains("./ck_solution"))
+        // And an interpreted one does not.
+        #expect(!shellTestScript(type: .commandOutput, language: .lua).contains("-o "))
+    }
+
+    /// No declared language keeps the previous bytes exactly.
+    @Test(arguments: ShellTestTemplateType.allCases)
+    func aLanguagelessSuiteGetsThePythonScaffoldUnchanged(_ type: ShellTestTemplateType) {
+        #expect(shellTestScript(type: type) == shellTestScript(type: type, language: .python))
     }
 
     @Test func allShellTemplateTypes_nonEmpty() {

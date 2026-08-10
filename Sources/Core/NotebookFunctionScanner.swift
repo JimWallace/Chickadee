@@ -148,7 +148,9 @@ public struct NotebookFunctionScanEntry: Sendable {
 /// other language. Production code calls the language-aware overload
 /// `scanNotebookForSectionsAndFunctions(_:language:)` instead, which answers
 /// "cannot read this language" rather than "found nothing".
-public func scanNotebookForSectionsAndFunctions(_ notebookData: Data) -> NotebookScanResult {
+public func scanNotebookForSectionsAndFunctions(
+    _ notebookData: Data, parsing language: AssignmentLanguage = .python
+) -> NotebookScanResult {
     guard
         let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
         let cells = notebook["cells"] as? [[String: Any]]
@@ -179,7 +181,7 @@ public func scanNotebookForSectionsAndFunctions(_ notebookData: Data) -> Noteboo
                 }
             }
         } else if cellType == "code" {
-            let fns = extractTopLevelFunctions(from: source)
+            let fns = extractTopLevelFunctions(from: source, language: language)
             for fn in fns {
                 rawEntriesByName[fn.name] = entries.count
                 entries.append(NotebookFunctionScanEntry(info: fn, sectionName: currentSection))
@@ -254,31 +256,123 @@ private func cellSource(_ cell: [String: Any]) -> String {
     return (cell["source"] as? String) ?? ""
 }
 
-/// Parses all top-level (no leading indentation) `def` statements in `source`.
+/// Parses all top-level (no leading indentation) definitions in `source`.
 /// Private functions (names starting with `_`) are excluded.
-private func extractTopLevelFunctions(from source: String) -> [NotebookFunctionInfo] {
+///
+/// THE TRAVERSAL IS ONE IMPLEMENTATION; only the per-line parse varies. Walking
+/// cells, tracking the current `## ` header, deduping and marking shadowed
+/// redefinitions are language-independent, and copying them per language would
+/// be five chances to diverge on the part that has nothing to do with syntax.
+private func extractTopLevelFunctions(
+    from source: String, language: AssignmentLanguage = .python
+) -> [NotebookFunctionInfo] {
     let lines = source.components(separatedBy: "\n")
     var results: [NotebookFunctionInfo] = []
-    var i = 0
 
-    while i < lines.count {
-        let line = lines[i]
-        // Top-level means no leading whitespace.
-        guard !line.isEmpty,
-            !line.hasPrefix(" "),
-            !line.hasPrefix("\t"),
-            line.hasPrefix("def ")
-        else {
-            i += 1
-            continue
-        }
-        let bodyLines = Array(lines.dropFirst(i + 1))
-        if let info = parseFunctionDef(line, bodyLines: bodyLines), !info.name.hasPrefix("_") {
+    for (index, line) in lines.enumerated() {
+        // Top-level means no leading whitespace, in every language here.
+        guard !line.isEmpty, !line.hasPrefix(" "), !line.hasPrefix("\t") else { continue }
+        let bodyLines = Array(lines.dropFirst(index + 1))
+        if let info = parseDefinition(line, bodyLines: bodyLines, language: language),
+            !info.name.hasPrefix("_")
+        {
             results.append(info)
         }
-        i += 1
     }
     return results
+}
+
+/// One definition line, in `language`, or nil when the line is not one.
+///
+/// EXHAUSTIVE, so a seventh language answers it rather than silently scanning
+/// as Python. Written as a switch of small parsers rather than a table of
+/// regexes and capture indices: the four syntaxes are not one shape with
+/// different tokens. Octave puts return variables BEFORE the name
+/// (`function [a, b] = f(x)`), Lua has three definition forms, and R's is an
+/// assignment whose right-hand side is a `function` literal. A table
+/// expressive enough for all of them is a parser generator; one that is not
+/// silently misses definitions, which is the failure mode this whole
+/// supported/unsupported apparatus exists to end.
+private func parseDefinition(
+    _ line: String, bodyLines: [String], language: AssignmentLanguage
+) -> NotebookFunctionInfo? {
+    switch language {
+    case .python: return parseFunctionDef(line, bodyLines: bodyLines)
+    case .r: return parseRFunctionDef(line)
+    case .lua: return parseLuaFunctionDef(line)
+    case .octave: return parseOctaveFunctionDef(line)
+    case .cpp, .racket:
+        // Upload-only: there is no solution notebook, so this is unreachable
+        // through `scanNotebookForSectionsAndFunctions(_:language:)`, which
+        // refuses before calling here.
+        return nil
+    }
+}
+
+/// `name <- function(a, b = 2)`, and the `=` and `assign()` spellings.
+///
+/// No type information: R has no parameter annotations, so `paramTypes` is
+/// all-nil and `hasTypeHints` false. That is the same state an un-annotated
+/// Python function already produces, and the editor already falls back to
+/// untyped JSON parsing for it.
+private func parseRFunctionDef(_ line: String) -> NotebookFunctionInfo? {
+    let pattern = #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
+    return parseAssignmentStyleDefinition(line, pattern: pattern)
+}
+
+/// `function f(a, b)`, `local function f(a, b)`, and `f = function(a, b)`.
+///
+/// The `local` form matters: it is the Lua idiom, so omitting it would miss
+/// most real definitions. Method syntax (`function M.f(x)` / `function M:f(x)`)
+/// is deliberately not matched — a dotted name is not something a generated
+/// test can call by bare identifier.
+private func parseLuaFunctionDef(_ line: String) -> NotebookFunctionInfo? {
+    let declaration = #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
+    if let info = parseAssignmentStyleDefinition(line, pattern: declaration) { return info }
+    let assignment = #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#
+    return parseAssignmentStyleDefinition(line, pattern: assignment)
+}
+
+/// `function f(a)`, `function y = f(a)`, `function [y, z] = f(a)`.
+///
+/// The return-variable forms are why Octave cannot share R's or Lua's pattern:
+/// the name is not the first identifier on the line. Return variables are
+/// parsed only far enough to skip them — the editor needs the callable name and
+/// its parameters.
+private func parseOctaveFunctionDef(_ line: String) -> NotebookFunctionInfo? {
+    let withReturns =
+        #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"#
+        + #"([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
+    if let info = parseAssignmentStyleDefinition(line, pattern: withReturns) { return info }
+    let bare = #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
+    return parseAssignmentStyleDefinition(line, pattern: bare)
+}
+
+/// Shared machinery for the three: a regex whose group 1 is the function name
+/// and group 2 is the raw parameter list.
+///
+/// `parseParams` is reused verbatim. Its `x = 0` default-stripping is correct
+/// for all three (R and Lua and Octave all spell defaults with `=`), and its
+/// `x: int` type-stripping simply never fires, since none of them writes one.
+private func parseAssignmentStyleDefinition(
+    _ line: String, pattern: String
+) -> NotebookFunctionInfo? {
+    guard let regex = try? NSRegularExpression(pattern: pattern),
+        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+        let nameRange = Range(match.range(at: 1), in: line),
+        let paramsRange = Range(match.range(at: 2), in: line)
+    else { return nil }
+
+    let parsedParams = parseParams(from: String(line[paramsRange]))
+    return NotebookFunctionInfo(
+        name: String(line[nameRange]),
+        paramNames: parsedParams.map(\.name),
+        paramTypes: parsedParams.map { _ in nil },
+        paramHasDefault: parsedParams.map(\.hasDefault),
+        returnType: nil,
+        hasTypeHints: false,
+        hasDocstring: false
+    )
 }
 
 /// Attempts to parse a `def name(params...) [-> ret]:` line.
@@ -441,16 +535,18 @@ public func notebookFunctionScanSupport(
     case .python:
         return .supported
     case .r, .lua, .octave:
-        // A notebook workflow exists for these — they have vendored kernels —
-        // so the gap is the PARSER, not the concept. Each needs its own
-        // definition syntax read (`f <- function(x)`, `function f(x)`,
-        // `function y = f(x)`); none of them writes `def`.
-        return .unsupported(
-            reason: """
-                Scanning a solution for function definitions is currently Python-only. \
-                The scanner reads Python `def` statements, which \(language.displayName) \
-                source does not contain. Add the family's function name and parameters by hand.
-                """)
+        // Each has its own parser now — `f <- function(x)`, `function f(x)` (and
+        // Lua's `local function` and `f = function` forms), and Octave's
+        // `function [y, z] = f(x)`, whose name is not the first identifier on
+        // the line. See `parseDefinition`.
+        //
+        // What they do NOT supply is type information: none of the three has
+        // parameter annotations, so `paramTypes` is all-nil and `hasTypeHints`
+        // is false. That is the same state an un-annotated Python function
+        // already produces, and the editor already handles it by falling back
+        // to untyped JSON parsing — so partial fidelity here is a real answer,
+        // not a broken one.
+        return .supported
     case .cpp, .racket:
         // Structural, not a missing parser: these are upload-only
         // (`EditorSupport.uploadOnly`), so there is no solution notebook in the
@@ -474,8 +570,16 @@ public func scanNotebookForSectionsAndFunctions(
 ) -> NotebookScanResult {
     let support = notebookFunctionScanSupport(for: language)
     guard support.isSupported else {
+        // SECTIONS ARE STILL READ. `unsupportedReason` scopes to `functions`,
+        // and only to functions: a section name is a `## ` markdown header,
+        // which has nothing to do with the code language. Returning an empty
+        // `sectionNames` here denied suite-section scaffolding to five
+        // languages as collateral from a limitation that applies to function
+        // extraction alone.
         return NotebookScanResult(
-            sectionNames: [], functions: [], unsupportedReason: support.unsupportedReason)
+            sectionNames: scanNotebookForSectionsAndFunctions(notebookData).sectionNames,
+            functions: [],
+            unsupportedReason: support.unsupportedReason)
     }
-    return scanNotebookForSectionsAndFunctions(notebookData)
+    return scanNotebookForSectionsAndFunctions(notebookData, parsing: language ?? .python)
 }

@@ -87,14 +87,24 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// assignment's language".
     let scriptExtension: String?
 
-    /// Whether the editor can compute a case's expected value by running the
-    /// solution in the browser.
+    /// Whether a case's expected value can be computed by running the solution
+    /// at all — in the browser for Python, on the server for everything else.
     ///
-    /// The evaluator is `/python-eval-worker.js`, a Python kernel, so for any
-    /// other language it does not merely fail — it would compute a PYTHON
-    /// answer for a value that will be compared against an R, Lua, Octave or
-    /// Racket result. Wrong and confident is worse than absent, so the UI hides
-    /// the control rather than offering it.
+    /// True for all six today, because `PersonalizationEvaluator` has a driver
+    /// for each. It is READ rather than assumed because the failure it guards
+    /// is silent: a seventh language whose driver is not yet written answers
+    /// false here, and an unread flag would leave the editor auto-filling
+    /// Expected cells from a server that refuses.
+    ///
+    /// This doc used to describe the field as "can the BROWSER compute it",
+    /// and said the UI hides the control on any non-Python assignment because
+    /// the in-page evaluator would produce a Python answer for an R value. Both
+    /// halves are now wrong: the non-Python path routes to
+    /// `POST /instructor/:id/compute-expected`, which evaluates in the
+    /// assignment's own language, and nothing is hidden. Kept as a correction
+    /// rather than deleted, because a stale doc in a file whose whole purpose
+    /// is one-place-per-fact is the thing most likely to cause the next wrong
+    /// change.
     let expressionEvaluation: Bool
 
     /// Facts for `language`, or the language-less answer when it is nil.
