@@ -617,20 +617,12 @@ struct InstructorDashboardRoutes: RouteCollection {
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
         let currentStartsAt = dueAtLocalInputString(assignment.startsAt)
         let manifest = setup.decodedManifest()
-        let patternFamiliesJSON: String = {
-            guard let props = manifest else { return "[]" }
-            let enc = JSONEncoder()
-            enc.outputFormatting = [.sortedKeys]
-            let familyData = (try? enc.encode(props.patternFamilies)) ?? Data("[]".utf8)
-            return String(data: familyData, encoding: .utf8) ?? "[]"
-        }()
-        let notebookChecksJSON: String = {
-            guard let props = manifest else { return "[]" }
-            let enc = JSONEncoder()
-            enc.outputFormatting = [.sortedKeys]
-            let checkData = (try? enc.encode(props.notebookChecks)) ?? Data("[]".utf8)
-            return String(data: checkData, encoding: .utf8) ?? "[]"
-        }()
+        // Resolved once and handed to both language-bearing seeds below.
+        let resolvedLanguage = manifest.flatMap {
+            AssignmentLanguage.resolve(for: setup, manifest: $0)
+        }
+        let patternFamiliesJSON = manifestArraySeedJSON(manifest?.patternFamilies)
+        let notebookChecksJSON = manifestArraySeedJSON(manifest?.notebookChecks)
         return EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
@@ -652,13 +644,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
             notebookChecksJSON: notebookChecksJSON,
-            checkSchemaJSON: notebookCheckFormSchemaJSON(),
+            // Both seeds take the SAME resolved language, from one call — the
+            // check form annotates fields this language cannot use, and the
+            // facts island answers everything else.
+            checkSchemaJSON: notebookCheckFormSchemaJSON(language: resolvedLanguage),
             // The resolved language, so the authoring editors stop assuming
             // Python. Resolved through the server wrapper (never
             // `resolve(manifest:)` alone) so a brand-new notebook assignment
             // whose only signal is its kernelspec is answered correctly.
-            assignmentLanguageJSON: authoringLanguageFactsJSON(
-                manifest.flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }),
+            assignmentLanguageJSON: authoringLanguageFactsJSON(resolvedLanguage),
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             sectionActionBase: "/instructor/\(idStr)/suite-sections",
@@ -690,4 +684,18 @@ struct InstructorDashboardRoutes: RouteCollection {
             // pane is already showing it.
         )
     }
+}
+
+/// One manifest array, encoded for a `<script>` JSON seed; `"[]"` for a
+/// missing manifest or an encode failure so the page still renders.
+///
+/// The pattern-family and notebook-check seeds were byte-identical closures
+/// differing only in which array they reached for.
+private func manifestArraySeedJSON<T: Encodable>(_ values: [T]?) -> String {
+    guard let values else { return "[]" }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let data = try? encoder.encode(values), let json = String(data: data, encoding: .utf8)
+    else { return "[]" }
+    return json
 }

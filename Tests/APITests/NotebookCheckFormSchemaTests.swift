@@ -107,6 +107,75 @@ import Testing
         }
     }
 
+    // MARK: - Field-level language refusals
+
+    /// The form's field annotations come from the SAME predicate the save-time
+    /// refusal reads.
+    ///
+    /// The gap this closes: `cellContains` is a supported kind on Lua, so the
+    /// kind-level map the Add Test menu reads said "available" — and then
+    /// ticking its regex box produced a check the server refused. Kind-level
+    /// availability is not field-level availability, and until now only the
+    /// former could be expressed.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyAnnotatedFieldMatchesTheRefusalPredicate(_ language: AssignmentLanguage) {
+        let schema = notebookCheckFormSchema(language: language)
+        for kind in NotebookCheckKind.allCases {
+            for field in schema.kinds[kind.rawValue] ?? [] {
+                #expect(
+                    field.unsupportedReason
+                        == notebookCheckFieldUnsupportedReason(
+                            field.name, kind: kind, language: language),
+                    """
+                    The form schema and the save-time refusal disagree about \
+                    \(kind.rawValue).\(field.name) on \(language.displayName).
+                    """)
+            }
+        }
+    }
+
+    /// Lua is the one language with a field-level refusal today, and the
+    /// annotation lands on exactly the field that is refused.
+    @Test func luaRefusesRegexCellMatchingInTheFormAndOnSave() throws {
+        let luaFields = try #require(
+            notebookCheckFormSchema(language: .lua).kinds[NotebookCheckKind.cellContains.rawValue])
+        let regexField = try #require(luaFields.first { $0.name == "regex" })
+        let reason = try #require(
+            regexField.unsupportedReason, "Lua should refuse regex cell matching")
+        #expect(reason.contains("Lua patterns"))
+        // Its neighbour in the same kind is untouched: this is a FIELD-level
+        // refusal, and a kind-level one would have taken the whole card.
+        let textField = try #require(luaFields.first { $0.name == "containsText" })
+        #expect(textField.unsupportedReason == nil)
+    }
+
+    /// Octave's regexp is PCRE and R's engine takes the same constructs, so a
+    /// pattern authored against the Python renderer transfers. Neither is
+    /// refused — asserted so a later reader does not "fix" them by symmetry
+    /// with Lua.
+    @Test(arguments: [AssignmentLanguage.python, .r, .octave])
+    func languagesWithCompatibleRegexEnginesAreNotRefused(_ language: AssignmentLanguage) {
+        #expect(
+            notebookCheckFieldUnsupportedReason("regex", kind: .cellContains, language: language)
+                == nil)
+    }
+
+    /// The label named Python on every assignment. It now names the language,
+    /// and says nothing about one when the assignment declares none.
+    @Test func theRegexLabelNamesTheAssignmentLanguage() throws {
+        func regexLabel(_ language: AssignmentLanguage?) throws -> String {
+            let fields = try #require(
+                notebookCheckFormSchema(language: language)
+                    .kinds[NotebookCheckKind.cellContains.rawValue])
+            return try #require(fields.first { $0.name == "regex" }).label
+        }
+        #expect(try regexLabel(.r).contains("R regular expression"))
+        #expect(try regexLabel(.octave).contains("Octave"))
+        #expect(try !regexLabel(.r).contains("Python"))
+        // No language declared: no language named.
+        #expect(try regexLabel(nil) == "Interpret as a regular expression")
+    }
+
     /// Returns a copy of `s` with the named field cleared to nil.  Covers
     /// every field name any kind marks `required` in the schema.
     private func clearing(_ field: String, from s: NotebookCheck) -> NotebookCheck {

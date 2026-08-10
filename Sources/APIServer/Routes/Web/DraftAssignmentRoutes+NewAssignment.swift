@@ -50,6 +50,10 @@ extension DraftAssignmentRoutes {
         )
 
         let suiteRows = setup.map(editableSuiteRowsForSetup) ?? []
+        // Resolved once and handed to both language-bearing seeds below.
+        let resolvedLanguage = setup.flatMap { s in
+            s.decodedManifest().flatMap { AssignmentLanguage.resolve(for: s, manifest: $0) }
+        }
         let supportFileRows = newAssignmentSupportFileRows(setup: setup, suiteRows: suiteRows)
         let detected = newAssignmentRequirementSuggestions(req: req, userID: userID, setup: setup)
 
@@ -75,17 +79,12 @@ extension DraftAssignmentRoutes {
             supportFileRows: supportFileRows,
             patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
             notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
-            checkSchemaJSON: notebookCheckFormSchemaJSON(),
+            checkSchemaJSON: notebookCheckFormSchemaJSON(language: resolvedLanguage),
             // Same seed as the edit page, so the two authoring surfaces
             // cannot disagree about the language. A draft with no setup yet
             // has no language, which is the honest answer — its facts say so
             // and the editor omits the language-specific hints.
-            assignmentLanguageJSON: authoringLanguageFactsJSON(
-                setup.flatMap { s in
-                    s.decodedManifest().flatMap {
-                        AssignmentLanguage.resolve(for: s, manifest: $0)
-                    }
-                }),
+            assignmentLanguageJSON: authoringLanguageFactsJSON(resolvedLanguage),
             suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
             suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
             sectionActionBase: "/instructor/new/draft/suite-sections",
