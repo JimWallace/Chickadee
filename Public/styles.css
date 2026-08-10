@@ -1711,6 +1711,13 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: none;
 }
 
+/* The differential family's reference implementation: source code, so it gets
+   the code face rather than the form face. */
+.family-reference-input {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
 /* Inline editor (accordion) hosted in a detail row beneath a suite/achievement
    row.  Shared by the suite editor (suite-table.js) and the achievements editor
    (achievements-editor.js) through ChickadeeUI.accordion. */

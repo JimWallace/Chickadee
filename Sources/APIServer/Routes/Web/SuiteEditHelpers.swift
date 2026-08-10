@@ -242,13 +242,7 @@ func applySuiteEdit(
             // — without that an `argVarRefs` reference would fail
             // validation on the next save.
             if let rowDeps = item.dependsOn {
-                f = PatternFamily(
-                    id: f.id, name: f.name, kind: f.kind,
-                    functionName: f.functionName, paramNames: f.paramNames,
-                    defaults: f.defaults, cases: f.cases,
-                    variables: f.variables,
-                    dependsOn: rowDeps
-                )
+                f = f.replacingDependsOn(rowDeps)
             }
             authored.append(.family(id: f.id, sectionID: item.sectionID))
             nextFamilies.append(f)

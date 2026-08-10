@@ -102,6 +102,9 @@ struct CreatePatternFamilyTool: ContentTool {
         let sectionID: String?
         let dependsOn: [String]?
         let variables: [VariableInput]?
+        /// Required by `differential`, ignored by every other kind: the
+        /// instructor's reference implementation, in the assignment's language.
+        let referenceImplementation: String?
         let cases: [CaseInput]
 
         init(
@@ -110,7 +113,8 @@ struct CreatePatternFamilyTool: ContentTool {
             defaultTier: String? = nil, defaultPoints: Int? = nil, defaultHint: String? = nil,
             defaultTimeLimitSeconds: Int? = nil,
             tolerance: Double? = nil, sectionID: String? = nil, dependsOn: [String]? = nil,
-            variables: [VariableInput]? = nil, cases: [CaseInput]
+            variables: [VariableInput]? = nil, referenceImplementation: String? = nil,
+            cases: [CaseInput]
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.id = id
@@ -126,6 +130,7 @@ struct CreatePatternFamilyTool: ContentTool {
             self.sectionID = sectionID
             self.dependsOn = dependsOn
             self.variables = variables
+            self.referenceImplementation = referenceImplementation
             self.cases = cases
         }
     }
@@ -146,9 +151,8 @@ struct CreatePatternFamilyTool: ContentTool {
         + "whenever the check is a function-call assertion (equality, float tolerance, return type, "
         + "expected exception, performance bound, or stdout). "
         + "Create a NEW pattern family on an assignment, by public ID. Provide the family `id` "
-        + "(unique; not an existing family), `name`, `kind` (boundary_equality / approximate_equality "
-        + "/ variable_equality / return_type_check / exception_expected / performance_threshold / "
-        + "stdout_equality / unordered_equality), the `function` it tests, `paramNames`, and a "
+        + "(unique; not an existing family), `name`, `kind` (\(MCPPatternKindProse.slashSeparated)), "
+        + "the `function` it tests, `paramNames`, and a "
         + "non-empty `cases` list — each "
         + "case a { key, args, expected } with raw-JSON args (in parameter order) and expected return. "
         + "Cases may personalize via argVarRefs / expectedVarRef (names of global/section = expressions). "
@@ -176,12 +180,7 @@ struct CreatePatternFamilyTool: ContentTool {
             ]),
             "kind": .object([
                 "type": .string("string"),
-                "enum": .array([
-                    .string("boundary_equality"), .string("approximate_equality"),
-                    .string("variable_equality"), .string("return_type_check"),
-                    .string("exception_expected"), .string("performance_threshold"),
-                    .string("stdout_equality"), .string("unordered_equality"),
-                ]),
+                "enum": MCPPatternKindProse.jsonEnum,
             ]),
             "function": .object([
                 "type": .string("string"),
@@ -212,6 +211,16 @@ struct CreatePatternFamilyTool: ContentTool {
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("Existing section id to group under; omit for ungrouped."),
+            ]),
+            "referenceImplementation": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Required by kind=differential, ignored otherwise. Your reference "
+                        + "implementation, in the assignment's language, defining a function named "
+                        + "ck_ref_<function> taking the same arguments as `function`. Each case's "
+                        + "expected value is whatever it returns, so cases supply only args. "
+                        + "Note it is rendered into the generated test, which a browser-graded "
+                        + "assignment downloads to the student's browser."),
             ]),
             "dependsOn": .object([
                 "type": .string("array"), "items": MCPSchema.string,
@@ -390,7 +399,8 @@ struct CreatePatternFamilyTool: ContentTool {
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
             paramNames: input.paramNames ?? [], defaults: defaults, cases: cases,
             variables: (input.variables ?? []).map { FamilyVariable(name: $0.name, value: $0.value) },
-            dependsOn: input.dependsOn ?? [])
+            dependsOn: input.dependsOn ?? [],
+            referenceImplementation: input.referenceImplementation)
     }
 
     /// Builds one `PatternCase` from a case input, filling the parallel

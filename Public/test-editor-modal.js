@@ -42,7 +42,8 @@
                 { value: 'return_type_check',     mechanism: 'family', label: 'Returns the right type' },
                 { value: 'exception_expected',    mechanism: 'family', label: 'Raises the right error' },
                 { value: 'stdout_equality',       mechanism: 'family', label: 'Prints the right output' },
-                { value: 'performance_threshold', mechanism: 'family', label: 'Runs within a time budget' }
+                { value: 'performance_threshold', mechanism: 'family', label: 'Runs within a time budget' },
+                { value: 'differential',          mechanism: 'family', label: 'Matches a reference implementation' }
             ]
         },
         {
@@ -82,6 +83,7 @@
         exception_expected:    'Check that the function raises the expected exception for given inputs.',
         stdout_equality:       'Check what the function prints to stdout for given inputs.',
         performance_threshold: 'Check that the function completes within a millisecond budget.',
+        differential:          'Compare the student’s function against a reference implementation you write — you supply the inputs, the reference supplies each expected value.',
         variable_exists:       'Check that a notebook variable is defined (optionally of a given type).',
         variable_equality:     'Check that a notebook variable equals an expected value.',
         function_exists:       'Check that a function is defined and callable (optionally with a given arity).',

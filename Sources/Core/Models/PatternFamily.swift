@@ -73,6 +73,34 @@ public enum PatternKind: String, Codable, Sendable, Equatable, CaseIterable {
     /// contract (e.g. "find all patients with diagnosis X"); a plain
     /// `boundary_equality` would false-fail on a correct-but-reordered result.
     case unorderedEquality = "unordered_equality"
+    /// Calls the student's function and an instructor-written REFERENCE
+    /// IMPLEMENTATION with the same args, and asserts the two agree. Each case
+    /// supplies only inputs; `expected` is not authored and is ignored, because
+    /// the expected value is whatever the reference returns at grade time.
+    ///
+    /// This is the one thing the retired custom-script templates could do that
+    /// no kind could (`TestScriptTemplates.swift` records the other eight and
+    /// what superseded them). It earns its place where enumerating expected
+    /// values is the hard part — a function over a large or awkward input space,
+    /// or one whose right answer is easier to *write* than to *tabulate*.
+    ///
+    /// TWO THINGS TO KNOW BEFORE REACHING FOR IT.
+    ///
+    /// The reference is rendered into the generated test script, so on a
+    /// BROWSER-GRADED assignment it reaches the student's browser along with
+    /// every other test script — browser grading runs the suite locally, so it
+    /// must. `docs/datasets.md` states the general rule ("the browser cannot
+    /// keep a secret") and worker grading is the answer when the reference is
+    /// one. Chickadee does not refuse or warn: whether a reference implementation
+    /// is a secret is the instructor's judgement, and for many assignments —
+    /// a spec the students already have, a slow-but-obvious implementation they
+    /// are asked to speed up — it plainly is not.
+    ///
+    /// And it grades agreement, not correctness. A wrong reference makes a wrong
+    /// test that passes for whoever reproduces the same mistake. Validation runs
+    /// the instructor's own solution against it, which catches disagreement
+    /// between the two but cannot tell you which one is right.
+    case differential
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,
@@ -261,6 +289,17 @@ public struct PatternFamily: Codable, Equatable, Sendable {
     /// family's enabled generated filenames so the runner only ever sees
     /// concrete script names.
     public let dependsOn: [String]
+    /// Source of the instructor's reference implementation, in the assignment's
+    /// language. Required by `.differential` and ignored by every other kind.
+    ///
+    /// Family-level rather than per-case: one reference answers every case, and
+    /// a per-case reference would be a script, not a family.
+    ///
+    /// Rendered verbatim into each generated test, which is what makes it the
+    /// instructor's own code in their own language rather than something
+    /// Chickadee translates. It must define the reference under a name the
+    /// renderer can call — see `differentialReferenceName`.
+    public let referenceImplementation: String?
 
     public init(
         id: String, name: String, kind: PatternKind,
@@ -268,7 +307,8 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         defaults: PatternDefaults = PatternDefaults(),
         cases: [PatternCase] = [],
         variables: [FamilyVariable] = [],
-        dependsOn: [String] = []
+        dependsOn: [String] = [],
+        referenceImplementation: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -279,6 +319,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         self.cases = cases
         self.variables = variables
         self.dependsOn = dependsOn
+        self.referenceImplementation = referenceImplementation
     }
 
     public init(from decoder: Decoder) throws {
@@ -292,7 +333,47 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         cases = try c.decodeIfPresent([PatternCase].self, forKey: .cases) ?? []
         variables = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        referenceImplementation = try c.decodeIfPresent(
+            String.self, forKey: .referenceImplementation)
     }
+}
+
+extension PatternFamily {
+    /// A copy carrying different `dependsOn`, preserving every other field.
+    ///
+    /// Exists because the suite-edit path used to rebuild the family inline
+    /// when the editor sent the dependency at row level, listing the fields it
+    /// knew about — and a field added later was silently dropped. That already
+    /// happened once, to `variables`: an `argVarRefs` reference failed
+    /// validation on the next save, for a family the author had not touched.
+    /// `referenceImplementation` would have been the second.
+    ///
+    /// One copy, beside the property list, pinned by a `Mirror`-based test that
+    /// fails when any stored property does not survive — so the next field is
+    /// caught by a test rather than by an instructor.
+    public func replacingDependsOn(_ newDependsOn: [String]) -> PatternFamily {
+        PatternFamily(
+            id: id, name: name, kind: kind,
+            functionName: functionName, paramNames: paramNames,
+            defaults: defaults, cases: cases,
+            variables: variables,
+            dependsOn: newDependsOn,
+            referenceImplementation: referenceImplementation)
+    }
+
+    /// The name the generated `.differential` test binds the reference under,
+    /// and therefore the name the instructor's source must define.
+    ///
+    /// Derived from the function under test rather than fixed, so a family can
+    /// name its reference after what it references and two families in one
+    /// suite cannot collide.
+    ///
+    /// `ck_ref_`, NOT `_ck_ref_`, even though every other harness name in this
+    /// codebase leads with an underscore: R forbids a leading-underscore
+    /// identifier outright, which is the same rule that makes the per-student
+    /// inputs file bind `.ck_inputs` rather than `_ck`. One spelling has to
+    /// work in all six languages, because the instructor types it.
+    public var differentialReferenceName: String { "ck_ref_\(functionName)" }
 }
 
 extension PatternCase {

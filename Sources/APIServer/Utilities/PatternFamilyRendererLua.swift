@@ -68,6 +68,8 @@ func renderLuaPatternCase(
         return luaPerformanceCase(family: family, case: c, prelude: prelude)
     case .stdoutEquality:
         return luaStdoutCase(family: family, case: c, prelude: prelude)
+    case .differential:
+        return luaDifferentialCase(family: family, case: c, prelude: prelude)
     }
 }
 
@@ -110,6 +112,60 @@ func renderLuaExistenceGuard(family: PatternFamily, specHash: String) -> String 
 
 /// `.boundaryEquality` / `.unorderedEquality` — call the function, compare the
 /// return value (exactly, or ignoring order).
+/// `.differential` — compares the student's function against the instructor's
+/// reference implementation, rendered verbatim above the call.
+///
+/// A failure IN THE REFERENCE is `errored`, not `failed`: a student cannot make
+/// it raise except through inputs the instructor chose, so the outcome is a
+/// broken test and telling the student their function is wrong would send them
+/// to debug the wrong code.
+private func luaDifferentialCase(
+    family: PatternFamily, case c: PatternCase, prelude: String
+) -> String {
+    let ctx = luaCallContext(for: family, case: c)
+    let reference = family.referenceImplementation ?? ""
+    return """
+        \(prelude)
+
+        \(ctx.declBlock)
+        -- Instructor's reference implementation, rendered verbatim.
+        \(reference)
+
+        local ref_ok, expected = pcall(\(family.differentialReferenceName)\(ctx.callArgsSuffix))
+        if not ref_ok then
+            chickadee.errored(table.concat({
+                "\(GeneratedMessage.referenceFailed)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.error)", tostring(expected),
+            }))
+        end
+
+        local student = chickadee.load_student()
+        local target = chickadee.require_fn(student, \(JSONValue.string(family.functionName).luaLiteral))
+
+        local ok, result = pcall(target\(ctx.callArgsSuffix))
+        if not ok then
+            chickadee.failed(table.concat({
+                "\(GeneratedMessage.unexpectedException)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)", chickadee.format(expected), "\\n",
+                "\(GeneratedMessage.error)", tostring(result),
+            }))
+        end
+
+        if not chickadee.equal(result, expected) then
+            chickadee.failed(table.concat({
+                "\(GeneratedMessage.wrongValue)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)", chickadee.format(expected), "\\n",
+                "\(GeneratedMessage.got)", chickadee.format(result),
+            }))
+        end
+
+        chickadee.passed("\(GeneratedMessage.returned)" .. chickadee.format(result))
+        """
+}
+
 private func luaEqualityCase(
     family: PatternFamily, case c: PatternCase, prelude: String, unordered: Bool
 ) -> String {

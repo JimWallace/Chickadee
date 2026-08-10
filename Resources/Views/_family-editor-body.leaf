@@ -30,6 +30,7 @@
                         <option value="performance_threshold">Performance threshold (max milliseconds)</option>
                         <option value="stdout_equality">Stdout equality (compare captured print output)</option>
                         <option value="unordered_equality">Unordered equality (list compare, ignore order)</option>
+                        <option value="differential">Differential (compare against a reference implementation)</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" class="field-stack" style="display:none">
@@ -38,6 +39,13 @@
                            placeholder="1e-6">
                 </label>
             </div>
+            <label id="family-reference-label" class="field-stack" style="display:none">
+                Reference implementation
+                <span class="label-note">(required — define <code>ck_ref_&lt;function&gt;</code> taking the same arguments; each case&#39;s expected value is whatever it returns, so leave the Expected column blank)</span>
+                <textarea class="form-input editor-input family-reference-input" id="family-reference-implementation"
+                          rows="8" spellcheck="false"
+                          placeholder="def ck_ref_classify(bmi):&#10;    ..."></textarea>
+            </label>
             <label class="field-stack">
                 Default hint <span class="label-note">(optional — shown to students when a case with no hint of its own fails)</span>
                 <input type="text" class="form-input editor-input" id="family-default-hint" value=""

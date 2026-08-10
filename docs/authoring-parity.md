@@ -184,6 +184,18 @@ auto-compute is first used, not on every visit as this claimed.
 R shipped first, then Lua, then Octave. Every kernel language now computes in
 the page; only C++ and Racket route to the server, because neither has a kernel.
 
+**The `differential` template — SHIPPED as a ninth pattern kind.** The table
+below said it was "the only template with no pattern-family equivalent, and it
+is reachable with a family plus auto-compute". The second half was the weaker
+claim: auto-compute fills in an expected value for a case an author has already
+enumerated, which is exactly the work a differential test exists to avoid. It is
+now `PatternKind.differential`, rendering in all six languages, computing each
+case's expected value by running the instructor's reference at grade time.
+
+The template survives it, deliberately: it is a one-shot text dump the
+instructor then owns, so an already-applied one has no link back to the enum and
+nothing would migrate if it were removed.
+
 **Per-language custom-script template sets.** Seven of the nine Python templates
 are already available in every language as pattern-family kinds, in a better
 form: server-rendered, spec-hashed, re-renderable, and pinned by execution

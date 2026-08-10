@@ -145,6 +145,8 @@ func renderRacketPatternCase(
         return racketPerformanceCase(family: family, case: c, prelude: prelude)
     case .stdoutEquality:
         return racketStdoutCase(family: family, case: c, prelude: prelude)
+    case .differential:
+        return racketDifferentialCase(family: family, case: c, prelude: prelude)
     }
 }
 
@@ -184,6 +186,60 @@ private func racketLoadAndGuard(_ family: PatternFamily) -> String {
 }
 
 // MARK: - Kind bodies
+
+/// `.differential` — compares the student's function against the instructor's
+/// reference implementation, spliced verbatim into the generated module.
+///
+/// The reference is called with `apply`, because the call context hands its
+/// arguments over as a list — the same list `chickadee-call` takes to reach
+/// into the student's namespace. The student's function still goes through
+/// `chickadee-call`: it lives in a separately-loaded module, and this one does
+/// not.
+///
+/// The instructor's source is spliced into a `#lang racket/base` module, so it
+/// must be definitions only — a `#lang` line of its own would not parse there.
+/// That is stated in the kind's documentation rather than validated, because
+/// deciding what is "a definition" needs a Racket reader.
+///
+/// A failure IN THE REFERENCE is `errored`, not `failed`: a student cannot make
+/// it raise except through inputs the instructor chose.
+private func racketDifferentialCase(
+    family: PatternFamily, case c: PatternCase, prelude: String
+) -> String {
+    let ctx = racketCallContext(for: family, case: c)
+    let reference = family.referenceImplementation ?? ""
+    return """
+        \(prelude)
+
+        \(ctx.declBlock)
+
+        ; Instructor's reference implementation, rendered verbatim.
+        \(reference)
+
+        (define expected
+          (with-handlers ([exn:fail? (lambda (e)
+              (chickadee-errored (string-append \(JSONValue.string(GeneratedMessage.referenceFailed).racketLiteral) "\\n"
+                                 \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
+                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
+            (apply \(family.differentialReferenceName) \(ctx.argList))))
+
+        \(racketLoadAndGuard(family))
+
+        (define actual
+          (with-handlers ([exn:fail? (lambda (e)
+              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
+                                 \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
+                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
+            (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList))))
+
+        (if (chickadee-equal? actual expected)
+            (chickadee-passed (string-append "Returned " (chickadee-format actual)))
+            (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.wrongValue).racketLiteral) "\\n"
+                               \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
+                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
+                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
+        """ + "\n"
+}
 
 private func racketEqualityCase(
     family: PatternFamily, case c: PatternCase, prelude: String, unordered: Bool

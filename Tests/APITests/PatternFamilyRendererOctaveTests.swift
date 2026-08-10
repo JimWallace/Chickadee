@@ -80,13 +80,54 @@ import Testing
 
     private func single(
         kind: PatternKind, functionName: String, paramNames: [String],
-        args: [JSONValue], expected: JSONValue, defaults: PatternDefaults = PatternDefaults()
+        args: [JSONValue], expected: JSONValue, defaults: PatternDefaults = PatternDefaults(),
+        referenceImplementation: String? = nil
     ) throws -> GeneratedScript {
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: kind, functionName: functionName,
             paramNames: paramNames, defaults: defaults,
-            cases: [PatternCase(key: "01", label: "Case 1", args: args, expected: expected)])
+            cases: [PatternCase(key: "01", label: "Case 1", args: args, expected: expected)],
+            referenceImplementation: referenceImplementation)
         return try #require(renderPatternFamily(fam, language: .octave).first)
+    }
+
+    /// `.differential` end to end: the reference computes the expected value, a
+    /// matching submission passes and a diverging one fails.
+    ///
+    /// The reference is a `function … end` block spliced into a generated `.m`
+    /// file. That only works because the file's header is already a statement,
+    /// making it a SCRIPT — a generated test that opened with the reference
+    /// would be read as a function file and nothing in it would run. Parsing
+    /// cannot show the difference; running it can.
+    @Test func differentialGradesAgainstTheReference() throws {
+        guard Self.hasOctave else { return }
+        let script = try single(
+            kind: .differential, functionName: "double_it", paramNames: ["x"],
+            args: [.int(21)], expected: .null,
+            referenceImplementation: "function r = ck_ref_double_it(x)\n  r = x * 2;\nend")
+        #expect(
+            try Self.run(
+                script: script, submission: "function r = double_it(x)\n  r = x * 2;\nend\n") == 0)
+        #expect(
+            try Self.run(
+                script: script, submission: "function r = double_it(x)\n  r = x + 2;\nend\n") == 1)
+    }
+
+    /// A reference that RAISES is the instructor's bug, and must not be
+    /// reported as a student failure. Exit 2 (errored), not 1 (failed): a
+    /// student cannot make the reference raise except through inputs the
+    /// instructor chose, and "your function is wrong" would send them to debug
+    /// the wrong code.
+    @Test func differentialBlamesTheReferenceWhenTheReferenceRaises() throws {
+        guard Self.hasOctave else { return }
+        let script = try single(
+            kind: .differential, functionName: "double_it", paramNames: ["x"],
+            args: [.int(21)], expected: .null,
+            referenceImplementation:
+                "function r = ck_ref_double_it(x)\n  error(\"reference is broken\");\nend")
+        #expect(
+            try Self.run(
+                script: script, submission: "function r = double_it(x)\n  r = x * 2;\nend\n") == 2)
     }
 
     @Test func boundaryEqualityPassesAndFails() throws {

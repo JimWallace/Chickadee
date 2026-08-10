@@ -84,7 +84,8 @@ import Testing
     func patternFamilySourceIsUnchanged(_ language: AssignmentLanguage) throws {
         for kind in GeneratedSourceFixtures.orderedPatternKinds {
             let scripts = renderPatternFamily(
-                GeneratedSourceFixtures.family(kind: kind), language: language)
+                GeneratedSourceFixtures.family(kind: kind, language: language),
+                language: language)
             // The filenames are part of the contract (they carry the spec_hash
             // into the manifest), so snapshot them alongside the source rather
             // than only the bodies.

@@ -187,6 +187,35 @@ import Testing
         return body
     }
 
+    /// The family editor's own kind `<select>` offers every `PatternKind`.
+    ///
+    /// A THIRD hand-written list, found while adding the ninth kind — the Add
+    /// Test menu, the modal's type select, and this. A kind missing here is
+    /// reachable only through the Add Test menu (which presets the kind) and
+    /// cannot be switched to on an existing family, which is the sort of gap
+    /// nobody reports because it reads as "not supported yet".
+    @Test func theFamilyEditorOffersEveryPatternKind() throws {
+        let template = try String(
+            contentsOf: Self.repoRoot.appendingPathComponent(
+                "Resources/Views/_family-editor-body.leaf"), encoding: .utf8)
+        let pattern = try NSRegularExpression(pattern: #"<option value="([a-z_]+)">"#)
+        let range = NSRange(template.startIndex..., in: template)
+        let offered = Set(
+            pattern.matches(in: template, range: range).compactMap { match -> String? in
+                guard let value = Range(match.range(at: 1), in: template) else { return nil }
+                return String(template[value])
+            })
+        #expect(!offered.isEmpty, "no <option> values parsed — has the template changed shape?")
+        for kind in PatternKind.allCases {
+            #expect(
+                offered.contains(kind.rawValue),
+                """
+                Resources/Views/_family-editor-body.leaf has no <option> for \
+                PatternKind.\(kind.rawValue), so an author cannot switch an existing family to it.
+                """)
+        }
+    }
+
     /// Every catalog entry has a description. The map is parallel to the
     /// catalog and keyed by the same value, so a kind added to one and not the
     /// other shows an instructor a blank explanation — visibly empty, but only

@@ -95,13 +95,18 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// them untouched. Expanded + cycle-checked by the same save path the
         /// web editor uses.
         let dependsOn: [String]?
+        /// Replaces the `differential` reference implementation. Omit (nil) to
+        /// leave it untouched — an instructor fixing a broken reference edits it
+        /// here rather than re-creating the family.
+        let referenceImplementation: String?
 
         init(
             assignmentPublicID: String, familyID: String, defaultTier: String? = nil,
             defaultPoints: Int? = nil, defaultHint: String? = nil,
             defaultTimeLimitSeconds: Int? = nil, enableCases: [String]? = nil,
             disableCases: [String]? = nil, cases: [CaseEdit]? = nil,
-            addCases: [CreatePatternFamilyTool.CaseInput]? = nil, dependsOn: [String]? = nil
+            addCases: [CreatePatternFamilyTool.CaseInput]? = nil, dependsOn: [String]? = nil,
+            referenceImplementation: String? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.familyID = familyID
@@ -114,6 +119,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             self.cases = cases
             self.addCases = addCases
             self.dependsOn = dependsOn
+            self.referenceImplementation = referenceImplementation
         }
     }
 
@@ -292,6 +298,12 @@ struct UpdatePatternFamilyTool: ContentTool {
                     "Replace the family's prerequisites (script filenames or family:<id> tokens). "
                         + "Pass [] to clear them; omit to leave unchanged."),
             ]),
+            "referenceImplementation": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Replace a kind=differential family's reference implementation "
+                        + "(defines ck_ref_<function>); omit to leave unchanged."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("familyID")]),
         "additionalProperties": .bool(false),
@@ -409,7 +421,8 @@ struct UpdatePatternFamilyTool: ContentTool {
             family, defaults: newDefaults,
             changes: CaseChanges(
                 enable: enable, disable: disable, edits: editsByKey, newCases: newCases),
-            dependsOn: input.dependsOn)
+            dependsOn: input.dependsOn,
+            referenceImplementation: input.referenceImplementation)
         payload.items[idx].family = updatedFamily
         // The family's row-level dependsOn wins over `family.dependsOn` in
         // applySuiteEdit, so when the caller replaces deps, mirror the new value
@@ -469,7 +482,7 @@ struct UpdatePatternFamilyTool: ContentTool {
     /// copied verbatim.
     private static func rebuild(
         _ family: PatternFamily, defaults: PatternDefaults,
-        changes: CaseChanges, dependsOn: [String]?
+        changes: CaseChanges, dependsOn: [String]?, referenceImplementation: String?
     ) throws -> PatternFamily {
         let cases = try family.cases.map { caseSpec -> PatternCase in
             let enabled =
@@ -480,7 +493,8 @@ struct UpdatePatternFamilyTool: ContentTool {
         return PatternFamily(
             id: family.id, name: family.name, kind: family.kind, functionName: family.functionName,
             paramNames: family.paramNames, defaults: defaults, cases: cases + changes.newCases,
-            variables: family.variables, dependsOn: dependsOn ?? family.dependsOn)
+            variables: family.variables, dependsOn: dependsOn ?? family.dependsOn,
+            referenceImplementation: referenceImplementation ?? family.referenceImplementation)
     }
 
     /// Applies one case's arg/expected edit, keeping the parallel

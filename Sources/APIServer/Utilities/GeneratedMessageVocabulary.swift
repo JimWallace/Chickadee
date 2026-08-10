@@ -136,6 +136,15 @@ enum GeneratedMessage {
     static let outsideTolerance = "value outside tolerance"
     static let returned = "Returned "
 
+    /// `.differential`, when the INSTRUCTOR's reference implementation raises.
+    ///
+    /// Deliberately not phrased as a student failure, and reported through
+    /// `errored` rather than `failed`: a student cannot make the reference
+    /// raise except through inputs the instructor chose, so this outcome is a
+    /// broken test, and a student reading "your function is wrong" would be
+    /// debugging the wrong code.
+    static let referenceFailed = "the reference implementation raised"
+
     /// `.unorderedEquality`'s mismatch line, which is one of the two places the
     /// languages genuinely say different things today: Python appends
     /// "(order doesn't matter)" and R does not.

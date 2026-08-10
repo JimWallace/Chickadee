@@ -62,6 +62,57 @@ func patternKindHandler(for kind: PatternKind) -> any PatternKindHandler {
     case .performanceThreshold: return PerformanceThresholdKind()
     case .stdoutEquality: return StdoutEqualityKind()
     case .unorderedEquality: return UnorderedEqualityKind()
+    case .differential: return DifferentialKind()
+    }
+}
+
+// MARK: - differential
+
+/// Grades the student's function against an instructor-written reference
+/// rather than a tabulated expected value. See `PatternKind.differential`.
+struct DifferentialKind: PatternKindHandler {
+    func render(
+        family: PatternFamily, case c: PatternCase,
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
+    ) -> String {
+        renderDifferential(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
+    }
+
+    func validateFamily(_ family: PatternFamily) throws {
+        let source = (family.referenceImplementation ?? "").trimmingCharacters(
+            in: .whitespacesAndNewlines)
+        guard !source.isEmpty else {
+            throw Abort(
+                .unprocessableEntity,
+                reason: """
+                    Pattern family '\(family.id)' (differential) has no reference \
+                    implementation. This kind computes each case's expected value by \
+                    running your reference, so there is nothing to compare against \
+                    without one.
+                    """)
+        }
+        // The renderer calls a name it chose; the instructor's source has to
+        // define it. Without this the family saves, generates, and fails every
+        // case at grade time with "name is not defined" — a broken test that
+        // reads to the student as a broken submission.
+        guard source.contains(family.differentialReferenceName) else {
+            throw Abort(
+                .unprocessableEntity,
+                reason: """
+                    Pattern family '\(family.id)' (differential) must define \
+                    `\(family.differentialReferenceName)`, which is the name the generated \
+                    test calls. Rename your reference implementation to \
+                    `\(family.differentialReferenceName)` — it takes the same arguments as \
+                    `\(family.functionName)`.
+                    """)
+        }
+    }
+
+    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+        try validatePatternArgCount(family: family, case: c, kindLabel: "differential")
     }
 }
 

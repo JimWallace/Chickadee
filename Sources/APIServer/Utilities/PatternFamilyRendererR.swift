@@ -53,6 +53,8 @@ func renderRPatternCase(
         return rPerformanceCase(family: family, case: c, prelude: prelude)
     case .stdoutEquality:
         return rStdoutCase(family: family, case: c, prelude: prelude)
+    case .differential:
+        return rDifferentialCase(family: family, case: c, prelude: prelude)
     }
 }
 
@@ -124,6 +126,57 @@ private func rEqualityCase(
                 "\(mismatchLabel)\\n",
                 \(ctx.inputLine)
                 \(expectedLine)
+                "\(GeneratedMessage.got)", chickadee_format(result)))
+        }
+
+        passed(paste0("Returned ", chickadee_format(result)))
+        """
+}
+
+/// `.differential` — compares the student's function against the instructor's
+/// reference implementation, which is rendered verbatim above the call.
+///
+/// A failure IN THE REFERENCE is `errored`, not `failed`: a student cannot make
+/// it raise except through inputs the instructor chose, so the outcome is a
+/// broken test and telling the student their function is wrong would send them
+/// to debug the wrong code.
+private func rDifferentialCase(
+    family: PatternFamily, case c: PatternCase, prelude: String
+) -> String {
+    let ctx = rCallContext(for: family, case: c)
+    let reference = family.referenceImplementation ?? ""
+    return """
+        \(prelude)
+
+        \(ctx.declBlock)
+        # Instructor's reference implementation, rendered verbatim.
+        \(reference)
+
+        expected <- tryCatch(
+            \(family.differentialReferenceName)(\(ctx.callArgs)),
+            error = function(e) errored(paste0(
+                "\(GeneratedMessage.referenceFailed)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.error)", conditionMessage(e)))
+        )
+
+        student <- chickadee_load_student()
+        target  <- chickadee_require_fn(student, \(JSONValue.string(family.functionName).rLiteral))
+
+        result <- tryCatch(
+            target(\(ctx.callArgs)),
+            error = function(e) failed(paste0(
+                "\(GeneratedMessage.unexpectedException)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)", chickadee_format(expected), "\\n",
+                "\(GeneratedMessage.error)", conditionMessage(e)))
+        )
+
+        if (!chickadee_equal(result, expected)) {
+            failed(paste0(
+                "\(GeneratedMessage.wrongValue)\\n",
+                \(ctx.inputLine)
+                "\(GeneratedMessage.expected)", chickadee_format(expected), "\\n",
                 "\(GeneratedMessage.got)", chickadee_format(result)))
         }
 

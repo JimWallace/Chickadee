@@ -550,7 +550,7 @@ import Vapor
         } throws: { error in
             #expect(
                 "\(error)".contains(
-                    "only supported in boundary_equality, approximate_equality, and unordered_equality"
+                    "only supported in boundary_equality, approximate_equality, unordered_equality, and differential"
                 ))
             return true
         }
@@ -625,7 +625,7 @@ import Vapor
         } throws: { error in
             #expect(
                 "\(error)".contains(
-                    "only supported in boundary_equality, approximate_equality, and unordered_equality"
+                    "only supported in boundary_equality, approximate_equality, unordered_equality, and differential"
                 ))
             return true
         }
