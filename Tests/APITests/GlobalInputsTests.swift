@@ -56,11 +56,11 @@ import Testing
             body,
             variables: [FamilyVariable(name: "x", value: .int(7))]
         )
-        #expect(result.contains(TestScriptVariablePrepender.rawScriptBannerComment))
+        #expect(result.contains(TestScriptVariablePrepender.rawScriptBannerComment()))
         #expect(result.contains("x = 7"))
         #expect(result.contains("import os"))
         // Banner appears before the original body.
-        if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment),
+        if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment()),
             let importRange = result.range(of: "import os")
         {
             #expect(bannerRange.upperBound < importRange.lowerBound)
@@ -98,7 +98,7 @@ import Testing
         #expect(secondPass.contains("x = 2"))
         let bannerOccurrences =
             secondPass.components(
-                separatedBy: TestScriptVariablePrepender.rawScriptBannerComment
+                separatedBy: TestScriptVariablePrepender.rawScriptBannerComment()
             ).count - 1
         #expect(bannerOccurrences == 1, "banner should appear exactly once after re-prepending")
     }
@@ -114,7 +114,7 @@ import Testing
             prepended,
             variables: []
         )
-        #expect(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment) == false)
+        #expect(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment()) == false)
         #expect(stripped.contains("x = 1") == false)
         #expect(stripped.contains("import os"))
     }
