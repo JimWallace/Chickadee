@@ -113,3 +113,35 @@ test('the parser round-trips a payload the snippet shape would produce', () => {
   // No payload at all is a substrate failure, not an empty result.
   assert.equal(protocol.parseEvalOutput('nothing here', 'NONCE'), null);
 });
+
+test('callFunction renders arguments through the pinned R literal renderer', () => {
+  const snippet = R.callFunction('classify', [18.5, 'lo', [1, 2], null], {}, 'N');
+  assert.ok(snippet.includes('.ck_args <- list(18.5, "lo", c(1, 2), NA)'),
+    `arguments are not rendered as R literals:\n${snippet}`);
+  assert.ok(snippet.includes('get("classify", envir = globalenv())'),
+    'the function must be looked up in the environment the cells loaded into');
+  assert.ok(snippet.includes('do.call('),
+    'arguments are already R values; they must not be re-parsed from source');
+  assert.ok(isOneTopLevelExpression(snippet), 'callFunction must be one expression');
+});
+
+test('callFunction embeds no raw newline in generated R', () => {
+  // A regression on a real bug in this file: the captureStdout branch built
+  // `collapse = "<real newline>"`, which parses (R allows multi-line strings)
+  // and made the snippet depend on invisible whitespace. Worse, an escaping
+  // slip in the other direction emitted a literal backslash-n BETWEEN
+  // statements, which is not valid R at all.
+  const captured = R.callFunction('f', [], { captureStdout: true }, 'N');
+  assert.ok(captured.includes('collapse = "\\n"'),
+    'the newline must be the two-character R escape');
+  // No stray escape sequence sitting outside a string literal.
+  assert.ok(!/\),\\n/.test(captured),
+    'statements must be separated by real newlines, not a literal escape');
+  assert.ok(captured.includes('capture.output('), 'captureStdout must capture what was printed');
+});
+
+test('callFunction without captureStdout reports the return value', () => {
+  const plain = R.callFunction('f', [1], {}, 'N');
+  assert.ok(!plain.includes('capture.output('),
+    'the default path must report the returned value, not printed output');
+});

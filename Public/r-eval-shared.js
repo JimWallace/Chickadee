@@ -119,11 +119,63 @@
         ].join('\n');
     }
 
+    /// Call `functionName` in the loaded solution with `args`, reporting the
+    /// result as R's repr.
+    ///
+    /// THE ARGUMENTS ARE RENDERED HERE, in the browser, by the JS twin of
+    /// `JSONValue.rLiteral` — because an instructor changing a case has not
+    /// saved it, so there is no server round-trip in which the server could
+    /// render them. Both renderers are pinned to
+    /// Tests/Fixtures/r-literal-contract.json.
+    ///
+    /// `do.call` rather than a spliced call expression: the arguments are
+    /// already R values in a list, and splicing their source into a call would
+    /// re-parse text this function just finished rendering.
+    ///
+    /// `captureStdout` reports what the solution PRINTED instead of what it
+    /// returned — the shape a stdout-equality case needs. It is deparsed like
+    /// any other value so the client reads it as the string it is.
+    function callFunctionR(functionName, args, options, nonce) {
+        var captureStdout = !!(options && options.captureStdout);
+        var argList = (args || []).map(grading.rLiteral).join(', ');
+        var invoke = captureStdout
+            // The emitted R must contain the two-character escape, not a real
+            // newline: a line break inside the string would still parse (R
+            // allows multi-line strings) but would make this snippet's source
+            // depend on invisible whitespace.
+            ? [
+                '    .ck_out <- paste(capture.output(.ck_res <- do.call(.ck_fn, .ck_args)),',
+                '                     collapse = ' + grading.rStringLiteral('\n') + ')',
+                '    .ck_res <- .ck_out'
+            ].join('\n')
+            : '    .ck_res <- do.call(.ck_fn, .ck_args)';
+        return [
+            'local({',
+            '  .ck_err <- NULL',
+            '  .ck_val <- NULL',
+            '  tryCatch({',
+            '    .ck_fn <- get(' + grading.rStringLiteral(functionName) + ', envir = globalenv())',
+            '    .ck_args <- list(' + argList + ')',
+            invoke,
+            '    if (!is.null(.ck_res)) .ck_val <- paste(deparse(.ck_res), collapse = "")',
+            '  }, error = function(e) .ck_err <<- conditionMessage(e))',
+            payloadCat(nonce, [
+                grading.rStringLiteral('{"value":'),
+                jsonOrNull('.ck_val'),
+                grading.rStringLiteral(',"error":'),
+                jsonOrNull('.ck_err'),
+                grading.rStringLiteral('}')
+            ]),
+            '})'
+        ].join('\n');
+    }
+
     root.ChickadeeREvalShared = {
         R_KERNEL: grading.R_KERNEL,
         makeNonce: grading.makeNonce,
         loadCell: loadCellR,
         runExpression: runExpressionR,
+        callFunction: callFunctionR,
         parseEvalOutput: protocol.parseEvalOutput,
     };
 })(typeof self !== 'undefined' ? self : globalThis);

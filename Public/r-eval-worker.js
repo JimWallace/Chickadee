@@ -101,6 +101,27 @@ self.onmessage = async function (e) {
             _reply({ id: id, ok: true, cellErrors: cellErrors });
             return;
         }
+        if (msg.type === 'call') {
+            // The language-neutral request: call this function with these
+            // JSON args. The SNIPPET is built here rather than on the main
+            // thread, so rendering R values stays in the R module.
+            await ensureBooted(msg.runtimeSource);
+            var callNonce = _eval.makeNonce();
+            var callReply = await _kernel.execute(
+                _eval.callFunction(
+                    msg.functionName, msg.args || [],
+                    { captureStdout: !!msg.captureStdout }, callNonce),
+                { maxWaitMs: MAX_WAIT_MS });
+            var parsedCall = _eval.parseEvalOutput(callReply.stdout, callNonce);
+            if (!parsedCall) {
+                throw new Error(
+                    callReply.failure || (callReply.stderr || '').trim()
+                    || 'the R kernel produced no result');
+            }
+            if (parsedCall.error) throw new Error(parsedCall.error);
+            _reply({ id: id, ok: true, result: parsedCall.value });
+            return;
+        }
         if (msg.type === 'run') {
             await ensureBooted(msg.runtimeSource);
             var nonce = _eval.makeNonce();

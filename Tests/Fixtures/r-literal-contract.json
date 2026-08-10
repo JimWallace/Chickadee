@@ -1,0 +1,75 @@
+{
+  "_comment": [
+    "The R literal contract, asserted by BOTH implementations of it.",
+    "",
+    "`JSONValue.rLiteral` (Sources/Core/JSONValue.swift) renders a value into R",
+    "source on the server. `rLiteral` (Public/r-grading-shared.js) does the same",
+    "in the browser, because in-page auto-compute has to call an R solution with",
+    "arguments the instructor has typed but not yet saved — there is no server",
+    "round-trip in which the server could render them.",
+    "",
+    "Two implementations of one rendering is normally the defect this codebase",
+    "keeps removing. It is allowed here for the same reason",
+    "`personalizationInputsSourceR` is: the browser cannot call Swift. What makes",
+    "it safe is that neither side owns the expectations. Both read this file, so",
+    "a change to either that is not mirrored fails on both sides.",
+    "",
+    "Modelled on Tests/Fixtures/output-contract.json, which pins RunnerCore's",
+    "native and wasm builds to one another the same way.",
+    "",
+    "NaN and the infinities are absent on purpose: JSON cannot express them, so",
+    "they cannot appear in a fixture. Swift-only unit tests cover those arms."
+  ],
+  "cases": [
+    { "name": "null", "json": null, "r": "NA" },
+    { "name": "true", "json": true, "r": "TRUE" },
+    { "name": "false", "json": false, "r": "FALSE" },
+    { "name": "zero", "json": 0, "r": "0" },
+    { "name": "positive int", "json": 42, "r": "42" },
+    { "name": "negative int", "json": -7, "r": "-7" },
+    { "name": "double", "json": 2.5, "r": "2.5" },
+    { "name": "negative double", "json": -0.125, "r": "-0.125" },
+
+    { "name": "empty string", "json": "", "r": "\"\"" },
+    { "name": "plain string", "json": "hello", "r": "\"hello\"" },
+    { "name": "string with quote", "json": "he said \"hi\"", "r": "\"he said \\\"hi\\\"\"" },
+    { "name": "string with backslash", "json": "a\\b", "r": "\"a\\\\b\"" },
+    { "name": "string with newline", "json": "a\nb", "r": "\"a\\nb\"" },
+    { "name": "string with tab", "json": "a\tb", "r": "\"a\\tb\"" },
+    { "name": "string with carriage return", "json": "a\rb", "r": "\"a\\rb\"" },
+    { "name": "string with control char", "json": "a\u0001b", "r": "\"a\\u0001b\"" },
+    { "name": "string with unicode", "json": "café ☕", "r": "\"café ☕\"" },
+
+    { "name": "empty array", "json": [], "r": "list()" },
+    { "name": "numeric array", "json": [1, 2, 3], "r": "c(1, 2, 3)" },
+    { "name": "string array", "json": ["a", "b"], "r": "c(\"a\", \"b\")" },
+    { "name": "bool array", "json": [true, false], "r": "c(TRUE, FALSE)" },
+    { "name": "numeric array with null", "json": [1, null, 3], "r": "c(1, NA, 3)" },
+    { "name": "all nulls array", "json": [null, null], "r": "c(NA, NA)" },
+    { "name": "mixed scalar array", "json": [1, "a"], "r": "list(1, \"a\")" },
+    { "name": "nested array", "json": [[1, 2]], "r": "list(c(1, 2))" },
+
+    { "name": "empty object", "json": {}, "r": "list()" },
+    { "name": "object syntactic keys", "json": { "b": 2, "a": 1 }, "r": "list(a = 1, b = 2)" },
+    {
+      "name": "object non-syntactic key",
+      "json": { "a b": 1 },
+      "r": "list(\"a b\" = 1)"
+    },
+    {
+      "name": "object dotted key",
+      "json": { ".x": 1 },
+      "r": "list(.x = 1)"
+    },
+    {
+      "name": "object numeric-leading key",
+      "json": { "1a": 1 },
+      "r": "list(\"1a\" = 1)"
+    },
+    {
+      "name": "nested object",
+      "json": { "outer": { "inner": [1, 2] } },
+      "r": "list(outer = list(inner = c(1, 2)))"
+    }
+  ]
+}

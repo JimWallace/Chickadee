@@ -507,12 +507,99 @@ window.__result = null;
 })().catch((err) => { window.__result = { ok: false, stage: 'page', error: String(err) }; });
 </script>`;
 
+/// The R escaper the SERVER seeds into the worker, read out of the Swift
+/// constant that defines it rather than copied here.
+///
+/// A copy would be a fourth R JSON encoder in this repo — there are already
+/// three, and one of them exists because another was wrong. Extraction keeps
+/// the smoke honest: if the constant is renamed or moved, this throws instead of
+/// silently probing something that is no longer what ships.
+async function readRRuntimeSource() {
+    const swift = await fs.readFile(
+        path.resolve(REPO_ROOT, 'Sources/Core/RPersonalizationRuntime.swift'), 'utf8');
+    const match = /chickadeeJSONStringRSource\s*=\s*#"""\n([\s\S]*?)\n\s*"""#/.exec(swift);
+    if (!match) {
+        throw new Error(
+            'could not find chickadeeJSONStringRSource in RPersonalizationRuntime.swift — '
+            + 'the R auto-compute smoke cannot probe the runtime the server actually seeds');
+    }
+    return match[1];
+}
+
+// The R auto-compute probe. Same shape as the Python one — two solution cells,
+// one of which raises — but exercising the STRUCTURED `call` path every
+// non-Python in-page kernel uses, where the worker renders the arguments.
+//
+// Only a real kernel proves any of this: the snippets are one top-level
+// expression each (a xeus-lite performance constraint), they print behind a
+// nonce, and the seeded escaper has to be defined before any of them runs. Each
+// of those fails silently when wrong — no error, just no value.
+const rEvalProbePage = (runtimeSource) => `<!doctype html><meta charset="utf-8"><title>R auto-compute smoke</title>
+<body><pre id="log"></pre><script>
+window.__result = null;
+(async () => {
+  const worker = new Worker('/r-eval-worker.js');
+  let counter = 0;
+  const pending = new Map();
+  worker.onmessage = (event) => {
+    const message = event.data || {};
+    const settle = pending.get(message.id);
+    if (settle) { pending.delete(message.id); settle(message); }
+  };
+  worker.onerror = (event) => {
+    window.__result = { ok: false, stage: 'worker', error: event.message || 'worker error' };
+  };
+  // The escaper the server seeds, extracted from the Swift constant that
+  // defines it — see readRRuntimeSource. Not a copy.
+  const RUNTIME_SOURCE = ${JSON.stringify(runtimeSource)};
+  const call = (payload) => new Promise((resolve) => {
+    const id = ++counter;
+    pending.set(id, resolve);
+    worker.postMessage(Object.assign({ id, runtimeSource: RUNTIME_SOURCE }, payload));
+  });
+
+  const bootStart = Date.now();
+  const init = await call({ type: 'init' });
+  const bootMs = Date.now() - bootStart;
+  if (!init.ok) { window.__result = { ok: false, stage: 'init', error: init.error }; return; }
+
+  const load = await call({ type: 'loadCells', cells: [
+    'classify <- function(bmi) if (bmi < 18.5) "under" else "ok"',
+    'this_name_does_not_exist()',
+    'area <- function(r) round(pi * r * r, 2)',
+  ] });
+  if (!load.ok) { window.__result = { ok: false, stage: 'loadCells', error: load.error }; return; }
+
+  const runs = {};
+  const calls = {
+    call: { functionName: 'classify', args: [18.49] },
+    later: { functionName: 'area', args: [2] },
+    // A string argument, to prove rLiteral's quoting survives the round trip.
+    stringArg: { functionName: 'paste0', args: ['a', 'b'] },
+    // A vector argument, which R renders c(...) and Python would not.
+    vectorArg: { functionName: 'sum', args: [[1, 2, 3]] },
+    missing: { functionName: 'no_such_function', args: [] },
+  };
+  for (const [key, payload] of Object.entries(calls)) {
+    const reply = await call(Object.assign({ type: 'call' }, payload));
+    runs[key] = reply.ok ? { ok: true, result: reply.result } : { ok: false, error: reply.error };
+  }
+  // The expression path too, since the worker serves both.
+  const expr = await call({ type: 'run', code: 'classify(30)' });
+  runs.expression = expr.ok ? { ok: true, result: expr.result } : { ok: false, error: expr.error };
+
+  window.__result = { ok: true, bootMs, cellErrors: load.cellErrors, runs };
+})().catch((err) => { window.__result = { ok: false, stage: 'page', error: String(err) }; });
+</script>`;
+
 function startServer() {
     const server = http.createServer(async (req, res) => {
         const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         if (urlPath === '/' || urlPath === '/index.html') {
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...ISOLATION_HEADERS });
-            res.end(mode === 'eval' ? EVAL_PROBE_PAGE : PROBE_PAGE);
+            res.end(mode === 'eval'
+                ? (language === 'r' ? rEvalProbePage(await readRRuntimeSource()) : EVAL_PROBE_PAGE)
+                : PROBE_PAGE);
             return;
         }
         // Confine reads to Public/ — this server exists only to feed the probe.
@@ -588,6 +675,40 @@ if (!result || !result.ok) {
     process.exit(1);
 }
 console.log(`  kernel booted in ${result.bootMs}ms`);
+
+if (mode === 'eval' && language === 'r') {
+    const errors = result.cellErrors || [];
+    check('the failing solution cell is reported', errors.length === 1, JSON.stringify(errors));
+    check('it is attributed to the right cell', errors[0]?.index === 1, JSON.stringify(errors));
+    check('its message is R\'s own error text',
+        /could not find function|object/.test(errors[0]?.message || ''), JSON.stringify(errors));
+
+    // The value comes back as R's repr, which is what the server driver returns
+    // too — the client parses both with the same reader.
+    check('a call returns its value as an R literal',
+        result.runs.call?.result === '"under"', JSON.stringify(result.runs.call));
+    // Proves the global environment survived the cell that raised.
+    check('a function defined after the failing cell is callable',
+        result.runs.later?.result === '12.57', JSON.stringify(result.runs.later));
+    // rLiteral's quoting survived the trip through the snippet.
+    check('a string argument round-trips',
+        result.runs.stringArg?.result === '"ab"', JSON.stringify(result.runs.stringArg));
+    // The case Python cannot express: a JSON array becomes an atomic vector,
+    // so `sum` sees three numbers rather than a list.
+    check('an array argument becomes an R vector',
+        result.runs.vectorArg?.result === '6', JSON.stringify(result.runs.vectorArg));
+    check('a missing function is an error, not a null result',
+        result.runs.missing?.ok === false, JSON.stringify(result.runs.missing));
+    check('the expression path works too',
+        result.runs.expression?.result === '"ok"', JSON.stringify(result.runs.expression));
+
+    if (failures.length) {
+        console.log(`\nFAILED: ${failures.length} check(s)`);
+        process.exit(1);
+    }
+    console.log('\nPASS');
+    process.exit(0);
+}
 
 if (mode === 'eval') {
     // A cell that raises must be REPORTED, not swallowed and not fatal: the

@@ -116,13 +116,89 @@
     // Only used for names Chickadee itself controls (script names, the seed,
     // the nonce), but escaping keeps a surprising filename from breaking the
     // wrapper's parse.
+    /// An R string literal for `value`.
+    ///
+    /// Byte-identical to `encodeRString` in Sources/Core/JSONValue.swift,
+    /// including the `\uXXXX` escape for control characters below 0x20 that an
+    /// earlier version of this function omitted. Pinned by
+    /// Tests/Fixtures/r-literal-contract.json, which both implementations read.
     function rStringLiteral(value) {
-        return '"' + String(value)
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t') + '"';
+        var out = '"';
+        var text = String(value);
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            var code = text.charCodeAt(i);
+            if (ch === '\\') out += '\\\\';
+            else if (ch === '"') out += '\\"';
+            else if (ch === '\n') out += '\\n';
+            else if (ch === '\r') out += '\\r';
+            else if (ch === '\t') out += '\\t';
+            else if (code < 0x20) out += '\\u' + code.toString(16).padStart(4, '0');
+            else out += ch;
+        }
+        return out + '"';
+    }
+
+    /// An R list NAME: bare when it is a syntactic identifier, quoted otherwise.
+    /// Mirrors `encodeRName` in JSONValue.swift.
+    function rName(key) {
+        var text = String(key);
+        var syntactic = /^[A-Za-z.][A-Za-z0-9._]*$/.test(text);
+        return syntactic ? text : rStringLiteral(text);
+    }
+
+    /// Whether an array renders as `c(...)` rather than `list(...)`.
+    ///
+    /// Mirrors `isHomogeneousScalarArray`: empty is NOT homogeneous (so `[]`
+    /// becomes `list()`), nulls are compatible with every kind, and any array
+    /// or object member disqualifies the whole thing.
+    function isHomogeneousScalarArray(items) {
+        if (!items.length) return false;
+        var seen = null;
+        for (var i = 0; i < items.length; i++) {
+            var v = items[i];
+            var kind;
+            if (v === null) continue;                       // compatible with anything
+            else if (typeof v === 'boolean') kind = 0;
+            else if (typeof v === 'number') kind = 1;
+            else if (typeof v === 'string') kind = 2;
+            else return false;                              // array / object
+            if (seen !== null && seen !== kind) return false;
+            seen = kind;
+        }
+        return true;
+    }
+
+    /// Renders a JSON value as R source.
+    ///
+    /// A SECOND IMPLEMENTATION of `JSONValue.rLiteral`, and deliberately so: the
+    /// in-page evaluator has to call an R solution with arguments the instructor
+    /// has typed but not yet saved, so there is no server round-trip in which
+    /// the server could render them. The same allowance
+    /// `personalizationInputsSourceR` already takes.
+    ///
+    /// What makes it safe is that neither side owns the expectations —
+    /// Tests/Fixtures/r-literal-contract.json does, and both read it.
+    function rLiteral(value) {
+        if (value === null || value === undefined) return 'NA';
+        if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+        if (typeof value === 'number') {
+            if (Number.isNaN(value)) return 'NaN';
+            if (!Number.isFinite(value)) return value < 0 ? '-Inf' : 'Inf';
+            // Swift renders `.int` without a decimal point and `.double` with
+            // one; JS has a single number type, so integrality decides — which
+            // is the same split the server's JSON decode makes.
+            if (Number.isInteger(value)) return String(value);
+            return String(value);
+        }
+        if (typeof value === 'string') return rStringLiteral(value);
+        if (Array.isArray(value)) {
+            var inner = value.map(rLiteral).join(', ');
+            return isHomogeneousScalarArray(value) ? 'c(' + inner + ')' : 'list(' + inner + ')';
+        }
+        var keys = Object.keys(value).sort();
+        var pairs = keys.map(function (k) { return rName(k) + ' = ' + rLiteral(value[k]); });
+        return 'list(' + pairs.join(', ') + ')';
     }
 
     // Set CHICKADEE_ASSIGNMENT_SEED for the whole session, mirroring the native
@@ -240,6 +316,7 @@
     root.ChickadeeRGradingShared = {
         R_KERNEL: R_KERNEL,
         rStringLiteral: rStringLiteral,
+        rLiteral: rLiteral,
         assignmentSeedR: assignmentSeedR,
         makeNonce: makeNonce,
         runScriptR: runScriptR,
