@@ -9,6 +9,85 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.51] - 2026-08-10
+
+### Added
+
+- **The in-page auto-compute worker can now be given its language's own value
+  serializer and JSON escaper.** `AssignmentLanguage.autoComputeRuntimeSource`
+  seeds the source a worker must prepend before it can report a value — the
+  SAME constants the server driver and grading runtime already use, so the two
+  substrates cannot disagree about what a value looks like. Lua and Octave need
+  a serializer and an escaper; R needs only an escaper (`deparse` is a builtin);
+  Python needs neither.
+
+  The eval protocol is unchanged — the one `python-eval-worker.js` already
+  speaks, with the payload printed as JSON behind a per-run nonce. An earlier
+  draft of this work proposed a second, nonce-framed encoding to avoid pushing
+  escapers into three languages; the escapers turned out to already exist as
+  Core constants, so framing would have bought nothing and cost a second payload
+  encoding and a second parser.
+
+### Changed
+
+- **R's char-by-char JSON string encoder moved from `PersonalizationEvaluator`
+  into `RPersonalizationRuntime`**, where a second consumer can share it rather
+  than copy it. Worth knowing when reaching for one: there are two R encoders in
+  the tree, and this is the robust one — the `gsub`-based encoder in the grading
+  runtime trips over replacement-string backslash rules, which is why this one
+  was written.
+
+### Added
+
+- **R assignments compute expected values in the browser.** Auto-compute used to
+  send every non-Python language to the server, which was the right fix for a
+  wrong answer and the wrong rule for an editor whose job is in-browser
+  authoring: an instructor changing a case should see what their solution
+  returns without a round-trip. R now runs on the vendored xeus-r kernel, the
+  same one that grades a browser-graded R submission.
+
+  Lua and Octave still route to the server. Their kernels exist and the worker
+  shape is now proven; each needs its own snippet module and a smoke row.
+
+- **`rLiteral` in `Public/r-grading-shared.js`** — a browser twin of
+  `JSONValue.rLiteral`, needed because in-page auto-compute calls an R solution
+  with arguments the instructor has typed but not saved, so there is no server
+  round-trip in which the server could render them. Neither implementation owns
+  the expectations: both read `Tests/Fixtures/r-literal-contract.json`, so a
+  change to either that is not mirrored fails on both sides — the arrangement
+  `output-contract.json` already uses to pin RunnerCore's native and wasm builds
+  together.
+
+- **A browser-grading smoke row for R auto-compute.** It exercises the kernel
+  for real, because every way these snippets can be wrong is silent: they must
+  be one top-level expression each (a xeus-lite performance constraint), they
+  report behind a nonce, and the seeded escaper has to be defined before any of
+  them runs. The probe reads that escaper out of the Swift constant that defines
+  it rather than copying it — a copy would have been the fourth R JSON encoder
+  in this repo.
+
+### Added
+
+- **A browser `luaLiteral`**, pinned to `JSONValue.luaLiteral` by
+  `Tests/Fixtures/lua-literal-contract.json` — the same arrangement the R
+  renderer uses, where neither implementation owns the expectations and both
+  read the fixture. Groundwork for in-page auto-compute on Lua.
+
+  The contract exists mainly to pin one trap: Lua spells null `nil`, and a `nil`
+  inside a table constructor **is not stored** — `{60, nil, 20}` loses its middle
+  slot, `ipairs` stops at the hole, and `#t` is unspecified. So null renders
+  `nil` only at top level and the `chickadee.NULL` sentinel inside any table. A
+  renderer that misses that produces a table of the wrong length and grades
+  against it.
+
+### Fixed
+
+- **`luaStringLiteral` now escapes control characters**, matching
+  `encodeLuaString` in Swift. It passed them through, and a literal newline
+  inside a quoted Lua string is a syntax error rather than a formatting quirk.
+  The escape is decimal (`\ddd`) because `\xNN` is Lua 5.2+.
+
+
 ## [0.5.50] - 2026-08-10
 
 ### Changed
