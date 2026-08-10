@@ -261,15 +261,7 @@ Create Assignment
                 <label class="gen-template-label">
                     Template:
                     <select id="gen-template-select" class="form-input select-xs">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness" selected>Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                        <option value="py:variable_equality">Variable Equality</option>
-                        <option value="py:structural_check">Structural Check (AST properties)</option>
+                        <option value="py:differential" selected>Differential (reference solution)</option>
                     </select>
                 </label>
             </div>

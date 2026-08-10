@@ -30,6 +30,7 @@ import {
 (function (global) {
     'use strict';
 
+<<<<<<< HEAD
     // Which template groups an assignment may pick from.
     //
     // The Python group is Python-only, and used not to be gated at all: an
@@ -85,6 +86,22 @@ import {
         var language = global.ChickadeeLanguage;
         return language ? language.scriptExtension() : 'py';
     }
+=======
+    var TEMPLATE_OPTIONS = [
+        // Python's template set is down to one. The other eight duplicated a
+        // pattern-family kind that renders in all six languages, in a better
+        // form, and offering both taught authors to reach for the fallback.
+        // `differential` has no first-class equivalent yet.
+        { group: 'Python', items: [
+            { value: 'py:differential', label: 'Differential (reference solution)' }
+        ] },
+        { group: 'Shell', items: [
+            { value: 'sh:always_pass', label: 'Always Pass (placeholder)' },
+            { value: 'sh:file_exists', label: 'File Exists Check' },
+            { value: 'sh:command_output', label: 'Command Output Check' }
+        ] }
+    ];
+>>>>>>> 4cba87e (refactor(templates): retire the eight script templates pattern families replaced)
 
     function cfg() { return global.ChickadeeScriptRendererConfig || {}; }
 

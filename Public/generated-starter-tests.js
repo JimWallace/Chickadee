@@ -131,7 +131,7 @@
                     setStatus('Upload a notebook first to start a draft.');
                     return;
                 }
-                var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
+                var tplType = genTplSelect ? genTplSelect.value : 'py:differential';
                 var checked = fnChecklist
                     ? Array.prototype.slice.call(
                         fnChecklist.querySelectorAll('input[type=checkbox]:checked'))
