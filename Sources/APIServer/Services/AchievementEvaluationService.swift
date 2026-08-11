@@ -99,49 +99,30 @@ func evaluateClassGoalAchievements(
         let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
             .filter { enrolledStudents.contains($0.key) }
 
-        for goal in goals {
-            if rowByAchievement[goal.id]?.locked == true { continue }  // frozen at the deadline
-
-            // Authoring rejects goal shapes the sweep can't evaluate (a single
-            // "grade ≥ X" condition at most), but a hand-authored manifest can
-            // still carry one — skip it loudly rather than silently mis-grade
-            // the bonus as grade-only (audit A4).
-            guard goal.isSweepEvaluableClassGoal else {
-                logger.warning(
-                    """
-                    Class goal '\(goal.id)' on setup \(setupID) has conditions the sweep \
-                    cannot evaluate (only a single 'grade atLeast' condition is supported); skipping.
-                    """
-                )
-                continue
-            }
-
-            let threshold = goal.gradeThresholdFraction ?? 1
-            let studentsMeeting = bestByStudent.values.filter { $0 >= threshold }.count
-            let progress = classGoalProgress(
-                studentsMeeting: studentsMeeting,
+        let outcome = try await writeClassGoalSnapshots(
+            goals: goals,
+            rowByAchievement: rowByAchievement,
+            evaluation: ClassGoalEvaluation(
+                setupID: setupID,
+                bestByStudent: bestByStudent,
                 denominator: denominator,
-                classFraction: goal.classFraction ?? 1)
+                locked: locked,
+                now: now),
+            on: db,
+            logger: logger)
+        written += outcome.written
 
-            if let row = rowByAchievement[goal.id] {
-                row.studentsMeeting = studentsMeeting
-                row.denominator = denominator
-                row.progress = progress
-                row.locked = locked
-                row.evaluatedAt = now
-                try await row.save(on: db)
-            } else {
-                try await APIAchievementResult(
-                    testSetupID: setupID,
-                    achievementID: goal.id,
-                    studentsMeeting: studentsMeeting,
-                    denominator: denominator,
-                    progress: progress,
-                    locked: locked,
-                    evaluatedAt: now
-                ).save(on: db)
-            }
-            written += 1
+        // The bonus a points-rewarded goal awards scales with live class
+        // progress, so every grade already pushed to LEARN carries whatever
+        // progress happened to be when THAT student's submission was graded.
+        // Freezing at the deadline is the moment the final bonus exists — and
+        // nothing else re-queues a push, because a push is only ever triggered
+        // by a new result, an override, or the manual "Push all". Without this,
+        // an assignment whose class goal completed late lands in LEARN with
+        // every early submitter's bonus permanently under-counted.
+        if outcome.bonusFroze {
+            try await requeueFrozenClassGoalBonusPushes(
+                assignment: assignment, testSetupID: setupID, on: db, logger: logger)
         }
     }
 
@@ -149,6 +130,150 @@ func evaluateClassGoalAchievements(
         logger.debug("Class-goal achievement sweep wrote \(written) snapshot(s)")
     }
     return written
+}
+
+// MARK: - Snapshot writing
+
+/// What one setup's snapshot write produced: how many rows were written, and
+/// whether a **points-rewarded** goal crossed from live to frozen in this pass.
+private struct ClassGoalWriteOutcome {
+    var written: Int
+    var bonusFroze: Bool
+}
+
+/// Everything one setup's goals are evaluated against in a single sweep pass:
+/// which setup, the per-student grades over the enrolled roster, the roster
+/// size, whether the deadline has passed, and the sweep's clock.
+private struct ClassGoalEvaluation {
+    let setupID: String
+    let bestByStudent: [UUID: Double]
+    let denominator: Int
+    let locked: Bool
+    let now: Date
+}
+
+/// Upserts one snapshot per evaluable goal on a setup and reports whether a
+/// points-rewarded goal just froze — the transition that finalizes the bonus
+/// every student's grade of record carries.
+///
+/// A goal that is *already* locked is skipped, so the freeze is reported exactly
+/// once in an assignment's life: the sweep never re-opens a locked row (the
+/// caller skips a setup whose goals are all locked), so a later due-date change
+/// cannot re-trigger the re-push.
+private func writeClassGoalSnapshots(
+    goals: [Achievement],
+    rowByAchievement: [String: APIAchievementResult],
+    evaluation: ClassGoalEvaluation,
+    on db: Database,
+    logger: Logger
+) async throws -> ClassGoalWriteOutcome {
+    var outcome = ClassGoalWriteOutcome(written: 0, bonusFroze: false)
+    let setupID = evaluation.setupID
+    let denominator = evaluation.denominator
+    let locked = evaluation.locked
+    let now = evaluation.now
+
+    for goal in goals {
+        if rowByAchievement[goal.id]?.locked == true { continue }  // frozen at the deadline
+
+        // Authoring rejects goal shapes the sweep can't evaluate (a single
+        // "grade ≥ X" condition at most), but a hand-authored manifest can
+        // still carry one — skip it loudly rather than silently mis-grade
+        // the bonus as grade-only (audit A4).
+        guard goal.isSweepEvaluableClassGoal else {
+            logger.warning(
+                """
+                Class goal '\(goal.id)' on setup \(setupID) has conditions the sweep \
+                cannot evaluate (only a single 'grade atLeast' condition is supported); skipping.
+                """
+            )
+            continue
+        }
+
+        let threshold = goal.gradeThresholdFraction ?? 1
+        let studentsMeeting = evaluation.bestByStudent.values.filter { $0 >= threshold }.count
+        let progress = classGoalProgress(
+            studentsMeeting: studentsMeeting,
+            denominator: denominator,
+            classFraction: goal.classFraction ?? 1)
+
+        if let row = rowByAchievement[goal.id] {
+            row.studentsMeeting = studentsMeeting
+            row.denominator = denominator
+            row.progress = progress
+            row.locked = locked
+            row.evaluatedAt = now
+            try await row.save(on: db)
+        } else {
+            try await APIAchievementResult(
+                testSetupID: setupID,
+                achievementID: goal.id,
+                studentsMeeting: studentsMeeting,
+                denominator: denominator,
+                progress: progress,
+                locked: locked,
+                evaluatedAt: now
+            ).save(on: db)
+        }
+        outcome.written += 1
+        // A goal awarding no points moves no grade, so its freeze is not a
+        // reason to re-push the class.
+        if locked, (goal.reward.points ?? 0) > 0 { outcome.bonusFroze = true }
+    }
+
+    return outcome
+}
+
+// MARK: - Re-push at the freeze
+
+/// Re-queues every student's grade for a setup whose class-goal bonus just
+/// froze, so LEARN carries the final bonus rather than the value in effect when
+/// each student's own submission happened to be graded.
+///
+/// Gated on the assignment actually being wired to a LEARN grade item (and not
+/// explicitly excluded from sync), mirroring `flagResultForBrightSpaceSync`: on
+/// a deployment with no BrightSpace binding this touches nothing. Runs at most
+/// once per assignment, at the deadline, so it costs one push per student in
+/// total — not the per-sweep churn that re-pushing on every progress *change*
+/// would cost while the assignment is still live.
+///
+/// An assignment with no due date never freezes and so is never re-pushed here;
+/// its bonus stays live-but-stale in LEARN, and "Push all" remains the way to
+/// settle it.
+private func requeueFrozenClassGoalBonusPushes(
+    assignment: APIAssignment,
+    testSetupID: String,
+    on db: Database,
+    logger: Logger
+) async throws {
+    guard assignment.brightspaceSyncExcluded != true,
+        let gradeObjectID = assignment.brightspaceGradeObjectID,
+        !gradeObjectID.isEmpty,
+        let course = try await APICourse.find(assignment.courseID, on: db),
+        let orgUnitID = course.brightspaceOrgUnitID,
+        !orgUnitID.isEmpty
+    else { return }
+
+    let submissionIDs = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+        .compactMap(\.id)
+    guard !submissionIDs.isEmpty else { return }
+
+    var results: [APIResult] = []
+    for chunk in chunkedForInFilter(submissionIDs) {
+        results += try await APIResult.query(on: db).filter(\.$submissionID ~~ chunk).all()
+    }
+    guard !results.isEmpty else { return }
+
+    try await requeueForImmediateSync(results, on: db)
+    logger.info(
+        """
+        Class-goal bonus froze for '\(assignment.title)' — re-queued \(results.count) \
+        grade push(es) so LEARN carries the final bonus.
+        """
+    )
 }
 
 /// Per-student best whole-assignment grade (`0...1`) for a setup, from

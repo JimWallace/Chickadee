@@ -584,7 +584,9 @@ extension GradeSyncSweep {
     }
 }
 
-private func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
+/// Splits an `~~` (SQL IN) filter's operand into driver-safe chunks. Shared with
+/// the class-goal freeze re-push, which builds the same shape of query.
+func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
     guard items.count > gradeSyncInFilterChunkSize else {
         return items.isEmpty ? [] : [items]
     }
