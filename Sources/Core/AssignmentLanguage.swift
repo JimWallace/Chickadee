@@ -283,38 +283,45 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         return nil
     }
 
-    /// Resolve the language from the manifest and (optionally) the notebook
-    /// kernel. Precedence:
-    ///   0. the manifest's recorded `language`, when it has one — an explicit
-    ///      answer always beats sniffing, and it is what lets a suite made up
-    ///      only of pattern families (no graded script to find) keep its
-    ///      language;
-    ///   1. any graded test script (`.R` → `.r`, `.lua` → `.lua`, `.py` →
-    ///      `.python`), in `allCases` order — the graded suite is the strongest
-    ///      signal, it's what actually runs;
-    ///   2. else a notebook kernel whose `kernelspec.name` / `language_info.name`
-    ///      is in some language's `notebookKernelNames`;
-    ///   3. else **nil** — no signal says this assignment has a language.
+    /// The language this assignment DECLARES, or nil when it declares none.
     ///
-    /// nil is a legal, supported answer, NOT an error: an assignment whose suite
-    /// is plain `.sh` scripts is the system's original mode and has no language
-    /// in the `AssignmentLanguage` sense. It means "no language-specific
-    /// machinery applies" — refuse only at the operations that genuinely need a
-    /// language (rendering a literal, evaluating a per-student `=` expression,
-    /// generating a pattern family, picking an editor kernel).
+    /// NO SNIFFING. This used to fall back to a graded script's extension and
+    /// then to the starter notebook's kernel, which is how "the author chose
+    /// Python" and "we guessed Python from a `.py` file" became the same
+    /// answer. Every silent misroute in this arc descended from that: a Lua
+    /// assignment resolving to Python, an R author's first `=` expression sent
+    /// to `python3`, a browser writing `_ck_inputs.py` for an R runtime.
     ///
-    /// This used to answer `.python` instead of nil, which made "this is
-    /// Python" and "nothing here says anything" indistinguishable. Every silent
-    /// misroute in this area descended from that, Lua shipping green while
-    /// resolving to Python among them.
+    /// Declaration is now a requirement, not a hint. Every door that creates an
+    /// assignment answers the question — the web create page's `required`
+    /// select (with an explicit "None"), MCP `create_assignment`'s required
+    /// `language`, the REST zip upload, and course-bundle import — and
+    /// `BackfillDeclaredLanguage` answered it for everything that predates the
+    /// rule. So a nil here means "the author says this has no language", which
+    /// is a real and supported state (a suite of plain `.sh` scripts), and NOT
+    /// "nobody has been asked".
     ///
-    /// Deliberately not public (docs/language-handling-review.md §3): the
-    /// defaulted parameters made `resolve(manifest: props)` an easy spelling
-    /// that silently skips the notebook sniff — the bug class the
-    /// `resolve(for:manifest:)` server wrapper exists to prevent. External
-    /// callers state their notebook source explicitly: `resolve(manifest:notebookData:)`
-    /// here, or the `APITestSetup` wrapper in `AssignmentLanguageResolution.swift`.
-    static func resolve(
+    /// Derivation still happens, exactly once, at the moment content arrives
+    /// without an answer — see `derivedDeclaration`. It is a boundary step, not
+    /// a resolution strategy.
+    public static func resolve(manifest: TestProperties) -> AssignmentLanguage? {
+        manifest.language
+    }
+
+    /// Derive a language for content that arrives WITHOUT a declaration, so it
+    /// can be recorded once and never guessed again.
+    ///
+    /// THE ONLY REMAINING SNIFF, and it is deliberately not called `resolve`.
+    /// Three callers, all of them boundaries where content enters the system
+    /// with no author answer attached: the REST zip upload, course-bundle
+    /// import, and the one-time backfill. Each records the result immediately,
+    /// so the guess is made once and becomes a declaration.
+    ///
+    /// Precedence is the old resolution order, preserved so that what gets
+    /// recorded matches what the system used to compute on the fly: a graded
+    /// script's extension (in `allCases` order, so a mixed suite resolves
+    /// deterministically), then the starter notebook's kernel, then nil.
+    public static func derivedDeclaration(
         manifest: TestProperties,
         notebookKernelName: String? = nil,
         notebookLanguageInfoName: String? = nil
@@ -339,38 +346,34 @@ extension AssignmentLanguage {
     // trap `docs/adding-a-xeus-kernel.md` counts as its fifth. Leaving a
     // ready-made one in Core is an invitation to reintroduce it.
 
-    /// Resolve including the assignment's starter notebook, read straight from
-    /// `.ipynb` bytes.
+    /// Derive a declaration for content that arrives without one, reading the
+    /// starter notebook's kernel straight from `.ipynb` bytes.
     ///
-    /// This is the only signal a *brand-new* notebook assignment has. Its suite
-    /// is still empty and nothing has recorded a language yet, so
-    /// `resolve(manifest:)` alone answers nil — and used to answer `.python`,
-    /// which meant an instructor's first R `=` expression was evaluated by
-    /// `python3` and rejected with a Python `SyntaxError`, before any `.R`
-    /// script existed to give the game away.
+    /// The notebook is the ONLY signal a brand-new notebook assignment has: its
+    /// suite is empty and no script names a language. This is what the REST zip
+    /// upload and course-bundle import call to answer the question once, at the
+    /// boundary, before recording the answer.
     ///
-    /// Returns nil when neither the manifest nor the notebook names a language;
-    /// see `resolve(manifest:notebookKernelName:notebookLanguageInfoName:)` for
-    /// why that is a legal answer rather than a failure.
-    /// `notebookData` is an autoclosure because only step 2 of the precedence
-    /// needs it: a recorded language or an `.R` script in the suite both
-    /// outrank the kernelspec, so callers on hot paths (the worker job payload,
-    /// every suite save) don't pay to read the notebook off disk to be told
-    /// something the manifest already knew.
-    public static func resolve(
+    /// `notebookData` is an autoclosure because a manifest that already names a
+    /// language outranks the kernelspec, so a caller does not pay to read the
+    /// notebook off disk to be told something the manifest already knew.
+    ///
+    /// This was `resolve(manifest:notebookData:)`, called on every read — the
+    /// worker job payload, every suite save, every instructor page render. It is
+    /// a one-shot now, and the rename is the point: nothing downstream derives a
+    /// language any more, it reads the declared one.
+    public static func derivedDeclaration(
         manifest: TestProperties,
         notebookData: @autoclosure () -> Data?
     ) -> AssignmentLanguage? {
-        // The kernelspec is consulted only when the manifest said nothing at
-        // all — a manifest answer of any kind outranks it.
-        if let manifestOnly = resolve(manifest: manifest) { return manifestOnly }
+        if let fromManifest = derivedDeclaration(manifest: manifest) { return fromManifest }
         guard let data = notebookData(),
             let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let metadata = notebook["metadata"] as? [String: Any]
         else {
             return nil
         }
-        return resolve(
+        return derivedDeclaration(
             manifest: manifest,
             notebookKernelName: (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
             notebookLanguageInfoName: (metadata["language_info"] as? [String: Any])?["name"]
@@ -378,35 +381,18 @@ extension AssignmentLanguage {
         )
     }
 
-    /// Re-derive the language from scratch, **ignoring any recorded
-    /// `manifest.language`**.
-    ///
-    /// `resolve` treats a recorded language as an authoritative answer (step 0),
-    /// which is what a stable render needs — but it also makes the recorded value
-    /// a one-way door: a Python assignment cloned and converted to R keeps
-    /// rendering `.py` forever, because the sticky `.python` outranks the new R
-    /// notebook. When the starter notebook is *replaced* the recorded value is a
-    /// stale memo, not a declaration, so re-derivation must skip it. Precedence
-    /// is otherwise identical to `resolve`: a graded script wins (`.R` → `.r`,
-    /// `.lua` → `.lua`, `.py` → `.python`), else the notebook's own kernel via
-    /// `fromNotebookMetadata`, else nil.
-    public static func rederive(
-        manifest: TestProperties,
-        notebookData: @autoclosure () -> Data?
-    ) -> AssignmentLanguage? {
-        if let scriptLanguage = gradedScriptLanguage(in: manifest) { return scriptLanguage }
-        guard let data = notebookData(),
-            let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-            let metadata = notebook["metadata"] as? [String: Any]
-        else {
-            return nil
-        }
-        // `fromNotebookMetadata`, not `isRNotebookMetadata(…) ? .r : .python`: the
-        // ternary compiles forever and routes every non-R notebook to Python, so
-        // a Lua notebook re-derived as Python. The general form returns the
-        // language it recognised, or nil when it recognised none.
-        return fromNotebookMetadata(metadata)
-    }
+    // `rederive(manifest:notebookData:)` used to live here: re-derivation that
+    // ignored the recorded language, so that replacing a starter notebook
+    // changed the assignment's language under the author.
+    //
+    // It existed because the recorded value was a MEMO — "what resolution last
+    // computed" — and a memo goes stale when the content it summarised is
+    // replaced. A declaration does not. An author who converts a Python
+    // assignment to R changes the language in the dropdown that already exists
+    // for exactly that purpose; a notebook upload no longer changes it silently
+    // underneath them.
+    //
+    // Its one caller, `manifestWithRederivedLanguage`, is gone with it.
 }
 
 // MARK: - Per-language rendering / delivery strategy

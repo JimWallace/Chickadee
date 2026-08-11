@@ -70,7 +70,7 @@ import Testing
         //    fails the legs below rather than quietly grading as Python.
         let props = try manifest(gradedScriptIn: expected)
         let resolved = try #require(
-            AssignmentLanguage.resolve(manifest: props, notebookData: nil),
+            AssignmentLanguage.derivedDeclaration(manifest: props, notebookData: nil),
             """
             A manifest whose only graded script is a \(expected) script resolved to NO language. \
             Resolution is Optional, and nil means "nothing here names a language" — a graded \
@@ -172,7 +172,7 @@ import Testing
                     .utf8))
         for alias in expected.notebookKernelNames {
             let json = #"{"nbformat":4,"metadata":{"kernelspec":{"name":"\#(alias)"}},"cells":[]}"#
-            let resolved = AssignmentLanguage.resolve(
+            let resolved = AssignmentLanguage.derivedDeclaration(
                 manifest: empty, notebookData: Data(json.utf8))
             #expect(
                 resolved == expected,

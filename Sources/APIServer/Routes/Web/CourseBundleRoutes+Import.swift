@@ -440,7 +440,9 @@ private func importBundledTestSetups(
         if let imported = setup.decodedManifest(), imported.languageDeclared != true {
             try await declareManifestLanguage(
                 setup: setup,
-                to: AssignmentLanguage.resolve(for: setup, manifest: imported),
+                to: AssignmentLanguage.derivedDeclaration(
+                    manifest: imported,
+                    notebookData: setup.notebookPath.flatMap { FileManager.default.contents(atPath: $0) }),
                 on: db)
         }
 

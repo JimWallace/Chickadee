@@ -129,7 +129,7 @@ import Vapor
             // tool, since nothing about a C++ assignment implies its language.
             let props = try #require(try await manifest(of: assignment, on: app))
             #expect(props.language == .cpp)
-            #expect(AssignmentLanguage.resolve(manifest: props, notebookData: nil) == .cpp)
+            #expect(AssignmentLanguage.derivedDeclaration(manifest: props, notebookData: nil) == .cpp)
         }
     }
 

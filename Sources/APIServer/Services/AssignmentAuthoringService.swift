@@ -267,18 +267,14 @@ enum AssignmentAuthoringService {
             throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
         }
         setup.notebookPath = path
-        // Replacing the starter notebook re-derives the assignment language: a
-        // recorded language is a memo of what was last resolved, so a Python
-        // assignment converted to R (new R notebook, no `.R` script yet) must
-        // stop rendering `.py`. A no-op (byte-stable) when the language is
-        // unchanged or was never recorded — see `manifestWithRederivedLanguage`.
-        // Derives from the normalized bytes just written, which future reads see
-        // (R kernels normalize to `xr`, still detected as R).
-        if let updatedManifest = manifestWithRederivedLanguage(
-            manifestJSON: setup.manifest, notebookData: normalized)
-        {
-            setup.manifest = updatedManifest
-        }
+        // Replacing the starter notebook no longer changes the assignment's
+        // language. `manifestWithRederivedLanguage` ran here and rewrote it from
+        // the new notebook's kernel, on the reasoning that a recorded language
+        // is "a memo of what was last resolved" — which is exactly the
+        // assumption this arc removed. A declaration does not go stale when
+        // content changes: an author converting a Python assignment to R
+        // changes the language in the dropdown that exists for that purpose,
+        // and a notebook upload does not overrule them silently.
         try await setup.save(on: db)
     }
 

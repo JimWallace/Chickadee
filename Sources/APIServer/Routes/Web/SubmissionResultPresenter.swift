@@ -514,7 +514,7 @@ func buildHintByFilename(_ props: TestProperties) -> [String: String] {
     // makes the filename key correct as well, so the map is not one refactor
     // of `outcomeTestName` away from silently losing every hint on every
     // non-Python assignment.
-    let language = AssignmentLanguage.resolve(manifest: props, notebookData: nil) ?? .python
+    let language = AssignmentLanguage.resolve(manifest: props) ?? .python
     for f in props.patternFamilies {
         for c in f.cases where c.enabled {
             record(
