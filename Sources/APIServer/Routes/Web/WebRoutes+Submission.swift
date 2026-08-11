@@ -385,8 +385,9 @@ extension WebRoutes {
 
     // MARK: - submissionPage helpers
 
-    /// Class-goal bonus: extra credit on the autograded grade, capped at 100%
-    /// (no-op unless the assignment has a points-rewarded class goal).
+    /// Class-goal bonus: true extra credit on the autograded grade, so a
+    /// student already at full marks reads above 100% (no-op unless the
+    /// assignment has a points-rewarded class goal).
     private func applyClassGoalBonus(
         to processed: inout ProcessedCollection,
         setupProps: TestProperties?,

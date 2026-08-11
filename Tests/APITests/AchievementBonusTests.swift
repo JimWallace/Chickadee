@@ -1,9 +1,14 @@
 // Tests/APITests/AchievementBonusTests.swift
 //
-// Phase 3b: the class-goal grade bonus — extra credit, capped at 100% — applied
-// at the grade-of-record sites. The pure cap is unit-tested; the grades CSV
+// Phase 3b: the class-goal grade bonus — true extra credit, uncapped — applied
+// at the grade-of-record sites. The pure fold is unit-tested; the grades CSV
 // (an official export) is exercised end-to-end. The submission page and the
 // BrightSpace push apply the same `classGoalBonusPoints` + `earnedWithClassGoalBonus`.
+//
+// Uncapped is deliberate and was a reversal: capping at the suite total made the
+// reward invisible to exactly the students who earned it, since a goal
+// conditioned on "N% of the class reaches 100%" leaves most of the class at full
+// marks, where the cap absorbed the whole bonus.
 
 import Core
 import Fluent
@@ -15,11 +20,16 @@ import VaporTesting
 
 @Suite struct AchievementBonusTests {
 
-    @Test func earnedWithClassGoalBonusCapsAtTotal() {
-        #expect(earnedWithClassGoalBonus(earned: 18, total: 20, bonus: 5) == 20)  // capped at 100%
-        #expect(earnedWithClassGoalBonus(earned: 10, total: 20, bonus: 5) == 15)  // under the cap
+    @Test func earnedWithClassGoalBonusIsUncappedExtraCredit() {
+        #expect(earnedWithClassGoalBonus(earned: 10, total: 20, bonus: 5) == 15)  // ordinary case
+        // Above the suite total: the student who was already at full marks is
+        // the one a class goal most needs to visibly reward.
+        #expect(earnedWithClassGoalBonus(earned: 18, total: 20, bonus: 5) == 23)
+        #expect(earnedWithClassGoalBonus(earned: 20, total: 20, bonus: 5) == 25)  // 125%
         #expect(earnedWithClassGoalBonus(earned: 18, total: 20, bonus: 0) == 18)  // no bonus
-        #expect(earnedWithClassGoalBonus(earned: 18, total: 0, bonus: 5) == 18)  // no total → untouched
+        // The bonus is denominated in suite points, so an unknown total is not a
+        // scale it can be added to.
+        #expect(earnedWithClassGoalBonus(earned: 18, total: 0, bonus: 5) == 18)
     }
 
     @Test func gradesCSVIncludesCappedClassGoalBonus() async throws {
@@ -72,8 +82,11 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = res.body.string
-                    #expect(body.contains("20.0"), "18/20 + 5 bonus capped at 20 must export as 20.0")
-                    #expect(!body.contains("18.0"), "Raw 18 must be replaced by the bonused 20")
+                    #expect(
+                        body.contains("23.0"),
+                        "18/20 + 5 bonus must export as 23.0 — the export carries the extra credit, uncapped"
+                    )
+                    #expect(!body.contains("18.0"), "Raw 18 must be replaced by the bonused 23")
                 })
         }
     }

@@ -288,6 +288,37 @@ in the LEARN classlist and no usable student number).
 4. Watch the **sync-activity log** on the tab (success / failure / skipped),
    and use **"Retry failed"** / per-assignment **"Push all"** as needed.
 
+### What triggers a push
+
+A push is queued by an *event on a row*, never by a periodic re-derivation of
+the grade: a new or re-graded result, an instructor override (or its removal),
+the manual "Sync now" / "Push all", and — for an assignment carrying a
+points-rewarded **class goal** — the goal freezing at the deadline.
+
+That last one exists because the class-goal bonus is not a property of the
+student's submission: it scales with how far the *class* got, so it keeps moving
+after a grade has already been pushed. Freezing at the deadline is the moment the
+final bonus exists, so the class-goal sweep re-queues every student's grade for
+one push then. Nothing re-pushes while the goal is still live — the bonus in
+LEARN is a lower bound until the deadline — and an assignment with **no due
+date** never freezes at all, so its bonus only reaches LEARN via "Push all".
+
+### Grades above the item maximum
+
+A class-goal bonus is **true extra credit and is not capped**, so a student
+already at full marks pushes above 100%: a 4-point suite with a met +1 bonus
+sends 5/4, which onto a /10 LEARN item is **12.5**. This is deliberate — capping
+it at 100% made the reward invisible to precisely the students who earned it,
+since a goal like "80% of the class reaches 100%" leaves most of the class at
+full marks.
+
+D2L decides whether it keeps that value. A numeric grade item carries a
+**"Can Exceed"** flag, and an item without it may clamp or reject an above-max
+grade. Chickadee pushes the true value either way — a clamped grade is worth more
+to the student than no grade — and records a warning on the **success** row of
+the sync-activity log naming the item, its maximum, and the fix. If an assignment
+carries a points-rewarded class goal, tick **Can Exceed** on its LEARN grade item.
+
 For ops-level diagnosis, the admin diagnostic MCP surface exposes
 `get_brightspace_sync_status` (counts by status + recent D2L error detail,
 student-free).

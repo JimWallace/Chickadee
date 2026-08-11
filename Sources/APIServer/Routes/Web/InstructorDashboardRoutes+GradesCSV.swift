@@ -88,9 +88,10 @@ extension InstructorDashboardRoutes {
             overrideKeys.insert(mapKey)
         }
 
-        // Class-goal bonus: extra credit (capped at 100%) for every graded
-        // submission on a setup with class goals.  Overrides are authoritative,
-        // so a key an override already set is left untouched.
+        // Class-goal bonus: true extra credit for every graded submission on a
+        // setup with class goals — it may take a student above the suite total.
+        // Overrides are authoritative, so a key an override already set is left
+        // untouched.
         for setupID in setupIDs {
             guard let setup = setupByID[setupID] else { continue }
             let props = setup.decodedManifest()
@@ -101,7 +102,8 @@ extension InstructorDashboardRoutes {
             let suffix = "::\(setupID)"
             for (mapKey, points) in bestPointsByUserAndSetup
             where mapKey.hasSuffix(suffix) && !overrideKeys.contains(mapKey) {
-                bestPointsByUserAndSetup[mapKey] = min(total, points + bonus)
+                bestPointsByUserAndSetup[mapKey] = earnedWithClassGoalBonus(
+                    earned: points, total: total, bonus: bonus)
             }
         }
 
