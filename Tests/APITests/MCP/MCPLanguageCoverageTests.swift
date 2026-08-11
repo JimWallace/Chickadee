@@ -272,7 +272,7 @@ import Testing
                 #expect(entry.editorKernel == nil)
                 // No notebook exists to inspect, so no check kind can apply.
                 #expect(entry.supportedNotebookCheckKinds.isEmpty)
-            case .notebookKernel(_, let kernelName, _, _):
+            case .notebookKernel(_, let kernelName, _, _, _):
                 #expect(entry.submissionMode == SubmissionMode.notebook.rawValue)
                 #expect(entry.editorKernel == kernelName)
             }

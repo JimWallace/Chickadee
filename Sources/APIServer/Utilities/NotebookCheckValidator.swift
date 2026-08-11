@@ -28,7 +28,7 @@ func validateNotebookChecks(
     _ checks: [NotebookCheck],
     patternFamilies: [PatternFamily] = [],
     testSuites: [TestSuiteEntry] = [],
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) throws {
     var seenCheckIDs: Set<String> = []
     for check in checks {
@@ -68,7 +68,14 @@ func validateNotebookChecks(
     )
     var seenCheckFilenames: Set<String> = []
     for check in checks {
-        for filename in notebookCheckAllGeneratedFilenames(check) {
+        // Every language's filenames, matching the family-collision check
+        // above and for the same reason: this asked only for Python's, so on a
+        // non-Python assignment it compared `.py` names against a suite that
+        // contains none and could never collide.
+        let checkFilenames = AssignmentLanguage.allCases.flatMap {
+            notebookCheckAllGeneratedFilenames(check, language: $0)
+        }
+        for filename in checkFilenames {
             if rawScripts.contains(filename) {
                 throw Abort(
                     .unprocessableEntity,

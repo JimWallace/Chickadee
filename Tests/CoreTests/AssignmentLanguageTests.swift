@@ -170,4 +170,84 @@ import Testing
                 "rederive of a `\(kernel)` notebook must be \(language)")
         }
     }
+
+    // MARK: - The extension scan behind `gradedScriptLanguage`
+
+    /// The resolution walk no longer builds a `URL` per suite entry to read a
+    /// file extension — `URL(fileURLWithPath:).pathExtension` measured 4.5 µs
+    /// per call on Linux Foundation, and the walk called it once per entry per
+    /// language, which is where a plain 40-entry `.sh` suite's 1.27 ms went.
+    ///
+    /// A DIFFERENTIAL, not an example list, because the first hand-rolled scan
+    /// passed every example anyone would think to write (`.gitignore`, `a.R`,
+    /// `dir/x.py`) and still disagreed with Foundation on `..R`. Names are
+    /// generated from fragments chosen to collide with the rule's corners:
+    /// leading dots, repeated dots, separators, and each language's own
+    /// extension in both cases.
+    ///
+    /// Dotfiles are EXCLUDED and pinned separately below, because Foundation's
+    /// answer for them is not a rule — see the scan's own doc comment for the
+    /// measured table.
+    @Test func scriptExtensionScanAgreesWithFoundation() throws {
+        let fragments = ["a", "R", "py", "sh", "lua", "m", "rkt", "cpp", "PY", ".", "/", "", "x.y", "..", "-"]
+        var names: [String] = [""]
+        for _ in 0..<3 {
+            names = names.flatMap { tail in fragments.map { $0 + tail } }
+        }
+        var compared = 0
+        for name in names {
+            // The divergence is stated, not accidental: a base name beginning
+            // with a dot is a dotfile here, whatever Foundation says.
+            let base = name.split(separator: "/", omittingEmptySubsequences: false).last ?? ""
+            if base.hasPrefix(".") { continue }
+            let viaFoundation = AssignmentLanguage(
+                scriptExtension: URL(fileURLWithPath: name).pathExtension)
+            let props = TestProperties(
+                requiredFiles: [],
+                testSuites: [TestSuiteEntry(tier: .pub, script: name)],
+                timeLimitSeconds: 10)
+            compared += 1
+            #expect(
+                AssignmentLanguage.resolve(manifest: props) == viaFoundation,
+                """
+                The extension scan and URL.pathExtension disagree about \(name.debugDescription): \
+                scan says \(String(describing: AssignmentLanguage.resolve(manifest: props))), \
+                Foundation says \(String(describing: viaFoundation)).
+                """)
+        }
+        #expect(compared > 2000, "the differential must actually generate names, not skip them all")
+    }
+
+    /// The dotfile rule, pinned. `....R` is the one Foundation calls an R file
+    /// and this does not; the assertion exists so that divergence is a decision
+    /// someone can find and argue with rather than a silent difference.
+    @Test(arguments: [".R", ".gitignore", "..R", "...R", "....R", "dir/.py"])
+    func aDotfileNeverClaimsALanguage(_ script: String) {
+        let props = TestProperties(
+            requiredFiles: [],
+            testSuites: [TestSuiteEntry(tier: .pub, script: script)],
+            timeLimitSeconds: 10)
+        #expect(
+            AssignmentLanguage.resolve(manifest: props) == nil,
+            "\(script) is a hidden file and must not resolve a language")
+    }
+
+    /// `allCases` order still breaks a tie, and it is now applied to what the
+    /// single pass found rather than driving the search. A mixed suite resolves
+    /// to the earliest case present regardless of the order the entries appear
+    /// in — the property the old `allCases.first { suites.contains { … } }`
+    /// shape provided for free and the rewrite had to preserve deliberately.
+    @Test func aMixedSuiteResolvesInAllCasesOrderNotSuiteOrder() {
+        let scripts = ["publictest_a.lua", "publictest_b.R", "publictest_c.rkt"]
+        for rotation in 0..<scripts.count {
+            let rotated = Array(scripts[rotation...] + scripts[..<rotation])
+            let props = TestProperties(
+                requiredFiles: [],
+                testSuites: rotated.map { TestSuiteEntry(tier: .pub, script: $0) },
+                timeLimitSeconds: 10)
+            #expect(
+                AssignmentLanguage.resolve(manifest: props) == .r,
+                "suite order \(rotated) must not change the resolved language")
+        }
+    }
 }

@@ -93,7 +93,7 @@ import Testing
                 to: workDir.appendingPathComponent(file.name), atomically: true, encoding: .utf8)
         }
 
-        let bundle = renderNotebookCheck(check)
+        let bundle = renderNotebookCheck(check, language: .python)
         let scriptName = "publiccheck_\(check.id).py"
         try bundle.script.source.write(
             to: workDir.appendingPathComponent(scriptName), atomically: true, encoding: .utf8)

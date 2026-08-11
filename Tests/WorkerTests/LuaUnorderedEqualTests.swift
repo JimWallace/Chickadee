@@ -32,7 +32,7 @@ import Testing
             .appendingPathComponent("ck-unordered-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        try testRuntimeLua.write(
+        try testRuntimeSource(for: .lua).write(
             to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
 
         let process = Process()

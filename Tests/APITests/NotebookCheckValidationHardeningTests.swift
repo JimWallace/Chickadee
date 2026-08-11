@@ -32,44 +32,44 @@ import Vapor
         // `\(` is an escaped literal, not an opening group — the naive counter
         // saw one `(` and zero `)` and rejected it. This is the real-world
         // needle from the R Assignment 4 conversion.
-        try validateNotebookChecks(cellContains(#"summary\s*\("#, regex: true))
+        try validateNotebookChecks(cellContains(#"summary\s*\("#, regex: true), language: .python)
     }
 
     @Test func regex_acceptsParenInsideCharacterClass() throws {
-        try validateNotebookChecks(cellContains("[()]+", regex: true))
+        try validateNotebookChecks(cellContains("[()]+", regex: true), language: .python)
     }
 
     @Test func regex_acceptsBalancedGroups() throws {
-        try validateNotebookChecks(cellContains("(a|b)(c)", regex: true))
+        try validateNotebookChecks(cellContains("(a|b)(c)", regex: true), language: .python)
     }
 
     @Test func regex_acceptsLiteralTrailingBackslashPair() throws {
         // `\\` is an escaped backslash, not a dangling escape.
-        try validateNotebookChecks(cellContains(#"path\\"#, regex: true))
+        try validateNotebookChecks(cellContains(#"path\\"#, regex: true), language: .python)
     }
 
     @Test func regex_rejectsUnbalancedOpen() {
         #expect(throws: (any Error).self) {
-            try validateNotebookChecks(cellContains("(a", regex: true))
+            try validateNotebookChecks(cellContains("(a", regex: true), language: .python)
         }
     }
 
     @Test func regex_rejectsUnbalancedClose() {
         #expect(throws: (any Error).self) {
-            try validateNotebookChecks(cellContains("a)", regex: true))
+            try validateNotebookChecks(cellContains("a)", regex: true), language: .python)
         }
     }
 
     @Test func regex_rejectsDanglingBackslash() {
         #expect(throws: (any Error).self) {
-            try validateNotebookChecks(cellContains(#"abc\"#, regex: true))
+            try validateNotebookChecks(cellContains(#"abc\"#, regex: true), language: .python)
         }
     }
 
     @Test func nonRegex_skipsParenSanity() throws {
         // A plain substring needle is not a regex, so unbalanced parens in it
         // (matching literal source like `f(x`) must not be rejected.
-        try validateNotebookChecks(cellContains("f(x", regex: false))
+        try validateNotebookChecks(cellContains("f(x", regex: false), language: .python)
     }
 
     // MARK: - item 2: R identifier names

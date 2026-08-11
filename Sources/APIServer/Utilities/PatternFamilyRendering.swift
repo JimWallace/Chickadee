@@ -30,7 +30,7 @@ func renderFamilyArtifacts(
     sectionVarsByID: [String: [FamilyVariable]],
     globalVariables: [FamilyVariable],
     perStudentNames: Set<String>,
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) -> RenderedFamilyArtifacts {
     var caseScripts: [String: [GeneratedScript]] = [:]
     var guardScripts: [String: GeneratedScript] = [:]

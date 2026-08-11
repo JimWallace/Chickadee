@@ -18,12 +18,36 @@ import VaporTesting
 @testable import APIServer
 
 func configureTestDatabase(_ app: Application) async throws {
-    // Read env vars while holding the async env lock so we don't see a
-    // transient `TEST_DATABASE_BACKEND=postgres` set by a concurrently-
-    // running env-mutating test in another suite.
-    var settings = try await withAsyncEnvLock {
-        try testDatabaseSettingsFromEnvironment()
+    // EVERY env read in this function happens inside ONE locked region, and
+    // that is load-bearing rather than tidy.
+    //
+    // `setenv`/`unsetenv` mutate glibc's `environ` in place, and a concurrent
+    // `getenv` walking that array is undefined behaviour — not a stale read, a
+    // segfault. This helper runs on every one of the suite's ~1,100 test
+    // Applications, so it is by far the most frequent env reader in the
+    // process; the env WRITERS are a handful of tests that all hold
+    // `withAsyncEnvLock` correctly.
+    //
+    // The `TEST_LOG_LEVEL` read used to sit below, outside this block, and it
+    // was the one reader in the codebase that escaped the lock. That is exactly
+    // where the parallel run crashed:
+    //
+    //     Thread 7 crashed: __strlen_evex
+    //       specialized _ProcessInfo.environment.getter
+    //       static Environment.get(_:)
+    //       configureTestDatabase(_:) at TestHelpers.swift:63
+    //
+    // It presented as a different test dying on each run, which reads as a
+    // flake and is not one. Folding the read in here costs nothing — the lock
+    // is already being acquired on this line — and is why APITests does not
+    // need `--no-parallel`.
+    let (settingsFromEnvironment, testLogLevel) = try await withAsyncEnvLock {
+        (
+            try testDatabaseSettingsFromEnvironment(),
+            Environment.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
+        )
     }
+    var settings = settingsFromEnvironment
 
     // Per-test isolated schema for Postgres so `swift test --parallel` can
     // run XCTestCase subclasses concurrently against one shared database.
@@ -59,8 +83,7 @@ func configureTestDatabase(_ app: Application) async throws {
     // buffer tests) is affected. Override the floor with TEST_LOG_LEVEL (e.g.
     // =info) when debugging migrations.
     let priorLogLevel = app.logger.logLevel
-    app.logger.logLevel =
-        Environment.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
+    app.logger.logLevel = testLogLevel
     try await app.autoMigrate()
     app.logger.logLevel = priorLogLevel
 }

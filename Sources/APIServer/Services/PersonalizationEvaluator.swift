@@ -116,7 +116,7 @@ enum PersonalizationEvaluator {
         staticVariables: [FamilyVariable],
         expressions: [PersonalizationExpression],
         supportFilesDirectory: String? = nil,
-        language: AssignmentLanguage = .python,
+        language: AssignmentLanguage,
         timeoutSeconds: Int = defaultTimeoutSeconds
     ) async throws -> [String: String] {
         guard !expressions.isEmpty else { return [:] }

@@ -41,7 +41,7 @@ import Testing
                         expression:
                             "__import__('os').environ.get('CHICKADEE_AUDIT_FAKE_SECRET', 'LEAK_BLOCKED')"),
                     PersonalizationExpression(name: "shift", expression: "seed % 7"),
-                ]
+                ], language: .python
             )
 
             // The instructor expression cannot read the server's secret env var:

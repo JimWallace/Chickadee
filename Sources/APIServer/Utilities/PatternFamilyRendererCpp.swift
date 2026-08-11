@@ -27,6 +27,13 @@
 //   * a missing function is a compile error, so the existence guard treats
 //     compile failure as the test's own FAIL rather than an error.
 
+// THE PER-KIND RENDERERS ARE NOT HERE. Each one moved to
+// `PatternFamilyRenderer+<Kind>.swift`, beside the other five languages'
+// rendering of the same kind, so a kind can be reviewed across languages in one
+// file. What remains is what is genuinely per-language: the kind dispatcher
+// below, the call-context builder, the case header, the personalization
+// preamble and the identifier/comment helpers.
+
 import Core
 import Foundation
 
@@ -219,7 +226,7 @@ private func cppVariableDecls(
 /// The rendered pieces a kind body composes: argument bindings, the call's
 /// argument list, and the C++ expression fragment that previews the inputs in
 /// a failure message.
-private struct CppCallContext {
+struct CppCallContext {
     let declBlock: String  // "auto x = ...;" lines opening main(), or ""
     let callArgs: String  // "x, y"
     let inputLine: String  // C++ expr: "input: x=..., y=...\n" (or no-input)
@@ -304,7 +311,7 @@ private func cppCallContext(
 /// as a broken TEST rather than a broken submission. `auto expected` is declared
 /// outside the try (and default-initialised) so the comparison below can see it;
 /// `ck::errored` is `[[noreturn]]`, so the uninitialised path is unreachable.
-private func cppDifferentialExpected(family: PatternFamily, context: CppCallContext) -> String {
+func cppDifferentialExpected(family: PatternFamily, context: CppCallContext) -> String {
     """
     decltype(\(family.differentialReferenceName)(\(context.callArgs))) expected{};
     try {
@@ -325,197 +332,10 @@ private func cppReferenceBlock(_ family: PatternFamily) -> String {
     ].joined(separator: "\n")
 }
 
-/// `.differential` — compares the student's function against the instructor's
-/// reference. See `PatternKind.differential`.
-///
-/// C++ differs from the interpreted languages in one way worth knowing: the
-/// reference is COMPILED with the test, so a reference that does not compile is
-/// a build failure — the collection's `buildStatus` fails and no case runs at
-/// all — rather than a per-case `errored`. That is louder, and it lands on the
-/// instructor at validation, which is where a broken reference should land.
-///
-/// A reference that compiles but THROWS gets its own try/catch rather than
-/// riding the shared guard. Under the shared one it would report as
-/// "unexpected exception", which is the student-failure message: the same
-/// misattribution the other five languages avoid by reporting `errored`.
-private func cppDifferentialBody(
-    family: PatternFamily, context: CppCallContext, c: PatternCase
-) -> String {
-    cppGuarded(
-        """
-        \(cppDifferentialExpected(family: family, context: context))
-        auto result = \(family.functionName)(\(context.callArgs));
-        if (!ck::equal(result, expected)) {
-            ck::failed(std::string("\(GeneratedMessage.wrongValue)\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)" + ck::format(expected) + "\\n"
-                + "\(GeneratedMessage.got)" + ck::format(result));
-        }
-        ck::passed("\(GeneratedMessage.returned)" + ck::format(result));
-        """, inputLine: context.inputLine)
-}
-
-private func cppEqualityBody(
-    target: String, context: CppCallContext, c: PatternCase, unordered: Bool
-) -> String {
-    let compare = unordered ? "ck::unordered_equal" : "ck::equal"
-    let mismatch = unordered ? GeneratedMessage.wrongElements : GeneratedMessage.wrongValue
-    return cppGuarded(
-        """
-        auto expected = \(context.expectedExpression);
-        auto result = \(target)(\(context.callArgs));
-        if (!\(compare)(result, expected)) {
-            ck::failed(std::string("\(mismatch)\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)" + ck::format(expected) + "\\n"
-                + "\(GeneratedMessage.got)" + ck::format(result));
-        }
-        ck::passed("\(GeneratedMessage.returned)" + ck::format(result));
-        """, inputLine: context.inputLine)
-}
-
-private func cppApproximateBody(
-    target: String, context: CppCallContext, c: PatternCase, family: PatternFamily
-) -> String {
-    let tolerance = family.defaults.tolerance ?? 1e-6
-    return cppGuarded(
-        """
-        auto expected = \(context.expectedExpression);
-        auto result = \(target)(\(context.callArgs));
-        if (!ck::close(result, expected, \(tolerance))) {
-            ck::failed(std::string("\(GeneratedMessage.outsideTolerance)\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)" + ck::format(expected) + " (±\(tolerance))\\n"
-                + "\(GeneratedMessage.got)" + ck::format(result));
-        }
-        ck::passed("\(GeneratedMessage.returned)" + ck::format(result) + " (within ±\(tolerance))");
-        """, inputLine: context.inputLine)
-}
-
-private func cppVariableEqualityBody(
-    family: PatternFamily, context: CppCallContext, c: PatternCase
-) -> String {
-    // The "function name" IS the variable name for this kind — a global in
-    // the student's file, in scope through the single-TU include. Referencing
-    // it is the existence check: missing → the wrapper's exit-2 diagnostic
-    // names it.
-    let variable = family.functionName
-    return """
-        auto expected = \(context.expectedExpression);
-        if (!ck::equal(\(variable), expected)) {
-            ck::failed(std::string("Variable `\(variable)` has the \(GeneratedMessage.wrongValue)\\n")
-                + "\(GeneratedMessage.expected)" + ck::format(expected) + "\\n"
-                + "\(GeneratedMessage.got)" + ck::format(\(variable)));
-        }
-        ck::passed("\(variable) is " + ck::format(\(variable)));
-        """
-}
-
-private func cppReturnTypeBody(
-    target: String, context: CppCallContext, c: PatternCase
-) -> String {
-    let expectedType: String = {
-        if case .string(let s) = c.expected { return s }
-        return "int"
-    }()
-    return cppGuarded(
-        """
-        auto result = \(target)(\(context.callArgs));
-        if (!ck::type_matches<decltype(result)>("\(expectedType)")) {
-            ck::failed(std::string("\(GeneratedMessage.wrongReturnType)\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)\(expectedType)\\n"
-                + "\(GeneratedMessage.got)" + ck::type_name<decltype(result)>());
-        }
-        ck::passed("\(GeneratedMessage.returned)a \(expectedType)");
-        """, inputLine: context.inputLine)
-}
-
-private func cppExceptionBody(
-    target: String, context: CppCallContext, c: PatternCase
-) -> String {
-    let substring: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
-    return """
-        std::string what;
-        auto outcome = ck::expect_throw(
-            [&] { (void)\(target)(\(context.callArgs)); }, "\(substring)", what);
-        if (outcome == ck::ThrowOutcome::returned) {
-            ck::failed(std::string("no error raised\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)an exception\(substring.isEmpty ? "" : " matching \\\"\(substring)\\\"")");
-        }
-        if (outcome == ck::ThrowOutcome::threwOther) {
-            ck::failed(std::string("wrong error raised\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)an exception matching \\"\(substring)\\"\\n"
-                + "\(GeneratedMessage.got)" + what);
-        }
-        ck::passed("Raised as expected: " + what);
-        """
-}
-
-private func cppPerformanceBody(
-    target: String, context: CppCallContext, c: PatternCase
-) -> String {
-    // The budget is authored in MILLISECONDS, like every other renderer.
-    let budgetMs: String = {
-        switch c.expected {
-        case .int(let i): return String(Double(i))
-        case .double(let d): return String(d)
-        default: return "1000.0"
-        }
-    }()
-    return cppGuarded(
-        """
-        auto ck_started = std::chrono::steady_clock::now();
-        auto result = \(target)(\(context.callArgs));
-        double ck_elapsed_ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - ck_started).count();
-        (void)result;
-        if (ck_elapsed_ms > \(budgetMs)) {
-            ck::failed(std::string("too slow\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.threshold)" + ck::format(\(budgetMs)) + " ms\\n"
-                + "\(GeneratedMessage.elapsed)" + ck::format(ck_elapsed_ms) + " ms");
-        }
-        ck::passed("Completed in " + ck::format(ck_elapsed_ms) + " ms");
-        """, inputLine: context.inputLine)
-}
-
-private func cppStdoutBody(
-    target: String, context: CppCallContext, c: PatternCase
-) -> String {
-    cppGuarded(
-        """
-        auto expected = \(context.expectedExpression);
-        ck::CaptureStdout ck_capture;
-        (void)\(target)(\(context.callArgs));
-        auto ck_printed = ck_capture.finish();
-        // Trailing-newline tolerance, matching the other stdout renderers.
-        while (!ck_printed.empty() && (ck_printed.back() == '\\n' || ck_printed.back() == '\\r')) {
-            ck_printed.pop_back();
-        }
-        std::string ck_wanted(expected);
-        while (!ck_wanted.empty() && (ck_wanted.back() == '\\n' || ck_wanted.back() == '\\r')) {
-            ck_wanted.pop_back();
-        }
-        if (ck_printed != ck_wanted) {
-            ck::failed(std::string("\(GeneratedMessage.wrongOutput)\\n")
-                + \(context.inputLine)
-                + "\(GeneratedMessage.expected)" + ck::format(ck_wanted) + "\\n"
-                + "\(GeneratedMessage.got)" + ck::format(ck_printed));
-        }
-        ck::passed("Printed the expected output");
-        """, inputLine: context.inputLine)
-}
-
 /// Wraps a body in the shared unexpected-exception handler: a throw from
 /// the student's code is a graded FAIL with the same first line every other
 /// language uses, never a std::terminate.
-private func cppGuarded(_ inner: String, inputLine: String) -> String {
+func cppGuarded(_ inner: String, inputLine: String) -> String {
     """
     try {
     \(cppIndent(inner))

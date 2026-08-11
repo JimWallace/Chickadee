@@ -28,7 +28,7 @@ enum TestScriptVariablePrepender {
     /// Empty string when `variables` is empty.  `language` defaults to
     /// `.python`, so generated Python bytes are unchanged.
     static func emit(
-        _ variables: [FamilyVariable], language: AssignmentLanguage = .python
+        _ variables: [FamilyVariable], language: AssignmentLanguage
     ) -> String {
         switch language {
         case .python:
@@ -81,13 +81,11 @@ enum TestScriptVariablePrepender {
         }
     }
 
-    /// Wraps `emit` with a trailing blank line so callers can use a
-    /// fixed format: variables block, blank line, then the original
-    /// test-script body.  Empty string when `variables` is empty.
-    static func emitBlock(_ variables: [FamilyVariable]) -> String {
-        let decls = emit(variables)
-        return decls.isEmpty ? "" : decls + "\n\n"
-    }
+    // `emitBlock(_:)` used to live here: `emit` plus a trailing blank line,
+    // with no language parameter and therefore Python declarations for every
+    // assignment. Nothing in Sources/ called it — only two test assertions did,
+    // which is why the missing parameter never surfaced. Its callers now use
+    // `emit` directly and say which language they mean.
 
     /// Whether a hand-written test script in `language` can host an inlined
     /// variable block at all.
@@ -126,9 +124,12 @@ enum TestScriptVariablePrepender {
     /// the marker is also the sentinel, so the block could not be stripped and
     /// re-saving compounded it.
     ///
-    /// Python, R and Octave keep byte-identical output, so no existing script
-    /// changes.
-    static func rawScriptBannerComment(language: AssignmentLanguage = .python) -> String {
+    /// Python and R keep byte-identical output, so no existing script of
+    /// theirs changes. Octave moved from `#` to `%` when this fact stopped
+    /// being answered twice — both parse there, `%` is what the rest of the
+    /// Octave corpus uses, and an existing `#` banner is still recognised
+    /// because `allBannerComments` carries the legacy spelling unconditionally.
+    static func rawScriptBannerComment(language: AssignmentLanguage) -> String {
         language.lineCommentPrefix + rawScriptBannerBody
     }
 
@@ -159,7 +160,7 @@ enum TestScriptVariablePrepender {
     static func prependToRawScript(
         _ originalBody: String,
         variables: [FamilyVariable],
-        language: AssignmentLanguage = .python
+        language: AssignmentLanguage
     ) -> String {
         let stripped = stripExistingBlock(originalBody)
         guard !variables.isEmpty else { return stripped }

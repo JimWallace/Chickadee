@@ -152,11 +152,23 @@ public enum EditorSupport: Equatable, Sendable {
     /// - `missingDependencyFailureDescription`: how a missing dependency
     ///   presents to a student at grade time, phrased for that same rejection
     ///   message.
+    /// - `gradingWorkerScript`: the Web Worker `Public/browser-runner.js`
+    ///   spawns to grade this language in the browser. It lives here for the
+    ///   same reason the kernel name does — it exists exactly when a kernel
+    ///   does — and because it was previously a fact held in two places that
+    ///   nothing connected: a hand-written path in `browser-runner.js` and a
+    ///   hand-written entry in `NotebookAssetIsolationMiddleware
+    ///   .isolatedWorkerScripts`. A worker missing from the allowlist is
+    ///   refused by the browser on an isolated page, `ensureReady` throws, and
+    ///   the submission silently fails over to the native worker: right marks,
+    ///   none of the speed. That is how #1274 shipped browser-graded R no
+    ///   isolated engine ever ran.
     case notebookKernel(
         environmentFileName: String,
         kernelName: String,
         kernelDisplayName: String,
-        missingDependencyFailureDescription: String)
+        missingDependencyFailureDescription: String,
+        gradingWorkerScript: String)
 
     /// No vendored kernel, deliberately — submissions arrive as file uploads
     /// and grade on the native worker only.
@@ -286,7 +298,19 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// one fact is the shape this file exists to stop.
     public let sourceFileExtension: String
 
-    /// How this language opens a single-line comment: `#`, `--`, `;` or `//`.
+    /// How this language opens a single-line comment: `#`, `%`, `--`, `;` or
+    /// `//`.
+    ///
+    /// THE ONLY COPY. There were two: this field, and a `lineCommentLeader`
+    /// switch on `AssignmentLanguage` written for the same purpose a release
+    /// later. They disagreed about Octave — `#` here, `%` there — and neither
+    /// was wrong enough to break, because Octave accepts both. So the inputs
+    /// file got `%`, the starter-notebook scaffold and the inlined-inputs
+    /// banner got `#`, and every other Octave byte the system emits
+    /// (`test_runtime.m`, every generated case) got `%`. Two spellings of one
+    /// fact, drifting quietly, in the file whose entire thesis is one place per
+    /// fact. `%` won: it is what Octave itself is written in here, and the one
+    /// of the two that MATLAB also accepts.
     ///
     /// A FACT, and one that used to be assumed. `TestScriptVariablePrepender`
     /// wrote a `#`-prefixed banner above the inputs it inlines into a
@@ -315,10 +339,18 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// Kernelspec `name` values (and `language_info.name`) that positively mark
     /// a notebook as THIS language.
     ///
-    /// Python is deliberately EMPTY and that is not an oversight: it is the
-    /// default, reached by falling through when nothing else matched. Giving it
-    /// a positive alias set would change how every existing assignment
-    /// resolves. Positive detection is for the non-default languages only.
+    /// EVERY language with a notebook workflow answers this, Python included.
+    /// This doc used to say the opposite — "Python is deliberately EMPTY and
+    /// that is not an oversight" — which was true when written and stopped
+    /// being true when resolution became Optional and Python started matching
+    /// positively like everything else. The two upload-only languages are the
+    /// empty ones now, and for a structural reason: no kernel exists to claim
+    /// an alias for.
+    ///
+    /// The distinction the old doc was protecting is real and now lives in
+    /// `resolve`: "this is Python" and "nothing here names a language" used to
+    /// be the same answer, and every silent misroute in this area descended
+    /// from that. It is `nil` that means the second thing, not Python.
     ///
     /// Populated from the `<lang>KernelNames` statics rather than inlined here,
     /// and that is load-bearing: `scripts/generate-js-constants.sh` parses those
@@ -433,236 +465,260 @@ extension AssignmentLanguage {
     /// EXHAUSTIVE, like everything else on this type: a new case does not
     /// compile until it supplies a descriptor, and the descriptor's initialiser
     /// does not compile until every fact is answered.
+    ///
+    /// The switch returns a STORED static rather than building a descriptor
+    /// literal per access, which is what it used to do. Every fact on this type
+    /// is read through here — `scriptExtensions`, `inputsFileName`,
+    /// `notebookKernelNames` and the rest are all one-line forwarders — so a
+    /// per-access literal meant every one of them allocated four Sets, two
+    /// Arrays and a dozen Strings to answer a question whose answer is a
+    /// compile-time constant. Measured at 134 ns per access, and the callers
+    /// are loops: `init?(scriptExtension:)` walks `allCases`, and
+    /// `gradedScriptLanguage` used to walk `allCases` × suite entries on top of
+    /// that. A plain `.sh` suite of 40 entries — the system's original mode and
+    /// a fully supported one — cost **1.27 ms** to resolve, on the worker
+    /// claim path and every instructor page render.
+    ///
+    /// The switch is kept exactly as it was: it is the compile-forced worklist
+    /// that is the whole point of this type. Only the literal moved.
     public var descriptor: LanguageDescriptor {
         switch self {
-        case .python:
-            return LanguageDescriptor(
-                displayName: "Python",
-                scriptExtensions: ["py"],
-                generatedScriptExtension: "py",
-                sourceFileExtension: "py",
-                lineCommentPrefix: "#",
-                functionScan: .pythonDefStatements,
-                autoCompute: .inPageKernel(workerScript: "/python-eval-worker.js"),
-                inputsFileName: "_ck_inputs.py",
-                notebookKernelNames: AssignmentLanguage.pythonKernelNames,
-                editorSupport: .notebookKernel(
-                    environmentFileName: "environment-python.yml",
-                    kernelName: "xpython",
-                    kernelDisplayName: "Python (xeus-python)",
-                    missingDependencyFailureDescription: "an ImportError"),
-                interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
-                moduleResolution: .byName(
-                    searchPathVariable: "PYTHONPATH",
-                    interpreterHookModules: ["sitecustomize"]),
-                // The driver runs from a temp directory with cwd set to the
-                // support-files directory, so `sys.path[0]` is the driver's
-                // directory and not the one the helpers are in.
-                workingDirectoryIsOnDefaultSearchPath: false,
-                // Interpreted: the runner spawns the probed interpreter on a
-                // script, so probing IS invoking. Nothing is produced to execute.
-                capabilityRequiresExecutableOutput: false
-            )
-        case .r:
-            return LanguageDescriptor(
-                displayName: "R",
-                scriptExtensions: ["r"],
-                generatedScriptExtension: "R",
-                sourceFileExtension: "R",
-                lineCommentPrefix: "#",
-                functionScan: .definitionPatterns([
-                    #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
-                ]),
-                autoCompute: .inPageKernel(workerScript: "/r-eval-worker.js"),
-                inputsFileName: "_ck_inputs.R",
-                notebookKernelNames: AssignmentLanguage.rKernelNames,
-                editorSupport: .notebookKernel(
-                    environmentFileName: "environment-r.yml",
-                    kernelName: "xr",
-                    kernelDisplayName: "R (xeus-r)",
-                    missingDependencyFailureDescription: "an error from library()"),
-                interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
-                // `source("test_runtime.R")` is a file read, not a module load:
-                // there is no name to resolve, so nothing is importable and no
-                // guard could reject anything.
-                moduleResolution: .fileRead,
-                workingDirectoryIsOnDefaultSearchPath: true,
-                // Interpreted: the runner spawns the probed interpreter on a
-                // script, so probing IS invoking. Nothing is produced to execute.
-                capabilityRequiresExecutableOutput: false
-            )
-        case .lua:
-            return LanguageDescriptor(
-                displayName: "Lua",
-                scriptExtensions: ["lua"],
-                generatedScriptExtension: "lua",
-                sourceFileExtension: "lua",
-                lineCommentPrefix: "--",
-                functionScan: .definitionPatterns([
-                    #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
-                    #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#,
-                ]),
-                autoCompute: .inPageKernel(workerScript: "/lua-eval-worker.js"),
-                inputsFileName: "_ck_inputs.lua",
-                notebookKernelNames: AssignmentLanguage.luaKernelNames,
-                editorSupport: .notebookKernel(
-                    environmentFileName: "environment-lua.yml",
-                    kernelName: "xlua",
-                    kernelDisplayName: "Lua (xeus-lua)",
-                    missingDependencyFailureDescription: "an error from require()"),
-                // `-v`, not `--version` — see `interpreterProbe`'s note.
-                interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
-                // `require("test_runtime")` IS a module load — the same shape as
-                // R's and the opposite answer, which is why this is asked per
-                // language rather than inherited.
-                moduleResolution: .byName(searchPathVariable: "LUA_PATH"),
-                // Verified rather than assumed: `lua -e 'print(package.path)'`
-                // ends with `./?.lua;./?/init.lua`.
-                workingDirectoryIsOnDefaultSearchPath: true,
-                // Interpreted: the runner spawns the probed interpreter on a
-                // script, so probing IS invoking. Nothing is produced to execute.
-                capabilityRequiresExecutableOutput: false
-            )
-        case .octave:
-            return LanguageDescriptor(
-                displayName: "Octave",
-                scriptExtensions: ["m"],
-                generatedScriptExtension: "m",
-                sourceFileExtension: "m",
-                lineCommentPrefix: "#",
-                functionScan: .definitionPatterns([
-                    #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
-                    #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
-                ]),
-                autoCompute: .inPageKernel(workerScript: "/octave-eval-worker.js"),
-                inputsFileName: "_ck_inputs.m",
-                notebookKernelNames: AssignmentLanguage.octaveKernelNames,
-                editorSupport: .notebookKernel(
-                    environmentFileName: "environment-octave.yml",
-                    kernelName: "xoctave",
-                    kernelDisplayName: "Octave (xeus-octave)",
-                    missingDependencyFailureDescription: "an undefined-function error"),
-                // `octave-cli --version` prints "GNU Octave, version N" and
-                // exits 0 (verified on 8.4.0). The worker invokes the same
-                // binary, so probe and invocation cannot skew.
-                interpreterProbe: .init(command: "octave-cli", versionArguments: ["--version"]),
-                // `chickadee = test_runtime()` IS a by-name load: the file is
-                // found through Octave's load path, not read by filename.
-                moduleResolution: .byName(searchPathVariable: "OCTAVE_PATH"),
-                // Verified rather than assumed, per this type's own rule —
-                // and the verification OVERTURNED the survey's prediction:
-                // `octave-cli --eval "path"` lists `.` first, so the working
-                // directory is on the default path and no OCTAVE_PATH is set.
-                workingDirectoryIsOnDefaultSearchPath: true,
-                // Interpreted: the runner spawns the probed interpreter on a
-                // script, so probing IS invoking. Nothing is produced to execute.
-                capabilityRequiresExecutableOutput: false
-            )
-        case .cpp:
-            return LanguageDescriptor(
-                displayName: "C++",
-                // Marks hand-added `.cpp` suite entries as this language's.
-                // Such an entry is not directly runnable (there is no C++
-                // interpreter case, deliberately) — the runner classifies it
-                // unsupported and errors it, which is the honest outcome for
-                // a graded script that needs compiling. Generated cases are
-                // `.sh` wrappers instead; see `generatedScriptExtension`.
-                scriptExtensions: ["cpp", "h", "hpp"],
-                // The generated case IS a shell script (heredoc source →
-                // `g++` → run the binary), so it rides the original
-                // shell-script contract and the runner needs no new
-                // dispatch. Unique across languages like every other value
-                // here — no other language generates `.sh`.
-                generatedScriptExtension: "sh",
-                sourceFileExtension: "cpp",
-                lineCommentPrefix: "//",
-                functionScan: .noSolutionNotebook,
-                autoCompute: .serverDriver,
-                inputsFileName: "_ck_inputs.hpp",
-                // No notebook workflow, so no kernel aliases to claim — like
-                // Python's empty set, but for the opposite reason (nothing to
-                // detect, rather than default-by-fallthrough).
-                notebookKernelNames: [],
-                // The first language to answer this honestly: no vendored
-                // kernel, upload-only submissions, native-worker grading.
-                // The browser cannot run the course's real g++, and grading
-                // a different compiler than the course teaches is the
-                // pedagogy defect the C++ design settled on avoiding
-                // (docs/cpp-support.md).
-                editorSupport: .uploadOnly,
-                // `g++ --version` prints a version line and exits 0
-                // (verified on 13.3.0). The generated wrappers invoke the
-                // same binary, so probe and invocation cannot skew.
-                interpreterProbe: .init(command: "g++", versionArguments: ["--version"]),
-                // `#include` IS a file read — at compile time rather than
-                // run time, but the shape is R's, not Python's: nothing is
-                // name-addressable, no search-path variable exists to set,
-                // and the derivations (no runner-provided modules, no
-                // student prefixes, no path env var) are all correct for it.
-                moduleResolution: .fileRead,
-                // Quoted includes resolve relative to the INCLUDING file's
-                // directory by rule, so everything a generated test includes
-                // sits beside it and nothing needs setting. (Unused by the
-                // fileRead derivations; stated because the field must be.)
-                workingDirectoryIsOnDefaultSearchPath: true,
-                // The generated wrapper compiles a binary and `exec`s it, so a
-                // runner must be able to run what g++ writes into its work
-                // directory — not merely own a g++. See the property's doc.
-                capabilityRequiresExecutableOutput: true
-            )
-        case .racket:
-            return LanguageDescriptor(
-                displayName: "Racket",
-                // `.rkt` only. `.ss` and `.scm` are Scheme's historical
-                // extensions and DrRacket still opens them, but no Waterloo
-                // course submits them and claiming an extension is how a
-                // language steals another's files — the uniqueness invariant
-                // exists for exactly that.
-                scriptExtensions: ["rkt"],
-                // Unlike C++, the generated test IS the language: Racket is
-                // interpreted, so `racket test.rkt` runs it directly under the
-                // ordinary shell-script contract. No wrapper, no build step.
-                generatedScriptExtension: "rkt",
-                sourceFileExtension: "rkt",
-                lineCommentPrefix: ";",
-                functionScan: .noSolutionNotebook,
-                autoCompute: .serverDriver,
-                inputsFileName: "_ck_inputs.rkt",
-                // No kernel exists to claim aliases for. Empty for the same
-                // reason as C++ — nothing to detect — not Python's
-                // default-by-fallthrough.
-                notebookKernelNames: [],
-                // No xeus kernel on the channel, so no editor and no notebook
-                // workflow. Contingent rather than principled: see the enum
-                // case's doc for why that difference is worth keeping.
-                editorSupport: .uploadOnly,
-                // `racket --version` prints "Welcome to Racket v8.10 [cs]."
-                // and exits 0 (measured on 8.10). The generated tests invoke
-                // the same binary, and — unlike C++ — nothing is produced to
-                // execute afterwards, so probe and invocation genuinely cannot
-                // skew here.
-                interpreterProbe: .init(command: "racket", versionArguments: ["--version"]),
-                // `(require "student.rkt")` is a FILE path, resolved relative
-                // to the requiring module — R's shape, not Python's. Nothing
-                // is name-addressable and no search-path variable applies.
-                //
-                // The test does not actually `require` the submission (an HtDP
-                // module exports nothing; see the enum case), but the
-                // resolution MECHANISM this field describes is still file
-                // reading — `dynamic-require` takes a `(file ...)` path too.
-                moduleResolution: .fileRead,
-                // Racket resolves a relative module path against the enclosing
-                // module's own directory, so a test and the submission beside
-                // it find each other with nothing set. Verified, not assumed —
-                // this is the field the Octave run proved you cannot reason
-                // your way to.
-                workingDirectoryIsOnDefaultSearchPath: true,
-                // Interpreted: the runner hands a file to `racket`. Nothing is
-                // built, so there is no second capability to prove.
-                capabilityRequiresExecutableOutput: false
-            )
+        case .python: return Self.pythonDescriptor
+        case .r: return Self.rDescriptor
+        case .lua: return Self.luaDescriptor
+        case .octave: return Self.octaveDescriptor
+        case .cpp: return Self.cppDescriptor
+        case .racket: return Self.racketDescriptor
         }
     }
+
+    private static let pythonDescriptor = LanguageDescriptor(
+        displayName: "Python",
+        scriptExtensions: ["py"],
+        generatedScriptExtension: "py",
+        sourceFileExtension: "py",
+        lineCommentPrefix: "#",
+        functionScan: .pythonDefStatements,
+        autoCompute: .inPageKernel(workerScript: "/python-eval-worker.js"),
+        inputsFileName: "_ck_inputs.py",
+        notebookKernelNames: AssignmentLanguage.pythonKernelNames,
+        editorSupport: .notebookKernel(
+            environmentFileName: "environment-python.yml",
+            kernelName: "xpython",
+            kernelDisplayName: "Python (xeus-python)",
+            missingDependencyFailureDescription: "an ImportError",
+            gradingWorkerScript: "/python-grading-worker.js"),
+        interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
+        moduleResolution: .byName(
+            searchPathVariable: "PYTHONPATH",
+            interpreterHookModules: ["sitecustomize"]),
+        // The driver runs from a temp directory with cwd set to the
+        // support-files directory, so `sys.path[0]` is the driver's
+        // directory and not the one the helpers are in.
+        workingDirectoryIsOnDefaultSearchPath: false,
+        // Interpreted: the runner spawns the probed interpreter on a
+        // script, so probing IS invoking. Nothing is produced to execute.
+        capabilityRequiresExecutableOutput: false
+    )
+    private static let rDescriptor = LanguageDescriptor(
+        displayName: "R",
+        scriptExtensions: ["r"],
+        generatedScriptExtension: "R",
+        sourceFileExtension: "R",
+        lineCommentPrefix: "#",
+        functionScan: .definitionPatterns([
+            #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
+        ]),
+        autoCompute: .inPageKernel(workerScript: "/r-eval-worker.js"),
+        inputsFileName: "_ck_inputs.R",
+        notebookKernelNames: AssignmentLanguage.rKernelNames,
+        editorSupport: .notebookKernel(
+            environmentFileName: "environment-r.yml",
+            kernelName: "xr",
+            kernelDisplayName: "R (xeus-r)",
+            missingDependencyFailureDescription: "an error from library()",
+            gradingWorkerScript: "/r-grading-worker.js"),
+        interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
+        // `source("test_runtime.R")` is a file read, not a module load:
+        // there is no name to resolve, so nothing is importable and no
+        // guard could reject anything.
+        moduleResolution: .fileRead,
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // Interpreted: the runner spawns the probed interpreter on a
+        // script, so probing IS invoking. Nothing is produced to execute.
+        capabilityRequiresExecutableOutput: false
+    )
+    private static let luaDescriptor = LanguageDescriptor(
+        displayName: "Lua",
+        scriptExtensions: ["lua"],
+        generatedScriptExtension: "lua",
+        sourceFileExtension: "lua",
+        lineCommentPrefix: "--",
+        functionScan: .definitionPatterns([
+            #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+            #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#,
+        ]),
+        autoCompute: .inPageKernel(workerScript: "/lua-eval-worker.js"),
+        inputsFileName: "_ck_inputs.lua",
+        notebookKernelNames: AssignmentLanguage.luaKernelNames,
+        editorSupport: .notebookKernel(
+            environmentFileName: "environment-lua.yml",
+            kernelName: "xlua",
+            kernelDisplayName: "Lua (xeus-lua)",
+            missingDependencyFailureDescription: "an error from require()",
+            gradingWorkerScript: "/lua-grading-worker.js"),
+        // `-v`, not `--version` — see `interpreterProbe`'s note.
+        interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
+        // `require("test_runtime")` IS a module load — the same shape as
+        // R's and the opposite answer, which is why this is asked per
+        // language rather than inherited.
+        moduleResolution: .byName(searchPathVariable: "LUA_PATH"),
+        // Verified rather than assumed: `lua -e 'print(package.path)'`
+        // ends with `./?.lua;./?/init.lua`.
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // Interpreted: the runner spawns the probed interpreter on a
+        // script, so probing IS invoking. Nothing is produced to execute.
+        capabilityRequiresExecutableOutput: false
+    )
+    private static let octaveDescriptor = LanguageDescriptor(
+        displayName: "Octave",
+        scriptExtensions: ["m"],
+        generatedScriptExtension: "m",
+        sourceFileExtension: "m",
+        // `%`, not `#`. Octave accepts both, which is why the two copies of
+        // this fact disagreed for four releases without anything failing — see
+        // the field's doc. `%` is what every other Octave byte here uses.
+        lineCommentPrefix: "%",
+        functionScan: .definitionPatterns([
+            #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+            #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
+        ]),
+        autoCompute: .inPageKernel(workerScript: "/octave-eval-worker.js"),
+        inputsFileName: "_ck_inputs.m",
+        notebookKernelNames: AssignmentLanguage.octaveKernelNames,
+        editorSupport: .notebookKernel(
+            environmentFileName: "environment-octave.yml",
+            kernelName: "xoctave",
+            kernelDisplayName: "Octave (xeus-octave)",
+            missingDependencyFailureDescription: "an undefined-function error",
+            gradingWorkerScript: "/octave-grading-worker.js"),
+        // `octave-cli --version` prints "GNU Octave, version N" and
+        // exits 0 (verified on 8.4.0). The worker invokes the same
+        // binary, so probe and invocation cannot skew.
+        interpreterProbe: .init(command: "octave-cli", versionArguments: ["--version"]),
+        // `chickadee = test_runtime()` IS a by-name load: the file is
+        // found through Octave's load path, not read by filename.
+        moduleResolution: .byName(searchPathVariable: "OCTAVE_PATH"),
+        // Verified rather than assumed, per this type's own rule —
+        // and the verification OVERTURNED the survey's prediction:
+        // `octave-cli --eval "path"` lists `.` first, so the working
+        // directory is on the default path and no OCTAVE_PATH is set.
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // Interpreted: the runner spawns the probed interpreter on a
+        // script, so probing IS invoking. Nothing is produced to execute.
+        capabilityRequiresExecutableOutput: false
+    )
+    private static let cppDescriptor = LanguageDescriptor(
+        displayName: "C++",
+        // Marks hand-added `.cpp` suite entries as this language's.
+        // Such an entry is not directly runnable (there is no C++
+        // interpreter case, deliberately) — the runner classifies it
+        // unsupported and errors it, which is the honest outcome for
+        // a graded script that needs compiling. Generated cases are
+        // `.sh` wrappers instead; see `generatedScriptExtension`.
+        scriptExtensions: ["cpp", "h", "hpp"],
+        // The generated case IS a shell script (heredoc source →
+        // `g++` → run the binary), so it rides the original
+        // shell-script contract and the runner needs no new
+        // dispatch. Unique across languages like every other value
+        // here — no other language generates `.sh`.
+        generatedScriptExtension: "sh",
+        sourceFileExtension: "cpp",
+        lineCommentPrefix: "//",
+        functionScan: .noSolutionNotebook,
+        autoCompute: .serverDriver,
+        inputsFileName: "_ck_inputs.hpp",
+        // No notebook workflow, so no kernel aliases to claim — like
+        // Python's empty set, but for the opposite reason (nothing to
+        // detect, rather than default-by-fallthrough).
+        notebookKernelNames: [],
+        // The first language to answer this honestly: no vendored
+        // kernel, upload-only submissions, native-worker grading.
+        // The browser cannot run the course's real g++, and grading
+        // a different compiler than the course teaches is the
+        // pedagogy defect the C++ design settled on avoiding
+        // (docs/cpp-support.md).
+        editorSupport: .uploadOnly,
+        // `g++ --version` prints a version line and exits 0
+        // (verified on 13.3.0). The generated wrappers invoke the
+        // same binary, so probe and invocation cannot skew.
+        interpreterProbe: .init(command: "g++", versionArguments: ["--version"]),
+        // `#include` IS a file read — at compile time rather than
+        // run time, but the shape is R's, not Python's: nothing is
+        // name-addressable, no search-path variable exists to set,
+        // and the derivations (no runner-provided modules, no
+        // student prefixes, no path env var) are all correct for it.
+        moduleResolution: .fileRead,
+        // Quoted includes resolve relative to the INCLUDING file's
+        // directory by rule, so everything a generated test includes
+        // sits beside it and nothing needs setting. (Unused by the
+        // fileRead derivations; stated because the field must be.)
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // The generated wrapper compiles a binary and `exec`s it, so a
+        // runner must be able to run what g++ writes into its work
+        // directory — not merely own a g++. See the property's doc.
+        capabilityRequiresExecutableOutput: true
+    )
+    private static let racketDescriptor = LanguageDescriptor(
+        displayName: "Racket",
+        // `.rkt` only. `.ss` and `.scm` are Scheme's historical
+        // extensions and DrRacket still opens them, but no Waterloo
+        // course submits them and claiming an extension is how a
+        // language steals another's files — the uniqueness invariant
+        // exists for exactly that.
+        scriptExtensions: ["rkt"],
+        // Unlike C++, the generated test IS the language: Racket is
+        // interpreted, so `racket test.rkt` runs it directly under the
+        // ordinary shell-script contract. No wrapper, no build step.
+        generatedScriptExtension: "rkt",
+        sourceFileExtension: "rkt",
+        lineCommentPrefix: ";",
+        functionScan: .noSolutionNotebook,
+        autoCompute: .serverDriver,
+        inputsFileName: "_ck_inputs.rkt",
+        // No kernel exists to claim aliases for. Empty for the same
+        // reason as C++ — nothing to detect — not Python's
+        // default-by-fallthrough.
+        notebookKernelNames: [],
+        // No xeus kernel on the channel, so no editor and no notebook
+        // workflow. Contingent rather than principled: see the enum
+        // case's doc for why that difference is worth keeping.
+        editorSupport: .uploadOnly,
+        // `racket --version` prints "Welcome to Racket v8.10 [cs]."
+        // and exits 0 (measured on 8.10). The generated tests invoke
+        // the same binary, and — unlike C++ — nothing is produced to
+        // execute afterwards, so probe and invocation genuinely cannot
+        // skew here.
+        interpreterProbe: .init(command: "racket", versionArguments: ["--version"]),
+        // `(require "student.rkt")` is a FILE path, resolved relative
+        // to the requiring module — R's shape, not Python's. Nothing
+        // is name-addressable and no search-path variable applies.
+        //
+        // The test does not actually `require` the submission (an HtDP
+        // module exports nothing; see the enum case), but the
+        // resolution MECHANISM this field describes is still file
+        // reading — `dynamic-require` takes a `(file ...)` path too.
+        moduleResolution: .fileRead,
+        // Racket resolves a relative module path against the enclosing
+        // module's own directory, so a test and the submission beside
+        // it find each other with nothing set. Verified, not assumed —
+        // this is the field the Octave run proved you cannot reason
+        // your way to.
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // Interpreted: the runner hands a file to `racket`. Nothing is
+        // built, so there is no second capability to prove.
+        capabilityRequiresExecutableOutput: false
+    )
 }
 
 // MARK: - Derived from the resolution mechanism

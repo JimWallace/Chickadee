@@ -50,7 +50,7 @@ import Testing
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: String(repeating: "a", count: 64),
             staticVariables: [],
-            expressions: []
+            expressions: [], language: .python
         )
         #expect(result.isEmpty)
     }
@@ -60,7 +60,7 @@ import Testing
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "aaaa",
             staticVariables: [],
-            expressions: [PersonalizationExpression(name: "shift", expression: "seed % 26")]
+            expressions: [PersonalizationExpression(name: "shift", expression: "seed % 26")], language: .python
         )
         #expect(result["shift"] == "10")
     }
@@ -75,7 +75,7 @@ import Testing
             ],
             expressions: [
                 PersonalizationExpression(name: "pick", expression: "quotes[seed % len(quotes)]")
-            ]
+            ], language: .python
         )
         // seed = 1; 1 % 3 = 1; quotes[1] = "bar".
         #expect(result["pick"] == "'bar'")
@@ -88,7 +88,7 @@ import Testing
             expressions: [
                 PersonalizationExpression(name: "shift", expression: "seed % 26"),
                 PersonalizationExpression(name: "doubled", expression: "shift * 2"),
-            ]
+            ], language: .python
         )
         // seed = 16; 16 % 26 = 16; 16 * 2 = 32.
         #expect(result["shift"] == "16")
@@ -100,7 +100,7 @@ import Testing
             _ = try await PersonalizationEvaluator.evaluate(
                 seedHex: "0001",
                 staticVariables: [],
-                expressions: [PersonalizationExpression(name: "x", expression: "1/0")]
+                expressions: [PersonalizationExpression(name: "x", expression: "1/0")], language: .python
             )
             Issue.record("Expected nonZeroExit")
         } catch PersonalizationEvaluatorError.nonZeroExit(_, let stderr) {
@@ -117,7 +117,7 @@ import Testing
             _ = try await PersonalizationEvaluator.evaluate(
                 seedHex: "0001",
                 staticVariables: [],
-                expressions: [PersonalizationExpression(name: "x", expression: "undeclared_thing")]
+                expressions: [PersonalizationExpression(name: "x", expression: "undeclared_thing")], language: .python
             )
             Issue.record("Expected nonZeroExit")
         } catch PersonalizationEvaluatorError.nonZeroExit(_, let stderr) {
@@ -133,7 +133,8 @@ import Testing
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "abc1",
             staticVariables: [],
-            expressions: [PersonalizationExpression(name: "msg", expression: "f\"hello {seed % 10}\"")]
+            expressions: [PersonalizationExpression(name: "msg", expression: "f\"hello {seed % 10}\"")],
+            language: .python
         )
         // Result should be a Python string literal — single-quoted by repr.
         let v = result["msg"] ?? ""
@@ -228,7 +229,7 @@ import Testing
                         staticVariables: [],
                         expressions: [
                             PersonalizationExpression(name: "v", expression: "seed % 100")
-                        ]
+                        ], language: .python
                     )
                 }
             }

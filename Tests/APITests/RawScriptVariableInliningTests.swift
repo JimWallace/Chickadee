@@ -50,14 +50,57 @@ import Testing
             "\(language.displayName)'s banner does not open with its comment marker")
     }
 
-    /// Python, R and Octave keep byte-identical output — `#` was right for
-    /// them, and every script already saved carries that exact line. If this
-    /// fails, existing scripts stop being strippable.
-    @Test(arguments: [AssignmentLanguage.python, .r, .octave])
+    /// Python and R keep byte-identical output — `#` is their only comment
+    /// marker, and every script already saved carries that exact line.
+    @Test(arguments: [AssignmentLanguage.python, .r])
     func thePreviouslyCorrectLanguagesAreByteIdentical(_ language: AssignmentLanguage) {
         #expect(
             TestScriptVariablePrepender.rawScriptBannerComment(language: language)
                 == "# === Chickadee inputs: name = value, prepended at save time. Do not edit. ===")
+    }
+
+    /// Octave used to be in the list above and moved deliberately.
+    ///
+    /// It was the one language with TWO answers in the tree: `lineCommentPrefix`
+    /// said `#` and a second switch, `lineCommentLeader`, said `%`. Both parse
+    /// in Octave, which is why they disagreed for four releases with nothing
+    /// failing — the inputs file got `%`, this banner got `#`, and every other
+    /// Octave byte the system emits (`test_runtime.m`, every generated case)
+    /// got `%`. Collapsing the two onto `%` makes the banner agree with the
+    /// rest of the corpus, and with the marker MATLAB also accepts.
+    @Test func octaveUsesItsConventionalMarker() {
+        #expect(
+            TestScriptVariablePrepender.rawScriptBannerComment(language: .octave)
+                == "% === Chickadee inputs: name = value, prepended at save time. Do not edit. ===")
+    }
+
+    /// The invariant the byte-identity assertion was really protecting: an
+    /// Octave script already carrying the old `#` banner must still be
+    /// recognised and stripped, so a save replaces the block instead of
+    /// stacking a second one on top of it.
+    ///
+    /// It holds for a reason that predates this change — `allBannerComments`
+    /// appends the legacy `#` spelling unconditionally, for the Lua and Racket
+    /// scripts that were left with an un-strippable block. Asserted here
+    /// because that is now the only thing standing between an emission change
+    /// and a compounding file, and nothing said so.
+    @Test func anOctaveScriptCarryingTheOldHashBannerIsStillStripped() {
+        let legacy = """
+            # === Chickadee inputs: name = value, prepended at save time. Do not edit. ===
+            threshold = 1.0;
+            body_line = 1;
+            """
+        let script = TestScriptVariablePrepender.prependToRawScript(
+            legacy,
+            variables: [FamilyVariable(name: "threshold", value: .double(18.5))],
+            language: .octave)
+        #expect(
+            !script.contains("# === Chickadee inputs"),
+            "the legacy # banner must be stripped, not left above the new % one")
+        #expect(
+            script.components(separatedBy: "=== Chickadee inputs").count == 2,
+            "exactly one banner must survive a re-save")
+        #expect(script.contains("18.5"), "the new value must be inlined")
     }
 
     // MARK: - Every language that can be inlined into, is

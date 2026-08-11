@@ -36,7 +36,7 @@ import Testing
     func everyKernelAliasNormalizesToItsVendoredKernel(_ language: AssignmentLanguage) throws {
         // Python is included: it has its own aliases now, and they must
         // normalize onto the vendored xeus-python kernel like everyone else.
-        guard case .notebookKernel(_, let expected, _, _) = language.editorSupport else {
+        guard case .notebookKernel(_, let expected, _, _, _) = language.editorSupport else {
             // A kernel-less language must claim no aliases at all — an alias
             // with nothing to normalize onto is exactly the F6 shape.
             #expect(
@@ -55,7 +55,7 @@ import Testing
     /// would attach the same kernel — a copied descriptor literal.
     @Test func vendoredKernelNamesAreDistinct() {
         let facts = AssignmentLanguage.allCases.compactMap { language -> (String, String)? in
-            guard case .notebookKernel(_, let name, let display, _) = language.editorSupport
+            guard case .notebookKernel(_, let name, let display, _, _) = language.editorSupport
             else { return nil }
             return (name, display)
         }

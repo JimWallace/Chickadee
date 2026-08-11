@@ -125,17 +125,107 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// See `LanguageDescriptor.scriptExtensions`.
     public var scriptExtensions: Set<String> { descriptor.scriptExtensions }
 
+    /// Every graded-script extension, mapped to the language that claims it.
+    ///
+    /// BUILT FROM `allCases`, so it is discovered rather than enumerated and a
+    /// seventh language needs no edit. Extensions are disjoint across languages
+    /// — asserted by `LanguageConformanceMatrixTests
+    /// .scriptExtensionsAreDisjointAcrossLanguages` — so the flattening is
+    /// lossless; a collision would silently drop one claim, which is why that
+    /// test is the load-bearing half of this.
+    ///
+    /// A stored map because the lookup below is called in loops (the resolution
+    /// walk, the worker's submission staging), and a linear scan over
+    /// `allCases` had to touch every language's `scriptExtensions` to answer a
+    /// MISS — which is the common case, since `.sh`, data files and READMEs all
+    /// land here.
+    /// The `allCases` position is carried alongside the language so the
+    /// resolution walk can rank what it finds with an `Int` compare. It cannot
+    /// use `==` or a `Set` for that: `AssignmentLanguage` has a `String` raw
+    /// value, so its synthesized `Hashable`/`Equatable` go through `rawValue`,
+    /// and every comparison hashes a string.
+    private static let languageByScriptExtension: [String: (language: AssignmentLanguage, rank: Int)] =
+        allCases.enumerated().reduce(into: [:]) { table, pair in
+            for ext in pair.element.scriptExtensions { table[ext] = (pair.element, pair.offset) }
+        }
+
     /// The language a graded-script filename extension implies, or nil for an
     /// extension that carries no language signal (`sh`, data files, …).
     /// Case-insensitive, so `.R` and `.r` both answer `.r`.
     public init?(scriptExtension: String) {
-        let lowered = scriptExtension.lowercased()
-        guard
-            let match = AssignmentLanguage.allCases.first(where: {
-                $0.scriptExtensions.contains(lowered)
-            })
+        guard let match = AssignmentLanguage.languageByScriptExtension[scriptExtension.lowercased()]
         else { return nil }
-        self = match
+        self = match.language
+    }
+
+    /// The lowercased extension of a suite entry's script path, without
+    /// building a `URL` to get it.
+    ///
+    /// `URL(fileURLWithPath:).pathExtension` is what this replaced, and it is
+    /// the single most expensive thing that was on this path: **4.5 µs per
+    /// call**, measured, on Linux Foundation. `gradedScriptLanguage` called it
+    /// once per suite entry per language, so a 40-entry suite paid it 240
+    /// times — 1.07 ms of the 1.27 ms that walk cost.
+    ///
+    /// Scanned over UTF-8, not `Character`s: `String.lastIndex(of:)` does
+    /// grapheme-cluster breaking over the whole path, which was ~350 ns per
+    /// entry on its own. Script names are ASCII filenames, so the byte scan is
+    /// behaviour-identical and allocation-free until the extension itself.
+    ///
+    /// Agrees with `URL.pathExtension` on every name whose base does not begin
+    /// with a dot — asserted by
+    /// `AssignmentLanguageTests.scriptExtensionScanAgreesWithFoundation`, a
+    /// differential over generated names rather than a list of examples. That
+    /// distinction earned itself immediately: the first version applied the
+    /// dotfile rule to the LAST dot rather than the FIRST character of the base
+    /// name, so `..R` claimed an R assignment. A hand-picked example list would
+    /// have contained `.gitignore`, passed, and shipped it.
+    ///
+    /// ON DOTFILES IT DELIBERATELY DIVERGES, because Foundation's answer there
+    /// is not a rule anyone would want to reproduce — measured on Linux
+    /// Foundation:
+    ///
+    /// | name | `URL.pathExtension` | here |
+    /// |---|---|---|
+    /// | `.R`, `.gitignore` | `""` | `""` |
+    /// | `..R` | `""` | `""` |
+    /// | `...R` | `""` | `""` |
+    /// | `....R` | **`"R"`** | `""` |
+    ///
+    /// Four leading dots claim an extension where two and three do not. This
+    /// uses the classic rule instead — a base name beginning with `.` is a
+    /// dotfile and has no extension — so the only names that answer differently
+    /// are hidden files, and they answer *nil language* rather than a wrong
+    /// one. That is the safe direction: nil means "no language-specific
+    /// machinery applies", which is a supported state (a plain `.sh` suite),
+    /// while a wrong language renders generated tests the suite can never run.
+    /// `FilenameSafety` permits such a name (it rejects only `.` and `..`
+    /// exactly), so this is a reachable input and not a can't-happen.
+    private static func scriptExtension(ofPath path: String) -> String {
+        let utf8 = path.utf8
+        var baseStart = utf8.startIndex
+        var lastDot: String.Index?
+        var index = utf8.startIndex
+        while index != utf8.endIndex {
+            let next = utf8.index(after: index)
+            switch utf8[index] {
+            case UInt8(ascii: "/"): baseStart = next; lastDot = nil
+            case UInt8(ascii: "."): lastDot = index
+            default: break
+            }
+            index = next
+        }
+        // A base name beginning with a dot is a dotfile, whatever follows it:
+        // `.gitignore` and `..R` alike have no extension.
+        guard baseStart != utf8.endIndex, utf8[baseStart] != UInt8(ascii: "."),
+            let dot = lastDot
+        else { return "" }
+        // Sliced off the original string by the index the scan already has —
+        // no byte copy, and `lowercased()` is the same full-Unicode folding
+        // `init?(scriptExtension:)` has always applied, so `.R` and `.r` still
+        // answer alike. `.` is ASCII, so the index after it is a Character
+        // boundary and the slice is valid.
+        return path[utf8.index(after: dot)...].lowercased()
     }
 
     /// The language whose graded script appears in `manifest`'s suite, in
@@ -153,13 +243,26 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// falling through, which meant a `.py` suite and a suite with no language
     /// at all produced the same answer. `.sh`-only suites are the case that
     /// distinction was really protecting, and nil now says so directly.
+    /// ONE PASS over the suite, then `allCases` order applied to what was
+    /// found. It used to be the other way round — `allCases.first { suites
+    /// .contains { … } }` — which walked the suite once per language and, on a
+    /// suite carrying no language at all, walked all of it six times over. That
+    /// case is not exotic: a plain `.sh` suite is the system's original mode
+    /// and a supported one, and it was the WORST case, 1.27 ms for 40 entries
+    /// on the worker claim path. The `allCases`-order tie-break is preserved
+    /// exactly (a mixed R+Lua suite still resolves R-first); it is applied to
+    /// the set of languages present rather than used to drive the search.
     static func gradedScriptLanguage(in manifest: TestProperties) -> AssignmentLanguage? {
-        allCases.first { language in
-            manifest.testSuites.contains {
-                AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
-                    == language
-            }
+        var best: (language: AssignmentLanguage, rank: Int)?
+        for entry in manifest.testSuites {
+            guard let found = languageByScriptExtension[scriptExtension(ofPath: entry.script)]
+            else { continue }
+            if found.rank < (best?.rank ?? Int.max) { best = found }
+            // Nothing can outrank the first case, so a suite that contains it
+            // stops here rather than walking the rest.
+            if found.rank == 0 { break }
         }
+        return best?.language
     }
 
     /// The language a notebook kernel name (`kernelspec.name` then
@@ -224,24 +327,17 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
 
 extension AssignmentLanguage {
 
-    /// True when a notebook's `metadata` marks it as R: `kernelspec.name` is in
-    /// `rKernelNames`, or `language_info.name` is `"r"`.
-    ///
-    /// The one implementation of that two-step sniff. `rederive`, the worker's
-    /// submission routing (`submissionIsRNotebook`) and its notebook→source
-    /// extraction (`extractNotebooksToCode`) all call through here, so the
-    /// alias list lives in exactly one place.
-    public static func isRNotebookMetadata(_ metadata: [String: Any]) -> Bool {
-        fromNotebookMetadata(metadata) == .r
-    }
-
-    /// `isRNotebookMetadata(_:)` for a parsed notebook object. A notebook with
-    /// no `metadata` has nothing to sniff and is not R — matching what every
-    /// caller already did on a missing/unparseable metadata dictionary.
-    public static func isRNotebook(_ notebook: [String: Any]) -> Bool {
-        guard let metadata = notebook["metadata"] as? [String: Any] else { return false }
-        return isRNotebookMetadata(metadata)
-    }
+    // `isRNotebookMetadata` / `isRNotebook` used to live here: two public
+    // R-shaped booleans over `fromNotebookMetadata`, from when R was the only
+    // non-Python language. Every caller they documented had already moved to
+    // the general form — `rederive` calls `fromNotebookMetadata` directly, and
+    // the worker's `submissionIsRNotebook` was generalised out of existence —
+    // leaving the pair reachable from nothing but their own stale doc comment.
+    // They are deleted rather than kept for convenience: a `Bool` return is the
+    // `isRNotebook(nb) ? .r : .python` shape that type-checks forever and
+    // routes every other language to Python, which is the compiler-invisible
+    // trap `docs/adding-a-xeus-kernel.md` counts as its fifth. Leaving a
+    // ready-made one in Core is an invitation to reintroduce it.
 
     /// Resolve including the assignment's starter notebook, read straight from
     /// `.ipynb` bytes.
@@ -417,7 +513,7 @@ extension AssignmentLanguage {
     /// variable can't be `_ck`) and omits the trailing comma R's `list()` rejects.
     public func renderInputsFile(_ values: [String: String]) -> String {
         let header =
-            "\(lineCommentLeader) Auto-generated per-student grading inputs (issue #461). Do not edit."
+            "\(lineCommentPrefix) Auto-generated per-student grading inputs (issue #461). Do not edit."
         let keys = values.keys.sorted()
         switch self {
         case .python:
@@ -534,31 +630,11 @@ extension AssignmentLanguage {
     /// See `LanguageDescriptor.displayName`.
     public var displayName: String { descriptor.displayName }
 
-    /// This language's line-comment leader.
-    ///
-    /// Lua's is why this is a per-language answer and not one shared `#`. `#` is
-    /// not a Lua comment — but a Lua chunk whose FIRST line starts with `#` has
-    /// that line skipped outright, a shebang accommodation. So a `#` header
-    /// parsed, the round-trip test passed, and the file was one edit away from
-    /// breaking: move the header down a line, or put anything above it, and the
-    /// whole inputs file becomes a syntax error that surfaces as every
-    /// per-student value silently reading as missing. Racket fails the same way
-    /// but louder — `#` there begins a reader macro (`#t`, `#lang`, `#(`), so a
-    /// `#`-led header is a read error rather than an ignored line.
-    ///
-    /// Hoisted out of `renderInputsFile`, which was its only caller until the
-    /// runtime-helper drift guard needed the same fact to tell a language's
-    /// prose from its code. A second hand-written table would have been a second
-    /// chance to give Lua a `#`.
-    public var lineCommentLeader: String {
-        switch self {
-        case .lua: return "--"
-        case .octave: return "%"
-        case .cpp: return "//"
-        case .racket: return ";"
-        case .python, .r: return "#"
-        }
-    }
+    // `lineCommentLeader` used to live here — a second switch answering exactly
+    // what `LanguageDescriptor.lineCommentPrefix` answers. The two disagreed
+    // about Octave (`%` here, `#` there) for as long as both existed, which
+    // nothing caught because Octave accepts either. Callers now read
+    // `lineCommentPrefix`; see its doc for why `%` is the surviving answer.
 
     /// The name this language advertises itself under in a runner's
     /// `languageVersions`, and the token an assignment's required-languages

@@ -34,6 +34,7 @@
 // comlink transport — see EditorBrowserEngine. See `COEPMiddleware` for the
 // rationale and the #574 history.
 
+import Core
 import Vapor
 
 struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
@@ -63,13 +64,26 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
     /// caught by a unit test, because the block only exists in a real browser.
     /// `IsolatedWorkerScriptDriftTests` now reads the spawn sites out of the page
     /// scripts and fails on both directions of drift.
-    static let isolatedWorkerScripts: Set<String> = [
-        "/python-grading-worker.js",  // browser submission grader, Python (browser-runner.js)
-        "/r-grading-worker.js",  // browser submission grader, R (browser-runner.js)
-        "/lua-grading-worker.js",  // browser submission grader, Lua (browser-runner.js)
-        "/octave-grading-worker.js",  // browser submission grader, Octave (browser-runner.js)
-        "/freeze-watchdog-worker.js",  // main-thread freeze failover (notebook.js)
-    ]
+    ///
+    /// DERIVED for the graders, listed for the rest. The four grading workers
+    /// were four hand-written strings here and four more in
+    /// `browser-runner.js`, with nothing connecting them — a seventh kernel
+    /// language had to remember both, and forgetting this one is silent by
+    /// construction (the failure is a browser refusing the script, after which
+    /// the grade quietly fails over to the native worker). They now come off
+    /// `EditorSupport.notebookKernel`, which is also what the browser's own
+    /// table is generated from, so both halves move together.
+    ///
+    /// The freeze watchdog stays written out: it is not a language's worker and
+    /// nothing derives it.
+    static let isolatedWorkerScripts: Set<String> =
+        Set(
+            AssignmentLanguage.allCases.compactMap { language in
+                guard case .notebookKernel(_, _, _, _, let worker) = language.editorSupport
+                else { return nil }
+                return worker
+            }
+        ).union(["/freeze-watchdog-worker.js"])  // main-thread freeze failover (notebook.js)
 
     func respond(
         to request: Request,

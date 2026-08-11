@@ -26,6 +26,13 @@
 // notion — BSL has no optional parameters at all — so an omitted argument is
 // simply not passed, and an arity error surfaces as an ordinary test failure.
 
+// THE PER-KIND RENDERERS ARE NOT HERE. Each one moved to
+// `PatternFamilyRenderer+<Kind>.swift`, beside the other five languages'
+// rendering of the same kind, so a kind can be reviewed across languages in one
+// file. What remains is what is genuinely per-language: the kind dispatcher
+// below, the call-context builder, the case header, the personalization
+// preamble and the identifier/comment helpers.
+
 import Core
 import Foundation
 
@@ -172,12 +179,12 @@ private func racketPersonalizationPreamble(
 
 /// The expected value: a per-student reference when the case names one,
 /// otherwise the authored literal.
-private func racketExpected(_ c: PatternCase) -> String {
+func racketExpected(_ c: PatternCase) -> String {
     if let ref = c.expectedVarRef, !ref.isEmpty { return racketArgumentName(ref) }
     return c.expected.racketLiteral
 }
 
-private func racketLoadAndGuard(_ family: PatternFamily) -> String {
+func racketLoadAndGuard(_ family: PatternFamily) -> String {
     """
     (define ns (chickadee-load-student))
     (unless (chickadee-defined? ns '\(racketArgumentName(family.functionName)))
@@ -186,282 +193,6 @@ private func racketLoadAndGuard(_ family: PatternFamily) -> String {
 }
 
 // MARK: - Kind bodies
-
-/// `.differential` — compares the student's function against the instructor's
-/// reference implementation, spliced verbatim into the generated module.
-///
-/// The reference is called with `apply`, because the call context hands its
-/// arguments over as a list — the same list `chickadee-call` takes to reach
-/// into the student's namespace. The student's function still goes through
-/// `chickadee-call`: it lives in a separately-loaded module, and this one does
-/// not.
-///
-/// The instructor's source is spliced into a `#lang racket/base` module, so it
-/// must be definitions only — a `#lang` line of its own would not parse there.
-/// That is stated in the kind's documentation rather than validated, because
-/// deciding what is "a definition" needs a Racket reader.
-///
-/// A failure IN THE REFERENCE is `errored`, not `failed`: a student cannot make
-/// it raise except through inputs the instructor chose.
-private func racketDifferentialCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let reference = family.referenceImplementation ?? ""
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-
-        ; Instructor's reference implementation, rendered verbatim.
-        \(reference)
-
-        (define expected
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-errored (string-append \(JSONValue.string(GeneratedMessage.referenceFailed).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (apply \(family.differentialReferenceName) \(ctx.argList))))
-
-        \(racketLoadAndGuard(family))
-
-        (define actual
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList))))
-
-        (if (chickadee-equal? actual expected)
-            (chickadee-passed (string-append "Returned " (chickadee-format actual)))
-            (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.wrongValue).racketLiteral) "\\n"
-                               \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
-        """ + "\n"
-}
-
-private func racketEqualityCase(
-    family: PatternFamily, case c: PatternCase, prelude: String, unordered: Bool
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let compare = unordered ? "chickadee-unordered-equal?" : "chickadee-equal?"
-    // Python names "wrong value" for boundaryEquality and not for
-    // unorderedEquality; the conformance matrix pins that a kind uses the same
-    // vocabulary in every language, so the difference is carried here rather
-    // than invented.
-    let mismatchPrefix =
-        unordered ? "" : JSONValue.string(GeneratedMessage.wrongValue).racketLiteral + " \"\\n\""
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define expected \(racketExpected(c)))
-        \(racketLoadAndGuard(family))
-
-        (define actual
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList))))
-
-        (if (\(compare) actual expected)
-            (chickadee-passed (string-append "Returned " (chickadee-format actual)))
-            (chickadee-failed (string-append \(mismatchPrefix)
-                               \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
-        """ + "\n"
-}
-
-private func racketApproximateCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let tolerance = JSONValue.double(family.defaults.tolerance ?? 1e-6).racketLiteral
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define expected \(racketExpected(c)))
-        (define tolerance \(tolerance))
-        \(racketLoadAndGuard(family))
-
-        (define actual
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList))))
-
-        (unless (and (real? actual) (real? expected))
-          (chickadee-failed (string-append                              \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                             \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
-        (define delta (abs (- actual expected)))
-        (if (<= delta tolerance)
-            (chickadee-passed (string-append "Returned " (chickadee-format actual)))
-            (chickadee-failed (string-append                                \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual) "\\n"
-                               \(JSONValue.string(GeneratedMessage.delta).racketLiteral) (chickadee-format delta))))
-        """ + "\n"
-}
-
-/// `variableEquality` names a module-level VALUE rather than a function, so it
-/// reads the binding with `chickadee-value`. Safe to evaluate bare even under
-/// BSL: the operator-position restriction applies to procedures, not data.
-private func racketVariableEqualityCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let target = racketArgumentName(family.functionName)
-    return """
-        \(prelude)
-
-        (define expected \(racketExpected(c)))
-        (define ns (chickadee-load-student))
-        (unless (chickadee-defined? ns '\(target))
-          (chickadee-failed \(JSONValue.string("`\(family.functionName)` is not defined").racketLiteral)))
-
-        (define actual
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append "the variable could not be read" "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (chickadee-value ns '\(target))))
-
-        (if (chickadee-equal? actual expected)
-            (chickadee-passed (string-append "\(racketComment(family.functionName)) = " (chickadee-format actual)))
-            (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.wrongValue).racketLiteral) "\\n"
-                                                              \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
-        """ + "\n"
-}
-
-private func racketReturnTypeCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let expectedType: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define expected-type \(JSONValue.string(expectedType).racketLiteral))
-        \(racketLoadAndGuard(family))
-
-        (define actual
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList))))
-
-        (define actual-type (chickadee-type-name actual))
-        (if (string=? actual-type expected-type)
-            (chickadee-passed (string-append "Returned a " actual-type))
-            (chickadee-failed (string-append                                \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) expected-type "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) actual-type)))
-        """ + "\n"
-}
-
-/// Racket has no exception TYPES in the Python sense that a student would name,
-/// so the expectation is matched against the message — the same posture the Lua
-/// renderer takes for the same reason.
-private func racketExceptionCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let expectedText: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define expected-error \(JSONValue.string(expectedText).racketLiteral))
-        \(racketLoadAndGuard(family))
-
-        (define outcome
-          (with-handlers ([exn:fail? (lambda (e) (cons 'raised (exn-message e)))])
-            (cons 'returned (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList)))))
-
-        (cond
-          [(eq? (car outcome) 'returned)
-           (chickadee-failed (string-append "expected an error\\n"
-                              \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                              \(JSONValue.string(GeneratedMessage.expected).racketLiteral) expected-error "\\n"
-                              \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format (cdr outcome))))]
-          [(or (string=? expected-error "")
-               (regexp-match? (regexp (regexp-quote expected-error)) (cdr outcome)))
-           (chickadee-passed "Raised the expected error")]
-          [else
-           (chickadee-failed (string-append                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) expected-error "\\n"
-                              \(JSONValue.string(GeneratedMessage.error).racketLiteral) (cdr outcome)))])
-        """ + "\n"
-}
-
-private func racketPerformanceCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    let budgetMs: Double = {
-        switch c.expected {
-        case .double(let d): return d
-        case .int(let i): return Double(i)
-        default: return 1000
-        }
-    }()
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define budget-ms \(budgetMs))
-        \(racketLoadAndGuard(family))
-
-        (define start (current-inexact-milliseconds))
-        (with-handlers ([exn:fail? (lambda (e)
-            (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                               \(JSONValue.string(GeneratedMessage.performanceError).racketLiteral) (exn-message e))))])
-          (chickadee-call ns '\(racketArgumentName(family.functionName)) \(ctx.argList)))
-        (define elapsed (- (current-inexact-milliseconds) start))
-
-        (if (<= elapsed budget-ms)
-            (chickadee-passed (format "Completed in ~ams" (round elapsed)))
-            (chickadee-failed (string-append "too slow\\n"
-                               \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.threshold).racketLiteral) (format "~ams" budget-ms) "\\n"
-                               \(JSONValue.string(GeneratedMessage.elapsed).racketLiteral) (format "~ams" (round elapsed)))))
-        """ + "\n"
-}
-
-private func racketStdoutCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
-) -> String {
-    let ctx = racketCallContext(for: family, case: c)
-    return """
-        \(prelude)
-
-        \(ctx.declBlock)
-        (define expected \(racketExpected(c)))
-        \(racketLoadAndGuard(family))
-
-        (define printed
-          (with-handlers ([exn:fail? (lambda (e)
-              (chickadee-failed (string-append \(JSONValue.string(GeneratedMessage.unexpectedException).racketLiteral) "\\n"
-                                 \(JSONValue.string(GeneratedMessage.error).racketLiteral) (exn-message e))))])
-            (let-values ([(out _) (chickadee-call/capture ns '\(racketArgumentName(family.functionName)) \(ctx.argList))])
-              out)))
-
-        (if (chickadee-stdout-matches? printed expected)
-            (chickadee-passed "Printed the expected output")
-            (chickadee-failed (string-append                                \(JSONValue.string(GeneratedMessage.input).racketLiteral) \(ctx.inputPreview) "\\n"
-                               \(JSONValue.string(GeneratedMessage.expected).racketLiteral) (chickadee-format expected) "\\n"
-                               \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format printed))))
-        """ + "\n"
-}
 
 // MARK: - Existence guard
 

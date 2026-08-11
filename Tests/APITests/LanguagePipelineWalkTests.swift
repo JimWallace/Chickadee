@@ -142,7 +142,7 @@ import Testing
         //    A kernel-less (upload-only) language has no notebook workflow, so
         //    this leg does not apply to it — the walk's earlier legs already
         //    covered everything such a language does.
-        guard case .notebookKernel(_, let expectedKernel, _, _) = resolved.editorSupport else {
+        guard case .notebookKernel(_, let expectedKernel, _, _, _) = resolved.editorSupport else {
             return
         }
         let normalized = normalizeNotebookForJupyterLite(notebook(for: resolved))

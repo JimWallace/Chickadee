@@ -24,6 +24,26 @@ enum AsyncEnvLockHolding {
 /// Serializes async env-mutating test bodies across suites.
 /// Only one `withAsyncEnvLock` closure can be running at a time process-wide.
 /// Reentrant within the same task: nested calls run the body inline.
+///
+/// READERS MUST TAKE IT TOO, not just writers. This is the part that is easy to
+/// get wrong and it has been got wrong: `setenv`/`unsetenv` rewrite glibc's
+/// `environ` array in place, so a concurrent `getenv` walking it does not read a
+/// stale value — it segfaults. The whole test process dies, at a different test
+/// each run, with no failing test name attached. It reads as a flake.
+///
+/// `configureTestDatabase` locked its database-settings read and then read
+/// `TEST_LOG_LEVEL` thirty lines lower, outside the block — on every one of the
+/// suite's ~1,100 test Applications, making it the most frequent env reader in
+/// the process. Every writer was correct; that one reader was enough to make
+/// `swift test --parallel` crash reliably and earn a standing `--no-parallel`
+/// workaround. Both reads now share one locked region.
+///
+/// A source-scanning guard for this was tried and abandoned: a lexical scan
+/// cannot tell an unlocked read from a helper whose only caller holds the lock
+/// (`testDatabaseSettingsFromEnvironment` and `OIDCTests.EnvironmentOverride`
+/// are both the latter), so it produced more exemptions than findings. The
+/// invariant lives here instead, where someone adding an env read will be
+/// looking.
 func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async throws -> R {
     if AsyncEnvLockHolding.isHeld {
         return try await body()

@@ -107,7 +107,7 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
         self.generatedScriptExtension = descriptor.generatedScriptExtension
         self.sourceFileExtension = descriptor.sourceFileExtension
         switch descriptor.editorSupport {
-        case .notebookKernel(_, let kernelName, _, _):
+        case .notebookKernel(_, let kernelName, _, _, _):
             self.submissionMode = SubmissionMode.notebook.rawValue
             self.editorKernel = kernelName
         case .uploadOnly:

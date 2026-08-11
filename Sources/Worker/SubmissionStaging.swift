@@ -108,7 +108,7 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
 /// back to scanning. Defaults to `.python`, so the Python path is unchanged.
 func preferredStudentModuleFilename(
     submissionFilename: String?,
-    language: AssignmentLanguage = .python
+    language: AssignmentLanguage
 ) -> String? {
     guard let submissionFilename, !submissionFilename.isEmpty else { return nil }
     let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent

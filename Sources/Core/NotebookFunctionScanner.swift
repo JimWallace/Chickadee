@@ -149,7 +149,7 @@ public struct NotebookFunctionScanEntry: Sendable {
 /// `scanNotebookForSectionsAndFunctions(_:language:)` instead, which answers
 /// "cannot read this language" rather than "found nothing".
 public func scanNotebookForSectionsAndFunctions(
-    _ notebookData: Data, parsing language: AssignmentLanguage = .python
+    _ notebookData: Data, parsing language: AssignmentLanguage
 ) -> NotebookScanResult {
     guard
         let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
@@ -166,18 +166,12 @@ public func scanNotebookForSectionsAndFunctions(
         let cellType = cell["cell_type"] as? String
         let source = cellSource(cell)
         if cellType == "markdown" {
-            // First `##` line (not `###`+) becomes the current section.
-            for line in source.components(separatedBy: "\n") {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.hasPrefix("## ") && !trimmed.hasPrefix("### ") {
-                    let title = String(trimmed.dropFirst(3))
-                        .trimmingCharacters(in: .whitespaces)
-                    guard !title.isEmpty else { continue }
-                    currentSection = title
-                    if seenSections.insert(title).inserted {
-                        sectionsInOrder.append(title)
-                    }
-                    break  // one section set per cell; ignore subsequent #s
+            // Read through the same helper `notebookSectionNames` uses, so the
+            // sections-only entry point cannot drift from this one.
+            if let title = firstSectionHeading(in: source) {
+                currentSection = title
+                if seenSections.insert(title).inserted {
+                    sectionsInOrder.append(title)
                 }
             }
         } else if cellType == "code" {
@@ -210,40 +204,53 @@ public func scanNotebookForSectionsAndFunctions(
     return NotebookScanResult(sectionNames: sectionsInOrder, functions: shadowed)
 }
 
-public func scanNotebookForFunctions(_ notebookData: Data) -> [NotebookFunctionInfo] {
+/// The `## ` section headers of a notebook, in order, deduplicated.
+///
+/// LANGUAGE-INDEPENDENT, and that is the point: a section name is a markdown
+/// header and has nothing to do with the code cells around it. It exists as its
+/// own entry point because the language-aware scan needs section names even
+/// when it cannot read the language — and the only way to ask for them used to
+/// be to call the raw Python scan, which meant naming a language to answer a
+/// question that has none. That call was literally `parsing: language ?? .python`
+/// on an R or Lua notebook.
+///
+/// One implementation, shared with `scanNotebookForSectionsAndFunctions`, so
+/// the two cannot disagree about what a section is.
+public func notebookSectionNames(_ notebookData: Data) -> [String] {
     guard
         let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
         let cells = notebook["cells"] as? [[String: Any]]
     else { return [] }
-
-    let raw: [NotebookFunctionInfo] = cells.flatMap { cell -> [NotebookFunctionInfo] in
-        guard (cell["cell_type"] as? String) == "code" else { return [] }
-        let source = cellSource(cell)
-        return extractTopLevelFunctions(from: source)
+    var inOrder: [String] = []
+    var seen: Set<String> = []
+    for cell in cells where (cell["cell_type"] as? String) == "markdown" {
+        if let title = firstSectionHeading(in: cellSource(cell)), seen.insert(title).inserted {
+            inOrder.append(title)
+        }
     }
-
-    // Python's second `def foo(...)` replaces the first at runtime — every
-    // entry except the *last* occurrence of each name is shadowed.  Mark them
-    // so the client can warn the instructor away from targeting a version
-    // the runner will never see.
-    var lastIndexByName: [String: Int] = [:]
-    for (i, info) in raw.enumerated() {
-        lastIndexByName[info.name] = i
-    }
-    return raw.enumerated().map { idx, info in
-        let shadowed = (lastIndexByName[info.name] ?? idx) != idx
-        return NotebookFunctionInfo(
-            name: info.name,
-            paramNames: info.paramNames,
-            paramTypes: info.paramTypes,
-            paramHasDefault: info.paramHasDefault,
-            returnType: info.returnType,
-            hasTypeHints: info.hasTypeHints,
-            hasDocstring: info.hasDocstring,
-            isShadowed: shadowed
-        )
-    }
+    return inOrder
 }
+
+/// The first `## ` heading in a markdown cell's source, or nil. `###`+ is not a
+/// section, and one section is set per cell — subsequent headings are ignored.
+private func firstSectionHeading(in source: String) -> String? {
+    for line in source.components(separatedBy: "\n") {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("## "), !trimmed.hasPrefix("### ") else { continue }
+        let title = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { continue }
+        return title
+    }
+    return nil
+}
+
+// `scanNotebookForFunctions(_:)` used to live here: a Python-only,
+// sections-unaware function scan with its own copy of the shadowing pass.
+// Production stopped calling it when the language-aware
+// `scanNotebookForSectionsAndFunctions(_:language:)` took over; only tests
+// still reached it, which is why nothing noticed it had no way to be told a
+// language. Its coverage moved onto the surviving entry point, so the
+// shadowing rule is now asserted against the implementation that actually runs.
 
 // MARK: - Private helpers
 
@@ -264,7 +271,7 @@ private func cellSource(_ cell: [String: Any]) -> String {
 /// redefinitions are language-independent, and copying them per language would
 /// be five chances to diverge on the part that has nothing to do with syntax.
 private func extractTopLevelFunctions(
-    from source: String, language: AssignmentLanguage = .python
+    from source: String, language: AssignmentLanguage
 ) -> [NotebookFunctionInfo] {
     let lines = source.components(separatedBy: "\n")
     var results: [NotebookFunctionInfo] = []
@@ -525,9 +532,13 @@ public func scanNotebookForSectionsAndFunctions(
         // languages as collateral from a limitation that applies to function
         // extraction alone.
         return NotebookScanResult(
-            sectionNames: scanNotebookForSectionsAndFunctions(notebookData).sectionNames,
+            sectionNames: notebookSectionNames(notebookData),
             functions: [],
             unsupportedReason: support.unsupportedReason)
     }
-    return scanNotebookForSectionsAndFunctions(notebookData, parsing: language ?? .python)
+    // `support.isSupported` is false for a nil language, so this is reached
+    // only with a real one — no `?? .python` fallback, which is the shape that
+    // put a Python parser on an R notebook everywhere else in this arc.
+    guard let language else { return NotebookScanResult(sectionNames: [], functions: []) }
+    return scanNotebookForSectionsAndFunctions(notebookData, parsing: language)
 }

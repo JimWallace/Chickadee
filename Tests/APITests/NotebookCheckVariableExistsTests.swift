@@ -22,7 +22,7 @@ import Vapor
             kind: .variableExists,
             variable: "df"
         )
-        let bundle = renderNotebookCheck(check)
+        let bundle = renderNotebookCheck(check, language: .python)
         let source = bundle.script.source
 
         #expect(
@@ -55,7 +55,7 @@ import Vapor
             variable: "n",
             expectedType: "int"
         )
-        let source = renderNotebookCheck(check).script.source
+        let source = renderNotebookCheck(check, language: .python).script.source
 
         #expect(source.contains("expected_type_name = \"int\""))
         #expect(
@@ -73,7 +73,7 @@ import Vapor
             variable: "df",
             expectedType: "DataFrame"
         )
-        let source = renderNotebookCheck(check).script.source
+        let source = renderNotebookCheck(check, language: .python).script.source
 
         #expect(
             source.contains("__mro__"),
@@ -91,7 +91,7 @@ import Vapor
             variable: "obj",
             expectedType: "MyCustomClass"
         )
-        let source = renderNotebookCheck(check).script.source
+        let source = renderNotebookCheck(check, language: .python).script.source
 
         #expect(source.contains("__mro__"))
         #expect(source.contains(#""MyCustomClass""#))
@@ -102,7 +102,7 @@ import Vapor
             id: "var_df", kind: .variableExists,
             tier: .release, variable: "df"
         )
-        let files = notebookCheckAllGeneratedFilenames(check)
+        let files = notebookCheckAllGeneratedFilenames(check, language: .python)
         #expect(
             files == ["releasecheck_var_df.py"], "variableExists generates a single .py with the tier-prefixed name")
     }
@@ -115,7 +115,7 @@ import Vapor
             kind: .variableExists,
             variable: "results"
         )
-        let source = renderNotebookCheck(check).script.source
+        let source = renderNotebookCheck(check, language: .python).script.source
         #expect(
             source.contains("# Test: `results` is defined"),
             "default label should describe pure existence")
@@ -128,7 +128,7 @@ import Vapor
             variable: "df",
             expectedType: "DataFrame"
         )
-        let source = renderNotebookCheck(check).script.source
+        let source = renderNotebookCheck(check, language: .python).script.source
         #expect(
             source.contains("# Test: `df` is defined and is a DataFrame"),
             "default label should describe existence + type")
@@ -140,7 +140,7 @@ import Vapor
         let checks = [
             NotebookCheck(id: "ok", kind: .variableExists, variable: "df")
         ]
-        try validateNotebookChecks(checks)
+        try validateNotebookChecks(checks, language: .python)
     }
 
     @Test func validate_passesForExistencePlusType() throws {
@@ -149,7 +149,7 @@ import Vapor
                 id: "ok", kind: .variableExists,
                 variable: "df", expectedType: "DataFrame")
         ]
-        try validateNotebookChecks(checks)
+        try validateNotebookChecks(checks, language: .python)
     }
 
     @Test func validate_rejectsMissingVariable() throws {
@@ -157,7 +157,7 @@ import Vapor
             NotebookCheck(id: "bad", kind: .variableExists, variable: nil)
         ]
         let error = try #require(throws: (any Error).self) {
-            try validateNotebookChecks(checks)
+            try validateNotebookChecks(checks, language: .python)
         }
         #expect("\(error)".contains("variable name is required"))
     }
@@ -167,7 +167,7 @@ import Vapor
             NotebookCheck(id: "bad", kind: .variableExists, variable: "")
         ]
         #expect(throws: (any Error).self) {
-            try validateNotebookChecks(checks)
+            try validateNotebookChecks(checks, language: .python)
         }
     }
 
@@ -176,7 +176,7 @@ import Vapor
             NotebookCheck(id: "bad", kind: .variableExists, variable: "1df")
         ]
         let error = try #require(throws: (any Error).self) {
-            try validateNotebookChecks(checks)
+            try validateNotebookChecks(checks, language: .python)
         }
         #expect("\(error)".contains("not a valid Python identifier"))
     }
@@ -188,7 +188,7 @@ import Vapor
                 variable: "df", expectedType: "   ")
         ]
         let error = try #require(throws: (any Error).self) {
-            try validateNotebookChecks(checks)
+            try validateNotebookChecks(checks, language: .python)
         }
         #expect("\(error)".contains("expectedType"))
     }

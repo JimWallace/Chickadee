@@ -219,17 +219,24 @@ func buildConfiguredSuiteEntries(
     renderedCheckByID: [String: GeneratedScript],
     deletedFilenames: Set<String>
 ) -> [ConfiguredSuiteEntry] {
+    // READ OFF WHAT WAS RENDERED, not recomputed from the spec.
+    //
+    // This used to call `generatedScriptFilename(familyID:caseKey:tier:)` with
+    // no language argument, taking the `.python` default — so on an R, Lua,
+    // Octave, C++ or Racket assignment it produced `.py` names while the suite
+    // entries beside it, rendered through the same helper WITH the language,
+    // carried `.R` / `.lua` / `.m` / `.sh` / `.rkt`. These names are what a
+    // `family:<id>` dependency token expands to, so the persisted manifest got
+    // a `dependsOn` naming files that do not exist, and a family dependency
+    // silently did nothing in five of the six languages.
+    //
+    // Passing the language would fix it once. Deriving from `artifacts` fixes
+    // the shape: the rendered scripts already carry their real filenames, so
+    // there is no second computation left to disagree with the first, and no
+    // language parameter to forget at the next call site.
     var familyFilenames: [String: [String]] = [:]
     for f in families {
-        familyFilenames[f.id] = f.cases
-            .filter(\.enabled)
-            .map { c in
-                generatedScriptFilename(
-                    familyID: f.id,
-                    caseKey: c.key,
-                    tier: c.resolvedTier(defaults: f.defaults)
-                )
-            }
+        familyFilenames[f.id] = (artifacts.caseScripts[f.id] ?? []).map(\.filename)
     }
 
     var builder = SuiteEntryBuilder(

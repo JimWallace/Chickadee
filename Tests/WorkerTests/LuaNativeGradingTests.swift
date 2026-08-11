@@ -67,7 +67,7 @@ import Testing
 
         // The SAME embedded source the worker injects, not a fixture copy — so
         // a runtime change that breaks native grading fails here.
-        try testRuntimeLua.write(
+        try testRuntimeSource(for: .lua).write(
             to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
         try submission.write(
             to: dir.appendingPathComponent("solution.lua"), atomically: true, encoding: .utf8)

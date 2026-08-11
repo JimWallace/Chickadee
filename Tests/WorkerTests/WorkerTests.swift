@@ -450,7 +450,7 @@ import Testing
 
     private func writeRRuntime() throws {
         let url = tmpDir.appendingPathComponent("test_runtime.R")
-        try testRuntimeR.write(to: url, atomically: true, encoding: .utf8)
+        try testRuntimeSource(for: .r).write(to: url, atomically: true, encoding: .utf8)
     }
 
     @Test func rRuntimePassedExitsZeroWithJSON() async throws {
@@ -513,8 +513,8 @@ import Testing
     /// The reserved-filename list is interpolated from `AssignmentLanguage`, so
     /// the R runtime can't drift from the file the worker actually writes.
     @Test func rRuntimeReservesTheInputsFilename() {
-        #expect(testRuntimeR.contains("\"\(AssignmentLanguage.r.inputsFileName)\""))
-        #expect(testRuntimeR.contains("chickadee_student_file"))
+        #expect(testRuntimeSource(for: .r).contains("\"\(AssignmentLanguage.r.inputsFileName)\""))
+        #expect(testRuntimeSource(for: .r).contains("chickadee_student_file"))
     }
 
     /// The bug this closes: `_ck_inputs.R` is an R file in the grading
@@ -619,10 +619,12 @@ import Testing
     /// A notebook is extracted to its assignment's source language, so an R
     /// job's hint has to name the `.R` file. Naming `.py` (the pre-fix
     /// behaviour) pointed at a path that was never written.
+    ///
+    /// The first assertion here used to omit `language:` entirely, pinning the
+    /// `.python` default. That default is gone — every caller states its
+    /// language — so the assertion that pinned it is gone with it rather than
+    /// being rewritten into a duplicate of the one below it.
     @Test func preferredStudentModuleFilenameIsLanguageAware() {
-        #expect(
-            preferredStudentModuleFilename(submissionFilename: "analysis.ipynb")
-                == "analysis.py")
         #expect(
             preferredStudentModuleFilename(
                 submissionFilename: "analysis.ipynb", language: .python) == "analysis.py")
@@ -631,12 +633,14 @@ import Testing
                 == "analysis.R")
         // A source upload is already the module, whatever the assignment's language.
         #expect(
-            preferredStudentModuleFilename(submissionFilename: "warmup.py") == "warmup.py")
+            preferredStudentModuleFilename(submissionFilename: "warmup.py", language: .python)
+                == "warmup.py")
         #expect(
             preferredStudentModuleFilename(submissionFilename: "warmup.R", language: .r)
                 == "warmup.R")
-        #expect(preferredStudentModuleFilename(submissionFilename: "data.csv") == nil)
-        #expect(preferredStudentModuleFilename(submissionFilename: nil) == nil)
+        #expect(
+            preferredStudentModuleFilename(submissionFilename: "data.csv", language: .python) == nil)
+        #expect(preferredStudentModuleFilename(submissionFilename: nil, language: .python) == nil)
     }
 
     // MARK: - ExponentialBackoff
