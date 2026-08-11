@@ -790,12 +790,25 @@ same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
 in the editor's picker, so a language that can be authored must be one that
 can be graded.
 
-**Two places enumerate the kernels rather than discovering them, and both fail
-open for one they have never heard of:** the `chickadee-*` glob in
-`build-jupyterlite.sh` (which decides who gets a module index) and
-`expected_language` in `check-xeus-vendored.sh` (which decides who gets a
-vendoring guard). Neither errors — you simply get a kernel nothing checks.
-`docs/adding-a-xeus-kernel.md` is the runbook.
+**One place still enumerates the kernels rather than discovering them, and it
+fails open for one it has never heard of:** the `chickadee-*` glob in
+`build-jupyterlite.sh`, which decides who gets a module index. It does not error
+— you simply get a kernel nothing checks. Its twin is closed: `expected_language`
+in `check-xeus-vendored.sh` derives the expected set from each language's
+`editorSupport.notebookKernel(kernelName:)`, so a kernel is guarded the day its
+descriptor names it.
+
+**Deriving it did not make it safe.** That derivation reads Swift with a regex
+and paired language to kernel by line PROXIMITY, so when #1330 hoisted the
+descriptors into their own `static let`s it went silently partial — one kernel,
+mapped to the wrong language — and `main` was red for five releases while every
+PR showed green, because the workflow's path filter reported the job green when
+it skipped it and only `push` counted as relevant. Three rules came out of it: a
+derivation must assert its own **completeness** (only an empty one used to fail,
+and a partial one is indistinguishable from a correct one); read the mapping the
+compiler already forces to be exhaustive rather than inferring one from
+proximity; and **a guard whose answer depends on the event it runs under is not
+a guard**. `docs/adding-a-xeus-kernel.md` is the runbook.
 
 The channel is **`emscripten-forge-4x`**. The older `emscripten-forge-dev` alias
 serves the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of
