@@ -170,4 +170,65 @@ import Testing
                 "suite order \(rotated) must not change the resolved language")
         }
     }
+
+    // MARK: - What must be installed before this manifest can be graded
+
+    /// `languagesRequiredToGrade` answers a different question from resolution:
+    /// not "what is this assignment written in" (one answer) but "what
+    /// interpreters must exist" (a set). A suite may legitimately mix — the
+    /// runner classifies each script independently — so both the declaration
+    /// and the suite contribute.
+    private func manifest(language: AssignmentLanguage?, scripts: [String]) -> TestProperties {
+        TestProperties(
+            requiredFiles: [],
+            testSuites: scripts.map { TestSuiteEntry(tier: .pub, script: $0) },
+            timeLimitSeconds: 10,
+            language: language,
+            languageDeclared: true)
+    }
+
+    @Test func theDeclaredLanguageIsAlwaysRequired() {
+        // C++'s ordinary shape: generated cases are `.sh` wrappers, so nothing
+        // in the suite names the language and only the declaration can.
+        #expect(
+            AssignmentLanguage.languagesRequiredToGrade(
+                manifest: manifest(language: .cpp, scripts: ["publictest_a.sh"])) == [.cpp])
+    }
+
+    @Test func aHandWrittenOffLanguageScriptIsRequiredToo() {
+        #expect(
+            AssignmentLanguage.languagesRequiredToGrade(
+                manifest: manifest(language: .python, scripts: ["a.py", "helper.R"]))
+                == [.python, .r])
+    }
+
+    /// The empty set is what keeps the system's original mode claimable by any
+    /// runner. `.sh` is deliberately signal-free, and the interpreters the
+    /// runner can dispatch but Chickadee cannot author in have no capability
+    /// token at all — requiring one would queue such a job forever.
+    @Test(arguments: [
+        ["publictest_a.sh"], ["a.sh", "b.bash", "c.zsh"], ["helper.rb", "tool.js", "x.pl"], [],
+    ])
+    func aSuiteNamingNoAssignmentLanguageRequiresNothing(_ scripts: [String]) {
+        #expect(
+            AssignmentLanguage.languagesRequiredToGrade(
+                manifest: manifest(language: nil, scripts: scripts)
+            ).isEmpty)
+    }
+
+    /// Every language is reachable through the suite, not just through the
+    /// declaration — derived from `allCases`, so a seventh is covered the day
+    /// it exists. C++ is the one exception and it is stated rather than skipped:
+    /// its `.sh` generated extension must keep carrying no language signal.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func everyLanguageIsReachableFromItsOwnScript(_ language: AssignmentLanguage) {
+        let script = "publictest_x.\(language.generatedScriptExtension)"
+        let required = AssignmentLanguage.languagesRequiredToGrade(
+            manifest: manifest(language: nil, scripts: [script]))
+        if language == .cpp {
+            #expect(required.isEmpty, "a `.sh` script must name no language, C++ included")
+        } else {
+            #expect(required == [language])
+        }
+    }
 }

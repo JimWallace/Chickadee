@@ -185,7 +185,7 @@ func evaluateAndClaimCandidate(
         )
         let languageResult = RunnerLanguageGate.evaluate(
             runnerProfile: runnerProfile,
-            language: AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            manifest: manifest
         )
         let compatibilityResult = RunnerVersionGate.combine(
             RunnerVersionGate.combine(capabilityResult, versionResult),

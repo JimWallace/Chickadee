@@ -193,53 +193,44 @@ struct AuthoringLanguageResolution {
     let previous: AssignmentLanguage?
 }
 
-/// Decides which language the generated scripts render in.
+/// Decides which language the generated scripts render in: the one the author
+/// declared, and nothing else.
 ///
-/// The authored items carry the edit being applied, which may be the very
-/// first non-Python graded script — the `.R` or `.lua` that establishes the
-/// language before the manifest has recorded anything. Any non-Python language
-/// wins, in `allCases` order for a deterministic answer on a mixed edit.
-/// Checking only `.r` here is what made the first `.lua` script save as Python.
-/// Python is excluded by name so adding a `.py` helper to an R assignment
-/// cannot flip the render language; the stored manifest stays authoritative.
+/// THE SUITE'S CONTENTS DO NOT VOTE. This used to scan the authored items for a
+/// non-Python script extension and let it outrank the stored declaration, on
+/// the reasoning that the edit being applied "may be the very first non-Python
+/// graded script — the `.R` or `.lua` that establishes the language before the
+/// manifest has recorded anything". Nothing has been in that state since
+/// declaration became a requirement: every door that creates an assignment
+/// declares, so there is no un-established language for a script to establish.
+///
+/// What the scan did instead was migrate assignments nobody asked to migrate.
+/// It ran on EVERY suite save, including reorders, so authoring one
+/// `helper_test.R` into an assignment declaring Python re-rendered every
+/// generated script in R, DELETED the `.py` ones (the deletion diff reads
+/// `previous`), and wrote `.r` into the manifest. It was asymmetric on top of
+/// that — a `.py` helper could not flip an R assignment, because Python was
+/// excluded by name — so the same act had opposite consequences depending on
+/// which language you already had.
+///
+/// A mixed-language suite is legitimate and always has been: the runner
+/// classifies every script independently (`classifyScriptInterpreter`) and
+/// stages every language's `test_runtime.*` into the workspace, so an `.R`
+/// helper in a Python assignment runs under `Rscript` and always did. The
+/// declaration governs what Chickadee GENERATES, not what the author may write
+/// by hand. Changing it is the language dropdown's job (and
+/// `set_assignment_language`'s), both of which refuse once generated scripts
+/// exist — a guard this scan quietly went around.
 func resolveAuthoringLanguage(
     setup: APITestSetup,
-    props: TestProperties,
-    authoredItems: [AuthoredSuiteItem]?
+    props: TestProperties
 ) -> AuthoringLanguageResolution {
-    let previous = AssignmentLanguage.resolve(for: setup, manifest: props)
-
-    var authoredLanguages: Set<AssignmentLanguage> = []
-    for item in authoredItems ?? [] {
-        guard case .script(let raw) = item,
-            let language = AssignmentLanguage(
-                scriptExtension: URL(fileURLWithPath: raw.script).pathExtension),
-            language != .python
-        else { continue }
-        authoredLanguages.insert(language)
-    }
-    let resolved = AssignmentLanguage.allCases.first { authoredLanguages.contains($0) } ?? previous
-
-    // NO PYTHON FALLBACK. This used to end `?? .python`, justified as follows:
-    //
-    //     Refusing here would be circular: a pattern family is frequently the
-    //     FIRST thing authored on an assignment, and generating its scripts is
-    //     how the suite acquires a graded script in the first place.
-    //
-    // That was true while the language was INFERRED from content, when nil
-    // honestly meant "nothing has named a language yet". Declaration dissolves
-    // it: every door that creates an assignment declares, so nil here means the
-    // author picked "None" and the circularity is gone — there is nothing to
-    // wait for, only an answer to respect.
-    //
-    // The fallback was also actively wrong, not merely redundant. Every suite
-    // save runs through this function, including saves that touch only raw
-    // scripts and ordering, and the manifest rebuild ALWAYS records the value
-    // it is handed — so reordering two `.sh` scripts on a declared-None
-    // assignment silently rewrote its declaration to Python. The caller now
-    // refuses only when the save would actually GENERATE something (which needs
-    // a syntax) and persists nil otherwise.
-    return AuthoringLanguageResolution(language: resolved, previous: previous)
+    let declared = AssignmentLanguage.resolve(for: setup, manifest: props)
+    // `previous` is retained as a separate field even though it now always
+    // equals `language`: the deletion diff consumes it to find generated
+    // scripts written under a DIFFERENT extension, which is still reachable
+    // when `set_assignment_language` changes the declaration between saves.
+    return AuthoringLanguageResolution(language: declared, previous: declared)
 }
 
 /// Every save-time validation, in the order the pre-split function ran them.

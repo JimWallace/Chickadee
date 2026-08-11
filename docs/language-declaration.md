@@ -250,12 +250,84 @@ Closed:
   refused *and* what must still be allowed).
 - Manifest rebuilds preserve `language` + `languageDeclared`.
 
+- The last content sniff on an authoring path is gone:
+  `resolveAuthoringLanguage` returns the stored declaration. See "A declared
+  language is not exclusive" below for why it was wrong rather than merely
+  redundant.
+- `RunnerLanguageGate` requires every language the suite actually needs, not
+  just the declared one.
+
 Deliberately open:
 
 - Group 3 stays as it is. Those defaults are correct, not debt.
-- `resolveAuthoringLanguage` still lets an authored non-Python raw script
-  outrank the stored declaration — the last content sniff on an authoring path.
-  It is harmless while it agrees with the declaration and wrong when it does
-  not (adding `test_extra.R` to a declared-Python assignment would re-render its
-  families as R), but removing it is a separate behaviour change with its own
-  reachability question, so it is named here rather than done quietly.
+
+---
+
+## A declared language is not exclusive
+
+The declaration governs what Chickadee **generates**. It does not restrict what
+the suite may hold, and never did.
+
+| | `ScriptInterpreter` (RunnerCore) | `AssignmentLanguage` (Core) |
+|---|---|---|
+| scope | one script | one assignment |
+| derived from | extension → shebang → content sniff | the author's declaration |
+| cases | 13, incl. `sh` `bash` `zsh` `ruby` `perl` `node` `php` | 6 |
+| answers | "how do I run this file?" | "what do generated artifacts render in?" |
+
+`scriptInvocation(for:)` takes only a URL — no `AssignmentLanguage` parameter
+exists and no caller passes one — and the runner stages *every* language's
+`test_runtime.*` into every job workspace. `TestSuiteEntry` carries no language
+field. No authoring surface refuses an off-language script; `KernelImportGuard`
+switches on the script's own extension. A hand-written `.R` helper inside a
+Python assignment runs under `Rscript`, and always has.
+
+This is the original design — "test suites are shell scripts; the runner
+executes them generically" — with per-language generation layered on top rather
+than replacing it. **Shell is the substrate all six languages sit on**, which
+is why "None" means "nothing is generated" and, in practice, "hand-written
+scripts only".
+
+### Two places that contradicted it
+
+**Content voted on the declaration.** `resolveAuthoringLanguage` scanned the
+authored scripts and let a non-Python extension outrank the stored language. It
+ran on *every* suite save, including reorders, so authoring one `helper_test.R`
+into a Python assignment re-rendered every generated script in R, **deleted** the
+`.py` ones (the deletion diff reads `previous`), and wrote `.r` into the
+manifest. It was asymmetric too — a `.py` helper could not flip an R assignment,
+because Python was excluded by name — so the same act had opposite consequences
+depending on which language you already had. It also went around the guard that
+refuses a language change once generated scripts exist. Now it returns the
+declaration; changing language is the dropdown's job and
+`set_assignment_language`'s.
+
+**The capability gate asked the wrong question.** It required exactly one token,
+the declared language, so a `.R` helper in a Python assignment was claimable by
+an R-less runner and died at `exit 127 / Rscript: not found` in front of a
+student — this gate's own failure mode, in a shape it could not see.
+`AssignmentLanguage.languagesRequiredToGrade(manifest:)` unions the declaration
+with every language the suite's extensions imply. An empty set still fails open,
+which is what keeps a plain `.sh` suite — and one written in an interpreter with
+no capability token, like `.rb` or `.js` — claimable by anyone.
+
+Both were the same root cause: using the declaration to answer a question about
+*the suite's contents*, which only the contents can answer.
+
+### Why "None" is not a `.shell` language
+
+Tempting, because it would delete the Optional and collapse the remaining
+fallbacks into the per-language capability tables. It does not work:
+`languageByScriptExtension` folds every language's `scriptExtensions`, so a
+`.shell` case claiming `["sh"]` would make every C++ assignment's generated `.sh`
+wrappers derive as shell — `generatedScriptExtension: "sh"` is C++'s, and
+`everyLanguageResolvesFromItsOwnGradedScript` carries an explicit C++ arm
+asserting a bare `.sh` suite derives nil. Giving `.shell` no `scriptExtensions`
+defuses that but breaks `update_solution`, which reads the same field to decide
+which solution filenames are acceptable — one field, two questions, opposite
+answers.
+
+A *genuine* shell assignment language — students submit `solution.sh`, tests
+source it and compare stdout, with a `test_runtime.sh` — is a defensible
+separate feature. It would not replace "None", since a `.sh` harness that
+compiles a student's C file is still an assignment with no generation language.

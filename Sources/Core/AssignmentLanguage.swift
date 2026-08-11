@@ -265,6 +265,40 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         return best?.language
     }
 
+    /// Every language an interpreter must exist for before this manifest can be
+    /// graded: the declared one, plus every language its suite's scripts are
+    /// written in.
+    ///
+    /// These are two different questions and only together do they answer "can
+    /// this runner grade this job?". The declaration says what Chickadee
+    /// GENERATES; the suite says what the runner will actually be asked to
+    /// execute, and a suite may legitimately mix — the runner classifies each
+    /// script independently (`classifyScriptInterpreter`) and stages every
+    /// language's `test_runtime.*` into the workspace, so a hand-written `.R`
+    /// helper inside a Python assignment runs under `Rscript` and always has.
+    ///
+    /// Asking only the declaration is how a `.R` helper in a Python assignment
+    /// could be claimed by an R-less runner and die at `exit 127` in front of a
+    /// student — the exact failure `RunnerLanguageGate` exists to prevent, for a
+    /// shape it could not see.
+    ///
+    /// Extensions that name no assignment language contribute nothing, which is
+    /// what keeps the original mode claimable by anyone: `.sh` carries no
+    /// language signal (deliberately — C++'s generated cases ARE `.sh`
+    /// wrappers), and neither do the other interpreters the runner can dispatch
+    /// but Chickadee cannot author in, like `.rb` or `.js`. A plain `.sh` suite
+    /// on an assignment declaring nothing therefore returns the empty set.
+    public static func languagesRequiredToGrade(manifest: TestProperties) -> Set<AssignmentLanguage> {
+        var required: Set<AssignmentLanguage> = []
+        if let declared = manifest.language { required.insert(declared) }
+        for entry in manifest.testSuites {
+            guard let found = languageByScriptExtension[scriptExtension(ofPath: entry.script)]
+            else { continue }
+            required.insert(found.language)
+        }
+        return required
+    }
+
     /// The language a notebook kernel name (`kernelspec.name` then
     /// `language_info.name`) declares, or nil when neither is recognised. The
     /// string-argument form of `fromNotebookMetadata`, matched against every

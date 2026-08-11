@@ -33,13 +33,27 @@ import Foundation
 /// runs the server's own vended WASM bundle and has no runner profile to check.
 enum RunnerLanguageGate {
 
-    /// Whether `runnerProfile` advertises the language this assignment is in.
+    /// Whether `runnerProfile` advertises every language this assignment needs.
+    ///
+    /// EVERY language, not just the declared one. The declaration says what
+    /// Chickadee generates; the suite says what the runner will be asked to
+    /// execute, and a suite may legitimately mix — the runner classifies each
+    /// script independently and stages every language's `test_runtime.*`, so a
+    /// hand-written `.R` helper inside a Python assignment runs under `Rscript`
+    /// and always has. Checking only the declaration let exactly that job be
+    /// claimed by an R-less runner, where it died at `exit 127 /
+    /// Rscript: not found` in front of a student — this gate's own failure mode,
+    /// in a shape it could not see. `languagesRequiredToGrade` answers both
+    /// halves at once.
     ///
     /// Compatible — with no check performed — in two cases:
     ///
-    /// 1. **The assignment names no language** (`language == nil`). A suite of
-    ///    plain `.sh` scripts has no interpreter to require; that is the
-    ///    system's original mode and stays claimable by anyone.
+    /// 1. **Nothing requires an interpreter** (the required set is empty): no
+    ///    declared language and a suite whose extensions name none, i.e. plain
+    ///    `.sh`. That is the system's original mode and stays claimable by
+    ///    anyone. Extensions the runner can dispatch but Chickadee cannot author
+    ///    in (`.rb`, `.js`, `.pl`) also contribute nothing, so a suite of those
+    ///    keeps failing open exactly as it did before.
     /// 2. **The runner advertises no profile at all.** That means capability
     ///    discovery is switched off (`RUNNER_CAPABILITY_DISCOVERY_ENABLED=false`),
     ///    an explicit operator choice, and treating it as incompatible would
@@ -48,22 +62,31 @@ enum RunnerLanguageGate {
     ///    know the language still *has* discovery on, so it advertises a profile
     ///    without the language and is caught by the closed path below.
     ///
-    /// Everything else is checked: a profile that is present and does not list
-    /// the language is refused, whatever the reason it is missing (build too old
-    /// to probe for it, or host without the interpreter installed).
+    /// Everything else is checked: a profile that is present and does not list a
+    /// required language is refused, whatever the reason it is missing (build too
+    /// old to probe for it, or host without the interpreter installed).
     static func evaluate(
         runnerProfile: RunnerCapabilityProfile?,
-        language: AssignmentLanguage?
+        manifest: TestProperties
     ) -> CompatibilityResult {
-        guard let language else { return CompatibilityResult(isCompatible: true) }
+        let required = AssignmentLanguage.languagesRequiredToGrade(manifest: manifest)
+        guard !required.isEmpty else { return CompatibilityResult(isCompatible: true) }
         guard let runnerProfile else { return CompatibilityResult(isCompatible: true) }
 
-        let required = normalized(language.capabilityName)
         let advertised = Set(runnerProfile.languageVersions.map { normalized($0.language) })
-        guard advertised.contains(required) else {
+        // `allCases` order, so a runner missing two languages names them in a
+        // stable order rather than a Set's arbitrary one.
+        let missing = AssignmentLanguage.allCases
+            .filter { required.contains($0) && !advertised.contains(normalized($0.capabilityName)) }
+        guard missing.isEmpty else {
             return CompatibilityResult(
                 isCompatible: false,
-                reasons: ["runner does not provide \(required) (assignment language)"]
+                reasons: missing.map {
+                    let role =
+                        manifest.language == $0
+                        ? "assignment language" : "used by a test script in the suite"
+                    return "runner does not provide \(normalized($0.capabilityName)) (\(role))"
+                }
             )
         }
         return CompatibilityResult(isCompatible: true)
