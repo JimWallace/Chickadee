@@ -230,23 +230,55 @@ and `racket --version`'s letter-led `v8.10` defeating the runner's version parse
 — are fixed, each with an `allCases` guard; a Racket assignment still needs a
 runner new enough to carry both. See `docs/multi-language-audit.md`.
 
-**Assignments are Python, R, Lua, Octave, C++ *or* Racket; language is first-class (`AssignmentLanguage`).**
-`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket`, Core) is resolved from the manifest
-(any `.R` graded script → `.r`, any `.lua` → `.lua`, any `.m` → `.octave`; else
-a notebook kernel in that language's `notebookKernelNames` — `{ir,r,webr,xr}`
-for R, `{xlua,lua}` for Lua, `{xoctave,octave}` for Octave; else `.python`) and every language-specific path dispatches through it — literal
+**Every assignment DECLARES its language. Nothing infers one (v0.5.59, #1331).**
+`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket`, Core) is
+read from the manifest and nowhere else: `resolve(manifest:)` returns
+`manifest.language`, full stop. Declaration is a **requirement**, and every door
+that creates an assignment enforces it — the web create page's `required`
+language select (with an explicit "None"), MCP `create_assignment`'s required
+`language`, `POST /api/v1/testsetups`, and course-bundle import.
+`BackfillDeclaredLanguage` answered it for everything that predates the rule, so
+`languageDeclared` is true everywhere and a **nil language means the author said
+"none"** — a plain `.sh` suite — never "nobody has been asked".
+
+Resolution used to sniff: a `.R` graded script, else a notebook kernel, else
+`.python`. That made "the author chose Python" and "we guessed from a `.py`
+file" the same answer, and every silent misroute in the multi-language arc
+descended from it — a Lua assignment resolving to Python, an R author's first
+`=` expression sent to `python3`, a browser writing `_ck_inputs.py` for an R
+runtime. **Do not reintroduce inference.** If a call site does not know the
+language, the answer is to ask the author, not to guess.
+
+Derivation survives in exactly one place, deliberately not called `resolve`:
+`AssignmentLanguage.derivedDeclaration` runs at the three boundaries where
+content arrives with no author answer (the REST zip upload, bundle import, the
+backfill) and each records the result immediately. It is a boundary step, not a
+resolution strategy. `rederive` is gone: a declaration does not go stale when
+content changes, so replacing a starter notebook no longer rewrites the language
+underneath the author.
+
+Every language-specific path dispatches on the declared value — literal
 rendering (`pythonLiteral`/`rLiteral`), the per-student inputs file
 (`_ck_inputs.py`/`_ck_inputs.R` via `renderInputsFile`), and the expression
 driver. Personalization is evaluated **per-language on the server**:
 `PersonalizationEvaluator` spawns `python3`, `Rscript`, `lua` or `octave-cli`
 (all on the server image), preserving the property that expression source +
-the solution never reach the runner. Base R has no bignum, so the seed is a deterministic
-Horner-fold reduction (`RPersonalizationRuntime.chickadeeSeedRSource`, shared by
-the server driver and the grading runtime so they never drift). The default is
-`.python` at every call site, so existing Python bytes are byte-for-byte
-unchanged. R pattern-family / notebook-check renderers and literal-globals
-inlined into hand-authored `.R` scripts shipped in #1207 (v0.4.636);
-`astStructure` remains the one Python-only check kind. See `docs/r-support.md`.
+the solution never reach the runner. Base R has no bignum, so the seed is a
+deterministic Horner-fold reduction
+(`RPersonalizationRuntime.chickadeeSeedRSource`, shared by the server driver and
+the grading runtime so they never drift). `astStructure` remains the one
+Python-only check kind.
+
+**No function may default a `language:` parameter** — `scripts/no-language-defaults.sh`
+enforces it in `format-lint`. Seventeen did, which is what made the two #1330
+defects possible. A caller that means Python says so.
+
+The transition is not finished: fourteen `?? .python` sites remain, and they are
+a different question from resolution — "this operation needs a language and the
+assignment declares none". See
+[docs/language-declaration.md](docs/language-declaration.md) for the state, the
+per-site split, and the rule that decides them (fail loudly while authoring,
+never while grading). Also `docs/r-support.md`.
 
 **A runner only claims a job it can actually grade — enforced, not authored
 (`RunnerLanguageGate`).** Runners are separate hosts that upgrade on their own
@@ -1346,6 +1378,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 27 compiler-named switch arms across 17 files, the **nine** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy; the ninth whether the generated scripts DISPATCH at all, which the RunnerCore/Core dependency direction means the compiler probably never will see), the authoring-UI section that exists to stop you working (a seventh language needs ZERO JavaScript edits, and the failure mode is going to look for one), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed. Extended after the in-page auto-compute and `differential` work: the eval-worker half a kernel language also owes the editor (renderer → snippets → worker → smoke row → and only THEN the descriptor, because a descriptor naming a worker that does not exist makes the editor spawn a 404 silently), a per-kernel eval-quirk table (each of the three kernels needed a different shape rule and none inherited its neighbour's), the per-language literal traps (three of four are a null-ish value silently changing a container's length, and all three needed different rules), and a **parity checklist** separating what a seventh language now gets free from `allCases` — all 9 pattern kinds, both Add Test renderings, the authoring UI, the whole MCP surface, the browser inputs filename, the vendoring guard — from the four things that remain genuinely per-language
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
+- `docs/language-declaration.md` — where the multi-language transition stands: language is **declared, not inferred** (`resolve(manifest:)` reads `manifest.language` and nothing else; nil means the author said "none", not "nobody has been asked"), the four doors that declare and the one boundary that still derives (`derivedDeclaration`, three callers, each recording immediately), what was deleted and why each deleted shape was compiler-invisible, and a per-site table of the fourteen remaining `?? .python` fallbacks split by the rule that decides them — fail loudly while authoring, never while grading, rendering, or extracting a student's submission
 - `docs/language-handling-review.md` — second-opinion design review of the assignment-language dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules. Written before Lua existed, so §4's prediction is now **scored against the real third language** — what held (bucket A never changed; every bucket-B site failed to compile) and what did not (the compiler-invisible surface is a recurring shape, not a checklist)
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
