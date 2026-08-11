@@ -72,9 +72,17 @@ func validateNotebookChecks(
         // above and for the same reason: this asked only for Python's, so on a
         // non-Python assignment it compared `.py` names against a suite that
         // contains none and could never collide.
-        let checkFilenames = AssignmentLanguage.allCases.flatMap {
-            notebookCheckAllGeneratedFilenames(check, language: $0)
-        }
+        //
+        // DEDUPLICATED PER CHECK, and that is load-bearing rather than tidy:
+        // two languages may legitimately share a generated extension (C++ and
+        // Java both emit `.sh` wrappers), so one check yields the same filename
+        // twice and would collide with ITSELF on the `seenCheckFilenames`
+        // insert below — refusing every notebook check on every assignment.
+        // The set exists to catch two DIFFERENT checks claiming one name.
+        var seenForThisCheck: Set<String> = []
+        let checkFilenames = AssignmentLanguage.allCases
+            .flatMap { notebookCheckAllGeneratedFilenames(check, language: $0) }
+            .filter { seenForThisCheck.insert($0).inserted }
         for filename in checkFilenames {
             if rawScripts.contains(filename) {
                 throw Abort(
@@ -114,7 +122,7 @@ func notebookCheckKindIsSupported(_ kind: NotebookCheckKind, language: Assignmen
     case .r: return notebookCheckKindSupportsR(kind)
     case .lua: return notebookCheckKindSupportsLua(kind)
     case .octave: return notebookCheckKindSupportsOctave(kind)
-    case .cpp, .racket:
+    case .cpp, .racket, .java:
         // Categorical, not per-kind: these are upload-only, so there is no
         // submitted notebook for any kind to inspect.
         return false
@@ -128,7 +136,7 @@ func notebookCheckKindUnsupportedReason(
 ) -> String? {
     guard !notebookCheckKindIsSupported(kind, language: language) else { return nil }
     switch language {
-    case .cpp, .racket:
+    case .cpp, .racket, .java:
         return "\(language.displayName) assignments are upload-only, so there is no submitted "
             + "notebook to check."
     case .r, .lua, .octave, .python:
@@ -154,7 +162,7 @@ func notebookCheckFieldUnsupportedReason(
 ) -> String? {
     guard kind == .cellContains, field == "regex" else { return nil }
     switch language {
-    case .python, .r, .octave, .cpp, .racket:
+    case .python, .r, .octave, .cpp, .racket, .java:
         // R and Octave both take a pattern authored against the Python
         // renderer: Octave's regexp is PCRE (verified against octave-cli
         // before claiming it) and R's engine accepts the same constructs.
@@ -219,32 +227,52 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
     // No `regex: true` refusal here, deliberately: Octave's regexp is
     // PCRE, so a pattern authored against the Python or R renderer
     // transfers — verified against octave-cli before claiming it.
-    case .cpp:
-        // Categorical, not per-kind: notebook checks inspect a submitted
-        // notebook, and C++ assignments are upload-only with no notebook
-        // workflow — there is nothing for any kind to check. Pattern
-        // families and hand-written .sh tests are the C++ authoring surface.
+    case .cpp, .racket, .java:
+        // Categorical, not per-kind, for all three: notebook checks inspect a
+        // submitted notebook, and an upload-only language has no notebook
+        // workflow — there is nothing for any kind to check. Pattern families
+        // and hand-written tests are the whole authoring surface.
+        //
+        // The refusal is NOT a statement about any of these languages'
+        // expressiveness: several kinds would render fine against a notebook if
+        // one existed. If a kernel ever lands for one of them, this arm is what
+        // to revisit.
+        //
+        // ONE ARM RATHER THAN THREE. C++ and Racket carried a hand-written
+        // Abort each, and adding Java's would have been the third copy of one
+        // sentence — the shape this codebase keeps paying for. The reason text
+        // already comes from `notebookCheckKindUnsupportedReason`, the same
+        // predicate the Add Test menu and `get_server_info` read, so folding
+        // them makes the save-time refusal and the discoverable answer the same
+        // string by construction. The rendered message is byte-identical to
+        // what C++ and Racket produced before the fold.
+        guard let reason = notebookCheckKindUnsupportedReason(check.kind, language: language)
+        else { break }
         throw Abort(
             .unprocessableEntity,
             reason:
                 "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not available for "
-                + "C++ assignments: C++ assignments are upload-only, so there is no submitted "
-                + "notebook to check. Use a pattern family or a hand-written .sh test instead."
+                + "\(language.displayName) assignments: \(reason) Use a pattern family or a "
+                + "hand-written \(handWrittenTestExtension(language)) test instead."
         )
-    case .racket:
-        // Categorical for the same structural reason as C++ — upload-only, so
-        // no submitted notebook exists for any kind to inspect. The refusal is
-        // NOT a statement about Racket's expressiveness: several kinds would
-        // render fine against a notebook if one existed. If a Scheme-family
-        // kernel ever lands on the channel, this arm is what to revisit.
-        throw Abort(
-            .unprocessableEntity,
-            reason:
-                "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not available for "
-                + "Racket assignments: Racket assignments are upload-only, so there is no "
-                + "submitted notebook to check. Use a pattern family or a hand-written .rkt "
-                + "test instead."
-        )
+    }
+}
+
+/// The file extension an instructor should reach for when writing a test by
+/// hand in `language`.
+///
+/// Not simply `sourceFileExtension`, and C++ is why: a bare `.cpp` is not
+/// something the runner executes (there is no C++ `ScriptInterpreter` case, by
+/// design), so a C++ author's hand-written test is a `.sh` wrapper. Java's
+/// `.java` *is* executable — single-file source mode — so it answers its own
+/// extension even though its GENERATED cases are `.sh` wrappers like C++'s.
+/// That difference is exactly why this cannot be derived from
+/// `generatesLanguagelessWrapper`.
+private func handWrittenTestExtension(_ language: AssignmentLanguage) -> String {
+    switch language {
+    case .cpp: return ".sh"
+    case .racket, .java, .python, .r, .lua, .octave:
+        return ".\(language.sourceFileExtension)"
     }
 }
 

@@ -247,3 +247,25 @@ func racketVariableEqualityCase(
                                \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaVariableEqualityBody(
+    family: PatternFamily, context: JavaCallContext, c: PatternCase
+) -> String {
+    // The "function name" IS the variable for this kind, and for Java it is a
+    // qualified `Class.field` — the same rule the callable kinds follow, for
+    // the same reason: Java has no free variables either. Referencing it is the
+    // existence check, since a missing field is a compile error the wrapper
+    // reports as exit 2.
+    let variable = family.functionName
+    return """
+        var expected = \(context.expectedExpression);
+        if (!ck.equal(\(variable), expected)) {
+            ck.failed("Variable `\(variable)` has the \(GeneratedMessage.wrongValue)\\n"
+                + "\(GeneratedMessage.expected)" + ck.format(expected) + "\\n"
+                + "\(GeneratedMessage.got)" + ck.format(\(variable)));
+        }
+        ck.passed("\(variable) is " + ck.format(\(variable)));
+        """
+}

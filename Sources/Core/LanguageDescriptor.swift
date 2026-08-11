@@ -506,7 +506,34 @@ extension AssignmentLanguage {
         case .octave: return Self.octaveDescriptor
         case .cpp: return Self.cppDescriptor
         case .racket: return Self.racketDescriptor
+        case .java: return Self.javaDescriptor
         }
+    }
+
+    /// True when this language's generated cases are wrappers written in a
+    /// language that carries NO signal of its own — today, POSIX shell.
+    ///
+    /// THE FACT THAT REPLACED SIX HARDCODED `== .cpp` FORKS. While C++ was the
+    /// only `.sh`-generating language, "is this C++?" and "does a generated
+    /// script of this language classify back to it?" were the same question,
+    /// and six tests and helpers spelled it the first way. They are different
+    /// questions, and Java is the case that separates them: its generated cases
+    /// are `.sh` wrappers too, so every one of those forks would have answered
+    /// "no" for a language that needed "yes".
+    ///
+    /// Two consequences follow for such a language, and both are what the forks
+    /// were really testing:
+    ///
+    ///   * a generated script cannot classify back to it, so `.sh` keeps
+    ///     carrying no language signal and every hand-written shell suite in
+    ///     every course stays language-less; and
+    ///   * the assignment's **declaration** is therefore the only resolution
+    ///     signal it has (`SubmissionStaging.manifestOwningLanguage`).
+    ///
+    /// Derived rather than stored, so a language cannot claim it and then
+    /// contradict itself with its own extensions.
+    public var generatesLanguagelessWrapper: Bool {
+        !descriptor.scriptExtensions.contains(descriptor.generatedScriptExtension.lowercased())
     }
 
     private static let pythonDescriptor = LanguageDescriptor(
@@ -740,6 +767,85 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner hands a file to `racket`. Nothing is
         // built, so there is no second capability to prove.
+        capabilityRequiresExecutableOutput: false
+    )
+    private static let javaDescriptor = LanguageDescriptor(
+        displayName: "Java",
+        // `.java` only. Unlike C++, a hand-added `.java` suite entry IS
+        // directly runnable: `ScriptInterpreter.java` spawns `java` on
+        // it, and Java 11+ single-file source mode compiles and runs one
+        // file. That is strictly more than `.cpp` gets, and it costs
+        // nothing — the limitation source mode has (it compiles exactly
+        // ONE file, seeing no siblings) is precisely why GENERATED cases
+        // are wrappers instead.
+        scriptExtensions: ["java"],
+        // The generated case is a shell script: heredoc the test source,
+        // `javac` it — which pulls the student's class and
+        // `_ck_inputs.java` in from the sourcepath on demand — then run
+        // it under the ordinary shell-script contract.
+        //
+        // The SECOND language to answer `"sh"`, and the reason
+        // `generatesLanguagelessWrapper` exists. See that property, and
+        // note the uniqueness pin in `LanguageDescriptorTests` exempts
+        // this value for exactly the languages it describes.
+        generatedScriptExtension: "sh",
+        sourceFileExtension: "java",
+        lineCommentPrefix: "//",
+        functionScan: .noSolutionNotebook,
+        autoCompute: .serverDriver,
+        // A class of `public static final` fields — see
+        // `renderInputsFile`. `_ck_inputs` is a legal Java identifier and
+        // must match the filename, which Java requires of a public class.
+        inputsFileName: "_ck_inputs.java",
+        // No notebook workflow, so no kernel aliases to claim — C++'s and
+        // Racket's reason, not Python's default-by-fallthrough.
+        notebookKernelNames: [],
+        // No vendored kernel. Both available arguments agree here: no
+        // xeus Java kernel exists on the channel, AND a browser kernel
+        // would grade a different toolchain than the course's javac,
+        // which is the pedagogy defect C++ settled on avoiding.
+        editorSupport: .uploadOnly,
+        // `javac`, NOT `java`, and the difference is the whole point. The
+        // real skew is a JRE-only host: `java --version` succeeds there,
+        // the runner advertises Java, and every test dies at `javac:
+        // not found` — exit 127, which reads as a broken test script and
+        // gets debugged as one. Probing the compiler covers both binaries,
+        // since no JDK package ships `javac` without `java`.
+        //
+        // `--version` (not `-version`): the old form prints to STDERR and
+        // quotes the number (`openjdk version "21.0.10"`). The detector
+        // reads both streams and tolerates the quote, so either happens to
+        // parse today — but `javac --version` prints `javac 21.0.10` to
+        // stdout and exits 0, which is the answer that does not depend on
+        // a tolerance. Measured on 21.0.10.
+        //
+        // Probe-differs-from-run is the accepted R precedent (`R` vs
+        // `Rscript`); `RunCommandMatchesInvocationTests` pins the run
+        // command separately.
+        interpreterProbe: .init(command: "javac", versionArguments: ["--version"]),
+        scriptRunCommand: "java",
+        // `import` IS by-name resolution against a search path, and the
+        // path variable is `CLASSPATH` — exactly what this file's
+        // scorecard predicted for Java before the language existed.
+        moduleResolution: .byName(searchPathVariable: "CLASSPATH"),
+        // MEASURED, and it is the field the Octave run proved you cannot
+        // reason your way to: `.` is on the default classpath — but ONLY
+        // while CLASSPATH is unset. Setting it REPLACES the default rather
+        // than extending it, so `java -cp /somewhere Test` cannot find a
+        // class in the working directory. That is Lua's `LUA_PATH` trap in
+        // a new costume, and it is why the derivation must return nil here
+        // rather than helpfully exporting a variable that would break the
+        // very lookup it was meant to enable.
+        workingDirectoryIsOnDefaultSearchPath: true,
+        // False, deliberately, and NOT because Java is uncompiled. The
+        // property asks whether grading EXECUTES a file it just produced,
+        // because that is a second capability a `--version` probe cannot
+        // see (`g++ --version` succeeds on a `noexec` work directory; the
+        // binary it writes will not run). Java's artefacts are `.class`
+        // files that the JVM READS — `noexec` does not block them, and
+        // nothing is ever handed to the kernel as an executable. The
+        // capability this language can genuinely lack is the compiler, and
+        // that is covered by probing `javac` above.
         capabilityRequiresExecutableOutput: false
     )
 }

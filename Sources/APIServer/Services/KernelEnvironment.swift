@@ -104,6 +104,11 @@ struct KernelEnvironment: Sendable {
         // exists on the channel to vendor. Resolves to a path that is not
         // there, so no inventory loads and nothing is checked.
         case .racket: return "chickadee-racket"
+        // Same outcome again, and both of the other two reasons at once: no
+        // xeus Java kernel exists on the channel, and a browser kernel would
+        // grade a different toolchain than the course's javac. Resolves to a
+        // path that is not there, so nothing loads and nothing is checked.
+        case .java: return "chickadee-java"
         }
     }
 

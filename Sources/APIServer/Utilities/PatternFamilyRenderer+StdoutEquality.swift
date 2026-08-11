@@ -338,3 +338,27 @@ func racketStdoutCase(
                                \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format printed))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaStdoutBody(
+    target: String, context: JavaCallContext, c: PatternCase
+) -> String {
+    javaGuarded(
+        """
+        var expected = \(context.expectedExpression);
+        ck.beginCapture();
+        \(target)(\(context.callArgs));
+        String ckPrinted = ck.endCapture();
+        // Trailing-newline tolerance, matching the other stdout renderers.
+        ckPrinted = ckPrinted.replaceAll("[\\r\\n]+$", "");
+        String ckWanted = String.valueOf(expected).replaceAll("[\\r\\n]+$", "");
+        if (!ckPrinted.equals(ckWanted)) {
+            ck.failed("\(GeneratedMessage.wrongOutput)\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)" + ck.format(ckWanted) + "\\n"
+                + "\(GeneratedMessage.got)" + ck.format(ckPrinted));
+        }
+        ck.passed("Printed the expected output");
+        """, inputLine: context.inputLine)
+}

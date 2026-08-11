@@ -305,3 +305,23 @@ func racketApproximateCase(
                                \(JSONValue.string(GeneratedMessage.delta).racketLiteral) (chickadee-format delta))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaApproximateBody(
+    target: String, context: JavaCallContext, c: PatternCase, family: PatternFamily
+) -> String {
+    let tolerance = family.defaults.tolerance ?? 1e-6
+    return javaGuarded(
+        """
+        var expected = \(context.expectedExpression);
+        var result = \(target)(\(context.callArgs));
+        if (!ck.close(result, expected, \(tolerance))) {
+            ck.failed("\(GeneratedMessage.outsideTolerance)\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)" + ck.format(expected) + " (±\(tolerance))\\n"
+                + "\(GeneratedMessage.got)" + ck.format(result));
+        }
+        ck.passed("\(GeneratedMessage.returned)" + ck.format(result) + " (within ±\(tolerance))");
+        """, inputLine: context.inputLine)
+}

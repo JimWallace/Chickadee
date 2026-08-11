@@ -175,6 +175,14 @@ extension PublishedAssignmentRoutes {
                 ? nil : "(\(functionName) \(arguments.joined(separator: " ")))"
         case .cpp:
             return captureStdout ? nil : "\(functionName)(\(args))"
+        case .java:
+            // `functionName` is already the qualified `Class.method` a Java
+            // family carries, so it interpolates as written. No stdout capture:
+            // Java's spelling is a `System.setOut` swap around the call, which
+            // is three statements and does not fit the evaluator's
+            // single-expression contract — the same answer Python, Lua, Racket
+            // and C++ give, for the same reason.
+            return captureStdout ? nil : "\(functionName)(\(args))"
         }
     }
 }

@@ -108,7 +108,19 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         fonts-freefont-otf \
         g++ \
         racket \
+        default-jdk \
     && rm -rf /var/lib/apt/lists/*
+# default-jdk — javac and java, for the fifth and sixth reasons this image
+# carries a toolchain. On the SERVER image because the Java personalization
+# driver compiles a generated program per `=`-expression evaluation; on the
+# RUNNER image because every generated Java test is a `.sh` wrapper that runs
+# javac before java. Both halves need the COMPILER, which is why the capability
+# probe is `javac --version` and not `java --version`: a JRE-only host would
+# advertise Java and then fail every test at exit 127.
+#
+# `default-jdk` rather than a pinned `openjdk-N-jdk`: it tracks the base image's
+# LTS (21 on noble) and needs no bump when the base moves. ~350 MB installed,
+# the same order as the octave line below and accepted on the same grounds.
 # racket — the interpreter generated .rkt tests are handed to, and the one the
 # Racket personalization driver runs under. The Debian package carries the HtDP
 # teaching-language collections (`#lang htdp/bsl`), which is what CS 135/115

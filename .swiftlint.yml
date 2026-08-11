@@ -111,8 +111,20 @@ type_name:
 # tuning can lower these in tandem with real refactors without
 # re-deriving the right ratios.
 
+# Raised 15 -> 18 when Java became the seventh language. The two functions that
+# tripped it are `classifyScriptInterpreter` and `scriptInvocation`, and both are
+# FLAT DISPATCH TABLES — one arm per file extension, one arm per interpreter —
+# where each arm is a single `return`. Their complexity score grows by one for
+# every language the system learns, and nothing about them gets harder to read.
+#
+# Splitting either to satisfy the metric would make it worse: the whole value of
+# those functions is that the complete extension-to-interpreter mapping is
+# visible in one place, which is what the extensionless-dispatch bug (#754) cost
+# us when it was not. Per the repo's own rule, the threshold moves rather than
+# `--strict` being dropped. 18 leaves room for one more language before this
+# needs revisiting.
 cyclomatic_complexity:
-  warning: 15
+  warning: 18
   error: 40
 
 function_body_length:

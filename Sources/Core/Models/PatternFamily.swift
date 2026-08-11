@@ -373,7 +373,29 @@ extension PatternFamily {
     /// identifier outright, which is the same rule that makes the per-student
     /// inputs file bind `.ck_inputs` rather than `_ck`. One spelling has to
     /// work in all six languages, because the instructor types it.
-    public var differentialReferenceName: String { "ck_ref_\(functionName)" }
+    /// The name the generated differential test calls, and the name the
+    /// instructor's reference implementation must define.
+    ///
+    /// DOTS BECOME UNDERSCORES, because a function name is not always a bare
+    /// identifier. Java targets are qualified (`Solution.f`, since Java has no
+    /// free functions and a public class must live in a file of its own name),
+    /// and `ck_ref_Solution.f` is not a legal identifier in any language — it
+    /// made the generated test fail to compile AND made the save-time validator
+    /// demand a name no instructor could write. Both halves read this one
+    /// property, so sanitizing here fixes them together and cannot let them
+    /// disagree.
+    ///
+    /// No language parameter, deliberately: `.` is not legal in an identifier
+    /// in any of the six other languages either, so replacing it is right for
+    /// all of them rather than a Java special case. The one language it could
+    /// affect is R, whose identifiers genuinely may contain dots (`my.fn` →
+    /// `ck_ref_my_fn` rather than `ck_ref_my.fn`). No fixture or stored family
+    /// uses a dotted function name, and the change surfaces as a loud
+    /// validation error naming the expected name rather than a silent
+    /// mis-generation.
+    public var differentialReferenceName: String {
+        "ck_ref_" + functionName.replacingOccurrences(of: ".", with: "_")
+    }
 }
 
 extension PatternCase {

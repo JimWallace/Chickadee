@@ -45,7 +45,7 @@ FROM ${BASE_IMAGE}
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl \
         r-base python3-pandas python3-matplotlib lua5.4 octave \
-        gnuplot-nox fonts-freefont-otf g++ racket \
+        gnuplot-nox fonts-freefont-otf g++ racket default-jdk \
         nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # octave     — provides /usr/bin/octave-cli for the Octave execution-path

@@ -230,8 +230,35 @@ and `racket --version`'s letter-led `v8.10` defeating the runner's version parse
 — are fixed, each with an `allCases` guard; a Racket assignment still needs a
 runner new enough to carry both. See `docs/multi-language-audit.md`.
 
+**Java is the seventh assignment language, and the third upload-only one.**
+Both reasons the other two are upload-only hold at once: no JVM kernel exists on
+the channel (Racket's contingent reason) *and* a browser kernel would grade a
+different toolchain than the course's `javac` (C++'s principled one). Its
+generated cases are `.sh` wrappers like C++'s — the SECOND language to answer
+`generatedScriptExtension: "sh"`, which is what turned six hardcoded
+`language == .cpp` forks into the derived
+`LanguageDescriptor.generatesLanguagelessWrapper`. Generating `.java` cannot
+work: single-file source mode compiles exactly one file and sees neither the
+student's class nor `test_runtime.java`, while the wrapper's `javac` pulls both
+in from the sourcepath on demand. All nine pattern kinds render and execute; all
+ten notebook checks are refused categorically. Three measured traps shape it: a
+student's **`System.exit(0)` would make every test read as a pass** (the
+`quit()`/`os.exit`/`exit` hazard, but in the NATIVE path, where
+`SecurityManager` is deprecated for removal — so every verdict prints a sentinel
+the wrapper checks for); **`Integer.valueOf(1).equals(Long.valueOf(1L))` is
+false**, so `ck.equal` compares numerically or a `long`-returning submission is
+silently marked wrong; and **setting `CLASSPATH` REPLACES the default `.`**, the
+`LUA_PATH` trap again and the third case proving `moduleResolution` and
+`workingDirectoryIsOnDefaultSearchPath` must be asked separately. Unlike C++ it
+needs no literal refusal table (`Object` + autoboxing render every `JSONValue`
+shape), but it has its own literal rules: `Arrays.asList` never `List.of` (which
+throws on null), `int` unless the value exceeds int32 (Java widens but never
+narrows), and **never a backslash-u escape**, which javac processes in the lexer
+and which would break the source file. The probe is `javac --version`, not
+`java`: a JRE-only host is the real skew. See `docs/java-support.md`.
+
 **Every assignment DECLARES its language. Nothing infers one (v0.5.59, #1331).**
-`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket`, Core) is
+`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket | .java`, Core) is
 read from the manifest and nowhere else: `resolve(manifest:)` returns
 `manifest.language`, full stop. Declaration is a **requirement**, and every door
 that creates an assignment enforces it — the web create page's `required`
@@ -290,10 +317,10 @@ table. Also `docs/r-support.md`.
 **A declared language is NOT exclusive. Shell is the substrate every assignment
 sits on.** Two concepts do two jobs and are routinely confused for one:
 `ScriptInterpreter` (RunnerCore) is **per script**, derived from extension →
-shebang → content, and has thirteen cases including `sh`, `bash`, `zsh`, `ruby`,
+shebang → content, and has fourteen cases including `sh`, `bash`, `zsh`, `ruby`,
 `perl`, `node` and `php` — interpreters the runner dispatches but Chickadee
 cannot author in. `AssignmentLanguage` (Core) is **per assignment**, declared,
-and has six. The declaration governs what Chickadee **generates**; the script's
+and has seven. The declaration governs what Chickadee **generates**; the script's
 own extension governs how it **runs**. `TestSuiteEntry` carries no language
 field precisely because of this: `scriptInvocation(for:)` takes only a URL, and
 the runner stages *every* language's `test_runtime.*` into every job workspace,
@@ -1219,8 +1246,8 @@ Full design, runbook, and host steps:
 
 **The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
 course offering run on Chickadee and the pivot to next year's feature work.
-The system is a working client–server autograder: Python, R, Lua, Octave, C++
-and Racket assignments;
+The system is a working client–server autograder: Python, R, Lua, Octave, C++,
+Racket and Java assignments;
 browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (8 kinds) and notebook checks (10 kinds); achievements; student slip days;
@@ -1420,6 +1447,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/cpp-assignment-language-decision.md` — why C++ stays on the shell-script + makefile path rather than becoming an `AssignmentLanguage`: the one-file-one-command invocation mismatch, the typed-literal impossibility, and the Clang-REPL-vs-course-toolchain pedagogy problem; the priced revisit condition
 - `docs/authoring-parity.md` — what an instructor authoring in R, Lua, Octave, C++ or Racket can and cannot do that a Python author can, which differences are defects and which are correct refusals. Its work list is complete; what survives is the reasoning behind the parity checklist in `adding-a-xeus-kernel.md`, including the gaps that are correct as they stand and have been re-litigated more than once
 - `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (two still open — `.rkt` dispatching to `/bin/sh`, and `racket --version`'s letter-led token defeating the runner's version parser, confirmed against the production fleet), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect
+- `docs/java-support.md` — first-class Java support: why both upload-only arguments hold at once, why generated cases are `.sh` wrappers (single-file source mode compiles exactly one file), the three measured traps (`System.exit` hijacking the exit code, type-strict boxed numeric equality, `CLASSPATH` replacing the default `.`), the literal rules that replace C++'s refusal table, and why the capability probe is `javac` rather than `java`
 - `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 27 compiler-named switch arms across 17 files, the **nine** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy; the ninth whether the generated scripts DISPATCH at all, which the RunnerCore/Core dependency direction means the compiler probably never will see), the authoring-UI section that exists to stop you working (a seventh language needs ZERO JavaScript edits, and the failure mode is going to look for one), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed. Extended after the in-page auto-compute and `differential` work: the eval-worker half a kernel language also owes the editor (renderer → snippets → worker → smoke row → and only THEN the descriptor, because a descriptor naming a worker that does not exist makes the editor spawn a 404 silently), a per-kernel eval-quirk table (each of the three kernels needed a different shape rule and none inherited its neighbour's), the per-language literal traps (three of four are a null-ish value silently changing a container's length, and all three needed different rules), and a **parity checklist** separating what a seventh language now gets free from `allCases` — all 9 pattern kinds, both Add Test renderings, the authoring UI, the whole MCP surface, the browser inputs filename, the vendoring guard — from the four things that remain genuinely per-language
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
 - `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)

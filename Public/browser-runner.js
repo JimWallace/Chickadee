@@ -104,7 +104,7 @@
     // them here is what omitted `.lua`, leaving a Lua upload with no hint and
     // test_runtime.lua (which cannot list a directory) unable to find it.
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:BEGIN
-    const GRADED_SCRIPT_EXTENSIONS = ['.cpp', '.h', '.hpp', '.lua', '.m', '.py', '.r', '.rkt'];
+    const GRADED_SCRIPT_EXTENSIONS = ['.cpp', '.h', '.hpp', '.java', '.lua', '.m', '.py', '.r', '.rkt'];
     // CHICKADEE_GENERATED:GRADED_SCRIPT_EXTENSIONS:END
 
     // The per-student inputs file each language's test_runtime reads. A
@@ -115,7 +115,7 @@
     // upload-only ones a browser never grades; deciding here which languages
     // "matter" would be one more list to keep current.
     // CHICKADEE_GENERATED:INPUTS_FILE_NAMES:BEGIN
-    const INPUTS_FILE_NAMES = { cpp: '_ck_inputs.hpp', lua: '_ck_inputs.lua', octave: '_ck_inputs.m', python: '_ck_inputs.py', r: '_ck_inputs.R', racket: '_ck_inputs.rkt' };
+    const INPUTS_FILE_NAMES = { cpp: '_ck_inputs.hpp', java: '_ck_inputs.java', lua: '_ck_inputs.lua', octave: '_ck_inputs.m', python: '_ck_inputs.py', r: '_ck_inputs.R', racket: '_ck_inputs.rkt' };
     // CHICKADEE_GENERATED:INPUTS_FILE_NAMES:END
 
     // The Web Worker that grades each kernel language. A GENERATED copy of
@@ -138,7 +138,7 @@
     // `LanguageDescriptor.displayName`. The raw value is a wire token, so
     // "r grading needs Web Worker support" would read like a typo.
     // CHICKADEE_GENERATED:LANGUAGE_LABELS:BEGIN
-    const LANGUAGE_LABELS = { cpp: 'C++', lua: 'Lua', octave: 'Octave', python: 'Python', r: 'R', racket: 'Racket' };
+    const LANGUAGE_LABELS = { cpp: 'C++', java: 'Java', lua: 'Lua', octave: 'Octave', python: 'Python', r: 'R', racket: 'Racket' };
     // CHICKADEE_GENERATED:LANGUAGE_LABELS:END
 
     // CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:BEGIN

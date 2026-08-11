@@ -107,6 +107,44 @@ import Testing
     /// premise is that they are readable side by side.
     static func adapter(for language: AssignmentLanguage) -> Adapter {
         switch language {
+        case .java:
+            // Java's generated "scripts" are POSIX shell wrappers like C++'s,
+            // so the glue runs through `sh -c` on the same substrate the runner
+            // uses, and the parse check is `sh -n` over the wrapper (the Java
+            // inside is executed, not parsed, by the execution suite).
+            //
+            // The availability probe goes through sh TO **javac**, not `java`:
+            // the compiler is the binary a JRE-only host lacks, and it is what
+            // the descriptor probes for the same reason.
+            //
+            // Reading the inputs file compiles a two-line class against
+            // `_ck_inputs.java`, which javac pulls in from the sourcepath
+            // because its filename matches its class name. `-cp .` is explicit
+            // rather than relied upon: it is on the default classpath only
+            // while CLASSPATH is unset, and this runs in whatever environment
+            // CI has.
+            return Adapter(
+                interpreter: "sh",
+                evalFlag: "-c",
+                versionArguments: ["-c", "javac --version"],
+                debianPackage: "default-jdk",
+                toolchainProbeCommand: "javac",
+                parseOnlyProgram: { path in
+                    "sh -n '\(path)'"
+                },
+                readInputsProgram: { key in
+                    """
+                    cat > CkReadInputs.java <<'CK_READ_EOF'
+                    public class CkReadInputs {
+                        public static void main(String[] a) {
+                            System.out.println(_ck_inputs.\(key));
+                        }
+                    }
+                    CK_READ_EOF
+                    javac -cp . -d . CkReadInputs.java && java -cp . CkReadInputs
+                    """
+                }
+            )
         case .cpp:
             // C++ has no interpreter, and its generated "scripts" are POSIX
             // shell wrappers carrying the C++ source in a heredoc — so the
@@ -267,13 +305,17 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func everyLanguageDeclaresAUsableScriptExtension(_ language: AssignmentLanguage) {
         #expect(!language.scriptExtensions.isEmpty)
-        // C++ breaks the round-trip DELIBERATELY: its generated cases are
-        // POSIX shell wrappers (`.sh` — the compile step lives inside the
-        // script), and `.sh` must keep carrying no language signal, or every
-        // hand-written shell suite in every course would suddenly sniff as
-        // C++. The wrapper never needs to classify back: the runner runs it
-        // as the shell script it is.
-        guard language != .cpp else {
+        // A WRAPPER LANGUAGE breaks the round-trip DELIBERATELY: its generated
+        // cases are POSIX shell wrappers (`.sh` — the compile step lives inside
+        // the script), and `.sh` must keep carrying no language signal, or
+        // every hand-written shell suite in every course would suddenly sniff
+        // as that language. The wrapper never needs to classify back: the
+        // runner runs it as the shell script it is.
+        //
+        // Asked as `generatesLanguagelessWrapper` rather than `== .cpp`, which
+        // is what this read before Java became the second such language and
+        // would have failed it for doing exactly the same correct thing.
+        guard !language.generatesLanguagelessWrapper else {
             #expect(language.generatedScriptExtension == "sh")
             #expect(AssignmentLanguage(scriptExtension: "sh") == nil)
             return

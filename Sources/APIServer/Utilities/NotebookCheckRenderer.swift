@@ -85,6 +85,16 @@ func renderNotebookCheck(
             (eprintf "Notebook checks are not available for Racket assignments.\\n")
             (exit 2)
             """
+    case .java:
+        // Unreachable for the same reason as C++ and Racket, and kept total the
+        // same way. A shell script like C++'s, not a `.java` one, because
+        // Java's generated extension is `sh` — this file is named
+        // `<something>.sh` and the runner hands it to `/bin/sh`.
+        source = """
+            #!/bin/sh
+            echo "Notebook checks are not available for Java assignments." 1>&2
+            exit 2
+            """
     }
     let displayName = check.name ?? handler.defaultLabel(check)
     let sidecars = handler.sidecars(check)

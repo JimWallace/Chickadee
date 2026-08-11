@@ -126,7 +126,7 @@ import Testing
         //    proves its delivery instead.
         let inputs = resolved.renderInputsFile(["threshold": resolved.literal(.int(42))])
         #expect(!inputs.isEmpty, "\(resolved) rendered an empty inputs file")
-        if resolved != .cpp {
+        if !resolved.generatesLanguagelessWrapper {
             #expect(
                 resolved.inputsFileName.lowercased()
                     .hasSuffix(".\(resolved.generatedScriptExtension.lowercased())"),

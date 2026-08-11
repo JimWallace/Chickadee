@@ -234,7 +234,7 @@ private func assembleExtractedSource(
     language: AssignmentLanguage, cells: [[String: Any]], filename: String
 ) -> String {
     switch language {
-    case .r, .lua, .octave, .cpp, .racket:
+    case .r, .lua, .octave, .cpp, .racket, .java:
         // Flattening concatenates cells, which loses the boundaries a
         // source-level check (`.cellContains`) needs.  Python keeps them
         // because `wrapCellForResilientLoad` labels each cell; the others get
@@ -258,6 +258,7 @@ private func assembleExtractedSource(
         case .octave: extracted = extractOctave(cells: inputCells, filename: filename)
         case .cpp: extracted = extractCpp(cells: inputCells, filename: filename)
         case .racket: extracted = extractRacket(cells: inputCells, filename: filename)
+        case .java: extracted = extractJava(cells: inputCells, filename: filename)
         case .r, .python: extracted = extractR(cells: inputCells, filename: filename)
         }
         return extracted.source
