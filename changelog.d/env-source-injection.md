@@ -14,3 +14,15 @@
   `Core/ZipProcessSerialization.swift` was written to stop. They now share
   `writeZipFixture`, which holds `withZipProcessLock` across construction and
   spawn.
+
+### Fixed
+
+- **The browser runner boots the assignment's declared substrate, not Python's.**
+  `RoutingExecutor.ensureReady` treated `PRIMARY_KIND = 'python'` as the runtime
+  the grade depended on, swallowing every other substrate's boot failure
+  whenever Python was present. On an R assignment carrying one stray `.py`, that
+  made R's boot the swallowed one — so every R test posted a real zero while the
+  incidental file got the protection. It now boots the language the assignment
+  declares, and only that one; a script of another kind still runs (its worker
+  boots on first use) and reports its own error. Where no language reaches the
+  browser, every present substrate is required rather than assuming Python.

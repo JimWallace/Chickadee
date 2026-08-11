@@ -397,6 +397,8 @@ function makeFakeGradingWorkerFactory(options) {
       // Records every `run` message's { script, limit } so a test can assert
       // the per-script time limit the executor handed down.
       this.runCalls = [];
+      // Set by the factory below, before any message is posted.
+      this.scriptPath = null;
       created.push(this);
     }
 
@@ -435,7 +437,13 @@ function makeFakeGradingWorkerFactory(options) {
         // `initPending` simulates a worker whose loadPyodide()/env-config never
         // completes (the intermittent Pyodide-314 init hang) — it NEVER replies,
         // so the executor's bounded-init timeout must terminate + retry it.
+        //
+        // `initPendingFor` does the same for ONE substrate, named by its worker
+        // path, so a test can hang R's runtime while Python's stays healthy —
+        // which is the only way to observe WHICH substrate `ensureReady`
+        // treats as required.
         if (options.initPending) return;
+        if ((options.initPendingFor || []).includes(this.scriptPath)) return;
         this._reply({ id: msg.id, ok: true });
         return;
       }
@@ -1955,3 +1963,86 @@ test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', as
 // unloaded — green on the native validation run (numpy installed system-wide),
 // ModuleNotFoundError for every student in the browser.
 
+test('only the declared language\'s substrate is booted up front', async () => {
+  // C, from the ensureReady discussion: an assignment is written in ONE
+  // language and declares it, so that is the runtime whose health the grade
+  // depends on. A script of some other kind still runs — its worker boots on
+  // first use — but it is not this function's problem, and it does not get to
+  // decide whether the grade fails over.
+  //
+  // THIS TEST DOCUMENTS THE SHAPE; it is not the regression guard. The old
+  // `PRIMARY_KIND = 'python'` code also booted both workers, so these
+  // assertions pass against it too. The test below is the discriminating one —
+  // it fails against the old behaviour, which is what makes it worth having.
+  const harness = await loadRunnerHarness({
+    assignmentLanguage: 'r',
+    zipFiles: {
+      'publictest_bmi.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n',
+      'publictest_stray.py': '# stray\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [
+        { script: 'publictest_bmi.R', tier: 'public' },
+        { script: 'publictest_stray.py', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_declared_r',
+  );
+
+  // Both ran: the stray Python script self-booted when it was reached.
+  assert.deepEqual(
+    plain(result.outcomes.map(o => [o.testName, o.status])),
+    [['publictest_bmi', 'pass'], ['publictest_stray', 'pass']],
+  );
+
+  // But R was booted FIRST, by ensureReady, before any script ran. Python's
+  // worker exists only because a script demanded it.
+  const paths = harness.gradingWorkerFactory.created.map(w => w.scriptPath);
+  assert.equal(paths[0], '/r-grading-worker.js', 'the declared substrate boots first');
+  assert.deepEqual([...paths].sort(), ['/python-grading-worker.js', '/r-grading-worker.js']);
+});
+
+test('the declared substrate failing to boot fails the grade over, even when another is healthy', async () => {
+  // THE DEFECT C FIXES. `ensureReady` used to treat `PRIMARY_KIND = 'python'`
+  // as the substrate that mattered, so on an R assignment carrying one stray
+  // `.py` it was R's boot failure that got swallowed — and every R test posted
+  // a real zero while the incidental file enjoyed the protection.
+  //
+  // Here R (declared) cannot start and Python (incidental) is healthy. The
+  // grade must abort so notebook.js fails it over to the native worker, which
+  // returns correct marks. Posting a collection here would record zeros.
+  const harness = await loadRunnerHarness({
+    assignmentLanguage: 'r',
+    initPendingFor: ['/r-grading-worker.js'],
+    gradingInitTimeoutMs: 50,
+    zipFiles: {
+      'publictest_bmi.R': 'source("test_runtime.R")\nJSON_RESULT_PASS\n',
+      'publictest_stray.py': '# stray\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 10,
+      testSuites: [
+        { script: 'publictest_bmi.R', tier: 'public' },
+        { script: 'publictest_stray.py', tier: 'public' },
+      ],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_declared_r_dead',
+    ),
+    /failed to initialize/,
+  );
+  assert.equal(
+    harness.postBodies.length, 0,
+    'a dead declared substrate must fail over, never post zeros for its tests');
+});
