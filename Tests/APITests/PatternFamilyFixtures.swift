@@ -110,13 +110,26 @@ struct PFFixture {
 /// `withApp` (it builds its app directly), so it arms `WedgeWatchdog` itself
 /// — otherwise a wedge whose only in-flight bodies were pattern-family ones
 /// would find the watchdog disarmed.
-func withPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async throws {
+///
+/// The fixture DECLARES Python, because every door that creates a real
+/// assignment declares something and a fixture that skips it is not modelling
+/// anything a user can produce. Pass `declaredLanguage: nil` for the
+/// author-said-None case — a suite of plain `.sh` scripts — which is a real
+/// state with its own rules (no generated tests, no `=` expressions), not the
+/// absence of an answer.
+func withPatternFamilyFixture(
+    declaredLanguage: AssignmentLanguage? = .python,
+    _ body: (PFFixture) async throws -> Void
+) async throws {
     try await WedgeWatchdog.track {
-        try await runPatternFamilyFixture(body)
+        try await runPatternFamilyFixture(declaredLanguage: declaredLanguage, body)
     }
 }
 
-private func runPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async throws {
+private func runPatternFamilyFixture(
+    declaredLanguage: AssignmentLanguage?,
+    _ body: (PFFixture) async throws -> Void
+) async throws {
     let app = try await Application.make(.testing)
     let tmpDir = NSTemporaryDirectory() + "pattern-family-tests-\(UUID().uuidString)/"
 
@@ -135,7 +148,9 @@ private func runPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) a
         let zipPath = tmpDir + "\(UUID().uuidString).zip"
         try pfWriteEmptyZip(at: zipPath)
 
-        let initialManifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false)
+        let initialManifest = try makeWorkerManifestJSON(
+            testSuites: [], includeMakefile: false,
+            language: declaredLanguage, languageDeclared: true)
         let setup = APITestSetup(
             id: "pf_test_\(UUID().uuidString.prefix(8))",
             manifest: initialManifest, zipPath: zipPath, courseID: courseID

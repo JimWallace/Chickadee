@@ -242,6 +242,16 @@ func makeWorkerManifestJSON(
     builtInAchievementsSeeded: Bool = false,
     datasets: [DatasetSpec] = [],
     language: AssignmentLanguage? = nil,
+    // Whether the assignment's author has ANSWERED the language question, which
+    // is a different fact from the answer and has to travel with it.
+    //
+    // This builder writes a fresh dict, so every field it does not know about is
+    // dropped by a rebuild. `languageDeclared` was one of them, and dropping it
+    // is what turns "the author picked None" back into "nobody has been asked" —
+    // the exact conflation the declaration rule exists to remove. Rebuild
+    // callers pass the previous manifest's value; a caller creating a manifest
+    // from nothing leaves it false and declares separately.
+    languageDeclared: Bool = false,
     minimumRunnerVersion: String? = nil
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
@@ -268,6 +278,9 @@ func makeWorkerManifestJSON(
     // it — Python included — so the answer is stated, not re-inferred later.
     if let language {
         manifest["language"] = language.rawValue
+    }
+    if languageDeclared {
+        manifest["languageDeclared"] = true
     }
     // Optional minimum-runner-version gate.  Threaded through like `language`
     // so a suite/script/family rebuild never silently un-gates an assignment;

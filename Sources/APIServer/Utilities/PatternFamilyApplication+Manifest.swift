@@ -21,7 +21,7 @@ func rebuildPatternFamilyManifest(
     previousProps props: TestProperties,
     families: [PatternFamily],
     inputs: ResolvedApplyInputs,
-    language: AssignmentLanguage
+    language: AssignmentLanguage?
 ) throws -> String {
     let newManifest = try makeWorkerManifestJSON(
         testSuites: entries,
@@ -40,15 +40,24 @@ func rebuildPatternFamilyManifest(
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
         datasets: props.datasets,
-        // Always record the language, Python included. An explicit answer is
-        // the point: a suite that later holds only pattern families has no
-        // `.R` script left to sniff, and "we inferred Python" and "this is a
-        // Python assignment" should not be the same state. The first save of
-        // a pre-existing assignment therefore changes its manifest hash once,
-        // which re-keys the runner's TestSetupCache and triggers one
-        // revision-retest fan-out for that assignment — a bounded, one-time
-        // cost accepted in exchange for the language never being re-inferred.
+        // Always record the language the author DECLARED, Python included —
+        // and nil when they declared none. An explicit answer is the point: a
+        // suite that later holds only pattern families has no `.R` script left
+        // to sniff, and "we inferred Python" and "this is a Python assignment"
+        // should not be the same state. The first save of a pre-existing
+        // assignment therefore changes its manifest hash once, which re-keys
+        // the runner's TestSetupCache and triggers one revision-retest fan-out
+        // for that assignment — a bounded, one-time cost accepted in exchange
+        // for the language never being re-inferred.
+        //
+        // This used to be handed a non-optional that had already been
+        // `?? .python`'d, so reordering two `.sh` scripts on an assignment
+        // whose author chose "None" rewrote its declaration to Python.
         language: language,
+        // Preserved, not recomputed: a rebuild must not un-declare an
+        // assignment, least of all one whose declaration is "none" — which is
+        // exactly the case where `language` alone carries no evidence.
+        languageDeclared: props.languageDeclared == true,
         minimumRunnerVersion: props.minimumRunnerVersion
     )
 

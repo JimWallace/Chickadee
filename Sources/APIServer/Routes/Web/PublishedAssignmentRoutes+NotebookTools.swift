@@ -83,8 +83,9 @@ extension PublishedAssignmentRoutes {
         // recognisable is a hand-crafted one that used to scan fine. The
         // distinction being restored is between the languages we can read and
         // the ones we cannot — not between declared and undeclared.
+        let scannedLanguage = requestedLanguage ?? notebookLanguage
         let scan = scanNotebookForSectionsAndFunctions(
-            notebookData, language: requestedLanguage ?? notebookLanguage ?? .python)
+            notebookData, language: scannedLanguage ?? .python)
 
         // Forward ALL fields the scanner produces — not just a hand-picked
         // subset.  Pre-v0.4.94 this DTO dropped `paramTypes`, `returnType`,
@@ -123,7 +124,18 @@ extension PublishedAssignmentRoutes {
                 hasDocstring: fn.hasDocstring,
                 isShadowed: fn.isShadowed,
                 sectionName: entry.sectionName,
-                templates: allTemplateInfos(functionName: fn.name, paramNames: fn.paramNames)
+                // The language, PASSED. Omitting it took `allTemplateInfos`'
+                // default and handed every author — R, Lua, Octave, C++,
+                // Racket — the Python shell templates, which is the exact
+                // defect `shellTestScript` was taught to render per-language
+                // for. The default is gone now, so this cannot silently
+                // regress. Unlike the scan itself, an unrecognised notebook
+                // does NOT become Python here: a template with no language is
+                // a shell scaffold, which is a better answer than a confident
+                // `python3` for a suite nobody has claimed.
+                templates: allTemplateInfos(
+                    functionName: fn.name, paramNames: fn.paramNames,
+                    language: scannedLanguage)
             )
         }
 

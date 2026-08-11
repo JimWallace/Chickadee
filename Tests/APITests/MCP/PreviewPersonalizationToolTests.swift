@@ -48,7 +48,7 @@ import Vapor
 
     @Test func resolvesLiteralsAndExpressionsForExplicitSeed() async throws {
         let manifest = #"""
-            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}
             """#
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -69,7 +69,7 @@ import Vapor
 
     @Test func literalOnlyNeedsNoSeed() async throws {
         let manifest = #"""
-            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}]}
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}]}
             """#
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -84,7 +84,8 @@ import Vapor
     }
 
     @Test func invalidSeedThrows() async throws {
-        let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+        let manifest =
+            #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
@@ -105,7 +106,7 @@ import Vapor
         // markers added via `update_notebook`. A *different* notebook in the zip
         // proves the audit prefers the blob.
         let manifest = #"""
-            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"starterNotebook":"starter.ipynb","globalVariables":[{"name":"cap","value":5}]}
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"starterNotebook":"starter.ipynb","globalVariables":[{"name":"cap","value":5}]}
             """#
         let blobNotebook = #"""
             {"cells":[{"cell_type":"code","metadata":{},"source":["x = {{cap}}\n","y = {{missing}}"]}],"metadata":{},"nbformat":4,"nbformat_minor":5}
@@ -135,7 +136,7 @@ import Vapor
         // to the zip's starter entry, matching notebookData(for:) and the
         // student first-open path.
         let manifest = #"""
-            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"starterNotebook":"starter.ipynb","globalVariables":[{"name":"cap","value":5}]}
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"starterNotebook":"starter.ipynb","globalVariables":[{"name":"cap","value":5}]}
             """#
         let notebook = #"""
             {"cells":[{"cell_type":"code","metadata":{},"source":["x = {{cap}}"]}],"metadata":{},"nbformat":4,"nbformat_minor":5}
@@ -161,7 +162,7 @@ import Vapor
         // case that references per-student inputs (argVarRefs / expectedVarRef)
         // shows up in `used`, and resolves when the inputs are declared.
         let manifest = #"""
-            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,
             "globalExpressions":[{"name":"patients","expression":"[1, 2, 3]"},
             {"name":"adults_expected","expression":"2"}]}
             """#
@@ -193,7 +194,8 @@ import Vapor
     }
 
     @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+        let manifest =
+            #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")

@@ -160,7 +160,9 @@ import Vapor
                 includeMakefile: false,
                 patternFamilies: draftProps.patternFamilies,
                 notebookChecks: draftProps.notebookChecks,
-                sections: draftProps.sections
+                sections: draftProps.sections,
+                language: draftProps.language,
+                languageDeclared: draftProps.languageDeclared == true
             )
             try await fixture.setup.save(on: fixture.app.db)
 

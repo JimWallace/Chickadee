@@ -327,7 +327,16 @@ extension DraftAssignmentRoutes {
             gradingMode: sectionGradingMode,
             patternFamilies: preserved.families,
             notebookChecks: preserved.checks,
-            sections: preserved.sections
+            sections: preserved.sections,
+            // The draft already carries the author's language — the select on
+            // the create page is `required` and `updateNewAssignmentDraft`
+            // records it before this save runs. Preserving it here is not
+            // belt-and-braces: this builder writes a fresh dict, so leaving it
+            // out silently discarded the declaration at the moment of publish,
+            // and the assignment came out with the language the author picked
+            // erased.
+            language: preserved.props?.language,
+            languageDeclared: preserved.props?.languageDeclared == true
         )
         let setup = try await persistNewAssignmentSetup(
             req: req,

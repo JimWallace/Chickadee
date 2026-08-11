@@ -18,7 +18,8 @@ import Vapor
         )
     }
 
-    private let emptyManifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private let emptyManifest =
+        #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
 
     /// Course + enrolled instructor + setup seeded with the BMI pattern family
     /// (three cases, all enabled) + assignment.  Returns the assignment.

@@ -162,25 +162,24 @@ struct UpdateSolutionTool: ContentTool {
         // language, not by the caller's preference: a language with no notebook
         // workflow has no `.ipynb` to extract source from, so a notebook
         // solution would be stored and then grade as an empty submission.
-        // An assignment with no language signal keeps the notebook workflow:
-        // only `.uploadOnly` languages need a source file, and nothing that has
-        // not named itself is upload-only.
-        let language =
-            setup?.decodedManifest().flatMap {
-                AssignmentLanguage.resolve(manifest: $0)
-            } ?? .python
-        let wantsSourceFile: Bool
-        if case .uploadOnly = language.editorSupport {
-            wantsSourceFile = true
-        } else {
-            wantsSourceFile = false
+        // An assignment that declares no language keeps the notebook workflow:
+        // only `.uploadOnly` languages need a source file, and a declaration of
+        // "none" is not upload-only. So the question is answered WITHOUT a
+        // fallback — this used to read `?? .python`, which named a language it
+        // did not mean in order to reach `.editorSupport`.
+        let language = setup?.decodedManifest().flatMap {
+            AssignmentLanguage.resolve(manifest: $0)
         }
-        if wantsSourceFile, input.notebook != nil {
+        let uploadOnlyLanguage: AssignmentLanguage? = {
+            guard let language, case .uploadOnly = language.editorSupport else { return nil }
+            return language
+        }()
+        if let uploadOnlyLanguage, input.notebook != nil {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail:
-                    "\(language.rawValue) has no notebook workflow, so a notebook cannot serve as its "
-                    + "reference solution. Pass solutionFile ({filename, content}) instead.")
+                    "\(uploadOnlyLanguage.rawValue) has no notebook workflow, so a notebook cannot "
+                    + "serve as its reference solution. Pass solutionFile ({filename, content}) instead.")
         }
 
         let data: Data
@@ -194,6 +193,20 @@ struct UpdateSolutionTool: ContentTool {
                 throw MCPToolError.invalidArguments(
                     tool: Self.name,
                     detail: "solutionFile.filename must be a bare filename with no path separators.")
+            }
+            // Which extensions are acceptable IS a language question, and it
+            // cannot be answered for an assignment that declares none — the
+            // previous `?? .python` answered it as Python, so a `.sh`-suite
+            // assignment accepted `solution.py` and rejected everything else
+            // for a reason nothing in the assignment supported. Refusing is an
+            // authoring-time refusal that names its own fix.
+            guard let language else {
+                throw MCPToolError.invalidArguments(
+                    tool: Self.name,
+                    detail:
+                        "This assignment declares no language, so there is no set of solution-file "
+                        + "extensions to check \"\(name)\" against. Set the assignment's language "
+                        + "with set_assignment_language first.")
             }
             let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
             guard language.scriptExtensions.contains(ext) else {

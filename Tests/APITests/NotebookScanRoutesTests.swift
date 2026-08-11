@@ -66,6 +66,24 @@ import VaporTesting
         }
         """
 
+    /// R source, so an R scan actually finds a function — a Python-source
+    /// notebook scanned as R yields no functions and therefore no templates,
+    /// which would make a template assertion vacuous.
+    private let rNotebookWithOneFunction = """
+        {
+          "cells": [
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": "add <- function(a, b) {\\n  a + b\\n}\\n"
+            }
+          ],
+          "metadata": {},
+          "nbformat": 4,
+          "nbformat_minor": 5
+        }
+        """
+
     private let notebookWithTypeHints = """
         {
           "cells": [
@@ -195,6 +213,45 @@ import VaporTesting
                 }
             )
 
+        }
+    }
+
+    /// The templates come back in the assignment's language.
+    ///
+    /// They did not. `allTemplateInfos` learned to render its three shell
+    /// templates per-language — `solution.R` and `Rscript` for an R assignment,
+    /// and so on for Lua, Octave, C++ and Racket — and this endpoint then
+    /// omitted the argument, taking a `= nil` default that meant Python. So the
+    /// per-language work never reached a browser: every author of every
+    /// language was handed `FILE="solution.py"` and a `python3` invocation,
+    /// which is the exact defect it was written to fix.
+    ///
+    /// The default is gone, so a future caller that forgets gets a compile
+    /// error instead. This asserts the wiring end to end, because a compile
+    /// error cannot see a caller passing the WRONG language.
+    @Test func scanNotebookTemplatesUseTheRequestedLanguage() async throws {
+        try await withApp(try await makeApp()) { app in
+            let cookie = try await loginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/instructor/scan-notebook?language=r",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: rNotebookWithOneFunction)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("\"add\""), "the R scan must find a function first")
+                    #expect(body.contains("solution.R"))
+                    #expect(body.contains("Rscript"))
+                    #expect(!body.contains("solution.py"))
+                    #expect(!body.contains("python3 solution"))
+                }
+            )
         }
     }
 

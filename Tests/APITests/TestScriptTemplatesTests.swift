@@ -159,14 +159,14 @@ import Testing
     }
 
     @Test func shellAlwaysPass() {
-        let s = shellTestScript(type: .alwaysPass)
+        let s = shellTestScript(type: .alwaysPass, language: .python)
         #expect(s.contains("exit 0"))
         #expect(s.contains("#!/bin/sh"))
 
     }
 
     @Test func shellFileExists() {
-        let s = shellTestScript(type: .fileExists)
+        let s = shellTestScript(type: .fileExists, language: .python)
         #expect(s.contains("#!/bin/sh"))
         #expect(s.contains("exit 0"))
         #expect(s.contains("exit 1"))
@@ -175,7 +175,7 @@ import Testing
     }
 
     @Test func shellCommandOutput() {
-        let s = shellTestScript(type: .commandOutput)
+        let s = shellTestScript(type: .commandOutput, language: .python)
         #expect(s.contains("#!/bin/sh"))
         #expect(s.contains("exit 0"))
         #expect(s.contains("exit 1"))
@@ -194,7 +194,10 @@ import Testing
         #expect(fileExists.contains("solution.\(language.sourceFileExtension)"))
 
         let commandOutput = shellTestScript(type: .commandOutput, language: language)
-        #expect(commandOutput.contains(language.descriptor.interpreterProbe.command))
+        // `scriptRunCommand`, not the probe command. This asserted the probe
+        // and passed, which is how `ACTUAL=$(R solution.R 2>&1)` shipped: the
+        // right probe for "is R installed" and a command that runs nothing.
+        #expect(commandOutput.contains(language.descriptor.scriptRunCommand))
         #expect(commandOutput.contains("solution.\(language.sourceFileExtension)"))
 
         guard language != .python else { return }
@@ -217,15 +220,48 @@ import Testing
         #expect(!shellTestScript(type: .commandOutput, language: .lua).contains("-o "))
     }
 
-    /// No declared language keeps the previous bytes exactly.
+    /// An assignment whose author declared NO language gets a scaffold written
+    /// in shell, not in Python.
+    ///
+    /// This asserted the opposite until v0.5.60 — that a language-less suite
+    /// kept the Python bytes exactly — which was the reasonable answer while
+    /// nil meant "nobody has been asked". It means "the author chose None" now,
+    /// and None is precisely the case with no language to name, so the two
+    /// language-shaped values become shell variables the author fills in.
     @Test(arguments: ShellTestTemplateType.allCases)
-    func aLanguagelessSuiteGetsThePythonScaffoldUnchanged(_ type: ShellTestTemplateType) {
-        #expect(shellTestScript(type: type) == shellTestScript(type: type, language: .python))
+    func aLanguagelessSuiteGetsAShellScaffoldNamingNoLanguage(_ type: ShellTestTemplateType) {
+        let none = shellTestScript(type: type, language: nil)
+        #expect(none.contains("#!/bin/sh"))
+        // Python by name, because Python is what it used to emit.
+        #expect(!none.contains("solution.py"))
+        #expect(!none.contains("python3"))
+        // And not any other language's scaffold either. Compared whole rather
+        // than by searching for interpreter names: R's probe command is the
+        // single letter `R`, which matches inside `RUN=` and would pass a
+        // substring check for the wrong reason.
+        for language in AssignmentLanguage.allCases {
+            #expect(!none.contains("solution.\(language.sourceFileExtension)"))
+            if type != .alwaysPass {
+                #expect(
+                    none != shellTestScript(type: type, language: language),
+                    "the language-less scaffold must not be \(language)'s scaffold")
+            }
+        }
+    }
+
+    /// The two decisions a language would have made are handed to the author as
+    /// shell variables with a TODO apiece, rather than guessed.
+    @Test func theLanguagelessCommandTemplateSpendsShellVariables() {
+        let none = shellTestScript(type: .commandOutput, language: nil)
+        #expect(none.contains("FILE=\"submission\""))
+        #expect(none.contains("RUN=\"./$FILE\""))
+        #expect(none.contains("ACTUAL=$($RUN"))
+        #expect(none.components(separatedBy: "TODO").count - 1 >= 2)
     }
 
     @Test func allShellTemplateTypes_nonEmpty() {
         for type in ShellTestTemplateType.allCases {
-            let s = shellTestScript(type: type)
+            let s = shellTestScript(type: type, language: .python)
             #expect(
                 s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                 "Shell template \(type.rawValue) should not be empty")
@@ -236,14 +272,14 @@ import Testing
     // MARK: - allTemplateInfos
 
     @Test func allTemplateInfos_countMatchesTypes() {
-        let infos = allTemplateInfos(functionName: "foo", paramNames: ["x"])
+        let infos = allTemplateInfos(functionName: "foo", paramNames: ["x"], language: .python)
         let expectedCount = PythonTestTemplateType.allCases.count + ShellTestTemplateType.allCases.count
         #expect(infos.count == expectedCount)
 
     }
 
     @Test func allTemplateInfos_eachHasContent() {
-        let infos = allTemplateInfos(functionName: "bar", paramNames: [])
+        let infos = allTemplateInfos(functionName: "bar", paramNames: [], language: .python)
         for info in infos {
             #expect(
                 info.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
@@ -253,7 +289,7 @@ import Testing
     }
 
     @Test func allTemplateInfos_pythonContainFunctionName() {
-        let infos = allTemplateInfos(functionName: "special_fn", paramNames: ["x"])
+        let infos = allTemplateInfos(functionName: "special_fn", paramNames: ["x"], language: .python)
         // Every remaining Python template is function-scoped. `variable_equality`
         // was the one exception and it is gone — the `variableEquality` pattern
         // kind does that job, in all six languages.

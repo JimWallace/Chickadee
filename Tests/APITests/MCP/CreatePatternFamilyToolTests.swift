@@ -18,7 +18,12 @@ import Vapor
         )
     }
 
-    private let emptyManifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    // Declared, because `create_assignment` requires a language and there is no
+    // door that produces an assignment without an answer. A family save on an
+    // assignment whose author chose "None" is refused, and that case has its own
+    // test rather than being every test's accidental starting state.
+    private let emptyManifest =
+        #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
 
     /// Course + enrolled instructor + setup with an EMPTY suite + assignment.
     /// Optionally seeds global `=` expressions so personalized cases can resolve.

@@ -45,7 +45,11 @@ import VaporTesting
                     dependsOn: [], points: 1, displayName: nil
                 ))
         }
-        let manifest = try makeWorkerManifestJSON(testSuites: entries, includeMakefile: false)
+        // Declared, like every assignment a real door produces. An undeclared
+        // fixture would model nothing and would refuse the first family save.
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: entries, includeMakefile: false,
+            language: .python, languageDeclared: true)
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(

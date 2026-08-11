@@ -21,7 +21,7 @@ import Vapor
     }
 
     private let manifest = """
-        {"schemaVersion":1,"testSuites":[\
+        {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1},\
         {"tier":"public","script":"test_b.sh","points":1}\
         ],"timeLimitSeconds":10}

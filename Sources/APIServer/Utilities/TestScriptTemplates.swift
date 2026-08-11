@@ -141,11 +141,21 @@ func pythonTestScript(
 /// filename comes from `sourceFileExtension` and the invocation from
 /// `interpreterProbe`, so no new per-language table exists to go stale.
 ///
-/// nil keeps Python, which is the previous output byte-for-byte and the right
-/// answer for a suite that declares no language.
-func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage? = nil) -> String {
-    let language = language ?? .python
-    let solutionFile = "solution.\(language.sourceFileExtension)"
+/// nil — the author declared NO language — renders in plain shell rather than
+/// falling back to Python. A `.sh` suite is the one case where there is no
+/// language to name, so the two language-shaped values become ordinary shell
+/// variables with a TODO apiece: `FILE` for what the student submits, `RUN` for
+/// the command that runs it. That is a scaffold the author completes, where
+/// `solution.py` + `python3` was a scaffold they had to notice was wrong first.
+///
+/// No default on `language:`. The parameter had one, and the scan endpoint
+/// omitted the argument — so every author of every language got the Python
+/// templates anyway, and the per-language work above never reached a browser.
+func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage?) -> String {
+    // A language names the file it grades; a language-less suite cannot, so the
+    // name becomes a placeholder the author replaces — the TODO beside it is
+    // already there and now means something.
+    let solutionFile = language.map { "solution.\($0.sourceFileExtension)" } ?? "submission"
 
     switch type {
 
@@ -190,14 +200,33 @@ func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage? 
 
 /// The shell lines that run the submission and leave its output in `$ACTUAL`.
 ///
-/// Two shapes, chosen by `capabilityRequiresExecutableOutput` — the fact that
-/// already means "grading this language builds something before running it".
-/// Asking it here rather than switching on `.cpp` keeps the one judgement in
-/// one place; a seventh compiled language gets the compile form for free.
+/// Three shapes. The two language ones are chosen by
+/// `capabilityRequiresExecutableOutput` — the fact that already means "grading
+/// this language builds something before running it". Asking it here rather
+/// than switching on `.cpp` keeps the one judgement in one place; a seventh
+/// compiled language gets the compile form for free.
+///
+/// The third is for an assignment that declares no language, where there is no
+/// interpreter to name and guessing `python3` would be a guess the author has
+/// to catch. It spends two shell variables instead — the same currency the rest
+/// of the template is written in — so what has to be decided is visible as a
+/// TODO rather than buried in a plausible-looking command.
 private func runSubmissionShellFragment(
-    language: AssignmentLanguage, solutionFile: String
+    language: AssignmentLanguage?, solutionFile: String
 ) -> String {
-    let interpreter = language.descriptor.interpreterProbe.command
+    guard let language else {
+        return """
+            FILE="\(solutionFile)"  # TODO: set to the filename students submit
+            RUN="./$FILE"  # TODO: set to the command that runs the submission
+            ACTUAL=$($RUN 2>&1)
+            """
+    }
+    // `scriptRunCommand`, not `interpreterProbe.command`. The two agree for
+    // every language but R, where the probe is `R` and the runner spawns
+    // `Rscript` — and `R solution.R` does not run the file, it warns that the
+    // argument is ignored and waits on stdin. So every R author's scaffold was
+    // a command that cannot work.
+    let interpreter = language.descriptor.scriptRunCommand
     guard language.descriptor.capabilityRequiresExecutableOutput else {
         // Run the file directly. This replaced a Python-only
         // `python3 -c "import solution; print(solution.main())"`, which had no
@@ -225,8 +254,11 @@ struct TestTemplateInfo: Codable {
 
 /// Returns all template types as `TestTemplateInfo` values for the given function.
 /// Used by the scan-notebook and template-picker endpoints.
+/// No default on `language:` — the scan endpoint omitted the argument, which is
+/// how the shell templates stayed Python for every assignment in every language
+/// long after they learned to render per-language.
 func allTemplateInfos(
-    functionName: String, paramNames: [String], language: AssignmentLanguage? = nil
+    functionName: String, paramNames: [String], language: AssignmentLanguage?
 ) -> [TestTemplateInfo] {
     let pyTypes = PythonTestTemplateType.allCases.map { t in
         TestTemplateInfo(

@@ -255,6 +255,49 @@ import VaporTesting
         }
     }
 
+    // MARK: - The declaration survives a suite action
+
+    /// Both suite actions rebuild the manifest with `makeWorkerManifestJSON`,
+    /// which writes a FRESH dict — so anything it is not handed is dropped.
+    /// `language` and `languageDeclared` were among them, which meant the
+    /// create page's required language select recorded the author's choice and
+    /// the very next suite action erased it.
+    ///
+    /// `clear-suite-files` is the cheaper of the two to drive (no zip round
+    /// trip) and takes the identical path.
+    @Test func clearingSuiteFilesKeepsTheDeclaredLanguage() async throws {
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_lang_keep")
+            try await declareManifestLanguage(setup: setup, to: .r, on: app.db)
+
+            var service = makeService(
+                courseID: courseID, setup: setup, payload: makePayload(action: "clear-suite-files"))
+            #expect(try await service.perform() == .applied)
+
+            let props = try #require(setup.decodedManifest())
+            #expect(props.language == .r)
+            #expect(props.languageDeclared == true)
+        }
+    }
+
+    /// The "None" half of the same rule: an author who declared no language
+    /// must not come out of a suite action looking like one who was never
+    /// asked, because that is the distinction every downstream refusal reads.
+    @Test func clearingSuiteFilesKeepsADeclarationOfNone() async throws {
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_lang_none")
+            try await declareManifestLanguage(setup: setup, to: nil, on: app.db)
+
+            var service = makeService(
+                courseID: courseID, setup: setup, payload: makePayload(action: "clear-suite-files"))
+            #expect(try await service.perform() == .applied)
+
+            let props = try #require(setup.decodedManifest())
+            #expect(props.language == nil)
+            #expect(props.languageDeclared == true)
+        }
+    }
+
     // MARK: - Unknown / empty action
 
     @Test func unknownActionIsNoOpReturningApplied() async throws {

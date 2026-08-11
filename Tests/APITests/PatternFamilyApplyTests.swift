@@ -91,7 +91,8 @@ import Vapor
                 dependsOn: [], points: 1, displayName: nil
             )
             fixture.setup.manifest = try makeWorkerManifestJSON(
-                testSuites: [rawEntry], includeMakefile: false
+                testSuites: [rawEntry], includeMakefile: false,
+                language: .python, languageDeclared: true
             )
             try await fixture.setup.save(on: fixture.app.db)
             _ = try await applyPatternFamilies(
@@ -117,7 +118,8 @@ import Vapor
             }
             fixture.setup.manifest = try makeWorkerManifestJSON(
                 testSuites: [rawEntry], includeMakefile: false,
-                patternFamilies: existingFamilies
+                patternFamilies: existingFamilies,
+                language: .python, languageDeclared: true
             )
             try await fixture.setup.save(on: fixture.app.db)
 
@@ -1086,7 +1088,11 @@ import Vapor
             ]
             fixture.setup.manifest = try makeWorkerManifestJSON(
                 testSuites: newRawEntries, includeMakefile: false,
-                patternFamilies: draftProps.patternFamilies
+                patternFamilies: draftProps.patternFamilies,
+                // Threaded exactly as `saveNewAssignment` now does: the publish
+                // rebuild used to drop the declaration on the floor.
+                language: draftProps.language,
+                languageDeclared: draftProps.languageDeclared == true
             )
             try await fixture.setup.save(on: fixture.app.db)
 

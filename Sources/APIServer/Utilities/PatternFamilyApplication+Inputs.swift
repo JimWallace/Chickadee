@@ -184,7 +184,12 @@ func buildAuthoredOrdering(
 /// written in (which the deletion diff needs so old-extension scripts aren't
 /// stranded when an assignment changes language).
 struct AuthoringLanguageResolution {
-    let language: AssignmentLanguage
+    /// nil means the assignment declares no language — the author picked
+    /// "None", which is a real answer and the right one for a suite of plain
+    /// `.sh` scripts. It is NOT "nobody has been asked": every door that
+    /// creates an assignment declares, so by the time a save reaches here the
+    /// question has an answer.
+    let language: AssignmentLanguage?
     let previous: AssignmentLanguage?
 }
 
@@ -215,21 +220,26 @@ func resolveAuthoringLanguage(
     }
     let resolved = AssignmentLanguage.allCases.first { authoredLanguages.contains($0) } ?? previous
 
-    // Authoring falls back to Python, deliberately and locally — this is NOT
-    // the old resolution default leaking back in.
+    // NO PYTHON FALLBACK. This used to end `?? .python`, justified as follows:
     //
-    // Refusing here would be circular: a pattern family is frequently the FIRST
-    // thing authored on an assignment, and generating its scripts is how the
-    // suite acquires a graded script in the first place. "Add a graded script
-    // before you can add a family" asks the instructor for the output as a
-    // precondition of the input. So when nothing names a language yet, author
-    // in Python — and the save RECORDS the choice into the manifest, so the
-    // ambiguity exists for exactly one save and never silently again.
+    //     Refusing here would be circular: a pattern family is frequently the
+    //     FIRST thing authored on an assignment, and generating its scripts is
+    //     how the suite acquires a graded script in the first place.
     //
-    // What the Optional buys is upstream of this line: an `.R`/`.lua`/`.m`
-    // assignment can no longer arrive here as Python by fallthrough, because
-    // those signals now resolve positively and nil means only "nothing said".
-    return AuthoringLanguageResolution(language: resolved ?? .python, previous: previous)
+    // That was true while the language was INFERRED from content, when nil
+    // honestly meant "nothing has named a language yet". Declaration dissolves
+    // it: every door that creates an assignment declares, so nil here means the
+    // author picked "None" and the circularity is gone — there is nothing to
+    // wait for, only an answer to respect.
+    //
+    // The fallback was also actively wrong, not merely redundant. Every suite
+    // save runs through this function, including saves that touch only raw
+    // scripts and ordering, and the manifest rebuild ALWAYS records the value
+    // it is handed — so reordering two `.sh` scripts on a declared-None
+    // assignment silently rewrote its declaration to Python. The caller now
+    // refuses only when the save would actually GENERATE something (which needs
+    // a syntax) and persists nil otherwise.
+    return AuthoringLanguageResolution(language: resolved, previous: previous)
 }
 
 /// Every save-time validation, in the order the pre-split function ran them.

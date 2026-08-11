@@ -215,10 +215,10 @@ enum GlobalInputsService {
         testSetupsDirectory: String,
         // Defaulted to nil, not to `.python`. The old `= .python` default meant
         // an omitted argument produced a confident wrong answer for an R or Lua
-        // assignment; omitting it now produces "unknown", which lands on the
-        // same explicit fallback below as any other unknown. (Both callers pass
-        // it explicitly regardless; the default is here so the parameter count
-        // stays inside the lint threshold.)
+        // assignment; omitting it now produces "unknown", which the refusal
+        // below reports. (Both callers pass it explicitly regardless; the
+        // default is here so the parameter count stays inside the lint
+        // threshold.)
         language: AssignmentLanguage? = nil,
         seedDB: any Database
     ) async throws {
@@ -226,10 +226,19 @@ enum GlobalInputsService {
             let userID = actingUserID,
             let assignmentID = assignment.id
         else { return }
-        // See the matching line in `SectionInputsService.evaluateForActingSeed`:
-        // evaluation needs an interpreter, so a language-less assignment
-        // evaluates as Python rather than refusing.
-        let language = language ?? .python
+        // An `=` expression is SOURCE CODE, so storing one on an assignment that
+        // declares no language has no meaning: there is no interpreter to run it
+        // in and no syntax to write it in. This used to evaluate as Python,
+        // which is how an author could store an expression that only ever ran
+        // one way regardless of what the assignment was.
+        //
+        // Refusing HERE and not at substitution time is the whole point: this
+        // runs on the save, where an instructor can act on the message.
+        // `PersonalizationSubstitution.resolve` keeps its stated default,
+        // because it runs when a student opens the notebook.
+        guard let language else {
+            throw WebAssignmentError.unprocessable(reason: undeclaredLanguageExpressionMessage)
+        }
         let seedHex = try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: seedDB)
         // Combine globals + section vars so expressions can reference the same

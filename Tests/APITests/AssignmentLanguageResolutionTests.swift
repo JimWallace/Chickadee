@@ -40,7 +40,7 @@ import Vapor
     /// knows better, and it has to reach the save path or the assignment is
     /// recorded wrong forever.
     @Test func firstSaveOfAnRNotebookAssignmentRecordsR() async throws {
-        try await withPatternFamilyFixture { fixture in
+        try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
             // nil, not `.python`: an empty suite says nothing about the
             // language, and saying nothing used to be spelled "Python".
@@ -93,7 +93,7 @@ import Vapor
     /// is content too. `derivedDeclaration` still reads it, because that is
     /// what the creation boundaries call to answer the question once.
     @Test func resolutionReadsTheDeclarationAndNothingElse() async throws {
-        try await withPatternFamilyFixture { fixture in
+        try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
             #expect(fixture.setup.notebookPath == nil)
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
             #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
@@ -107,7 +107,7 @@ import Vapor
     /// A `notebookPath` pointing at a file that is gone (or isn't a notebook)
     /// must not throw or flip the answer — it falls back to the manifest.
     @Test func missingOrUnparseableNotebookFallsBackToTheManifest() async throws {
-        try await withPatternFamilyFixture { fixture in
+        try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
 
             fixture.setup.notebookPath = fixture.app.testSetupsDirectory + "does-not-exist.ipynb"
