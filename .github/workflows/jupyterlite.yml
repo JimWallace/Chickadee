@@ -21,50 +21,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Skip the expensive toolchain + build on PRs that touch nothing
-      # JupyterLite/Pyodide-related. The job itself still runs and reports
-      # success — so it stays safe to mark as a required check (a skipped
-      # required workflow would block merges forever); only the heavy steps
-      # are gated. Fail-safe like editor-smoke's `changes` job: non-PR
-      # events, a missing base, or an empty diff run everything.
-      - name: Detect JupyterLite-relevant changes
-        id: detect
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -uo pipefail
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::non-PR event ($EVENT) — running the JupyterLite build."
-            exit 0
-          fi
-          git fetch --no-tags --quiet origin "$BASE_REF" || true
-          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::base sha unavailable — running the build (fail-safe)."
-            exit 0
-          fi
-          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
-          if [ -z "$changed" ]; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::no diff computed — running the build (fail-safe)."
-            exit 0
-          fi
-          pattern='^(Public/jupyterlite/|Public/vendor/|Tools/jupyterlite/|Tools/vendor/|scripts/setup-jupyterlite\.sh|scripts/build-jupyterlite\.sh|scripts/setup-vendor\.sh|scripts/verify-jupyterlite\.sh|scripts/check-xeus-vendored\.sh|scripts/check-env-vendored-sync\.sh|scripts/derive-kernel-modules\.py|\.github/workflows/jupyterlite\.yml)'
-          # Here-string, not a pipe — see editor-smoke.yml for the SIGPIPE
-          # trap that silently misclassifies large diffs.
-          if grep -qE "$pattern" <<< "$changed"; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::JupyterLite-relevant files changed — running the build."
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::no JupyterLite-relevant changes — skipping the build steps."
-          fi
-
+      # EVERY step below runs on EVERY event, deliberately.
+      #
+      # There used to be a path filter here that skipped these steps on a PR
+      # touching nothing JupyterLite-related, while still reporting the job
+      # green so it stayed safe as a required check. Two things made that a bad
+      # trade. It was written to skip "the expensive toolchain + build", and
+      # that build no longer exists — CI cannot rebuild the kernels from
+      # emscripten-forge, so the committed bytes are authoritative and all this
+      # job does is verify them. The guards below take well under a second; the
+      # filter's entire saving was one Python setup.
+      #
+      # What it cost was the merge-time signal. `push` to main always counted as
+      # relevant, so the guards effectively ran ONLY on main: a PR touching no
+      # JupyterLite path was reported green without them, and main went red
+      # seconds after the merge. That is exactly how the broken kernel
+      # derivation in check-xeus-vendored.sh survived five releases — every PR
+      # was green, every push to main was red, and the two were never the same
+      # check. A guard whose answer depends on the event it runs under is not a
+      # guard, so this one now runs everywhere.
       - name: Set up Python
-        if: steps.detect.outputs.relevant == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -77,7 +53,6 @@ jobs:
       # emscripten-forge are reachable, or via the re-vendor workflow. See
       # docs/xeus-r-kernel-spike.md.
       - name: Verify the committed JupyterLite bundle is coherent
-        if: steps.detect.outputs.relevant == 'true'
         # No Pyodide may return, the diagnostics collector tag, and the xeus
         # parselmouth-fetch stub — the internal invariants a rebuild used to
         # guarantee, asserted on the committed bytes. (The waitAsync blob-worker
@@ -96,7 +71,6 @@ jobs:
       # nothing a kernel imports at boot is missing from the vendored bytes.
 
       - name: Verify the vendored xeus-r kernel is intact
-        if: steps.detect.outputs.relevant == 'true'
         # The xeus-r WASM kernel is manually vendored (CI can't rebuild it from
         # emscripten-forge). Assert it is present + internally coherent so a
         # botched or partial re-vendor fails here, not in front of a student.
@@ -107,5 +81,4 @@ jobs:
       # vendored tree against itself, which is how an env file could list scipy
       # while the kernel had none — see the script's header.
       - name: Environment files match the vendored kernels
-        if: steps.detect.outputs.relevant == 'true'
         run: scripts/check-env-vendored-sync.sh

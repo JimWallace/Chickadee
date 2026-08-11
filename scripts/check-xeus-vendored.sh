@@ -56,26 +56,67 @@ if not ext.is_dir():
 #    That makes the guard follow the language set by construction: a seventh
 #    language with a kernel is checked the day its descriptor names one, and an
 #    upload-only language contributes nothing because it declares no kernel.
+#    Read the language set out of the ONE switch the compiler forces to be
+#    exhaustive, then read each language's own descriptor literal. What this
+#    deliberately does NOT do is infer the pairing from line PROXIMITY, which is
+#    how it broke: the previous parse treated the nearest preceding `case .X:`
+#    as the owner of the next `kernelName:`, so when #1330 hoisted each
+#    descriptor into its own `static let`, the six consecutive `case .X: return
+#    Self.XDescriptor` lines left `.racket` current, the first kernelName found
+#    (`xpython`) was attributed to it, and the other three were discarded
+#    entirely. The guard then failed on every push to main for five releases
+#    while reporting the one kernel it did find against the wrong language.
 def derive_expected_kernels():
-    source = (root / "Sources" / "Core" / "LanguageDescriptor.swift").read_text()
+    path = root / "Sources" / "Core" / "LanguageDescriptor.swift"
+    source = path.read_text()
+
+    descriptor_of = dict(re.findall(r"case \.(\w+):\s*return Self\.(\w+Descriptor)", source))
+    if not descriptor_of:
+        fail(
+            f"could not read the AssignmentLanguage → descriptor switch out of {path.name} — "
+            "the vendored kernels would go completely unchecked"
+        )
+
+    # Each descriptor's literal runs from its own `static let` to the next one.
+    starts = [
+        (m.group(1), m.start())
+        for m in re.finditer(r"static let (\w+) = LanguageDescriptor\(", source)
+    ]
+    blocks = {
+        name: source[start : (starts[i + 1][1] if i + 1 < len(starts) else len(source))]
+        for i, (name, start) in enumerate(starts)
+    }
+
     expected = {}
-    language = None
-    for line in source.splitlines():
-        case_match = re.search(r"case \.([A-Za-z]+):", line)
-        if case_match:
-            language = case_match.group(1)
-            continue
-        name_match = re.search(r'kernelName:\s*"([^"]+)"', line)
-        if name_match and language is not None:
-            expected[name_match.group(1)] = language
-            language = None
+    for language, descriptor_name in sorted(descriptor_of.items()):
+        block = blocks.get(descriptor_name)
+        if block is None:
+            fail(f"{language} resolves to {descriptor_name}, which {path.name} does not define")
+        support = re.search(r"editorSupport:\s*\.(\w+)", block)
+        if support is None:
+            fail(
+                f"{descriptor_name} declares no editorSupport — cannot tell whether "
+                f"{language} claims a vendored kernel"
+            )
+        kind = support.group(1)
+        if kind == "uploadOnly":
+            continue  # no kernel vendored for this language, deliberately
+        if kind != "notebookKernel":
+            fail(
+                f"{descriptor_name} declares editorSupport .{kind}, which this guard does not "
+                "understand — teach it that case rather than letting the kernel go unchecked"
+            )
+        name_match = re.search(r'kernelName:\s*"([^"]+)"', block[support.start() :])
+        if name_match is None:
+            fail(f"{descriptor_name} claims .notebookKernel but names no kernelName")
+        expected[name_match.group(1)] = language
     return expected
 
 
 expected_language = derive_expected_kernels()
 if not expected_language:
     fail(
-        "could not read any kernelName out of Sources/Core/LanguageDescriptor.swift — "
+        "no AssignmentLanguage claims a vendored kernel, yet kernels are vendored — "
         "the vendored kernels would go completely unchecked"
     )
 
