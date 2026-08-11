@@ -22,7 +22,7 @@ import Vapor
     /// One section ("sec1"), one global variable ("g") to exercise the
     /// cross-scope clash check.
     private let manifest = #"""
-        {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"g","value":1}],"sections":[{"id":"sec1","name":"Part A"}]}
+        {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"g","value":1}],"sections":[{"id":"sec1","name":"Part A"}]}
         """#
 
     private func fixture(on app: Application) async throws -> APIAssignment {

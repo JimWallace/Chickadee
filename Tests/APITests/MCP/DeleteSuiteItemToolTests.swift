@@ -18,7 +18,8 @@ import Vapor
         )
     }
 
-    private let emptyManifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private let emptyManifest =
+        #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
 
     /// Course + enrolled instructor + setup + assignment.  When `seedFamily` is
     /// true the BMI family is applied; `seedScript` adds a hand-written script.

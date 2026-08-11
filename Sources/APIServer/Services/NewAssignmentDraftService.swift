@@ -325,11 +325,18 @@ struct NewAssignmentDraftService {
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
+        // The declaration survives a suite replacement. Uploading test files
+        // says nothing about which language the author chose, and this builder
+        // writes a fresh dict — so not threading these two erased the choice
+        // the create page had already recorded.
+        let declared = declaredLanguage()
         setup.manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
             gradingMode: sectionGradingMode,
-            starterNotebook: starterNotebook
+            starterNotebook: starterNotebook,
+            language: declared.language,
+            languageDeclared: declared.declared
         )
         try await setup.save(on: req.db)
         extractSupportFilesToSharedDirectory(
@@ -345,13 +352,28 @@ struct NewAssignmentDraftService {
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
         _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
+        // Clearing the suite empties the test files, not the author's choice of
+        // language — see `replaceSuiteFiles`.
+        let declared = declaredLanguage()
         setup.manifest = try makeWorkerManifestJSON(
             testSuites: [],
             includeMakefile: false,
             gradingMode: try await newAssignmentSectionGradingMode(
                 req: req, courseID: courseID, sectionIDRaw: payload.sectionIDRaw),
-            starterNotebook: starterNotebook
+            starterNotebook: starterNotebook,
+            language: declared.language,
+            languageDeclared: declared.declared
         )
         try await setup.save(on: req.db)
+    }
+
+    /// The draft's recorded declaration, read back off its own manifest.
+    ///
+    /// Both halves travel together on purpose: `language` alone cannot express
+    /// "the author picked None", so a rebuild that carried only the language
+    /// would still turn a deliberate None back into an unanswered question.
+    private func declaredLanguage() -> (language: AssignmentLanguage?, declared: Bool) {
+        guard let props = setup.decodedManifest() else { return (nil, false) }
+        return (props.language, props.languageDeclared == true)
     }
 }

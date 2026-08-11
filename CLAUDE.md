@@ -273,12 +273,19 @@ Python-only check kind.
 enforces it in `format-lint`. Seventeen did, which is what made the two #1330
 defects possible. A caller that means Python says so.
 
-The transition is not finished: fourteen `?? .python` sites remain, and they are
-a different question from resolution — "this operation needs a language and the
-assignment declares none". See
-[docs/language-declaration.md](docs/language-declaration.md) for the state, the
-per-site split, and the rule that decides them (fail loudly while authoring,
-never while grading). Also `docs/r-support.md`.
+The `?? .python` sites that remain are a different question from resolution —
+"this operation needs a language and the assignment declares none" — and are
+settled by one rule: **fail loudly while authoring, never while grading,
+rendering a page, or extracting a student's submission.** An instructor can fix
+a missing declaration in seconds; a student cannot fix it at all. So generating
+a test, storing an `=` expression, and checking a solution file's extension all
+refuse on a declared-None assignment, while extraction, literal rendering,
+notebook scaffolding and the two display paths keep a locally-stated default.
+Corollary worth knowing: `makeWorkerManifestJSON` writes a **fresh dict**, so
+every rebuild must thread `language` *and* `languageDeclared` — carrying only
+the language turns a deliberate "None" back into "nobody has been asked". See
+[docs/language-declaration.md](docs/language-declaration.md) for the per-site
+table. Also `docs/r-support.md`.
 
 **A runner only claims a job it can actually grade — enforced, not authored
 (`RunnerLanguageGate`).** Runners are separate hosts that upgrade on their own

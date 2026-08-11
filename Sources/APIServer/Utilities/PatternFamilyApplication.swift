@@ -186,11 +186,31 @@ func applyPatternFamilies(
     // ── 3. Resolve the language, then validate the whole save ───────────
     let language = resolveAuthoringLanguage(
         setup: setup, props: props, authoredItems: authoredItems)
+
+    // A generated script has to be written in SOME syntax, so a save that
+    // generates one needs a declared language. A save that generates nothing
+    // does not — and refusing it would make a plain `.sh` suite uneditable,
+    // which is a supported assignment shape, not an oversight.
+    //
+    // This is the authoring half of the rule the fallback census settled on:
+    // fail loudly while authoring, never while grading. An instructor can fix a
+    // missing declaration from the dropdown in seconds and this message says
+    // so; a student cannot fix it at all.
+    let generatesScripts =
+        nextFamilies.contains { $0.cases.contains(where: \.enabled) } || !inputs.checks.isEmpty
+    if language.language == nil, generatesScripts {
+        throw Abort(.badRequest, reason: undeclaredLanguageGenerationMessage)
+    }
+    // Inert on the declared-None path: the guard above means nothing is
+    // rendered there, and the manifest below records `language.language`, not
+    // this — so the standin cannot leak into the declaration.
+    let renderLanguage = language.language ?? .python
+
     try validatePatternFamilySave(
         families: nextFamilies,
         ordering: ordering,
         inputs: inputs,
-        language: language.language
+        language: renderLanguage
     )
 
     // ── 4. Render generated scripts ONCE, then diff and mutate the zip ──
@@ -203,7 +223,7 @@ func applyPatternFamilies(
             globalVariables: inputs.globalVariables,
             perStudentNames: inputs.perStudentExpressionNames,
             itemsForOrdering: ordering.items,
-            language: language.language,
+            language: renderLanguage,
             previousLanguage: language.previous
         ),
         previousProps: props,

@@ -103,7 +103,10 @@ path.
 
 ---
 
-## What is still open: the fourteen `?? .python` sites
+## The `?? .python` sites
+
+There were fourteen. Four are gone; eleven lines remain and are correct as they
+stand.
 
 These are **not** resolution fallbacks. Resolution has no fallback. They are
 sites asking a different question:
@@ -119,7 +122,7 @@ An author can fix a missing declaration in ten seconds and a refusal tells them
 how. A student cannot fix it at all, and a refusal on their path turns an
 instructor's omission into a failed submission.
 
-### Group 1 — authoring: a refusal is the right answer
+### Group 1 — authoring: refuse. **Done.**
 
 The justification written at these sites ("refusing would be circular — a
 pattern family is frequently the FIRST thing authored, and generating its
@@ -130,31 +133,60 @@ the author chose *None*, and authoring a Python pattern family on an assignment
 whose author said it has no language is the exact silent-wrong-answer shape this
 arc removed.
 
-| Site | Currently |
+| Site | Now |
 |---|---|
-| `PatternFamilyApplication+Inputs.swift:232` | Generates `.py` scripts on a declared-none assignment |
-| `GlobalInputsService.swift:232` | Evaluates `=` expressions with `python3` |
-| `SectionInputsService.swift:179` | Same, for section variables |
+| `PatternFamilyApplication+Inputs.swift` | Returns the declaration, optional. `applyPatternFamilies` refuses (`undeclaredLanguageGenerationMessage`) when the save would generate a script |
+| `GlobalInputsService.swift` | Refuses an `=` expression (`undeclaredLanguageExpressionMessage`); literal variables are unaffected |
+| `SectionInputsService.swift` | Same, for section variables |
 
-Note the seam for the two inputs services: they run at **evaluation** time,
-which is on the acting seed and can be reached by a student page load. The
-refusal belongs at the **save** that stores the expression, not here. Leave the
-evaluator's stated default alone and add the guard where the expression is
-authored.
+Two properties of the pattern-family refusal are load-bearing:
 
-### Group 2 — sites that should stop naming a language at all
+- **It is conditional on generation.** Every suite save runs through
+  `applyPatternFamilies`, including saves that only reorder raw scripts, so an
+  unconditional refusal would make a plain `.sh` suite uneditable. The guard
+  fires only when there is an enabled family case or a notebook check to render.
+- **It is not the whole bug.** The fallback was also *writing Python down*:
+  `rebuildPatternFamilyManifest` always records the language it is handed, so
+  reordering two `.sh` scripts silently rewrote a declared-None assignment's
+  declaration to Python. The manifest rebuild now takes an optional and persists
+  nil.
 
-These do not need a fallback; they need a rewrite that never asks the question.
+The inputs services refuse inside `evaluateForActingSeed`, which despite the
+name is reached only from `apply` — the save. Notebook substitution at student
+first-open (`PersonalizationSubstitution.resolve`) keeps its stated default and
+never refuses.
 
-| Site | Fix |
-|---|---|
-| `UpdateSolutionTool.swift:171` | Only asks whether the language is `.uploadOnly`. `if case .uploadOnly = language?.editorSupport` answers it with no default and no behaviour change |
+### Group 2 — stop naming a language at all. **Done.**
+
+`UpdateSolutionTool` asked two questions through one `?? .python`:
+
+- *Is this language upload-only?* — answered now by
+  `if case .uploadOnly = language?.editorSupport`, with no default: a
+  declaration of "none" is not upload-only, so the notebook workflow is kept
+  exactly as before.
+- *Is this solution filename's extension acceptable?* — a real language
+  question, and the old fallback answered it as Python, so a `.sh`-suite
+  assignment accepted `solution.py` and rejected everything else for a reason
+  nothing in the assignment supported. It refuses now, naming
+  `set_assignment_language` as the fix.
+
+### An adjacent defect the work surfaced
+
+`makeWorkerManifestJSON` builds a **fresh dict**, so any field it is not handed
+is dropped by a rebuild. `languageDeclared` was never handed to it, and
+`language` was not handed to it by the draft paths — so the create page's
+`required` language select recorded the author's choice and the next suite
+action (`replace-suite-files`, `clear-suite-files`, or the publish rebuild in
+`saveNewAssignment`) erased it. Both fields are threaded now, and both halves
+travel together: `language` alone cannot express "the author picked None", so
+carrying only it would still turn a deliberate None back into an unanswered
+question.
 
 ### Group 3 — keep the explicit default, and keep the comment
 
-Nine sites where "none" is not an answerable value and failing is worse than
-defaulting. Each already states the default locally rather than inheriting it,
-which is the property the Optional bought.
+Eleven lines where "none" is not an answerable value and failing is worse than
+defaulting. Each states the default locally rather than inheriting it, which is
+the property the Optional bought.
 
 | Site | Why the default stays |
 |---|---|
@@ -166,6 +198,7 @@ which is the property the Optional bought.
 | `PublishedAssignmentRoutes+NotebookTools.swift:87` | Scans an *arbitrary* notebook, not an assignment: the fallback chain is `?language=` → kernelspec → Python, and the distinction being drawn is between kernels we can read and ones we cannot |
 | `SubmissionResultPresenter.swift:517` | Display; computes generated filenames, which only exist when families do, which requires a recorded language — unreachable with effect |
 | `PublishedAssignmentRoutes+Suite.swift:133` | Same, for the author-facing suite view |
+| `PatternFamilyApplication.swift:207` | The render standin on the declared-None path, inert by the guard above: nothing is rendered there, and the manifest records the declaration rather than this |
 
 ---
 
@@ -181,8 +214,17 @@ Closed:
 - The browser runner boots only the declared language's substrate
   (`ensureReady`), rather than every kind present.
 
+- The Group 1 authoring refusals and the Group 2 rewrite, with
+  `UndeclaredLanguageRefusalTests` pinning both halves of each rule (what is
+  refused *and* what must still be allowed).
+- Manifest rebuilds preserve `language` + `languageDeclared`.
+
 Deliberately open:
 
-- The Group 1 refusals above. They are authoring-behaviour changes on a branch
-  that auto-deploys, and they want their own change with their own tests.
 - Group 3 stays as it is. Those defaults are correct, not debt.
+- `resolveAuthoringLanguage` still lets an authored non-Python raw script
+  outrank the stored declaration — the last content sniff on an authoring path.
+  It is harmless while it agrees with the declaration and wrong when it does
+  not (adding `test_extra.R` to a declared-Python assignment would re-render its
+  families as R), but removing it is a separate behaviour change with its own
+  reachability question, so it is named here rather than done quietly.

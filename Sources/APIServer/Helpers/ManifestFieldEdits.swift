@@ -264,6 +264,36 @@ let languageChangeAfterGenerationMessage =
     + "extension. Declare the language before authoring pattern families or notebook checks, or "
     + "delete the generated families/checks first."
 
+/// Refusal for a save that would GENERATE a test script on an assignment whose
+/// author declared no language.
+///
+/// A generated script is written in a language, so this question cannot answer
+/// "none" the way resolution can. The old behaviour rendered Python, justified
+/// by a circularity that only existed while the language was inferred from
+/// content ("a family is often the first thing authored, so there is no graded
+/// script to sniff yet"). Every door that creates an assignment declares now,
+/// so nil means the author chose None and there is nothing to wait for.
+///
+/// Deliberately an authoring-time refusal. Nothing on the grading path refuses
+/// for want of a declaration: an instructor can fix this from the dropdown, and
+/// a student cannot fix it at all.
+let undeclaredLanguageGenerationMessage =
+    "This assignment declares no language, so there is no syntax to generate a test in. "
+    + "Set the assignment's language before adding pattern families or notebook checks — "
+    + "an assignment set to \"None\" can hold hand-written shell scripts only."
+
+/// Refusal for a save that would store a per-student `=` expression on an
+/// assignment whose author declared no language.
+///
+/// Same rule as `undeclaredLanguageGenerationMessage`, one step further out: an
+/// expression is source code, so it needs a language the way a generated script
+/// does. The refusal lives on the save; notebook substitution at student
+/// first-open keeps its stated default and never refuses.
+let undeclaredLanguageExpressionMessage =
+    "This assignment declares no language, so a per-student `=` expression has no interpreter "
+    + "to run in. Set the assignment's language before adding expressions — literal variables "
+    + "work without one."
+
 /// Reads the `submissionMode` field straight from a manifest JSON string,
 /// defaulting to "notebook" (TestProperties' own default) when the field is
 /// absent or the manifest can't be parsed.
