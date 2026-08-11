@@ -163,7 +163,7 @@ func defaultNotebookData(title: String, language: AssignmentLanguage? = nil) -> 
     let safeTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
     let kernel: (name: String, displayName: String, languageName: String)
     switch (language ?? .python).editorSupport {
-    case .notebookKernel(_, let kernelName, let kernelDisplayName, _):
+    case .notebookKernel(_, let kernelName, let kernelDisplayName, _, _):
         kernel = (kernelName, kernelDisplayName, (language ?? .python).rawValue)
     case .uploadOnly:
         return nil

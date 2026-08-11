@@ -130,7 +130,7 @@ enum KernelImportGuard {
         // is ever unsatisfiable. Kept total so a direct caller gets a
         // truthful sentence rather than a crash.
         guard
-            case .notebookKernel(let envFile, _, _, let failure) = language.editorSupport
+            case .notebookKernel(let envFile, _, _, let failure, _) = language.editorSupport
         else {
             return "\(filename) is in a language with no browser grading environment."
         }

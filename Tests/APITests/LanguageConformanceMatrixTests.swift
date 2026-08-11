@@ -330,7 +330,7 @@ import Testing
         // (upload-only) language names no file, so there is nothing to check —
         // expected for that language, hence the silent return.
         guard
-            case .notebookKernel(let environmentFileName, _, _, _) = language.editorSupport
+            case .notebookKernel(let environmentFileName, _, _, _, _) = language.editorSupport
         else { return }
         let url = Self.repoRoot
             .appendingPathComponent("Tools/jupyterlite")

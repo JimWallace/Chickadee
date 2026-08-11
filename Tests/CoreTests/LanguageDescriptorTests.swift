@@ -23,7 +23,7 @@ import Testing
         #expect(!d.scriptExtensions.isEmpty)
         #expect(!d.generatedScriptExtension.isEmpty)
         #expect(!d.inputsFileName.isEmpty)
-        if case .notebookKernel(let env, let name, let display, let failure) = d.editorSupport {
+        if case .notebookKernel(let env, let name, let display, let failure, _) = d.editorSupport {
             #expect(!env.isEmpty)
             #expect(!name.isEmpty)
             #expect(!display.isEmpty)
@@ -67,7 +67,7 @@ import Testing
     @Test func theIdentifyingFieldsAreUniqueAcrossLanguages() {
         let all = AssignmentLanguage.allCases.map(\.descriptor)
         let kernels: [(env: String, name: String, display: String)] = all.compactMap {
-            guard case .notebookKernel(let env, let name, let display, _) = $0.editorSupport
+            guard case .notebookKernel(let env, let name, let display, _, _) = $0.editorSupport
             else { return nil }
             return (env, name, display)
         }

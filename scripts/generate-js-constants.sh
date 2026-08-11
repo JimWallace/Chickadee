@@ -229,6 +229,116 @@ for marker in "$inputs_begin" "$inputs_end"; do
   fi
 done
 
+# --- How each language is spelled to a student ------------------------------
+#
+# `LanguageDescriptor.displayName` — the browser labels a substrate with it
+# ("R grading needs Web Worker support…"), and the raw value is a wire token, so
+# "r grading" reads like a typo. Generated for the same reason as everything
+# else here: the alternative is a second table of names in JS.
+labels_file="$(mktemp)"
+awk '
+  /private static let [a-zA-Z]+Descriptor = LanguageDescriptor\(/ {
+    if (match($0, /let [a-zA-Z]+Descriptor/)) {
+      token = substr($0, RSTART + 4, RLENGTH - 4)
+      sub(/Descriptor$/, "", token)
+      lang = token
+    }
+  }
+  /displayName: "/ {
+    if (lang != "" && match($0, /"[^"]+"/)) {
+      print lang, substr($0, RSTART + 1, RLENGTH - 2)
+      lang = ""
+    }
+  }
+' "$descriptor_src" | LC_ALL=C sort > "$labels_file"
+labels_parsed="$(wc -l < "$labels_file" | tr -d ' ')"
+if [ "$labels_parsed" -ne "$declared_langs" ]; then
+  echo "generate-js-constants: parsed $labels_parsed displayName entries but" >&2
+  echo "AssignmentLanguage declares $declared_langs cases." >&2
+  rm -f "$work" "$labels_file"; exit 1
+fi
+labels_joined="$(awk -v q="'" 'NR > 1 { out = out ", " } { out = out $1 ": " q $2 q } END { print out }' \
+  "$labels_file")"
+rm -f "$labels_file"
+labels_generated="    const LANGUAGE_LABELS = { $labels_joined };"
+labels_begin="CHICKADEE_GENERATED:LANGUAGE_LABELS:BEGIN"
+labels_end="CHICKADEE_GENERATED:LANGUAGE_LABELS:END"
+for marker in "$labels_begin" "$labels_end"; do
+  if ! grep -q "$marker" "$work"; then
+    echo "generate-js-constants: missing $marker marker in $js_src." >&2
+    rm -f "$work"; exit 1
+  fi
+done
+tmp="$(mktemp)"
+awk -v repl="$labels_generated" -v begin="$labels_begin" -v end="$labels_end" '
+  index($0, begin) { print; print repl; skipping = 1; next }
+  index($0, end)   { skipping = 0; print; next }
+  skipping { next }
+  { print }
+' "$work" > "$tmp"
+mv "$tmp" "$work"
+
+# --- The grading worker each kernel language spawns -------------------------
+#
+# The browser routes a `.py` test to /python-grading-worker.js, a `.R` to
+# /r-grading-worker.js, and so on. That mapping was four hand-written strings in
+# browser-runner.js and four more in `NotebookAssetIsolationMiddleware
+# .isolatedWorkerScripts`, with nothing connecting them — and forgetting the
+# allowlist half is silent by construction: the browser refuses the script on an
+# isolated page, `ensureReady` throws, and the submission fails over to the
+# native worker with right marks and none of the speed (#1274). Both halves now
+# read `EditorSupport.notebookKernel`'s `gradingWorkerScript`.
+#
+# Keyed by the enum case, which is also the substrate "kind" the router
+# computes (`interpreterToKind` maps rscript -> r and is otherwise identity), so
+# the lookup needs no translation. Only kernel languages appear: an upload-only
+# language has no `notebookKernel` and therefore no worker, which is the whole
+# point of the fact living inside that case.
+workers_file="$(mktemp)"
+awk '
+  /private static let [a-zA-Z]+Descriptor = LanguageDescriptor\(/ {
+    if (match($0, /let [a-zA-Z]+Descriptor/)) {
+      token = substr($0, RSTART + 4, RLENGTH - 4)
+      sub(/Descriptor$/, "", token)
+      lang = token
+    }
+  }
+  /gradingWorkerScript: "/ {
+    if (lang != "" && match($0, /"[^"]+"/)) {
+      print lang, substr($0, RSTART + 1, RLENGTH - 2)
+      lang = ""
+    }
+  }
+' "$descriptor_src" | LC_ALL=C sort > "$workers_file"
+if [ ! -s "$workers_file" ]; then
+  echo "generate-js-constants: found no gradingWorkerScript declarations in $descriptor_src" >&2
+  rm -f "$work" "$workers_file"; exit 1
+fi
+
+workers_joined="$(awk -v q="'" 'NR > 1 { out = out ", " } { out = out $1 ": " q $2 q } END { print out }' \
+  "$workers_file")"
+rm -f "$workers_file"
+workers_generated="    const GRADING_WORKER_SCRIPTS = { $workers_joined };"
+workers_begin="CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:BEGIN"
+workers_end="CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:END"
+for marker in "$workers_begin" "$workers_end"; do
+  if ! grep -q "$marker" "$work"; then
+    echo "generate-js-constants: missing $marker marker in $js_src." >&2
+    echo "The browser needs the grading worker path for each kernel language, or it" >&2
+    echo "cannot route a test to a substrate. Add the fenced block and re-run." >&2
+    rm -f "$work"; exit 1
+  fi
+done
+
+tmp="$(mktemp)"
+awk -v repl="$workers_generated" -v begin="$workers_begin" -v end="$workers_end" '
+  index($0, begin) { print; print repl; skipping = 1; next }
+  index($0, end)   { skipping = 0; print; next }
+  skipping { next }
+  { print }
+' "$work" > "$tmp"
+mv "$tmp" "$work"
+
 tmp="$(mktemp)"
 awk -v repl="$inputs_generated" -v begin="$inputs_begin" -v end="$inputs_end" '
   index($0, begin) { print; print repl; skipping = 1; next }

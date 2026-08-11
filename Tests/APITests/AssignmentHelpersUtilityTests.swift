@@ -71,7 +71,7 @@ final class AssignmentHelpersUtilityTests {
     /// was sticky.
     @Test(arguments: AssignmentLanguage.allCases)
     func scaffoldedNotebooksCarryTheirLanguagesKernel(_ language: AssignmentLanguage) throws {
-        guard case .notebookKernel(_, let kernelName, let displayName, _) = language.editorSupport
+        guard case .notebookKernel(_, let kernelName, let displayName, _, _) = language.editorSupport
         else {
             // Upload-only: there is no notebook workflow, so no notebook.
             #expect(defaultNotebookData(title: "Lab", language: language) == nil)

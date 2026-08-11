@@ -152,11 +152,23 @@ public enum EditorSupport: Equatable, Sendable {
     /// - `missingDependencyFailureDescription`: how a missing dependency
     ///   presents to a student at grade time, phrased for that same rejection
     ///   message.
+    /// - `gradingWorkerScript`: the Web Worker `Public/browser-runner.js`
+    ///   spawns to grade this language in the browser. It lives here for the
+    ///   same reason the kernel name does — it exists exactly when a kernel
+    ///   does — and because it was previously a fact held in two places that
+    ///   nothing connected: a hand-written path in `browser-runner.js` and a
+    ///   hand-written entry in `NotebookAssetIsolationMiddleware
+    ///   .isolatedWorkerScripts`. A worker missing from the allowlist is
+    ///   refused by the browser on an isolated page, `ensureReady` throws, and
+    ///   the submission silently fails over to the native worker: right marks,
+    ///   none of the speed. That is how #1274 shipped browser-graded R no
+    ///   isolated engine ever ran.
     case notebookKernel(
         environmentFileName: String,
         kernelName: String,
         kernelDisplayName: String,
-        missingDependencyFailureDescription: String)
+        missingDependencyFailureDescription: String,
+        gradingWorkerScript: String)
 
     /// No vendored kernel, deliberately — submissions arrive as file uploads
     /// and grade on the native worker only.
@@ -494,7 +506,8 @@ extension AssignmentLanguage {
             environmentFileName: "environment-python.yml",
             kernelName: "xpython",
             kernelDisplayName: "Python (xeus-python)",
-            missingDependencyFailureDescription: "an ImportError"),
+            missingDependencyFailureDescription: "an ImportError",
+            gradingWorkerScript: "/python-grading-worker.js"),
         interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
         moduleResolution: .byName(
             searchPathVariable: "PYTHONPATH",
@@ -523,7 +536,8 @@ extension AssignmentLanguage {
             environmentFileName: "environment-r.yml",
             kernelName: "xr",
             kernelDisplayName: "R (xeus-r)",
-            missingDependencyFailureDescription: "an error from library()"),
+            missingDependencyFailureDescription: "an error from library()",
+            gradingWorkerScript: "/r-grading-worker.js"),
         interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
         // `source("test_runtime.R")` is a file read, not a module load:
         // there is no name to resolve, so nothing is importable and no
@@ -551,7 +565,8 @@ extension AssignmentLanguage {
             environmentFileName: "environment-lua.yml",
             kernelName: "xlua",
             kernelDisplayName: "Lua (xeus-lua)",
-            missingDependencyFailureDescription: "an error from require()"),
+            missingDependencyFailureDescription: "an error from require()",
+            gradingWorkerScript: "/lua-grading-worker.js"),
         // `-v`, not `--version` — see `interpreterProbe`'s note.
         interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
         // `require("test_runtime")` IS a module load — the same shape as
@@ -585,7 +600,8 @@ extension AssignmentLanguage {
             environmentFileName: "environment-octave.yml",
             kernelName: "xoctave",
             kernelDisplayName: "Octave (xeus-octave)",
-            missingDependencyFailureDescription: "an undefined-function error"),
+            missingDependencyFailureDescription: "an undefined-function error",
+            gradingWorkerScript: "/octave-grading-worker.js"),
         // `octave-cli --version` prints "GNU Octave, version N" and
         // exits 0 (verified on 8.4.0). The worker invokes the same
         // binary, so probe and invocation cannot skew.

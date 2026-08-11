@@ -183,7 +183,7 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     // combined condition falls through to "leave unchanged" — there is no
     // kernel to normalize onto.
     if let language = matched,
-        case .notebookKernel(_, let kernelName, let kernelDisplayName, _) =
+        case .notebookKernel(_, let kernelName, let kernelDisplayName, _, _) =
             language.editorSupport
     {
         kernelSpec["name"] = kernelName
@@ -205,7 +205,7 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         // being true).
         let python = AssignmentLanguage.python
         guard
-            case .notebookKernel(_, let kernelName, let kernelDisplayName, _) =
+            case .notebookKernel(_, let kernelName, let kernelDisplayName, _, _) =
                 python.editorSupport
         else { return data }
         kernelSpec["name"] = kernelName

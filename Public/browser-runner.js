@@ -118,6 +118,33 @@
     const INPUTS_FILE_NAMES = { cpp: '_ck_inputs.hpp', lua: '_ck_inputs.lua', octave: '_ck_inputs.m', python: '_ck_inputs.py', r: '_ck_inputs.R', racket: '_ck_inputs.rkt' };
     // CHICKADEE_GENERATED:INPUTS_FILE_NAMES:END
 
+    // The Web Worker that grades each kernel language. A GENERATED copy of
+    // `EditorSupport.notebookKernel`'s `gradingWorkerScript`, keyed by the enum
+    // case — which is also the substrate kind `interpreterToKind` computes, so
+    // the router looks a worker up by the value it already has.
+    //
+    // Same rule as the tables above: edit the Swift literal and re-run
+    // scripts/generate-js-constants.sh, never this line. Only kernel languages
+    // appear; an upload-only language has no worker because it has no kernel,
+    // and `executorForKind` answering null for one is exactly right.
+    //
+    // The other half of this fact is `NotebookAssetIsolationMiddleware
+    // .isolatedWorkerScripts`, which now derives from the same descriptor
+    // field. Those two lists were hand-written and unconnected, and the
+    // allowlist half fails SILENTLY when it is short: the browser refuses the
+    // script on an isolated page, ensureReady throws, and the grade quietly
+    // fails over to the native worker (#1274).
+    // How each language is spelled to a student, from
+    // `LanguageDescriptor.displayName`. The raw value is a wire token, so
+    // "r grading needs Web Worker support" would read like a typo.
+    // CHICKADEE_GENERATED:LANGUAGE_LABELS:BEGIN
+    const LANGUAGE_LABELS = { cpp: 'C++', lua: 'Lua', octave: 'Octave', python: 'Python', r: 'R', racket: 'Racket' };
+    // CHICKADEE_GENERATED:LANGUAGE_LABELS:END
+
+    // CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:BEGIN
+    const GRADING_WORKER_SCRIPTS = { lua: '/lua-grading-worker.js', octave: '/octave-grading-worker.js', python: '/python-grading-worker.js', r: '/r-grading-worker.js' };
+    // CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:END
+
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
@@ -559,10 +586,8 @@
             this.runnerCore = runnerCore;
             this.reportPhase = reportPhase;
             this.suites = Array.isArray(suites) ? suites : [];
-            this.python = null;
-            this.r = null;
-            this.lua = null;
-            this.octave = null;
+            // kind -> executor, created on first use. Was four named slots.
+            this.executors = new Map();
         }
 
         scriptExists(name) {
@@ -586,110 +611,82 @@
             return kinds;
         }
 
-        // Both substrates are Web Workers running a vendored xeus kernel, and
-        // both speak the same init/run protocol, so GradingWorkerExecutor drives
-        // either without knowing which it has — the only difference is the
-        // script it spawns.
+        // ONE lazy factory for every kernel language, from the generated
+        // GRADING_WORKER_SCRIPTS table.
         //
-        // There is no main-thread fallback any more. The old one existed only
-        // because Pyodide can run on the main thread, and it carried a real
-        // hazard: a synchronous CPU-bound loop in student code never yields, so
-        // the per-test timer never fires and the tab freezes with the submission
+        // This was four near-identical methods — pythonExecutor, rExecutor,
+        // luaExecutor, octaveExecutor — differing only in a worker path and a
+        // display label, plus four `this.<lang> = null` slots, a four-arm
+        // executorForKind and a four-name dispose list. Thirteen places to
+        // remember for a seventh kernel language, none of which the Swift side
+        // could see. The table is generated from the descriptor now, so a
+        // seventh language appears here the day its literal does.
+        //
+        // Every substrate is a Web Worker running a vendored xeus kernel and
+        // they all speak the same init/run protocol, so GradingWorkerExecutor
+        // drives any of them without knowing which it has.
+        //
+        // There is no main-thread fallback. The old one existed only because
+        // Pyodide can run on the main thread, and it carried a real hazard: a
+        // synchronous CPU-bound loop in student code never yields, so the
+        // per-test timer never fires and the tab freezes with the submission
         // lost. Worker.terminate() is the only kill path that works, and a
-        // kernel cannot be booted outside a worker anyway (it needs
+        // xeus kernel cannot boot outside a worker anyway (it needs
         // importScripts). A Worker-less browser therefore fails the grade over
-        // to the native worker: slower, and correct.
-        pythonExecutor() {
-            if (!this.python) {
-                const factory = gradingWorkerFactory('/python-grading-worker.js');
-                this.python = factory
-                    ? new GradingWorkerExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore, factory,
-                        this.reportPhase, 'Python')
-                    : new UnavailableExecutor(
-                        'Browser grading needs Web Worker support, '
-                        + 'which this browser did not provide');
-            }
-            return this.python;
-        }
-
-        // Same shape as the Python substrate, and worker-only for the same
-        // reason: booting a xeus kernel needs importScripts, which exists only
-        // inside a worker. A Worker-less environment therefore gets an executor
-        // whose ensureReady throws, routing the whole grade to the server-side
-        // failover rather than recording every R test as an error.
-        rExecutor() {
-            if (!this.r) {
-                const factory = gradingWorkerFactory('/r-grading-worker.js');
-                this.r = factory
-                    ? new GradingWorkerExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
-                        'R')
-                    : new UnavailableExecutor(
-                        'R grading needs Web Worker support, which this browser did not provide');
-            }
-            return this.r;
-        }
-
-        // Third of the same shape (the vendored xeus-lua kernel), and
-        // worker-only for the same reason.
-        luaExecutor() {
-            if (!this.lua) {
-                const factory = gradingWorkerFactory('/lua-grading-worker.js');
-                this.lua = factory
-                    ? new GradingWorkerExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore, factory, this.reportPhase,
-                        'Lua')
-                    : new UnavailableExecutor(
-                        'Lua grading needs Web Worker support, '
-                        + 'which this browser did not provide');
-            }
-            return this.lua;
-        }
-
-        // Fourth of the same shape (the vendored xeus-octave kernel), and
-        // worker-only for the same reason.
-        octaveExecutor() {
-            if (!this.octave) {
-                const factory = gradingWorkerFactory('/octave-grading-worker.js');
-                this.octave = factory
-                    ? new GradingWorkerExecutor(
-                        this.files, this.assignmentSeed, this.runnerCore, factory,
-                        this.reportPhase, 'Octave')
-                    : new UnavailableExecutor(
-                        'Octave grading needs Web Worker support, '
-                        + 'which this browser did not provide');
-            }
-            return this.octave;
-        }
-
+        // to the native worker: slower, and correct — which is why the
+        // unavailable case is an executor whose ensureReady throws rather than
+        // one that records every test as an error.
         executorForKind(kind) {
-            if (kind === 'python') return this.pythonExecutor();
-            if (kind === 'r') return this.rExecutor();
-            if (kind === 'lua') return this.luaExecutor();
-            if (kind === 'octave') return this.octaveExecutor();
-            return null;
+            const script = GRADING_WORKER_SCRIPTS[kind];
+            if (!script) return null;
+            const existing = this.executors.get(kind);
+            if (existing) return existing;
+            const factory = gradingWorkerFactory(script);
+            const label = LANGUAGE_LABELS[kind] || kind;
+            const executor = factory
+                ? new GradingWorkerExecutor(
+                    this.files, this.assignmentSeed, this.runnerCore, factory,
+                    this.reportPhase, label)
+                : new UnavailableExecutor(
+                    label + ' grading needs Web Worker support, '
+                    + 'which this browser did not provide');
+            this.executors.set(kind, executor);
+            return executor;
         }
 
         async ensureReady() {
             const kinds = this.requiredKinds();
-            const needsPython = kinds.has('python');
+            // A substrate that cannot start must abort the grade — that is what
+            // routes the submission to the server-side worker instead of
+            // posting an all-`error` collection as a real 0 (see the
+            // ensureReady probe in runScripts).
+            //
+            // But only when it is the substrate this assignment RUNS on. An
+            // assignment is one language, so "R failed to boot" on an R lab is
+            // a failed grade; a stray .R or .lua sitting beside Python tests is
+            // not, and must not sink the tests that can run. Those scripts then
+            // report their own error through run().
+            //
+            // WHICH ONE IS "THE" SUBSTRATE IS STILL DECIDED BY A CONSTANT, and
+            // that is preserved here rather than fixed: when Python is present
+            // it is treated as the assignment's language and every other kind's
+            // boot failure is swallowed. On an R assignment that happens to
+            // carry one .py file the rule reads backwards — R is the language,
+            // yet an R boot failure would be the one ignored. Mixed-kind suites
+            // should not exist (an assignment is one language), so this has
+            // never been observed; changing failover semantics is not something
+            // to do as a side effect of removing four duplicated methods, so
+            // the behaviour is identical to before and the assumption is named
+            // instead of buried in a loop over ['r', 'lua', 'octave'].
+            const PRIMARY_KIND = 'python';
+            const primaryIsPresent = kinds.has(PRIMARY_KIND);
             const boots = [];
-            if (needsPython) boots.push(this.pythonExecutor().ensureReady());
-            for (const kind of ['r', 'lua', 'octave']) {
-                if (!kinds.has(kind)) continue;
-                // A substrate that cannot start must abort the grade — that is
-                // what routes the submission to the server-side worker instead
-                // of posting an all-`error` collection as a real 0 (see the
-                // ensureReady probe in runScripts).
-                //
-                // But only when it is the substrate this assignment RUNS on.
-                // An assignment is one language, so "R failed to boot" on an R
-                // lab is a failed grade; a stray .R or .lua sitting beside
-                // Python tests is not, and must not sink the tests that can
-                // run. Those scripts then report their own error through run().
-                const boot = this.executorForKind(kind).ensureReady();
-                boots.push(needsPython ? boot.catch(() => {}) : boot);
+            for (const kind of kinds) {
+                const executor = this.executorForKind(kind);
+                if (!executor) continue;  // shell / unsupported / no kernel
+                const boot = executor.ensureReady();
+                const required = kind === PRIMARY_KIND || !primaryIsPresent;
+                boots.push(required ? boot : boot.catch(() => {}));
             }
             // No runnable script kind (all shell/unsupported, or an empty
             // suite): nothing to boot. Each run() still reports its own precise
@@ -709,8 +706,10 @@
         }
 
         async dispose() {
-            for (const executor of [this.python, this.r, this.lua, this.octave]) {
-                if (!executor) continue;
+            // Every executor that was actually created, rather than a
+            // hand-written list of four that a seventh language would silently
+            // leak past.
+            for (const executor of this.executors.values()) {
                 try { await executor.dispose(); } catch (_) { /* best-effort */ }
             }
         }

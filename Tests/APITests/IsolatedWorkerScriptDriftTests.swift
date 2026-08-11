@@ -71,13 +71,47 @@ import Testing
             }
             .joined(separator: "\n")
 
-        let pattern = #"(?:new\s+Worker|gradingWorkerFactory)\(\s*['"](/[^'"]+)['"]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-        let range = NSRange(code.startIndex..<code.endIndex, in: code)
+        // Three shapes now. The first two name a script at the call:
+        // `new Worker('/x.js')` and browser-runner's
+        // `gradingWorkerFactory('/x.js')` wrapper. The third is the GENERATED
+        // `GRADING_WORKER_SCRIPTS` table, which is where every grading worker
+        // path lives since the four hand-written `<lang>Executor()` methods
+        // collapsed into one table-driven factory — `gradingWorkerFactory` is
+        // now called with a variable, so a call-site scan alone would find
+        // nothing and this test would fail in the direction that says the
+        // allowlist has entries nothing spawns.
+        //
+        // Reading the table is the honest replacement: it IS the set of workers
+        // the page can spawn, and it is generated from the same descriptor
+        // field the allowlist derives from — so this test now checks that the
+        // two derivations agree end to end, rather than that two hand-written
+        // lists happen to match.
+        let patterns = [
+            #"(?:new\s+Worker|gradingWorkerFactory)\(\s*['"](/[^'"]+)['"]"#,
+            #"GRADING_WORKER_SCRIPTS\s*=\s*\{([^}]*)\}"#,
+        ]
         var found: Set<String> = []
-        for match in regex.matches(in: code, range: range) {
-            guard let captured = Range(match.range(at: 1), in: code) else { continue }
-            found.insert(String(code[captured]))
+        let range = NSRange(code.startIndex..<code.endIndex, in: code)
+        for (index, pattern) in patterns.enumerated() {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in regex.matches(in: code, range: range) {
+                guard let captured = Range(match.range(at: 1), in: code) else { continue }
+                let text = String(code[captured])
+                if index == 0 {
+                    found.insert(text)
+                } else {
+                    // `{ lua: '/lua-grading-worker.js', … }` — take every quoted
+                    // path in the table body.
+                    guard
+                        let inner = try? NSRegularExpression(pattern: #"['"](/[^'"]+)['"]"#)
+                    else { continue }
+                    let innerRange = NSRange(text.startIndex..<text.endIndex, in: text)
+                    for hit in inner.matches(in: text, range: innerRange) {
+                        guard let r = Range(hit.range(at: 1), in: text) else { continue }
+                        found.insert(String(text[r]))
+                    }
+                }
+            }
         }
         return found
     }
