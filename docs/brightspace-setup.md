@@ -303,6 +303,22 @@ one push then. Nothing re-pushes while the goal is still live — the bonus in
 LEARN is a lower bound until the deadline — and an assignment with **no due
 date** never freezes at all, so its bonus only reaches LEARN via "Push all".
 
+### Grades above the item maximum
+
+A class-goal bonus is **true extra credit and is not capped**, so a student
+already at full marks pushes above 100%: a 4-point suite with a met +1 bonus
+sends 5/4, which onto a /10 LEARN item is **12.5**. This is deliberate — capping
+it at 100% made the reward invisible to precisely the students who earned it,
+since a goal like "80% of the class reaches 100%" leaves most of the class at
+full marks.
+
+D2L decides whether it keeps that value. A numeric grade item carries a
+**"Can Exceed"** flag, and an item without it may clamp or reject an above-max
+grade. Chickadee pushes the true value either way — a clamped grade is worth more
+to the student than no grade — and records a warning on the **success** row of
+the sync-activity log naming the item, its maximum, and the fix. If an assignment
+carries a points-rewarded class goal, tick **Can Exceed** on its LEARN grade item.
+
 For ops-level diagnosis, the admin diagnostic MCP surface exposes
 `get_brightspace_sync_status` (counts by status + recent D2L error detail,
 student-free).

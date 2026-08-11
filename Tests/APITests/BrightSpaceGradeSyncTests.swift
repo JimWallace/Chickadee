@@ -800,6 +800,112 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
+    // MARK: Class-goal bonus (true extra credit, so a push may exceed the max)
+
+    /// A suite worth `total` points carrying one fully-met class goal awarding
+    /// `bonusPoints`, plus the snapshot that makes the bonus live.
+    private func seedClassGoalBonus(
+        setupID: String, total: Int, bonusPoints: Int, progress: Double = 1.0
+    ) async throws {
+        let props = TestProperties(
+            testSuites: try JSONDecoder().decode(
+                [TestSuiteEntry].self,
+                from: Data(#"[{"tier":"public","script":"t1.sh","points":\#(total)}]"#.utf8)),
+            achievements: [
+                Achievement(
+                    id: "cg", name: "Class Goal", scope: .classWide,
+                    conditions: [
+                        AchievementCondition(signal: .grade, comparator: .atLeast, value: 100)
+                    ],
+                    reward: AchievementReward(type: .points, label: "Met", points: bonusPoints),
+                    classFraction: 0.8)
+            ])
+        let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+        setup.manifest = try #require(
+            String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
+        try await setup.save(on: app.db)
+
+        try await APIAchievementResult(
+            testSetupID: setupID, achievementID: "cg",
+            studentsMeeting: 8, denominator: 10, progress: progress, locked: true,
+            evaluatedAt: Date()
+        ).save(on: app.db)
+    }
+
+    @Test func aMetClassGoalPushesAboveTheGradeItemMaximum() async throws {
+        // 4/4 of a 4-point suite + a fully-met +1 class goal = 5/4, which onto a
+        // /10 item is 12.5. A student at full marks is exactly who a class goal
+        // needs to visibly reward, so the cap that used to hold this at 10 is gone.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-cg")
+            try await seedClassGoalBonus(setupID: scenario.setupID, total: 4, bonusPoints: 1)
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 4, total: 4),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-456", name: "Lab", maxPoints: 10, gradeType: "Numeric", canExceed: true))
+
+            #expect(try await sweep(client: fake) == 1)
+
+            let pushed = try #require(await fake.pushes.first?.earnedPoints)
+            #expect(abs(pushed - 12.5) < 0.0001)
+        }
+    }
+
+    @Test func anAboveMaxPushOnANonExceedingItemIsWarnedInTheSyncLog() async throws {
+        // The one way the bonus can be computed correctly and still not appear in
+        // LEARN: D2L may clamp or reject a value above an item that isn't set to
+        // exceed its maximum. The push still goes out — a clamped grade beats no
+        // grade — but the success row has to say so, or the instructor is back to
+        // "the bonus isn't counting" with nothing to look at.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-cgx")
+            try await seedClassGoalBonus(setupID: scenario.setupID, total: 4, bonusPoints: 1)
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 4, total: 4),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-456", name: "Lab", maxPoints: 10, gradeType: "Numeric", canExceed: false))
+
+            #expect(try await sweep(client: fake) == 1)
+            #expect(await fake.pushes.count == 1, "the push still goes out")
+
+            let logs = try await APIBrightSpaceSyncLog.query(on: app.db).all()
+            let row = try #require(logs.first(where: { $0.status == APIBrightSpaceSyncLog.Status.success.rawValue }))
+            let detail = try #require(row.detail)
+            #expect(detail.contains("above its maximum"))
+            #expect(detail.contains("Can Exceed"))
+        }
+    }
+
+    @Test func anAtMaxPushCarriesNoWarning() async throws {
+        // The warning must be specific to exceeding the max, not fire on every
+        // push to an item that happens to be flagged non-exceeding.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-cgn")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 4, total: 4),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-456", name: "Lab", maxPoints: 10, gradeType: "Numeric", canExceed: false))
+
+            #expect(try await sweep(client: fake) == 1)
+
+            let logs = try await APIBrightSpaceSyncLog.query(on: app.db).all()
+            let row = try #require(logs.first(where: { $0.status == APIBrightSpaceSyncLog.Status.success.rawValue }))
+            #expect(row.detail == nil)
+        }
+    }
+
     @Test func scaledGradeIsRoundedToTwoDecimals() async throws {
         // 6/7 of a /7 suite onto a /10 item = 8.571428…, which must land as 8.57.
         try await withApp(app) { _ in

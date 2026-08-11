@@ -102,10 +102,20 @@ func bestGradeForStudent(
     } else {
         basePoints = earned
     }
-    // Class-goal bonus: extra credit, capped at the suite total (100%).
+    // Class-goal bonus: true extra credit, which may exceed the suite total.
     let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, props: setupProps, on: db)
-    let points = bonus > 0 ? min(total, basePoints + bonus) : basePoints
+    let points = earnedWithClassGoalBonus(earned: basePoints, total: total, bonus: bonus)
     return StudentGrade(points: points, total: total)
+}
+
+/// One resolved grade push: the points to send, the item they target, a
+/// `refusal` when the item can't be synced to at all, and a `warning` recorded
+/// alongside a push that goes through but may not land as sent.
+struct ScaledGradePush {
+    let pushPoints: Double
+    let gradeObject: BrightSpaceGradeObject?
+    let refusal: String?
+    let warning: String?
 }
 
 /// The points to push and the grade item they target, or a `refusal` message
@@ -119,7 +129,7 @@ func scaledGradePush(
     client: any BrightSpaceGrading,
     gradeObjectCache: GradeObjectInfoCache,
     application: Application
-) async -> (pushPoints: Double, gradeObject: BrightSpaceGradeObject?, refusal: String?) {
+) async -> ScaledGradePush {
     var gradeObject: BrightSpaceGradeObject?
     do {
         gradeObject = try await gradeObjectCache.info(
@@ -136,7 +146,8 @@ func scaledGradePush(
         let message =
             "Grade item '\(gradeObject?.name ?? gradeObjectID)' is type \(type); "
             + "Chickadee can only sync to Numeric grade items."
-        return (grade.points, gradeObject, message)
+        return ScaledGradePush(
+            pushPoints: grade.points, gradeObject: gradeObject, refusal: message, warning: nil)
     }
 
     // Scale Chickadee's grade onto the D2L item's own max when both totals are
@@ -144,10 +155,36 @@ func scaledGradePush(
     // unknown or already equals the suite total, this is the identity, so the
     // pushed value is unchanged. The result is rounded to 2 decimals so the
     // gradebook shows a clean value (8.57) rather than 8.571428571…
+    var pushPoints = roundedGradePoints(grade.points)
     if let total = grade.total, total > 0, let maxPoints = gradeObject?.maxPoints, maxPoints > 0 {
-        return (roundedGradePoints(grade.points / total * maxPoints), gradeObject, nil)
+        pushPoints = roundedGradePoints(grade.points / total * maxPoints)
     }
-    return (roundedGradePoints(grade.points), gradeObject, nil)
+    return ScaledGradePush(
+        pushPoints: pushPoints, gradeObject: gradeObject, refusal: nil,
+        warning: aboveMaxWarning(pushPoints: pushPoints, gradeObject: gradeObject))
+}
+
+/// Flags a push that exceeds the item's maximum on an item D2L says cannot
+/// exceed it. A class-goal bonus is true extra credit, so this is now reachable
+/// by design — and it is the one way the bonus can be computed correctly and
+/// still not appear in LEARN, since D2L may clamp or reject the value. Recorded
+/// on the successful sync-log row rather than refused: a clamped grade is worth
+/// more to the student than no grade, and the instructor's fix (tick "Can
+/// Exceed" on the item) needs the observation, not a blocked push.
+///
+/// `canExceed` nil means D2L didn't tell us — say nothing rather than warn on
+/// every push to an item whose flag we never captured.
+private func aboveMaxWarning(pushPoints: Double, gradeObject: BrightSpaceGradeObject?) -> String? {
+    guard let gradeObject,
+        let maxPoints = gradeObject.maxPoints, maxPoints > 0,
+        pushPoints > maxPoints,
+        gradeObject.canExceed == false
+    else { return nil }
+    return """
+        Pushed \(pushPoints) to '\(gradeObject.name)', above its maximum of \(maxPoints). \
+        The item is not set to allow grades above the maximum, so LEARN may clamp or reject \
+        the extra credit — tick "Can Exceed" on the grade item to keep it.
+        """
 }
 
 /// Rounds a grade value to 2 decimal places for the LEARN gradebook.

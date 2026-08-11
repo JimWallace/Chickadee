@@ -343,7 +343,11 @@ extension GradeSyncSweep {
             try await row.save(on: db)
         }
 
-        await appendSyncLog(.success, points: pushPoints, detail: nil)
+        // `warning` is nil on an ordinary push; when set, the push went through
+        // but LEARN may not keep all of it (extra credit above a grade item that
+        // is not "Can Exceed"). It rides the success row so it's visible in the
+        // sync-activity log without inventing a fourth status.
+        await appendSyncLog(.success, points: pushPoints, detail: scaled.warning)
 
         application.logger.info(
             "BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(pushPoints) pts")
