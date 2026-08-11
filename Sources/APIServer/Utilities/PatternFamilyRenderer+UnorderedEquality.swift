@@ -3,6 +3,27 @@
 // `.unorderedEquality` renderer.  Split from PatternFamilyRenderer.swift
 // (June 2026 audit); byte-identical output.
 
+// ORGANIZED BY KIND, NOT BY LANGUAGE. Every language's rendering of this kind
+// lives in this file, so the six can be read against each other — which is the
+// comparison the parity work keeps having to make and could not, when Python
+// was sliced by kind and the other five were one file per language each
+// re-switching on kind internally. Adding a tenth kind is one new file plus six
+// dispatcher arms, and the dispatchers are exhaustive switches, so the compiler
+// produces that worklist.
+//
+// The per-language files keep what is genuinely per-language: the kind
+// dispatcher itself, the call-context builder, the case header, the
+// personalization preamble and the identifier/comment helpers.
+
+// THE ONE KIND THAT DOES NOT FIT CLEANLY, and it is worth knowing why. Only
+// Python renders `unorderedEquality` with its own function. R, Lua, Octave, C++
+// and Racket all render it through their `<lang>EqualityCase` with an
+// `unordered: true` flag — ONE renderer serving two kinds — so those five live
+// in PatternFamilyRenderer+BoundaryEquality.swift beside the ordered form they
+// share code with. Splitting them to satisfy the file naming would have meant
+// either duplicating a renderer or exporting half of one, which is a worse
+// trade than a cross-reference.
+
 import Core
 
 // MARK: - unorderedEquality
