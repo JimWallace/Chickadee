@@ -181,13 +181,27 @@ from the YAML would accept imports the shipped kernel cannot serve.
 If the language has no package ecosystem, emit an empty `moduleOwners`. On-demand
 loading then correctly does nothing.
 
-### 4. Register it with the vendoring guard
+### 4. Confirm the vendoring guard picked your kernel up
 
-`scripts/check-xeus-vendored.sh` carries
-`expected_language = {"xpython": "python", "xr": "r"}` and iterates **that map**,
-not `kernels.json`. A third kernel that is not in it ships completely unguarded:
-a partial or botched re-vendor of your kernel passes CI. Add the entry when you
-add the env.
+There is nothing to register. This step used to say `check-xeus-vendored.sh`
+carried a literal `expected_language` map you had to add your kernel to, and
+that was true once; it now derives the expected set from each language's
+`editorSupport: .notebookKernel(kernelName:)`. **Your kernel is guarded the day
+your descriptor names it**, which is why the parity checklist below lists the
+vendoring guard as free.
+
+What you do owe is a check that the derivation actually sees you, because it
+reads Swift source with a regex and a derivation can go *partial* without going
+loud. After vendoring:
+
+```
+scripts/check-xeus-vendored.sh
+```
+
+Confirm the first OK line lists your kernel alongside the others — e.g.
+`kernels ['xlua', 'xoctave', 'xpython', 'xr']`. A kernel missing from that list
+is unguarded even though nothing failed. If yours is absent, the derivation is
+what to fix, not your env; see the trap below.
 
 ### 5. Write the language module
 
@@ -299,6 +313,35 @@ an uncaught error with its message on stderr, and — if the language has packag
   `editorSupport.notebookKernel(kernelName:)`, so **your kernel is guarded the
   day your descriptor names it**, and a vendored kernel no language claims is an
   error rather than dead weight in a 100 MB payload.
+
+  **Deriving it did not make it safe, and learning that cost five red releases
+  on `main`.** The derivation reads `LanguageDescriptor.swift` with a regex, and
+  it paired language to kernel by line PROXIMITY: the nearest preceding
+  `case .X:` owned the next `kernelName:`. When #1330 hoisted each descriptor
+  into its own `static let`, the six consecutive `case .X: return
+  Self.XDescriptor` lines left `.racket` current, the first kernel name found
+  (`xpython`) was attributed to it, and `xr`/`xlua`/`xoctave` were dropped —
+  three of four kernels unguarded, the fourth checked against the wrong
+  language. Only an *entirely empty* derivation failed loudly, so a partial one
+  was indistinguishable from a complete one. Two rules fall out, and they
+  generalise past this script:
+
+  - **A derivation must assert its own completeness.** Deriving four of seven
+    silently is the same fail-open you replaced the hand-written list to escape,
+    wearing better clothes. Refuse on anything you cannot classify.
+  - **Do not infer structure from proximity.** Read the mapping the compiler
+    already forces to be exhaustive — here the `descriptor` switch — rather than
+    whichever `case` line happens to sit nearest. Proximity survives exactly
+    until someone moves the code, and moving code is not a change anyone expects
+    to break a guard.
+
+  It stayed invisible for a second reason worth its own rule: `jupyterlite.yml`
+  gated these guards behind a path filter that reported the job green when it
+  skipped them, while `push` to `main` always counted as relevant — so the guard
+  ran only after merge. Every PR was green, every push to `main` was red, and
+  the two were never the same check. **A guard whose answer depends on the event
+  it runs under is not a guard.** All three JupyterLite guards now run
+  unconditionally; they cost well under a second.
 - **Do not add a `default:` arm to a language switch.** The compiler producing
   the worklist is the entire reason the count of touched files is acceptable.
   See `docs/language-handling-review.md` §4.
@@ -1220,6 +1263,11 @@ where predicted: `expected_language` in `check-xeus-vendored.sh` and the
 `XEUS_ENVS` array in `build-jupyterlite.sh`. Neither errors on a kernel it has
 never heard of. The `chickadee-*` naming rule is what made the module-index step
 pick the new env up for free.
+
+(Point-in-time, as postmortems here are: `expected_language` was a literal map
+when Lua was added. It has since been derived from the language descriptors, so
+that half of the trap no longer applies to a seventh language — see the traps
+section above, including what deriving it did *not* fix.)
 
 ### What did not hold — R's two expensive lessons do not generalise
 
