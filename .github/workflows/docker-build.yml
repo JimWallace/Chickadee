@@ -191,6 +191,14 @@ jobs:
       # sqlite, no worker secret (one is generated), no MCP — which is enough to
       # prove the binary starts, migrations apply, and the HTTP server serves.
       #
+      # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany it. `AUTH_MODE` alone is
+      # SILENTLY IGNORED — the default mode is SSO and `AuthConfig` only honours
+      # a local/dual request when this second flag is set, logging "AUTH_MODE=
+      # local ignored ... using sso" and then trapping on the missing
+      # OIDC_CLIENT_ID. The first version of this step set only AUTH_MODE and
+      # died exactly that way, which is worth knowing: the two variables are a
+      # pair, and setting one of them looks like it worked right up until boot.
+      #
       # The budget MIRRORS PRODUCTION deliberately: `wait_healthy` in
       # scripts/bluegreen-deploy.sh gives a new color 90s
       # (CHICKADEE_HEALTH_TIMEOUT). Matching it means this step fails whenever
@@ -203,6 +211,7 @@ jobs:
           echo "Booting $IMAGE ..."
           docker run -d --name chickadee-smoke \
             -e AUTH_MODE=local \
+            -e ENABLE_NON_SSO_AUTH_MODES=true \
             -p 18080:8080 \
             "$IMAGE"
 
@@ -214,24 +223,32 @@ jobs:
           # which is precisely the ambiguity that made v0.5.65 hard to diagnose
           # from off-host. Here we can tell them apart, so we do.
           ok=0
+          exited=0
           last_code=000
           for i in $(seq 1 90); do
+            # `-w '%{http_code}'` already prints 000 when the connection fails,
+            # so curl's own non-zero exit is swallowed rather than appended —
+            # an `|| echo 000` here concatenates into "000000" and defeats the
+            # branch below.
             last_code="$(curl -s -o /tmp/health.body -w '%{http_code}' \
-              http://127.0.0.1:18080/health 2>/dev/null || echo 000)"
+              http://127.0.0.1:18080/health 2>/dev/null)" || true
+            [ -n "$last_code" ] || last_code=000
             if [ "$last_code" = "200" ]; then
               echo "Healthy after ${i}s."
               ok=1
               break
             fi
             if [ "$(docker inspect -f '{{.State.Running}}' chickadee-smoke 2>/dev/null)" != "true" ]; then
-              echo "::error::Container exited before answering /health."
+              exited=1
               break
             fi
             sleep 1
           done
 
           if [ "$ok" -ne 1 ]; then
-            if [ "$last_code" = "000" ]; then
+            if [ "$exited" -eq 1 ]; then
+              echo "::error::The container EXITED before answering /health — the server process died at startup."
+            elif [ "$last_code" = "000" ]; then
               echo "::error::No HTTP response from /health within 90s — the server never began serving."
             else
               echo "::error::/health answered ${last_code}, not 200 — the server is up but degraded (503 means its database check failed)."
