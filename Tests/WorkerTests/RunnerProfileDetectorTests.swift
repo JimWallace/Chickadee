@@ -34,6 +34,14 @@ import Testing
         (.cpp, "g++ (Debian 12.2.0-14) 12.2.0", "12.2.0"),
         // The one that broke. Letter-led, and no other language's is.
         (.racket, "Welcome to Racket v8.10 [cs].", "8.10"),
+        // `javac --version`, measured on 21.0.10. The OLD form is the trap
+        // here, and it is Racket's trap wearing a different coat: `java
+        // -version` prints `openjdk version "21.0.10" 2026-01-20` — to STDERR,
+        // with the number QUOTED. The detector reads both streams and its
+        // leading-non-digit drop eats the quote, so that form happens to parse
+        // too; `--version` on the compiler is the answer that does not depend
+        // on either tolerance, and `javac` is the binary a JRE-only host lacks.
+        (.java, "javac 21.0.10", "21.0.10"),
     ]
 
     @Test func everyLanguagesRealBannerParses() {

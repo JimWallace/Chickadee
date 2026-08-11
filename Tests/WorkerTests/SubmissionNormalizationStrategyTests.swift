@@ -50,14 +50,20 @@ import Testing
         let script = "publictest_a.\(language.generatedScriptExtension)"
         let result = submissionNormalization(
             manifest: Self.manifest(
-                suiteScripts: [script], language: language == .cpp ? .cpp : nil),
+                suiteScripts: [script],
+                // A language whose generated case is a shell wrapper has no
+                // extension to sniff, so its manifest must RECORD the language
+                // — that is the whole reason `manifestOwningLanguage` exists.
+                // Derived rather than spelled `== .cpp`, which silently
+                // answered "no" for the second such language.
+                language: language.generatesLanguagelessWrapper ? language : nil),
             submissionFilename: "lab.ipynb",
             submissionDirectory: dir)
 
         switch language {
         case .python:
             #expect(result == .pythonModule)
-        case .r, .lua, .octave, .cpp, .racket:
+        case .r, .lua, .octave, .cpp, .racket, .java:
             #expect(
                 result == .extractToSource(forcedLanguage: language),
                 """
@@ -76,19 +82,21 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let ext = language.generatedScriptExtension
-        // C++'s generated scripts are `.sh` (no signal, by design) — its
-        // manifest records the language and its submissions are `.cpp`.
-        let submissionExt = language == .cpp ? "cpp" : ext
+        // A wrapper language's generated scripts carry no language signal (by
+        // design) — its manifest records the language, and its submissions
+        // arrive under the language's OWN source extension.
+        let submissionExt =
+            language.generatesLanguagelessWrapper ? language.sourceFileExtension : ext
         let result = submissionNormalization(
             manifest: Self.manifest(
                 suiteScripts: ["publictest_a.\(ext)"],
-                language: language == .cpp ? .cpp : nil),
+                language: language.generatesLanguagelessWrapper ? language : nil),
             submissionFilename: "solution.\(submissionExt)",
             submissionDirectory: dir)
 
         switch language {
         case .python: #expect(result == .pythonModule)
-        case .r, .lua, .octave, .cpp, .racket:
+        case .r, .lua, .octave, .cpp, .racket, .java:
             #expect(result == .extractToSource(forcedLanguage: language))
         }
     }

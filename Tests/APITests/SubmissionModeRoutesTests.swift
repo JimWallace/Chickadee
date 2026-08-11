@@ -36,9 +36,9 @@ import VaporTesting
 
     @Test func acceptAttributeDerivesFromTheLanguageTable() {
         // Every assignment language's extensions plus the two formats every
-        // assignment takes.  Adding a fifth language changes this string
-        // without anyone editing a template.
-        #expect(submissionAcceptAttribute(manifest: nil) == ".cpp,.h,.hpp,.ipynb,.lua,.m,.py,.r,.rkt,.zip")
+        // assignment takes.  Adding a language changes this string without
+        // anyone editing a template — `.java` arrived exactly that way.
+        #expect(submissionAcceptAttribute(manifest: nil) == ".cpp,.h,.hpp,.ipynb,.java,.lua,.m,.py,.r,.rkt,.zip")
     }
 
     @Test func acceptAttributeIncludesRequiredFileExtensions() throws {
@@ -48,7 +48,7 @@ import VaporTesting
         // AssignmentLanguage claims, which is the upload-mode C++ case.
         #expect(
             submissionAcceptAttribute(manifest: manifest)
-                == ".cpp,.h,.hpp,.ipynb,.lua,.m,.py,.r,.rkt,.zip")
+                == ".cpp,.h,.hpp,.ipynb,.java,.lua,.m,.py,.r,.rkt,.zip")
     }
 
     @Test func acceptAttributeSkipsExtensionlessRequiredFiles() throws {
@@ -170,7 +170,7 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("main.cpp, util.h"))
-                    #expect(html.contains(#"accept=".cpp,.h,.hpp,.ipynb,.lua,.m,.py,.r,.rkt,.zip""#))
+                    #expect(html.contains(#"accept=".cpp,.h,.hpp,.ipynb,.java,.lua,.m,.py,.r,.rkt,.zip""#))
                 })
         }
     }

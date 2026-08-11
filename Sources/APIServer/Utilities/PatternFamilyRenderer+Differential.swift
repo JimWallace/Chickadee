@@ -347,3 +347,30 @@ func racketDifferentialCase(
                                \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+/// `.differential` — compares the student's method against the instructor's
+/// reference. See `PatternKind.differential`.
+///
+/// Java lands where C++ does: the reference is COMPILED with the test, so a
+/// reference that does not compile is a build failure the instructor meets at
+/// validation, rather than a per-case `errored`. A reference that compiles but
+/// THROWS gets its own try/catch rather than riding the shared guard, so it is
+/// not misreported as the student's "unexpected exception".
+func javaDifferentialBody(
+    family: PatternFamily, context: JavaCallContext, c: PatternCase
+) -> String {
+    javaGuarded(
+        """
+        \(javaDifferentialExpected(family: family, context: context))
+        var result = \(javaTargetCall(family.functionName))(\(context.callArgs));
+        if (!ck.equal(result, expected)) {
+            ck.failed("\(GeneratedMessage.wrongValue)\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)" + ck.format(expected) + "\\n"
+                + "\(GeneratedMessage.got)" + ck.format(result));
+        }
+        ck.passed("\(GeneratedMessage.returned)" + ck.format(result));
+        """, inputLine: context.inputLine)
+}

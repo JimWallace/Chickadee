@@ -107,7 +107,7 @@ enum PersonalizationEvaluator {
     /// from the evaluator instead of keeping a second copy of it.
     static func supportsEvaluation(_ language: AssignmentLanguage) -> Bool {
         switch language {
-        case .python, .r, .lua, .octave, .cpp, .racket: return true
+        case .python, .r, .lua, .octave, .cpp, .racket, .java: return true
         }
     }
 
@@ -331,6 +331,23 @@ enum PersonalizationEvaluator {
             )
             filename = "personalize_driver.sh"
             interpreter = "sh"
+        case .java:
+            // Same shape as C++ and for the same reason — no interpreter to
+            // hand an expression to — so the driver is a shell script that
+            // compiles with javac and runs with java. The support helpers are
+            // named on the javac command line rather than textually included,
+            // since Java has no `#include`.
+            //
+            // The filename matches C++'s deliberately: each evaluation runs in
+            // its own temporary directory, so there is no collision, and both
+            // are the same kind of artefact.
+            source = JavaPersonalizationDriver.renderDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            filename = "personalize_driver.sh"
+            interpreter = "sh"
         }
         return (source, filename, interpreter)
     }
@@ -386,6 +403,14 @@ enum PersonalizationEvaluator {
             let headers = lowered.filter { $0.1 == "hpp" || $0.1 == "h" }.map(\.0).sorted()
             let sources = lowered.filter { $0.1 == "cpp" }.map(\.0).sorted()
             return headers + sources
+        case .java:
+            // Compiled by FILE alongside the driver, so any `.java` beside the
+            // assignment is a candidate helper. No ordering constraint, unlike
+            // C++: javac resolves declarations across every file in one
+            // invocation regardless of the order they are named in, so a plain
+            // sort is enough for deterministic driver bytes.
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "java" }
+                .sorted()
         }
     }
 

@@ -44,7 +44,13 @@ import Testing
         case .lua: return "lua"
         case .octave: return "octave-cli"
         case .racket: return "racket"
-        case .cpp: return "sh"
+        // Both languages whose generated case is a shell wrapper carrying a
+        // compile step. Stated per language rather than derived from
+        // `generatesLanguagelessWrapper`, deliberately: this table is the
+        // compile-forced place a new language SAYS what its generated script
+        // dispatches to, and deriving it would let a language inherit an answer
+        // nobody checked. That is the defect the whole test exists to catch.
+        case .cpp, .java: return "sh"
         }
     }
 

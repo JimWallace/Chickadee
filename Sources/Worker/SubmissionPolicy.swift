@@ -82,14 +82,14 @@ func submissionGuaranteeExemption(
         // a corrupt notebook is corrupt whatever kernel wrote it, and a student
         // who gets silence cannot act on it in any language.
         switch language {
-        case .python, .r, .lua, .octave, .cpp, .racket: return nil
+        case .python, .r, .lua, .octave, .cpp, .racket, .java: return nil
         }
 
     case .introspectableSidecar:
         switch language {
         case .python:
             return nil
-        case .r, .lua, .octave, .cpp, .racket:
+        case .r, .lua, .octave, .cpp, .racket, .java:
             // A genuine language-shaped exemption rather than unbuilt work. The
             // sidecar exists so `astStructure` notebook checks can introspect
             // real module-level definitions, and `astStructure` is Python-only

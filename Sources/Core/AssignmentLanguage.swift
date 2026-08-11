@@ -50,6 +50,44 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// generated test is byte-identical across the CS 135 and CS 136 dialects.
     case racket
 
+    /// Java — the THIRD upload-only language, and the second compiled one.
+    ///
+    /// Upload-only for C++'s reason rather than Racket's: a browser kernel
+    /// would be a different toolchain than the course's `javac`, and no xeus
+    /// Java kernel exists on the channel either, so both arguments point the
+    /// same way and the decision does not hinge on which.
+    ///
+    /// Its generated cases are POSIX shell wrappers like C++'s — the SECOND
+    /// language to generate `.sh`, which is what turned the hardcoded
+    /// `language != .cpp` forks into the derived
+    /// `generatesLanguagelessWrapper` predicate. Generating `.java` instead
+    /// cannot work: a generated `.java` test would be run by `java` in
+    /// single-file source mode, which compiles exactly one file and can see
+    /// neither the student's class nor `test_runtime` (measured — the launcher
+    /// has no `--source-path`). The wrapper's `javac` pulls both in from the
+    /// sourcepath on demand instead, so a broken unrelated file in the upload
+    /// does not fail every test.
+    ///
+    /// Three measured facts shape everything else about it:
+    ///
+    /// * **A student's `System.exit(0)` would make every test read as a pass.**
+    ///   The same hazard R (`quit()`), Lua (`os.exit`) and Octave (`exit`) each
+    ///   had — but in the NATIVE path, where there is no kernel to mask the
+    ///   call, and Java's `SecurityManager` is deprecated for removal so
+    ///   masking is not available at all. Every generated wrapper therefore
+    ///   checks for a sentinel line the test itself printed, and reports
+    ///   `error` when it is missing.
+    /// * **`Integer.valueOf(1).equals(Long.valueOf(1L))` is `false`.** Boxed
+    ///   numeric equality is type-strict, so `ck.equal` compares numbers
+    ///   numerically. Without that, an authored `1` against a student method
+    ///   returning `long` is a silent wrong mark.
+    /// * **Setting `CLASSPATH` REPLACES the default `.` entry**, so
+    ///   `moduleResolution` is `.byName("CLASSPATH")` while
+    ///   `workingDirectoryIsOnDefaultSearchPath` is `true` — the `LUA_PATH`
+    ///   trap again, and the third case proving those two must be asked
+    ///   separately.
+    case java
+
     /// Kernelspec `name` values that mark a Python notebook. `xpython` is the
     /// vendored xeus-python kernel; `python3` is what classic Jupyter writes and
     /// `python` is what `language_info.name` reports.
@@ -447,6 +485,7 @@ extension AssignmentLanguage {
         case .octave: return value.octaveLiteral
         case .cpp: return value.cppLiteral
         case .racket: return value.racketLiteral
+        case .java: return value.javaLiteral
         }
     }
 
@@ -516,7 +555,7 @@ extension AssignmentLanguage {
         case .octave:
             return OctavePersonalizationRuntime.chickadeeSerializeOctaveSource + "\n\n"
                 + OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource
-        case .cpp, .racket:
+        case .cpp, .racket, .java:
             // No kernel, so no in-page worker to prepend anything to.
             return nil
         }
@@ -623,6 +662,40 @@ extension AssignmentLanguage {
                 ? "(define ck-inputs (hash))"
                 : "(define ck-inputs\n  (hash\n" + entries.joined(separator: "\n") + "))"
             return "#lang racket/base\n\(header)\n(provide ck-inputs)\n\(body)\n"
+        case .java:
+            // A CLASS of `public static final` fields, which is C++'s answer in
+            // Java's clothing: each input keeps its own field, so a generated
+            // test says `_ck_inputs.name` and a MISSING input is a compile
+            // error naming the identifier — the fail-closed check the dynamic
+            // runtimes do with `isKey`, earlier and louder.
+            //
+            // The class is named for the file because Java requires it: a
+            // public class must live in `<name>.java`. `_ck_inputs` is a legal
+            // Java identifier (leading underscore is fine; bare `_` is not, and
+            // is not what this is).
+            //
+            // Each field is declared at the value's NATURAL type — Java's
+            // answer to C++'s `inline const auto`, spelled out because Java has
+            // no `var` for fields. `Object` was the obvious first choice and
+            // does not compile at the call site: Java will not pass an `Object`
+            // to a student's `f(int x)`, so every test using a per-student
+            // input would need a cast to a type the renderer cannot know.
+            //
+            // The type comes from `javaDeclaredType(forLiteral:)`, which reads
+            // the rendered literal because that is all this function has — see
+            // its doc for why that is sound and where the closed grammar comes
+            // from.
+            //
+            // No imports: every literal renders fully qualified, so this file
+            // can be written into an empty directory and compiled on its own.
+            let fields = keys.map { key -> String in
+                let literal = values[key] ?? "null"
+                return
+                    "    public static final \(javaDeclaredType(forLiteral: literal)) \(key) = \(literal);"
+            }
+            return "\(header)\npublic class _ck_inputs {\n"
+                + (fields.isEmpty ? "" : fields.joined(separator: "\n") + "\n")
+                + "}\n"
         }
     }
 

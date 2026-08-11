@@ -146,6 +146,7 @@ func existenceGuard(
     case .r: source = renderRExistenceGuard(family: family, specHash: hash)
     case .octave: source = renderOctaveExistenceGuard(family: family, specHash: hash)
     case .cpp: source = renderCppExistenceGuard(family: family, specHash: hash)
+    case .java: source = renderJavaExistenceGuard(family: family, specHash: hash)
     case .python: source = pythonExistenceGuardSource(family: family, specHash: hash, label: label)
     }
     return GeneratedScript(
@@ -272,6 +273,11 @@ private func renderCase(
             perStudentNames: perStudentNames)
     case .cpp:
         source = renderCppPatternCase(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    case .java:
+        source = renderJavaPatternCase(
             family: family, case: c,
             sectionVariables: sectionVariables, specHash: specHash,
             perStudentNames: perStudentNames)

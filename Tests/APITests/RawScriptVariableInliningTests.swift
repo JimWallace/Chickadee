@@ -214,8 +214,11 @@ import Testing
         case .octave: return "if (threshold != 18.5)\n  exit(1);\nend\n"
         case .racket:
             return "#lang racket\n(exit (if (= threshold 18.5) 0 1))\n"
-        case .cpp:
-            // Declines inlining by design, so there is nothing to execute.
+        case .cpp, .java:
+            // Both decline inlining by design, so there is nothing to execute —
+            // C++ because a bare `.cpp` is never run, Java because a `.java`
+            // file has no top-level statement position to inline into. See
+            // `TestScriptVariablePrepender.supportsRawScriptInlining`.
             return ""
         }
     }
@@ -227,7 +230,7 @@ import Testing
         case .lua: return ["lua"]
         case .octave: return ["octave-cli", "--no-gui", "--quiet"]
         case .racket: return ["racket"]
-        case .cpp: return nil
+        case .cpp, .java: return nil
         }
     }
 

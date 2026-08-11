@@ -160,6 +160,22 @@ public func extractRacket(cells: [NotebookCell], filename: String) -> ExtractedR
     extractWithCellMarkers(cells: cells, filename: filename, comment: ";")
 }
 
+/// Extract Java from a notebook's cells — the sixth marker-based extractor,
+/// sharing C++'s `//` comment leader.
+///
+/// Java assignments are upload-only, so this path is as rare as C++'s and
+/// Racket's: a student sending an `.ipynb` through the upload form. It carries
+/// Racket's caveat rather than C++'s, and more strongly — the flattened file is
+/// NOT directly compilable, because Java requires a public class whose name
+/// matches the file and this emits bare cell text under a provenance header.
+/// Nothing wraps one around it, deliberately: inventing a class name is the
+/// silent-wrong-answer shape, and a submission wrapped in a guessed class would
+/// compile to something the student did not write. The guarantee that holds is
+/// the universal one: the notebook extracts or errors, never silently vanishes.
+public func extractJava(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    extractWithCellMarkers(cells: cells, filename: filename, comment: "//")
+}
+
 /// The shared body of the marker-based extractors. Emits each non-empty code
 /// cell verbatim (trailing whitespace trimmed) behind a boundary comment whose
 /// number is the cell's 1-based position in the ORIGINAL notebook — a markdown

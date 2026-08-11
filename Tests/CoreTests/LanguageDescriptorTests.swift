@@ -53,7 +53,7 @@ import Testing
             $0.editorSupport == .uploadOnly
         }
         #expect(
-            kernelLess == [.cpp, .racket],
+            kernelLess == [.cpp, .racket, .java],
             """
             The kernel-less language set changed: \(kernelLess). Vendoring or \
             dropping a kernel is a stated decision — update this pin in the \
@@ -73,7 +73,23 @@ import Testing
         }
         let unique: [(String, [String])] = [
             ("displayName", all.map(\.displayName)),
-            ("generatedScriptExtension", all.map(\.generatedScriptExtension)),
+            // EXEMPTING THE WRAPPER LANGUAGES, and only them. A language whose
+            // generated case is a shell wrapper answers `sh` here, and `sh` is
+            // definitionally the extension that carries NO language signal —
+            // so two of them sharing it is not the copied-literal mistake this
+            // row exists to catch, it is the design. Nothing routes by this
+            // value for such a language: resolution reads the recorded
+            // declaration instead (`manifestOwningLanguage`).
+            //
+            // The uniqueness requirement is unchanged for every language whose
+            // generated extension really is its own, which is where a copied
+            // literal would actually steal another language's files.
+            (
+                "generatedScriptExtension",
+                AssignmentLanguage.allCases
+                    .filter { !$0.generatesLanguagelessWrapper }
+                    .map(\.descriptor.generatedScriptExtension)
+            ),
             ("inputsFileName", all.map(\.inputsFileName)),
             ("kernel environmentFileName", kernels.map(\.env)),
             ("kernelName", kernels.map(\.name)),
@@ -325,7 +341,7 @@ import Testing
         case .python:
             // `repr` plus Python's own `json` module. Nothing to prepend.
             #expect(language.autoComputeRuntimeSource == nil)
-        case .cpp, .racket:
+        case .cpp, .racket, .java:
             // No kernel, so no in-page worker to prepend anything to.
             #expect(language.autoComputeRuntimeSource == nil)
         }

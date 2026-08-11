@@ -62,8 +62,8 @@ enum KernelImportGuard {
             return RLibraryScanner.referencedPackages(in: source)
                 .filter { !environment.provides($0.package) && !localModules.contains($0.package) }
                 .map { Unsatisfied(name: $0.package, line: $0.line) }
-        case .cpp, .racket:
-            // Unreachable twice over for both: `language(forFile:)` returns nil
+        case .cpp, .racket, .java:
+            // Unreachable twice over for all three: `language(forFile:)` returns nil
             // for their extensions, and no inventory exists to load — a
             // kernel-less language has no fixed browser environment for
             // anything to be unsatisfiable against. Reporting nothing is the

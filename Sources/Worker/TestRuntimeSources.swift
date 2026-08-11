@@ -54,6 +54,8 @@ func runtimeHelperFiles(for language: AssignmentLanguage) -> [String: String] {
         return canonicalSources("test_runtime.hpp")
     case .racket:
         return canonicalSources("test_runtime.rkt")
+    case .java:
+        return canonicalSources("test_runtime.java")
     }
 }
 

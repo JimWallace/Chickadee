@@ -78,6 +78,23 @@ enum TestScriptVariablePrepender {
                 variables
                 .map { "(define \($0.name) \($0.value.racketLiteral))" }
                 .joined(separator: "\n")
+        case .java:
+            // Nothing, like C++ — but for a DIFFERENT reason, and the
+            // difference matters because C++'s reason does not apply here. A
+            // hand-written `.java` suite entry IS executable (single-file
+            // source mode), so unlike a bare `.cpp` there genuinely is a point
+            // at which an inlined block would be read.
+            //
+            // What stops it is Java's syntax: a `.java` file is a class
+            // declaration, and there is no top-level statement position to
+            // prepend `int n = 5;` to. Any inlined block would have to be
+            // injected INSIDE a class body — which means knowing where the
+            // class starts, in a file the instructor wrote. That is a text
+            // transformation on someone else's source with a syntax error as
+            // the failure mode, so it is refused rather than attempted; see
+            // `supportsRawScriptInlining`. Inputs reach Java through
+            // `_ck_inputs.java` instead.
+            return ""
         }
     }
 
@@ -101,7 +118,11 @@ enum TestScriptVariablePrepender {
     static func supportsRawScriptInlining(_ language: AssignmentLanguage) -> Bool {
         switch language {
         case .python, .r, .lua, .octave, .racket: return true
-        case .cpp: return false
+        // False for both compiled languages, for two different reasons — see
+        // the corresponding arms of `emit`. C++: a bare `.cpp` is never
+        // executed, so nothing would read the block. Java: a `.java` file has
+        // no top-level statement position to prepend one to.
+        case .cpp, .java: return false
         }
     }
 

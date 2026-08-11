@@ -56,15 +56,18 @@ import Testing
         // no-signal pin for the bare script. That pin is now nil rather than
         // Python: a `.sh`-only suite is the canonical language-less assignment,
         // and saying so is the point of the Optional.
-        guard language != .cpp else {
+        // Asked of the DESCRIPTOR rather than spelled `== .cpp`: every language
+        // whose generated case is a language-less wrapper resolves from its
+        // recorded declaration, and there are two of them now.
+        guard !language.generatesLanguagelessWrapper else {
             let bare = try manifest(
                 #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
             )
             #expect(AssignmentLanguage.derivedDeclaration(manifest: bare) == nil)
             let recorded = try manifest(
-                #"{"schemaVersion":1,"language":"cpp","requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
+                #"{"schemaVersion":1,"language":"\#(language.rawValue)","requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_x.sh"}],"timeLimitSeconds":10}"#
             )
-            #expect(AssignmentLanguage.derivedDeclaration(manifest: recorded) == .cpp)
+            #expect(AssignmentLanguage.derivedDeclaration(manifest: recorded) == language)
             return
         }
         let script = "publictest_x.\(language.generatedScriptExtension)"
@@ -225,8 +228,10 @@ import Testing
         let script = "publictest_x.\(language.generatedScriptExtension)"
         let required = AssignmentLanguage.languagesRequiredToGrade(
             manifest: manifest(language: nil, scripts: [script]))
-        if language == .cpp {
-            #expect(required.isEmpty, "a `.sh` script must name no language, C++ included")
+        if language.generatesLanguagelessWrapper {
+            #expect(
+                required.isEmpty,
+                "a `.sh` script must name no language, \(language.displayName) included")
         } else {
             #expect(required == [language])
         }

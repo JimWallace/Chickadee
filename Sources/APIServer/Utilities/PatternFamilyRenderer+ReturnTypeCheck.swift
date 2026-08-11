@@ -244,3 +244,30 @@ func racketReturnTypeCase(
                                \(JSONValue.string(GeneratedMessage.got).racketLiteral) actual-type)))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaReturnTypeBody(
+    target: String, context: JavaCallContext, c: PatternCase
+) -> String {
+    let expectedType: String = {
+        if case .string(let s) = c.expected { return s }
+        return "int"
+    }()
+    // The RUNTIME class of the boxed result, where C++ asks the static type via
+    // decltype. Java cannot do the latter here: the result is bound with `var`
+    // and handed to a helper taking `Object`, which erases it. For a boxed
+    // value the runtime class is the honest answer, and it is what the student
+    // sees when they print it.
+    return javaGuarded(
+        """
+        var result = \(target)(\(context.callArgs));
+        if (!ck.typeMatches(result, "\(expectedType)")) {
+            ck.failed("\(GeneratedMessage.wrongReturnType)\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)\(expectedType)\\n"
+                + "\(GeneratedMessage.got)" + ck.typeName(result));
+        }
+        ck.passed("\(GeneratedMessage.returned)a \(expectedType)");
+        """, inputLine: context.inputLine)
+}

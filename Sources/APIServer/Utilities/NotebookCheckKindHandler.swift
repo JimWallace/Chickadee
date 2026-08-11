@@ -98,6 +98,7 @@ private func isValidIdentifier(_ value: String, language: AssignmentLanguage) ->
     case .octave: return isValidOctaveIdentifier(value)
     case .cpp: return isValidCppIdentifier(value)
     case .racket: return isValidRacketIdentifier(value)
+    case .java: return isValidJavaIdentifier(value)
     }
 }
 
@@ -110,6 +111,7 @@ private func identifierKindName(_ language: AssignmentLanguage) -> String {
     case .octave: return "Octave identifier"
     case .cpp: return "C++ identifier"
     case .racket: return "Racket identifier"
+    case .java: return "Java identifier"
     }
 }
 

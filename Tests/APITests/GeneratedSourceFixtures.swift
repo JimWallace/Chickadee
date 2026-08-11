@@ -40,7 +40,28 @@ enum GeneratedSourceFixtures {
         .octave: "function r = ck_ref_classify(x)\n  r = 1;\nend",
         .cpp: "int ck_ref_classify(double x) { return 1; }",
         .racket: "(define (ck_ref_classify x) 1)",
+        // `ck_ref_Solution_classify`, because Java's target is QUALIFIED and
+        // `differentialReferenceName` sanitizes the dot — see that property.
+        // A class member, not a free function: Java has none.
+        .java: "static int ck_ref_Solution_classify(double x) { return 1; }",
     ]
+
+    /// The family target, in the shape `language` requires.
+    ///
+    /// Java is the one language whose targets are QUALIFIED (`Class.method`):
+    /// it has no free functions, and a public class must live in a file of its
+    /// own name, so a generated test has to say the class out loud. A bare name
+    /// would render the renderer's undefined-identifier backstop into every
+    /// Java golden — technically honest, and useless as a fixture.
+    ///
+    /// Exhaustive so an eighth language states its answer rather than
+    /// inheriting Python's.
+    static func fixtureFunctionName(for language: AssignmentLanguage) -> String {
+        switch language {
+        case .java: return "Solution.classify"
+        case .python, .r, .lua, .octave, .cpp, .racket: return "classify"
+        }
+    }
 
     /// One plausible family per kind, in `language`.
     ///
@@ -74,7 +95,7 @@ enum GeneratedSourceFixtures {
         }
         return PatternFamily(
             id: "fam", name: "Family", kind: kind,
-            functionName: "classify", paramNames: ["x"], cases: [example],
+            functionName: fixtureFunctionName(for: language), paramNames: ["x"], cases: [example],
             referenceImplementation: kind == .differential
                 ? differentialReference[language] : nil)
     }
@@ -128,6 +149,17 @@ enum GeneratedSourceFixtures {
         // kind to check. `NotebookCheckValidator` refuses every kind at save
         // time with a message saying exactly that.
         .cpp: Set(NotebookCheckKind.allCases),
+        // Java excludes ALL TEN for C++'s reason, not Lua's: the exclusion is
+        // categorical (upload-only, so no submitted notebook exists for any
+        // kind to inspect) rather than a per-kind statement about what the
+        // language can express. `NotebookCheckValidator` refuses every kind at
+        // save time with a message saying exactly that.
+        //
+        // Following C++'s precedent deliberately: Racket refuses all ten at
+        // save time yet has no entry here, so it stores ten goldens for checks
+        // it will never render in anger. That is a known inconsistency, not a
+        // pattern to copy.
+        .java: Set(NotebookCheckKind.allCases),
     ]
 
     /// The check kinds `language` is expected to render, in a stable order.

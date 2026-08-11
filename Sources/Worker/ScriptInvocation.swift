@@ -92,6 +92,12 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     // test reporting `error`, in the only grading path an upload-only language
     // has.
     case .racket: return envInvocation(interpreter: "racket", script: script)
+    // `java Foo.java` — single-file source mode (Java 11+), which compiles the
+    // file in memory and runs it. This serves a HAND-WRITTEN `.java` suite
+    // entry; Chickadee's generated Java cases are `.sh` wrappers and never
+    // arrive here, because source mode compiles exactly ONE file and would see
+    // neither the student's class nor `test_runtime.java`.
+    case .java: return envInvocation(interpreter: "java", script: script)
     case .unknown:
         if FileManager.default.isExecutableFile(atPath: script.path) {
             return ScriptInvocation(executableURL: script, arguments: [])

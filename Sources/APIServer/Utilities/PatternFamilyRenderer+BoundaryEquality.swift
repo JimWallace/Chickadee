@@ -277,3 +277,24 @@ func racketEqualityCase(
                                \(JSONValue.string(GeneratedMessage.got).racketLiteral) (chickadee-format actual))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaEqualityBody(
+    target: String, context: JavaCallContext, c: PatternCase, unordered: Bool
+) -> String {
+    let compare = unordered ? "ck.unorderedEqual" : "ck.equal"
+    let mismatch = unordered ? GeneratedMessage.wrongElements : GeneratedMessage.wrongValue
+    return javaGuarded(
+        """
+        var expected = \(context.expectedExpression);
+        var result = \(target)(\(context.callArgs));
+        if (!\(compare)(result, expected)) {
+            ck.failed("\(mismatch)\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)" + ck.format(expected) + "\\n"
+                + "\(GeneratedMessage.got)" + ck.format(result));
+        }
+        ck.passed("\(GeneratedMessage.returned)" + ck.format(result));
+        """, inputLine: context.inputLine)
+}

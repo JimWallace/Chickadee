@@ -19,6 +19,17 @@ public enum ScriptInterpreter: String, Sendable, Equatable {
     case lua
     case octave
     case racket
+    /// Java, run through the launcher's single-file source mode (`java
+    /// Foo.java`), which compiles one file in memory and runs it.
+    ///
+    /// This is for a HAND-WRITTEN `.java` suite entry. Chickadee's GENERATED
+    /// Java cases are `.sh` wrappers and never reach this case, precisely
+    /// because source mode compiles exactly one file and so cannot see the
+    /// student's class or the runtime helper. A hand-written test that is
+    /// genuinely self-contained runs fine here — which is more than `.cpp`
+    /// gets, and the reason Java claims its own extension while C++ leaves
+    /// `.cpp` unrunnable.
+    case java
     /// No recognised extension, shebang, or Python-looking content. The caller
     /// decides the fallback (e.g. executable bit, else /bin/sh).
     case unknown
@@ -39,6 +50,7 @@ public func classifyScriptInterpreter(name: String, source: String) -> ScriptInt
     case "lua": return .lua
     case "m": return .octave
     case "rkt": return .racket
+    case "java": return .java
     default: break  // no / unrecognised extension → shebang, then content
     }
     if let viaShebang = interpreterFromShebang(source) {
@@ -57,6 +69,11 @@ private func interpreterFromShebang(_ source: String) -> ScriptInterpreter? {
     guard firstLine.hasPrefix("#!") else { return nil }
     if containsSubstring(firstLine, "python") { return .python }
     if containsSubstring(firstLine, "node") || containsSubstring(firstLine, "javascript") { return .node }
+    // AFTER the node check, and that ordering is load-bearing: "javascript"
+    // contains "java", so checking Java first would claim every
+    // `#!/usr/bin/env javascript` script. Same class of hazard as the
+    // bash-before-sh ordering below, one letter further along.
+    if containsSubstring(firstLine, "java") { return .java }
     if containsSubstring(firstLine, "ruby") { return .ruby }
     if containsSubstring(firstLine, "perl") { return .perl }
     if containsSubstring(firstLine, "lua") { return .lua }

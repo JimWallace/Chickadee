@@ -301,3 +301,33 @@ func racketExceptionCase(
                               \(JSONValue.string(GeneratedMessage.error).racketLiteral) (cdr outcome)))])
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaExceptionBody(
+    target: String, context: JavaCallContext, c: PatternCase
+) -> String {
+    let substring: String = {
+        if case .string(let s) = c.expected { return s }
+        return ""
+    }()
+    let expectedClause =
+        substring.isEmpty ? "" : " matching \\\"\(substring)\\\""
+    return """
+        String[] ckWhat = new String[1];
+        int ckOutcome = ck.expectThrow(
+            () -> \(target)(\(context.callArgs)), "\(substring)", ckWhat);
+        if (ckOutcome == ck.RETURNED) {
+            ck.failed("no error raised\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)an exception\(expectedClause)");
+        }
+        if (ckOutcome == ck.THREW_OTHER) {
+            ck.failed("wrong error raised\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.expected)an exception matching \\"\(substring)\\"\\n"
+                + "\(GeneratedMessage.got)" + ckWhat[0]);
+        }
+        ck.passed("Raised as expected: " + ckWhat[0]);
+        """
+}

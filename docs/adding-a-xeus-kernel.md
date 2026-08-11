@@ -1477,3 +1477,97 @@ install. The one native-side surprise: Ubuntu ships no CLI-only package —
 `octave` hard-depends on the Qt5 stack even with `--no-install-recommends`,
 so the interpreter costs ~338 MB installed on both images. Reported, priced,
 accepted.
+
+## What the Java run actually cost
+
+The seventh language, and the first added since this document was last revised —
+so it is also the test of whether the runbook works. Short answer: the
+compiler-named worklist held exactly, the invisible list caught two of its nine,
+and the run found one defect class the document did not predict.
+
+### The counts
+
+| Pass | Layer | Sites |
+|---|---|---|
+| 1 | `Core` | 4 |
+| 2 | `RunnerCore` + `Worker` | 5 |
+| 3 | `APIServer` | 19 |
+| 4 | `Tests` | 6 |
+
+Twenty-eight compiler-named sites, plus one descriptor literal. Every one was
+found by adding `case java` and rebuilding; none had to be looked for.
+
+### What the invisible list caught
+
+Two of the nine fired, both exactly as written:
+
+* **Item 1 (the interpreter on the image)** — `default-jdk` on the application
+  Dockerfile, the CI image, and three probe/apt pairs in `swift-tests.yml`. The
+  conformance matrix names all five, so this was a failing test rather than a
+  discovery.
+* **Item 6 (capability matching, and specifically the probe's ARGUMENTS and
+  OUTPUT FORMAT)** — `java -version` prints to **stderr** and **quotes** the
+  number. It happens to parse, which is the dangerous kind of nearly-wrong;
+  `javac --version` is the answer that does not depend on a tolerance. The
+  deeper point is one the list does not make: the probe should name the binary
+  that can be **absent**, and for Java that is the compiler, not the runtime. A
+  JRE-only host advertises Java and then fails every test at exit 127.
+
+Item 9 (do the generated scripts dispatch?) did not fire, because Java's
+generated case is a `.sh` wrapper like C++'s. Items 2–5, 7 and 8 cost nothing:
+the boolean sniffs are gone, the JS constants regenerate themselves, the MCP
+surface is fully derived, and the submission policy is two one-token edits.
+
+### The defect class the document did not predict
+
+**A hardcoded `== .cpp` is not a C++ fact — it is a question about the language's
+generated extension, asked badly.** Six sites spelled it the first way:
+
+- the `generatedScriptExtension` uniqueness pin,
+- the round-trip exemption in the conformance matrix,
+- two resolution tests in `AssignmentLanguageTests`,
+- the inputs-extension coupling in `LanguagePipelineWalkTests`,
+- two `language == .cpp ? "cpp" : …` ternaries in `SubmissionPolicyTests`,
+- and both submission-normalisation fixtures.
+
+Every one of them silently answered "no" for a language that needed "yes". They
+now read `LanguageDescriptor.generatesLanguagelessWrapper`
+(`!scriptExtensions.contains(generatedScriptExtension)`), which is the fact they
+were all approximating.
+
+This is the same shape the document already names — "an arm is invisible to the
+compiler when the next language arrives; a loop is not" — but one level down: not
+a missing arm, a **present arm asking the wrong question**. A grep for the
+neighbour's name (`grep -rn '== \.cpp' Sources/ Tests/`) is what finds it, and
+it belongs beside the existing "search for the *default* rather than for the
+language" advice under invisible item 5.
+
+Two more defects fell out of the same run, both pre-existing and both invisible
+until a second language shared an answer:
+
+* **The notebook-check collision scan refused every check on every assignment.**
+  It flat-mapped generated filenames across `allCases` without deduplicating, so
+  two languages sharing a generated extension made one check collide with
+  *itself*.
+* **`differentialReferenceName` produced an illegal identifier.** It
+  interpolated the function name directly; Java's targets are qualified, so it
+  yielded `ck_ref_Solution.f` — uncompilable in the renderer AND undefinable by
+  the instructor the save-time validator was telling to define it. Both halves
+  read one property, so one fix closed both.
+
+### What was genuinely per-language
+
+Roughly 1,100 lines: the renderer and its nine kind bodies, `test_runtime.java`,
+the personalization driver, the identifier helpers, and the execution suite.
+That matches the document's own budget. The three traps that shaped it —
+`System.exit` hijacking the exit code, type-strict boxed numeric equality, and
+`CLASSPATH` replacing rather than extending the default — are in
+[java-support.md](java-support.md).
+
+### One thing to carry forward
+
+**The per-language quirk budget was spent, and on the native side.** R, Lua and
+Octave each needed one kernel quirk; Java has no kernel and still needed one, in
+the *shell wrapper*: a sentinel line proving the test ran to completion, because
+a student's `System.exit(0)` otherwise reads as a pass. "Upload-only" removes
+the kernel's quirks; it does not remove the language's. Budget one either way.

@@ -153,7 +153,13 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         // carry a null anyway — `cppRenderabilityIssue` refuses it at save, and
         // this is the same refusal moved one step earlier, into the box.
         switch language {
-        case .python, .r, .lua, .octave, .racket:
+        case .python, .r, .lua, .octave, .racket, .java:
+            // Java joins the FIRST arm, not C++'s, and the difference is real
+            // rather than a coin toss: Java has a `null` and renders it, so
+            // there is nothing to refuse and no poison identifier to hide.
+            // Statically typed does not imply C++'s answer here — `Object`,
+            // autoboxing and generics are what make the difference, which is
+            // also why Java needs no `javaRenderabilityIssue` at all.
             self.nullLiteral = language.literal(.null)
         case .cpp:
             self.nullLiteral = nil

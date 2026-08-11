@@ -286,3 +286,40 @@ func racketPerformanceCase(
                                \(JSONValue.string(GeneratedMessage.elapsed).racketLiteral) (format "~ams" (round elapsed)))))
         """ + "\n"
 }
+
+// MARK: - Java
+
+func javaPerformanceBody(
+    target: String, context: JavaCallContext, c: PatternCase
+) -> String {
+    // The budget is authored in MILLISECONDS, like every other renderer.
+    let budgetMs: String = {
+        switch c.expected {
+        case .int(let i): return String(Double(i))
+        case .double(let d): return String(d)
+        default: return "1000.0"
+        }
+    }()
+    // Supportable for the same reason it is in C++: Java assignments are
+    // native-only, so the two-substrate timing divergence that forces refusals
+    // elsewhere cannot arise. The call is a bare statement rather than a bound
+    // result — `var` cannot bind a void return, and a timed method may well be
+    // void.
+    //
+    // No JIT warm-up loop, deliberately: warming would time the OPTIMISED
+    // method, which is not what a student's single graded call costs, and it
+    // would multiply every budget by the warm-up count.
+    return javaGuarded(
+        """
+        long ckStarted = System.nanoTime();
+        \(target)(\(context.callArgs));
+        double ckElapsedMs = (System.nanoTime() - ckStarted) / 1e6;
+        if (ckElapsedMs > \(budgetMs)) {
+            ck.failed("too slow\\n"
+                + \(context.inputLine)
+                + "\(GeneratedMessage.threshold)" + ck.format(\(budgetMs)) + " ms\\n"
+                + "\(GeneratedMessage.elapsed)" + ck.format(ckElapsedMs) + " ms");
+        }
+        ck.passed("Completed in " + ck.format(ckElapsedMs) + " ms");
+        """, inputLine: context.inputLine)
+}

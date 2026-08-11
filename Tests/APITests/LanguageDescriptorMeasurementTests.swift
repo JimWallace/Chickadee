@@ -183,6 +183,33 @@ import Testing
         // is nothing to measure. Racket resolves a module by PATH in
         // `dynamic-require`, which is likewise a file read. C++ resolves at
         // compile time via `-I`, not at run time at all.
+        case .java:
+            // Java's probe command is `javac`, so what runs here is a COMPILE
+            // rather than an execution — and that is the honest measurement,
+            // because javac's implicit source path and the JVM's class path are
+            // the same list: both default to `.` and both are REPLACED (not
+            // extended) by CLASSPATH. Compiling a runner that names the module
+            // therefore answers exactly the question the field asks — can this
+            // language find a file sitting in the working directory by name,
+            // with no variable set?
+            //
+            // The `VALUE == 41` check is deliberately not load-bearing: javac
+            // exits 0 on a successful compile whatever the program would do.
+            // Findability is the property; the comparison just keeps the module
+            // referenced so the compiler has to resolve it.
+            //
+            // Class names are capitalised because Java requires a public class
+            // to live in a file of its own name, and the file names here are
+            // what the module lookup is searching for.
+            return SearchPathProbe(
+                moduleFileName: "CkProbeModule.java",
+                moduleSource: "public class CkProbeModule { public static final int VALUE = 41; }\n",
+                runnerSource:
+                    "public class CkProbeRunner {\n"
+                    + "    public static void main(String[] a) {\n"
+                    + "        System.exit(CkProbeModule.VALUE == 41 ? 0 : 1);\n"
+                    + "    }\n}\n",
+                runnerFileName: "CkProbeRunner.java")
         case .r, .racket, .cpp:
             return nil
         }

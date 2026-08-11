@@ -70,9 +70,9 @@ import Testing
         }
         #expect(
             exempted.sorted() == [
-                "cpp/introspectableSidecar", "lua/introspectableSidecar",
-                "octave/introspectableSidecar", "r/introspectableSidecar",
-                "racket/introspectableSidecar",
+                "cpp/introspectableSidecar", "java/introspectableSidecar",
+                "lua/introspectableSidecar", "octave/introspectableSidecar",
+                "r/introspectableSidecar", "racket/introspectableSidecar",
             ],
             "the exemption list changed: \(exempted.sorted())")
     }
@@ -147,7 +147,10 @@ import Testing
         // The student's notebook still extracted… (C++ extraction output is a
         // `.cpp` source file — its GENERATED tests are `.sh` wrappers, so the
         // two extensions differ for that one language.)
-        let sourceExtension = language == .cpp ? "cpp" : language.generatedScriptExtension
+        // `sourceFileExtension` is the field that answers this for every
+        // language; the `== .cpp` special case it replaced silently gave the
+        // wrong answer for the second wrapper language.
+        let sourceExtension = language.sourceFileExtension
         let produced = dir.appendingPathComponent("lab.\(sourceExtension)")
         #expect(FileManager.default.fileExists(atPath: produced.path))
         // …and the unreadable helper produced a warning rather than silence.
@@ -170,7 +173,10 @@ import Testing
         let warnings = try extractNotebooksToCode(
             in: dir, forcedLanguage: language, studentNotebookName: "lab.ipynb")
         #expect(warnings.isEmpty)
-        let sourceExtension = language == .cpp ? "cpp" : language.generatedScriptExtension
+        // `sourceFileExtension` is the field that answers this for every
+        // language; the `== .cpp` special case it replaced silently gave the
+        // wrong answer for the second wrapper language.
+        let sourceExtension = language.sourceFileExtension
         #expect(
             FileManager.default.fileExists(
                 atPath: dir.appendingPathComponent("lab.\(sourceExtension)").path))

@@ -176,6 +176,7 @@ enum SolutionNotebookExtractor {
         case .octave: extracted = extractOctave(cells: inputCells, filename: "solution.ipynb")
         case .cpp: extracted = extractCpp(cells: inputCells, filename: "solution.ipynb")
         case .racket: extracted = extractRacket(cells: inputCells, filename: "solution.ipynb")
+        case .java: extracted = extractJava(cells: inputCells, filename: "solution.ipynb")
         case .python: return nil  // handled above
         }
         guard extracted.codeCellCount > 0 else { return nil }
