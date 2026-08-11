@@ -43,7 +43,9 @@ struct BackfillDeclaredLanguage: ChickadeeMigration {
             // run of this migration. Never re-derive over a real answer.
             guard manifest.languageDeclared != true else { continue }
 
-            let resolved = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            let resolved = AssignmentLanguage.derivedDeclaration(
+                manifest: manifest,
+                notebookData: setup.notebookPath.flatMap { FileManager.default.contents(atPath: $0) })
             guard let updated = manifestWithDeclaredLanguage(setup.manifest, language: resolved)
             else { continue }
             setup.manifest = updated

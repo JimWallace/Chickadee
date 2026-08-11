@@ -130,7 +130,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
     // expanded filenames where every Python assignment showed one `family:<id>`
     // row. No notebook is read: a persisted manifest records its language, and
     // a suite with generated entries has scripts to resolve from either way.
-    let language = AssignmentLanguage.resolve(manifest: props, notebookData: nil) ?? .python
+    let language = AssignmentLanguage.resolve(manifest: props) ?? .python
     var familyFilenames: [String: Set<String>] = [:]
     for f in props.patternFamilies {
         familyFilenames[f.id] = Set(

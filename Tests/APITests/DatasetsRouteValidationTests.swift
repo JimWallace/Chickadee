@@ -58,15 +58,7 @@ import VaporTesting
         for (name, content) in entries {
             try content.data(using: .utf8)?.write(to: root.appendingPathComponent(name))
         }
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = root
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
-        try zip.run()
-        zip.waitUntilExit()
-        #expect(zip.terminationStatus == 0)
+        try writeZipFixture(of: root, to: zipPath)
     }
 
     private func putDatasets(

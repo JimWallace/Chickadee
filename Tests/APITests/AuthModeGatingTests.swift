@@ -143,14 +143,11 @@ import VaporTesting
     }
 
     @Test func ssoMode_customCallbackRouteRegisteredFromEnv() async throws {
-        // Cross-suite env serialization via `withAsyncEnvLock` — OIDCTests
-        // also mutates OIDC_* env vars, and without serialization the two
-        // suites' setenv/unsetenv calls have raced under `swift test
-        // --parallel` (#603 first run).
-        try await withAsyncEnvLock {
-            setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
-            defer { unsetenv("OIDC_CALLBACK") }
-
+        // No serialization needed any more: `withTestEnvironment` supplies the
+        // value through `EnvironmentSource` rather than writing the process
+        // environment, so this cannot race OIDCTests (or anything else) the way
+        // the old `setenv`/`unsetenv` pair did (#603 first run).
+        try await withTestEnvironment(["OIDC_CALLBACK": "/oidc/duo/callback/"]) {
             try await withApp(try await makeApp(authMode: .sso)) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/duo/callback",

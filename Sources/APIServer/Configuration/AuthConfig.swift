@@ -31,7 +31,7 @@ struct AuthConfig: Sendable {
             mode: effective,
             requestedMode: requested,
             nonSSOModesEnabled: nonSSO,
-            ssoAdminUsers: parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
+            ssoAdminUsers: parseSSOIdentityAllowlist(EnvironmentSource.get("SSO_ADMIN_USERS"))
         )
     }
 }

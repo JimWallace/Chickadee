@@ -167,7 +167,7 @@ struct UpdateSolutionTool: ContentTool {
         // not named itself is upload-only.
         let language =
             setup?.decodedManifest().flatMap {
-                AssignmentLanguage.resolve(manifest: $0, notebookData: nil)
+                AssignmentLanguage.resolve(manifest: $0)
             } ?? .python
         let wantsSourceFile: Bool
         if case .uploadOnly = language.editorSupport {

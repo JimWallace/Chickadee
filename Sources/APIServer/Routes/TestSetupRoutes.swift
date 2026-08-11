@@ -154,6 +154,30 @@ struct TestSetupRoutes: RouteCollection {
         )
         try await setup.save(on: req.db)
 
+        // DECLARE THE LANGUAGE, once, here.
+        //
+        // This is the one creation path that carries no author answer: the web
+        // create page has a `required` language select, MCP `create_assignment`
+        // takes `language` as a required parameter, and course-bundle import
+        // declares on the way in. A raw zip is just a manifest and some files.
+        //
+        // Nothing derives a language on read any more — `resolve` returns what
+        // the manifest declares and nothing else — so an assignment that
+        // arrived here undeclared would have no language at all: pattern
+        // families would refuse, generated tests would not render, and the
+        // failure would look like the assignment rather than the upload. The
+        // derivation happens once, at the boundary, and becomes a declaration.
+        //
+        // `derivedDeclaration` is the old resolution order (a graded script's
+        // extension, then the starter notebook's kernel), so what gets recorded
+        // is exactly what the system used to compute on every read. An upload
+        // whose contents name nothing is recorded as declared-with-no-language,
+        // the truthful answer for a suite of plain `.sh` scripts.
+        let derived = AssignmentLanguage.derivedDeclaration(
+            manifest: manifest,
+            notebookData: setup.notebookPath.flatMap { FileManager.default.contents(atPath: $0) })
+        try await declareManifestLanguage(setup: setup, to: derived, on: req.db)
+
         // For browser-mode: extract and save the flat .ipynb file so the
         // instructor can edit it later without re-uploading the zip.
         if manifest.gradingMode == .browser {

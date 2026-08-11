@@ -213,27 +213,16 @@ func updateManifestLanguage(manifestJSON: String, language: AssignmentLanguage?)
     )
 }
 
-/// Re-derives the assignment language from a freshly-written starter notebook,
-/// treating the recorded manifest `language` as a memo of what was last resolved
-/// rather than a fixed declaration. Returns updated manifest JSON when the
-/// recorded language no longer matches what the new notebook implies (e.g. a
-/// cloned Python assignment whose starter notebook is replaced with an R one),
-/// or nil when nothing needs to change:
-///   - no language was ever recorded — lazy `resolve(…notebookData:)` already
-///     re-derives that case from the notebook on every read, so there is nothing
-///     sticky to correct and no reason to churn the manifest bytes;
-///   - the recorded language still matches the notebook (the common case: a
-///     Python notebook re-saved on a Python assignment stays `.python`).
-func manifestWithRederivedLanguage(manifestJSON: String, notebookData: Data) -> String? {
-    guard let props = decodeManifest(fromJSON: manifestJSON),
-        let recorded = props.language
-    else {
-        return nil
-    }
-    let rederived = AssignmentLanguage.rederive(manifest: props, notebookData: notebookData)
-    guard recorded != rederived else { return nil }
-    return updateManifestLanguage(manifestJSON: manifestJSON, language: rederived)
-}
+// `manifestWithRederivedLanguage` used to live here: on every starter-notebook
+// write it re-derived the language from the new notebook's kernel and rewrote
+// the manifest when the answer differed.
+//
+// It treated the recorded language as "a memo of what was last resolved rather
+// than a fixed declaration" — its own words — which is the assumption this arc
+// removed. A declaration does not go stale when content changes. An author
+// converting a Python assignment to R changes the language in the dropdown that
+// exists for exactly that purpose, and uploading a notebook no longer rewrites
+// it underneath them.
 
 func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],

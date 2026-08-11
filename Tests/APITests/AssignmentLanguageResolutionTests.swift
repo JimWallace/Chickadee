@@ -44,10 +44,21 @@ import Vapor
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
             // nil, not `.python`: an empty suite says nothing about the
             // language, and saying nothing used to be spelled "Python".
-            #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: nil) == nil)
+            #expect(AssignmentLanguage.derivedDeclaration(manifest: manifest, notebookData: nil) == nil)
 
+            // ATTACHING AN R NOTEBOOK NO LONGER MAKES THE ASSIGNMENT R.
+            // That was the old rule and it is the one this arc removed: a
+            // kernelspec is content, and content does not declare a language.
             try await attachNotebook(fixture, kernel: "xr")
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .r)
+            #expect(
+                AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil,
+                "a notebook kernel must not silently declare the language")
+
+            // The author declares it — which is what every creation path now
+            // does, and what the REST upload does on the author's behalf.
+            try await declareManifestLanguage(setup: fixture.setup, to: .r, on: fixture.app.db)
+            let declared = try pfDecodeManifest(fixture.setup.manifest)
+            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: declared) == .r)
 
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
@@ -63,6 +74,7 @@ import Vapor
     @Test func firstSaveOfAPythonNotebookAssignmentRecordsPython() async throws {
         try await withPatternFamilyFixture { fixture in
             try await attachNotebook(fixture, kernel: "python3")
+            try await declareManifestLanguage(setup: fixture.setup, to: .python, on: fixture.app.db)
 
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
@@ -73,16 +85,22 @@ import Vapor
         }
     }
 
-    /// A setup with no notebook resolves from the manifest alone: a language
-    /// when the suite names one, nil when nothing does.
-    @Test func setupWithoutANotebookResolvesFromTheManifestAlone() async throws {
+    /// Resolution reads the declaration and nothing else — not the suite, not
+    /// the notebook.
+    ///
+    /// The `.R` suite below used to resolve to `.r` through the extension
+    /// sniff. It resolves to nil now, and that is the change: a graded script
+    /// is content too. `derivedDeclaration` still reads it, because that is
+    /// what the creation boundaries call to answer the question once.
+    @Test func resolutionReadsTheDeclarationAndNothingElse() async throws {
         try await withPatternFamilyFixture { fixture in
             #expect(fixture.setup.notebookPath == nil)
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
             #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
 
             let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: rSuite) == .r)
+            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: rSuite) == nil)
+            #expect(AssignmentLanguage.derivedDeclaration(manifest: rSuite, notebookData: nil) == .r)
         }
     }
 

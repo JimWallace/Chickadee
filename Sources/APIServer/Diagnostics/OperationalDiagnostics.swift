@@ -83,7 +83,7 @@ struct DiagnosticsConfiguration: Sendable {
             pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24,
             auditLogRetentionDays: environmentInt("AUDIT_LOG_RETENTION_DAYS") ?? 90,
             submissionRetentionDays: environmentInt("SUBMISSION_RETENTION_DAYS") ?? 365,
-            deployStateDirectory: Environment.get("CHICKADEE_DEPLOY_STATE_DIR") ?? "/deploy-state"
+            deployStateDirectory: EnvironmentSource.get("CHICKADEE_DEPLOY_STATE_DIR") ?? "/deploy-state"
         )
     }
 }

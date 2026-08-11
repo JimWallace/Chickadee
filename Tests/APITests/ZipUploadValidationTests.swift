@@ -36,13 +36,7 @@ import VaporTesting
             try data.write(to: fileURL)
         }
         let zipPath = tmpDir.appendingPathComponent(named).path
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = workDir
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        try zip.run()
-        zip.waitUntilExit()
-        #expect(zip.terminationStatus == 0, "zip command must succeed")
+        try writeZipFixture(of: workDir, to: zipPath)
         try FileManager.default.removeItem(at: workDir)
         return zipPath
     }

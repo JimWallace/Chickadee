@@ -372,12 +372,17 @@
         // older server) yields no seed/inputs → unset env var, no _ck_inputs.py.
         let assignmentSeed = null;
         let personalizedInputs = null;
-        // The assignment's language, as the SERVER resolved it
-        // (AssignmentLanguage.resolve — manifest scripts, then notebook kernel).
-        // It decides only which inputs file the per-student values land in;
-        // which substrate runs a given script is still decided per script by
-        // RunnerCore's classification, exactly as the native worker does it.
-        let assignmentLanguage = 'python';
+        // The assignment's language, as the SERVER resolved it. NULL until the
+        // server says otherwise, which is the distinction that matters: "the
+        // assignment declares Python" and "nobody told us" were the same value
+        // when this defaulted to `'python'`, and that is the shape every silent
+        // misroute in this area has come from.
+        //
+        // It decides which inputs file the per-student values land in, and
+        // which substrate `ensureReady` boots. Which substrate RUNS a given
+        // script is still decided per script by RunnerCore's classification,
+        // exactly as the native worker does it.
+        let assignmentLanguage = null;
         try {
             const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
             const parsed = JSON.parse(seedText);
@@ -419,6 +424,8 @@
             // consistent deployment — this file is served by the same build that
             // resolved the language — and the coverage test is what keeps a new
             // kernel language from reaching it.
+            // Python on an unrecognised OR absent token — unchanged behaviour,
+            // now written out because `assignmentLanguage` can be null.
             const language = INPUTS_WRITERS[assignmentLanguage] ? assignmentLanguage : 'python';
             files[INPUTS_FILE_NAMES[language]] = INPUTS_WRITERS[language](personalizedInputs);
         }
@@ -481,7 +488,7 @@
         //    the Node test harness, which has neither Worker nor a factory
         //    override, so it deterministically exercises the fallback).
         const executor = makeExecutor(
-            files, assignmentSeed, runnerCore, options.reportPhase, suites);
+            files, assignmentSeed, runnerCore, options.reportPhase, suites, assignmentLanguage);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -559,8 +566,9 @@
         return null;
     }
 
-    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites) {
-        return new RoutingExecutor(files, assignmentSeed, runnerCore, reportPhase, suites);
+    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
+        return new RoutingExecutor(
+            files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage);
     }
 
     // -------------------------------------------------------------------------
@@ -580,12 +588,15 @@
     // -------------------------------------------------------------------------
 
     class RoutingExecutor {
-        constructor(files, assignmentSeed, runnerCore, reportPhase, suites) {
+        constructor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.reportPhase = reportPhase;
             this.suites = Array.isArray(suites) ? suites : [];
+            // The language the assignment DECLARES, or null when the server did
+            // not say. Null is not Python — see ensureReady.
+            this.assignmentLanguage = assignmentLanguage ?? null;
             // kind -> executor, created on first use. Was four named slots.
             this.executors = new Map();
         }
@@ -655,44 +666,56 @@
         }
 
         async ensureReady() {
+            // BOOT THE ASSIGNMENT'S OWN SUBSTRATE, AND ONLY THAT ONE.
+            //
+            // An assignment is written in one language and declares it. That
+            // declaration is the answer to "which runtime must be working for
+            // this grade to mean anything", so it is the only thing booted here
+            // — and its failure aborts the grade, which is what routes the
+            // submission to the native worker instead of posting an all-`error`
+            // collection as a real 0 (see the ensureReady probe in runScripts).
+            //
+            // A script of some OTHER kind is not this function's problem. It
+            // still runs: `GradingWorkerExecutor.run` boots its worker on first
+            // use, and if that fails it returns an error outcome for that
+            // script alone. The author handles it, exactly as they would a test
+            // that fails for any other reason.
+            //
+            // WHAT THIS REPLACED. A `PRIMARY_KIND = 'python'` constant, with
+            // every other substrate's boot failure swallowed whenever Python
+            // was present. On an R assignment carrying one stray `.py`, that
+            // made R's boot the swallowed one — so every R test posted a real
+            // zero while the incidental file got the protection. The constant
+            // was the last place the browser assumed a language instead of
+            // reading the one the assignment declares.
+            const declared = this.assignmentLanguage;
             const kinds = this.requiredKinds();
-            // A substrate that cannot start must abort the grade — that is what
-            // routes the submission to the server-side worker instead of
-            // posting an all-`error` collection as a real 0 (see the
-            // ensureReady probe in runScripts).
-            //
-            // But only when it is the substrate this assignment RUNS on. An
-            // assignment is one language, so "R failed to boot" on an R lab is
-            // a failed grade; a stray .R or .lua sitting beside Python tests is
-            // not, and must not sink the tests that can run. Those scripts then
-            // report their own error through run().
-            //
-            // WHICH ONE IS "THE" SUBSTRATE IS STILL DECIDED BY A CONSTANT, and
-            // that is preserved here rather than fixed: when Python is present
-            // it is treated as the assignment's language and every other kind's
-            // boot failure is swallowed. On an R assignment that happens to
-            // carry one .py file the rule reads backwards — R is the language,
-            // yet an R boot failure would be the one ignored. Mixed-kind suites
-            // should not exist (an assignment is one language), so this has
-            // never been observed; changing failover semantics is not something
-            // to do as a side effect of removing four duplicated methods, so
-            // the behaviour is identical to before and the assumption is named
-            // instead of buried in a loop over ['r', 'lua', 'octave'].
-            const PRIMARY_KIND = 'python';
-            const primaryIsPresent = kinds.has(PRIMARY_KIND);
-            const boots = [];
-            for (const kind of kinds) {
-                const executor = this.executorForKind(kind);
-                if (!executor) continue;  // shell / unsupported / no kernel
-                const boot = executor.ensureReady();
-                const required = kind === PRIMARY_KIND || !primaryIsPresent;
-                boots.push(required ? boot : boot.catch(() => {}));
+
+            // No declaration reaching us — an older server, or a seed fetch that
+            // failed — is NOT treated as Python. Every present substrate is
+            // required instead, which is the conservative reading: a boot
+            // failure fails the grade over rather than scoring zeros. Guessing
+            // a language here is the bug class this whole change removes.
+            if (declared === null) {
+                const boots = [];
+                for (const kind of kinds) {
+                    const executor = this.executorForKind(kind);
+                    if (executor) boots.push(executor.ensureReady());
+                }
+                await Promise.all(boots);
+                return;
             }
-            // No runnable script kind (all shell/unsupported, or an empty
-            // suite): nothing to boot. Each run() still reports its own precise
-            // "not here" message, so the grade completes rather than failing
-            // over on a runtime that was never needed.
-            await Promise.all(boots);
+
+            // Declared a language this assignment's suite does not actually use
+            // (or an upload-only one, which has no kernel and never reaches a
+            // browser): nothing to boot. Any script present still self-boots and
+            // reports its own error.
+            if (!kinds.has(declared)) return;
+            const executor = this.executorForKind(declared);
+            if (!executor) return;
+            // REQUIRED: a rejection here propagates to the runScripts probe and
+            // fails the submission over to the native worker.
+            await executor.ensureReady();
         }
 
         async run(name, limitSeconds) {
