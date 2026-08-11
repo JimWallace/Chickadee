@@ -1,8 +1,8 @@
 # Assignment language: declared, not inferred
 
 Where the multi-language transition stands as of v0.5.59 (#1330, #1331), what
-the rule now is, and the fourteen call sites that are still answering a
-different question.
+the rule now is, and what became of the fourteen call sites that were still
+answering a different question.
 
 ---
 
@@ -105,7 +105,7 @@ path.
 
 ## The `?? .python` sites
 
-There were fourteen. Four are gone; eleven lines remain and are correct as they
+There were fourteen. Five are gone; ten lines remain and are correct as they
 stand.
 
 These are **not** resolution fallbacks. Resolution has no fallback. They are
@@ -113,7 +113,7 @@ sites asking a different question:
 
 > This operation needs a language, and the assignment declares none. Now what?
 
-They divide into three groups, and the decision rule that separates them is:
+They divide into four groups, and the decision rule that separates them is:
 
 **Fail loudly while authoring. Never fail while grading, rendering a page, or
 extracting a student's submission.**
@@ -170,6 +170,37 @@ never refuses.
   nothing in the assignment supported. It refuses now, naming
   `set_assignment_language` as the fix.
 
+### Group 4 — "none" is a real answer here. **Done.**
+
+`shellTestScript` renders the three `.sh` scaffolds. Its nil case fell back to
+Python, which was defensible only while nil meant "nobody has been asked": a
+declared-None assignment *is* the one case with no language to name, so the two
+language-shaped values become ordinary shell variables with a TODO apiece —
+`FILE` for what the student submits, `RUN` for the command that runs it. That is
+a scaffold the author completes, where `solution.py` + `python3` was one they had
+to notice was wrong first.
+
+Two defects fell out of touching it:
+
+- **The per-language scaffolds never reached a browser.** `allTemplateInfos`
+  and `shellTestScript` both defaulted `language:` to nil, and the scan endpoint
+  omitted the argument — so the work that taught these templates to render
+  `solution.R` / `Rscript` for R, and so on for Lua, Octave, C++ and Racket,
+  was dead on arrival: every author of every language got the Python ones. Both
+  defaults are gone, so a caller that forgets now fails to compile.
+- **R's scaffold could not run.** It invoked `interpreterProbe.command`, which
+  for R is `R` — the right probe for "is R installed", and a command that runs
+  nothing: `R solution.R` reports the argument ignored and reads a REPL from
+  stdin. The runner has always spawned `Rscript`. `LanguageDescriptor` carries
+  `scriptRunCommand` now, and `RunCommandMatchesInvocationTests` (in WorkerTests,
+  the one target that can see both Core's descriptor and Worker's invocation
+  table) pins it against what the worker actually spawns.
+
+The second is the general lesson, not an R quirk: a value in reach that is
+*shaped* like the one you need is not the one you need. "Probe for it" and "run
+it" are different questions, and the descriptor answered them with one field
+because for five of six languages the answers coincide.
+
 ### An adjacent defect the work surfaced
 
 `makeWorkerManifestJSON` builds a **fresh dict**, so any field it is not handed
@@ -184,7 +215,7 @@ question.
 
 ### Group 3 — keep the explicit default, and keep the comment
 
-Eleven lines where "none" is not an answerable value and failing is worse than
+Ten lines where "none" is not an answerable value and failing is worse than
 defaulting. Each states the default locally rather than inheriting it, which is
 the property the Optional bought.
 
@@ -193,7 +224,7 @@ the property the Optional bought.
 | `Worker/NotebookExtractor.swift:130` | Extraction has to write a file in *some* syntax; grading path |
 | `Worker/RunnerDaemon+JobProcessing.swift:652` | The student-module hint must name the file the extractor actually wrote |
 | `PersonalizationSubstitution.swift:55` | There is no literal without a syntax |
-| `TestScriptTemplates.swift:147` | Scaffold text; nil output byte-for-byte matches the previous Python |
+| ~~`TestScriptTemplates.swift`~~ | **Gone.** A language-less suite gets a *shell* scaffold — see below |
 | `NotebookScaffoldHelpers.swift:165,167,174` | A notebook needs a kernelspec; nil already returns nil for upload-only |
 | `PublishedAssignmentRoutes+NotebookTools.swift:87` | Scans an *arbitrary* notebook, not an assignment: the fallback chain is `?language=` → kernelspec → Python, and the distinction being drawn is between kernels we can read and ones we cannot |
 | `SubmissionResultPresenter.swift:517` | Display; computes generated filenames, which only exist when families do, which requires a recorded language — unreachable with effect |

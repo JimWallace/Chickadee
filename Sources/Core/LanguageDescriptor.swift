@@ -415,6 +415,21 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// the step after `g++`.
     public let capabilityRequiresExecutableOutput: Bool
 
+    /// The command that RUNS a source file in this language, which is not
+    /// always the command that PROBES for it.
+    ///
+    /// They differ for exactly one language today and the difference is total:
+    /// `R --version` is the right probe, and `R solution.R` does not run
+    /// anything — it warns that the argument is ignored and then reads the
+    /// REPL from stdin. The runner has always spawned `Rscript`
+    /// (`ScriptInvocation`), but the shell test-script scaffold reached for
+    /// `interpreterProbe.command` because it was the interpreter-shaped value
+    /// in reach, and handed every R author a template that cannot run.
+    ///
+    /// `RunCommandMatchesInvocationTests` pins this against what the worker
+    /// actually spawns, so the two cannot drift apart again.
+    public let scriptRunCommand: String
+
     public struct InterpreterProbe: Equatable, Sendable {
         public let command: String
         public let versionArguments: [String]
@@ -437,6 +452,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         notebookKernelNames: Set<String>,
         editorSupport: EditorSupport,
         interpreterProbe: InterpreterProbe,
+        scriptRunCommand: String,
         moduleResolution: ModuleResolution,
         workingDirectoryIsOnDefaultSearchPath: Bool,
         capabilityRequiresExecutableOutput: Bool
@@ -452,6 +468,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.notebookKernelNames = notebookKernelNames
         self.editorSupport = editorSupport
         self.interpreterProbe = interpreterProbe
+        self.scriptRunCommand = scriptRunCommand
         self.moduleResolution = moduleResolution
         self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
         self.capabilityRequiresExecutableOutput = capabilityRequiresExecutableOutput
@@ -509,6 +526,7 @@ extension AssignmentLanguage {
             missingDependencyFailureDescription: "an ImportError",
             gradingWorkerScript: "/python-grading-worker.js"),
         interpreterProbe: .init(command: "python3", versionArguments: ["--version"]),
+        scriptRunCommand: "python3",
         moduleResolution: .byName(
             searchPathVariable: "PYTHONPATH",
             interpreterHookModules: ["sitecustomize"]),
@@ -539,6 +557,7 @@ extension AssignmentLanguage {
             missingDependencyFailureDescription: "an error from library()",
             gradingWorkerScript: "/r-grading-worker.js"),
         interpreterProbe: .init(command: "R", versionArguments: ["--version"]),
+        scriptRunCommand: "Rscript",
         // `source("test_runtime.R")` is a file read, not a module load:
         // there is no name to resolve, so nothing is importable and no
         // guard could reject anything.
@@ -569,6 +588,7 @@ extension AssignmentLanguage {
             gradingWorkerScript: "/lua-grading-worker.js"),
         // `-v`, not `--version` — see `interpreterProbe`'s note.
         interpreterProbe: .init(command: "lua", versionArguments: ["-v"]),
+        scriptRunCommand: "lua",
         // `require("test_runtime")` IS a module load — the same shape as
         // R's and the opposite answer, which is why this is asked per
         // language rather than inherited.
@@ -606,6 +626,7 @@ extension AssignmentLanguage {
         // exits 0 (verified on 8.4.0). The worker invokes the same
         // binary, so probe and invocation cannot skew.
         interpreterProbe: .init(command: "octave-cli", versionArguments: ["--version"]),
+        scriptRunCommand: "octave-cli",
         // `chickadee = test_runtime()` IS a by-name load: the file is
         // found through Octave's load path, not read by filename.
         moduleResolution: .byName(searchPathVariable: "OCTAVE_PATH"),
@@ -653,6 +674,7 @@ extension AssignmentLanguage {
         // (verified on 13.3.0). The generated wrappers invoke the
         // same binary, so probe and invocation cannot skew.
         interpreterProbe: .init(command: "g++", versionArguments: ["--version"]),
+        scriptRunCommand: "g++",
         // `#include` IS a file read — at compile time rather than
         // run time, but the shape is R's, not Python's: nothing is
         // name-addressable, no search-path variable exists to set,
@@ -700,6 +722,7 @@ extension AssignmentLanguage {
         // execute afterwards, so probe and invocation genuinely cannot
         // skew here.
         interpreterProbe: .init(command: "racket", versionArguments: ["--version"]),
+        scriptRunCommand: "racket",
         // `(require "student.rkt")` is a FILE path, resolved relative
         // to the requiring module — R's shape, not Python's. Nothing
         // is name-addressable and no search-path variable applies.
