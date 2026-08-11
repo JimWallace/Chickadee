@@ -646,7 +646,7 @@ enum PersonalizationEvaluator {
         // `python3`, plus HOME / locale / PYTHONHOME for the runtime), then
         // overlay the caller-supplied vars (the assignment seed and an optional
         // PYTHONPATH into the support-files dir).
-        let parentEnv = ProcessInfo.processInfo.environment
+        let parentEnv = EnvironmentSource.all
         var mergedEnv: [String: String] = [:]
         for key in ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHOME"] {
             if let value = parentEnv[key] { mergedEnv[key] = value }

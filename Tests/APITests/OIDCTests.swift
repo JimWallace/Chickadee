@@ -12,29 +12,6 @@ import VaporTesting
 // config off env vars.
 @Suite(.serialized) struct OIDCTests {
 
-    private struct EnvironmentOverride {
-        let key: String
-        let previousValue: String?
-
-        init(key: String, value: String?) {
-            self.key = key
-            self.previousValue = Environment.get(key)
-            if let value {
-                setenv(key, value, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-
-        func restore() {
-            if let previousValue {
-                setenv(key, previousValue, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-    }
-
     private struct NoOpJWTAlgorithm: JWTAlgorithm {
         let name = "noop"
 
@@ -47,21 +24,19 @@ import VaporTesting
         }
     }
 
+    /// Runs `operation` with `values` applied to the environment configuration
+    /// reads from.
+    ///
+    /// This used to build `EnvironmentOverride` values that called `setenv` and
+    /// restored on exit, serialized by `withAsyncEnvLock` against the other
+    /// env-mutating suites. Nothing writes the process environment now — see
+    /// `withTestEnvironment` — so the lock is gone with the writes, and so is
+    /// the restore bookkeeping: the binding simply ends.
     private func withEnvironment(
         _ values: [String: String?],
         perform operation: @Sendable () async throws -> Void
     ) async throws {
-        // Cross-suite env serialization: AuthModeGatingTests, AppConfigTests,
-        // DatabaseConfigurationTests also mutate env vars.  Without this lock
-        // their setenv/unsetenv races have shown up as OIDC tests reading
-        // wrong values mid-test (#603 first run).
-        try await withAsyncEnvLock {
-            let overrides = values.map { EnvironmentOverride(key: $0.key, value: $0.value) }
-            defer {
-                for override in overrides.reversed() {
-                    override.restore()
-                }
-            }
+        try await withTestEnvironment(values) {
             try await operation()
         }
     }

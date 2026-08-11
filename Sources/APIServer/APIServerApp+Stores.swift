@@ -251,7 +251,7 @@ actor LocalRunnerManager {
                 "--max-jobs", "1",
                 "--sandbox",
             ]
-        var childEnvironment = ProcessInfo.processInfo.environment
+        var childEnvironment = EnvironmentSource.all
         childEnvironment["RUNNER_SHARED_SECRET"] = secret
         proc.environment = childEnvironment
         proc.currentDirectoryURL = URL(fileURLWithPath: workDir)

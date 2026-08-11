@@ -63,15 +63,7 @@ import VaporTesting
         for (name, content) in entries {
             try Data(content.utf8).write(to: root.appendingPathComponent(name))
         }
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = root
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
-        try zip.run()
-        zip.waitUntilExit()
-        #expect(zip.terminationStatus == 0)
+        try writeZipFixture(of: root, to: zipPath)
     }
 
     /// A version row written directly, so a test can control its timestamp and
@@ -376,14 +368,7 @@ import VaporTesting
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try Data("exit 0\n".utf8).write(to: root.appendingPathComponent("test_a.sh"))
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = root
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
-        try zip.run()
-        zip.waitUntilExit()
+        try writeZipFixture(of: root, to: zipPath)
 
         let setup = APITestSetup(
             id: setupID,

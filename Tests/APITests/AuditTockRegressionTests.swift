@@ -28,9 +28,15 @@ import Testing
     // MARK: - Personalization M1: no server-secret leakage
 
     @Test func evaluator_doesNotLeakServerEnvironmentSecrets() async throws {
-        try await withAsyncEnvLock {
-            setenv("CHICKADEE_AUDIT_FAKE_SECRET", "super-secret-value", 1)
-            defer { unsetenv("CHICKADEE_AUDIT_FAKE_SECRET") }
+        // The secret is supplied through `EnvironmentSource`, not `setenv`, and
+        // the test is exactly as strong for it: `spawnAndCapture` builds the
+        // child's environment from `EnvironmentSource.all` and an allowlist, so
+        // a variable injected here reaches the same code path a real parent
+        // variable would — and must still be excluded from the child.
+        //
+        // The old form wrote the real process environment, which raced every
+        // concurrent reader in the suite (see Tests/APITests/EnvTestLock.swift).
+        try await withTestEnvironment(["CHICKADEE_AUDIT_FAKE_SECRET": "super-secret-value"]) {
 
             let result = try await PersonalizationEvaluator.evaluate(
                 seedHex: "00ff",

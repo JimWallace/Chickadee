@@ -68,15 +68,7 @@ import Vapor
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try content.data(using: .utf8)?.write(to: url)
         }
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = root
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
-        try zip.run()
-        zip.waitUntilExit()
-        #expect(zip.terminationStatus == 0)
+        try writeZipFixture(of: root, to: zipPath)
     }
 
     private func versions(

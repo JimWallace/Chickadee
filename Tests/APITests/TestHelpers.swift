@@ -44,7 +44,7 @@ func configureTestDatabase(_ app: Application) async throws {
     let (settingsFromEnvironment, testLogLevel) = try await withAsyncEnvLock {
         (
             try testDatabaseSettingsFromEnvironment(),
-            Environment.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
+            EnvironmentSource.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
         )
     }
     var settings = settingsFromEnvironment
@@ -117,7 +117,7 @@ func dropPostgresTestSchema(_ app: Application) async throws {
 
 func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
     let backend =
-        Environment.get("TEST_DATABASE_BACKEND")
+        EnvironmentSource.get("TEST_DATABASE_BACKEND")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         .flatMap(DatabaseBackend.init(rawValue:))
         ?? .sqlite
@@ -126,11 +126,11 @@ func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
     case .sqlite:
         return .sqliteInMemory()
     case .postgres:
-        let host = Environment.get("TEST_DATABASE_HOST")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let database = Environment.get("TEST_DATABASE_NAME")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let username = Environment.get("TEST_DATABASE_USER")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let password = Environment.get("TEST_DATABASE_PASSWORD")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let port = Environment.get("TEST_DATABASE_PORT")
+        let host = EnvironmentSource.get("TEST_DATABASE_HOST")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let database = EnvironmentSource.get("TEST_DATABASE_NAME")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = EnvironmentSource.get("TEST_DATABASE_USER")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let password = EnvironmentSource.get("TEST_DATABASE_PASSWORD")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = EnvironmentSource.get("TEST_DATABASE_PORT")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .flatMap { $0.isEmpty ? nil : Int($0) }
 

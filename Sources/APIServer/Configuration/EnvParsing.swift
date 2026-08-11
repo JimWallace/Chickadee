@@ -9,7 +9,7 @@ import Vapor
 
 /// Trimmed, non-empty env value. Returns nil for unset, blank, or whitespace-only.
 func trimmedEnv(_ key: String) -> String? {
-    let raw = Environment.get(key)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let raw = EnvironmentSource.get(key)?.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let raw, !raw.isEmpty else { return nil }
     return raw
 }

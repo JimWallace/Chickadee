@@ -43,14 +43,7 @@ import Vapor
                 .write(to: root.appendingPathComponent(name))
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = root
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        zip.standardOutput = Pipe()
-        zip.standardError = Pipe()
-        try zip.run()
-        zip.waitUntilExit()
+        try writeZipFixture(of: root, to: zipPath)
     }
 
     @Test func resolvesLiteralsAndExpressionsForExplicitSeed() async throws {
