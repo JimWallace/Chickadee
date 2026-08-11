@@ -121,7 +121,18 @@ let package = Package(
             ],
             path: "Sources/Worker",
             exclude: ["README.md"],
-            swiftSettings: strictWarnings
+            swiftSettings: strictWarnings,
+            // Compiles Tools/runner-support/* into the binary. Replaces 2,223
+            // lines of hand-typed string literals that mirrored those files;
+            // see the plugin for why this is codegen and not `resources:`.
+            plugins: [.plugin(name: "EmbedRunnerSupport")]
+        ),
+
+        // MARK: - Build-tool plugins
+        .plugin(
+            name: "EmbedRunnerSupport",
+            capability: .buildTool(),
+            path: "Plugins/EmbedRunnerSupport"
         ),
 
         // MARK: - Shared test support

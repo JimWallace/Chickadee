@@ -38,7 +38,7 @@ import Testing
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
-        try testRuntimeR.write(
+        try testRuntimeSource(for: .r).write(
             to: dir.appendingPathComponent("test_runtime.R"), atomically: true, encoding: .utf8)
         let script = "source(\"test_runtime.R\")\npassed(\(rMessageLiteral))\n"
         let scriptURL = dir.appendingPathComponent("probe.R")

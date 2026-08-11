@@ -55,7 +55,7 @@ import Testing
 
         // The SAME embedded source the worker injects, not a fixture copy — so
         // a runtime change that breaks native grading fails here.
-        try testRuntimeOctave.write(
+        try testRuntimeSource(for: .octave).write(
             to: dir.appendingPathComponent("test_runtime.m"), atomically: true, encoding: .utf8)
         try submission.write(
             to: dir.appendingPathComponent("solution.m"), atomically: true, encoding: .utf8)

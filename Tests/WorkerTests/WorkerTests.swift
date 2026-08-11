@@ -450,7 +450,7 @@ import Testing
 
     private func writeRRuntime() throws {
         let url = tmpDir.appendingPathComponent("test_runtime.R")
-        try testRuntimeR.write(to: url, atomically: true, encoding: .utf8)
+        try testRuntimeSource(for: .r).write(to: url, atomically: true, encoding: .utf8)
     }
 
     @Test func rRuntimePassedExitsZeroWithJSON() async throws {
@@ -513,8 +513,8 @@ import Testing
     /// The reserved-filename list is interpolated from `AssignmentLanguage`, so
     /// the R runtime can't drift from the file the worker actually writes.
     @Test func rRuntimeReservesTheInputsFilename() {
-        #expect(testRuntimeR.contains("\"\(AssignmentLanguage.r.inputsFileName)\""))
-        #expect(testRuntimeR.contains("chickadee_student_file"))
+        #expect(testRuntimeSource(for: .r).contains("\"\(AssignmentLanguage.r.inputsFileName)\""))
+        #expect(testRuntimeSource(for: .r).contains("chickadee_student_file"))
     }
 
     /// The bug this closes: `_ck_inputs.R` is an R file in the grading
