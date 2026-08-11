@@ -287,6 +287,41 @@ the language turns a deliberate "None" back into "nobody has been asked". See
 [docs/language-declaration.md](docs/language-declaration.md) for the per-site
 table. Also `docs/r-support.md`.
 
+**A declared language is NOT exclusive. Shell is the substrate every assignment
+sits on.** Two concepts do two jobs and are routinely confused for one:
+`ScriptInterpreter` (RunnerCore) is **per script**, derived from extension →
+shebang → content, and has thirteen cases including `sh`, `bash`, `zsh`, `ruby`,
+`perl`, `node` and `php` — interpreters the runner dispatches but Chickadee
+cannot author in. `AssignmentLanguage` (Core) is **per assignment**, declared,
+and has six. The declaration governs what Chickadee **generates**; the script's
+own extension governs how it **runs**. `TestSuiteEntry` carries no language
+field precisely because of this: `scriptInvocation(for:)` takes only a URL, and
+the runner stages *every* language's `test_runtime.*` into every job workspace,
+so a hand-written `.R` helper inside a Python assignment runs under `Rscript`
+and always has. No authoring surface refuses an off-language script, and
+`KernelImportGuard` is explicitly per-file. This is the original design — "test
+suites are shell scripts; the runner executes them generically" — with
+per-language generation layered on top, not replacing it.
+
+Two consequences that were each once a defect. **Content does not vote on the
+declaration:** `resolveAuthoringLanguage` used to let an authored `.R` script
+outrank the stored language, silently re-rendering every generated script and
+deleting the old ones — a migration triggered by adding a helper. It returns the
+declaration now; changing language stays the dropdown's job. **The capability
+gate reads the suite, not just the declaration:**
+`AssignmentLanguage.languagesRequiredToGrade(manifest:)` unions the declared
+language with every language the suite's extensions imply, because asking only
+the declaration let a `.R` helper in a Python assignment be claimed by an R-less
+runner and die at exit 127 in front of a student. An empty set — a plain `.sh`
+suite, or one of `.rb`/`.js` — still fails open, which is what keeps the
+original mode claimable by anyone.
+
+So **"None" means "nothing is generated"**, which in practice means hand-written
+scripts only. Do not turn it into a `.shell` language case: `sh` must keep
+carrying no language signal (C++'s generated cases *are* `.sh` wrappers), and
+the field that would have to claim it, `scriptExtensions`, is also what
+`update_solution` reads to decide which solution filenames are acceptable.
+
 **A runner only claims a job it can actually grade — enforced, not authored
 (`RunnerLanguageGate`).** Runners are separate hosts that upgrade on their own
 schedule, so several `chickadee-runner` builds poll at once and claim order
@@ -294,14 +329,17 @@ decides which one grades a job. That used to make an assignment in a newer
 language nondeterministic: it validated green because a capable runner happened
 to claim it, then failed for the one student whose job an older runner claimed —
 with a symptom (exit 127, "interpreter not found") that reads as a broken test
-script and gets debugged as one. The claim seam now resolves the assignment's
-language from its manifest and refuses a runner whose advertised profile lacks
-it, so the job waits for a runner that can grade it. No authoring step: the
+script and gets debugged as one. The claim seam now asks
+`languagesRequiredToGrade` for every language the job needs — the declared one
+*plus* every language the suite's own script extensions imply — and refuses a
+runner whose advertised profile lacks any of them, so the job waits for a runner
+that can grade it. No authoring step: the
 manifest already knows the language, and `RunnerProfileDetector` discovers its
 probes from `AssignmentLanguage.allCases`, so every runner advertises every
 language it has and a runner whose *build* predates one advertises a profile
-without it. Two deliberate fail-opens — an assignment with no language (a plain
-`.sh` suite) and a runner advertising no profile at all (discovery switched off,
+without it. Two deliberate fail-opens — nothing requiring an interpreter (a plain
+`.sh` suite, or one of the interpreters that has no capability token) and a
+runner advertising no profile at all (discovery switched off,
 an operator's choice; an old runner still has discovery on and is caught by the
 closed path). It catches strictly more than a version gate: a *current* runner
 whose host lacks the interpreter never advertises it either. `minimumRunnerVersion`

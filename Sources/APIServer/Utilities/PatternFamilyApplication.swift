@@ -184,8 +184,7 @@ func applyPatternFamilies(
     try validateAuthoredSectionContiguity(ordering.items)
 
     // ── 3. Resolve the language, then validate the whole save ───────────
-    let language = resolveAuthoringLanguage(
-        setup: setup, props: props, authoredItems: authoredItems)
+    let language = resolveAuthoringLanguage(setup: setup, props: props)
 
     // A generated script has to be written in SOME syntax, so a save that
     // generates one needs a declared language. A save that generates nothing
