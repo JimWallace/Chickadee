@@ -26,9 +26,28 @@ enum NotebookSubstitution {
     /// `{{ciphertext}}` is tagged `chickadee_personalized: "ciphertext"`).
     static let fencedCellMetadataKey = "chickadee_personalized"
 
-    /// Regex that matches `{{identifier}}` — only valid Python identifier
-    /// characters between the braces, no spaces.  Mirrors the validator
-    /// used by the editor so the on-disk shape matches what the user typed.
+    /// Regex that matches `{{name}}` — any run of non-space, non-brace
+    /// characters between the braces.
+    ///
+    /// Deliberately a PERMISSIVE TOKEN GRAB, not a grammar check. It used to be
+    /// `[A-Za-z_][A-Za-z0-9_]*`, which is the cross-language identifier subset,
+    /// and that made a name an author could legally declare on an R or Racket
+    /// assignment (`my.df`, `bmi-value`) unreferenceable: `{{my.df}}` matched
+    /// nothing and survived into every student's notebook as literal text, with
+    /// no error raised anywhere.
+    ///
+    /// Parameterising this by the assignment's language was the obvious fix and
+    /// is the wrong one twice over. A placeholder is replaced by a literal
+    /// VALUE and never reaches a runtime, so no language rule applies to it —
+    /// and Racket's grammar is a NEGATIVE rule (anything but whitespace, reader
+    /// delimiters, a leading `#`, or something that parses as a number) which
+    /// no character-class regex expresses faithfully. So the parser's job is
+    /// only to grab a token; whether that name is legal is the validator's job,
+    /// and `isValidSharedName` already answers it per language.
+    ///
+    /// Excluding whitespace is what keeps this safe for existing content:
+    /// `{{ some prose }}` stays unmatched exactly as it does today, so only
+    /// brace-wrapped single tokens become newly visible.
     private static let placeholderRegex: NSRegularExpression = {
         // The pattern is a compile-time string literal that we know parses
         // successfully — there is no runtime input that could change it.
@@ -36,7 +55,7 @@ enum NotebookSubstitution {
         // through every call site of `apply(...)`, which would give
         // callers a failure case that can never actually fire.
         // swiftlint:disable:next force_try
-        try! NSRegularExpression(pattern: #"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}"#)
+        try! NSRegularExpression(pattern: #"\{\{([^\s{}]+)\}\}"#)
     }()
 
     /// Applies `substitutions` to the notebook in `notebookData`.

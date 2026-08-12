@@ -38,6 +38,25 @@
 // point; the returned `{ getFamilies() }` exists for console debugging.
 
 (function (global) {
+
+    /// A `$name` reference cell, e.g. `$bmi_threshold` in an arg or Expected
+    /// cell.
+    ///
+    /// A PERMISSIVE TOKEN GRAB, not a grammar check, and one constant rather
+    /// than the ten hand-written copies this replaces. It used to be
+    /// `[A-Za-z_][A-Za-z0-9_]*` — the cross-language identifier subset — which
+    /// silently broke references on the languages that accept more: a Racket
+    /// author could declare `bmi-value` and `$bmi-value` then matched nothing
+    /// and fell through as a literal STRING, i.e. a wrong expected value in a
+    /// generated test with no error anywhere.
+    ///
+    /// Whether the captured name is legal is NOT decided here. The server
+    /// decides, per language, in `isValidSharedName`; this side only has to
+    /// resolve the token against the declared variable list, which fails
+    /// loudly on a name that does not exist. Excluding whitespace keeps a cell
+    /// of prose from reading as a reference.
+    var VAR_REF_RE = /^\$([^\s]+)$/;
+
     'use strict';
 
     function initPatternFamilyEditor(config) {
@@ -596,23 +615,27 @@
         /// Is `s` a name the SERVER will accept for a family variable or
         /// function?
         ///
-        /// Still Python's grammar, deliberately, because that is what the
-        /// server applies here: `PatternFamilyValidator` and the inputs
-        /// services call `isValidPythonIdentifier` for every language. Widening
-        /// the client alone would let a name through that the save then
-        /// rejects, which is worse than the wording bug this fixes.
+        /// A DELIBERATELY PERMISSIVE inline hint, not a grammar check. The
+        /// server is authoritative and answers per language
+        /// (`isValidSharedName`), so anything narrower here is a second,
+        /// hand-written copy of seven grammars that can only drift from it.
         ///
-        /// (The server DOES have a per-language identifier dispatch —
-        /// `isValidRIdentifier` and friends — but it is private to
-        /// `NotebookCheckKindHandler` and reaches notebook checks only.
-        /// Extending it to families is a real improvement and a real behaviour
-        /// change: `my.df` would become a legal R variable name, and `$name`
-        /// reference parsing has to be checked against a dot before that can
-        /// ship. It is not a wording fix and is not bundled with one.)
+        /// It used to be Python's grammar, which was correct only while the
+        /// server applied Python's grammar to every language. Now that the
+        /// server asks the assignment's own, a fixed rule here would refuse
+        /// names the save accepts — an R author's `my.df`, a Racket author's
+        /// `bmi-value` — and the author would have no way to tell that the
+        /// refusal came from the browser rather than from Chickadee.
+        ///
+        /// It cannot be made exact, either: Racket's grammar is a NEGATIVE rule
+        /// (anything but whitespace, reader delimiters, a leading `#`, or
+        /// something that parses as a number), which no character class
+        /// expresses. Rejecting whitespace catches the one mistake worth
+        /// catching inline; everything else is the server's to refuse, with a
+        /// message that names the language.
         function isValidServerIdentifier(s) {
             if (!s) return false;
-            if (PYTHON_KEYWORDS.has(s)) return false;
-            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
+            return !/\s/.test(s);
         }
 
         /// Shared with the Global/Section Inputs editors — see
@@ -828,7 +851,7 @@
 
         function refreshArgCellHighlight(cell, declaredNames) {
             var raw = (cell.value || '').trim();
-            var match = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+            var match = raw.match(VAR_REF_RE);
             cell.style.fontStyle = '';
             cell.style.color = '';
             cell.style.borderColor = '';
@@ -852,7 +875,7 @@
         /// when an unrelated keystroke triggers a bulk refresh.
         function refreshExpectedCellHighlight(cell, declaredNames) {
             var raw = (cell.value || '').trim();
-            var match = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+            var match = raw.match(VAR_REF_RE);
             if (!match) {
                 cell.style.fontStyle = '';
                 cell.style.borderColor = '';
@@ -1142,7 +1165,7 @@
                             continue;
                         }
                         // Variable reference: `$ident` (not `$"...$"` quoted).
-                        var varMatch = trimmed.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                        var varMatch = trimmed.match(VAR_REF_RE);
                         if (varMatch) {
                             var varName = varMatch[1];
                             if (!declaredVarNames.has(varName)) {
@@ -1172,7 +1195,7 @@
                     // Per-student expected: `$name` references a declared input
                     // (a global/section `=` expression), resolved per student at
                     // grading time — mirrors arg-cell refs.
-                    var expRefMatch = rawExp.trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                    var expRefMatch = rawExp.trim().match(VAR_REF_RE);
                     if (expRefMatch) {
                         var expRefName = expRefMatch[1];
                         if (!declaredVarNames.has(expRefName)) {
@@ -1229,7 +1252,7 @@
                             argVarRefs.push(null);
                             return;
                         }
-                        var varMatch = String(raw).trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                        var varMatch = String(raw).trim().match(VAR_REF_RE);
                         if (varMatch) {
                             args.push(null);
                             argsProvided.push(true);
@@ -1254,7 +1277,7 @@
                 var expected = null;
                 var expectedVarRef = null;
                 var rawExpTrim = rawExp.trim();
-                var expRefMatch = rawExpTrim.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                var expRefMatch = rawExpTrim.match(VAR_REF_RE);
                 if (expRefMatch) {
                     expectedVarRef = expRefMatch[1];
                 } else if (rawExpTrim !== '') {
@@ -2005,7 +2028,7 @@
                 var hasVarRef = Array.from(row.querySelectorAll('.pf-case-arg'))
                     .some(function (cell) {
                         var v = (cell.value || '').trim();
-                        return /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(v);
+                        return VAR_REF_RE.test(v);
                     });
                 if (!hasVarRef) return;
                 // Don't clobber the instructor's manual expected value.
@@ -2047,7 +2070,7 @@
             if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
             // A per-student `$name` Expected is resolved server-side per
             // student — never auto-compute/overwrite it.
-            if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(expectedEl.value.trim())) return;
+            if (VAR_REF_RE.test(expectedEl.value.trim())) return;
 
             // Pull the latest variable values straight from the DOM so
             // `$name` refs in arg cells resolve to what the instructor
@@ -2084,7 +2107,7 @@
                     if (currentParamHasDefault && currentParamHasDefault[i]) continue;
                     return;
                 }
-                var varMatch = raw.trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                var varMatch = raw.trim().match(VAR_REF_RE);
                 if (varMatch) {
                     if (!(varMatch[1] in varsNow)) return; // unresolved ref — skip until valid
                     args.push(varsNow[varMatch[1]]);
@@ -2181,7 +2204,7 @@
                 // cell manual so auto-compute won't clobber an author value.
                 // Clearing the cell re-enables auto-compute.
                 refreshExpectedCellHighlight(t, collectDeclaredInputNames());
-                if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t.value.trim())) {
+                if (VAR_REF_RE.test(t.value.trim())) {
                     t.dataset.manual = '1';
                     delete t.dataset.autoComputed;
                 } else if (t.value.trim() === '') {

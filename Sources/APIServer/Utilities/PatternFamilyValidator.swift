@@ -53,38 +53,32 @@ private func validatePatternCaseHeader(
 /// section.
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
+    language: AssignmentLanguage,
     sectionVarNamesHere: Set<String>,
     globalVarNames: Set<String>,
     perStudentExpressionNames: Set<String>
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
-    // Deliberately the CROSS-LANGUAGE SUBSET, not the assignment's grammar —
-    // unlike `paramNames` and `.variableEquality`'s case variable, which this
-    // release did widen.
+    // Held to the assignment's own grammar, like `paramNames`.
     //
-    // `isValidPythonIdentifier` is the predicate, but Python is not the reason,
-    // and reading it that way points at the wrong fix. Two things pin it:
+    // This was briefly pinned to the cross-language subset for a real reason:
+    // the name is REFERENCED from an arg cell as `$name`, and the editor parsed
+    // that with a subset-shaped regex, so accepting a Racket `bmi-value` made
+    // `$bmi-value` match nothing and fall through as a literal STRING — a wrong
+    // expected value in a generated test, reported nowhere.
     //
-    //  1. A family variable is REFERENCED from an arg cell as `$name`, parsed
-    //     by `/^\$([A-Za-z_][A-Za-z0-9_]*)$/` in `pattern-family-editor.js`.
-    //     Accepting a Racket `bmi-value` makes `$bmi-value` match nothing and
-    //     fall through as a literal STRING — a wrong expected value in a
-    //     generated test, reported nowhere.
-    //  2. The name is EMITTED bare into the generated preamble. Every language
-    //     has an emitter that makes an arbitrary name safe (`rIdentifier`
-    //     backticks, `luaIdentifier`/`octaveIdentifier` mangle) EXCEPT Python,
-    //     whose preamble writes `name = _ck["name"]` directly — so a hyphen is
-    //     a syntax error. The subset is pinned by that weakest emitter.
-    //
-    // So the unlock is not "make this language-aware". It is: give Python an
-    // emitter like the other four have, then widen the `$name` parser with it.
-    // Same reasoning holds for global/section input names and `{{name}}`.
+    // That parser is now a permissive token grab (`VAR_REF_RE`), which is what
+    // lifts the constraint. A parser's job is to grab a token; deciding whether
+    // the name is legal is THIS check's job, per language. Once the two stopped
+    // duplicating each other, the subset had nothing left to protect.
     for v in family.variables {
-        guard isValidPythonIdentifier(v.name) else {
+        guard isValidIdentifier(v.name, language: language) else {
             throw Abort(
                 .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid Python identifier")
+                reason:
+                    "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid "
+                    + identifierKindName(language))
         }
         guard seenVarNames.insert(v.name).inserted else {
             throw Abort(
@@ -333,6 +327,7 @@ func validatePatternFamilies(
         // `paramNames`, stay on Python's grammar; see the helper.
         try validateFamilyVariablesAndArgRefs(
             family: family,
+            language: language,
             sectionVarNamesHere: sectionVarNames(forFamily: family.id),
             globalVarNames: globalVariableNames,
             perStudentExpressionNames: perStudentExpressionNames

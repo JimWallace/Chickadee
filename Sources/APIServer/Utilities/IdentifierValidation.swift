@@ -67,6 +67,39 @@ func isValidRIdentifier(_ s: String) -> Bool {
     return true
 }
 
+/// The widest name EVERY language's generated code can carry as a bare
+/// identifier — `[A-Za-z_][A-Za-z0-9_]*`.
+///
+/// Implemented as Python's rule because they coincide, not because Python is
+/// privileged: R accepts more (and `rIdentifier` backticks the rest), Racket
+/// accepts far more, and C++/Java/Lua/Octave accept exactly this. It is the
+/// intersection, and it is what a name falls back to when the assignment
+/// declares no language at all — a plain `.sh` suite has no grammar to consult,
+/// and a name in this subset is safe whatever the suite's scripts turn out to
+/// be written in.
+func isValidCrossLanguageIdentifier(_ s: String) -> Bool {
+    isValidPythonIdentifier(s)
+}
+
+/// The grammar a shared name (a global/section input, a family variable) is
+/// held to on an assignment whose language may be undeclared.
+///
+/// A declared language is checked against its own grammar, so an R author may
+/// name an input `my.df` and a Racket author `bmi-value`. A declared-None
+/// assignment falls back to the cross-language subset rather than refusing:
+/// nil means the author said "no language", not that nobody has been asked, and
+/// refusing to name an input would make a plain `.sh` assignment unauthorable.
+func isValidSharedName(_ s: String, language: AssignmentLanguage?) -> Bool {
+    guard let language else { return isValidCrossLanguageIdentifier(s) }
+    return isValidIdentifier(s, language: language)
+}
+
+/// What a shared name may look like, for the save-time refusal.
+func sharedNameExpectation(for language: AssignmentLanguage?) -> String {
+    guard let language else { return "a letter or underscore followed by letters, digits or underscores" }
+    return "a valid \(identifierKindName(language))"
+}
+
 /// Whether `s` is a valid *bare name* in `language` — a variable, a parameter,
 /// a module-level identifier.
 ///
