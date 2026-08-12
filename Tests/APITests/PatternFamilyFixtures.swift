@@ -16,16 +16,35 @@ import Vapor
 
 // MARK: - Family fixtures
 
+/// A function target that is valid in `language`, for a fixture whose subject
+/// is something OTHER than the identifier grammar (filename expansion,
+/// dependency resolution, ordering…).
+///
+/// It picks by asking `isValidFunctionTarget` rather than tabulating a name per
+/// language, so an eighth language cannot silently reuse a spelling its grammar
+/// refuses — which is exactly how the `.java` case of
+/// `apply_expandsFamilyRefToTheAssignmentsOwnExtension` started failing: it
+/// swept `allCases` with a hardcoded bare `bmi_category`, valid in six
+/// languages and unexpressible in Java, which has no free functions.
+///
+/// Whether a given target is accepted is pinned by
+/// `PatternFamilyFunctionTargetTests`; here it only has to be legal.
+func pfValidFunctionTarget(for language: AssignmentLanguage) -> String {
+    let candidates = ["bmi_category", "bmi-category", "Solution.bmiCategory"]
+    return candidates.first { isValidFunctionTarget($0, language: language) } ?? "bmi_category"
+}
+
 func pfBMIFamily(
     id: String = "bmi_category",
     hint: String? = "values below 18.5 should be 'underweight'",
-    tier: TestTier = .pub
+    tier: TestTier = .pub,
+    functionName: String = "bmi_category"
 ) -> PatternFamily {
     PatternFamily(
         id: id,
         name: "BMI Category Boundaries",
         kind: .boundaryEquality,
-        functionName: "bmi_category",
+        functionName: functionName,
         paramNames: ["bmi"],
         defaults: PatternDefaults(tier: tier, points: 1, hint: hint),
         cases: [

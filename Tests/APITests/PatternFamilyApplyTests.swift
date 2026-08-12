@@ -315,7 +315,12 @@ import Vapor
 
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
-                nextFamilies: [pfBMIFamily()],
+                nextFamilies: [
+                    // The target has to be legal in THIS language: Java has no
+                    // free functions, so the bare name every other language
+                    // uses is not something a Java family can express.
+                    pfBMIFamily(functionName: pfValidFunctionTarget(for: language))
+                ],
                 authoredItems: [
                     .script(
                         AuthoredRawScript(
