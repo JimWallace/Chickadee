@@ -87,34 +87,6 @@ private func validateRequiredIdentifier(
     return value
 }
 
-/// Identifier grammar for `language`. Keeps name fields (`variable`, function
-/// names) held to the right language's rules, so an R name like `my.df` passes
-/// on an R assignment while Python assignments are unchanged.
-private func isValidIdentifier(_ value: String, language: AssignmentLanguage) -> Bool {
-    switch language {
-    case .python: return isValidPythonIdentifier(value)
-    case .r: return isValidRIdentifier(value)
-    case .lua: return isValidLuaIdentifier(value)
-    case .octave: return isValidOctaveIdentifier(value)
-    case .cpp: return isValidCppIdentifier(value)
-    case .racket: return isValidRacketIdentifier(value)
-    case .java: return isValidJavaIdentifier(value)
-    }
-}
-
-/// Human-readable name of the identifier grammar, for validation messages.
-private func identifierKindName(_ language: AssignmentLanguage) -> String {
-    switch language {
-    case .python: return "Python identifier"
-    case .r: return "R name"
-    case .lua: return "Lua identifier"
-    case .octave: return "Octave identifier"
-    case .cpp: return "C++ identifier"
-    case .racket: return "Racket identifier"
-    case .java: return "Java identifier"
-    }
-}
-
 /// rtol / atol bounds check shared by the float-comparison kinds.
 private func validateTolerances(_ check: NotebookCheck, kindLabel: String) throws {
     if let rtol = check.rtol, !rtol.isFinite || rtol < 0 {

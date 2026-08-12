@@ -1,11 +1,23 @@
 // APIServer/Utilities/IdentifierValidation.swift
 //
-// Tiny shared helpers for validating Python-identifier safety of
+// Tiny shared helpers for validating the identifier safety of
 // instructor-authored manifest fields (pattern-family ids, case keys,
 // variable names, etc.).  Lifted out of `ManifestValidation.swift` in
 // v0.4.182 when that file was split into per-concern validators —
 // all three (`ManifestDependencyValidator`, `PatternFamilyValidator`,
 // `NotebookCheckValidator`) call these.
+//
+// Two questions live here and must not be collapsed into one:
+// `isValidIdentifier` asks whether a BARE NAME is legal (a variable, a
+// parameter), `isValidFunctionTarget` whether a CALL TARGET is. They disagree
+// on Java, whose target is a qualified `Solution.classify` that is not itself
+// an identifier, and on Lua, whose bare names are checked against Lua's grammar
+// while its targets still borrow Python's.
+//
+// The per-language arms are what makes them right: a check here that answers
+// with Python's rules on every assignment does not fail loudly, it simply
+// refuses a name the author's language considers ordinary, in a message naming
+// a language their assignment has nothing to do with.
 
 import Core
 import Foundation
@@ -53,6 +65,45 @@ func isValidRIdentifier(_ s: String) -> Bool {
         guard ch.isLetter || ch.isNumber || ch == "." || ch == "_" else { return false }
     }
     return true
+}
+
+/// Whether `s` is a valid *bare name* in `language` — a variable, a parameter,
+/// a module-level identifier.
+///
+/// Distinct from `isValidFunctionTarget`, and deliberately so: the two answer
+/// different questions and disagree on two languages. A Java call target is a
+/// qualified `Solution.classify`, which is not a Java identifier; a Lua bare
+/// name is checked against Lua's own grammar while a Lua call target still
+/// borrows Python's. Collapsing them would either let a dotted name through as
+/// a variable or refuse Java's only legal call target.
+///
+/// Lives here rather than beside its first caller because it has several: it
+/// was written for notebook checks, stayed `private` in that file, and the
+/// pattern-family validator went on applying Python's rules to every language's
+/// parameter and variable names as a result.
+func isValidIdentifier(_ value: String, language: AssignmentLanguage) -> Bool {
+    switch language {
+    case .python: return isValidPythonIdentifier(value)
+    case .r: return isValidRIdentifier(value)
+    case .lua: return isValidLuaIdentifier(value)
+    case .octave: return isValidOctaveIdentifier(value)
+    case .cpp: return isValidCppIdentifier(value)
+    case .racket: return isValidRacketIdentifier(value)
+    case .java: return isValidJavaIdentifier(value)
+    }
+}
+
+/// Human-readable name of the identifier grammar, for validation messages.
+func identifierKindName(_ language: AssignmentLanguage) -> String {
+    switch language {
+    case .python: return "Python identifier"
+    case .r: return "R name"
+    case .lua: return "Lua identifier"
+    case .octave: return "Octave identifier"
+    case .cpp: return "C++ identifier"
+    case .racket: return "Racket identifier"
+    case .java: return "Java identifier"
+    }
 }
 
 /// Whether `s` is a usable pattern-family function target in `language`.

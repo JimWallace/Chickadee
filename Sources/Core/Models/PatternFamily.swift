@@ -245,8 +245,10 @@ public struct PatternCase: Codable, Equatable, Sendable {
 /// useful we can promote this struct onto `TestProperties` without a
 /// breaking change to the per-family spec.
 public struct FamilyVariable: Codable, Equatable, Sendable {
-    /// Python identifier.  Validated against keywords + identifier syntax
-    /// in `ManifestValidation`.  Must be unique within the family.
+    /// An identifier in the ASSIGNMENT'S language — validated against that
+    /// language's keywords + identifier syntax by `PatternFamilyValidator`,
+    /// not against Python's on every assignment.  Must be unique within the
+    /// family.
     public let name: String
     /// The value bound to `name` in the generated test.  Any JSON-expressible
     /// Python literal (scalar, list, dict) works; nesting is free.

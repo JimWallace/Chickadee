@@ -53,6 +53,7 @@ private func validatePatternCaseHeader(
 /// section.
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
+    language: AssignmentLanguage,
     sectionVarNamesHere: Set<String>,
     globalVarNames: Set<String>,
     perStudentExpressionNames: Set<String>
@@ -60,10 +61,12 @@ private func validateFamilyVariablesAndArgRefs(
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
     for v in family.variables {
-        guard isValidPythonIdentifier(v.name) else {
+        guard isValidIdentifier(v.name, language: language) else {
             throw Abort(
                 .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid Python identifier")
+                reason:
+                    "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid "
+                    + identifierKindName(language))
         }
         guard seenVarNames.insert(v.name).inserted else {
             throw Abort(
@@ -216,10 +219,12 @@ private func validatePatternFamilyHeader(
     }
     var seenParams: Set<String> = []
     for param in family.paramNames {
-        guard isValidPythonIdentifier(param) else {
+        guard isValidIdentifier(param, language: language) else {
             throw Abort(
                 .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': parameter name '\(param)' is not a valid Python identifier")
+                reason:
+                    "Pattern family '\(family.id)': parameter name '\(param)' is not a valid "
+                    + identifierKindName(language))
         }
         guard seenParams.insert(param).inserted else {
             throw Abort(
@@ -295,7 +300,7 @@ func validatePatternFamilies(
         var seenCaseKeys: Set<String> = []
         for c in family.cases {
             try validatePatternCaseHeader(family: family, c: c, seenCaseKeys: &seenCaseKeys)
-            try handler.validateCase(family: family, case: c)
+            try handler.validateCase(family: family, case: c, language: language)
         }
 
         // Family-level, kind-specific rules (e.g. approximateEquality's
@@ -303,12 +308,13 @@ func validatePatternFamilies(
         try handler.validateFamily(family)
 
         // v0.4.94: family-scoped variables.  Each name must be a valid
-        // Python identifier, unique within the family, and not collide
-        // with a parameter name (the renderer would shadow it at call
-        // time, silently breaking the test).  Any `$name` reference in
+        // identifier in the ASSIGNMENT'S language, unique within the family,
+        // and not collide with a parameter name (the renderer would shadow it
+        // at call time, silently breaking the test).  Any `$name` reference in
         // a case arg cell must resolve to a declared variable.
         try validateFamilyVariablesAndArgRefs(
             family: family,
+            language: language,
             sectionVarNamesHere: sectionVarNames(forFamily: family.id),
             globalVarNames: globalVariableNames,
             perStudentExpressionNames: perStudentExpressionNames
