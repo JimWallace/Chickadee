@@ -249,6 +249,7 @@ func validatePatternFamilySave(
     try validatePatternFamilies(
         families,
         testSuites: rawAsTestSuites,
+        language: language,
         sections: inputs.sections,
         familySectionID: ordering.familySectionID,
         globalVariableNames: Set(inputs.globalVariables.map(\.name)),

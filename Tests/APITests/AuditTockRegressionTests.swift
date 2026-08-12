@@ -112,13 +112,13 @@ import Testing
         // Rejected when the referenced name isn't a known family/section/global
         // variable…
         #expect(throws: (any Error).self) {
-            try validatePatternFamilies([family], testSuites: [])
+            try validatePatternFamilies([family], testSuites: [], language: .python)
         }
         // …accepted once it's declared as an assignment-scope global input
         // (matching what the renderer actually puts in scope).
         #expect(throws: Never.self) {
             try validatePatternFamilies(
-                [family], testSuites: [], globalVariableNames: ["roster_name"])
+                [family], testSuites: [], language: .python, globalVariableNames: ["roster_name"])
         }
     }
 }

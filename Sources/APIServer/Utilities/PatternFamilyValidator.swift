@@ -186,6 +186,7 @@ private let perStudentExpectedCapableKindsDescription =
 /// detection works across the whole list.
 private func validatePatternFamilyHeader(
     family: PatternFamily,
+    language: AssignmentLanguage,
     seenFamilyIDs: inout Set<String>
 ) throws {
     guard isValidIdentifierFragment(family.id) else {
@@ -204,11 +205,12 @@ private func validatePatternFamilyHeader(
     // acceptable.  Every function-calling kind still requires a valid
     // identifier.
     if patternKindHandler(for: family.kind).requiresFunctionName {
-        guard isValidPythonIdentifier(family.functionName) else {
+        guard isValidFunctionTarget(family.functionName, language: language) else {
             throw Abort(
                 .unprocessableEntity,
                 reason:
-                    "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier"
+                    "Pattern family '\(family.id)': functionName '\(family.functionName)' is not valid for a "
+                    + "\(language.displayName) assignment — expected \(functionTargetExpectation(for: language))"
             )
         }
     }
@@ -250,6 +252,7 @@ private func validatePatternFamilyHeader(
 func validatePatternFamilies(
     _ families: [PatternFamily],
     testSuites: [TestSuiteEntry],
+    language: AssignmentLanguage,
     sections: [TestSuiteSection] = [],
     familySectionID: [String: String] = [:],
     globalVariableNames: Set<String> = [],
@@ -285,7 +288,8 @@ func validatePatternFamilies(
     // 1. Per-family structural checks.
     var seenFamilyIDs: Set<String> = []
     for family in families {
-        try validatePatternFamilyHeader(family: family, seenFamilyIDs: &seenFamilyIDs)
+        try validatePatternFamilyHeader(
+            family: family, language: language, seenFamilyIDs: &seenFamilyIDs)
 
         let handler = patternKindHandler(for: family.kind)
         var seenCaseKeys: Set<String> = []

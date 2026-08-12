@@ -57,7 +57,7 @@ import Vapor
             defaults: PatternDefaults(tolerance: -0.1),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [], language: .python) } throws: { error in
             #expect("\(error)".contains("tolerance"))
 
             return true
@@ -71,7 +71,7 @@ import Vapor
             defaults: PatternDefaults(tolerance: 0),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        try validatePatternFamilies([family], testSuites: [])
+        try validatePatternFamilies([family], testSuites: [], language: .python)
     }
 
     @Test func validation_approxEquality_rejectsNonFiniteTolerance() throws {
@@ -81,7 +81,7 @@ import Vapor
             defaults: PatternDefaults(tolerance: .nan),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: [], language: .python) }
     }
 
     // MARK: - variableEquality
@@ -117,7 +117,7 @@ import Vapor
     }
 
     @Test func variableEqualityValidation_acceptsGoodFamily() throws {
-        try validatePatternFamilies([pfNotebookVariablesFamily()], testSuites: [])
+        try validatePatternFamilies([pfNotebookVariablesFamily()], testSuites: [], language: .python)
     }
 
     @Test func variableEqualityValidation_rejectsCaseWithMultipleArgs() throws {
@@ -131,7 +131,7 @@ import Vapor
                     expected: .int(1))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func variableEqualityValidation_rejectsNonStringArg() throws {
@@ -144,7 +144,7 @@ import Vapor
                     args: [.int(42)], expected: .int(1))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func variableEqualityValidation_rejectsEmptyVariableName() throws {
@@ -157,7 +157,7 @@ import Vapor
                     args: [.string("")], expected: .int(1))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func variableEqualityValidation_rejectsNonIdentifierVariableName() throws {
@@ -170,7 +170,7 @@ import Vapor
                     args: [.string("not a valid name")], expected: .int(1))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func variableEqualityValidation_allowsPlaceholderFunctionName() throws {
@@ -187,7 +187,7 @@ import Vapor
                     args: [.string("x")], expected: .int(1))
             ]
         )
-        try validatePatternFamilies([fam], testSuites: [])
+        try validatePatternFamilies([fam], testSuites: [], language: .python)
     }
 
     // MARK: - stdoutEquality
@@ -236,7 +236,7 @@ import Vapor
                     args: [.int(1)], expected: .string(""))
             ]
         )
-        try validatePatternFamilies([fam], testSuites: [])
+        try validatePatternFamilies([fam], testSuites: [], language: .python)
     }
 
     @Test func stdoutEqualityValidationRejectsNonStringExpected() throws {
@@ -249,7 +249,7 @@ import Vapor
                     args: [.int(1)], expected: .int(42))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func stdoutEqualityValidationRejectsArgArityMismatch() throws {
@@ -262,7 +262,7 @@ import Vapor
                     args: [.int(1)], expected: .string("hi"))
             ]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: [], language: .python) }
     }
 
     @Test func stdoutEqualitySpecHashChangesWithExpected() throws {

@@ -90,7 +90,7 @@ import Vapor
             ]
         )
         do {
-            try validatePatternFamilies([fam], testSuites: [])
+            try validatePatternFamilies([fam], testSuites: [], language: .python)
             Issue.record("Expected the reserved guard case key to be rejected")
         } catch let abort as AbortError {
             #expect("\(abort.reason)".contains("reserved"))
@@ -108,7 +108,7 @@ import Vapor
                     args: [.string("answer")], expected: .int(42))
             ]
         )
-        try validatePatternFamilies([fam], testSuites: [])
+        try validatePatternFamilies([fam], testSuites: [], language: .python)
     }
 
     // MARK: - Apply wiring

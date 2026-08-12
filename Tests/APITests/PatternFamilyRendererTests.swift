@@ -309,7 +309,7 @@ import Vapor
             ],
             variables: []
         )
-        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [], language: .python) } throws: { error in
             let msg = "\(error)"
             #expect(
                 msg.contains("does_not_exist") && msg.contains("unknown"),
@@ -331,7 +331,7 @@ import Vapor
             ],
             variables: [FamilyVariable(name: "x", value: .int(99))]
         )
-        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [], language: .python) } throws: { error in
             #expect(
                 "\(error)".contains("collides with a parameter name"),
                 "Expected collision erroror, got: \(error)")
@@ -365,7 +365,7 @@ import Vapor
     @Test func validation_rejectsDuplicateFamilyID() throws {
         let f1 = pfBMIFamily(id: "x")
         let f2 = pfBMIFamily(id: "x")
-        #expect { try validatePatternFamilies([f1, f2], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([f1, f2], testSuites: [], language: .python) } throws: { error in
             #expect("\(error)".contains("Duplicate pattern family id"))
 
             return true
@@ -382,7 +382,7 @@ import Vapor
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "foo", paramNames: ["x"], cases: cases
         )
-        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [], language: .python) } throws: { error in
             #expect("\(error)".contains("duplicate case key"))
 
             return true
@@ -395,7 +395,7 @@ import Vapor
             functionName: "2bad", paramNames: ["x"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: [], language: .python) }
     }
 
     @Test func validation_rejectsPythonKeywordAsParameterName() throws {
@@ -404,7 +404,7 @@ import Vapor
             functionName: "foo", paramNames: ["class"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: [], language: .python) }
     }
 
     @Test func validation_rejectsArgCountMismatch() throws {
@@ -413,7 +413,7 @@ import Vapor
             functionName: "foo", paramNames: ["x", "y"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [], language: .python) } throws: { error in
             #expect("\(error)".contains("arg(s) but family declares"))
 
             return true
@@ -427,7 +427,7 @@ import Vapor
             script: "publictest_bmi_category_01.py",
             generatedBy: nil
         )
-        #expect { try validatePatternFamilies([family], testSuites: [rawClash]) } throws: { error in
+        #expect { try validatePatternFamilies([family], testSuites: [rawClash], language: .python) } throws: { error in
             #expect("\(error)".contains("hand-written script with that name already exists"))
 
             return true
@@ -435,7 +435,7 @@ import Vapor
     }
 
     @Test func validation_emptySpecIsValid() throws {
-        try validatePatternFamilies([], testSuites: [])
+        try validatePatternFamilies([], testSuites: [], language: .python)
     }
 
     // MARK: - Personalization (per-student inputs, #461)
@@ -515,7 +515,7 @@ import Vapor
 
     @Test func validation_acceptsPerStudentArgAndExpectedRefs() throws {
         try validatePatternFamilies(
-            [perStudentBoundaryFamily()], testSuites: [],
+            [perStudentBoundaryFamily()], testSuites: [], language: .python,
             perStudentExpressionNames: ["patients", "adults_expected"])
     }
 
@@ -528,7 +528,7 @@ import Vapor
             functionName: "countAdults", paramNames: ["x"], cases: [c])
         #expect {
             try validatePatternFamilies(
-                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+                [family], testSuites: [], language: .python, perStudentExpressionNames: ["patients"])
         } throws: { error in
             #expect("\(error)".contains("must name a per-student input"))
             return true
@@ -546,7 +546,7 @@ import Vapor
             functionName: "f", paramNames: ["patients"], cases: [c])
         #expect {
             try validatePatternFamilies(
-                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+                [family], testSuites: [], language: .python, perStudentExpressionNames: ["patients"])
         } throws: { error in
             #expect(
                 "\(error)".contains(
@@ -621,7 +621,7 @@ import Vapor
             functionName: "", paramNames: ["name"], cases: [c])
         #expect {
             try validatePatternFamilies(
-                [family], testSuites: [], perStudentExpressionNames: ["which_var"])
+                [family], testSuites: [], language: .python, perStudentExpressionNames: ["which_var"])
         } throws: { error in
             #expect(
                 "\(error)".contains(
@@ -642,7 +642,7 @@ import Vapor
             functionName: "f", paramNames: ["x"], cases: [c])
         #expect {
             try validatePatternFamilies(
-                [family], testSuites: [], perStudentExpressionNames: ["t_expected"])
+                [family], testSuites: [], language: .python, perStudentExpressionNames: ["t_expected"])
         } throws: { error in
             #expect("\(error)".contains("uses a per-student expected"))
             #expect("\(error)".contains("and variable_equality"))
@@ -663,7 +663,7 @@ import Vapor
 
     @Test func validation_acceptsPerStudentRefsForApproximate() throws {
         try validatePatternFamilies(
-            [perStudentApproxFamily()], testSuites: [],
+            [perStudentApproxFamily()], testSuites: [], language: .python,
             perStudentExpressionNames: ["patients", "avg_expected"])
     }
 
@@ -780,7 +780,7 @@ import Vapor
             id: "u", name: "U", kind: .unorderedEquality,
             functionName: "f", paramNames: ["x"], cases: [c])
         #expect {
-            try validatePatternFamilies([family], testSuites: [])
+            try validatePatternFamilies([family], testSuites: [], language: .python)
         } throws: { error in
             #expect("\(error)".contains("must be a list"))
             return true
@@ -789,7 +789,7 @@ import Vapor
 
     @Test func validation_acceptsPerStudentRefsForUnordered() throws {
         try validatePatternFamilies(
-            [unorderedPerStudentFamily()], testSuites: [],
+            [unorderedPerStudentFamily()], testSuites: [], language: .python,
             perStudentExpressionNames: ["patients", "matches"])
     }
 
