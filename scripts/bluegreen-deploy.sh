@@ -222,7 +222,7 @@ cmd_deploy() {
   # still reference their own images, so the rollback target is never pruned.
   log "Reclaiming disk from images orphaned by past swaps (before pull)..."
   run "docker image prune -f || true"
-  log "Free space on $(df -P / | awk 'NR==2{print $4\" KiB on \"$6}')"
+  log "Free space on $(df -P / | awk 'NR==2{print $4 " KiB on " $6}')"
 
   run "docker pull '$IMAGE'"
 
