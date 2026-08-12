@@ -213,7 +213,24 @@ jobs:
       # sqlite, no worker secret (one is generated), no MCP — which is enough to
       # prove the binary starts, migrations apply, and the HTTP server serves.
       #
-      # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany it. `AUTH_MODE` alone is
+      # `PUBLIC_BASE_URL` is what actually MOUNTS the MCP surfaces. Setting
+      # `MCP_MODE` alone is not enough — without an issuer/resource the server
+      # logs "MCP_MODE=read_write but no issuer/resource could be resolved;
+      # /mcp not mounted" and carries on, so the first version of this proved
+      # only that the server boots with the variable set. Production has a
+      # PUBLIC_BASE_URL and therefore builds the MCP tool catalog at boot,
+      # whose descriptions and schemas derive from AssignmentLanguage.allCases
+      # — the last startup path CI was not exercising.
+      #
+      # `MCP_ALLOW_OPEN_GUARDS=true` clears the SECOND gate. PUBLIC_BASE_URL
+      # alone only got as far as "Refusing to mount /mcp: MCP_ALLOWED_HOSTS and
+      # MCP_ALLOWED_ORIGINS unset in production" — the DNS-rebinding guards.
+      # Production pins Host/Origin at its reverse proxy; the smoke has no
+      # proxy and makes no cross-origin request, so opening the guards here is
+      # the honest equivalent. Note /health does NOT assert that /mcp mounted,
+      # so this is checked by reading the boot log, not by the probe.
+      #
+      # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany AUTH_MODE. `AUTH_MODE` alone is
       # SILENTLY IGNORED — the default mode is SSO and `AuthConfig` only honours
       # a local/dual request when this second flag is set, logging "AUTH_MODE=
       # local ignored ... using sso" and then trapping on the missing
@@ -240,6 +257,8 @@ jobs:
               -e AUTH_MODE=local \
               -e ENABLE_NON_SSO_AUTH_MODES=true \
               -e MCP_MODE=read_write \
+              -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
+              -e MCP_ALLOW_OPEN_GUARDS=true \
               -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
@@ -303,6 +322,23 @@ jobs:
           docker image inspect "$IMAGE" --format 'size: {{.Size}} bytes ({{.Size}} / 1e9 GB)' || true
           docker image inspect "$IMAGE" --format '{{.Size}}' \
             | awk '{ printf "size: %.2f GB\n", $1/1e9 }' || true
+
+          # THE ASSERTION THAT WOULD HAVE CAUGHT v0.5.65. The application user
+          # is created with `useradd --system`, which allocates the highest FREE
+          # system ID counting down from 999 — so installing a package that
+          # creates its own system users silently moves it. `default-jdk` moved
+          # it 999 -> 997, and every deploy onto the real data volume (owned by
+          # 999, with .mcp-signing-key at mode 0600) crash-looped at boot while
+          # every test here stayed green, because a FRESH volume takes whatever
+          # UID writes it first. Nothing downstream of the image can see this;
+          # it has to be asserted on the image itself.
+          echo "----- application user -----"
+          image_uid="$(docker run --rm --entrypoint id "$IMAGE" -u)"
+          echo "uid: $image_uid"
+          if [ "$image_uid" != "999" ]; then
+            echo "::error::Application user UID is $image_uid, expected 999. An existing deployment's data volume is owned by 999; a different UID cannot read its own 0600 signing key and will crash-loop at boot on every host that already has data. Pin the UID in the Dockerfile rather than relaxing this check."
+            exit 1
+          fi
 
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
