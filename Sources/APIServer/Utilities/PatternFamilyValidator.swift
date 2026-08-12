@@ -53,20 +53,30 @@ private func validatePatternCaseHeader(
 /// section.
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
-    language: AssignmentLanguage,
     sectionVarNamesHere: Set<String>,
     globalVarNames: Set<String>,
     perStudentExpressionNames: Set<String>
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
+    // Deliberately Python's grammar, NOT the assignment's — unlike `paramNames`
+    // and `.variableEquality`'s case variable, which this release did widen.
+    //
+    // A family variable is referenced from an arg cell as `$name`, and the web
+    // editor parses that with `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`. Accepting a
+    // Racket `bmi-value` here would make `$bmi-value` match nothing and fall
+    // through as a literal STRING — a wrong expected value in a generated test,
+    // with no error anywhere. Exactly the `{{name}}` hazard that keeps global
+    // and section inputs on Python's grammar too.
+    //
+    // The two are one coupled change: widen this only together with the
+    // editor's `$name` parser, via a grammar fact on `AuthoringLanguageFacts`
+    // rather than a second hand-written rule in JavaScript.
     for v in family.variables {
-        guard isValidIdentifier(v.name, language: language) else {
+        guard isValidPythonIdentifier(v.name) else {
             throw Abort(
                 .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid "
-                    + identifierKindName(language))
+                reason: "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid Python identifier")
         }
         guard seenVarNames.insert(v.name).inserted else {
             throw Abort(
@@ -308,13 +318,13 @@ func validatePatternFamilies(
         try handler.validateFamily(family)
 
         // v0.4.94: family-scoped variables.  Each name must be a valid
-        // identifier in the ASSIGNMENT'S language, unique within the family,
-        // and not collide with a parameter name (the renderer would shadow it
-        // at call time, silently breaking the test).  Any `$name` reference in
-        // a case arg cell must resolve to a declared variable.
+        // identifier, unique within the family, and not collide with a
+        // parameter name (the renderer would shadow it at call time, silently
+        // breaking the test).  Any `$name` reference in a case arg cell must
+        // resolve to a declared variable — which is why these names, unlike
+        // `paramNames`, stay on Python's grammar; see the helper.
         try validateFamilyVariablesAndArgRefs(
             family: family,
-            language: language,
             sectionVarNamesHere: sectionVarNames(forFamily: family.id),
             globalVarNames: globalVariableNames,
             perStudentExpressionNames: perStudentExpressionNames

@@ -18,12 +18,28 @@
 // These assert the OUTCOME an author sees, not that a particular predicate ran
 // — the predicate was being called correctly the whole time it was wrong.
 //
-// NOTE the deliberate gap: global and section INPUT names are still held to
-// Python's grammar, and that is not an oversight. They are referenced from
-// starter notebooks as `{{name}}`, and `NotebookSubstitution.placeholderRegex`
-// hardcodes `[A-Za-z_][A-Za-z0-9_]*`. Widening the name check alone would let
-// an author save `bmi-value` and then silently leave `{{bmi-value}}` as literal
-// text in every student's notebook. The two must move together.
+// TWO deliberate gaps, both the same shape: a name that is REFERENCED by a
+// Python-shaped parser elsewhere cannot be widened on its own, because the
+// result is not a refusal but a silent misread.
+//
+//   * Global and section INPUT names — referenced from starter notebooks as
+//     `{{name}}`, parsed by `NotebookSubstitution.placeholderRegex`, which
+//     hardcodes `[A-Za-z_][A-Za-z0-9_]*`. Widening the check alone lets an
+//     author save `bmi-value` and leaves `{{bmi-value}}` as literal text in
+//     every student's notebook.
+//   * Family `variables` — referenced from an arg cell as `$name`, parsed by
+//     the same shape in `pattern-family-editor.js`. Widening the check alone
+//     makes `$bmi-value` fall through as a literal STRING, i.e. a wrong
+//     expected value in a generated test, reported nowhere.
+//
+// `paramNames` and `.variableEquality`'s case variable have no such referencing
+// parser — they are rendered directly into generated source — which is exactly
+// why those two are widened here and the other two are not.
+//
+// Separately: the web editor's own `isValidServerIdentifier` is still Python's
+// grammar, so until it learns the language, these names are reachable through
+// MCP and REST but refused client-side in the browser. That is a narrowing bug
+// in the UI, not a correctness one in the save path.
 
 import Core
 import Foundation
@@ -103,23 +119,44 @@ import Vapor
         }
     }
 
-    // MARK: - Family-scoped variables
+    // MARK: - Family-scoped variables stay on Python's grammar, ON PURPOSE
 
+    /// A plain name still works everywhere.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func familyVariableAcceptsAPlainNameInEveryLanguage(language: AssignmentLanguage) throws {
+        try validate(
+            family(
+                function: validTarget(for: language),
+                variables: [FamilyVariable(name: "threshold_value", value: .double(25))]),
+            language)
+    }
+
+    /// But an R or Racket spelling is REFUSED even on its own language — the
+    /// one place this change deliberately stops short.
+    ///
+    /// A family variable is referenced from an arg cell as `$name`, and the web
+    /// editor parses that with `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`. Accepting
+    /// `threshold-value` here would make `$threshold-value` match nothing and
+    /// fall through as a literal string — a wrong expected value in a generated
+    /// test, reported nowhere. Widening the server alone converts a clear
+    /// refusal into a silent miscompare, which is strictly worse.
+    ///
+    /// When the editor's `$name` parser learns the language's grammar, delete
+    /// this test and fold these names into the accepting one above.
     @Test(
         arguments: [
-            ("threshold_value", AssignmentLanguage.python),
             ("threshold.value", AssignmentLanguage.r),
             ("threshold-value", AssignmentLanguage.racket),
         ])
-    func familyVariableAcceptedInItsOwnLanguage(name: String, language: AssignmentLanguage) throws {
-        try validate(family(variables: [FamilyVariable(name: name, value: .double(25))]), language)
-    }
-
-    @Test func familyVariableRefusedInAForeignLanguage() {
+    func familyVariableRefusesANonPythonSpellingPendingTheRefParser(
+        name: String, language: AssignmentLanguage
+    ) {
         #expect(throws: (any Error).self) {
             try validate(
-                family(variables: [FamilyVariable(name: "threshold-value", value: .double(25))]),
-                .python)
+                family(
+                    function: validTarget(for: language),
+                    variables: [FamilyVariable(name: name, value: .double(25))]),
+                language)
         }
     }
 
