@@ -304,7 +304,7 @@ jobs:
           docker image inspect "$IMAGE" --format '{{.Size}}' \
             | awk '{ printf "size: %.2f GB\n", $1/1e9 }' || true
 
-          echo "Phase 1: cold boot against empty postgres (applies migrations) ...
+          echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail
 
