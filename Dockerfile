@@ -67,6 +67,27 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Non-root user for the application processes.
+#
+# The UID and GID are PINNED to 999 and must stay there, and this must stay
+# ABOVE the package installs below. `useradd --system` allocates the highest
+# free system ID counting DOWN from 999, so the number it lands on is a
+# property of how many system users the installed packages happened to create
+# — not of the useradd line. Adding `default-jdk` in v0.5.65 claimed two of
+# them, the application user silently became 997, and every blue-green deploy
+# then crash-looped at boot on `/data/.mcp-signing-key`: the persistent data
+# volume is owned by 999, that key is mode 0600, and a 997 process cannot read
+# its own signing key. The server exited fatally, `--restart unless-stopped`
+# restarted it, /health never answered, and the deploy aborted at the health
+# gate having deleted the container that would have explained why.
+#
+# No test could catch it downstream of here: a FRESH volume takes whatever UID
+# creates it, so the image smoke-tests green on any UID. Only a volume written
+# by an older image fails. The guard is therefore the pin itself plus the
+# uid=999 assertion in the docker-build smoke step.
+RUN groupadd --system --gid 999 chickadee \
+    && useradd --system --uid 999 --gid 999 --create-home chickadee
+
 # System dependencies:
 #   - C runtime libs (Swift stdlib is statically linked)
 #   - zip / unzip: the server and worker shell out to /usr/bin/{zip,unzip}
@@ -146,9 +167,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # ft_text_renderer — either way every figureCount notebook check errors at
 # validation. Measured, not assumed; the wasm kernel side needs nothing (its
 # plotly toolkit is built in).
-
-# Non-root user for the application processes.
-RUN useradd --system --user-group --create-home chickadee
 
 WORKDIR /app
 

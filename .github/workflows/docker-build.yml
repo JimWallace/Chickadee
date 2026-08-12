@@ -323,6 +323,23 @@ jobs:
           docker image inspect "$IMAGE" --format '{{.Size}}' \
             | awk '{ printf "size: %.2f GB\n", $1/1e9 }' || true
 
+          # THE ASSERTION THAT WOULD HAVE CAUGHT v0.5.65. The application user
+          # is created with `useradd --system`, which allocates the highest FREE
+          # system ID counting down from 999 — so installing a package that
+          # creates its own system users silently moves it. `default-jdk` moved
+          # it 999 -> 997, and every deploy onto the real data volume (owned by
+          # 999, with .mcp-signing-key at mode 0600) crash-looped at boot while
+          # every test here stayed green, because a FRESH volume takes whatever
+          # UID writes it first. Nothing downstream of the image can see this;
+          # it has to be asserted on the image itself.
+          echo "----- application user -----"
+          image_uid="$(docker run --rm --entrypoint id "$IMAGE" -u)"
+          echo "uid: $image_uid"
+          if [ "$image_uid" != "999" ]; then
+            echo "::error::Application user UID is $image_uid, expected 999. An existing deployment's data volume is owned by 999; a different UID cannot read its own 0600 signing key and will crash-loop at boot on every host that already has data. Pin the UID in the Dockerfile rather than relaxing this check."
+            exit 1
+          fi
+
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail
