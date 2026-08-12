@@ -68,7 +68,9 @@ enum SectionInputsService {
         }
 
         // 1. Per-row validation across this section's vars + expressions.
-        let seenNames = try validateNames(variables: inputs.variables, expressions: inputs.expressions)
+        let seenNames = try validateNames(
+            variables: inputs.variables, expressions: inputs.expressions,
+            language: AssignmentLanguage.resolve(manifest: manifest))
         // 2. Cross-section + global clash check.
         try validateAgainstOtherScopes(seenNames: seenNames, manifest: manifest, sectionID: sectionID)
         // 3. Save-time eval check against the acting account's own seed. The
@@ -83,17 +85,20 @@ enum SectionInputsService {
 
     // MARK: - Validation
 
-    /// Validates that every variable/expression name is a valid Python
-    /// identifier, not the reserved `seed`, and unique across both kinds.
+    /// Validates that every variable/expression name is a valid identifier in
+    /// the ASSIGNMENT'S language (the cross-language subset when it declares
+    /// none), not the reserved `seed`, and unique across both kinds.
     static func validateNames(
         variables: [FamilyVariable],
-        expressions: [PersonalizationExpression]
+        expressions: [PersonalizationExpression],
+        language: AssignmentLanguage?
     ) throws -> Set<String> {
         var seenNames: Set<String> = []
         for v in variables {
-            guard isValidPythonIdentifier(v.name) else {
+            guard isValidSharedName(v.name, language: language) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Section input name '\(v.name)' is not a valid Python identifier.")
+                    reason: "Section input name '\(v.name)' is not valid here — expected "
+                        + sharedNameExpectation(for: language) + ".")
             }
             guard v.name != "seed" else {
                 throw WebAssignmentError.unprocessable(
@@ -105,9 +110,10 @@ enum SectionInputsService {
             }
         }
         for e in expressions {
-            guard isValidPythonIdentifier(e.name) else {
+            guard isValidSharedName(e.name, language: language) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Section expression name '\(e.name)' is not a valid Python identifier.")
+                    reason: "Section expression name '\(e.name)' is not valid here — expected "
+                        + sharedNameExpectation(for: language) + ".")
             }
             guard e.name != "seed" else {
                 throw WebAssignmentError.unprocessable(

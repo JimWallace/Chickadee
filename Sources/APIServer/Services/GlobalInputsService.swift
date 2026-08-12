@@ -83,7 +83,8 @@ enum GlobalInputsService {
 
         // 1. Per-row validation across variables + expressions.
         let seenNames = try validateNames(
-            variables: inputs.variables, expressions: inputs.expressions)
+            variables: inputs.variables, expressions: inputs.expressions,
+            language: AssignmentLanguage.resolve(manifest: manifest))
         // 2. Cross-list: no clash with any section variable name.
         try validateAgainstSections(seenNames: seenNames, manifest: manifest)
         // 3. Starter-notebook `{{undeclared}}` scan.
@@ -123,13 +124,15 @@ enum GlobalInputsService {
     /// duplicates across kinds are also rejected.
     static func validateNames(
         variables: [FamilyVariable],
-        expressions: [PersonalizationExpression]
+        expressions: [PersonalizationExpression],
+        language: AssignmentLanguage?
     ) throws -> Set<String> {
         var seenNames: Set<String> = []
         for v in variables {
-            guard isValidPythonIdentifier(v.name) else {
+            guard isValidSharedName(v.name, language: language) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Global variable name '\(v.name)' is not a valid Python identifier.")
+                    reason: "Global variable name '\(v.name)' is not valid here — expected "
+                        + sharedNameExpectation(for: language) + ".")
             }
             guard !reservedNames.contains(v.name) else {
                 throw WebAssignmentError.unprocessable(
@@ -141,9 +144,10 @@ enum GlobalInputsService {
             }
         }
         for e in expressions {
-            guard isValidPythonIdentifier(e.name) else {
+            guard isValidSharedName(e.name, language: language) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Global expression name '\(e.name)' is not a valid Python identifier.")
+                    reason: "Global expression name '\(e.name)' is not valid here — expected "
+                        + sharedNameExpectation(for: language) + ".")
             }
             guard !reservedNames.contains(e.name) else {
                 throw WebAssignmentError.unprocessable(

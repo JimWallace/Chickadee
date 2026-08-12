@@ -18,48 +18,24 @@
 // These assert the OUTCOME an author sees, not that a particular predicate ran
 // — the predicate was being called correctly the whole time it was wrong.
 //
-// TWO deliberate gaps, both the same shape: a name that is REFERENCED by
-// another parser cannot be widened on its own, because the result is not a
-// refusal but a silent misread.
+// The names that are REFERENCED elsewhere — family variables via `$name`, and
+// global/section inputs via `{{name}}` — are now checked per language too.
 //
-// Both parsers accept `[A-Za-z_][A-Za-z0-9_]*`, and it is worth being precise
-// about WHY, because "they use Python's rules" is wrong and points at the wrong
-// fix. Chickadee is not a Python system with other languages bolted on. That
-// character set is the CROSS-LANGUAGE SUBSET: the widest name every language's
-// generated code can carry as a bare identifier. It is pinned by the weakest
-// emitter, not by Python's semantics — R (`rIdentifier`) quotes an awkward name
-// in backticks and Lua/Octave (`luaIdentifier`/`octaveIdentifier`) mangle one,
-// but the Python preamble emits `name = _ck["name"]` with no emitter at all, so
-// a hyphen there is a syntax error. The subset happens to coincide with
-// Python's grammar; it is not derived from it.
+// They could not be while the reference PARSERS carried their own copy of a
+// grammar: both matched `[A-Za-z_][A-Za-z0-9_]*`, so a name an author could
+// legally declare on an R or Racket assignment was unreferenceable, and failed
+// as a SILENT MISREAD rather than a refusal (`$bmi-value` falling through as a
+// literal string; `{{my.df}}` surviving into a student's notebook as text).
 //
-// So widening these is NOT "make it language-aware" — a placeholder name is
-// replaced by a literal VALUE and never reaches any runtime, so a per-language
-// rule there would be meaningless. It is: give Python an emitter like the other
-// four have, after which the grammar is a free choice of Chickadee's own DSL.
+// The fix was not to teach those parsers the grammar — Racket's is a negative
+// rule that no character class expresses — but to stop them having one. A
+// parser grabs a token; deciding whether the token is a legal name belongs to
+// the validator, which already answers per language and is exhaustive over all
+// seven. Once the duplication went, the subset had nothing left to protect.
 //
-//   * Global and section INPUT names — referenced from starter notebooks as
-//     `{{name}}`, parsed by `NotebookSubstitution.placeholderRegex`, which
-//     hardcodes `[A-Za-z_][A-Za-z0-9_]*`. Widening the check alone lets an
-//     author save `bmi-value` and leaves `{{bmi-value}}` as literal text in
-//     every student's notebook.
-//   * Family `variables` — referenced from an arg cell as `$name`, parsed by
-//     the same shape in `pattern-family-editor.js`. Widening the check alone
-//     makes `$bmi-value` fall through as a literal STRING, i.e. a wrong
-//     expected value in a generated test, reported nowhere.
-//
-// `paramNames` and `.variableEquality`'s case variable have no such referencing
-// parser — they are rendered directly into generated source — which is exactly
-// why those two are widened here and the other two are not.
-//
-// The web editor needs no matching change, which is worth recording because it
-// is not obvious and was initially assumed backwards. `pattern-family-editor.js`
-// does have a Python-grammar check, `isValidServerIdentifier` — but it gates
-// only the family VARIABLES table, the names that correctly stayed on Python
-// here. A family's parameter list is a comma-separated text field that is split,
-// trimmed and sent unvalidated, so the server is its only authority and the
-// widening below is reachable from the browser as well as MCP and REST. Client
-// and server already agree on both halves; nothing to sync.
+// The editor's own check went permissive rather than learning the grammar, for
+// the same reason: the server answers per language, so any fixed rule in the
+// browser is a second copy that can only drift from it.
 
 import Core
 import Foundation
@@ -139,7 +115,7 @@ import Vapor
         }
     }
 
-    // MARK: - Family-scoped variables stay on Python's grammar, ON PURPOSE
+    // MARK: - Family-scoped variables
 
     /// A plain name still works everywhere.
     @Test(arguments: AssignmentLanguage.allCases)
@@ -151,26 +127,38 @@ import Vapor
             language)
     }
 
-    /// But an R or Racket spelling is REFUSED even on its own language — the
-    /// one place this change deliberately stops short, for two reasons that are
-    /// both about generated code and neither about Python.
-    ///
-    /// The name is REFERENCED from an arg cell as `$name`, parsed by
-    /// `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`, so `$threshold-value` would match
-    /// nothing and fall through as a literal string — a wrong expected value in
-    /// a generated test, reported nowhere. And it is EMITTED bare into the
-    /// preamble, where Python has no emitter to quote or mangle it the way
-    /// `rIdentifier` and `luaIdentifier` do for their languages.
-    ///
-    /// Widening the server alone converts a clear refusal into a silent
-    /// miscompare, which is strictly worse. Delete this test when Python gains
-    /// an emitter and the `$name` parser widens with it.
+    /// And each language's own spelling is accepted too, now that the editor's
+    /// `$name` parser is a permissive token grab rather than a second copy of
+    /// the grammar. While those two duplicated each other, this had to stay on
+    /// the cross-language subset: `$threshold-value` matched nothing and fell
+    /// through as a literal string, which is a wrong expected value in a
+    /// generated test rather than a refusal.
     @Test(
         arguments: [
             ("threshold.value", AssignmentLanguage.r),
             ("threshold-value", AssignmentLanguage.racket),
         ])
-    func familyVariableRefusesASpellingOutsideTheCrossLanguageSubset(
+    func familyVariableAcceptsItsOwnLanguagesSpelling(
+        name: String, language: AssignmentLanguage
+    ) throws {
+        try validate(
+            family(
+                function: validTarget(for: language),
+                variables: [FamilyVariable(name: name, value: .double(25))]),
+            language)
+    }
+
+    /// A reserved word is still refused, in the language that reserves it —
+    /// which the cross-language subset could not do. An input named `template`
+    /// on a C++ assignment used to pass (Python has no such keyword) and then
+    /// render `inline const auto template = …`, which does not compile.
+    @Test(
+        arguments: [
+            ("template", AssignmentLanguage.cpp),
+            ("class", AssignmentLanguage.java),
+            ("function", AssignmentLanguage.lua),
+        ])
+    func familyVariableRefusesAReservedWordInItsOwnLanguage(
         name: String, language: AssignmentLanguage
     ) {
         #expect(throws: (any Error).self) {
