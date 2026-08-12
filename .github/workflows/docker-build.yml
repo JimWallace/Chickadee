@@ -213,7 +213,16 @@ jobs:
       # sqlite, no worker secret (one is generated), no MCP — which is enough to
       # prove the binary starts, migrations apply, and the HTTP server serves.
       #
-      # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany it. `AUTH_MODE` alone is
+      # `PUBLIC_BASE_URL` is what actually MOUNTS the MCP surfaces. Setting
+      # `MCP_MODE` alone is not enough — without an issuer/resource the server
+      # logs "MCP_MODE=read_write but no issuer/resource could be resolved;
+      # /mcp not mounted" and carries on, so the first version of this proved
+      # only that the server boots with the variable set. Production has a
+      # PUBLIC_BASE_URL and therefore builds the MCP tool catalog at boot,
+      # whose descriptions and schemas derive from AssignmentLanguage.allCases
+      # — the last startup path CI was not exercising.
+      #
+      # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany AUTH_MODE. `AUTH_MODE` alone is
       # SILENTLY IGNORED — the default mode is SSO and `AuthConfig` only honours
       # a local/dual request when this second flag is set, logging "AUTH_MODE=
       # local ignored ... using sso" and then trapping on the missing
@@ -240,6 +249,7 @@ jobs:
               -e AUTH_MODE=local \
               -e ENABLE_NON_SSO_AUTH_MODES=true \
               -e MCP_MODE=read_write \
+              -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
               -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
