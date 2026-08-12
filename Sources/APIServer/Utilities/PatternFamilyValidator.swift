@@ -59,6 +59,27 @@ private func validateFamilyVariablesAndArgRefs(
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
+    // Deliberately the CROSS-LANGUAGE SUBSET, not the assignment's grammar —
+    // unlike `paramNames` and `.variableEquality`'s case variable, which this
+    // release did widen.
+    //
+    // `isValidPythonIdentifier` is the predicate, but Python is not the reason,
+    // and reading it that way points at the wrong fix. Two things pin it:
+    //
+    //  1. A family variable is REFERENCED from an arg cell as `$name`, parsed
+    //     by `/^\$([A-Za-z_][A-Za-z0-9_]*)$/` in `pattern-family-editor.js`.
+    //     Accepting a Racket `bmi-value` makes `$bmi-value` match nothing and
+    //     fall through as a literal STRING — a wrong expected value in a
+    //     generated test, reported nowhere.
+    //  2. The name is EMITTED bare into the generated preamble. Every language
+    //     has an emitter that makes an arbitrary name safe (`rIdentifier`
+    //     backticks, `luaIdentifier`/`octaveIdentifier` mangle) EXCEPT Python,
+    //     whose preamble writes `name = _ck["name"]` directly — so a hyphen is
+    //     a syntax error. The subset is pinned by that weakest emitter.
+    //
+    // So the unlock is not "make this language-aware". It is: give Python an
+    // emitter like the other four have, then widen the `$name` parser with it.
+    // Same reasoning holds for global/section input names and `{{name}}`.
     for v in family.variables {
         guard isValidPythonIdentifier(v.name) else {
             throw Abort(
@@ -216,10 +237,12 @@ private func validatePatternFamilyHeader(
     }
     var seenParams: Set<String> = []
     for param in family.paramNames {
-        guard isValidPythonIdentifier(param) else {
+        guard isValidIdentifier(param, language: language) else {
             throw Abort(
                 .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': parameter name '\(param)' is not a valid Python identifier")
+                reason:
+                    "Pattern family '\(family.id)': parameter name '\(param)' is not a valid "
+                    + identifierKindName(language))
         }
         guard seenParams.insert(param).inserted else {
             throw Abort(
@@ -295,7 +318,7 @@ func validatePatternFamilies(
         var seenCaseKeys: Set<String> = []
         for c in family.cases {
             try validatePatternCaseHeader(family: family, c: c, seenCaseKeys: &seenCaseKeys)
-            try handler.validateCase(family: family, case: c)
+            try handler.validateCase(family: family, case: c, language: language)
         }
 
         // Family-level, kind-specific rules (e.g. approximateEquality's
@@ -303,10 +326,11 @@ func validatePatternFamilies(
         try handler.validateFamily(family)
 
         // v0.4.94: family-scoped variables.  Each name must be a valid
-        // Python identifier, unique within the family, and not collide
-        // with a parameter name (the renderer would shadow it at call
-        // time, silently breaking the test).  Any `$name` reference in
-        // a case arg cell must resolve to a declared variable.
+        // identifier, unique within the family, and not collide with a
+        // parameter name (the renderer would shadow it at call time, silently
+        // breaking the test).  Any `$name` reference in a case arg cell must
+        // resolve to a declared variable — which is why these names, unlike
+        // `paramNames`, stay on Python's grammar; see the helper.
         try validateFamilyVariablesAndArgRefs(
             family: family,
             sectionVarNamesHere: sectionVarNames(forFamily: family.id),

@@ -23,8 +23,9 @@ import Vapor
 /// family/case is validated before it is applied to a test setup.
 protocol PatternKindHandler: Sendable {
     /// Whether this kind requires `PatternFamily.functionName` to be a valid
-    /// Python identifier.  `false` for kinds that inspect module-level state
-    /// rather than calling a function (`.variableEquality`).
+    /// call target in the assignment's language (`isValidFunctionTarget`).
+    /// `false` for kinds that inspect module-level state rather than calling a
+    /// function (`.variableEquality`).
     var requiresFunctionName: Bool { get }
 
     /// Renders one enabled case to Python source.  Delegates to the matching
@@ -39,8 +40,11 @@ protocol PatternKindHandler: Sendable {
     func validateFamily(_ family: PatternFamily) throws
 
     /// Validates the `args` / `expected` shape of a single case against this
-    /// kind's contract.
-    func validateCase(family: PatternFamily, case c: PatternCase) throws
+    /// kind's contract.  `language` is the assignment's declared language:
+    /// `.variableEquality` holds its case's variable name to that language's
+    /// identifier grammar, so an R `my.df` or a Racket `total-count` is
+    /// accepted where Python's rules would have refused it.
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws
 }
 
 extension PatternKindHandler {
@@ -111,7 +115,7 @@ struct DifferentialKind: PatternKindHandler {
         }
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "differential")
     }
 }
@@ -147,7 +151,7 @@ struct BoundaryEqualityKind: PatternKindHandler {
             specHash: specHash, perStudentNames: perStudentNames)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: nil)
     }
 }
@@ -173,7 +177,7 @@ struct ApproximateEqualityKind: PatternKindHandler {
         }
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: nil)
     }
 }
@@ -193,7 +197,7 @@ struct VariableEqualityKind: PatternKindHandler {
             perStudentNames: perStudentNames)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         // Exactly one arg, which must be a non-empty string naming
         // the module-level variable to check.  `paramNames` is
         // ignored — for this kind it's purely a UI hint (column
@@ -215,11 +219,12 @@ struct VariableEqualityKind: PatternKindHandler {
                     "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)"
             )
         }
-        guard isValidPythonIdentifier(varName) else {
+        guard isValidIdentifier(varName, language: language) else {
             throw Abort(
                 .unprocessableEntity,
                 reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier"
+                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name "
+                    + "'\(varName)' is not a valid \(identifierKindName(language))"
             )
         }
     }
@@ -236,7 +241,7 @@ struct ReturnTypeCheckKind: PatternKindHandler {
         renderReturnTypeCheck(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "return_type_check")
         guard case .string(let expectedType) = c.expected,
             !expectedType.trimmingCharacters(in: .whitespaces).isEmpty
@@ -261,7 +266,7 @@ struct ExceptionExpectedKind: PatternKindHandler {
         renderExceptionExpected(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "exception_expected")
         guard case .string(let exceptionType) = c.expected,
             !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty
@@ -286,7 +291,7 @@ struct PerformanceThresholdKind: PatternKindHandler {
         renderPerformanceThreshold(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "performance_threshold")
         let threshold: Double? = {
             switch c.expected {
@@ -316,7 +321,7 @@ struct StdoutEqualityKind: PatternKindHandler {
         renderStdoutEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "stdout_equality")
         // Empty string is intentionally allowed — it means "this
         // function should print nothing", a legitimate case for
@@ -345,7 +350,7 @@ struct UnorderedEqualityKind: PatternKindHandler {
             specHash: specHash, perStudentNames: perStudentNames)
     }
 
-    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
         try validatePatternArgCount(family: family, case: c, kindLabel: "unordered_equality")
         // Expected must be a list (the elements to match, in any order) — except
         // when it's per-student (expectedVarRef), where the list arrives at
