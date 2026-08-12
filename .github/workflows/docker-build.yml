@@ -239,6 +239,7 @@ jobs:
             docker run -d --name chickadee-smoke --network host \
               -e AUTH_MODE=local \
               -e ENABLE_NON_SSO_AUTH_MODES=true \
+              -e MCP_MODE=read_write \
               -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
@@ -291,7 +292,19 @@ jobs:
           # PHASE 1 — cold boot against an EMPTY postgres. This applies every
           # migration, so it gets a generous budget: prod's database is already
           # migrated and never pays this cost at boot.
-          echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
+          # THE NUMBER THE DEPLOY HOST CARES ABOUT. Every blue-green swap
+          # pulls this image while the live color still holds the previous one,
+          # so the host needs room for BOTH plus the rollback target. The Java
+          # arc added a JDK to the runtime layer (+387 MB by apt's own
+          # accounting), and buildx never prints a final size anywhere — so it
+          # has never been visible in CI at all. Printed unconditionally, on
+          # every build, so the trend is greppable rather than archaeological.
+          echo "----- image size -----"
+          docker image inspect "$IMAGE" --format 'size: {{.Size}} bytes ({{.Size}} / 1e9 GB)' || true
+          docker image inspect "$IMAGE" --format '{{.Size}}' \
+            | awk '{ printf "size: %.2f GB\n", $1/1e9 }' || true
+
+          echo "Phase 1: cold boot against empty postgres (applies migrations) ...
           run_server
           probe 240 || dump_and_fail
 
@@ -304,8 +317,11 @@ jobs:
           run_server
           probe 90 || dump_and_fail
 
-          echo "----- container logs (tail 40, for the record) -----"
-          docker logs --tail 40 chickadee-smoke 2>&1 || true
+          # Printed on SUCCESS too, and generously: the boot sequence of a
+          # known-good image is the baseline a future failure gets diffed
+          # against, and it costs nothing to keep it in the log.
+          echo "----- container logs (tail 80, for the record) -----"
+          docker logs --tail 80 chickadee-smoke 2>&1 || true
           docker rm -f chickadee-smoke >/dev/null 2>&1 || true
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
