@@ -117,6 +117,21 @@ import Vapor
         try validate("bmi-category", .racket)
     }
 
+    /// A language's own reserved words must be refused, which is the whole
+    /// reason each arm delegates to that language's validator rather than
+    /// borrowing Python's. `class` is a perfectly good Python identifier's
+    /// shape and a C++ keyword; `switch` likewise for Octave. Rendering either
+    /// produces source that cannot compile, so the refusal belongs at save.
+    @Test func reservedWordsAreRefusedInTheirOwnLanguage() throws {
+        #expect(throws: (any Error).self) { try validate("class", .cpp) }
+        #expect(throws: (any Error).self) { try validate("switch", .octave) }
+        #expect(throws: (any Error).self) { try validate("Solution.class", .java) }
+        // …and are ordinary names elsewhere, so this is discrimination and not
+        // a blanket tightening.
+        try validate("class_", .cpp)
+        try validate("switch_", .octave)
+    }
+
     /// Every language must answer, so a language added later cannot quietly
     /// inherit Python's rule by omission — the failure mode this whole suite
     /// exists to prevent.

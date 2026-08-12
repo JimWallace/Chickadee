@@ -71,16 +71,25 @@ func isValidRIdentifier(_ s: String) -> Bool {
 /// loudly; the family simply could not be saved, with a message naming Python
 /// on an assignment that has nothing to do with Python.
 ///
-/// Each arm delegates to the grammar that language's RENDERER uses, so what
-/// validation accepts and what rendering can emit cannot drift apart. The four
-/// languages sharing the Python arm keep their exact previous behaviour — only
-/// Java and Racket change.
+/// Each arm delegates to the grammar that language's RENDERER already uses, so
+/// what validation accepts and what rendering can emit cannot drift apart.
+///
+/// Only Lua still borrows Python's rule, because Lua has a sanitizer
+/// (`luaIdentifier`) rather than a validator and the two grammars agree on
+/// every name an author can realistically type. C++, Octave, Java and Racket
+/// each answer with their own — which matters: those four reject their
+/// language's RESERVED WORDS, so a family targeting `class` on a C++ assignment
+/// is refused at save instead of rendering a test that cannot compile.
 func isValidFunctionTarget(_ s: String, language: AssignmentLanguage) -> Bool {
     switch language {
-    case .python, .lua, .octave, .cpp:
+    case .python, .lua:
         return isValidPythonIdentifier(s)
     case .r:
         return isValidRIdentifier(s)
+    case .cpp:
+        return isValidCppIdentifier(s)
+    case .octave:
+        return isValidOctaveIdentifier(s)
     case .racket:
         return isValidRacketIdentifier(s)
     case .java:
