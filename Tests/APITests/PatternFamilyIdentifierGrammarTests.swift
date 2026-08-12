@@ -18,9 +18,25 @@
 // These assert the OUTCOME an author sees, not that a particular predicate ran
 // — the predicate was being called correctly the whole time it was wrong.
 //
-// TWO deliberate gaps, both the same shape: a name that is REFERENCED by a
-// Python-shaped parser elsewhere cannot be widened on its own, because the
-// result is not a refusal but a silent misread.
+// TWO deliberate gaps, both the same shape: a name that is REFERENCED by
+// another parser cannot be widened on its own, because the result is not a
+// refusal but a silent misread.
+//
+// Both parsers accept `[A-Za-z_][A-Za-z0-9_]*`, and it is worth being precise
+// about WHY, because "they use Python's rules" is wrong and points at the wrong
+// fix. Chickadee is not a Python system with other languages bolted on. That
+// character set is the CROSS-LANGUAGE SUBSET: the widest name every language's
+// generated code can carry as a bare identifier. It is pinned by the weakest
+// emitter, not by Python's semantics — R (`rIdentifier`) quotes an awkward name
+// in backticks and Lua/Octave (`luaIdentifier`/`octaveIdentifier`) mangle one,
+// but the Python preamble emits `name = _ck["name"]` with no emitter at all, so
+// a hyphen there is a syntax error. The subset happens to coincide with
+// Python's grammar; it is not derived from it.
+//
+// So widening these is NOT "make it language-aware" — a placeholder name is
+// replaced by a literal VALUE and never reaches any runtime, so a per-language
+// rule there would be meaningless. It is: give Python an emitter like the other
+// four have, after which the grammar is a free choice of Chickadee's own DSL.
 //
 //   * Global and section INPUT names — referenced from starter notebooks as
 //     `{{name}}`, parsed by `NotebookSubstitution.placeholderRegex`, which
@@ -136,23 +152,25 @@ import Vapor
     }
 
     /// But an R or Racket spelling is REFUSED even on its own language — the
-    /// one place this change deliberately stops short.
+    /// one place this change deliberately stops short, for two reasons that are
+    /// both about generated code and neither about Python.
     ///
-    /// A family variable is referenced from an arg cell as `$name`, and the web
-    /// editor parses that with `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`. Accepting
-    /// `threshold-value` here would make `$threshold-value` match nothing and
-    /// fall through as a literal string — a wrong expected value in a generated
-    /// test, reported nowhere. Widening the server alone converts a clear
-    /// refusal into a silent miscompare, which is strictly worse.
+    /// The name is REFERENCED from an arg cell as `$name`, parsed by
+    /// `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`, so `$threshold-value` would match
+    /// nothing and fall through as a literal string — a wrong expected value in
+    /// a generated test, reported nowhere. And it is EMITTED bare into the
+    /// preamble, where Python has no emitter to quote or mangle it the way
+    /// `rIdentifier` and `luaIdentifier` do for their languages.
     ///
-    /// When the editor's `$name` parser learns the language's grammar, delete
-    /// this test and fold these names into the accepting one above.
+    /// Widening the server alone converts a clear refusal into a silent
+    /// miscompare, which is strictly worse. Delete this test when Python gains
+    /// an emitter and the `$name` parser widens with it.
     @Test(
         arguments: [
             ("threshold.value", AssignmentLanguage.r),
             ("threshold-value", AssignmentLanguage.racket),
         ])
-    func familyVariableRefusesANonPythonSpellingPendingTheRefParser(
+    func familyVariableRefusesASpellingOutsideTheCrossLanguageSubset(
         name: String, language: AssignmentLanguage
     ) {
         #expect(throws: (any Error).self) {

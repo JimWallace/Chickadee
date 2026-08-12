@@ -12,11 +12,14 @@
   shared, so nothing was missing, it was out of reach. The refusal names the
   assignment's language.
 
-  Two name kinds are deliberately left on Python's grammar, because each is
-  REFERENCED by a Python-shaped parser and widening one alone converts a clear
-  refusal into a silent misread: global/section **input** names, referenced from
-  starter notebooks as `{{name}}`, and family **variables**, referenced from an
-  arg cell as `$name`. In both cases the reference would stop matching and fall
-  through as literal text — a wrong expected value in a generated test, or an
-  unsubstituted placeholder in every student's notebook, reported nowhere. Each
-  is one coupled change with its parser, not a validation tweak.
+  Two name kinds keep the `[A-Za-z_][A-Za-z0-9_]*` rule, and the comments around
+  them now say why in terms that are not Python's: global/section **input**
+  names, referenced from a notebook as `{{name}}`, and family **variables**,
+  referenced from an arg cell as `$name`. That character set is the
+  cross-language subset, pinned by the weakest emitter rather than by Python's
+  semantics — R backticks an awkward name and Lua/Octave mangle one, but the
+  Python preamble writes `name = _ck["name"]` with no emitter, so a hyphen is a
+  syntax error. Widening them is therefore not "make it language-aware" (a
+  placeholder is replaced by a literal value and reaches no runtime); it is
+  giving Python an emitter like the other four have, then widening the two
+  reference parsers with it.

@@ -59,19 +59,27 @@ private func validateFamilyVariablesAndArgRefs(
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
-    // Deliberately Python's grammar, NOT the assignment's — unlike `paramNames`
-    // and `.variableEquality`'s case variable, which this release did widen.
+    // Deliberately the CROSS-LANGUAGE SUBSET, not the assignment's grammar —
+    // unlike `paramNames` and `.variableEquality`'s case variable, which this
+    // release did widen.
     //
-    // A family variable is referenced from an arg cell as `$name`, and the web
-    // editor parses that with `/^\$([A-Za-z_][A-Za-z0-9_]*)$/`. Accepting a
-    // Racket `bmi-value` here would make `$bmi-value` match nothing and fall
-    // through as a literal STRING — a wrong expected value in a generated test,
-    // with no error anywhere. Exactly the `{{name}}` hazard that keeps global
-    // and section inputs on Python's grammar too.
+    // `isValidPythonIdentifier` is the predicate, but Python is not the reason,
+    // and reading it that way points at the wrong fix. Two things pin it:
     //
-    // The two are one coupled change: widen this only together with the
-    // editor's `$name` parser, via a grammar fact on `AuthoringLanguageFacts`
-    // rather than a second hand-written rule in JavaScript.
+    //  1. A family variable is REFERENCED from an arg cell as `$name`, parsed
+    //     by `/^\$([A-Za-z_][A-Za-z0-9_]*)$/` in `pattern-family-editor.js`.
+    //     Accepting a Racket `bmi-value` makes `$bmi-value` match nothing and
+    //     fall through as a literal STRING — a wrong expected value in a
+    //     generated test, reported nowhere.
+    //  2. The name is EMITTED bare into the generated preamble. Every language
+    //     has an emitter that makes an arbitrary name safe (`rIdentifier`
+    //     backticks, `luaIdentifier`/`octaveIdentifier` mangle) EXCEPT Python,
+    //     whose preamble writes `name = _ck["name"]` directly — so a hyphen is
+    //     a syntax error. The subset is pinned by that weakest emitter.
+    //
+    // So the unlock is not "make this language-aware". It is: give Python an
+    // emitter like the other four have, then widen the `$name` parser with it.
+    // Same reasoning holds for global/section input names and `{{name}}`.
     for v in family.variables {
         guard isValidPythonIdentifier(v.name) else {
             throw Abort(
