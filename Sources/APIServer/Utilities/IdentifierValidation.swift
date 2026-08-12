@@ -7,6 +7,7 @@
 // all three (`ManifestDependencyValidator`, `PatternFamilyValidator`,
 // `NotebookCheckValidator`) call these.
 
+import Core
 import Foundation
 
 let pythonKeywords: Set<String> = [
@@ -52,6 +53,61 @@ func isValidRIdentifier(_ s: String) -> Bool {
         guard ch.isLetter || ch.isNumber || ch == "." || ch == "_" else { return false }
     }
     return true
+}
+
+/// Whether `s` is a usable pattern-family function target in `language`.
+///
+/// This dispatch exists because the check it replaced was language-BLIND: a
+/// family's `functionName` was validated against Python's identifier rules on
+/// every assignment, which made two languages unauthorable outright. Java has
+/// no free functions, so its target is a qualified `Class.method` — and the dot
+/// fails Python's rules. Racket's idiomatic `bmi-category` fails them on the
+/// hyphen.
+///
+/// It stayed invisible because both renderers were written believing this check
+/// was already language-aware, so neither shouts: the Java renderer calls its
+/// unqualified branch "unreachable through authoring", and the Racket renderer
+/// quietly sanitizes an invalid name to `ck-invalid-name`. Nothing failed
+/// loudly; the family simply could not be saved, with a message naming Python
+/// on an assignment that has nothing to do with Python.
+///
+/// Each arm delegates to the grammar that language's RENDERER already uses, so
+/// what validation accepts and what rendering can emit cannot drift apart.
+///
+/// Only Lua still borrows Python's rule, because Lua has a sanitizer
+/// (`luaIdentifier`) rather than a validator and the two grammars agree on
+/// every name an author can realistically type. C++, Octave, Java and Racket
+/// each answer with their own — which matters: those four reject their
+/// language's RESERVED WORDS, so a family targeting `class` on a C++ assignment
+/// is refused at save instead of rendering a test that cannot compile.
+func isValidFunctionTarget(_ s: String, language: AssignmentLanguage) -> Bool {
+    switch language {
+    case .python, .lua:
+        return isValidPythonIdentifier(s)
+    case .r:
+        return isValidRIdentifier(s)
+    case .cpp:
+        return isValidCppIdentifier(s)
+    case .octave:
+        return isValidOctaveIdentifier(s)
+    case .racket:
+        return isValidRacketIdentifier(s)
+    case .java:
+        return javaQualifiedFunction(s) != nil
+    }
+}
+
+/// What a valid target looks like in `language`, for the save-time refusal.
+/// Only the two languages with a non-obvious rule say more than their name.
+func functionTargetExpectation(for language: AssignmentLanguage) -> String {
+    switch language {
+    case .java:
+        return "a qualified Class.method name, e.g. `Solution.classify`"
+    case .racket:
+        return "a Racket identifier, e.g. `bmi-category`"
+    case .python, .r, .lua, .octave, .cpp:
+        return "a valid \(language.displayName) identifier"
+    }
 }
 
 /// Stricter than Python identifier: lowercase-preferred alphanumeric +
