@@ -222,6 +222,14 @@ jobs:
       # whose descriptions and schemas derive from AssignmentLanguage.allCases
       # — the last startup path CI was not exercising.
       #
+      # `MCP_ALLOW_OPEN_GUARDS=true` clears the SECOND gate. PUBLIC_BASE_URL
+      # alone only got as far as "Refusing to mount /mcp: MCP_ALLOWED_HOSTS and
+      # MCP_ALLOWED_ORIGINS unset in production" — the DNS-rebinding guards.
+      # Production pins Host/Origin at its reverse proxy; the smoke has no
+      # proxy and makes no cross-origin request, so opening the guards here is
+      # the honest equivalent. Note /health does NOT assert that /mcp mounted,
+      # so this is checked by reading the boot log, not by the probe.
+      #
       # `ENABLE_NON_SSO_AUTH_MODES=true` must accompany AUTH_MODE. `AUTH_MODE` alone is
       # SILENTLY IGNORED — the default mode is SSO and `AuthConfig` only honours
       # a local/dual request when this second flag is set, logging "AUTH_MODE=
@@ -250,6 +258,7 @@ jobs:
               -e ENABLE_NON_SSO_AUTH_MODES=true \
               -e MCP_MODE=read_write \
               -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
+              -e MCP_ALLOW_OPEN_GUARDS=true \
               -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
