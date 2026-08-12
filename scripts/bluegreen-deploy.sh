@@ -250,6 +250,22 @@ cmd_deploy() {
 
   if ! wait_healthy "$idle_port"; then
     warn "New container failed health check. Aborting — active (:$active_port) is untouched."
+    # Capture the container's own output BEFORE the cleanup below removes it.
+    # That output is the ONLY record of why the boot failed, and `docker rm -f`
+    # destroys it — so a deploy that fails repeatedly used to leave nothing at
+    # all to diagnose from, on the host or through the admin MCP surface.
+    if (( ! DRY_RUN )); then
+      mkdir -p "$STATE_DIR" 2>/dev/null || true
+      local failed_log="${STATE_DIR}/failed-${idle_name}-$(date -u +%Y%m%dT%H%M%SZ).log"
+      if docker logs --tail 400 "$idle_name" >"$failed_log" 2>&1; then
+        warn "Captured failed container output -> $failed_log"
+      else
+        rm -f "$failed_log" 2>/dev/null || true
+        warn "Could not capture container output (container may never have started)."
+      fi
+      warn "Last lines from the failed container:"
+      docker logs --tail 40 "$idle_name" 2>&1 | sed 's/^/    | /' || true
+    fi
     run "docker rm -f '$idle_name' >/dev/null 2>&1 || true"
     die "deploy aborted; no traffic was moved."
   fi
