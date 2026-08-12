@@ -36,10 +36,14 @@
 // parser — they are rendered directly into generated source — which is exactly
 // why those two are widened here and the other two are not.
 //
-// Separately: the web editor's own `isValidServerIdentifier` is still Python's
-// grammar, so until it learns the language, these names are reachable through
-// MCP and REST but refused client-side in the browser. That is a narrowing bug
-// in the UI, not a correctness one in the save path.
+// The web editor needs no matching change, which is worth recording because it
+// is not obvious and was initially assumed backwards. `pattern-family-editor.js`
+// does have a Python-grammar check, `isValidServerIdentifier` — but it gates
+// only the family VARIABLES table, the names that correctly stayed on Python
+// here. A family's parameter list is a comma-separated text field that is split,
+// trimmed and sent unvalidated, so the server is its only authority and the
+// widening below is reachable from the browser as well as MCP and REST. Client
+// and server already agree on both halves; nothing to sync.
 
 import Core
 import Foundation
