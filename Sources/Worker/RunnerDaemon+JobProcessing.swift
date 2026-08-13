@@ -627,7 +627,13 @@ extension WorkerDaemon {
                 return (normalization.warnings, normalization.preferredStudentModule)
 
             case .extractToSource(let forcedLanguage):
-                try mergeDirectoryContents(from: paths.submissionDir, into: testSetupDir)
+                // The student's upload must not be able to replace the tests it
+                // is about to be graded by (#1357). Skipped files are warned
+                // about rather than dropped silently.
+                let refused = try mergeDirectoryContents(
+                    from: paths.submissionDir,
+                    into: testSetupDir,
+                    protected: protectedWorkspaceFilenames(manifest: manifest))
                 // A suite owned by a non-default language extracts every notebook
                 // to THAT source, regardless of the submission's kernelspec (the
                 // in-browser editor can rewrite it) — so the student-module hint
@@ -643,7 +649,7 @@ extension WorkerDaemon {
                         URL(fileURLWithPath: $0).lastPathComponent
                     })
                 return (
-                    warnings,
+                    refused.map(protectedFileSkippedWarning) + warnings,
                     preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
                         // nil means the extractor trusted the notebook's own
