@@ -136,25 +136,9 @@
     function buildModal() {
         if (overlay) return;
 
-        var style = document.createElement('style');
-        style.textContent = [
-            '.cd-idle-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;',
-            'align-items:center;justify-content:center;background:rgba(0,0,0,.55);}',
-            '.cd-idle-card{max-width:26rem;width:calc(100% - 2rem);background:#fff;color:#1a1a1a;',
-            'border-radius:.6rem;padding:1.5rem 1.6rem;box-shadow:0 10px 40px rgba(0,0,0,.35);',
-            'font-family:system-ui,-apple-system,sans-serif;line-height:1.45;}',
-            '.cd-idle-card h2{margin:0 0 .5rem;font-size:1.15rem;}',
-            '.cd-idle-card p{margin:.25rem 0 1rem;}',
-            '.cd-idle-count{font-variant-numeric:tabular-nums;font-weight:700;}',
-            '.cd-idle-actions{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap;}',
-            '.cd-idle-btn{font:inherit;padding:.5rem 1rem;border-radius:.4rem;cursor:pointer;border:1px solid transparent;}',
-            '.cd-idle-stay{background:#1b6ef3;color:#fff;}',
-            '.cd-idle-stay:hover{background:#1559c9;}',
-            '.cd-idle-out{background:transparent;color:inherit;border-color:currentColor;opacity:.8;}',
-            '@media (prefers-color-scheme:dark){.cd-idle-card{background:#23272e;color:#f0f0f0;}}'
-        ].join('');
-        document.head.appendChild(style);
-
+        // Dialog styling lives in styles.css (".cd-idle-*" — see the
+        // idle-logout section there); this file only mints the structure.
+        // JS must not make styling decisions: docs/ui-design.md.
         overlay = document.createElement('div');
         overlay.className = 'cd-idle-overlay';
         overlay.setAttribute('hidden', '');
@@ -184,13 +168,13 @@
 
         var outBtn = document.createElement('button');
         outBtn.type = 'button';
-        outBtn.className = 'cd-idle-btn cd-idle-out';
+        outBtn.className = 'btn';
         outBtn.textContent = 'Log out now';
         outBtn.addEventListener('click', function () { expire(); });
 
         var stayBtn = document.createElement('button');
         stayBtn.type = 'button';
-        stayBtn.className = 'cd-idle-btn cd-idle-stay';
+        stayBtn.className = 'btn btn-primary';
         stayBtn.textContent = 'Stay signed in';
         stayBtn.addEventListener('click', staySignedIn);
 
