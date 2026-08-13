@@ -56,9 +56,9 @@ public func executeSuites(
 
     for item in suites {
         // Dependency gate: auto-fail (don't run) if a prerequisite hasn't passed.
-        if let blockedBy = item.dependsOn.first(where: { !passedScripts.contains($0) }),
-            !item.dependsOn.isEmpty
-        {
+        // `first(where:)` returning non-nil already implies a non-empty list,
+        // so no emptiness check is needed here.
+        if let blockedBy = item.dependsOn.first(where: { !passedScripts.contains($0) }) {
             outcomes.append(
                 TestOutcome(
                     testName: outcomeTestName(for: item),

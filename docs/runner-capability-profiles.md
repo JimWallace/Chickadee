@@ -255,9 +255,22 @@ Currently detected automatically:
 
 - platform
 - architecture
-- `python3 --version`
-- `R --version`
-- `swift --version`
+- **every assignment language**, discovered from `AssignmentLanguage.allCases`
+  rather than hand-listed — so a language is advertised the day its case
+  exists, and this list cannot go stale again. Each language names its own
+  probe (`LanguageDescriptor.interpreterProbe`); today that is
+  `python3 --version`, `R --version`, `lua -v`, `octave-cli --version`,
+  `g++ --version`, `racket --version` and `javac --version`.
+  - Note two probes that deliberately differ from the command used to RUN a
+    script: R probes `R` but runs `Rscript`, and Java probes `javac` (not
+    `java`) because a JRE-only host would otherwise advertise Java and then
+    fail every test at `javac: not found`.
+  - A language whose grading path EXECUTES what it compiled (today only C++)
+    must also pass a compile-and-exec probe in the runner's work root; a
+    `noexec` work directory makes `g++ --version` succeed and the binary it
+    writes unrunnable, so the capability is withheld rather than advertised
+    and then failed.
+- `swift --version` — not an assignment language, so it stays a separate probe
 - Python package presence via import probes:
   - `numpy`
   - `pandas`
