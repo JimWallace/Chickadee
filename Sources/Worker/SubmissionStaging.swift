@@ -53,7 +53,45 @@ func directorySizeBytes(at directory: URL) -> Int? {
     return total
 }
 
-func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory: URL) throws {
+/// Workspace paths a student's upload must never be allowed to write over.
+///
+/// The runner executes `manifest.testSuites[].script` out of the same directory
+/// the submission is merged into, and the merge wrote every student file by its
+/// own name over whatever was already there. So an upload containing
+/// `publictest_bmi_01.py` REPLACED the instructor's generated test and was then
+/// graded against itself — self-grade-inflation reachable from the ordinary
+/// submit form, which accepts `.zip` (#1357). Generated names are deterministic
+/// and public-tier ones are visible to students, so the name is guessable.
+///
+/// `requiredFiles` is deliberately NOT protected: those name the files the
+/// student is required to SUPPLY, so protecting them would reject every correct
+/// submission.
+///
+/// The runtime helpers and `_ck_inputs.*` are included even though the prepare
+/// phase rewrites them after the merge. That ordering is what currently makes
+/// them safe, and it is not a property this function should have to depend on.
+func protectedWorkspaceFilenames(manifest: TestProperties) -> Set<String> {
+    var names = Set(manifest.testSuites.map(\.script))
+    names.formUnion(allRuntimeHelperFiles().keys)
+    names.formUnion(AssignmentLanguage.allCases.map(\.inputsFileName))
+    names.insert(".chickadee_student_module")
+    names.insert(".chickadee_student_source")
+    return names
+}
+
+/// Copies `sourceDirectory`'s regular files into `destinationDirectory`,
+/// skipping any whose destination path is `protected`.
+///
+/// Returns the relative paths that were skipped, so the caller can warn the
+/// student by name. Skipping silently would leave a student who collided by
+/// accident — a helper they happened to call `test_runtime.py` — with a
+/// missing file and no explanation.
+@discardableResult
+func mergeDirectoryContents(
+    from sourceDirectory: URL,
+    into destinationDirectory: URL,
+    protected: Set<String> = []
+) throws -> [String] {
     // Resolve symlinks once on the source root so that the prefix comparison
     // below works even when callers pass paths through `/var` vs `/private/var`
     // (macOS) or otherwise-aliased mounts.
@@ -67,9 +105,10 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
             options: [.skipsHiddenFiles]
         )
     else {
-        return
+        return []
     }
 
+    var skipped: [String] = []
     for case let sourceURL as URL in enumerator {
         let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey])
         guard values.isRegularFile == true else { continue }
@@ -85,6 +124,15 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
         }
         let relativeComponents = Array(entryComponents.dropFirst(sourceRootComponents.count))
 
+        // Matched on the RELATIVE PATH, not the bare filename: the collision
+        // that matters is one that lands on the workspace path the runner will
+        // execute, and a student's own `sub/test_runtime.py` is not that.
+        let relativePath = relativeComponents.joined(separator: "/")
+        guard !protected.contains(relativePath) else {
+            skipped.append(relativePath)
+            continue
+        }
+
         var destinationURL = destinationDirectory
         for component in relativeComponents {
             destinationURL.appendPathComponent(component)
@@ -96,6 +144,15 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
         try? FileManager.default.removeItem(at: destinationURL)
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
+    return skipped
+}
+
+/// The warning a student sees when one of their files was refused because it
+/// would have replaced part of the test setup. Shared by both normalization
+/// paths so the wording cannot drift.
+func protectedFileSkippedWarning(_ relativePath: String) -> String {
+    "Ignoring \(relativePath) from your submission: that filename belongs to the "
+        + "assignment's test setup, so it was not copied into the grading workspace."
 }
 
 /// Filename the extracted submission will have in the grading workspace, written

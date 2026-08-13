@@ -66,6 +66,10 @@ struct SubmissionNormalizer {
     ) throws -> NormalizationResult {
         let submissionFiles = regularFiles(in: submissionDirectory)
         var progress = NormalizationProgress()
+        // The student's own files must not be able to replace the tests they
+        // are about to be graded by (#1357). Same guard the generic merge path
+        // applies, because this path writes into the same workspace.
+        let protected = protectedWorkspaceFilenames(manifest: manifest)
 
         writeStructuredRunnerLog(
             event: "submission_normalization_start",
@@ -77,6 +81,17 @@ struct SubmissionNormalizer {
             ])
 
         for fileURL in submissionFiles {
+            let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
+            guard !protected.contains(fileRelativePath) else {
+                progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))
+                writeStructuredRunnerLog(
+                    event: "submission_file_refused",
+                    fields: [
+                        "file": fileRelativePath,
+                        "reason": "belongs_to_test_setup",
+                    ])
+                continue
+            }
             try processSubmissionFile(
                 fileURL: fileURL,
                 submissionDirectory: submissionDirectory,
