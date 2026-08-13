@@ -431,6 +431,61 @@ import VaporTesting
         }
     }
 
+    /// Queue depth is now two SQL aggregates plus one grading-mode lookup per
+    /// *distinct* assignment, instead of a load of every pending row (#1361).
+    /// Several pending rows behind one assignment, and a mix of worker- and
+    /// browser-graded assignments, are what that rewrite has to keep right —
+    /// the old shape counted rows it had already materialized, so neither case
+    /// could regress independently of correctness.
+    @Test func queueDepthCountsEveryPendingRowBehindEachAssignment() async throws {
+        try await withApp(app) { _ in
+            let workerSetup = try await makeSetup(id: "setup_depth_worker", gradingMode: "worker")
+            let browserSetup = try await makeSetup(id: "setup_depth_browser", gradingMode: "browser")
+
+            for index in 0..<3 {
+                try await makePendingSubmission(
+                    id: "sub_depth_worker_\(index)",
+                    setup: workerSetup,
+                    kind: APISubmission.Kind.student
+                )
+            }
+            for index in 0..<2 {
+                try await makePendingSubmission(
+                    id: "sub_depth_browser_\(index)",
+                    setup: browserSetup,
+                    kind: APISubmission.Kind.student
+                )
+            }
+            // Validations count whatever the assignment's grading mode is:
+            // instructors validate through the native worker.
+            try await makePendingSubmission(
+                id: "sub_depth_validation",
+                setup: browserSetup,
+                kind: APISubmission.Kind.validation
+            )
+
+            let depth = try await app.diagnostics.pendingQueueDepth(on: app.db)
+            #expect(depth == 4)
+        }
+    }
+
+    /// With no browser-graded assignment in the pending set, the depth query
+    /// skips binding an `IN` list — the common-case branch. It must still count
+    /// every row.
+    @Test func queueDepthCountsAllPendingWhenNoAssignmentIsBrowserGraded() async throws {
+        try await withApp(app) { _ in
+            let first = try await makeSetup(id: "setup_depth_all_worker_a", gradingMode: "worker")
+            let second = try await makeSetup(id: "setup_depth_all_worker_b", gradingMode: "worker")
+
+            try await makePendingSubmission(id: "sub_all_a1", setup: first, kind: APISubmission.Kind.student)
+            try await makePendingSubmission(id: "sub_all_a2", setup: first, kind: APISubmission.Kind.student)
+            try await makePendingSubmission(id: "sub_all_b1", setup: second, kind: APISubmission.Kind.student)
+
+            let depth = try await app.diagnostics.pendingQueueDepth(on: app.db)
+            #expect(depth == 3)
+        }
+    }
+
     /// Regression test for the admin runner page showing `Total < Queue
     /// Wait`. Models the production failure mode: the runner's wall clock
     /// is offset relative to the server, so the runner-reported
@@ -610,6 +665,24 @@ import VaporTesting
         )
         try await submission.save(on: app.db)
         return (setup, submission)
+    }
+
+    @discardableResult
+    private func makePendingSubmission(
+        id: String,
+        setup: APITestSetup,
+        kind: String
+    ) async throws -> APISubmission {
+        let submission = APISubmission(
+            id: id,
+            testSetupID: try setup.requireID(),
+            zipPath: "/tmp/\(id).zip",
+            attemptNumber: 1,
+            status: "pending",
+            kind: kind
+        )
+        try await submission.save(on: app.db)
+        return submission
     }
 
     private func makeSetup(

@@ -256,19 +256,29 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
 }
 
 extension OperationalDiagnosticsService {
-    // Returns the set of test setup IDs from the given list that exist in the database.
-    // Previously restricted to worker-mode setups; now includes browser-mode because
-    // the worker serves as a backstop for pending browser submissions.
+    /// Returns the subset of the given test setup IDs that exist and are graded
+    /// by the native worker fleet.
+    ///
+    /// Resolved in one query rather than a find-per-ID: the callers pass the
+    /// distinct setups behind a pending queue, and issuing a round trip each
+    /// put the queue-depth metric's cost on the wrong axis (#1361).
     func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
+        let uniqueIDs = Set(testSetupIDs)
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let setups = try await APITestSetup.query(on: db)
+            .filter(\.$id ~~ Array(uniqueIDs))
+            .all()
+
         var result: Set<String> = []
-        for testSetupID in Set(testSetupIDs) {
-            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
+        for setup in setups {
+            guard let setupID = setup.id else { continue }
             let manifest = try? JSONDecoder().decode(
                 TestProperties.self, from: Data(setup.manifest.utf8))
-            // Browser-graded setups are processed by the in-browser Pyodide runner,
-            // not the native worker. Exclude them from the worker queue depth metric.
+            // Browser-graded setups are graded by the in-browser runner, not the
+            // native worker. Exclude them from the worker queue depth metric.
             guard manifest?.effectiveGradingMode != .browser else { continue }
-            result.insert(testSetupID)
+            result.insert(setupID)
         }
         return result
     }
