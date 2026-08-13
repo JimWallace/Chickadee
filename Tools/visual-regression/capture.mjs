@@ -20,6 +20,7 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
 import { seed } from "./seed.mjs";
+import { pageList } from "./pages.mjs";
 
 const baseURL = process.argv[2];
 const outDir = process.argv[3];
@@ -45,18 +46,8 @@ async function main() {
   const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
   console.log(`Seeded setup ${setupID}; results page: ${resultsPath || "(none)"}`);
 
-  // page name → { path, session }.  Keep names stable: they are the baseline
-  // filenames.
-  const PAGES = [
-    { name: "login", path: "/login", state: null },
-    { name: "student-dashboard", path: "/", state: studentState },
-    { name: "student-submit", path: `/testsetups/${setupID}/submit`, state: studentState },
-    { name: "instructor-assignments", path: "/instructor", state: instructorState },
-    { name: "admin-dashboard", path: "/admin", state: instructorState },
-  ];
-  if (resultsPath) {
-    PAGES.push({ name: "submission-pending", path: resultsPath, state: studentState });
-  }
+  // Page list is shared with the a11y scan — see pages.mjs.
+  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
 
   const browser = await chromium.launch();
   let failures = 0;

@@ -108,10 +108,18 @@ set +e
 node compare.mjs baselines "$OUT/capture" "$OUT/diff"
 rc=$?
 set -e
+# Pages captured with no committed baseline bootstrap per page: compare.mjs
+# leaves their captures in diff/bootstrap/ — forward them to the same
+# directory the whole-run bootstrap uses, so the CI visual-baselines-bootstrap
+# artifact carries them and they can be committed straight into baselines/.
+if ls "$OUT/diff/bootstrap/"*.png >/dev/null 2>&1; then
+  mkdir -p "$REPO_ROOT/visual-bootstrap"
+  cp "$OUT/diff/bootstrap/"*.png "$REPO_ROOT/visual-bootstrap/"
+fi
 if [ "$rc" -ne 0 ]; then
   # Preserve evidence for the CI artifact step.
   mkdir -p "$REPO_ROOT/visual-diffs"
-  cp "$OUT/diff/"* "$REPO_ROOT/visual-diffs/" 2>/dev/null || true
+  find "$OUT/diff" -maxdepth 1 -type f -exec cp {} "$REPO_ROOT/visual-diffs/" \; 2>/dev/null || true
   cp "$OUT/capture/"*.png "$REPO_ROOT/visual-diffs/" 2>/dev/null || true
 fi
 exit "$rc"

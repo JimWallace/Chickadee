@@ -4,11 +4,20 @@
 //
 // Pass criteria per page: identical dimensions and <= MAX_DIFF_RATIO of pixels
 // differing under pixelmatch's anti-aliasing-aware comparison.  A missing
-// candidate (page failed to capture) or a candidate with no baseline (new page
-// added without committing its baseline) both fail.
+// candidate (page failed to capture) fails.
 //
-// Exit 0 = all pages match; 1 = differences (diff PNGs written to <diffDir>);
-// 2 = usage / IO error.
+// A candidate with NO baseline bootstraps per page — mirroring the harness's
+// whole-directory bootstrap: the capture is copied to <diffDir>/bootstrap/
+// under its baseline filename (run-visual.sh forwards that to the CI
+// visual-baselines-bootstrap artifact), a loud warning names it, and the run
+// passes.  Baselines are CI-canonical, so a PR adding pages cannot generate
+// its own; the intended flow is: add the page → CI bootstraps and uploads the
+// canonical capture → commit it to baselines/ in the same PR, which flips the
+// page to enforcing.  The warning keeps a never-committed page visible on
+// every run instead of becoming a silent permanent blind spot.
+//
+// Exit 0 = all pages match (bootstrapped pages warn); 1 = differences (diff
+// PNGs written to <diffDir>); 2 = usage / IO error.
 import fs from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
@@ -38,14 +47,18 @@ if (baselines.length === 0) {
 fs.mkdirSync(diffDir, { recursive: true });
 
 let failed = 0;
+let bootstrapped = 0;
 const report = [];
 
 for (const name of new Set([...baselines, ...candidates])) {
   const bPath = path.join(baselineDir, name);
   const cPath = path.join(candidateDir, name);
   if (!fs.existsSync(bPath)) {
-    failed++;
-    report.push(`✘ ${name}: captured but has NO committed baseline — run with --update and commit it`);
+    bootstrapped++;
+    const bootDir = path.join(diffDir, "bootstrap");
+    fs.mkdirSync(bootDir, { recursive: true });
+    fs.copyFileSync(cPath, path.join(bootDir, name));
+    report.push(`☐ ${name}: NO committed baseline — bootstrapped (commit the CI capture to baselines/)`);
     continue;
   }
   if (!fs.existsSync(cPath)) {
@@ -82,4 +95,9 @@ if (failed > 0) {
   console.error("Intentional UI change?  Regenerate baselines (run-visual.sh --update) and commit them in the same PR.");
   process.exit(1);
 }
-console.log("\nvisual-regression: OK (all pages match baselines)");
+if (bootstrapped > 0) {
+  console.warn(`\nWARNING: ${bootstrapped} page(s) have no committed baseline and are NOT being compared.`);
+  console.warn("         Commit the bootstrap captures (CI visual-baselines-bootstrap artifact,");
+  console.warn(`         or ${path.join(diffDir, "bootstrap")}/ locally) to baselines/ to enforce them.`);
+}
+console.log(`\nvisual-regression: OK (${baselines.length ? "committed pages match baselines" : "no baselines"}${bootstrapped ? `; ${bootstrapped} bootstrapped` : ""})`);
