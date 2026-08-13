@@ -30,6 +30,12 @@ struct CourseBundleRoutes: RouteCollection {
             // A real bundle is testsetup zips + every submission for the
             // course; the 10 MB default made importing Chickadee's own
             // exports impossible (#1158).
+            //
+            // This is a backstop, not the effective limit. Behind a reverse
+            // proxy the proxy's own cap applies first and rejects the body
+            // before the app is reached — `client_max_body_size` in
+            // deploy/nginx.conf, deliberately set well below this. Raise that
+            // too when a deployment genuinely needs a larger import.
             body: .collect(maxSize: "2gb"),
             use: importCourse)
     }
