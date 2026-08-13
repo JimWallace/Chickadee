@@ -122,3 +122,59 @@ import Testing
                 atPath: destination.appendingPathComponent("helpers/publictest_bmi_01.py").path))
     }
 }
+
+/// The student-module hint for an upload that carries no filename.
+///
+/// Every ARCHIVE submission is that upload: a zip stores `filename` as nil
+/// (`WebRoutes+Submission.swift`, `fallbackFilename = isZip ? nil : …`), so no
+/// hint was written and the generated C++ wrapper fell back to globbing `*.cpp`
+/// in the MERGED workspace — where it took the alphabetically-first candidate
+/// and graded the instructor's `helpers.cpp` instead of the student's
+/// `solution.cpp` (#1390).
+///
+/// The fix reads the SUBMISSION directory, before the merge, so provenance
+/// distinguishes the two — which is exactly what the wrapper cannot do.
+@Suite struct StudentModuleFromSubmittedFilesTests {
+
+    private static func directory(_ files: [String: String]) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ck-submitted-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (name, body) in files {
+            try body.write(
+                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        return dir
+    }
+
+    /// The regression: an instructor's `helpers.cpp` sorts before the student's
+    /// `solution.cpp`, so a name-based rule picks the wrong one. Provenance does
+    /// not see the instructor's file at all.
+    @Test func theHintNamesAFileTheSubmissionActuallyContained() throws {
+        let dir = try Self.directory(["solution.cpp": "int f(int x) { return x; }"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .cpp) == "solution.cpp")
+        // The instructor's helper lives in the test setup, not here — so it can
+        // never be chosen, whatever it is called.
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .cpp) != "helpers.cpp")
+    }
+
+    /// Deterministic rather than enumeration-ordered, so a multi-file upload
+    /// grades the same way on every runner.
+    @Test func aMultiFileUploadPicksDeterministically() throws {
+        let dir = try Self.directory(["zeta.cpp": "//", "alpha.cpp": "//", "beta.cpp": "//"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .cpp) == "alpha.cpp")
+    }
+
+    /// The extension is the LANGUAGE's, so the same upload answers differently
+    /// per assignment — and answers nil rather than guessing when the student
+    /// submitted nothing in it.
+    @Test func theExtensionComesFromTheAssignmentLanguage() throws {
+        let dir = try Self.directory(["Solution.java": "class Solution {}", "notes.txt": "hi"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .java) == "Solution.java")
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .cpp) == nil)
+        #expect(studentModuleFromSubmittedFiles(in: dir, language: .racket) == nil)
+    }
+}
