@@ -323,12 +323,12 @@ moderate/minor ratchet down via `a11y-baseline.json`.
 - **Shrinking the spacing lattice** → when a step's last usage disappears,
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.
-- **Migration queue** (known page-local duplicates the ratchet will squeeze
-  out over time; convert opportunistically when touching these pages): the
-  two `.bs-*` namespaces on the brightspace pages, `.storage-bar` /
-  `.activity-filter` toolbar variants, the `.student-subtitle` /
-  `.history-subtitle` family, `.submissions-table` / `.import-result-table`
-  bottom-margin variants, and `course-student-submissions`' absolutely
-  positioned `.action-panel` (a future `.popover-panel` component).
+- **Migration queue** — superseded as an inventory by
+  [ui-consistency-audit.md](ui-consistency-audit.md) (2026-08), which
+  audited the whole widget layer, found this queue's five entries were an
+  undercount (seven titlebar clones, seventeen action-row names, fourteen
+  muted-hint names, …), and carries the sliced conversion plan. Convert
+  opportunistically when touching a page, per that document's Slice 7;
+  update its status lines rather than growing this bullet.
 - **Future ratchets** (candidates, not yet enforced): `font-weight` and
   `line-height` scales.
