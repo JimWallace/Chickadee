@@ -28,7 +28,7 @@ func enqueueRunnerValidationSubmission(
     let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
     let ext = (sanitizedFilename as NSString).pathExtension
     let filePath = submissionsDir + "\(subID).\(ext)"
-    try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
+    try await req.fileio.writeFile(.init(data: solutionNotebookData), at: filePath)
 
     let priorCount = try await APISubmission.query(on: req.db)
         .filter(\.$testSetupID == setupID)
@@ -68,6 +68,7 @@ func enqueueRunnerValidationSubmission(
         setupID: setupID,
         templateNotebookData: solutionNotebookData,
         testSetupsDirectory: req.application.testSetupsDirectory,
+        app: req.application,
         on: req.db)
 
     try await materialized.saveClaimable(on: req.db)
@@ -156,6 +157,7 @@ func materializeValidationGrading(
     setupID: String,
     templateNotebookData: Data,
     testSetupsDirectory: String,
+    app: Application,
     on db: any Database
 ) async -> MaterializedValidationSubmission {
     await resolveAndCacheValidationMaterialization(
@@ -163,6 +165,7 @@ func materializeValidationGrading(
         setupID: setupID,
         templateNotebookData: templateNotebookData,
         testSetupsDirectory: testSetupsDirectory,
+        app: app,
         on: db)
     return MaterializedValidationSubmission(submission: submission)
 }
@@ -175,6 +178,7 @@ private func resolveAndCacheValidationMaterialization(
     setupID: String,
     templateNotebookData: Data,
     testSetupsDirectory: String,
+    app: Application,
     on db: any Database
 ) async {
     do {
@@ -222,7 +226,10 @@ private func resolveAndCacheValidationMaterialization(
                 substitutions: resolution.substitutions,
                 strict: false)
         {
-            try? substituted.write(to: URL(fileURLWithPath: submission.zipPath + ".grading"))
+            let sidecarPath = submission.zipPath + ".grading"
+            try? await runBlocking(app: app) {
+                try substituted.write(to: URL(fileURLWithPath: sidecarPath))
+            }
         }
 
         let materialization = SubmissionMaterialization(

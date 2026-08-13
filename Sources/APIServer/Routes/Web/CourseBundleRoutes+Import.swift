@@ -50,12 +50,12 @@ extension CourseBundleRoutes {
         let contentFilesDir = req.application.contentFilesDirectory
 
         let tally = try await performImportTransaction(
+            app: req.application,
             db: req.db,
             manifest: manifest,
-            extractDir: extractDir,
-            setupsDir: setupsDir,
-            subsDir: subsDir,
-            contentFilesDir: contentFilesDir
+            dirs: BundleImportDirectories(
+                extractDir: extractDir, setupsDir: setupsDir,
+                subsDir: subsDir, contentFilesDir: contentFilesDir)
         )
 
         await AuditLogger.record(
@@ -183,14 +183,15 @@ extension CourseBundleRoutes {
     // (errors in Swift 6 strict mode).
 
     private func performImportTransaction(
+        app: Application,
         db: Database,
         manifest: CourseBundleManifest,
-        extractDir: URL,
-        setupsDir: String,
-        subsDir: String,
-        contentFilesDir: String
+        dirs: BundleImportDirectories
     ) async throws -> ImportTally {
-        try await db.transaction { (db) -> ImportTally in
+        let extractDir = dirs.extractDir
+        let subsDir = dirs.subsDir
+        let contentFilesDir = dirs.contentFilesDir
+        return try await db.transaction { (db) -> ImportTally in
             // 6a. Check for course code conflicts (moved inside transaction)
             let existingCourse = try await APICourse.query(on: db)
                 .filter(\.$code == manifest.course.code)
@@ -248,8 +249,8 @@ extension CourseBundleRoutes {
 
             // 6f. Create test setups → setupIDMap[bundleID] = new live ID
             let setupIDMap = try await importBundledTestSetups(
-                manifest: manifest, extractDir: extractDir, setupsDir: setupsDir,
-                courseID: t.courseID, db: db, tally: &t)
+                manifest: manifest, dirs: dirs, courseID: t.courseID,
+                app: app, db: db, tally: &t)
 
             // 6g. Create assignments
             try await importBundledAssignments(
@@ -388,30 +389,49 @@ private func importBundledEnrollments(
     }
 }
 
+/// The filesystem destinations a bundle import writes into, bundled so the
+/// import helpers stay within the parameter-count limit.
+struct BundleImportDirectories: Sendable {
+    let extractDir: URL
+    let setupsDir: String
+    let subsDir: String
+    let contentFilesDir: String
+}
+
 private func importBundledTestSetups(
     manifest: CourseBundleManifest,
-    extractDir: URL,
-    setupsDir: String,
+    dirs: BundleImportDirectories,
     courseID: UUID,
+    app: Application,
     db: Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {
+    let extractDir = dirs.extractDir
+    let setupsDir = dirs.setupsDir
     var setupIDMap: [String: String] = [:]
     for bundledSetup in manifest.testSetups {
         let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let newZipPath = setupsDir + "\(newSetupID).zip"
 
-        // Copy zip from bundle into testsetups dir.
+        // Copy zip from bundle into testsetups dir — a whole test setup
+        // archive per loop turn, on the thread pool rather than the
+        // cooperative pool (#1382 item 9; app-scoped because this runs
+        // inside the import transaction, whose closure cannot capture the
+        // request).
         let srcZip = extractDir.appendingPathComponent(bundledSetup.zipFilename)
-        try FileManager.default.copyItem(
-            at: srcZip,
-            to: URL(fileURLWithPath: newZipPath))
+        try await runBlocking(app: app) {
+            try FileManager.default.copyItem(
+                at: srcZip,
+                to: URL(fileURLWithPath: newZipPath))
+        }
 
         // Extract .ipynb if present (browser-mode setups).
         var notebookPath: String?
         if let nbData = extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
-            try nbData.write(to: URL(fileURLWithPath: nbPath))
+            try await runBlocking(app: app) {
+                try nbData.write(to: URL(fileURLWithPath: nbPath))
+            }
             notebookPath = nbPath
         }
 

@@ -96,7 +96,7 @@ struct AdminRunnerSnapshotRow: Encodable {
     let lastPollAt: String?
 }
 
-struct AdminStorageRow: Encodable {
+struct AdminStorageRow: Encodable, Sendable {
     let label: String
     let formatted: String
 }
@@ -104,7 +104,7 @@ struct AdminStorageRow: Encodable {
 /// Per-assignment on-disk footprint: its test-suite (test setup) bytes plus
 /// the bytes of every submission graded against that setup.  Sorted largest-
 /// first so an admin can see where space is going.
-struct AdminAssignmentStorageRow: Encodable {
+struct AdminAssignmentStorageRow: Encodable, Sendable {
     let assignmentTitle: String
     let courseCode: String
     let testSuiteFormatted: String
@@ -118,7 +118,7 @@ struct AdminAssignmentStorageRow: Encodable {
     let totalBytes: Int
 }
 
-struct AdminStorageContext: Encodable {
+struct AdminStorageContext: Encodable, Sendable {
     let rows: [AdminStorageRow]
     let totalFormatted: String
     let dbBackend: String

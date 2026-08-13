@@ -193,7 +193,7 @@ extension PublishedAssignmentRoutes {
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
         _ = try ensureDraftNotebookDirectory(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
-        try normalized.write(to: URL(fileURLWithPath: draftPath))
+        try await req.fileio.writeFile(.init(data: normalized), at: draftPath)
 
         _ = try await ensureUserNotebookWorkingCopy(
             req: req, setupID: assignment.testSetupID, userID: userID, fallbackSetup: setup,

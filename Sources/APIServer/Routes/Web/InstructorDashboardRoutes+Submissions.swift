@@ -29,16 +29,20 @@ extension InstructorDashboardRoutes {
         async let enrolledStudentCountFetch = enrolledStudentCount(forCourse: assignment.courseID, on: req.db)
 
         let students = try await loadAssignmentSubmissionsStudents(req: req, assignment: assignment)
-        let studentIDs = Set(students.compactMap(\.id))
+        let studentIDs = students.compactMap(\.id)
 
-        let submissions = try await loadAssignmentSubmissionRows(
+        // Per-student summary (latest pick + attempt count) and best grade
+        // ("highest grade wins" across all result sources) are SQL aggregates
+        // (#1382 item 6): this page used to load every attempt by every
+        // student plus a grade fold over all of them, on a page instructors
+        // refresh during a deadline. The metric cards read only the last 30
+        // days of timestamps, so that window is all that's fetched for them.
+        async let summaryFetch = submissionSummaryByStudent(
+            setupID: assignment.testSetupID, studentIDs: studentIDs, on: req.db)
+        async let bestFetch = bestGradePercentByStudent(
+            setupID: assignment.testSetupID, studentIDs: studentIDs, on: req.db)
+        async let recentFetch = loadRecentSubmissionTimestamps(
             req: req, assignment: assignment, studentIDs: studentIDs)
-        let submissionsByStudentID = submissionsGroupedByStudentID(submissions)
-        let submissionIDs = submissions.compactMap(\.id)
-        // Best grade percentage per submission across ALL result sources
-        // (browser and worker alike) — "highest grade wins".
-        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
-            for: submissionIDs, on: req.db)
 
         // Instructor grade overrides for this assignment, indexed by student.
         let overrideMap = try await loadGradeOverridePercents(
@@ -58,9 +62,26 @@ extension InstructorDashboardRoutes {
                 assignmentID: assignment.requireID(), on: req.db)
         }
 
+        let summaryByStudentID = try await summaryFetch
+        let bestByStudentID = try await bestFetch
+
+        // The latest submission per student, refetched as O(students) rows
+        // for their timestamps.
+        let latestIDs = summaryByStudentID.values.map(\.latestSubmissionID)
+        let latestRows =
+            latestIDs.isEmpty
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$id ~~ latestIDs)
+                .all()
+        let latestRowByID = Dictionary(
+            latestRows.compactMap { row in row.id.map { ($0, row) } },
+            uniquingKeysWith: { first, _ in first })
+
         let lookups = StudentRowLookups(
-            submissionsByStudentID: submissionsByStudentID,
-            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            summaryByStudentID: summaryByStudentID,
+            latestRowByID: latestRowByID,
+            bestByStudentID: bestByStudentID,
             overrideByStudentID: overrideByStudentID,
             spentRevealUserIDs: spentRevealUserIDs)
         let fmt = waterlooDateTimeFormatter()
@@ -73,10 +94,11 @@ extension InstructorDashboardRoutes {
             )
         }
 
+        let recentSubmissions = try await recentFetch
         let enrolledStudentRosterCount = try await enrolledStudentCountFetch
         let metrics = buildAssignmentSubmissionsMetrics(
             rows: rows,
-            submissions: submissions,
+            submissions: recentSubmissions,
             enrolledStudentRosterCount: enrolledStudentRosterCount
         )
 
@@ -108,34 +130,33 @@ extension InstructorDashboardRoutes {
             .all()
     }
 
-    private func loadAssignmentSubmissionRows(
-        req: Request, assignment: APIAssignment, studentIDs: Set<UUID>
+    /// The last 31 days of roster submissions, field-limited to identity +
+    /// timestamp — all the metric cards read (the 24h count and the
+    /// 24h/7d/30d trend buckets, whose earliest bucket starts within 30
+    /// calendar days), so the fetch is bounded by the window rather than the
+    /// term. The extra day is timezone margin; the bucketing drops
+    /// out-of-range rows either way.
+    private func loadRecentSubmissionTimestamps(
+        req: Request, assignment: APIAssignment, studentIDs: [UUID]
     ) async throws -> [APISubmission] {
         guard !studentIDs.isEmpty else { return [] }
+        let cutoff = Date().addingTimeInterval(-31 * 24 * 60 * 60)
         return try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
             .filter(\.$userID ~~ studentIDs)
-            .sort(\.$submittedAt, .descending)
+            .filter(\.$submittedAt >= cutoff)
+            .field(\.$id)
+            .field(\.$submittedAt)
             .all()
-    }
-
-    private func submissionsGroupedByStudentID(
-        _ submissions: [APISubmission]
-    ) -> [UUID: [APISubmission]] {
-        var submissionsByStudentID: [UUID: [APISubmission]] = [:]
-        for row in submissions {
-            guard let userID = row.userID else { continue }
-            submissionsByStudentID[userID, default: []].append(row)
-        }
-        return submissionsByStudentID
     }
 
     /// Per-assignment lookup tables shared by every roster row build, bundled
     /// so `buildAssignmentStudentRow` stays within the parameter-count limit.
     private struct StudentRowLookups {
-        let submissionsByStudentID: [UUID: [APISubmission]]
-        let bestPercentBySubmissionID: [String: Int]
+        let summaryByStudentID: [UUID: SetupStudentSubmissionSummary]
+        let latestRowByID: [String: APISubmission]
+        let bestByStudentID: [UUID: Int]
         let overrideByStudentID: [UUID: Int]
         let spentRevealUserIDs: Set<UUID>
     }
@@ -147,20 +168,10 @@ extension InstructorDashboardRoutes {
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
-        let history = lookups.submissionsByStudentID[studentID] ?? []
-        let latest = history.first
-        let runnerBestGradePercent: Int? = {
-            var best = -1
-            for submission in history {
-                guard let subID = submission.id,
-                    let pct = lookups.bestPercentBySubmissionID[subID]
-                else {
-                    continue
-                }
-                if pct > best { best = pct }
-            }
-            return best >= 0 ? best : nil
-        }()
+        let summary = lookups.summaryByStudentID[studentID]
+        let latest = summary.flatMap { lookups.latestRowByID[$0.latestSubmissionID] }
+        let submissionCount = summary?.submissionCount ?? 0
+        let runnerBestGradePercent = lookups.bestByStudentID[studentID]
         // An instructor override is the student's effective grade — it feeds
         // both the displayed grade and the median metric.
         let override = lookups.overrideByStudentID[studentID]
@@ -177,12 +188,12 @@ extension InstructorDashboardRoutes {
             gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
             gradeIsOverridden: override != nil,
             gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
-            submissionCount: history.count,
+            submissionCount: submissionCount,
             hasLatestSubmission: latest != nil,
             latestSubmissionID: latest?.id ?? "",
             latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
             latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
-            additionalSubmissionCount: max(history.count - 1, 0),
+            additionalSubmissionCount: max(submissionCount - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
             secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID)

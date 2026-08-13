@@ -145,6 +145,67 @@ import VaporTesting
         }
     }
 
+    // MARK: - By-student variants (instructor roster, #1382 item 6)
+
+    @Test func summaryByStudentPicksLatestAndCountsPerStudent() async throws {
+        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+            _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
+            let alice = try await wrStudentUser(on: app)
+            let aliceID = try alice.requireID()
+            _ = try await loginUser(username: "student2", password: "pass", role: "student", on: app)
+            let bob = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student2").first())
+            let bobID = try bob.requireID()
+
+            try await wrInsertSetup(id: "agg_roster", on: app)
+            try await wrInsertSubmission(
+                id: "agg_r_a1", testSetupID: "agg_roster", userID: aliceID, attemptNumber: 1, on: app)
+            try await wrInsertSubmission(
+                id: "agg_r_a2", testSetupID: "agg_roster", userID: aliceID, attemptNumber: 2, on: app)
+            try await wrInsertSubmission(
+                id: "agg_r_b1", testSetupID: "agg_roster", userID: bobID, attemptNumber: 1, on: app)
+            // Noise: another setup's attempt must not leak into this roster.
+            try await wrInsertSetup(id: "agg_roster_other", on: app)
+            try await wrInsertSubmission(
+                id: "agg_r_other", testSetupID: "agg_roster_other", userID: aliceID,
+                attemptNumber: 3, on: app)
+
+            let summary = try await submissionSummaryByStudent(
+                setupID: "agg_roster", studentIDs: [aliceID, bobID], on: app.db)
+
+            #expect(summary.count == 2)
+            #expect(summary[aliceID]?.latestSubmissionID == "agg_r_a2")
+            #expect(summary[aliceID]?.submissionCount == 2)
+            #expect(summary[bobID]?.latestSubmissionID == "agg_r_b1")
+            #expect(summary[bobID]?.submissionCount == 1)
+        }
+    }
+
+    @Test func bestPercentByStudentKeepsAnAllFailZero() async throws {
+        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+            _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+
+            try await wrInsertSetup(id: "agg_roster_zero", on: app)
+            try await wrInsertSubmission(
+                id: "agg_rz1", testSetupID: "agg_roster_zero", userID: userID, attemptNumber: 1,
+                on: app)
+            try await wrInsertResult(
+                submissionID: "agg_rz1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .fail),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                ], on: app)
+
+            // Unlike the dashboard's by-setup fold (which hides a 0 behind its
+            // sentinel), the roster fold admits 0 — an instructor sees "0%".
+            let best = try await bestGradePercentByStudent(
+                setupID: "agg_roster_zero", studentIDs: [userID], on: app.db)
+            #expect(best == [userID: 0])
+        }
+    }
+
     @Test func bestPercentOmitsAnAllFailZero() async throws {
         try await withWebRoutesApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)

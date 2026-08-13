@@ -213,22 +213,33 @@ struct AdminRoutes: RouteCollection {
 
     /// Measures the persistent-volume sinks (submission/test-setup uploads,
     /// the results+logs dir, the static asset tree) and the database so an
-    /// admin can see where disk is going.  Directory walks are blocking, so
-    /// they run on the thread pool off the event loop.
+    /// admin can see where disk is going.
     ///
     /// `static` so the admin diagnostic MCP tool (`get_storage_usage`) can reuse
     /// the exact same builder as the `/admin/storage` page — the context is
     /// PII-free (assignment/course identifiers + byte counts only).
+    ///
+    /// Cached behind a single-flight TTL (#1382 item 5): the walks stat every
+    /// submission ever kept plus the whole static asset tree, so the page got
+    /// slowest exactly when there was the most disk to account for — and the
+    /// MCP tool made it pollable. The walks now run at most once per TTL.
     static func makeStorageContext(req: Request) async throws -> AdminStorageContext {
-        let submissionsDir = req.application.submissionsDirectory
-        let testSetupsDir = req.application.testSetupsDirectory
-        let resultsDir = req.application.resultsDirectory
-        let publicDir = req.application.directory.publicDirectory
+        let app = req.application
+        return try await app.storageUsageCache.context {
+            try await computeStorageContext(app: app)
+        }
+    }
+
+    /// The uncached breakdown build. Directory walks are blocking, so they
+    /// run on the thread pool off the event loop.
+    private static func computeStorageContext(app: Application) async throws -> AdminStorageContext {
+        let submissionsDir = app.submissionsDirectory
+        let testSetupsDir = app.testSetupsDirectory
+        let resultsDir = app.resultsDirectory
+        let publicDir = app.directory.publicDirectory
 
         func dirSize(_ path: String) async throws -> Int {
-            try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
-                directorySizeBytes(at: path)
-            }.get()
+            try await runBlocking(app: app) { directorySizeBytes(at: path) }
         }
 
         // Per-id footprints feed both the aggregate cards and the per-assignment
@@ -237,23 +248,26 @@ struct AdminRoutes: RouteCollection {
         // "Submissions" card to avoid scanning that (potentially large) dir
         // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
         // card keeps an authoritative recursive walk.
-        async let submissionSizesFetch = req.application.threadPool.runIfActive(
-            eventLoop: req.eventLoop
-        ) { topLevelFileSizesByID(inDirectory: submissionsDir) }.get()
-        async let setupSizesFetch = req.application.threadPool.runIfActive(
-            eventLoop: req.eventLoop
-        ) { testSetupSizesByID(testSetupsDirectory: testSetupsDir) }.get()
+        async let submissionSizesFetch = runBlocking(app: app) {
+            topLevelFileSizesByID(inDirectory: submissionsDir)
+        }
+        async let setupSizesFetch = runBlocking(app: app) {
+            testSetupSizesByID(testSetupsDirectory: testSetupsDir)
+        }
 
         async let testSetupsBytes = dirSize(testSetupsDir)
         async let resultsBytes = dirSize(resultsDir)
         async let publicBytes = dirSize(publicDir)
         async let dbBytes = databaseSizeBytes(
-            on: req.db, settings: req.application.appConfig.database)
+            on: app.db, settings: app.appConfig.database)
 
-        // Mapping rows for the per-assignment breakdown.
-        async let assignmentsFetch = APIAssignment.query(on: req.db).all()
-        async let coursesFetch = APICourse.query(on: req.db).all()
-        async let submissionLinksFetch = APISubmission.query(on: req.db)
+        // Mapping rows for the per-assignment breakdown.  The (id → setup)
+        // projection is the minimal query byte attribution needs: sizes live
+        // only on disk, keyed by submission id, so each on-disk file's bytes
+        // can only reach its assignment through this map.
+        async let assignmentsFetch = APIAssignment.query(on: app.db).all()
+        async let coursesFetch = APICourse.query(on: app.db).all()
+        async let submissionLinksFetch = APISubmission.query(on: app.db)
             .field(\.$id).field(\.$testSetupID).all()
 
         let submissionSizesByID = try await submissionSizesFetch
@@ -319,7 +333,7 @@ struct AdminRoutes: RouteCollection {
         return AdminStorageContext(
             rows: rows,
             totalFormatted: humanReadableBytes(total),
-            dbBackend: req.application.appConfig.database.backend.rawValue,
+            dbBackend: app.appConfig.database.backend.rawValue,
             assignments: assignmentRows
         )
     }

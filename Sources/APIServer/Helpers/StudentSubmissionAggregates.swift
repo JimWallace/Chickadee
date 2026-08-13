@@ -125,6 +125,106 @@ func studentBestGradePercentBySetup(
     return best
 }
 
+// MARK: - By-student variants (instructor roster, #1382 item 6)
+
+/// Per-student submission summary for one assignment's setup: the latest
+/// submission's id and the attempt count — `studentSubmissionSummaryBySetup`
+/// partitioned by student instead of by setup, for the instructor
+/// assignment-submissions roster.
+struct SetupStudentSubmissionSummary {
+    let latestSubmissionID: String
+    let submissionCount: Int
+}
+
+func submissionSummaryByStudent(
+    setupID: String, studentIDs: [UUID], on db: Database
+) async throws -> [UUID: SetupStudentSubmissionSummary] {
+    guard !studentIDs.isEmpty else { return [:] }
+    guard let sql = db as? SQLDatabase else {
+        return try await submissionSummaryByStudentViaFluent(
+            setupID: setupID, studentIDs: studentIDs, on: db)
+    }
+    struct SummaryRow: Decodable {
+        let userID: UUID
+        let id: String
+        let total: Int
+        enum CodingKeys: String, CodingKey {
+            case userID = "user_id"
+            case id
+            case total
+        }
+    }
+    let rows = try await sql.raw(
+        """
+        SELECT user_id, id, total FROM (
+            SELECT user_id, id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY user_id
+                    ORDER BY submitted_at DESC, attempt_number DESC
+                ) AS rn,
+                COUNT(*) OVER (PARTITION BY user_id) AS total
+            FROM \(unsafeRaw: APISubmission.schema)
+            WHERE test_setup_id = \(bind: setupID)
+              AND kind = \(bind: APISubmission.Kind.student)
+              AND user_id IN (\(binds: studentIDs))
+        ) ranked
+        WHERE rn = 1
+        """
+    ).all(decoding: SummaryRow.self)
+    return rows.reduce(into: [:]) {
+        $0[$1.userID] = SetupStudentSubmissionSummary(
+            latestSubmissionID: $1.id, submissionCount: $1.total)
+    }
+}
+
+/// The highest grade percent per student across every result of their
+/// submissions to one setup. Unlike the dashboard's by-setup fold, a best of
+/// exactly 0 IS kept: the roster fold this replaces admitted any grade at or
+/// above 0 (`best >= 0`), so an all-fail student shows "0%" to their
+/// instructor rather than no grade. Students with no gradeable result are
+/// absent.
+func bestGradePercentByStudent(
+    setupID: String, studentIDs: [UUID], on db: Database
+) async throws -> [UUID: Int] {
+    guard !studentIDs.isEmpty else { return [:] }
+    guard let sql = db as? SQLDatabase else {
+        return try await bestGradePercentByStudentViaFluent(
+            setupID: setupID, studentIDs: studentIDs, on: db)
+    }
+    struct BestRow: Decodable {
+        let userID: UUID
+        let bestFraction: Double?
+        enum CodingKeys: String, CodingKey {
+            case userID = "user_id"
+            case bestFraction = "best_fraction"
+        }
+    }
+    let rows = try await sql.raw(
+        """
+        SELECT s.user_id AS user_id,
+            MAX(CASE
+                WHEN r.total_points > 0 AND r.earned_points IS NOT NULL
+                    THEN r.earned_points / r.total_points * 100
+                WHEN r.total_tests > 0 AND r.pass_count IS NOT NULL
+                    THEN CAST(r.pass_count AS DOUBLE PRECISION)
+                        / CAST(r.total_tests AS DOUBLE PRECISION) * 100
+            END) AS best_fraction
+        FROM \(unsafeRaw: APIResult.schema) r
+        INNER JOIN \(unsafeRaw: APISubmission.schema) s ON s.id = r.submission_id
+        WHERE s.test_setup_id = \(bind: setupID)
+          AND s.kind = \(bind: APISubmission.Kind.student)
+          AND s.user_id IN (\(binds: studentIDs))
+        GROUP BY s.user_id
+        """
+    ).all(decoding: BestRow.self)
+    var best: [UUID: Int] = [:]
+    for row in rows {
+        guard let fraction = row.bestFraction else { continue }
+        best[row.userID] = Int(fraction.rounded())
+    }
+    return best
+}
+
 // MARK: - Non-SQL fallbacks
 //
 // Not hit by the sqlite/postgres drivers in use; they load the rows and run
@@ -155,6 +255,62 @@ private func studentSubmissionSummaryBySetupViaFluent(
         }
     }
     return summary
+}
+
+private func submissionSummaryByStudentViaFluent(
+    setupID: String, studentIDs: [UUID], on db: Database
+) async throws -> [UUID: SetupStudentSubmissionSummary] {
+    let rows = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$userID ~~ studentIDs)
+        .sort(\.$submittedAt, .descending)
+        .sort(\.$attemptNumber, .descending)
+        .field(\.$id)
+        .field(\.$userID)
+        .all()
+    var summary: [UUID: SetupStudentSubmissionSummary] = [:]
+    for row in rows {
+        guard let id = row.id, let userID = row.userID else { continue }
+        if let existing = summary[userID] {
+            summary[userID] = SetupStudentSubmissionSummary(
+                latestSubmissionID: existing.latestSubmissionID,
+                submissionCount: existing.submissionCount + 1)
+        } else {
+            summary[userID] = SetupStudentSubmissionSummary(
+                latestSubmissionID: id, submissionCount: 1)
+        }
+    }
+    return summary
+}
+
+private func bestGradePercentByStudentViaFluent(
+    setupID: String, studentIDs: [UUID], on db: Database
+) async throws -> [UUID: Int] {
+    let submissions = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$userID ~~ studentIDs)
+        .field(\.$id)
+        .field(\.$userID)
+        .all()
+    var studentBySubmissionID: [String: UUID] = [:]
+    for submission in submissions {
+        guard let id = submission.id, let userID = submission.userID else { continue }
+        studentBySubmissionID[id] = userID
+    }
+    guard !studentBySubmissionID.isEmpty else { return [:] }
+    let results = try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ Array(studentBySubmissionID.keys))
+        .all()
+    var best: [UUID: Int] = [:]
+    for row in results {
+        guard let userID = studentBySubmissionID[row.submissionID],
+            let pct = row.gradePercentValue
+        else { continue }
+        if pct > (best[userID] ?? -1) { best[userID] = pct }
+    }
+    return best
 }
 
 private func studentBestGradePercentBySetupViaFluent(

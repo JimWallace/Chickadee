@@ -417,6 +417,10 @@ func registerMigrations(on app: Application) {
     // `AddSessionsCreatedAt` above, which is what creates the column.
     app.migrations.add(CreateSessionReaperIndex())
 
+    // Observability prune sweep over submission_diagnostics (#1382 item 8).
+    // Index-only; the table is created far above.
+    app.migrations.add(CreateSubmissionDiagnosticsPruneIndex())
+
     // Data backfill, registered LAST on purpose: it full-queries `APITestSetup`,
     // which is only safe once every migration that adds a column to
     // `test_setups` has already run (the #1077 boot-order hazard, inverted —
