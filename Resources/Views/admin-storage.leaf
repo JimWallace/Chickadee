@@ -5,7 +5,7 @@ Storage
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section admin-diagnostics">
+<section class="page-section admin-diagnostics">
     <div class="storage-bar storage-bar--end">
         <span class="storage-meta">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
     </div>
@@ -18,7 +18,7 @@ Storage
         #endfor
     </div>
 </section>
-<section class="admin-section">
+<section class="page-section">
     <div class="storage-bar">
         <h2 class="storage-bar-title">By Assignment</h2>
         <span class="storage-meta">Largest first</span>

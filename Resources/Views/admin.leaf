@@ -5,7 +5,7 @@ Admin
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section admin-diagnostics">
+<section class="page-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card diagnostic-card-cyclable" data-activity-card
                  role="button" tabindex="0" aria-label="Active users, last 24 hours. Press to change the time window.">
@@ -38,7 +38,7 @@ Admin
     </div>
 </section>
 
-<section class="admin-section">
+<section class="page-section">
     <div class="page-titlebar admin-section-head">
         <h2>Runners</h2>
         <div class="toolbar">
@@ -102,7 +102,7 @@ Admin
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <div class="page-titlebar admin-courses-head">
         <h2>Courses</h2>
         <div class="admin-courses-actions">

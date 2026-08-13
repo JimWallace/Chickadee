@@ -197,6 +197,7 @@ a { color: var(--blue); }
 .flash-success { background: var(--success-bg); color: var(--success-fg); }
 .flash-error   { background: var(--danger-bg);  color: var(--danger-fg); }
 .flash-neutral { background: var(--gray-100);   color: var(--gray-700); }
+.flash-warning { background: var(--warning-bg); color: var(--gray-800); }
 
 /* ── Nav ─────────────────────────────────────────────── */
 
@@ -1047,13 +1048,18 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: 1rem;
 }
 
-/* ── Admin dashboard ─────────────────────────────────── */
+/* ── Page sections ───────────────────────────────────── */
 
-.admin-section {
+/* THE generic page-section wrapper: a heading plus its content, on any
+   chrome page (admin, instructor, account).  Renamed from .admin-section,
+   whose name lied once non-admin pages adopted it.  Distinct from
+   .section-block (the suite editor's per-test-section grouping) and
+   .submission-section-block (results grouping). */
+.page-section {
     margin-bottom: 2.5rem;
 }
 
-.admin-section h2 {
+.page-section h2 {
     margin-bottom: .9rem;
 }
 
@@ -1472,6 +1478,49 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .page-titlebar h1, .page-titlebar h2 { margin: 0; }
 .page-titlebar--baseline { align-items: baseline; }
+
+/* Secondary line directly under a .page-titlebar (username + role, course
+   name).  The negative top margin tucks it against the titlebar it follows. */
+.page-subtitle {
+    margin: -.75rem 0 1.5rem;
+    color: var(--text-secondary);
+}
+
+/* Lead-in paragraph directly under a section heading. */
+.section-intro {
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+    max-width: 60rem;
+}
+
+/* Aside/caveat paragraph inside a section. */
+.section-note {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Muted flavour of .field-note, for hints inside a form label. */
+.field-note--muted {
+    display: block;
+    color: var(--text-secondary);
+}
+
+/* Neutral rounded tag — runner capability tags, MCP course chips.  Not a
+   .tier badge: chips carry no status colour. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .2rem .55rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    color: var(--gray-700);
+    font-size: var(--text-sm);
+    line-height: 1.2;
+}
+.chip-row { display: flex; flex-wrap: wrap; gap: .45rem; }
 
 /* Horizontal cluster of controls (button groups, inline actions). */
 .toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

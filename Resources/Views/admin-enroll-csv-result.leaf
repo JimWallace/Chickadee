@@ -3,13 +3,13 @@
 CSV Enrollment Result
 #endexport
 #export("content"):
-<div class="csv-result-head">
+<div class="page-titlebar">
+    <h1>CSV Enrollment — #(courseCode)</h1>
     <a href="#(returnURL)" class="btn">← #(courseCode)</a>
-    <h1 class="csv-result-title">CSV Enrollment — #(courseCode)</h1>
 </div>
-<p class="csv-result-subtitle">#(courseName)</p>
+<p class="page-subtitle">#(courseName)</p>
 
-<section class="admin-section">
+<section class="page-section">
     <h2>Results</h2>
     <dl class="csv-result-list">
         <dt class="csv-result-term">Enrolled (existing accounts)</dt>
@@ -29,7 +29,7 @@ CSV Enrollment Result
 </section>
 
 #if(hasRejected):
-<section class="admin-section">
+<section class="page-section">
     <h2>Rejected usernames</h2>
     <p class="csv-result-reject-note">
         These rows in the CSV had a format we couldn't accept (empty, too long, or contained unsafe characters).  Fix the CSV and re-upload.
@@ -43,20 +43,6 @@ CSV Enrollment Result
 #endif
 
 <style>
-.csv-result-head {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-.csv-result-title {
-    margin: 0;
-}
-.csv-result-subtitle {
-    color: var(--gray-600);
-    margin-top: -.75rem;
-    margin-bottom: 1.5rem;
-}
 .csv-result-list {
     display: grid;
     grid-template-columns: auto 1fr;

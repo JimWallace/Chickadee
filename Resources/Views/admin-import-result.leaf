@@ -3,12 +3,14 @@
 Import result — Admin
 #endexport
 #export("content"):
-<div class="import-result-head">
-    <h1 class="import-result-title">Bundle imported</h1>
-    <span class="tier tier-open">success</span>
+<div class="page-titlebar">
+    <div class="toolbar">
+        <h1>Bundle imported</h1>
+        <span class="tier tier-open">success</span>
+    </div>
 </div>
 
-<section class="admin-section">
+<section class="page-section">
     <h2>#(courseCode) — #(courseName)</h2>
     <table class="results-table import-result-table">
         <tbody>
@@ -50,15 +52,6 @@ Import result — Admin
 </section>
 
 <style>
-.import-result-head {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    margin-bottom: 1.5rem;
-}
-.import-result-title {
-    margin: 0;
-}
 .import-result-table {
     max-width: 480px;
 }

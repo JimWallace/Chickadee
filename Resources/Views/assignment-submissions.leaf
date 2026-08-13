@@ -3,8 +3,8 @@
 #(assignmentTitle) — Submissions
 #endexport
 #export("content"):
-<div class="section-gap">
-    <h1 class="page-heading-flush">#(assignmentTitle)</h1>
+<div class="page-titlebar">
+    <h1>#(assignmentTitle)</h1>
 </div>
 
 <section class="assignment-diagnostics">
@@ -14,7 +14,7 @@
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
 #else:
-<div class="filter-row">
+<div class="toolbar toolbar--end section-gap">
     <input id="submissions-filter" class="form-input filter-input" type="search" autocomplete="off"
            placeholder="Filter by name or ID…"
            style="--filter-width:220px" aria-label="Filter students"
@@ -115,12 +115,6 @@
 <style>
 .assignment-diagnostics {
     margin-bottom: 1.25rem;
-}
-.page-heading-flush {
-    margin: 0;
-}
-.filter-row {
-    margin-bottom: .5rem;
 }
 .subm-row-actions {
     display: flex;

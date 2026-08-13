@@ -5,10 +5,10 @@ LEARN
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section">
+<section class="page-section">
     #extend("_flash")
 
-    <p class="bs-intro">
+    <p class="section-intro">
         LEARN grade sync runs as one D2L service account. The app credentials
         (URL / App ID / App Key) come from the server environment; this page sets
         the matching <strong>Valence user key</strong> — harvested from your
@@ -17,7 +17,7 @@ LEARN
     </p>
 
     #if(!configured):
-    <p class="bs-muted">
+    <p class="text-muted">
         Not configured. Set <code>BRIGHTSPACE_URL</code>,
         <code>BRIGHTSPACE_APP_ID</code>, and <code>BRIGHTSPACE_APP_KEY</code> in
         the server environment, then reload this page to set the user key.
@@ -28,7 +28,7 @@ LEARN
         <dd>
             #if(authorized):
             <span class="tier tier-public">Authorized</span>
-            #if(keySource == "env"):<span class="bs-muted">(using key from env)</span>#endif
+            #if(keySource == "env"):<span class="text-muted">(using key from env)</span>#endif
             #else:
             <span class="tier tier-closed">Not authorized</span>
             #endif
@@ -37,7 +37,7 @@ LEARN
         <dd><code>#(baseURL)</code></dd>
         #if(identityName):
         <dt>Authorized as</dt>
-        <dd>#(identityName)#if(capturedAt): <span class="bs-muted">— #(capturedAt)</span>#endif</dd>
+        <dd>#(identityName)#if(capturedAt): <span class="text-muted">— #(capturedAt)</span>#endif</dd>
         #endif
     </dl>
 
@@ -59,7 +59,7 @@ LEARN
 
     <div class="bs-manual">
         <h3 class="bs-manual-heading">Set the user key</h3>
-        <p class="bs-muted">
+        <p class="text-muted">
             Harvest the <strong>User ID</strong> and <strong>User Key</strong> for
             your service account from your institution's credential service (e.g.
             UW's <code>d2l-api-cred.fast.uwaterloo.ca</code>), then paste them here —
@@ -77,20 +77,13 @@ LEARN
         </form>
     </div>
 
-    <p class="bs-muted bs-footnote">
+    <p class="text-muted bs-footnote">
         Instructors map assignments to grade items and watch grades flow on
         their course's LEARN tab; this page only sets the shared connection.
     </p>
     #endif
 </section>
 <style>
-.bs-intro {
-    color: var(--muted);
-    margin-top: 0;
-}
-.bs-muted {
-    color: var(--muted);
-}
 .bs-status {
     display: grid;
     grid-template-columns: 9rem 1fr;

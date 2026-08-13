@@ -5,7 +5,7 @@ Audit Log
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section">
+<section class="page-section">
     <div class="page-titlebar">
         <h2>Audit Log</h2>
     </div>

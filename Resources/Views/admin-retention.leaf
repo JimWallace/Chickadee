@@ -5,20 +5,20 @@ Retention
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section">
+<section class="page-section">
     #extend("_flash")
 
-    <p class="retention-intro">
+    <p class="section-intro">
         Archived courses can be restored at any time. #(retentionDays) days
         after a course is archived, an admin may permanently delete it and all
         its data. <strong>Deletion cannot be undone.</strong>
     </p>
 
     #if(rows.isEmpty):
-    <p class="retention-muted">No archived courses. The retention clock starts when a course is archived.</p>
+    <p class="text-muted">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
     #if(deletableCount > 0):
-    <p class="retention-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
+    <p class="text-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
     #endif
     <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
@@ -78,13 +78,6 @@ Retention
     #endif
 </section>
 <style>
-.retention-intro {
-    color: var(--muted);
-    margin-top: 0;
-}
-.retention-muted {
-    color: var(--muted);
-}
 .retention-col-date {
     width: 11rem;
 }

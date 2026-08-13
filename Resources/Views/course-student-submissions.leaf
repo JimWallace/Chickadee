@@ -106,15 +106,15 @@
                         </summary>
                         <form method="post" action="#(row.extensionSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 New deadline for this student
-                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="action-panel-input">
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="ext-field-input">
                             </label>
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for extension" class="action-panel-input">
+                                <input type="text" name="note" placeholder="Reason for extension" class="ext-field-input">
                             </label>
-                            <div class="action-panel-actions">
+                            <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
                                 <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
@@ -128,15 +128,15 @@
                         </summary>
                         <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Override grade (%)
-                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="action-panel-input">
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="ext-field-input">
                             </label>
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for override" class="action-panel-input">
+                                <input type="text" name="note" placeholder="Reason for override" class="ext-field-input">
                             </label>
-                            <div class="action-panel-actions">
+                            <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.gradeIsOverridden):
                                 <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
@@ -249,15 +249,15 @@
                         </summary>
                         <form method="post" action="#(row.extensionSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 New deadline for this student
-                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="action-panel-input">
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="ext-field-input">
                             </label>
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for extension" class="action-panel-input">
+                                <input type="text" name="note" placeholder="Reason for extension" class="ext-field-input">
                             </label>
-                            <div class="action-panel-actions">
+                            <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
                                 <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
@@ -271,15 +271,15 @@
                         </summary>
                         <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Override grade (%)
-                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="action-panel-input">
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="ext-field-input">
                             </label>
-                            <label class="action-panel-label">
+                            <label class="ext-field-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for override" class="action-panel-input">
+                                <input type="text" name="note" placeholder="Reason for override" class="ext-field-input">
                             </label>
-                            <div class="action-panel-actions">
+                            <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.gradeIsOverridden):
                                 <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
@@ -346,18 +346,6 @@
     border: 1px solid var(--gray-300);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-pop);
-}
-.action-panel-label {
-    font-size: var(--text-sm);
-    color: var(--gray-700);
-}
-.action-panel-input {
-    width: 100%;
-    margin-top: .2rem;
-}
-.action-panel-actions {
-    display: flex;
-    gap: .3rem;
 }
 @media (max-width: 640px) {
     /* On a phone the absolutely-positioned popover can't be trusted to fit

@@ -5,7 +5,7 @@ Users
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section">
+<section class="page-section">
     <div class="toolbar toolbar--end section-gap">
         <input id="users-filter" class="form-input filter-input" type="search" autocomplete="off"
                placeholder="Filter by name, username or role…"

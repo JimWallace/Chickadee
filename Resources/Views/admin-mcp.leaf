@@ -5,12 +5,12 @@ MCP
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="admin-section">
-    #if(showServiceAccounts):
-    <h2 class="mcp-heading-flush">MCP service accounts</h2>
+#if(showServiceAccounts):
+<section class="page-section">
+    <h2>MCP service accounts</h2>
 
     #if(!enabled):
-    <div class="form-error mcp-alert-gap">
+    <div class="form-error">
         The MCP endpoint is not active, so tokens cannot be minted. Set
         <code>MCP_MODE=read_only</code> or <code>MCP_MODE=read_write</code>
         and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
@@ -19,7 +19,7 @@ MCP
     #endif
     #if(enabled):
     #if(!writeAllowed):
-    <div class="mcp-banner mcp-banner--warn">
+    <div class="flash flash-warning" role="status">
         MCP is in <strong>read-only</strong> mode (<code>MCP_MODE=read_only</code>): agents can read
         course content but cannot create or edit it. Minted tokens carry <code>content:read</code> only.
         Set <code>MCP_MODE=read_write</code> and restart to allow writes.
@@ -27,20 +27,20 @@ MCP
     #endif
     #endif
     #if(error == "username_required"):
-    <div class="form-error mcp-alert-gap">A username is required.</div>
+    <div class="form-error">A username is required.</div>
     #endif
     #if(error == "username_taken"):
-    <div class="form-error mcp-alert-gap">That username is already in use.</div>
+    <div class="form-error">That username is already in use.</div>
     #endif
     #if(error == "mcp_disabled"):
-    <div class="form-error mcp-alert-gap">Cannot mint a token while the MCP endpoint is inactive.</div>
+    <div class="form-error">Cannot mint a token while the MCP endpoint is inactive.</div>
     #endif
     #if(error == "enroll_failed"):
-    <div class="form-error mcp-alert-gap">Could not update the account's course enrollment.</div>
+    <div class="form-error">Could not update the account's course enrollment.</div>
     #endif
 
     #if(mintedToken):
-    <div class="mcp-banner mcp-banner--success">
+    <div class="flash flash-success" role="status">
         <p class="mcp-token-caption"><strong>Access token for #(mintedFor)</strong>
             &middot; scopes: <code>#(mintedScopes)</code> &middot; expires after #(tokenTTLSeconds)s.
             Copy it now — it is shown only once.</p>
@@ -83,9 +83,9 @@ MCP
                 <td>
                     <div class="mcp-course-cell">
                         #for(c in account.enrolledCourses):
-                        <span class="mcp-course-chip">
+                        <span class="chip">
                             <code>#(c.code)</code>
-                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" class="mcp-inline">
+                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" class="inline-form">
                                 #csrfFormField()
                                 <input type="hidden" name="courseID" value="#(c.id)">
                                 <button type="submit" title="Remove from #(c.code)"
@@ -109,7 +109,7 @@ MCP
                     </div>
                 </td>
                 <td>
-                    <div class="mcp-actions">
+                    <div class="toolbar">
                         #if(enabled):
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/token"
                               class="mcp-token-form">
@@ -124,7 +124,7 @@ MCP
                             <button class="btn action-btn" type="submit">Mint token</button>
                         </form>
                         #endif
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="mcp-inline">
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     onclick="return confirm('Delete this MCP account? Existing tokens stay valid until they expire.')">Delete</button>
@@ -134,13 +134,15 @@ MCP
             </tr>
         #endfor
         #if(accounts.isEmpty):
-            <tr><td colspan="4" class="mcp-empty-cell">No MCP accounts yet.</td></tr>
+            <tr><td colspan="4" class="text-muted">No MCP accounts yet.</td></tr>
         #endif
         </tbody>
     </table></div>
-    #endif
+</section>
+#endif
 
-    <h2 class="mcp-heading-spaced">Connected agents</h2>
+<section class="page-section">
+    <h2>Connected agents</h2>
     <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
@@ -164,9 +166,9 @@ MCP
                 <td class="time">#(grant.expiresAt)</td>
                 <td>
                     #if(grant.revoked):
-                    <span class="mcp-revoked">Revoked</span>
+                    <span class="text-muted">Revoked</span>
                     #else:
-                    <form method="post" action="/agents/#(grant.id)/revoke" class="mcp-inline">
+                    <form method="post" action="/agents/#(grant.id)/revoke" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
@@ -176,23 +178,12 @@ MCP
             </tr>
         #endfor
         #if(grants.isEmpty):
-            <tr><td colspan="7" class="mcp-empty-cell mcp-empty-cell--center">No agents have connected yet.</td></tr>
+            <tr><td colspan="7" class="text-muted mcp-cell-center">No agents have connected yet.</td></tr>
         #endif
         </tbody>
     </table></div>
 </section>
 <style>
-.mcp-heading-flush { margin-top: 0; }
-.mcp-heading-spaced { margin-top: 2rem; }
-.mcp-alert-gap { margin-bottom: 1rem; }
-.mcp-banner {
-    margin-bottom: 1rem;
-    padding: .75rem;
-    border: 1px solid var(--gray-500);
-    border-radius: var(--radius-md);
-}
-.mcp-banner--warn { background: var(--warning-bg); }
-.mcp-banner--success { background: var(--success-bg); }
 .mcp-token-caption { margin: .1rem 0 .5rem; }
 .mcp-token-area {
     width: 100%;
@@ -217,16 +208,6 @@ MCP
     flex-wrap: wrap;
     align-items: center;
 }
-.mcp-course-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: .2rem;
-    border: 1px solid var(--gray-400);
-    border-radius: var(--radius-sm);
-    padding: .1rem .35rem;
-    font-size: var(--text-sm);
-}
-.mcp-inline { display: inline; }
 .mcp-chip-remove {
     background: none;
     border: 0;
@@ -248,12 +229,6 @@ MCP
     padding: .2rem .4rem;
     font-size: var(--text-sm);
 }
-.mcp-actions {
-    display: flex;
-    gap: .4rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
 .mcp-token-form {
     display: flex;
     gap: .3rem;
@@ -263,12 +238,10 @@ MCP
     padding: .25rem .5rem;
     font-size: var(--text-sm);
 }
-.mcp-empty-cell { color: var(--gray-600); }
-.mcp-empty-cell--center {
+.mcp-cell-center {
     text-align: center;
     padding: 1rem;
 }
-.mcp-revoked { color: var(--gray-600); }
 </style>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport

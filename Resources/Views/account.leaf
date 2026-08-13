@@ -10,7 +10,7 @@ My Account
 #endif
 
 <!-- ── User info ──────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Account info</h2>
     <dl class="detail-grid">
         <dt>Username</dt>
@@ -31,7 +31,7 @@ My Account
 </section>
 
 <!-- ── Your data ──────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Your data</h2>
     #if(exportNotice == "started"):
     <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
@@ -71,7 +71,7 @@ My Account
 </section>
 
 <!-- ── My Courses ─────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>My courses</h2>
     #if(enrolledCourses.isEmpty):
     <p class="empty">You are not enrolled in any courses.
@@ -117,7 +117,7 @@ My Account
 
 <!-- ── Available Courses ──────────────────────────────────── -->
 #if(!availableCourses.isEmpty):
-<section class="admin-section">
+<section class="page-section">
     <h2>Available courses</h2>
     <table class="results-table">
         <thead>
