@@ -142,15 +142,10 @@
         overlay.id = 'test-editor-overlay';
         overlay.setAttribute('role', 'dialog');
         overlay.setAttribute('aria-modal', 'true');
-        overlay.style.cssText =
-            'display:none;position:fixed;inset:0;z-index:1000;align-items:center;' +
-            'justify-content:center;background:rgba(0,0,0,.5)';
+        overlay.className = 'editor-modal-overlay';
 
         var card = document.createElement('div');
-        card.style.cssText =
-            'background:var(--surface);color:var(--gray-900);border-radius:.5rem;' +
-            'width:min(960px,96vw);max-height:92vh;display:flex;flex-direction:column;' +
-            'box-shadow:0 8px 32px rgba(0,0,0,.25)';
+        card.className = 'editor-modal-card';
 
         // A kind this assignment's language cannot render is DISABLED with its
         // reason, not hidden. The menu offered all ten check kinds on every
@@ -178,22 +173,22 @@
         }).join('');
 
         card.innerHTML =
-            '<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
-            '  <div id="test-editor-title" style="font-weight:600;flex:1">Add Test</div>' +
-            '  <button type="button" id="test-editor-close" class="btn-link" aria-label="Close" title="Close" style="font-size:1.1rem;color:var(--gray-500);padding:.1rem .3rem">✕</button>' +
+            '<div class="editor-modal-head">' +
+            '  <div id="test-editor-title" class="editor-modal-title">Add Test</div>' +
+            '  <button type="button" id="test-editor-close" class="btn-link editor-modal-close" aria-label="Close" title="Close">✕</button>' +
             '</div>' +
-            '<div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.6rem">' +
-            '  <label id="test-editor-type-row" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">' +
+            '<div class="editor-modal-body">' +
+            '  <label id="test-editor-type-row" class="field-stack">' +
             '    What do you want to test?' +
-            '    <select class="form-input" id="test-editor-type" style="padding:.3rem .5rem;font-size:.85rem">' + optionsHTML + '</select>' +
-            '    <span id="test-editor-desc" class="card-meta" style="font-size:.78rem;line-height:1.3;min-height:1.2em"></span>' +
+            '    <select class="form-input input-compact" id="test-editor-type">' + optionsHTML + '</select>' +
+            '    <span id="test-editor-desc" class="card-meta"></span>' +
             '  </label>' +
-            '  <div id="test-editor-body" style="display:flex;flex-direction:column;gap:.6rem"></div>' +
+            '  <div id="test-editor-body" class="editor-stack"></div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border);flex-shrink:0">' +
+            '<div class="editor-modal-foot">' +
             '  <button class="btn btn-primary" id="test-editor-save" type="button">Save</button>' +
             '  <button class="btn" id="test-editor-cancel" type="button">Cancel</button>' +
-            '  <span id="test-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>' +
+            '  <span id="test-editor-status" class="editor-modal-status"></span>' +
             '</div>';
 
         overlay.appendChild(card);
@@ -239,8 +234,7 @@
         function showPanel(mechanism) {
             Object.keys(panels).forEach(function (m) {
                 panels[m].el.style.display = (m === mechanism) ? 'flex' : 'none';
-                panels[m].el.style.flexDirection = 'column';
-                panels[m].el.style.gap = '.6rem';
+                panels[m].el.classList.add('editor-stack');
             });
         }
 

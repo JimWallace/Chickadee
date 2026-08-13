@@ -34,14 +34,13 @@
     }
 
     function buildControl(field) {
-        var common = 'padding:.3rem .5rem;font-size:.85rem';
         if (field.control === 'textarea') {
-            var ta = el('textarea', { 'class': 'form-input', 'data-field': field.name, rows: String(field.rows || 4) }, common + ';font-family:monospace');
+            var ta = el('textarea', { 'class': 'form-input input-compact input-mono', 'data-field': field.name, rows: String(field.rows || 4) });
             if (field.placeholder) ta.placeholder = field.placeholder;
             return ta;
         }
         if (field.control === 'select') {
-            var sel = el('select', { 'class': 'form-input', 'data-field': field.name }, common);
+            var sel = el('select', { 'class': 'form-input input-compact', 'data-field': field.name });
             (field.enumOptions || []).forEach(function (opt) {
                 var o = el('option', { value: opt.value });
                 o.textContent = opt.label;
@@ -59,8 +58,8 @@
         }
         var input = el('input', {
             type: field.control === 'number' ? 'number' : 'text',
-            'class': 'form-input', 'data-field': field.name
-        }, common);
+            'class': 'form-input input-compact', 'data-field': field.name
+        });
         if (field.control === 'number') {
             if (field.valueType === 'optionalFloat') { input.setAttribute('step', 'any'); }
             else { input.setAttribute('step', '1'); input.setAttribute('min', '0'); }
@@ -78,20 +77,20 @@
         // fail with a message they only saw afterwards.
         var reasonText = field.unsupportedReason || null;
         var help = (field.help || reasonText) ? (function () {
-            var p = el('p', { 'class': 'card-meta' }, 'font-size:.72rem;margin:0');
+            var p = el('p', { 'class': 'card-meta' });
             p.textContent = reasonText || field.help;
             return p;
         })() : null;
         if (field.control === 'checkbox') {
-            var row = el('label', null, 'font-size:.82rem;display:flex;align-items:center;gap:.3rem');
+            var row = el('label', { 'class': 'checkbox-row' });
             row.appendChild(buildControl(field));
             row.appendChild(document.createTextNode(' ' + field.label));
             if (!help) return row;
-            var wrap = el('div', null, 'display:flex;flex-direction:column;gap:.2rem');
+            var wrap = el('div', { 'class': 'field-stack' });
             wrap.appendChild(row); wrap.appendChild(help);
             return wrap;
         }
-        var label = el('label', null, 'font-size:.85rem;display:flex;flex-direction:column;gap:.2rem');
+        var label = el('label', { 'class': 'field-stack' });
         label.appendChild(document.createTextNode(field.label));
         label.appendChild(buildControl(field));
         if (help) label.appendChild(help);
@@ -191,23 +190,23 @@
         mount: function (bodyEl /*, ctx */) {
             schema = loadSchema();
 
-            var nameLabel = el('label', null, 'font-size:.85rem;display:flex;flex-direction:column;gap:.2rem');
+            var nameLabel = el('label', { 'class': 'field-stack' });
             nameLabel.appendChild(document.createTextNode('Display name (shown to students)'));
-            nameInput = el('input', { type: 'text', 'class': 'form-input', placeholder: '(auto-generated when blank)' }, 'padding:.3rem .5rem;font-size:.85rem');
+            nameInput = el('input', { type: 'text', 'class': 'form-input input-compact', placeholder: '(auto-generated when blank)' });
             nameLabel.appendChild(nameInput);
             bodyEl.appendChild(nameLabel);
 
-            var note = el('p', { 'class': 'card-meta' }, 'font-size:.72rem;margin:.1rem 0 0');
+            var note = el('p', { 'class': 'card-meta' });
             note.textContent = 'Tier (visibility) and points are edited inline on the test suite row. New checks default to public and 1 point.';
             bodyEl.appendChild(note);
 
-            fieldsBody = el('div', null, 'display:flex;flex-direction:column;gap:.5rem');
-            commonBody = el('div', null, 'display:flex;flex-direction:column;gap:.5rem');
+            fieldsBody = el('div', { 'class': 'editor-stack' });
+            commonBody = el('div', { 'class': 'editor-stack' });
             bodyEl.appendChild(fieldsBody);
             bodyEl.appendChild(commonBody);
 
             Object.keys(schema.kinds).forEach(function (kind) {
-                var card = el('div', { 'data-kind': kind }, 'display:none;flex-direction:column;gap:.5rem');
+                var card = el('div', { 'data-kind': kind, 'class': 'editor-stack' }, 'display:none');
                 (schema.kinds[kind] || []).forEach(function (f) { card.appendChild(renderField(f)); });
                 fieldsBody.appendChild(card);
                 kindCards[kind] = card;

@@ -108,7 +108,7 @@
                     nameOk = false;
                 }
             }
-            nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
+            nameEl.classList.toggle('input-invalid', !(!name || nameOk));
             nameEl.title = (name && RESERVED_NAMES[name])
                 ? "'" + name + "' is reserved for Chickadee's personalization seed."
                 : '';
@@ -132,19 +132,14 @@
                     : 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.';
             }
 
-            // Reset all classification cues, then apply the current one so
-            // toggling between modes doesn't leave stale colours.
-            valueEl.style.borderColor = '';
-            valueEl.style.backgroundColor = '';
+            // Classification cues are classes (styles.css: .input-expression
+            // tints per-student rows green on both themes, .input-attention is
+            // the amber needs-a-look border); toggling both every pass means
+            // switching modes cannot leave stale cues.
             valueEl.title = hint;
-            if (classified.kind === 'expression') {
-                // Subtle green tint keeps per-student rows visually distinct
-                // from literal rows on both light and dark themes.
-                valueEl.style.backgroundColor = 'rgba(45, 143, 71, .07)';
-                if (!valueOk) valueEl.style.borderColor = 'var(--amber)';
-            } else if (rawVal && !valueOk) {
-                valueEl.style.borderColor = 'var(--amber)';
-            }
+            valueEl.classList.toggle('input-expression', classified.kind === 'expression');
+            valueEl.classList.toggle('input-attention',
+                (classified.kind === 'expression' && !valueOk) || (classified.kind !== 'expression' && !!rawVal && !valueOk));
 
             if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
         }

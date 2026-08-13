@@ -2092,6 +2092,73 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    row on phones. */
 .filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
 
+/* ── Editor-built forms (test-editor-modal.js, test-renderer-*.js,
+   inputs-editor-core.js) ─────────────────────────────── */
+/* Layout vocabulary for DOM the assignment editors BUILD in JS.  These exist
+   so the editor scripts toggle classes instead of writing style strings
+   (docs/ui-design.md, "JS does not make styling decisions"). */
+.editor-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none; /* opened via a JS display toggle */
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-bg);
+}
+.editor-modal-card {
+    background: var(--surface);
+    color: var(--gray-900);
+    border-radius: var(--radius-lg);
+    width: min(960px, 96vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-pop);
+}
+.editor-modal-head,
+.editor-modal-foot {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    flex-shrink: 0;
+}
+.editor-modal-head { border-bottom: 1px solid var(--border); }
+.editor-modal-foot { border-top: 1px solid var(--border); }
+.editor-modal-title { font-weight: 600; flex: 1; }
+.editor-modal-close { font-size: var(--text-lg); color: var(--gray-500); padding: .1rem .3rem; }
+.editor-modal-body {
+    padding: .75rem 1rem;
+    overflow: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+.editor-modal-status { font-size: var(--text-sm); color: var(--gray-500); }
+/* Vertical stack of editor fields/cards. */
+.editor-stack { display: flex; flex-direction: column; gap: .5rem; }
+/* CodeMirror host box in the Test Editor. */
+.editor-cm-mount {
+    min-height: 240px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: auto;
+    font-size: var(--text-base);
+}
+/* Field-stack width modifiers for editor rows. */
+.field-stack--grow { flex: 1 1 16rem; }
+.field-stack--narrow { width: 11rem; }
+/* Monospace form control (script/JSON textareas). */
+.input-mono { font-family: var(--font-mono); }
+/* Value-state cues the inputs editors toggle (docs/inputs.md): a per-student
+   `=` expression gets a green tint; a value that needs attention an amber
+   border; an invalid name a red one. */
+.input-expression { background: color-mix(in srgb, var(--green) 8%, var(--surface)); }
+.input-attention { border-color: var(--amber); }
+.input-invalid { border-color: var(--red); }
+
 /* ── Idle-logout dialog (idle-logout.js) ─────────────── */
 /* Styled here rather than by the JS-injected stylesheet idle-logout.js used
    to carry, which held nine hardcoded colours, an off-palette #1b6ef3 blue,

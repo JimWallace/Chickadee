@@ -141,7 +141,7 @@ fi
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=122
+JS_STYLE_DECISION_BASELINE=100
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true
