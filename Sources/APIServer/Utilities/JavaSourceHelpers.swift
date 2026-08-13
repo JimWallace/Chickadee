@@ -89,6 +89,39 @@ func javaComment(_ text: String) -> String {
     "// " + text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
 }
 
+/// Escapes `s` for embedding inside a Java double-quoted string literal.
+///
+/// The Java sibling of `escapeForPythonStringLiteral`. Every other language
+/// escaped an authored value before rendering it; Java and C++ interpolated it
+/// raw, so an `expected` of `C:\input` produced `"C:\input"` —
+/// `error: illegal escape character` — and a value carrying a quote or a
+/// newline broke the literal outright.
+///
+/// NEVER EMITS `\u`. javac processes Unicode escapes in the LEXER, before the
+/// grammar sees the file, so a `\u` in generated source is decoded even inside
+/// a literal and can terminate the string or break the file — the trap
+/// `JSONValueJavaLiteral` already documents. Control characters therefore use
+/// three-digit octal, which the lexer leaves alone.
+func escapeForJavaStringLiteral(_ s: String) -> String {
+    var out = ""
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\\": out += #"\\"#
+        case "\"": out += #"\""#
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        default:
+            if ch.value < 0x20 || ch.value == 0x7F {
+                out += String(format: "\\%03o", ch.value)
+            } else {
+                out.unicodeScalars.append(ch)
+            }
+        }
+    }
+    return out
+}
+
 /// A Java class name derived from a generated test's filename stem.
 ///
 /// Generated stems look like `publictest_bmi_01`, which is already a legal Java

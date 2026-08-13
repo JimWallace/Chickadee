@@ -244,19 +244,23 @@ func cppExceptionBody(
         if case .string(let s) = c.expected { return s }
         return ""
     }()
+    // Escaped, not interpolated raw — see the Java arm. An instructor writing
+    // an `expected` of `must be "positive"` produced `"must be "positive""`,
+    // a compile error that failed the whole family.
+    let escaped = escapeForCppStringLiteral(substring)
     return """
         std::string what;
         auto outcome = ck::expect_throw(
-            [&] { (void)\(target)(\(context.callArgs)); }, "\(substring)", what);
+            [&] { (void)\(target)(\(context.callArgs)); }, "\(escaped)", what);
         if (outcome == ck::ThrowOutcome::returned) {
             ck::failed(std::string("no error raised\\n")
                 + \(context.inputLine)
-                + "\(GeneratedMessage.expected)an exception\(substring.isEmpty ? "" : " matching \\\"\(substring)\\\"")");
+                + "\(GeneratedMessage.expected)an exception\(substring.isEmpty ? "" : " matching \\\"\(escaped)\\\"")");
         }
         if (outcome == ck::ThrowOutcome::threwOther) {
             ck::failed(std::string("wrong error raised\\n")
                 + \(context.inputLine)
-                + "\(GeneratedMessage.expected)an exception matching \\"\(substring)\\"\\n"
+                + "\(GeneratedMessage.expected)an exception matching \\"\(escaped)\\"\\n"
                 + "\(GeneratedMessage.got)" + what);
         }
         ck::passed("Raised as expected: " + what);
@@ -311,12 +315,22 @@ func javaExceptionBody(
         if case .string(let s) = c.expected { return s }
         return ""
     }()
+    // Escaped, not interpolated raw: the value is instructor-authored free
+    // text, and a quote or a backslash in it used to break the generated
+    // literal (`error: illegal escape character`) and fail the whole family.
+    let escaped = escapeForJavaStringLiteral(substring)
     let expectedClause =
-        substring.isEmpty ? "" : " matching \\\"\(substring)\\\""
+        substring.isEmpty ? "" : " matching \\\"\(escaped)\\\""
+    // A BLOCK lambda, not an expression one. `ck.Thunk.run()` returns `Object`,
+    // so `() -> f(x)` is value-compatible only when `f` returns something —
+    // and `void f(...)` is the most idiomatic shape for this kind
+    // (`Account.withdraw(double)` that throws). The expression form failed
+    // javac with "void cannot be converted to Object", erroring every case.
+    // `{ …; return null; }` is statement-compatible and serves both.
     return """
         String[] ckWhat = new String[1];
         int ckOutcome = ck.expectThrow(
-            () -> \(target)(\(context.callArgs)), "\(substring)", ckWhat);
+            () -> { \(target)(\(context.callArgs)); return null; }, "\(escaped)", ckWhat);
         if (ckOutcome == ck.RETURNED) {
             ck.failed("no error raised\\n"
                 + \(context.inputLine)
@@ -325,7 +339,7 @@ func javaExceptionBody(
         if (ckOutcome == ck.THREW_OTHER) {
             ck.failed("wrong error raised\\n"
                 + \(context.inputLine)
-                + "\(GeneratedMessage.expected)an exception matching \\"\(substring)\\"\\n"
+                + "\(GeneratedMessage.expected)an exception matching \\"\(escaped)\\"\\n"
                 + "\(GeneratedMessage.got)" + ckWhat[0]);
         }
         ck.passed("Raised as expected: " + ckWhat[0]);

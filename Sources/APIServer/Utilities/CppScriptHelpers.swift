@@ -54,6 +54,38 @@ func cppComment(_ text: String) -> String {
     "// " + text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
 }
 
+/// Escapes `s` for embedding inside a C++ double-quoted string literal.
+///
+/// The C++ sibling of `escapeForPythonStringLiteral`, and it exists for the
+/// same reason: an authored value reaches generated source as text, and every
+/// other language escaped it while C++ and Java interpolated it raw. An
+/// instructor writing an `expected` of `must be "positive"` produced
+/// `"must be "positive""` — a compile error that failed the whole family with
+/// no indication which case was at fault.
+///
+/// Control characters use THREE-DIGIT OCTAL rather than `\xHH`: a hex escape in
+/// C++ has no length limit, so `\x1` followed by a literal `f` would be read as
+/// the single character `\x1f` rather than as two.
+func escapeForCppStringLiteral(_ s: String) -> String {
+    var out = ""
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\\": out += #"\\"#
+        case "\"": out += #"\""#
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        default:
+            if ch.value < 0x20 || ch.value == 0x7F {
+                out += String(format: "\\%03o", ch.value)
+            } else {
+                out.unicodeScalars.append(ch)
+            }
+        }
+    }
+    return out
+}
+
 /// A POSIX-shell single-quoted literal — for the generated `.sh` wrappers'
 /// few interpolated values (filenames derive from validated identifiers, but
 /// quoting anyway keeps the wrapper safe by construction).

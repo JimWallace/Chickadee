@@ -200,16 +200,19 @@ func cppReturnTypeBody(
         if case .string(let s) = c.expected { return s }
         return "int"
     }()
+    // Escaped, not interpolated raw: the authored type name is free text, and
+    // a quote or backslash in it broke the generated literal.
+    let escaped = escapeForCppStringLiteral(expectedType)
     return cppGuarded(
         """
         auto result = \(target)(\(context.callArgs));
-        if (!ck::type_matches<decltype(result)>("\(expectedType)")) {
+        if (!ck::type_matches<decltype(result)>("\(escaped)")) {
             ck::failed(std::string("\(GeneratedMessage.wrongReturnType)\\n")
                 + \(context.inputLine)
-                + "\(GeneratedMessage.expected)\(expectedType)\\n"
+                + "\(GeneratedMessage.expected)\(escaped)\\n"
                 + "\(GeneratedMessage.got)" + ck::type_name<decltype(result)>());
         }
-        ck::passed("\(GeneratedMessage.returned)a \(expectedType)");
+        ck::passed("\(GeneratedMessage.returned)a \(escaped)");
         """, inputLine: context.inputLine)
 }
 
@@ -259,15 +262,16 @@ func javaReturnTypeBody(
     // and handed to a helper taking `Object`, which erases it. For a boxed
     // value the runtime class is the honest answer, and it is what the student
     // sees when they print it.
+    let escaped = escapeForJavaStringLiteral(expectedType)
     return javaGuarded(
         """
         var result = \(target)(\(context.callArgs));
-        if (!ck.typeMatches(result, "\(expectedType)")) {
+        if (!ck.typeMatches(result, "\(escaped)")) {
             ck.failed("\(GeneratedMessage.wrongReturnType)\\n"
                 + \(context.inputLine)
-                + "\(GeneratedMessage.expected)\(expectedType)\\n"
+                + "\(GeneratedMessage.expected)\(escaped)\\n"
                 + "\(GeneratedMessage.got)" + ck.typeName(result));
         }
-        ck.passed("\(GeneratedMessage.returned)a \(expectedType)");
+        ck.passed("\(GeneratedMessage.returned)a \(escaped)");
         """, inputLine: context.inputLine)
 }

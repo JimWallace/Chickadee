@@ -254,6 +254,41 @@ import Testing
         #expect(bad.stdout.contains("wrong output"))
     }
 
+    /// A `void` function is an ordinary thing to time (`render_board(int)`).
+    /// The renderer bound the call with `auto result = …`, which on a void call
+    /// is "deduced type 'void' for 'result' is incomplete" — so every case in
+    /// the family reported `error` while the 0-point existence guard, which
+    /// only takes the function's address, still passed (#1346).
+    @Test func performanceThresholdAcceptsAVoidTarget() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
+        let good = try Self.execute(script: script, submission: "void f(int) { }\n")
+        #expect(
+            good.code == 0,
+            "a void target did not compile or did not pass: \(good.stdout) \(good.stderr)")
+    }
+
+    /// Instructor `expected` text is free text, and it was interpolated into a
+    /// C++ string literal RAW — so `must be "positive"` rendered as
+    /// `"must be "positive""` and failed the whole family to compile (#1346).
+    /// Round-trips through the match, proving the escaping is correct rather
+    /// than merely compilable.
+    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
+        let good = try Self.execute(
+            script: script,
+            submission: """
+                #include <stdexcept>
+                int f(int) { throw std::runtime_error("must be \\"positive\\" (C:\\\\in)"); }
+                """)
+        #expect(
+            good.code == 0,
+            "a quoted/backslashed expectation did not compile or match: \(good.stdout) \(good.stderr)"
+        )
+    }
+
     /// A throw from the student's code during a stdout-capturing kind must
     /// still deliver its verdict.
     ///
