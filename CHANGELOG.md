@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.70] - 2026-08-13
+
+### Fixed
+
+- **A C++ or Java submission that throws during a `stdoutEquality` test now
+  reports its real failure.** Both runtimes install a stdout capture that was
+  only undone on the success path, so an exception unwound past the restore and
+  the verdict was written into the capture instead of to the runner. C++ students
+  saw a bare "failed" with no reason; Java students saw an `error` blaming a
+  `System.exit` they never called. `ck::CaptureStdout` now restores in its
+  destructor and `ck.passed`/`failed`/`errored` restore before printing, so a
+  verdict always reaches the runner.
+
+
 ## [0.5.69] - 2026-08-12
 
 ### Fixed
