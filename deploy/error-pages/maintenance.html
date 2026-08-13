@@ -8,6 +8,11 @@
   thing guaranteed to be running when this renders is nginx itself. The bird
   is an inline SVG and the palette mirrors Public/styles.css so it matches
   the rest of the app (including dark mode).
+
+  Because the page must be self-contained it cannot reference styles.css —
+  so every colour literal below MUST be a value that exists in the app
+  palette. scripts/check-maintenance-palette.sh (run from check-styles.sh)
+  fails the build when a colour here drifts from Public/styles.css.
 -->
 <html lang="en">
 <head>
@@ -26,10 +31,11 @@
             --health-teal-light:#97DFEF;
             --uw-gold:          #FFCC33;
             --surface:          #FFFFFF;
-            --bg:               #F8FAFC;
-            --text:             #1F2937;
-            --text-muted:       #4B5563;
-            --border:           #E5E7EB;
+            --bg:               #F7F7F7;   /* app --gray-50 (body background) */
+            --text:             #111827;   /* app --gray-900 (body text) */
+            --text-muted:       #4B5563;   /* app --gray-600 */
+            --border:           #E5E7EB;   /* app --gray-200 */
+            --shadow:           0 4px 16px rgba(0, 0, 0, .15); /* app --shadow-pop */
         }
         @media (prefers-color-scheme: dark) {
             :root {
@@ -40,6 +46,7 @@
                 --text:             #E5E7EB;
                 --text-muted:       #CBD5E1;
                 --border:           #1F2937;
+                --shadow:           0 4px 16px rgba(0, 0, 0, .5);
             }
         }
         * { box-sizing: border-box; }
@@ -58,12 +65,12 @@
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 16px;
+            border-radius: .5rem;   /* app --radius-lg */
             padding: 3rem 2.5rem;
             max-width: 30rem;
             width: 100%;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+            box-shadow: var(--shadow);
         }
         .bird {
             width: 96px;
@@ -73,7 +80,7 @@
         }
         h1 {
             margin: 0 0 .5rem;
-            font-size: 1.5rem;
+            font-size: 1.4rem;   /* app --text-2xl */
             color: var(--health-teal-dark);
         }
         p {
@@ -83,7 +90,7 @@
         }
         .hint {
             margin-top: 1.5rem;
-            font-size: .9rem;
+            font-size: .875rem;   /* app --text-base */
             color: var(--text-muted);
         }
         .spinner {

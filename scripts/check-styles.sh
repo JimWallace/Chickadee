@@ -31,6 +31,9 @@ scripts/check-css-vars.sh || status=1
 # ── 1b. Design-token guard (palette-only hex, type + radius scales) ─────────
 scripts/check-design-tokens.sh || status=1
 
+# ── 1c. Maintenance-page palette sync ────────────────────────────────────────
+scripts/check-maintenance-palette.sh || status=1
+
 # ── 2. Inline-style allowlist ───────────────────────────────────────────────
 # A style="" attribute is allowed only if every ;-separated declaration is
 # `display:none` or a `--custom-prop:` assignment.  Anything else (margins,
