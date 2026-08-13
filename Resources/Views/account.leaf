@@ -83,7 +83,7 @@ My Account
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th></th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>
@@ -124,7 +124,7 @@ My Account
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th></th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>
