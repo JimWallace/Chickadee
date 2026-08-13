@@ -1206,6 +1206,23 @@ code { font-family: var(--font-mono); font-size: .9em; }
     border-radius: var(--radius-sm);
 }
 .ext-field-label { font-size: var(--text-sm); color: var(--gray-700); }
+/* Anchor for .popover-panel children. Harmless on the pages whose panel
+   renders in static flow. */
+.ext-details { position: relative; }
+/* Float an .ext-panel beside its trigger instead of in static flow; drops
+   back into flow on a phone, where an absolute panel can't be trusted to
+   fit beside the rightmost table cell. */
+.popover-panel {
+    position: absolute;
+    top: calc(100% + .3rem);
+    right: 0;
+    z-index: 10;
+    max-width: calc(100vw - 2rem);
+    box-shadow: var(--shadow-pop);
+}
+@media (max-width: 640px) {
+    .popover-panel { position: static; max-width: none; }
+}
 .ext-field-input { width: 100%; margin-top: .2rem; }
 .ext-panel-actions { display: flex; gap: .3rem; }
 
@@ -1487,6 +1504,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
    name).  The negative top margin tucks it against the titlebar it follows. */
 .page-subtitle {
     margin: -.75rem 0 1.5rem;
+    color: var(--text-secondary);
+}
+
+/* Secondary line INSIDE a .page-titlebar's left cell, stacked under the
+   heading (the student-history pages).  Distinct from .page-subtitle, whose
+   negative margin assumes it renders as the titlebar's sibling. */
+.titlebar-subtitle {
+    margin: .35rem 0 0;
     color: var(--text-secondary);
 }
 

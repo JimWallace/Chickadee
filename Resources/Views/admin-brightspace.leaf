@@ -41,7 +41,7 @@ LEARN
         #endif
     </dl>
 
-    <div class="bs-actions">
+    <div class="toolbar section-gap">
         #if(authorized):
         <form method="post" action="/admin/brightspace/test" class="inline-form">
             #csrfFormField()
@@ -67,17 +67,17 @@ LEARN
         </p>
         <form method="post" action="/admin/brightspace/set-credentials" class="bs-manual-form">
             #csrfFormField()
-            <label class="bs-field">User ID
+            <label class="field-stack">User ID
                 <input type="text" name="userID" autocomplete="off" spellcheck="false" required>
             </label>
-            <label class="bs-field">User Key
+            <label class="field-stack">User Key
                 <input type="text" name="userKey" autocomplete="off" spellcheck="false" required>
             </label>
             <button class="btn" type="submit">Save &amp; verify</button>
         </form>
     </div>
 
-    <p class="text-muted bs-footnote">
+    <p class="text-muted fine-print">
         Instructors map assignments to grade items and watch grades flow on
         their course's LEARN tab; this page only sets the shared connection.
     </p>
@@ -96,16 +96,6 @@ LEARN
 .bs-status dd {
     margin: 0;
 }
-.bs-actions {
-    display: flex;
-    gap: .6rem;
-    flex-wrap: wrap;
-    margin: 1rem 0;
-}
-.bs-footnote {
-    font-size: var(--text-base);
-    margin-bottom: 0;
-}
 .bs-manual {
     margin-top: 1.5rem;
     padding-top: 1rem;
@@ -122,13 +112,7 @@ LEARN
     gap: .8rem;
     margin-top: .6rem;
 }
-.bs-field {
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    font-size: var(--text-base);
-}
-.bs-field input {
+.bs-manual-form input {
     width: 22rem;
     max-width: 100%;
 }

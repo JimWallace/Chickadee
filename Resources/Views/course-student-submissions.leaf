@@ -6,7 +6,7 @@
 <div class="page-titlebar page-titlebar--baseline">
     <div>
         <h1>#(studentName)</h1>
-        <p class="student-subtitle">
+        <p class="titlebar-subtitle">
             <strong>#(studentUsername)</strong> in #(courseName)
         </p>
     </div>
@@ -21,7 +21,7 @@
 #for(section in sections):
 #if(!section.rows.isEmpty):
 <h2 class="section-group-heading">#(section.name)</h2>
-<table class="results-table submissions-table">
+<table class="results-table section-gap">
     <thead>
         <tr>
             <th>Name</th>
@@ -89,14 +89,14 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                         </button>
                     </form>
                     #endif
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
@@ -104,7 +104,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
+                        <form method="post" action="#(row.extensionSavePath)" class="ext-panel popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 New deadline for this student
@@ -122,11 +122,11 @@
                             </div>
                         </form>
                     </details>
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="ext-panel popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 Override grade (%)
@@ -144,7 +144,7 @@
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -164,7 +164,7 @@
 #if(hasSections):
 <h2 class="section-group-heading">Ungrouped</h2>
 #endif
-<table class="results-table submissions-table">
+<table class="results-table section-gap">
     <thead>
         <tr>
             <th>Name</th>
@@ -232,14 +232,14 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                         </button>
                     </form>
                     #endif
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
@@ -247,7 +247,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
+                        <form method="post" action="#(row.extensionSavePath)" class="ext-panel popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 New deadline for this student
@@ -265,11 +265,11 @@
                             </div>
                         </form>
                     </details>
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="ext-panel popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 Override grade (%)
@@ -287,7 +287,7 @@
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -303,18 +303,11 @@
 
 #endif
 <style>
-.student-subtitle {
-    margin: .35rem 0 0;
-    color: var(--gray-700);
-}
 .section-group-heading {
     font-size: var(--text-lg);
     font-weight: 600;
     margin-top: 1.5rem;
     margin-bottom: .4rem;
-}
-.submissions-table {
-    margin-bottom: .5rem;
 }
 .extension-note {
     font-size: var(--text-xs);
@@ -325,36 +318,6 @@
     gap: .3rem;
     flex-wrap: nowrap;
     align-items: center;
-}
-.action-form-flush {
-    margin: 0;
-}
-.ext-details {
-    position: relative;
-}
-.action-panel {
-    position: absolute;
-    top: calc(100% + .3rem);
-    right: 0;
-    z-index: 10;
-    max-width: calc(100vw - 2rem);
-    display: flex;
-    flex-direction: column;
-    gap: .3rem;
-    padding: .5rem;
-    background: var(--gray-50);
-    border: 1px solid var(--gray-300);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-pop);
-}
-@media (max-width: 640px) {
-    /* On a phone the absolutely-positioned popover can't be trusted to fit
-       beside the rightmost cell — drop it into static flow under the row,
-       matching the assignment-submissions extension form. */
-    .action-panel {
-        position: static;
-        max-width: none;
-    }
 }
 </style>
 #endexport

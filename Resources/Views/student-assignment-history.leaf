@@ -6,7 +6,7 @@
 <div class="page-titlebar page-titlebar--baseline">
     <div>
         <h1>#(assignmentTitle)</h1>
-        <p class="history-subtitle">
+        <p class="titlebar-subtitle">
             <strong>#(studentName)</strong> (#(studentUsername))
         </p>
     </div>
@@ -53,11 +53,5 @@
     </tbody>
 </table>
 #endif
-<style>
-.history-subtitle {
-    margin: .35rem 0 0;
-    color: var(--gray-700);
-}
-</style>
 #endexport
 #endextend

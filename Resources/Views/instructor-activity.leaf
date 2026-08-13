@@ -15,15 +15,17 @@ Activity
     <div class="section-header">
         <h2>Recent activity</h2>
     </div>
-    <p class="activity-intro">
+    <p class="section-intro">
         Content edits and course events for this course, newest first. Every
         content edit is a recoverable version of the assignment it names.
     </p>
 
-    <form class="activity-filter" method="get" action="/instructor/activity">
-        <label class="activity-filter-label" for="activity-actor">Filter by person</label>
-        <input class="filter-input" id="activity-actor" type="text" name="actor"
-               value="#(filterActor)" placeholder="username" autocomplete="off">
+    <form class="toolbar section-gap" method="get" action="/instructor/activity">
+        <label class="field-inline">
+            <span>Filter by person</span>
+            <input class="form-input filter-input" type="text" name="actor"
+                   value="#(filterActor)" placeholder="username" autocomplete="off">
+        </label>
         <button type="submit" class="btn">Filter</button>
         #if(filtered):
         <a href="/instructor/activity" class="btn">Clear</a>
@@ -79,22 +81,6 @@ Activity
 #endexport
 #endextend
 <style>
-.activity-intro {
-    color: var(--muted);
-    font-size: var(--text-sm);
-    margin-bottom: 1rem;
-}
-.activity-filter {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-.activity-filter-label {
-    font-size: var(--text-sm);
-    color: var(--muted);
-}
 .activity-col-when { width: 11rem; }
 .activity-col-who { width: 9rem; }
 .activity-col-where { width: 14rem; }

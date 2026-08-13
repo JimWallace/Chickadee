@@ -6,7 +6,7 @@ LEARN
 #extend("_instructor-tabs")
 
 #if(hasActiveCourse):
-<div class="bs-tabbar">
+<div class="toolbar toolbar--end section-gap">
     #if(canSyncNow):
     <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
         #csrfFormField()
@@ -20,7 +20,7 @@ LEARN
 
 #if(!brightspaceSyncEnabled):
 #elseif(!hasActiveCourse):
-<section class="bs-section">
+<section class="page-section">
     <p class="empty">Select a course to manage its LEARN grade sync.</p>
 </section>
 #else:
@@ -28,8 +28,8 @@ LEARN
 #extend("_flash")
 
 <!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Connection</h2>
+<section class="page-section">
+    <h2>Connection</h2>
     #if(account.connected):
     <p class="bs-conn-line">Your LEARN account: <strong>#(account.identity)</strong>#(account.since)</p>
     #else:
@@ -59,14 +59,14 @@ LEARN
                name="userKey" autocomplete="off" required>
         <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
     </form>
-    <p class="card-meta bs-section-note">
+    <p class="field-note field-note--muted">
         Paste the Valence User ID + User Key minted for your own account (see the
         LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
     </p>
     #endif
 
     #if(showIdentityActions):
-    <div class="bs-conn-actions">
+    <div class="toolbar">
         <button class="btn action-btn" type="button" id="bs-test-connection"
                 title="Verify this course's grade-push credentials against D2L">Test connection</button>
         #if(showUseMyIdentity):
@@ -96,9 +96,9 @@ LEARN
 </section>
 
 <!-- ── Assignment → grade-item mapping ────────────────────── -->
-<section class="bs-section">
-    <div class="bs-mapping-head">
-        <h2 class="bs-h2">Grade-item mapping</h2>
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Grade-item mapping</h2>
         #if(!courseIsArchived):
         <form method="post" action="/instructor/brightspace/auto-map" class="inline-form">
             #csrfFormField()
@@ -194,9 +194,9 @@ LEARN
 </section>
 
 <!-- ── Class Roster ────────────────────────────────────────── -->
-<section class="bs-section">
-    <div class="bs-mapping-head">
-        <h2 class="bs-h2">Class Roster</h2>
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Class Roster</h2>
         #if(canReconcile):
         <form method="post" action="/instructor/brightspace/reconcile-now" class="inline-form">
             #csrfFormField()
@@ -206,7 +206,7 @@ LEARN
         #endif
     </div>
     #if(!courseLinked):
-    <p class="card-meta bs-section-note">
+    <p class="field-note field-note--muted">
         Link this course to its LEARN org unit (in the Connection panel above) to check
         whether each student's grade can be delivered to the LEARN gradebook.
     </p>
@@ -247,12 +247,6 @@ LEARN
 #endif
 
 <style>
-.bs-section { margin-bottom: 2rem; }
-.bs-tabbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
-.bs-h2 { font-size: var(--text-lg); font-weight: 600; margin: 0 0 .6rem; }
-.bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-.bs-mapping-head .bs-h2 { margin: 0; }
-.bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
 .bs-grade-input { width: 14rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-sync-detail { font-size: var(--text-2xs); }
@@ -269,7 +263,6 @@ LEARN
     font-size: var(--text-base); color: var(--gray-600);
 }
 .bs-roster-actions { white-space: nowrap; }
-.bs-roster-actions .inline-form { display: inline; }
 .bs-conn-line { margin: 0 0 .45rem; }
 .bs-connect-form, .bs-link-form {
     display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
@@ -277,7 +270,6 @@ LEARN
 }
 .bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
 .bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
-.bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
 .bs-test-result { margin: .3rem 0; font-size: var(--text-base); }
 .bs-test-ok { color: var(--green); }
 .bs-test-err { color: var(--red); }
