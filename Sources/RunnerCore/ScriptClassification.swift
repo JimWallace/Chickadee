@@ -110,10 +110,25 @@ private func looksLikePythonContent(_ source: String) -> Bool {
 // colliding with the similarly-named helpers in NotebookExtraction.swift).
 
 /// Lowercased file extension, or "" when there's none (bare name or dotfile).
+///
+/// A base name beginning with `.` is a DOTFILE and has no extension, whatever
+/// follows it — so `.hidden.lua` and `..R` both answer "". This has to agree
+/// with `AssignmentLanguage.scriptExtension(ofPath:)`, which applies the same
+/// rule, because the two answer halves of one question: that one decides which
+/// interpreters a job REQUIRES (and so which runners may claim it), this one
+/// decides which interpreter a script is actually RUN with.
+///
+/// They disagreed. This guard rejected only a name whose *only* dot was
+/// leading, so `.hidden.lua` was classified `.lua` here while
+/// `languagesRequiredToGrade` did not count Lua — and `RunnerLanguageGate`
+/// then let a Lua-less runner claim the job, which died at `exit 127` in front
+/// of a student. That is the exact failure the gate exists to prevent, in a
+/// shape it could not see. `FilenameSafety` permits such names, so this was
+/// reachable rather than theoretical.
 private func fileExtensionLowercased(_ name: String) -> String {
     let baseStart = name.lastIndex(of: "/").map { name.index(after: $0) } ?? name.startIndex
     let base = name[baseStart...]
-    guard let dot = base.lastIndex(of: "."), dot != base.startIndex else { return "" }
+    guard base.first != ".", let dot = base.lastIndex(of: ".") else { return "" }
     return asciiLowercased(String(base[base.index(after: dot)...]))
 }
 
