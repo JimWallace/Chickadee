@@ -49,7 +49,7 @@ enum JavaPersonalizationDriver {
             cat > CkPersonalizeDriver.java <<'CHICKADEE_GENERATED_SOURCE'
             \(program)
             CHICKADEE_GENERATED_SOURCE
-            javac -d . \(sources) 1>&2 || exit 3
+            javac -encoding UTF-8 -d . \(sources) 1>&2 || exit 3
             exec java -cp . CkPersonalizeDriver
             """ + "\n"
     }

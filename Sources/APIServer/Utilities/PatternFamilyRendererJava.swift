@@ -203,7 +203,7 @@ private func javaShellWrapper(
         \(embeddedSource)
         \(generatedSourceHeredocDelimiter)
         \(compileStep)
-        ck_out=$(java -cp . \(className))
+        ck_out=$(java -ea -cp . \(className))
         ck_rc=$?
         # The sentinel check. Without it, a student's own System.exit(0)
         # anywhere in their code exits the JVM with status 0 and this case —
