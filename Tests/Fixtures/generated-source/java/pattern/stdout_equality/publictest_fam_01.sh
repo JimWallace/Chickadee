@@ -33,7 +33,10 @@ public class CkTest_fam_01 {
     }
 }
 CHICKADEE_GENERATED_SOURCE
-javac -cp . -d . CkTest_fam_01.java test_runtime.java 1>&2 || exit 2
+if ! javac -encoding UTF-8 -cp . -d . CkTest_fam_01.java test_runtime.java 2>.ck_build_log; then
+    cat .ck_build_log 1>&2
+    exit 2
+fi
 ck_out=$(java -cp . CkTest_fam_01)
 ck_rc=$?
 # The sentinel check. Without it, a student's own System.exit(0)
