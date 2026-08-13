@@ -335,6 +335,15 @@ private func cppReferenceBlock(_ family: PatternFamily) -> String {
 /// Wraps a body in the shared unexpected-exception handler: a throw from
 /// the student's code is a graded FAIL with the same first line every other
 /// language uses, never a std::terminate.
+///
+/// BOTH arms are required. `catch (const std::exception&)` alone left
+/// `throw "negative input";` and `throw -1;` — the shapes an intro course
+/// teaches before `<stdexcept>` — to escape `main`, where `std::terminate`
+/// aborts the process (measured: SIGABRT, exit 134, which the worker maps to
+/// status `error` with a raw "terminate called after throwing" on stderr).
+/// The equivalent Java submission has always been a clean `fail`, because
+/// `javaGuarded` catches `Throwable`. `expect_throw` already had the
+/// `catch (...)` arm, so the omission was inconsistent inside one feature.
 func cppGuarded(_ inner: String, inputLine: String) -> String {
     """
     try {
@@ -343,6 +352,10 @@ func cppGuarded(_ inner: String, inputLine: String) -> String {
         ck::failed(std::string("\(GeneratedMessage.unexpectedException)\\n")
             + \(inputLine)
             + "\(GeneratedMessage.error)" + ck_e.what());
+    } catch (...) {
+        ck::failed(std::string("\(GeneratedMessage.unexpectedException)\\n")
+            + \(inputLine)
+            + "\(GeneratedMessage.error)(a non-std exception)");
     }
     """
 }

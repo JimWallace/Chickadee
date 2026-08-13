@@ -52,6 +52,10 @@ int main() {
         ck::failed(std::string("unexpected exception\n")
             + "  input:    " + "x=" + ck::format(x) + "\n"
             + "  error:    " + ck_e.what());
+    } catch (...) {
+        ck::failed(std::string("unexpected exception\n")
+            + "  input:    " + "x=" + ck::format(x) + "\n"
+            + "  error:    (a non-std exception)");
     }
 }
 CHICKADEE_GENERATED_SOURCE
