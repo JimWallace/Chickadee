@@ -46,7 +46,8 @@ struct RunnerProfileDetector {
                     // runner that can genuinely grade it, which is what the
                     // gate is for.
                     if language.descriptor.capabilityRequiresExecutableOutput,
-                        await !canExecuteCompiledOutput(compiler: probe.command)
+                        await !canExecuteCompiledOutput(
+                            language: language, compiler: probe.command)
                     {
                         return nil
                     }
@@ -125,16 +126,49 @@ struct RunnerProfileDetector {
         return firstNumericVersion(in: output)
     }
 
-    /// Compiles a trivial program into the runner's work root and runs it,
-    /// mirroring what a generated C++ wrapper does (compile into the working
-    /// directory, then `exec` the binary).
+    /// The trivial program whose compilation proves this language can produce a
+    /// runnable binary here, or nil when the language never produces one.
+    ///
+    /// EXHAUSTIVE, so an eighth language that sets
+    /// `capabilityRequiresExecutableOutput` cannot reach the probe without
+    /// supplying a program. The probe used to hardcode `probe.cpp` and
+    /// `int main(void)` — correct while C++ was the only such language, and a
+    /// silent failure for the next one: the C++ source would be handed to a
+    /// different compiler, fail, and the language would never be advertised,
+    /// so its jobs would queue forever with no error. That is the WORSE
+    /// direction of the capability gate.
+    static func execProbeProgram(
+        for language: AssignmentLanguage
+    ) -> (
+        filename: String, source: String
+    )? {
+        switch language {
+        case .cpp: return ("probe.cpp", "int main(void) { return 0; }\n")
+        case .python, .r, .lua, .octave, .racket, .java:
+            // Interpreted, or (Java) producing class files the JVM READS rather
+            // than anything handed to the kernel as an executable — so `noexec`
+            // cannot bite and there is nothing to prove.
+            return nil
+        }
+    }
+
+    /// Compiles this language's probe program into the runner's work root and
+    /// runs it, mirroring what a generated C++ wrapper does (compile into the
+    /// working directory, then `exec` the binary).
     ///
     /// Returns false when either step fails, including the case this exists
     /// for: the work root is mounted `noexec`, so the compile succeeds, the
     /// binary is `-rwxr-xr-x`, and `exec` still fails with EACCES. Failing
     /// closed here is deliberate — an unusable capability is worse than an
     /// absent one, because the gate trusts what a runner advertises.
-    private func canExecuteCompiledOutput(compiler: String) async -> Bool {
+    ///
+    /// True for a language with no probe program: there is nothing to prove,
+    /// and withholding the capability would be the fail-closed answer to a
+    /// question that was never asked.
+    private func canExecuteCompiledOutput(
+        language: AssignmentLanguage, compiler: String
+    ) async -> Bool {
+        guard let program = Self.execProbeProgram(for: language) else { return true }
         let probeDir = workRoot.appendingPathComponent(
             "chickadee_exec_probe_\(UUID().uuidString)", isDirectory: true)
         let fileManager = FileManager.default
@@ -144,9 +178,9 @@ struct RunnerProfileDetector {
         else { return false }
         defer { try? fileManager.removeItem(at: probeDir) }
 
-        let source = probeDir.appendingPathComponent("probe.cpp")
+        let source = probeDir.appendingPathComponent(program.filename)
         let binary = probeDir.appendingPathComponent("probe")
-        guard (try? "int main(void) { return 0; }\n".write(to: source, atomically: true, encoding: .utf8)) != nil
+        guard (try? program.source.write(to: source, atomically: true, encoding: .utf8)) != nil
         else { return false }
 
         guard

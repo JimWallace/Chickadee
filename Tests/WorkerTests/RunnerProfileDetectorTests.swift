@@ -119,3 +119,70 @@ import Testing
         }
     }
 }
+
+/// The compile-and-exec capability probe.
+///
+/// It gates whether a runner advertises C++ at all, and `docs/cpp-support.md`
+/// records it catching a real production case (a `noexec` work root at
+/// v0.5.33) — and nothing tested it. Both directions matter: failing open
+/// advertises a capability the host does not have and every C++ job dies at
+/// `exec`; failing closed advertises nothing and every C++ job queues forever.
+@Suite struct RunnerExecProbeTests {
+
+    /// The probe program is answered per language, exhaustively — the guard
+    /// against an eighth compiled language reaching the probe with C++'s source.
+    @Test func onlyCppSuppliesAnExecProbeProgram() {
+        for language in AssignmentLanguage.allCases {
+            let program = RunnerProfileDetector.execProbeProgram(for: language)
+            #expect(
+                (program != nil) == language.descriptor.capabilityRequiresExecutableOutput,
+                """
+                \(language) disagrees with its descriptor: capabilityRequiresExecutableOutput \
+                is \(language.descriptor.capabilityRequiresExecutableOutput) but the probe \
+                program is \(program == nil ? "absent" : "present").
+                """)
+        }
+    }
+
+    /// A work root that permits exec advertises C++; the same probe against a
+    /// directory it cannot write to does not.
+    @Test func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
+        guard gppIsAvailable() else { return }
+
+        let usable = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: usable, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: usable) }
+
+        let good = await RunnerProfileDetector(discoveryEnabled: true, workRoot: usable).detect()
+        let goodProfile = try #require(good)
+        #expect(
+            goodProfile.languageVersions.contains { $0.language == "cpp" },
+            "a usable work root did not advertise cpp: \(goodProfile.languageVersions)")
+
+        // An unwritable work root cannot hold the probe, so the capability is
+        // withheld — the fail-closed direction the gate depends on.
+        let unusable = URL(fileURLWithPath: "/proc/chickadee-nonexistent-probe-root")
+        let denied = await RunnerProfileDetector(discoveryEnabled: true, workRoot: unusable)
+            .detect()
+        let deniedProfile = try #require(denied)
+        #expect(
+            !deniedProfile.languageVersions.contains { $0.language == "cpp" },
+            "cpp was advertised from a work root the probe could not use")
+        // Everything else survives: the probe withholds one capability, not all.
+        #expect(
+            deniedProfile.languageVersions.contains { $0.language == "python" },
+            "an unusable work root withheld python too, which needs no exec probe")
+    }
+
+    private func gppIsAvailable() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["g++", "--version"]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+}

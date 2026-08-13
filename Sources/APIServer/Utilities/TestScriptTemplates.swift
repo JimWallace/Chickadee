@@ -201,10 +201,21 @@ func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage?)
 /// The shell lines that run the submission and leave its output in `$ACTUAL`.
 ///
 /// Three shapes. The two language ones are chosen by
-/// `capabilityRequiresExecutableOutput` — the fact that already means "grading
-/// this language builds something before running it". Asking it here rather
-/// than switching on `.cpp` keeps the one judgement in one place; a seventh
-/// compiled language gets the compile form for free.
+/// `capabilityRequiresExecutableOutput`, which is asked here rather than
+/// switching on `.cpp` — but note what that fact actually means, because the
+/// comment here used to overstate it. It means "grading EXECS a file it just
+/// produced", which is true of C++ alone: Java is compiled too, and answers
+/// `false`, because its `.class` files are READ by the JVM and `noexec` cannot
+/// bite them. So Java takes the interpreted branch, where `java solution.java`
+/// works only by single-file source mode and breaks the moment a submission
+/// needs a second file.
+///
+/// A future compiled language therefore does NOT "get the compile form for
+/// free" — it gets whichever branch its exec answer happens to select. Making
+/// this correct needs a fact meaning "grading builds before running", which is
+/// a different question from the one `capabilityRequiresExecutableOutput`
+/// exists to answer (see #1352); it is left as one fact rather than guessed
+/// at here.
 ///
 /// The third is for an assignment that declares no language, where there is no
 /// interpreter to name and guessing `python3` would be a guess the author has
@@ -235,7 +246,7 @@ private func runSubmissionShellFragment(
         return #"ACTUAL=$(\#(interpreter) \#(solutionFile) 2>&1)"#
     }
     return """
-        \(interpreter) -O2 -o ./ck_solution \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
+        \(interpreter) -std=c++20 -O2 -o ./ck_solution \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
         ACTUAL=$(./ck_solution 2>&1)
         """
 }
