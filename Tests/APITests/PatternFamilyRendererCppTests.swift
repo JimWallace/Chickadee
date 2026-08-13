@@ -254,6 +254,62 @@ import Testing
         #expect(bad.stdout.contains("wrong output"))
     }
 
+    /// The save-time validator tells authors to name the exception CLASS, and
+    /// C++ matched the message only — so a student correctly throwing
+    /// `std::invalid_argument("n must be positive")` against an authored
+    /// `invalid_argument` was marked "wrong error raised" (#1347). Java and
+    /// Python both match the type; this is C++ catching up.
+    @Test func exceptionExpectedMatchesTheExceptionType() throws {
+        guard Self.gppAvailable else { return }
+        let byType = Self.render(
+            Self.family(.exceptionExpected, expected: .string("invalid_argument")))
+        let good = try Self.execute(
+            script: byType,
+            submission: """
+                #include <stdexcept>
+                int f(int) { throw std::invalid_argument("n must be positive"); }
+                """)
+        #expect(
+            good.code == 0,
+            "an authored exception TYPE did not match: \(good.stdout) \(good.stderr)")
+
+        // The message form keeps working — this widens the match, it does not
+        // move it.
+        let byMessage = Self.render(
+            Self.family(.exceptionExpected, expected: .string("must be positive")))
+        let stillGood = try Self.execute(
+            script: byMessage,
+            submission: """
+                #include <stdexcept>
+                int f(int) { throw std::invalid_argument("n must be positive"); }
+                """)
+        #expect(stillGood.code == 0, "an authored MESSAGE stopped matching: \(stillGood.stdout)")
+
+        // And a genuinely wrong type is still a fail.
+        let wrong = try Self.execute(
+            script: byType,
+            submission: """
+                #include <stdexcept>
+                int f(int) { throw std::out_of_range("nope"); }
+                """)
+        #expect(wrong.code == 1, "the wrong exception type passed: \(wrong.stdout)")
+    }
+
+    /// `throw "text";` and `throw -1;` are what an intro course teaches before
+    /// `<stdexcept>`. With only a `std::exception` handler they escaped `main`
+    /// and aborted the process (SIGABRT → status `error`), where the same
+    /// submission in Java has always been a graded fail (#1347).
+    @Test func aNonStdThrowIsAGradedFailureNotACrash() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
+        let thrown = try Self.execute(
+            script: script, submission: #"int f(int) { throw "negative input"; }"#)
+        #expect(
+            thrown.code == 1,
+            "a non-std throw was not a graded fail (134 = SIGABRT): \(thrown.code)")
+        #expect(thrown.stdout.contains(GeneratedMessage.unexpectedException))
+    }
+
     /// A `void` function is an ordinary thing to time (`render_board(int)`).
     /// The renderer bound the call with `auto result = …`, which on a void call
     /// is "deduced type 'void' for 'result' is incomplete" — so every case in

@@ -24,6 +24,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+// The Itanium ABI demangler, for naming a caught exception's TYPE in
+// `expect_throw`. Provided by both toolchains the runner grades on (libstdc++
+// and libc++); there is no portable standard equivalent, and `typeid(e).name()`
+// alone is a mangled string no author would write.
+#include <cxxabi.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -35,6 +40,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unistd.h>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -272,6 +278,28 @@ class CaptureStdout {
 };
 
 // ---- exceptionExpected's trichotomy ----
+//
+// THE EXPECTATION MATCHES THE TYPE AS WELL AS THE MESSAGE, and it has to: the
+// save-time validator tells authors to write "a non-empty string naming the
+// exception class (e.g. \"ValueError\")", and matching `what()` alone meant an
+// author who did exactly that never matched. A student correctly throwing
+// `std::invalid_argument("n must be positive")` against an authored
+// `invalid_argument` was reported "wrong error raised" — a wrong mark on a
+// correct submission, on every case in the family.
+//
+// Java's runtime already tests the type name (`getSimpleName`/`getName`) beside
+// the message, and Python walks `__mro__`; this is C++ catching up, done by
+// folding the type into `what` so ONE substring search covers both. That also
+// makes the reported "got:" line name the type, which is what a student needs
+// in order to see why their exception did not match.
+inline std::string exception_type_name(const std::type_info& info) {
+    int status = 0;
+    char* raw = abi::__cxa_demangle(info.name(), nullptr, nullptr, &status);
+    std::string out = (status == 0 && raw != nullptr) ? std::string(raw) : std::string(info.name());
+    std::free(raw);  // free(nullptr) is well-defined, so this needs no guard
+    return out;
+}
+
 enum class ThrowOutcome { threwMatching, threwOther, returned };
 template <typename F>
 ThrowOutcome expect_throw(F&& f, std::string_view messageSubstring, std::string& what) {
@@ -279,7 +307,7 @@ ThrowOutcome expect_throw(F&& f, std::string_view messageSubstring, std::string&
         f();
         return ThrowOutcome::returned;
     } catch (const std::exception& e) {
-        what = e.what();
+        what = exception_type_name(typeid(e)) + ": " + e.what();
         return what.find(messageSubstring) != std::string::npos ? ThrowOutcome::threwMatching
                                                                 : ThrowOutcome::threwOther;
     } catch (...) {
