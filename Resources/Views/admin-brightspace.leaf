@@ -27,7 +27,7 @@ LEARN
         <dt>Status</dt>
         <dd>
             #if(authorized):
-            <span class="tier tier-public">Authorized</span>
+            <span class="tier tier-open">Authorized</span>
             #if(keySource == "env"):<span class="text-muted">(using key from env)</span>#endif
             #else:
             <span class="tier tier-closed">Not authorized</span>

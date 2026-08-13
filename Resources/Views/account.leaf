@@ -48,7 +48,7 @@ My Account
         uploaded), grading results, and account activity records — delivered
         as a single zip archive. Limit one export per day.</p>
     #if(exportStatus == "pending"):
-    <p id="export-pending"><span class="badge badge-info">In progress</span>
+    <p id="export-pending"><span class="chip">In progress</span>
         Requested #(exportRequestedAtDisplay). Preparing your export can take
         a few minutes.</p>
     <script src="/account-export.js?v=#appVersion()"></script>
@@ -103,9 +103,9 @@ My Account
                                 onclick="return confirm('Leave #(course.code)?')">Leave</button>
                     </form>
                     #elseif(course.enrollmentMode == "auto"):
-                    <span class="badge badge-info" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
+                    <span class="chip" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
                     #else:
-                    <span class="badge badge-secondary" title="Managed by instructor — contact them to be removed">Managed</span>
+                    <span class="chip" title="Managed by instructor — contact them to be removed">Managed</span>
                     #endif
                 </td>
             </tr>

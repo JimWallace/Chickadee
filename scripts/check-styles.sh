@@ -130,6 +130,34 @@ elif [ "$inline_script_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
   echo "note: inline <script> lines dropped to ${inline_script_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
 fi
 
+# ── 3c. JS styling-decision ratchet ─────────────────────────────────────────
+# Styling written by JavaScript is invisible to every CSS guard above: the
+# audit found the type and radius scales 100% bypassed in JS (11 font-size
+# literals, none a token), an injected stylesheet with its own dark-mode
+# block, and spacing values that would fail rule 4 verbatim in a .css file.
+# Counted here: style="…" inside generated-HTML strings, .style.<prop>
+# writes (display toggles exempt — show/hide is behaviour, not styling),
+# and cssText. Baseline may only go DOWN. The rule for new code
+# (docs/ui-design.md): JS toggles classes or sets a custom property
+# (workbench.js's --wb-left-width is the pattern); it does not decide
+# styling.
+JS_STYLE_DECISION_BASELINE=122
+js_style_count="$(
+  {
+    grep -ho 'style="' Public/*.js || true
+    grep -hoE '\.style\.[a-zA-Z]+' Public/*.js | grep -v '\.style\.display' || true
+    grep -ho 'cssText' Public/*.js || true
+  } | wc -l | tr -d ' '
+)"
+if [ "$js_style_count" -gt "$JS_STYLE_DECISION_BASELINE" ]; then
+  status=1
+  echo "ERROR: JS styling decisions grew (${js_style_count}, baseline ${JS_STYLE_DECISION_BASELINE})."
+  echo "       New page styling belongs in a class in Public/styles.css; JS toggles"
+  echo "       the class (or sets a --custom-property). See docs/ui-design.md."
+elif [ "$js_style_count" -lt "$JS_STYLE_DECISION_BASELINE" ]; then
+  echo "note: JS styling decisions dropped to ${js_style_count}; lower JS_STYLE_DECISION_BASELINE in scripts/check-styles.sh."
+fi
+
 # ── 4. No duplicated / shadowed selectors in page <style> blocks ─────────────
 # Page-local <style> blocks should only define page-unique classes.  Two
 # regressions the cleanup removed (and that render fine, so no test catches):
@@ -195,8 +223,39 @@ if [ -n "$cross" ]; then
   echo
 fi
 
+# ── 4b. Page <style> block size ratchet ─────────────────────────────────────
+# Page-local CSS is the sanctioned escape hatch for genuinely page-unique
+# styling — and it is where concept drift lives: the same visual idea
+# re-implemented under a fresh local name, which guard 4 cannot see because
+# the names never repeat. Economics instead of detection: the total may only
+# shrink, so new styling must either be small and truly page-unique or land
+# in Public/styles.css as a named component, where review sees it next to
+# the component it would duplicate. When you shrink a block, lower the
+# baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
+PAGE_STYLE_BASELINE=911
+page_style_count="$(
+  awk '
+    FNR==1 { inblock = 0 }
+    /<style>/ { inblock = 1; next }
+    /<\/style>/ { inblock = 0; next }
+    inblock && NF > 0 { n++ }
+    END { print n + 0 }
+  ' "${views[@]}"
+)"
+if [ "$page_style_count" -gt "$PAGE_STYLE_BASELINE" ]; then
+  status=1
+  echo "ERROR: page <style> blocks grew (${page_style_count} lines, baseline ${PAGE_STYLE_BASELINE})."
+  echo "       Reuse a component from Public/styles.css (see docs/ui-design.md's"
+  echo "       vocabulary), or hoist the new pattern there as a named component."
+elif [ "$page_style_count" -lt "$PAGE_STYLE_BASELINE" ]; then
+  echo "note: page <style> lines dropped to ${page_style_count}; lower PAGE_STYLE_BASELINE in scripts/check-styles.sh."
+fi
+
+# ── 5. Class names must resolve ──────────────────────────────────────────────
+scripts/check-class-resolution.sh || status=1
+
 if [ "$status" -eq 0 ]; then
-  echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors)"
+  echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"
 fi
 
 exit "$status"
