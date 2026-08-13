@@ -9,6 +9,19 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.73] - 2026-08-13
+
+### Fixed
+
+- **A dotfile script name no longer slips past the runner capability gate.**
+  `AssignmentLanguage` treats a base name beginning with `.` as extensionless,
+  but the runner's own classifier rejected only a name whose *only* dot was
+  leading — so a suite entry like `.hidden.lua` required no Lua of the runner
+  that claimed the job, and was then dispatched to `lua` anyway, dying at
+  `exit 127` in front of a student. The two scanners now apply the same rule,
+  held together by a differential test.
+
+
 ## [0.5.72] - 2026-08-13
 
 ### Fixed
