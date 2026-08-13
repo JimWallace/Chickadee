@@ -3,14 +3,7 @@
 Slip days
 #endexport
 #export("content"):
-<nav class="instructor-tabs" aria-label="Instructor sections">
-    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="instructor-tab" href="/instructor/activity"#if(activeInstructorTab == "activity"): aria-current="page"#endif>Activity</a>
-    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
-    <a class="instructor-tab" href="/instructor/slip-days"#if(activeInstructorTab == "slip-days"): aria-current="page"#endif>Slip days</a>
-    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
-</nav>
+#extend("_instructor-tabs")
 
 #if(!hasActiveCourse):
 <section class="slip-day-panel-section">

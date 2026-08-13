@@ -1058,9 +1058,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 
 /* ── Section tab bar (admin + instructor) ────────────── */
-/* Inlined into each page rather than a Leaf fragment: LeafKit 1.x raises a
-   false-positive "cyclically referenced" error on #extend of a shared
-   partial here. */
+/* Markup lives in _admin-tabs.leaf / _instructor-tabs.leaf — one shared
+   partial per area.  (A comment here used to claim LeafKit rejected a shared
+   partial with a false cycle error; the #1266 investigation discredited that
+   class of diagnosis, and the partials render fine.) */
 
 .admin-tabs,
 .instructor-tabs {

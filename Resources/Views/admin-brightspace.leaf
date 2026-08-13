@@ -4,16 +4,7 @@ LEARN
 #endexport
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
-<nav class="admin-tabs" aria-label="Admin sections">
-    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
-    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
-    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
-    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
-    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
-    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
-</nav>
+#extend("_admin-tabs")
 <section class="admin-section">
     #extend("_flash")
 
@@ -54,7 +45,7 @@ LEARN
         #if(authorized):
         <form method="post" action="/admin/brightspace/test" class="inline-form">
             #csrfFormField()
-            <button class="btn btn-secondary" type="submit">Test connection</button>
+            <button class="btn" type="submit">Test connection</button>
         </form>
         #endif
         #if(keySource == "authorized"):
