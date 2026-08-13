@@ -305,7 +305,7 @@ extension DraftAssignmentRoutes {
         case .redirect(toURL: let url): return req.redirect(to: url)
         }
 
-        let paths = try writeNewAssignmentNotebookAndPlanPaths(req: req, validated: validated)
+        let paths = try await writeNewAssignmentNotebookAndPlanPaths(req: req, validated: validated)
 
         let setupPackage = try rebuildNewAssignmentSuiteZip(
             validated: validated,
@@ -449,7 +449,7 @@ extension DraftAssignmentRoutes {
     fileprivate func writeNewAssignmentNotebookAndPlanPaths(
         req: Request,
         validated: ValidatedSaveNewAssignment
-    ) throws -> NewAssignmentPaths {
+    ) async throws -> NewAssignmentPaths {
         let assignmentNotebook = normalizeNotebookForJupyterLite(validated.assignmentNotebookRaw)
         let setupID = validated.draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
@@ -462,7 +462,7 @@ extension DraftAssignmentRoutes {
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let notebookPath = notebookDir + notebookFilename
         let zipPath = validated.draftSetup?.zipPath ?? (setupsDir + "\(setupID).zip")
-        try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        try await req.fileio.writeFile(.init(data: assignmentNotebook), at: notebookPath)
         return NewAssignmentPaths(setupID: setupID, notebookPath: notebookPath, zipPath: zipPath)
     }
 

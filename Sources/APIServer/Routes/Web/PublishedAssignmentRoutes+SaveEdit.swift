@@ -96,7 +96,7 @@ extension PublishedAssignmentRoutes {
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
-        try persistAssignmentNotebook(
+        try await persistAssignmentNotebook(
             req: req,
             assignment: assignment,
             setup: setup,
@@ -360,7 +360,7 @@ extension PublishedAssignmentRoutes {
         assignmentNotebookRaw: Data,
         uploadedFile: File?,
         hasUpload: Bool
-    ) throws {
+    ) async throws {
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let notebookPath: String = {
             if hasUpload {
@@ -377,7 +377,7 @@ extension PublishedAssignmentRoutes {
             }
             return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(assignment.testSetupID).ipynb")
         }()
-        try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        try await req.fileio.writeFile(.init(data: assignmentNotebook), at: notebookPath)
         setup.notebookPath = notebookPath
     }
 

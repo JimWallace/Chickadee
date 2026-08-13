@@ -184,7 +184,7 @@ struct TestSetupRoutes: RouteCollection {
             let notebookPath = setupsDir + "\(setupID).ipynb"
             if let data = try await runBlocking(on: req, { extractNotebookFromZip(zipPath: zipPath) }) {
                 let normalized = normalizeNotebookForJupyterLite(data)
-                try normalized.write(to: URL(fileURLWithPath: notebookPath))
+                try await req.fileio.writeFile(.init(data: normalized), at: notebookPath)
                 setup.notebookPath = notebookPath
                 try await setup.save(on: req.db)
                 req.logger.info("Saved flat notebook for setup \(setupID) at \(notebookPath)")
@@ -402,7 +402,7 @@ struct TestSetupRoutes: RouteCollection {
         }
 
         let normalizedNotebook = normalizeNotebookForJupyterLite(notebookBytes)
-        try normalizedNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        try await req.fileio.writeFile(.init(data: normalizedNotebook), at: notebookPath)
 
         if setup.notebookPath == nil {
             setup.notebookPath = notebookPath

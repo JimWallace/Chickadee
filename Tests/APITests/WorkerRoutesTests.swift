@@ -662,7 +662,8 @@ import VaporTesting
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
             _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
+                testSetupsDirectory: self.app.testSetupsDirectory, app: self.app,
+                on: self.app.db)
 
             // The cache record is stamped on the row.
             #expect(sub.materializationJSON != nil)
@@ -754,7 +755,8 @@ import VaporTesting
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
             _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
+                testSetupsDirectory: self.app.testSetupsDirectory, app: self.app,
+                on: self.app.db)
 
             // Sidecar carries the resolved int, not the raw placeholder.
             let sidecar = sub.zipPath + ".grading"

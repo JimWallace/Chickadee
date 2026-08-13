@@ -266,7 +266,7 @@ extension WebRoutes {
                 testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id ?? "")
             _ = try ensureDraftNotebookDirectory(
                 testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id ?? "")
-            try normalized.write(to: URL(fileURLWithPath: draftPath))
+            try await req.fileio.writeFile(.init(data: normalized), at: draftPath)
             return NotebookSaveOutcome(
                 validationStatus: nil, message: "Solution saved to the draft.")
         }
