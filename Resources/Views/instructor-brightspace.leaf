@@ -32,12 +32,7 @@ LEARN
 </section>
 #else:
 
-#if(flashSuccess):
-<div class="notice-banner"><p>#(flashSuccess)</p></div>
-#endif
-#if(flashError):
-<div class="form-error">#(flashError)</div>
-#endif
+#extend("_flash")
 
 <!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
 <section class="bs-section">

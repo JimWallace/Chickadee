@@ -15,12 +15,7 @@ LEARN
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 </nav>
 <section class="admin-section">
-    #if(flashSuccess):
-    <div class="flash flash-success" role="status">#(flashSuccess)</div>
-    #endif
-    #if(flashError):
-    <div class="flash flash-error" role="alert">#(flashError)</div>
-    #endif
+    #extend("_flash")
 
     <p class="bs-intro">
         LEARN grade sync runs as one D2L service account. The app credentials

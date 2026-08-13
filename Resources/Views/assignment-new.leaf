@@ -10,11 +10,7 @@ Create Assignment
 </div>
 #endif
 
-#if(notice):
-<div class="notice-banner">
-    <p>#(notice)</p>
-</div>
-#endif
+#extend("_flash")
 
 <form class="form form--wide" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
     #csrfFormField()

@@ -18,12 +18,7 @@ MCP
 </section>
 #else:
 
-#if(flashSuccess):
-<div class="notice-banner mcp-panel-flash"><p>#(flashSuccess)</p></div>
-#endif
-#if(flashError):
-<div class="form-error mcp-panel-flash">#(flashError)</div>
-#endif
+#extend("_flash")
 
 <section class="mcp-panel-section">
     <h2>Authoring voice — #(courseCode)</h2>
@@ -69,7 +64,6 @@ MCP
 #endif
 <style>
 .mcp-panel-section { margin-top: 1.5rem; }
-.mcp-panel-flash { margin-top: 1rem; }
 .mcp-panel-intro { margin: .75rem 0 1rem; color: var(--text-secondary); max-width: 60rem; }
 .mcp-panel-note { margin-bottom: 1rem; color: var(--text-secondary); font-style: italic; }
 .mcp-panel-form { display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; }

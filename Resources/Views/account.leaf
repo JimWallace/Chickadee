@@ -34,9 +34,9 @@ My Account
 <section class="admin-section">
     <h2>Your data</h2>
     #if(exportNotice == "started"):
-    <div class="notice-banner"><p>Your data export is being prepared. This page will refresh when it is ready.</p></div>
+    <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
     #elseif(exportNotice == "in_progress"):
-    <div class="notice-banner"><p>Your data export is already being prepared. This page will refresh when it is ready.</p></div>
+    <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
     #endif
     #if(exportError == "rate_limited"):
     <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>

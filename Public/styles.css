@@ -1447,17 +1447,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
    names instead of inline style="" attributes.  Page-unique styling still
    lives in each page; these are only the patterns that recurred widely. */
 
-/* Success/confirmation banner (distinct from the red .error-box / neutral
-   .notice-box) — green-outlined, sits above page content. */
-.notice-banner {
-    margin-bottom: 1rem;
-    padding: 1rem;
-    border: 1px solid var(--green);
-    border-radius: var(--radius-lg);
-    background: var(--success-bg);
-}
-.notice-banner p { margin: 0; color: var(--green); font-weight: 600; }
-
 /* Body copy on the error page (error.leaf).  GLOBAL rather than page-local
    because the class NAME is a cross-page contract:
    ChickadeeUI.extractErrorMessage (Public/chickadee-ui.js, loaded on every

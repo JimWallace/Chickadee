@@ -12,12 +12,7 @@ Students
     <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
 </nav>
 
-#if(flashSuccess):
-<div class="notice-banner students-flash"><p>#(flashSuccess)</p></div>
-#endif
-#if(flashError):
-<div class="form-error students-flash">#(flashError)</div>
-#endif
+#extend("_flash")
 
 <div class="students-titlebar">
     <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
@@ -184,7 +179,6 @@ Students
     flex-wrap: wrap;
     margin-bottom: .75rem;
 }
-.students-flash { margin-bottom: .75rem; }
 .students-add-staff { margin: 0; }
 .students-title { font-size: var(--text-lg); font-weight: 600; margin: 0; }
 .students-mode-form { margin: 0; }
