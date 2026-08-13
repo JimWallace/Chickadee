@@ -74,7 +74,7 @@ extension WebRoutes {
         // Block cross-tenant info disclosure: an authenticated student
         // shouldn't be able to learn that a setupID exists in a course
         // they aren't enrolled in, nor see its assignment title.
-        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         // Browser-graded assignments are submitted from the notebook page, not this form.
         let manifestData = Data(setup.manifest.utf8)
         let manifest = decodeManifest(from: manifestData)
@@ -88,7 +88,7 @@ extension WebRoutes {
         // never opened this (now-closed) upload-mode assignment is sent to
         // their dashboard rather than shown an upload form they cannot submit.
         if let userID = user.id, let assignment {
-            let isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+            let isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req))
             if let redirect = try await closedAssignmentGate(
                 req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
             {

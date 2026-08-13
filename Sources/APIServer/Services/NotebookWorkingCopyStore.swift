@@ -118,7 +118,7 @@ func closedAssignmentGate(
     // Course staff (TA+ or admin) bypass the closed-assignment gate for their
     // own course (#417 Slice G — was the global `user.isInstructor`).
     if let assignmentCourseID = assignment?.courseID,
-        try await isCourseStaff(user, inCourse: assignmentCourseID, db: req.db)
+        try await req.cachedIsCourseStaff(user, inCourse: assignmentCourseID)
     {
         return nil
     }
@@ -606,8 +606,11 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
 
 /// Materializes per-student dataset slices into the student's JupyterLite working
 /// directory. Dataset files are written as real files (not symlinks) so each student
-/// sees only their own rows. Idempotent — safe to call on every visit; always
-/// overwrites with the current slice so a spec change is picked up automatically.
+/// sees only their own rows. Idempotent — safe to call on every visit; a spec
+/// change, a re-uploaded source, or a staff re-seed is picked up automatically
+/// because each changes the materialization fingerprint (#1382 item 3 — this
+/// used to re-slice and overwrite on every visit; now an unchanged
+/// fingerprint with all targets present skips the slice + write entirely).
 /// A strict no-op when the assignment declares no datasets.
 func writeDatasetFiles(
     req: Request,
@@ -635,21 +638,65 @@ func writeDatasetFiles(
 
     let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
 
-    // Dataset resolution reads the source CSV and materializes a per-student
-    // slice, then writes one file per dataset — synchronous I/O + CPU on
-    // every visit to a dataset-carrying assignment. Thread pool (#1156).
-    try? await runBlocking(on: req) {
-        guard
-            let files = DatasetResolver.resolve(
-                manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
-        else { return }
-
-        for (filename, content) in files {
-            // Defense-in-depth (#1104): resolver keys are validated bare
-            // filenames, but never join an unvetted name onto the student dir.
-            guard FilenameSafety.bareFilename(filename) != nil else { continue }
-            let dest = studentDir + "/" + filename
-            try? content.write(toFile: dest, atomically: true, encoding: .utf8)
-        }
+    // Skip the slice + write when nothing that determines the bytes has
+    // changed since the last materialization and every target file is still
+    // present (a deleted file is repaired, matching the old always-rewrite).
+    let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking(on: req) {
+        (
+            fingerprint: datasetMaterializationFingerprint(
+                props: props, seedHex: seedHex, sharedDir: sharedDir),
+            targetsPresent: props.datasets.allSatisfy {
+                FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
+            }
+        )
     }
+    let cache = req.application.datasetMaterializationCache
+    if let state, state.targetsPresent,
+        await cache.isCurrent(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
+    {
+        return
+    }
+
+    // Dataset resolution reads the source CSV and materializes a per-student
+    // slice, then writes one file per dataset — synchronous I/O + CPU. Thread
+    // pool (#1156).
+    let wrote: Bool =
+        (try? await runBlocking(on: req) {
+            guard
+                let files = DatasetResolver.resolve(
+                    manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
+            else { return false }
+
+            for (filename, content) in files {
+                // Defense-in-depth (#1104): resolver keys are validated bare
+                // filenames, but never join an unvetted name onto the student dir.
+                guard FilenameSafety.bareFilename(filename) != nil else { continue }
+                let dest = studentDir + "/" + filename
+                try? content.write(toFile: dest, atomically: true, encoding: .utf8)
+            }
+            return true
+        }) ?? false
+
+    if wrote, let state {
+        await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
+    }
+}
+
+/// Everything that determines the bytes `writeDatasetFiles` produces, folded
+/// into one comparable string: the per-student seed, each dataset spec, and
+/// each source file's (mtime, size) identity. A missing source contributes a
+/// sentinel, so its later appearance also invalidates.
+private func datasetMaterializationFingerprint(
+    props: TestProperties, seedHex: String, sharedDir: String
+) -> String {
+    var parts: [String] = [seedHex]
+    let fm = FileManager.default
+    for spec in props.datasets {
+        let attrs = try? fm.attributesOfItem(atPath: sharedDir + spec.file)
+        let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+        let size = (attrs?[.size] as? Int) ?? -1
+        let sample = spec.sampleSize.map(String.init) ?? "-"
+        parts.append("\(spec.file)|\(spec.kind.rawValue)|\(sample)|\(mtime)|\(size)")
+    }
+    return parts.joined(separator: "\n")
 }

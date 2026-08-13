@@ -40,7 +40,7 @@ extension WebRoutes {
         else {
             throw Abort(.notFound)
         }
-        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
 
         let query = try req.query.decode(NotebookQuery.self)
         let fileKind = notebookFileKind(from: query.file)
@@ -48,7 +48,7 @@ extension WebRoutes {
         // `user.isInstructor`). It gates two things here: who may see the
         // reference solution at all, and who keeps an editable editor on a
         // closed assignment.
-        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         // The reference solution is staff-only. The student notebook route is
         // reachable by any enrolled student (and now, read-only, for closed
         // assignments), so guard the solution view here rather than relying on
@@ -94,7 +94,7 @@ extension WebRoutes {
             // Preview counts as open for staff and closed for students — handled
             // inside isAssignmentEffectivelyOpen — so staff get an editable
             // notebook on a Preview assignment and students see it read-only.
-            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req))
         } else {
             isClosed = false
         }
@@ -441,13 +441,13 @@ extension WebRoutes {
     ) async throws -> NotebookContext {
         guard let userID = user.id else { throw Abort(.unauthorized) }
         let setupID = setup.id ?? ""
-        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         let viewMode = try await resolveNotebookViewMode(
             req: req, setup: setup, assignment: assignment,
             fileKind: fileKind, isStaff: isStaff, requested: requestedView)
         let isClosed: Bool
         if let assignment {
-            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req))
         } else {
             isClosed = false
         }
@@ -582,19 +582,19 @@ extension WebRoutes {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
 
         // Same closed-assignment gate as the notebook page, applied to the raw
         // content endpoint so a student can't fetch a not-yet-opened lab's
         // starter notebook by hitting `/notebook/source` directly.  A
         // legitimately reachable closed assignment already has a participation
         // row (or a submission), so this never fires on normal page loads.
-        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         if !isStaff,
             let assignment = try await APIAssignment.query(on: req.db)
                 .filter(\.$testSetupID == setupID)
                 .first(),
-            !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db)),
+            !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
             !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
         {
             throw Abort(.forbidden)

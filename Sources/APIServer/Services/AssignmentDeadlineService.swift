@@ -181,6 +181,33 @@ func isAssignmentEffectivelyOpen(
     // own course get the preview/future-open bypass (#417 Slice G — was the
     // global `user.isInstructor`).
     let isStaff = try await isCourseStaff(user, inCourse: assignment.courseID, db: db)
+    return try await isAssignmentEffectivelyOpenResolved(
+        assignment, for: user, isStaff: isStaff, on: db, now: now)
+}
+
+/// `isAssignmentEffectivelyOpen` for request handlers: the staff check reads
+/// the request's role memo (#1382 item 3), so the several open/closed checks
+/// a page load performs share one enrollment read.
+func isAssignmentEffectivelyOpen(
+    _ assignment: APIAssignment,
+    for user: APIUser,
+    req: Request,
+    now: Date = Date()
+) async throws -> Bool {
+    let isStaff = try await req.cachedIsCourseStaff(user, inCourse: assignment.courseID)
+    return try await isAssignmentEffectivelyOpenResolved(
+        assignment, for: user, isStaff: isStaff, on: req.db, now: now)
+}
+
+/// The open/closed core over an already-resolved staff bit — shared by both
+/// variants above so the policy cannot drift.
+private func isAssignmentEffectivelyOpenResolved(
+    _ assignment: APIAssignment,
+    for user: APIUser,
+    isStaff: Bool,
+    on db: Database,
+    now: Date
+) async throws -> Bool {
     let gate = assignment.visibility.submissionGate(isStaff: isStaff)
     let baseline = assignment.dueAt
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
@@ -347,7 +374,7 @@ func requireOpenStudentAssignment(
     // vanity-URL resolutions) can submit to that assignment and pollute
     // foreign instructors' queues.  Instructors and admins bypass via
     // `requireCourseEnrollment`'s own short-circuit.
-    try await requireCourseEnrollment(caller: user, courseID: assignment.courseID, db: req.db)
+    try await req.cachedRequireCourseEnrollment(caller: user, courseID: assignment.courseID)
 
     // Lazy schedule enforcement, both directions. The close has always been
     // enforced here as a safety net under the periodic sweep; the open gets
@@ -360,7 +387,7 @@ func requireOpenStudentAssignment(
     // Preview is open for course staff and closed for students — handled
     // uniformly by isAssignmentEffectivelyOpen, so staff use it via the normal
     // open path (bundled solution/tests, normal submission) with no special case.
-    let open = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db, now: now)
+    let open = try await isAssignmentEffectivelyOpen(assignment, for: user, req: req, now: now)
     guard open else {
         throw AssignmentSubmissionGateError.closed
     }
