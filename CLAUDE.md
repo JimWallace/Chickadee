@@ -1112,9 +1112,31 @@ the `format-lint` CI job) — keep them green:
   (`SPACING_STEPS`); pop-out shadows use `--shadow-pop`. Pick the nearest
   step — never introduce a new literal. Full principles, the token tables,
   and the component vocabulary live in [docs/ui-design.md](docs/ui-design.md).
+- **Pages follow a named archetype** (docs/ui-design.md "Page archetypes"):
+  tab bars are the `_admin-tabs`/`_instructor-tabs` partials, flash banners
+  render only through the `_flash` partial (ARIA roles included), sections
+  are `.page-section`, page headers are `.page-titlebar`. Assemble new pages
+  from the component vocabulary — the page `<style>` total is a shrink-only
+  ratchet (`PAGE_STYLE_BASELINE`), so a private re-implementation of a
+  shared concept fails CI on growth.
+- **Every assigned class name must resolve to a stylesheet rule**
+  (`scripts/check-class-resolution.sh`). Behaviour-only hooks take the `js-`
+  prefix (pre-existing ones live in a shrink-only allowlist). Leaf-
+  interpolated families (`status-…` etc.) are pinned by
+  `StatusClassStylesheetTests` iterating the enum instead.
+- **JS makes no styling decisions** — it toggles classes or sets a custom
+  property (`--wb-left-width` pattern); `style="…"` strings, non-display
+  `.style` writes and `cssText` ratchet down only
+  (`JS_STYLE_DECISION_BASELINE`).
+- **The nginx maintenance page mirrors the palette by value** —
+  `scripts/check-maintenance-palette.sh` fails when a colour there stops
+  existing in `styles.css`.
 
-Run `scripts/check-styles.sh` locally before pushing UI changes (it runs the
-css-vars + design-token guards too — same as the CI `format-lint` job).
+Run `scripts/check-styles.sh` locally before pushing UI changes (it runs all
+of the above — same as the CI `format-lint` job). The visual-regression
+harness (`Tools/visual-regression/`, page list in `pages.mjs` shared with
+the axe scan) covers one page per archetype; a page captured without a
+committed baseline bootstraps loudly — commit the CI capture in the same PR.
 
 ---
 
