@@ -39,7 +39,7 @@ LEARN
     <p class="bs-conn-line">This course pushes grades as <strong>#(syncIdentity.name)</strong>.</p>
     #endif
     #if(syncIdentity.needsReconnect):
-    <div class="form-error">
+    <div class="form-error" role="status">
         This course's designated LEARN identity is disconnected — grade pushes are
         paused until they reconnect, or a connected co-instructor takes over below.
     </div>
@@ -177,7 +177,8 @@ LEARN
                           onsubmit="return confirm('Re-push every student's best grade for #(row.title) to LEARN?')">
                         #csrfFormField()
                         <button class="btn action-btn bs-push-btn" type="submit"
-                                title="Re-push all grades for #(row.title)">
+                                title="Re-push all grades for #(row.title)"
+                                aria-label="Re-push all grades for #(row.title)">
                             <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
                                 <path d="M8 1.5a.5.5 0 0 1 .5.5v8.793l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 10.793V2a.5.5 0 0 1 .5-.5z"/>
                                 <path d="M1 13.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5z"/>

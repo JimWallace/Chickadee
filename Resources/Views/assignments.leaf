@@ -306,13 +306,10 @@ tr.assignment-draggable td {
 /* .add-section-details* and .section-block.section-dragging now live in the
    global stylesheet (shared with assignment-edit.leaf). */
 </style>
-<script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/section-items-dnd.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
-
-    ChickadeeRelativeTime.applyRelativeTimes();
 
     // ── Dashboard diagnostic cards: headline + sparkline, click cycles ────────
     //   24h / 7d / 30d.  Polls /instructor/metrics/cards (course-scoped) and

@@ -316,6 +316,17 @@ hoist; D8 with S3). Zero design decisions; every fix is a line or two.
 Include a render-test or `.mjs` assertion where one is cheap (D1: the
 colspan follows the `isAdmin` flag; D2: assert headers on the poll fetch).
 
+**Status: done.** D1–D5 and D7 landed in the S0 PR. D7 went slightly
+further than parity: `app.js` now floats `.ext-panel` and `.action-panel`
+alike, the binding is **delegated** (capture-phase `toggle` on the
+document) so panels rebuilt by a poll repaint keep floating — which was a
+latent break for instructor-students' register popovers after the first
+5-second repaint — and a floated `.ext-panel` carries `--shadow-pop` via
+`.is-floating` without changing its in-flow rendering. The banner-role
+fixes follow the `_flash` split: action-failure banners got
+`role="alert"`, persistent-state banners (`admin-mcp`'s endpoint-inactive
+notice, `instructor-brightspace`'s reconnect notice) got `role="status"`.
+
 ### S1 — One list-filter pattern (M) — the prompting example
 
 **Target state.** Every list filter is visually and semantically the same

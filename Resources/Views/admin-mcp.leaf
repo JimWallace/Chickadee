@@ -10,7 +10,7 @@ MCP
     <h2>MCP service accounts</h2>
 
     #if(!enabled):
-    <div class="form-error">
+    <div class="form-error" role="status">
         The MCP endpoint is not active, so tokens cannot be minted. Set
         <code>MCP_MODE=read_only</code> or <code>MCP_MODE=read_write</code>
         and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
@@ -27,16 +27,16 @@ MCP
     #endif
     #endif
     #if(error == "username_required"):
-    <div class="form-error">A username is required.</div>
+    <div class="form-error" role="alert">A username is required.</div>
     #endif
     #if(error == "username_taken"):
-    <div class="form-error">That username is already in use.</div>
+    <div class="form-error" role="alert">That username is already in use.</div>
     #endif
     #if(error == "mcp_disabled"):
-    <div class="form-error">Cannot mint a token while the MCP endpoint is inactive.</div>
+    <div class="form-error" role="alert">Cannot mint a token while the MCP endpoint is inactive.</div>
     #endif
     #if(error == "enroll_failed"):
-    <div class="form-error">Could not update the account's course enrollment.</div>
+    <div class="form-error" role="alert">Could not update the account's course enrollment.</div>
     #endif
 
     #if(mintedToken):

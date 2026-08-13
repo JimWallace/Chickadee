@@ -9,7 +9,7 @@ Server Health Alerts
     #extend("_flash")
 
     #if(!enabled):
-    <div class="flash flash-neutral">
+    <div class="flash flash-neutral" role="status">
         Alerting is currently <strong>disabled</strong>.  Set <code>ALERT_ENABLED=1</code> in the
         environment and restart the server to begin evaluating rules.
     </div>
