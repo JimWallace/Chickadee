@@ -34,9 +34,15 @@ func requireCourseRole(
 ) async throws {
     guard !caller.isAdmin else { return }
     guard let callerID = caller.id else { throw Abort(.unauthorized) }
-    guard let role = try await courseRole(of: callerID, inCourse: courseID, db: db) else {
-        throw Abort(.forbidden)
-    }
+    try requireResolvedCourseRole(
+        try await courseRole(of: callerID, inCourse: courseID, db: db), atLeast: minimum)
+}
+
+/// The role-floor policy of `requireCourseRole`, over an already-resolved
+/// role — shared with the request-memoized variant below so the two cannot
+/// drift.
+private func requireResolvedCourseRole(_ role: CourseRole?, atLeast minimum: CourseRole) throws {
+    guard let role else { throw Abort(.forbidden) }
     guard role >= minimum else { throw Abort(.forbidden) }
 }
 
@@ -115,8 +121,13 @@ func enrolledCoursesWithRoles(
 func isCourseStaff(_ user: APIUser, inCourse courseID: UUID, db: Database) async throws -> Bool {
     if user.isAdmin { return true }
     guard let userID = user.id else { return false }
-    guard let role = try await courseRole(of: userID, inCourse: courseID, db: db) else { return false }
-    return role >= .ta
+    return resolvedRoleIsStaff(try await courseRole(of: userID, inCourse: courseID, db: db))
+}
+
+/// The staff floor (TA and up) over an already-resolved role — shared with
+/// the request-memoized variant below so the two cannot drift.
+private func resolvedRoleIsStaff(_ role: CourseRole?) -> Bool {
+    role.map { $0 >= .ta } ?? false
 }
 
 /// True when `user` is staff (role >= `.ta`) in *any* non-archived enrolled
@@ -274,4 +285,60 @@ func saveSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async t
         userID: userID, courseID: courseID,
         role: isAdmin ? .instructor : .student
     ).save(on: db)
+}
+
+// MARK: - Per-request role memoization (#1382 item 3)
+
+/// Request-storage key for the per-request `(user, course) → role` memo.
+private struct CourseRoleMemoKey: StorageKey {
+    typealias Value = [CourseRoleMemoIdentity: CourseRole?]
+}
+
+/// One (user, course) lookup in the per-request memo.
+private struct CourseRoleMemoIdentity: Hashable {
+    let userID: UUID
+    let courseID: UUID
+}
+
+extension Request {
+    /// `courseRole(of:inCourse:db:)` memoized on the request — the same
+    /// per-request caching `resolveActiveCourse` gets.  The notebook page
+    /// resolved the identical (user, course) role four times per load through
+    /// its enrollment guard, staff check, effectively-open check, and
+    /// closed-assignment gate; each request now pays for one enrollment read.
+    /// A nil role ("not enrolled") is memoized too — entry presence, not
+    /// value, marks the cache hit.
+    func cachedCourseRole(of userID: UUID, inCourse courseID: UUID) async throws -> CourseRole? {
+        let identity = CourseRoleMemoIdentity(userID: userID, courseID: courseID)
+        if let cached = storage[CourseRoleMemoKey.self]?[identity] { return cached }
+        let role = try await courseRole(of: userID, inCourse: courseID, db: db)
+        var memo = storage[CourseRoleMemoKey.self] ?? [:]
+        memo[identity] = role
+        storage[CourseRoleMemoKey.self] = memo
+        return role
+    }
+
+    /// `isCourseStaff(_:inCourse:db:)` over the memoized role — the same TA+
+    /// floor (`resolvedRoleIsStaff`), one enrollment read per request.
+    func cachedIsCourseStaff(_ user: APIUser, inCourse courseID: UUID) async throws -> Bool {
+        if user.isAdmin { return true }
+        guard let userID = user.id else { return false }
+        return resolvedRoleIsStaff(try await cachedCourseRole(of: userID, inCourse: courseID))
+    }
+
+    /// `requireCourseRole(caller:courseID:atLeast:db:)` over the memoized
+    /// role — the same floor policy (`requireResolvedCourseRole`).
+    func cachedRequireCourseRole(
+        caller: APIUser, courseID: UUID, atLeast minimum: CourseRole
+    ) async throws {
+        guard !caller.isAdmin else { return }
+        guard let callerID = caller.id else { throw Abort(.unauthorized) }
+        try requireResolvedCourseRole(
+            try await cachedCourseRole(of: callerID, inCourse: courseID), atLeast: minimum)
+    }
+
+    /// `requireCourseEnrollment(caller:courseID:db:)` over the memoized role.
+    func cachedRequireCourseEnrollment(caller: APIUser, courseID: UUID) async throws {
+        try await cachedRequireCourseRole(caller: caller, courseID: courseID, atLeast: .student)
+    }
 }

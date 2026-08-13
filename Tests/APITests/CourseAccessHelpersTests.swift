@@ -71,6 +71,58 @@ import Vapor
         }
     }
 
+    // MARK: - Per-request role memo (#1382 item 3)
+
+    @Test func cachedCourseRoleIsMemoizedPerRequest() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
+            let user = try await makeTestUser(on: app, username: "ta_user")
+            let enrollment = APICourseEnrollment(
+                userID: try user.requireID(), courseID: try course.requireID(), role: .ta)
+            try await enrollment.save(on: app.db)
+
+            let req = Request(application: app, on: app.eventLoopGroup.any())
+            #expect(try await req.cachedIsCourseStaff(user, inCourse: course.requireID()))
+
+            // Downgrade the enrollment behind the request's back: the memoized
+            // answer holds for the rest of THIS request (that is the memo
+            // working — one enrollment read per request)...
+            enrollment.role = .student
+            try await enrollment.save(on: app.db)
+            #expect(try await req.cachedIsCourseStaff(user, inCourse: course.requireID()))
+
+            // ...while a fresh request resolves the new role.
+            let fresh = Request(application: app, on: app.eventLoopGroup.any())
+            #expect(try await fresh.cachedIsCourseStaff(user, inCourse: course.requireID()) == false)
+        }
+    }
+
+    @Test func cachedEnrollmentGuardMatchesTheFreeFunction() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
+            let courseID = try course.requireID()
+            let outsider = try await makeTestUser(on: app, username: "outsider")
+            let member = try await makeTestUser(on: app, username: "member")
+            try await makeTestEnrollment(on: app, userID: member.requireID(), courseID: courseID)
+            let admin = try await makeTestUser(on: app, username: "boss", role: "admin")
+
+            let req = Request(application: app, on: app.eventLoopGroup.any())
+            await #expect(throws: Abort.self) {
+                try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
+            }
+            try await req.cachedRequireCourseEnrollment(caller: member, courseID: courseID)
+            // A nil role is memoized too — the denial repeats without a fresh
+            // read, and stays a denial.
+            await #expect(throws: Abort.self) {
+                try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
+            }
+            // Admins bypass, as in `requireCourseEnrollment`.
+            try await req.cachedRequireCourseEnrollment(caller: admin, courseID: courseID)
+        }
+    }
+
     @Test func mcpCourseAccessDeniesUnenrolledAdmin() async throws {
         // The MCP path: an admin token is enrollment-scoped — denied before
         // enrolling, allowed after, revoked again on unenroll.
