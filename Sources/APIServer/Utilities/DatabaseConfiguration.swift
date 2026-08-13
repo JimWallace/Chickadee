@@ -413,6 +413,10 @@ func registerMigrations(on app: Application) {
     // of. Index-only; `submissions` is created far above.
     app.migrations.add(CreateClaimPriorityIndex())
 
+    // Session reaper sweep column (#1365). Index-only, but it must follow
+    // `AddSessionsCreatedAt` above, which is what creates the column.
+    app.migrations.add(CreateSessionReaperIndex())
+
     // Data backfill, registered LAST on purpose: it full-queries `APITestSetup`,
     // which is only safe once every migration that adds a column to
     // `test_setups` has already run (the #1077 boot-order hazard, inverted —

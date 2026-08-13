@@ -277,6 +277,16 @@ extension OperationalDiagnosticsService {
             try await APISubmissionDiagnostics.query(on: db)
                 .filter(\.$finishedAt < jobCutoff)
                 .delete()
+            // Browser-side telemetry: one row per JS error, kernel boot failure
+            // and grading failover, each carrying a message and a stack. It was
+            // the only diagnostics table with no retention at all, while being
+            // the highest-volume endpoint the server takes — and it grows
+            // fastest during exactly the incident that makes someone read it.
+            // Same window as the rest; `idx_client_diagnostics_created_at`
+            // already covers the predicate (#1365).
+            try await APIClientDiagnostic.query(on: db)
+                .filter(\.$createdAt < jobCutoff)
+                .delete()
 
             await maintenance.markPruned(at: now)
             logger.info(
