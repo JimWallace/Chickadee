@@ -149,7 +149,11 @@ extension WebRoutes {
         }()
         let storedExt = isZip ? "zip" : ext
         let filePath = subsDir + "\(subID).\(storedExt)"
-        try fileData.write(to: URL(fileURLWithPath: filePath))
+        // Offloaded to the NIO thread pool, matching the API submission path: a
+        // synchronous write pins a cooperative-pool thread while the handler
+        // still holds the whole body in memory, and a deadline burst is exactly
+        // when this route is hot.
+        try await req.fileio.writeFile(.init(data: fileData), at: filePath)
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
         // Attempt number is scoped to this student for this test setup,

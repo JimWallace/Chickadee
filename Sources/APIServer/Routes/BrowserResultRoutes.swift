@@ -96,7 +96,10 @@ struct BrowserResultRoutes: RouteCollection {
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
-        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
+        // Offloaded to the NIO thread pool: a synchronous write pins a
+        // cooperative-pool thread for its duration, and these are the routes a
+        // whole lab section hits at once.
+        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
 
         // Create the submission record as "complete" immediately — browser
         // results are authoritative and no native worker re-run is queued.
@@ -296,7 +299,10 @@ struct BrowserResultRoutes: RouteCollection {
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
-        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
+        // Offloaded to the NIO thread pool: a synchronous write pins a
+        // cooperative-pool thread for its duration, and these are the routes a
+        // whole lab section hits at once.
+        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
 
         let submittedFilename = normalizedNotebookFilename(body.filename)
         let submission = APISubmission(
@@ -417,7 +423,10 @@ struct BrowserResultRoutes: RouteCollection {
             instructorData = studentData
         }
         let notebookToSave = mergeNotebook(student: studentData, instructor: instructorData)
-        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
+        // Offloaded to the NIO thread pool: a synchronous write pins a
+        // cooperative-pool thread for its duration, and these are the routes a
+        // whole lab section hits at once.
+        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
 
         let submission = APISubmission(
             id: subID,
