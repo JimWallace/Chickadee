@@ -174,7 +174,13 @@ extension OperationalDiagnosticsService {
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
-        guard shouldCaptureRequest(path: metric.path, statusCode: metric.statusCode) else { return }
+        guard
+            shouldCaptureRequest(
+                method: metric.method,
+                path: metric.path,
+                statusCode: metric.statusCode
+            )
+        else { return }
 
         do {
             try await metric.save(on: db)
@@ -201,7 +207,7 @@ extension OperationalDiagnosticsService {
             ])
     }
 
-    private func shouldCaptureRequest(path: String, statusCode: Int) -> Bool {
+    private func shouldCaptureRequest(method: String, path: String, statusCode: Int) -> Bool {
         if configuration.verboseRequestTiming { return true }
         // Runner check-in noise: an idle poll (204, no job) and a healthy
         // heartbeat arrive at up-to-1/s per runner. Persisting a metric row
@@ -209,7 +215,26 @@ extension OperationalDiagnosticsService {
         // the 2026-07 audit flagged on this exact path. Real dispatches
         // (200), result writebacks, and any error status still record.
         if isIdleWorkerCheckIn(path: path, statusCode: statusCode) { return false }
+        if isSubmissionStatusPoll(method: method, path: path, statusCode: statusCode) { return false }
         return shouldAlwaysLogRequest(path: path)
+    }
+
+    /// The student result view polls `GET /api/v1/submissions/<id>` every two
+    /// seconds for as long as its submission is pending (`Public/app.js`).
+    /// During a deadline that is the highest-frequency request the server
+    /// takes, and persisting a row for each turns a cheap read into a write at
+    /// the moment the database is busiest — the same amplification already
+    /// excluded for idle runner check-ins, arriving from the other side.
+    ///
+    /// Scoped to the bare status route: `/results`, `/download` and the
+    /// collection route keep recording. Errors record too, so a poll that
+    /// starts failing or slowing into 5xx stays visible.
+    private func isSubmissionStatusPoll(method: String, path: String, statusCode: Int) -> Bool {
+        guard method == "GET", statusCode < 400 else { return false }
+        let prefix = "/api/v1/submissions/"
+        guard path.hasPrefix(prefix) else { return false }
+        let remainder = path.dropFirst(prefix.count)
+        return !remainder.isEmpty && !remainder.contains("/")
     }
 
     private func isIdleWorkerCheckIn(path: String, statusCode: Int) -> Bool {

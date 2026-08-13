@@ -33,10 +33,10 @@ import VaporTesting
             .count()
     }
 
-    private func recordMetric(path: String, statusCode: Int) async {
+    private func recordMetric(method: String = "POST", path: String, statusCode: Int) async {
         await app.diagnostics.recordRequestMetric(
             APIRequestMetric(
-                method: "POST",
+                method: method,
                 path: path,
                 requestKind: "job_dispatch",
                 statusCode: statusCode,
@@ -92,6 +92,50 @@ import VaporTesting
             await recordMetric(path: "/api/v1/worker/heartbeat", statusCode: 500)
             let failedHeartbeatRows = try await metricCount(path: "/api/v1/worker/heartbeat")
             #expect(failedHeartbeatRows == 1)
+        }
+    }
+
+    /// The student result view polls the bare submission-status route every two
+    /// seconds while a submission is pending, so during a deadline it is the
+    /// highest-frequency request the server takes. Recording each one turns a
+    /// read into a write exactly when the database is busiest — the idle-runner
+    /// exclusion above, arriving from the client side.
+    @Test func submissionStatusPollIsNotPersisted() async throws {
+        try await withApp(app) { _ in
+            await recordMetric(method: "GET", path: "/api/v1/submissions/sub_abc123", statusCode: 200)
+            let pollRows = try await metricCount(path: "/api/v1/submissions/sub_abc123")
+            #expect(pollRows == 0)
+        }
+    }
+
+    /// A poll that starts failing has to stay visible — the exclusion is for
+    /// volume, not for hiding a broken route.
+    @Test func failingSubmissionStatusPollIsPersisted() async throws {
+        try await withApp(app) { _ in
+            await recordMetric(method: "GET", path: "/api/v1/submissions/sub_err", statusCode: 500)
+            let errorRows = try await metricCount(path: "/api/v1/submissions/sub_err")
+            #expect(errorRows == 1)
+        }
+    }
+
+    /// The exclusion is scoped to the bare status route. Its sub-routes are
+    /// real work — `/results` reads and decodes the outcome blob — and a
+    /// non-GET against the same path is not a poll at all.
+    @Test func submissionSubroutesAndWritesStillPersist() async throws {
+        try await withApp(app) { _ in
+            await recordMetric(
+                method: "GET", path: "/api/v1/submissions/sub_abc123/results", statusCode: 200)
+            let resultRows = try await metricCount(path: "/api/v1/submissions/sub_abc123/results")
+            #expect(resultRows == 1)
+
+            await recordMetric(
+                method: "GET", path: "/api/v1/submissions/sub_abc123/download", statusCode: 200)
+            let downloadRows = try await metricCount(path: "/api/v1/submissions/sub_abc123/download")
+            #expect(downloadRows == 1)
+
+            await recordMetric(method: "DELETE", path: "/api/v1/submissions/sub_abc123", statusCode: 200)
+            let deleteRows = try await metricCount(path: "/api/v1/submissions/sub_abc123")
+            #expect(deleteRows == 1)
         }
     }
 }
