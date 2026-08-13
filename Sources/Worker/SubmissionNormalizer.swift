@@ -330,6 +330,21 @@ struct SubmissionNormalizer {
             progress.producedPythonFiles.count == 1,
             let sourceURL = progress.producedPythonFiles.first
         else { return }
+        // The source has to actually be Python. `classify` accepts ANY `text/*`
+        // as a Python script, so a student who uploaded `solution.lua` to a
+        // Python assignment — wrong assignment, or a mis-set language on a
+        // course clone — had it copied to `solution.py` and was then shown
+        // Python syntax errors against Lua source, under a warning saying
+        // Chickadee had made a copy "from the single detected Python source
+        // file". Extensionless is allowed: a notebook extracts to `.py`, and a
+        // bare script is genuinely ambiguous rather than wrong.
+        let sourceExtension = sourceURL.pathExtension.lowercased()
+        guard sourceExtension.isEmpty || sourceExtension == "py" else {
+            progress.warnings.append(
+                "Expected file \(expectedFilename) was not present, and \(sourceURL.lastPathComponent) "
+                    + "is not a Python file, so no compatibility copy was made.")
+            return
+        }
 
         let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)
         try FileManager.default.createDirectory(

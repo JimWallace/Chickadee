@@ -9,17 +9,18 @@ struct NotebookExtraction {
 }
 
 struct NotebookExtractor {
+    /// Parses and shape-checks a file that claims to be a notebook.
+    ///
+    /// Delegates to `SubmissionValidation`, which is the point:
+    /// `SubmissionPolicy` says it is "the shared implementation of the notebook
+    /// guarantees, so both the Python normalizer and the generic extractor
+    /// enforce one standard rather than two" — and that was false. Python went
+    /// through a private second implementation here, so the exemption table
+    /// governed six languages and Python answered to nothing. The two agreed by
+    /// coincidence; a tightening of one would have silently skipped the other.
     func notebookJSONObject(from data: Data, filename: String) throws -> [String: Any] {
-        let rawObject: Any
-        do {
-            rawObject = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            throw SubmissionNormalizationError.invalidNotebookJSON(filename)
-        }
-        guard let object = rawObject as? [String: Any] else {
-            throw SubmissionNormalizationError.invalidNotebookJSON(filename)
-        }
-        return object
+        try SubmissionValidation.validatedNotebook(
+            data: data, filename: filename, language: .python)
     }
 
     func isNotebookJSONObject(_ notebook: [String: Any]) -> Bool {
@@ -47,9 +48,10 @@ struct NotebookExtractor {
         }
         let extracted = extractPython(cells: inputCells, filename: filename)
 
-        guard extracted.codeCellCount > 0 else {
-            throw SubmissionNormalizationError.notebookHasNoCodeCells(filename)
-        }
+        // Through the policy, not a private `> 0` — same reason as
+        // `notebookJSONObject` above.
+        try SubmissionValidation.requireCodeCells(
+            extracted.codeCellCount, filename: filename, language: .python)
 
         return NotebookExtraction(
             source: extracted.executableModule,
