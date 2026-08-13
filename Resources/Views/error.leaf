@@ -38,11 +38,6 @@
     margin: 0;
     font-size: var(--text-2xl);
 }
-.error-message {
-    color: var(--gray-600);
-    max-width: 28rem;
-    margin: 0;
-}
 </style>
 #endexport
 #endextend

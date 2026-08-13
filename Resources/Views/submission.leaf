@@ -165,7 +165,7 @@ Submission #(submissionID)
                 </td>
             </tr>
             #if(outcome.status != "pass" && outcome.longResult):
-            <tr class="test-output-row test-output-row-#(outcome.status)">
+            <tr class="test-output-row">
                 <td colspan="#if(hasDelta):4#else:3#endif">
                     <div class="test-output-panel">
                         <div class="test-output-heading">Output</div>

@@ -1458,6 +1458,18 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .notice-banner p { margin: 0; color: var(--green); font-weight: 600; }
 
+/* Body copy on the error page (error.leaf).  GLOBAL rather than page-local
+   because the class NAME is a cross-page contract:
+   ChickadeeUI.extractErrorMessage (Public/chickadee-ui.js, loaded on every
+   page) scrapes failed fetch bodies for class="error-message".  A page-local
+   rename would pass every style guard and silently break error extraction
+   site-wide. */
+.error-message {
+    color: var(--gray-600);
+    max-width: 28rem;
+    margin: 0;
+}
+
 /* A title row: heading on the left, actions on the right, wrapping on
    narrow screens.  The heading inside sheds its default margin. */
 .page-titlebar {
@@ -1959,6 +1971,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .suite-name-cell { display: flex; align-items: center; gap: .4rem; }
 .suite-root-drop { height: 2rem; text-align: center; font-size: var(--text-xs); color: var(--gray-500); cursor: default; }
 .suite-root-drop.drop-hover { background: var(--hover-bg); }
+/* Insertion indicator while dragging a whole SECTION over another section
+   block (suite-table.js toggles these beside tr.drop-before/-after).  These
+   were assigned by the JS but styled nowhere, so a section drag showed no
+   indicator at all.  Box-shadow lines rather than borders so the 2px
+   indicator cannot shift the block's layout mid-drag. */
+.section-block.section-drop-before { box-shadow: 0 -2px 0 0 var(--blue); }
+.section-block.section-drop-after  { box-shadow: 0 2px 0 0 var(--blue); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
 
