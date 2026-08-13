@@ -107,6 +107,27 @@ func submissionGuaranteeApplies(
     submissionGuaranteeExemption(guarantee, for: language) == nil
 }
 
+/// Emits the structured log line this file's own doc promises for a skipped
+/// guarantee.
+///
+/// The promise — "it appears in the conformance test's output AND in the
+/// runner's structured log when a guarantee is skipped" — was half true: the
+/// conformance test reports exemptions, nothing logged them. So an operator
+/// asked why a student's empty notebook produced no error could grep the job's
+/// log, find nothing, and conclude the guarantee had run.
+func reportSkippedGuarantee(
+    _ guarantee: SubmissionGuarantee, language: AssignmentLanguage, filename: String
+) {
+    writeStructuredRunnerLog(
+        event: "submission_guarantee_skipped",
+        fields: [
+            "guarantee": guarantee.rawValue,
+            "language": language.rawValue,
+            "file": filename,
+            "reason": submissionGuaranteeExemption(guarantee, for: language) ?? "",
+        ])
+}
+
 // MARK: - The checks themselves
 
 /// The shared implementation of the notebook guarantees, so both the Python
@@ -126,6 +147,7 @@ enum SubmissionValidation {
     ) throws -> [String: Any] {
         guard submissionGuaranteeApplies(.validNotebookJSON, to: language) else {
             // Exempt: parse leniently and let the caller skip on failure.
+            reportSkippedGuarantee(.validNotebookJSON, language: language, filename: filename)
             return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -152,7 +174,10 @@ enum SubmissionValidation {
         filename: String,
         language: AssignmentLanguage
     ) throws {
-        guard submissionGuaranteeApplies(.notebookHasCodeCells, to: language) else { return }
+        guard submissionGuaranteeApplies(.notebookHasCodeCells, to: language) else {
+            reportSkippedGuarantee(.notebookHasCodeCells, language: language, filename: filename)
+            return
+        }
         guard count > 0 else {
             throw SubmissionNormalizationError.notebookHasNoCodeCells(filename)
         }
