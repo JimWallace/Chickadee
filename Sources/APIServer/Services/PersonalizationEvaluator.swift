@@ -368,6 +368,17 @@ enum PersonalizationEvaluator {
         else {
             return []
         }
+        // The five "loaded by FILE" languages differ only in WHICH extension,
+        // and each used to spell it as a literal — four hand-written copies of a
+        // fact `LanguageDescriptor` already owns, in a function whose whole job
+        // is to be language-generic. They agree today; nothing made them keep
+        // agreeing.
+        func filesWithThisLanguagesSourceExtension() -> [String] {
+            let wanted = language.sourceFileExtension.lowercased()
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == wanted }
+                .sorted()
+        }
+
         switch language {
         case .python:
             return entries.compactMap { entry -> String? in
@@ -377,23 +388,23 @@ enum PersonalizationEvaluator {
                 return stem
             }.sorted()
         case .r:
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "r" }.sorted()
+            return filesWithThisLanguagesSourceExtension()
         case .racket:
             // Loaded by FILE like R and Lua — the driver `dynamic-require`s each
             // helper and copies its bindings into the expression namespace, so
             // there is no module identifier to validate.
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "rkt" }.sorted()
+            return filesWithThisLanguagesSourceExtension()
         case .lua:
             // Like R, the driver loads these by FILE (`dofile`), not by module
             // name, so there is no identifier to validate — any `.lua` beside
             // the assignment is a candidate helper.
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "lua" }.sorted()
+            return filesWithThisLanguagesSourceExtension()
         case .octave:
             // Loaded by file too — the driver evaluates each helper's text
             // behind a `1;` script guard (the same trick the grading runtime's
             // load_student uses), so a one-function-per-file helper registers
             // under its own name rather than executing as a bare body.
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "m" }.sorted()
+            return filesWithThisLanguagesSourceExtension()
         case .cpp:
             // Included by FILE into the driver's single translation unit —
             // headers first, then sources (the extracted reference solution
@@ -409,8 +420,7 @@ enum PersonalizationEvaluator {
             // C++: javac resolves declarations across every file in one
             // invocation regardless of the order they are named in, so a plain
             // sort is enough for deterministic driver bytes.
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "java" }
-                .sorted()
+            return filesWithThisLanguagesSourceExtension()
         }
     }
 
