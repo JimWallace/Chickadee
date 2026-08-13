@@ -486,6 +486,29 @@ import VaporTesting
         }
     }
 
+    /// `client_diagnostics` is the highest-volume endpoint the server takes and
+    /// was the one diagnostics table with no retention at all — every other one
+    /// goes through this same prune. Rows carry a message and a full JS stack,
+    /// and they arrive fastest during the incident that makes someone want to
+    /// read them, so "grows forever" and "grows fastest when it matters" were
+    /// the same table (#1365).
+    @Test func prunePassRemovesExpiredClientDiagnostics() async throws {
+        try await withApp(app) { _ in
+            let retentionDays = app.diagnostics.configuration.jobMetricRetentionDays
+            let expired = Date().addingTimeInterval(-Double(retentionDays + 5) * 86400)
+
+            let staleID = try await makeClientDiagnostic(kind: "js_error", createdAt: expired)
+            let freshID = try await makeClientDiagnostic(kind: "js_error", createdAt: Date())
+
+            await app.diagnostics.pruneNow(on: app.db, logger: app.logger)
+
+            let stale = try await APIClientDiagnostic.find(staleID, on: app.db)
+            let fresh = try await APIClientDiagnostic.find(freshID, on: app.db)
+            #expect(stale == nil)
+            #expect(fresh != nil)
+        }
+    }
+
     /// Regression test for the admin runner page showing `Total < Queue
     /// Wait`. Models the production failure mode: the runner's wall clock
     /// is offset relative to the server, so the runner-reported
@@ -665,6 +688,27 @@ import VaporTesting
         )
         try await submission.save(on: app.db)
         return (setup, submission)
+    }
+
+    /// `createdAt` is a `.create` timestamp, so it is stamped on save and then
+    /// backdated with an update — which `.create` leaves alone. `user_id`
+    /// carries a foreign key, so the row needs a real user behind it.
+    private func makeClientDiagnostic(kind: String, createdAt: Date) async throws -> UUID {
+        let user = APIUser(username: "obs-diag-\(UUID().uuidString)", passwordHash: "x", role: "user")
+        try await user.save(on: app.db)
+        let row = APIClientDiagnostic(
+            userID: try user.requireID(),
+            testSetupID: nil,
+            kind: kind,
+            failedChecks: nil,
+            userAgent: nil,
+            message: "boom",
+            stack: "at <anonymous>"
+        )
+        try await row.save(on: app.db)
+        row.createdAt = createdAt
+        try await row.update(on: app.db)
+        return try row.requireID()
     }
 
     @discardableResult
