@@ -14,7 +14,6 @@
 // is exactly one place that defines what "Ace" or "Trailblazer" is.
 
 import Core
-import Fluent
 
 enum BuiltInAchievements {
 
@@ -138,16 +137,15 @@ enum BuiltInAchievements {
         var achievements: [Achievement] = []
     }
 
-    /// Batch `[setupID: SetupAchievementData]`; setups whose manifest can't be
-    /// decoded are absent (callers treat that as "registry defaults, nothing
-    /// disabled").
+    /// Batch `[setupID: SetupAchievementData]` over already-loaded setup rows;
+    /// setups whose manifest can't be decoded are absent (callers treat that
+    /// as "registry defaults, nothing disabled").  Takes the rows rather than
+    /// querying: the caller has already fetched the setups it is rendering,
+    /// and re-selecting them — manifest blobs included — doubled the
+    /// dashboard's setup reads on every render (#1382 item 2).
     static func achievementDataBySetup(
-        setupIDs: [String], on db: Database
-    ) async throws -> [String: SetupAchievementData] {
-        guard !setupIDs.isEmpty else { return [:] }
-        let setups = try await APITestSetup.query(on: db)
-            .filter(\.$id ~~ Set(setupIDs))
-            .all()
+        setups: [APITestSetup]
+    ) -> [String: SetupAchievementData] {
         var map: [String: SetupAchievementData] = [:]
         for setup in setups {
             guard let id = setup.id, let props = setup.decodedManifest() else { continue }
