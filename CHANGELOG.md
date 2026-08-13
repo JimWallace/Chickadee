@@ -9,6 +9,52 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.92] - 2026-08-13
+
+### Changed
+
+- **Instructor-side file writes come off the cooperative pool.** The nine
+  synchronous notebook/zip writes left behind by the student-path fix — the
+  setup upload's flat-notebook extraction, the notebook edit save, both
+  assignment save paths, the draft solution writes, the validation
+  submission write and its personalization sidecar, and the course-bundle
+  import's per-setup zip copy + notebook write — now go through
+  `req.fileio.writeFile`, or the thread pool where the code runs inside the
+  import transaction and cannot hold a request (#1382 item 9).
+
+### Changed
+
+- **The instructor assignment-submissions roster no longer loads every
+  attempt to render.** The per-student latest pick, attempt count, and best
+  grade are computed by the database (the same window-function and MAX
+  aggregates the student dashboard now uses, partitioned by student), and
+  the metric cards fetch only the last month of submission timestamps —
+  their trend windows never look further back — instead of the full history
+  a deadline-day refresh used to re-fold (#1382 item 6). An all-fail
+  student still shows "0%" to their instructor, and the roster's values are
+  pinned by render tests written against the pre-aggregate loaders.
+
+### Changed
+
+- **The admin storage breakdown is cached behind a single-flight TTL.**
+  Building it stats every submission file ever kept plus the whole static
+  asset tree, so the "are we running out of disk" page got slowest exactly
+  when there was the most disk to account for — and the read-only admin
+  MCP's `get_storage_usage` made it pollable. The `/admin/storage` page and
+  the MCP tool now share one cached context; the walks run at most once per
+  minute no matter how many pollers ask (#1382 item 5).
+
+### Fixed
+
+- **The observability prune no longer full-scans `submission_diagnostics`,
+  and never-finished rows finally age out.** The nightly retention sweep's
+  `finished_at < cutoff` ran unindexed against a table that is 1:1 with
+  submissions, and rows whose job died before reporting (NULL
+  `finished_at`) never matched it — accumulating permanently. The sweep
+  column is indexed now, and never-finished rows are aged out on their
+  creation time at the same retention window (#1382 item 8).
+
+
 ## [0.5.91] - 2026-08-13
 
 ### Security
