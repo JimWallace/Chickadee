@@ -359,4 +359,50 @@ func validatePatternFamilies(
             )
         }
     }
+
+    // 3. Filename collisions BETWEEN families.  Only family-vs-hand-written was
+    //    checked, so two families could claim the same generated filename and
+    //    one silently overwrote the other on apply — an instructor losing a
+    //    family's cases with no error at all.
+    //
+    //    The squash is real rather than theoretical: the stem is
+    //    "<familyID>_<caseKey>", so family `a_b` case `c` and family `a` case
+    //    `b_c` both produce `publictest_a_b_c.*`.
+    var claimedBy: [String: String] = [:]
+    for family in families {
+        let candidates = Set(
+            AssignmentLanguage.allCases.flatMap {
+                patternFamilyAllGeneratedFilenames(family, language: $0)
+            })
+        for filename in candidates.sorted() {
+            if let other = claimedBy[filename], other != family.id {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern families '\(other)' and '\(family.id)' would both generate '\(filename)'. Change one family's id or case key — otherwise one family's cases would silently replace the other's."
+                )
+            }
+            claimedBy[filename] = family.id
+        }
+    }
+
+    // 4. A reference implementation is embedded verbatim inside a quoted
+    //    heredoc in the generated C++ / Java wrappers. Quoting makes `$`,
+    //    backticks and backslashes inert, but a line that IS the delimiter ends
+    //    the heredoc early and the rest of the reference is then run as shell.
+    //    Instructor-authored, so not a student attack surface — but the blast
+    //    radius is arbitrary shell in the grading workspace, and the check is
+    //    two lines.
+    for family in families {
+        guard let reference = family.referenceImplementation else { continue }
+        let offending = reference.split(separator: "\n", omittingEmptySubsequences: false)
+            .first { $0 == generatedSourceHeredocDelimiter }
+        if offending != nil {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)': the reference implementation contains a line reading exactly '\(generatedSourceHeredocDelimiter)', which would terminate the generated script's heredoc. Remove or indent that line."
+            )
+        }
+    }
 }

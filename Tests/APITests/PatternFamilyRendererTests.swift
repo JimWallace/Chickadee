@@ -434,6 +434,52 @@ import Vapor
         }
     }
 
+    /// Only family-vs-hand-written was checked, so two families could claim the
+    /// same generated filename and one silently overwrote the other on apply —
+    /// an instructor losing a family's cases with no error (#1350). The stem is
+    /// `<familyID>_<caseKey>`, so the separator squashes: `a_b`/`c` and
+    /// `a`/`b_c` both render `publictest_a_b_c.py`.
+    @Test func validation_rejectsGeneratedFilenameCollisionBetweenFamilies() throws {
+        let first = PatternFamily(
+            id: "a_b", name: "first", kind: .boundaryEquality,
+            functionName: "foo", paramNames: ["x"],
+            cases: [PatternCase(key: "c", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        let second = PatternFamily(
+            id: "a", name: "second", kind: .boundaryEquality,
+            functionName: "bar", paramNames: ["x"],
+            cases: [PatternCase(key: "b_c", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        #expect {
+            try validatePatternFamilies([first, second], testSuites: [], language: .python)
+        } throws: { error in
+            #expect("\(error)".contains("would both generate"))
+            return true
+        }
+    }
+
+    /// The reference is embedded in a QUOTED heredoc, so `$`/backtick/backslash
+    /// are inert — but a line that IS the delimiter ends it early and the rest
+    /// runs as shell (#1350).
+    @Test func validation_rejectsAReferenceThatClosesTheHeredoc() throws {
+        let family = PatternFamily(
+            id: "d", name: "d", kind: .differential,
+            functionName: "foo", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .null)],
+            referenceImplementation: """
+                int ck_ref_foo(int x) { return x; }
+                CHICKADEE_GENERATED_SOURCE
+                echo pwned
+                """
+        )
+        #expect {
+            try validatePatternFamilies([family], testSuites: [], language: .cpp)
+        } throws: { error in
+            #expect("\(error)".contains("terminate the generated script's heredoc"))
+            return true
+        }
+    }
+
     @Test func validation_emptySpecIsValid() throws {
         try validatePatternFamilies([], testSuites: [], language: .python)
     }

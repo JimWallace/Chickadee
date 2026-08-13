@@ -137,7 +137,8 @@ private func cppShellWrapper(
     // student's `longResult`, so a passing test displayed g++'s warnings as
     // though they were output worth reading (#1349).
     let compileCommand =
-        "g++ -std=c++20 \(optimization) \(sourceFile) -o \(binaryFile) >.ck_build_log 2>&1"
+        "g++ -std=c++20 \(optimization) \(shellSingleQuoted(sourceFile)) "
+        + "-o \(shellSingleQuoted(binaryFile)) >.ck_build_log 2>&1"
     let compileStep: String
     if compileFailureIsTestFailure {
         compileStep = """
@@ -185,20 +186,25 @@ private func cppShellWrapper(
             student_file=$(cat .chickadee_student_module)
         fi
         if [ ! -f "$student_file" ]; then
+            # POSIX `*` does not match a leading dot, so every artefact this
+            # wrapper writes (.ck_src_*, .ck_bin_*, .ck_solution.cpp) is already
+            # invisible here — the `.ck_*` arm this case once carried matched
+            # nothing and has been removed rather than left reading as a guard.
+            # `*test_*` still skips a hand-written test file.
             for candidate in *.cpp; do
                 case "$candidate" in
-                    .ck_*|*test_*) ;;
+                    *test_*) ;;
                     *) student_file="$candidate"; break ;;
                 esac
             done
         fi
         \(missingSubmissionStep)
         cp "$student_file" .ck_solution.cpp
-        cat > \(sourceFile) <<'CHICKADEE_GENERATED_SOURCE'
+        cat > \(shellSingleQuoted(sourceFile)) <<'\(generatedSourceHeredocDelimiter)'
         \(embeddedSource)
-        CHICKADEE_GENERATED_SOURCE
+        \(generatedSourceHeredocDelimiter)
         \(compileStep)
-        exec ./\(binaryFile)
+        exec \(shellSingleQuoted("./" + binaryFile))
         """ + "\n"
 }
 

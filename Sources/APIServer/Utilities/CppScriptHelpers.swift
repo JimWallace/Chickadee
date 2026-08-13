@@ -86,6 +86,15 @@ func escapeForCppStringLiteral(_ s: String) -> String {
     return out
 }
 
+/// The heredoc delimiter every generated `.sh` wrapper uses to carry its
+/// embedded C++ / Java source.
+///
+/// Named once because two wrappers, two personalization drivers and the
+/// save-time validator all have to agree on it: the validator refuses an
+/// authored reference implementation containing a line that IS this delimiter,
+/// which would end the heredoc early and run the remainder as shell.
+let generatedSourceHeredocDelimiter = "CHICKADEE_GENERATED_SOURCE"
+
 /// A POSIX-shell single-quoted literal — for the generated `.sh` wrappers'
 /// few interpolated values (filenames derive from validated identifiers, but
 /// quoting anyway keeps the wrapper safe by construction).
