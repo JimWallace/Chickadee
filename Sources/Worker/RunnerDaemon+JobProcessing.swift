@@ -654,7 +654,12 @@ extension WorkerDaemon {
                         submissionFilename: job.submissionFilename,
                         // nil means the extractor trusted the notebook's own
                         // metadata, which for an unrecognised kernel falls back
-                        // to Python — so the hint has to agree.
+                        // to Python — so the hint has to agree, and both sites
+                        // spell `?? .python` rather than sharing a named
+                        // constant. That is deliberate: `no-language-defaults.sh`
+                        // permits a nil-coalescing fallback precisely because it
+                        // stays VISIBLE at the call site, and hiding it behind a
+                        // name is the shape that guard exists to prevent.
                         language: forcedLanguage ?? .python)
                 )
             }

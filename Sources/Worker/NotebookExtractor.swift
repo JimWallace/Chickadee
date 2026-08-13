@@ -157,7 +157,8 @@ private func resolveNotebookForExtraction(
 
 // MARK: - Notebook-to-code extraction for test setup directories
 
-/// Extract code cells from all .ipynb notebooks in `directory` into .py or .R source files.
+/// Extract code cells from all .ipynb notebooks in `directory` into that
+/// language's source files (`.py` / `.R` / `.lua` / `.m` / `.cpp` / `.rkt` / `.java`).
 ///
 /// This replaces the former runner-support/Makefile prep step with a pure-Swift
 /// implementation. The .ipynb format is plain JSON — no `make`, Python, or external
@@ -197,7 +198,7 @@ func extractNotebooksToCode(
     var warnings: [String] = []
 
     for item in items where item.pathExtension.lowercased() == "ipynb" {
-        // Every .ipynb in the directory is extracted to .py (or .R).  The
+        // Every .ipynb in the directory is extracted to its language's source.  The
         // starter template notebook is already removed by process() before
         // this function runs (driven by manifest.starterNotebook), so the
         // only notebooks remaining are the student/canonical submission and
@@ -242,7 +243,8 @@ private func assembleExtractedSource(
         // because `wrapCellForResilientLoad` labels each cell; the others get
         // the same information from inert marker comments, which
         // `chickadee_student_cells()` splits on.  The assembly lives in
-        // RunnerCore (`extractR` / `extractLua` / `extractOctave`, all over one
+        // RunnerCore (`extractR` / `extractLua` / `extractOctave` / `extractCpp` /
+        // `extractRacket` / `extractJava`, all over one
         // `extractWithCellMarkers`) — the same implementation the browser
         // runner calls via wasm, so the two extractors cannot drift.
         let inputCells = cells.map { cell in
@@ -261,7 +263,15 @@ private func assembleExtractedSource(
         case .cpp: extracted = extractCpp(cells: inputCells, filename: filename)
         case .racket: extracted = extractRacket(cells: inputCells, filename: filename)
         case .java: extracted = extractJava(cells: inputCells, filename: filename)
-        case .r, .python: extracted = extractR(cells: inputCells, filename: filename)
+        case .r: extracted = extractR(cells: inputCells, filename: filename)
+        case .python:
+            // Unreachable: the OUTER switch assembles Python itself. Kept as a
+            // trap rather than folded in with `.r`, where it silently mapped
+            // Python to the R extractor — the exact compiler-invisible shape
+            // the surrounding comment says this switch exists to avoid. A later
+            // cleanup that merged Python into this group would have extracted
+            // every Python notebook as R.
+            preconditionFailure("Python notebooks are assembled by the outer switch")
         }
         return extracted.source
     case .python:

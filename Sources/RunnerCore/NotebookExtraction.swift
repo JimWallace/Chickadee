@@ -1,6 +1,7 @@
 // RunnerCore notebook extraction — the single source of truth for turning a
-// Jupyter notebook's code cells into runnable source (Python via
-// `extractPython`, R via `extractR`).
+// Jupyter notebook's code cells into runnable source — one extractor per
+// assignment language (`extractPython` / `extractR` / `extractLua` /
+// `extractOctave` / `extractCpp` / `extractRacket` / `extractJava`).
 //
 // RunnerCore is deliberately dependency-free (Swift stdlib only — no Foundation,
 // no Process, no filesystem) so it can compile to `wasm32` and run inside the
@@ -217,7 +218,7 @@ public func rCellBoundaryMarker(cellNumber: Int) -> String {
 }
 
 /// The Lua counterpart, split back out by `chickadee_student_cells()` in
-/// `Tools/runner-support/test_runtime.lua`. `NotebookExtractorLuaCellMarkerTests`
+/// `Tools/runner-support/test_runtime.lua`. `Tests/CoreTests/LuaCellMarkerExtractionTests`
 /// pins the two against each other, as the R pair is pinned.
 public func luaCellBoundaryMarker(cellNumber: Int) -> String {
     cellBoundaryMarker(cellNumber: cellNumber, comment: "--")
