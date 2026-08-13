@@ -64,7 +64,14 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // MARK: - Sessions (Fluent-backed; persisted in the database)
 
-    app.sessions.use(.fluent)
+    // The Fluent driver, wrapped so an untouched session is not rewritten.
+    // Vapor's SessionsMiddleware has no dirty flag and calls updateSession on
+    // every request carrying a cookie, which made a plain page view a row
+    // write on the busiest table in the schema. See
+    // UnchangedSessionSkippingDriver for why skipping is behaviour-preserving.
+    app.sessions.use { application in
+        UnchangedSessionSkippingDriver(base: application.fluent.sessions.driver())
+    }
     var sessionConfig = app.sessions.configuration
     sessionConfig.cookieFactory = { sessionID in
         chickadeeSessionCookie(
