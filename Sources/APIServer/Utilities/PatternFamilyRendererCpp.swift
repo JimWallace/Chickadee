@@ -204,7 +204,18 @@ private func cppShellWrapper(
         \(embeddedSource)
         \(generatedSourceHeredocDelimiter)
         \(compileStep)
-        exec \(shellSingleQuoted("./" + binaryFile))
+        ck_out=$(\(shellSingleQuoted("./" + binaryFile)))
+        ck_rc=$?
+        # The sentinel check. Without it, a student's own exit(0) — in an error
+        # path, which is where an intro submission puts one — exits the binary
+        # with status 0 and this case, every case, reads as a pass. C++ was the
+        # only language with no such guard; Java has had one since it shipped.
+        if ! printf '%s\\n' "$ck_out" | grep -q '^CK_SENTINEL$'; then
+            echo "The test did not run to completion. Does the submission call exit()?" 1>&2
+            exit 2
+        fi
+        printf '%s\\n' "$ck_out" | grep -v '^CK_SENTINEL$'
+        exit $ck_rc
         """ + "\n"
 }
 

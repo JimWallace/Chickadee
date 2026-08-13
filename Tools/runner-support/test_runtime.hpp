@@ -70,16 +70,40 @@ inline std::string json_escape(const std::string& s) {
     return out;
 }
 
+// ---- the sentinel that makes the shell contract honest ----
+//
+// A student's own `exit(0)` — in an error path, which is exactly where an intro
+// submission puts one — exits the process with status 0, and the wrapper read
+// that as a PASS. Every case in the assignment, silently, with no verdict JSON.
+// This is the hazard R (`quit()`), Lua (`os.exit`), Octave (`exit`) and Java
+// (`System.exit`) each had; C++ was the one language with no guard at all,
+// while the Java renderer's header listed sentinel-checking as a difference
+// between them without noting that C++ was exposed.
+//
+// Every verdict prints this line first and the wrapper refuses to trust a run
+// that did not emit it. Printing it HERE rather than in the generated test is
+// deliberate: a renderer cannot forget it.
+//
+// THE LIMIT, stated because it bounds what this buys: student code and the
+// grading runtime share one process, so a submission that prints this line
+// itself and then exits 0 still passes. That is a deliberate act, not the
+// error-path `exit(0)` this exists to catch, and no in-process guard can close
+// it — the same ceiling Java's sentinel has.
+inline constexpr const char* sentinel_line = "CK_SENTINEL";
+
 // ---- the shell contract's exit codes ----
 [[noreturn]] inline void passed(const std::string& msg) {
+    std::cout << sentinel_line << "\n";
     std::cout << "{\"shortResult\": \"" << json_escape(msg) << "\"}\n";
     std::exit(0);
 }
 [[noreturn]] inline void failed(const std::string& msg) {
+    std::cout << sentinel_line << "\n";
     std::cout << "{\"shortResult\": \"" << json_escape(msg) << "\"}\n";
     std::exit(1);
 }
 [[noreturn]] inline void errored(const std::string& msg) {
+    std::cout << sentinel_line << "\n";
     std::cerr << msg << "\n";
     // A shortResult footer, even though the exit code already says `error`.
     // The shell contract takes the LAST non-empty stdout line as the summary,

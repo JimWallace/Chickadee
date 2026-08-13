@@ -268,6 +268,38 @@ import Testing
         #expect(bad.stdout.contains("wrong output"))
     }
 
+    /// A student's own `exit(0)` must not read as a pass.
+    ///
+    /// C++ was the only language with no exit guard: `ck::passed` is a bare
+    /// `std::exit(0)` and the wrapper `exec`'d the binary, so a submission that
+    /// called `exit(0)` in an error path — where an intro submission puts one —
+    /// exited 0 and every case in the assignment passed silently, with no
+    /// verdict JSON at all (#1345).
+    @Test func aSubmissionCallingExitIsAnErrorNotAPass() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
+        let sneaky = try Self.execute(
+            script: script,
+            submission: """
+                #include <cstdlib>
+                int f(int) { std::exit(0); }
+                """)
+        #expect(
+            sneaky.code != 0,
+            "a submission calling exit(0) was graded as a PASS: \(sneaky.stdout)")
+        #expect(
+            sneaky.stderr.contains("did not run to completion"),
+            "the run was not identified as incomplete: \(sneaky.stderr)")
+
+        // And the sentinel never reaches the student-visible result line.
+        let good = try Self.execute(
+            script: script, submission: "int f(int x) { return x * x; }\n")
+        #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
+        #expect(
+            !good.stdout.contains("CK_SENTINEL"),
+            "the sentinel leaked into the result line: \(good.stdout)")
+    }
+
     /// A missing submission is the student's to fix, so the 0-point existence
     /// guard reports it as a graded FAIL with a readable message — which is
     /// what Java has always done for the same student state, while C++ said
