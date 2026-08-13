@@ -47,6 +47,30 @@ class ck {
     // in the generated test is deliberate: a renderer cannot forget it.
     private static final String SENTINEL = "CK_SENTINEL";
 
+    /// Real stdout, decoded as UTF-8 whatever the host locale says.
+    ///
+    /// `System.out` uses `stdout.encoding`, which follows `native.encoding` —
+    /// ASCII on a container with no `LANG`. A verdict quoting a student's
+    /// accented output therefore reached the runner with `?` in place of every
+    /// non-ASCII character. The COMPARISON was never affected (`beginCapture`
+    /// decodes UTF-8 explicitly, and equality runs in-JVM before anything is
+    /// printed) — only the message the student reads.
+    ///
+    /// Writing to `FileDescriptor.out` rather than to `System.out` also means a
+    /// verdict cannot land in an installed capture, which is the property
+    /// `restoreOut` exists to guarantee; the two agree rather than compete.
+    private static PrintStream ckOut = null;
+
+    private static PrintStream verdictStream() {
+        if (ckOut == null) {
+            ckOut = new PrintStream(
+                new java.io.FileOutputStream(java.io.FileDescriptor.out),
+                true,
+                java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return ckOut;
+    }
+
     // ---- the shell contract's exit codes ----
     //
     // stdout carries one JSON object as the last non-empty line; stderr carries
@@ -54,17 +78,19 @@ class ck {
     // here.
     static void passed(String msg) {
         restoreOut();
-        System.out.println(SENTINEL);
-        System.out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
-        System.out.flush();
+        PrintStream out = verdictStream();
+        out.println(SENTINEL);
+        out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
+        out.flush();
         Runtime.getRuntime().halt(0);
     }
 
     static void failed(String msg) {
         restoreOut();
-        System.out.println(SENTINEL);
-        System.out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
-        System.out.flush();
+        PrintStream out = verdictStream();
+        out.println(SENTINEL);
+        out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
+        out.flush();
         Runtime.getRuntime().halt(1);
     }
 
@@ -74,7 +100,8 @@ class ck {
         // it the wrapper could not tell a genuine error from a student's
         // premature exit, and would report the less specific of the two —
         // hiding the message this call exists to deliver.
-        System.out.println(SENTINEL);
+        PrintStream out = verdictStream();
+        out.println(SENTINEL);
         // A shortResult footer, even though the exit code already says `error`.
         // The shell contract takes the LAST non-empty stdout line as the
         // summary, so without one a student's own final print became the
@@ -84,8 +111,8 @@ class ck {
         int ckNewline = msg == null ? -1 : msg.indexOf('\n');
         String ckSummary = msg == null ? "" : (ckNewline < 0 ? msg : msg.substring(0, ckNewline));
         if (ckSummary.isEmpty()) ckSummary = "error";
-        System.out.println("{\"shortResult\": \"" + jsonEscape(ckSummary) + "\"}");
-        System.out.flush();
+        out.println("{\"shortResult\": \"" + jsonEscape(ckSummary) + "\"}");
+        out.flush();
         System.err.println(msg);
         System.err.flush();
         Runtime.getRuntime().halt(2);
