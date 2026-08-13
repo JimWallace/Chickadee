@@ -254,6 +254,33 @@ import Testing
         #expect(bad.stdout.contains("wrong output"))
     }
 
+    /// A throw from the student's code during a stdout-capturing kind must
+    /// still deliver its verdict.
+    ///
+    /// The capture is fd-level, so unwinding past `finish()` used to leave fd 1
+    /// pointing at the capture file: `ck::failed` wrote its JSON in there, the
+    /// runner saw empty stdout, and the shell contract synthesized a bare
+    /// "failed" with no reason (#1344). Asserting on the MESSAGE rather than
+    /// the exit code is what makes this a regression test — the status was
+    /// always 1.
+    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(.stdoutEquality, expected: .string("hello")))
+        let thrown = try Self.execute(
+            script: script,
+            submission: """
+                #include <stdexcept>
+                int f(int) { throw std::runtime_error("boom"); }
+                """)
+        #expect(thrown.code == 1, "a throwing submission did not fail: \(thrown.stdout)")
+        #expect(
+            thrown.stdout.contains(GeneratedMessage.unexpectedException),
+            "the verdict never reached stdout — the capture left fd 1 redirected: \(thrown.stdout)"
+        )
+        #expect(thrown.stdout.contains("boom"), "the failure did not carry the exception text")
+    }
+
     /// A throwing submission on a guarded kind is a graded FAIL with the
     /// shared first line, never a crash.
     @Test func anUnexpectedThrowIsAGradedFailure() throws {

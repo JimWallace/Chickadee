@@ -53,6 +53,7 @@ class ck {
     // detail. Exit 0 pass, 1 fail, 2 error — identical to every other runtime
     // here.
     static void passed(String msg) {
+        restoreOut();
         System.out.println(SENTINEL);
         System.out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
         System.out.flush();
@@ -60,6 +61,7 @@ class ck {
     }
 
     static void failed(String msg) {
+        restoreOut();
         System.out.println(SENTINEL);
         System.out.println("{\"shortResult\": \"" + jsonEscape(msg) + "\"}");
         System.out.flush();
@@ -67,6 +69,7 @@ class ck {
     }
 
     static void errored(String msg) {
+        restoreOut();
         // The sentinel goes out here too, even though no JSON follows. Without
         // it the wrapper could not tell a genuine error from a student's
         // premature exit, and would report the less specific of the two —
@@ -245,9 +248,28 @@ class ck {
     static String endCapture() {
         System.out.flush();
         String captured = captureBuffer.toString(java.nio.charset.StandardCharsets.UTF_8);
-        System.setOut(savedOut);
-        captureBuffer = null;
+        restoreOut();
         return captured;
+    }
+
+    /// Puts the real stdout back, if a capture is still installed. Idempotent.
+    ///
+    /// EVERY VERDICT CALLS THIS FIRST, and that is the point. A throw from the
+    /// student's code unwinds past `endCapture()`, so the enclosing catch
+    /// handler reported its verdict — the sentinel included — into the capture
+    /// buffer, which is then discarded. The wrapper saw no sentinel and
+    /// reported "The test did not run to completion. Does the submission call
+    /// System.exit?" for what was an ordinary exception, losing the failure
+    /// message the test had already produced.
+    ///
+    /// Restoring here rather than in the generated test is deliberate, for the
+    /// same reason the sentinel is printed here: a renderer cannot forget it.
+    private static void restoreOut() {
+        if (savedOut == null) return;
+        System.out.flush();
+        System.setOut(savedOut);
+        savedOut = null;
+        captureBuffer = null;
     }
 
     // ---- exceptionExpected's trichotomy ----
