@@ -1,7 +1,9 @@
+import Foundation
 import Testing
 import VaporTesting
 
 @testable import APIServer
+@testable import Core
 
 /// Exercises EditorAssetFastPathMiddleware in the production ordering:
 /// fast path → UserFileNamespaceMiddleware → FileMiddleware.  The suite
@@ -252,5 +254,75 @@ import VaporTesting
     ])
     func contentHashDetection(path: String, expected: Bool) {
         #expect(EditorAssetFastPathMiddleware.isContentHashedBundleAsset(path: path) == expected)
+    }
+
+    private static var repoRoot: URL {
+        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
+        for _ in 0..<3 { url.deleteLastPathComponent() }
+        return url
+    }
+
+    /// Reads the SHIPPED bytes, not the language table, and requires every
+    /// vendored kernel to be on the fast path.
+    ///
+    /// The hand-written list this replaced named Python and R only, so Lua and
+    /// Octave — the largest env we ship — booted on the slow path, each of ~50
+    /// package tarballs paying a session lookup it never needed. It fails open,
+    /// which is why it went unnoticed: nothing breaks, the boot is just
+    /// expensive. Deriving the list fixes today's gap; checking it against disk
+    /// is what stops the next one, since a vendored kernel whose language
+    /// forgot to declare a kernel would be invisible to a check that only read
+    /// `allCases`.
+    @Test func everyVendoredKernelPackageTreeTakesTheFastPath() throws {
+        let xeusDir = Self.repoRoot.appendingPathComponent("Public/jupyterlite/xeus")
+        let vendored = try FileManager.default.contentsOfDirectory(atPath: xeusDir.path)
+            .filter { $0.hasPrefix("chickadee-") }
+            .filter { environment in
+                var isDirectory: ObjCBool = false
+                let packages = xeusDir.appendingPathComponent("\(environment)/kernel_packages").path
+                let exists = FileManager.default.fileExists(
+                    atPath: packages, isDirectory: &isDirectory)
+                return exists && isDirectory.boolValue
+            }
+            .sorted()
+
+        // A derivation that silently produced nothing looks identical to a
+        // correct one, so assert the check found something before trusting it.
+        #expect(
+            !vendored.isEmpty,
+            "No vendored kernel_packages trees found under \(xeusDir.path) — this check read the wrong path"
+        )
+
+        for environment in vendored {
+            let prefix = "/jupyterlite/xeus/\(environment)/kernel_packages/"
+            #expect(
+                EditorAssetFastPathMiddleware.fastPathPrefixes.contains(prefix),
+                """
+                \(environment) ships kernel_packages but is not on the editor asset fast path, so \
+                every tarball of its boot rides the full session/auth chain. The prefix list is \
+                derived from AssignmentLanguage.allCases — check that language's editorSupport.
+                """
+            )
+        }
+    }
+
+    /// One prefix per kernel language, and none for an upload-only one: those
+    /// envs are never vendored, so a prefix for them would be a dead string
+    /// tested against every request path.
+    @Test func kernelPrefixesTrackEditorSupportExactly() {
+        let kernelLanguages = AssignmentLanguage.allCases.filter { language in
+            if case .notebookKernel = language.editorSupport { return true }
+            return false
+        }
+        #expect(!kernelLanguages.isEmpty)
+        #expect(
+            EditorAssetFastPathMiddleware.vendoredKernelPackagePrefixes.count
+                == kernelLanguages.count)
+
+        for language in AssignmentLanguage.allCases where language.editorSupport == .uploadOnly {
+            let prefix =
+                "/jupyterlite/xeus/\(KernelEnvironment.environmentName(for: language))/kernel_packages/"
+            #expect(!EditorAssetFastPathMiddleware.fastPathPrefixes.contains(prefix))
+        }
     }
 }

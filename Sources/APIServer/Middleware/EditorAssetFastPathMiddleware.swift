@@ -38,34 +38,52 @@
 // request falls through to the normal chain unchanged, so worst case is
 // exactly today's behaviour.
 
+import Core
 import Vapor
 
 struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     /// Vendored-only trees. Never list a prefix that can contain
     /// user-generated or access-controlled files.
-    static let fastPathPrefixes = [
-        "/jupyterlite/build/",
-        "/jupyterlite/extensions/",
-        // The vendored kernel PACKAGES — the bulk of the ~230 MB xeus tree, and
-        // the reason this middleware matters most: a kernel boot fetches every
-        // package in its environment (up to 48 for Python, 51 for R), and each
-        // one used to ride the full chain and pay a Fluent session lookup it
-        // never needed. That is exactly the class-wide-rush cost the fast path
-        // exists to remove.
-        //
-        // Deliberately the `kernel_packages/` subtree and NOT `/jupyterlite/xeus/`
-        // wholesale. The wider prefix also captures `kernels.json` and each
-        // `<env>/<kernel>/kernel.json`, which the editor fetches during app
-        // STARTUP — before any kernel exists — and short-circuiting those skips
-        // BundleAssetCacheMiddleware and the isolation middlewares for the
-        // requests that bring the app up. Keeping startup JSON on the normal
-        // chain costs a handful of requests per boot and leaves the app's own
-        // bring-up exactly as it was; the tarballs, which are the volume, still
-        // take the fast path.
-        "/jupyterlite/xeus/chickadee-python/kernel_packages/",
-        "/jupyterlite/xeus/chickadee-r/kernel_packages/",
-        "/vendor/",
-    ]
+    static let fastPathPrefixes: [String] =
+        [
+            "/jupyterlite/build/",
+            "/jupyterlite/extensions/",
+        ] + vendoredKernelPackagePrefixes + [
+            "/vendor/"
+        ]
+
+    /// One `kernel_packages/` prefix per language that ships a vendored kernel.
+    ///
+    /// These are the bulk of the ~310 MB xeus tree and the reason this
+    /// middleware matters most: a kernel boot fetches every package in its
+    /// environment (up to 48 for Python, 51 for R), and each one otherwise
+    /// rides the full chain and pays a Fluent session lookup it never needed.
+    /// That is exactly the class-wide-rush cost the fast path exists to remove.
+    ///
+    /// Derived from `AssignmentLanguage.allCases` rather than typed out. The
+    /// hand-written list named Python and R only, so Lua (19 MB) and Octave
+    /// (142 MB, the largest env we ship) booted on the slow path — the failure
+    /// mode of a hand-maintained language list in a language-generic place, and
+    /// one that fails open, so nothing broke and no test noticed. Asking each
+    /// language whether it has a kernel means a seventh needs no edit here.
+    ///
+    /// Deliberately the `kernel_packages/` subtree and NOT `/jupyterlite/xeus/`
+    /// wholesale. The wider prefix also captures `kernels.json` and each
+    /// `<env>/<kernel>/kernel.json`, which the editor fetches during app
+    /// STARTUP — before any kernel exists — and short-circuiting those skips
+    /// BundleAssetCacheMiddleware and the isolation middlewares for the
+    /// requests that bring the app up. Keeping startup JSON on the normal chain
+    /// costs a handful of requests per boot and leaves the app's own bring-up
+    /// exactly as it was; the tarballs, which are the volume, still take the
+    /// fast path.
+    static let vendoredKernelPackagePrefixes: [String] =
+        AssignmentLanguage.allCases
+        .filter { language in
+            if case .notebookKernel = language.editorSupport { return true }
+            return false
+        }
+        .map { "/jupyterlite/xeus/\(KernelEnvironment.environmentName(for: $0))/kernel_packages/" }
+        .sorted()
 
     private let publicDirectory: String
 
