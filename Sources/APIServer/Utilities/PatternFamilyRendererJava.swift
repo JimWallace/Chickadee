@@ -199,9 +199,9 @@ private func javaShellWrapper(
         # under the ordinary shell-script contract. javac pulls the student's
         # class and _ck_inputs.java in from the sourcepath on demand, so
         # nothing here has to locate or copy the submission.
-        cat > \(className).java <<'CHICKADEE_GENERATED_SOURCE'
+        cat > \(shellSingleQuoted("\(className).java")) <<'\(generatedSourceHeredocDelimiter)'
         \(embeddedSource)
-        CHICKADEE_GENERATED_SOURCE
+        \(generatedSourceHeredocDelimiter)
         \(compileStep)
         ck_out=$(java -cp . \(className))
         ck_rc=$?
