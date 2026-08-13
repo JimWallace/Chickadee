@@ -542,6 +542,240 @@ import VaporTesting
         }
     }
 
+    // MARK: - Grade-data fold pins (#1382 item 2)
+    //
+    // These pin the VALUES the dashboard derives from submissions + results —
+    // best-across-attempts, best-across-sources, the latest-submission pick,
+    // the history count, the weighted-grade rounding, and the prior-attempt
+    // badge input — so a rewrite of `loadStudentDashboardGradeData` cannot
+    // change a fold's meaning without a test noticing.
+
+    @Test func indexShowsBestGradeAcrossAttemptsWithLatestLinkAndCount() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_multi", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_multi", title: "Multi Attempt", isOpen: true, on: app)
+            // Attempt 1: 3/5 = 60%.  Attempt 2 (the best): 4/5 = 80%.
+            // Attempt 3 (the latest): 1/5 = 20%.
+            try await wrInsertSubmission(
+                id: "sub_ma1", testSetupID: "setup_multi", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_ma2", testSetupID: "setup_multi", userID: userID, attemptNumber: 2, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma2",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .pass),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_ma3", testSetupID: "setup_multi", userID: userID, attemptNumber: 3, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma3",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("<strong>80%</strong>"),
+                        "Best grade is the max across ALL attempts, not the latest one")
+                    #expect(
+                        !html.contains("<strong>20%</strong>"),
+                        "The latest attempt's lower grade must not displace the best")
+                    #expect(
+                        html.contains(#"/submissions/sub_ma3" class="submission-history-latest""#),
+                        "The latest-submission link points at the newest attempt")
+                    #expect(
+                        html.contains("+2 more"),
+                        "The history link counts every prior attempt")
+                })
+        }
+    }
+
+    @Test func indexShowsBestGradeAcrossSourcesWithinOneSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sources", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_sources", title: "Sourced", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_src", testSetupID: "setup_sources", userID: userID, on: app)
+            // Worker regrade at 50% must not displace the browser 75% —
+            // "highest grade wins" across every result source (#1111).
+            try await wrInsertResult(
+                submissionID: "sub_src",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                ],
+                source: "browser", on: app)
+            try await wrInsertResult(
+                submissionID: "sub_src",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                ],
+                source: "worker", on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("<strong>75%</strong>"),
+                        "A browser result's higher grade survives a lower worker regrade")
+                })
+        }
+    }
+
+    @Test func indexShowsWeightedGradeRoundedHalfAwayFromZero() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_weighted", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_weighted", title: "Weighted", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_w1", testSetupID: "setup_weighted", userID: userID, on: app)
+            // Weighted branch, on a rounding boundary: 7/8 points = 87.5 → 88%.
+            let result = APIResult(id: "res_weighted", submissionID: "sub_w1", source: "worker")
+            try await result.saveWithCollection(
+                json: #"{"submissionID":"sub_w1","earnedPoints":7,"totalPoints":8}"#, on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("<strong>88%</strong>"),
+                        "Weighted grades round half away from zero: 87.5 → 88")
+                })
+        }
+    }
+
+    @Test func indexShowsNoGradeForAllFailSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_zero", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_zero", title: "Zero Lab", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_zero", testSetupID: "setup_zero", userID: userID, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_zero",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .fail),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        !res.body.string.contains("<strong>0%</strong>"),
+                        "A best grade of exactly 0 renders no grade, not \"0%\" — the fold only admits a grade above the 0 sentinel"
+                    )
+                })
+        }
+    }
+
+    @Test func indexShowsRallyBadgeForGradeJumpOverPriorAttempt() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_rally", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_rally", title: "Rally Lab", isOpen: true, on: app)
+            // Attempt 1 at 40%, attempt 2 at 100%: a 60-point jump earns Rally,
+            // which reads the PRIOR attempt's preferred result.
+            try await wrInsertSubmission(
+                id: "sub_rally1", testSetupID: "setup_rally", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_rally1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_rally2", testSetupID: "setup_rally", userID: userID, attemptNumber: 2, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_rally2",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .pass),
+                    wrMakeOutcome(name: "t5", status: .pass),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("Rally"),
+                        "A ≥50-point jump over the prior attempt earns the Rally badge")
+                })
+        }
+    }
+
     // MARK: - Unenrolled admin scoping
 
     /// An admin who is not enrolled in any course is an *administrator*, not a
