@@ -84,26 +84,47 @@ extension OperationalDiagnosticsService {
         return SubmissionDiagnosticsContext(courseID: courseID, assignmentID: assignmentID)
     }
 
+    /// Pending jobs the native worker fleet is on the hook for: every pending
+    /// validation, plus pending student work whose assignment is not
+    /// browser-graded.
+    ///
+    /// Cost scales with the number of *distinct assignments* holding pending
+    /// work, never with queue depth. This used to load every pending student
+    /// row into memory to produce one log field, which made each claim and each
+    /// submission-accept slower exactly as the backlog grew — the wrong
+    /// direction under pressure, and unbounded after a retest fan-out flips
+    /// tens of thousands of rows back to pending (#1361).
     func pendingQueueDepth(on db: Database) async throws -> Int {
         let pendingValidation = try await APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == APISubmission.Kind.validation)
             .count()
 
-        let pendingStudents = try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
+        let distinctSetupIDs = Set(
+            try await APISubmission.query(on: db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .unique()
+                .all(\.$testSetupID)
+        )
+        guard !distinctSetupIDs.isEmpty else { return pendingValidation }
 
         let workerModeSetupIDs = try await workerModeTestSetupIDs(
-            for: pendingStudents.map(\.testSetupID),
+            for: Array(distinctSetupIDs),
             on: db
         )
-        let pendingWorkerStudents = pendingStudents.reduce(into: 0) { count, submission in
-            if workerModeSetupIDs.contains(submission.testSetupID) {
-                count += 1
-            }
+        guard !workerModeSetupIDs.isEmpty else { return pendingValidation }
+
+        var studentQuery = APISubmission.query(on: db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .filter(\.$kind == APISubmission.Kind.student)
+        // When every pending assignment is worker-graded — the common case —
+        // the `IN` list would select exactly the rows already matched, so skip
+        // binding it.
+        if workerModeSetupIDs.count < distinctSetupIDs.count {
+            studentQuery = studentQuery.filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
         }
+        let pendingWorkerStudents = try await studentQuery.count()
 
         return pendingValidation + pendingWorkerStudents
     }

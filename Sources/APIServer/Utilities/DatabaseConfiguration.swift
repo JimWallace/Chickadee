@@ -408,6 +408,11 @@ func registerMigrations(on app: Application) {
     // all created above, so no additional ordering constraint.
     app.migrations.add(CreateSlipDaySpends())
 
+    // Worker claim priority (#1361): covers the fresh-work-first split's
+    // `retested_at` predicate, which the older submissions index stopped short
+    // of. Index-only; `submissions` is created far above.
+    app.migrations.add(CreateClaimPriorityIndex())
+
     // Data backfill, registered LAST on purpose: it full-queries `APITestSetup`,
     // which is only safe once every migration that adds a column to
     // `test_setups` has already run (the #1077 boot-order hazard, inverted —
