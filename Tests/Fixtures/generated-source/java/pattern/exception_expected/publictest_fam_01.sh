@@ -12,7 +12,7 @@ public class CkTest_fam_01 {
         var x = -1;
         String[] ckWhat = new String[1];
         int ckOutcome = ck.expectThrow(
-            () -> Solution.classify(x), "ValueError", ckWhat);
+            () -> { Solution.classify(x); return null; }, "ValueError", ckWhat);
         if (ckOutcome == ck.RETURNED) {
             ck.failed("no error raised\n"
                 + "  input:    " + "x=" + ck.format(x) + "\n"

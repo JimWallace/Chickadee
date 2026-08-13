@@ -253,6 +253,44 @@ import Testing
         #expect(noThrow.stdout.contains("no error raised"))
     }
 
+    /// A `void` method is the most idiomatic target for this kind — a
+    /// `withdraw`/`validate` that throws rather than returns. The renderer
+    /// emitted an EXPRESSION lambda, and `ck.Thunk.run()` returns `Object`, so
+    /// javac refused it with "void cannot be converted to Object" and every
+    /// case in the family reported `error` (#1346).
+    @Test func exceptionExpectedAcceptsAVoidTarget() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(
+            Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
+        let good = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                "static void f(int x) { throw new IllegalArgumentException(\"bad\"); }"))
+        #expect(
+            good.code == 0,
+            "a void target did not compile or did not pass: \(good.stdout) \(good.stderr)")
+    }
+
+    /// Instructor `expected` text is free text, and it was interpolated into a
+    /// Java string literal RAW — so a quote broke the literal and a backslash
+    /// was an illegal escape, erroring the whole family (#1346). Round-trips
+    /// through the match, so it proves the escaping is correct and not merely
+    /// compilable.
+    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(
+            Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
+        let good = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                #"static void f(int x) { throw new IllegalStateException("must be \"positive\" (C:\\in)"); }"#
+            ))
+        #expect(
+            good.code == 0,
+            "a quoted/backslashed expectation did not compile or match: \(good.stdout) \(good.stderr)"
+        )
+    }
+
     // MARK: - performanceThreshold
 
     @Test func performanceThresholdTimesTheCall() throws {

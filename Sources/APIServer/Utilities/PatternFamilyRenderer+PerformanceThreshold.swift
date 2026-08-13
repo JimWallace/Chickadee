@@ -234,13 +234,18 @@ func cppPerformanceBody(
         default: return "1000.0"
         }
     }()
+    // The call is a bare statement rather than a bound result, for the reason
+    // the Java arm already states: a timed function may well be void, and
+    // `auto result = f(x)` on a void call is
+    // `error: deduced type 'void' for 'result' is incomplete` — which fails
+    // every case in the family while the 0-point existence guard (which only
+    // takes the function's address) still passes, so nothing points at it.
     return cppGuarded(
         """
         auto ck_started = std::chrono::steady_clock::now();
-        auto result = \(target)(\(context.callArgs));
+        \(target)(\(context.callArgs));
         double ck_elapsed_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - ck_started).count();
-        (void)result;
         if (ck_elapsed_ms > \(budgetMs)) {
             ck::failed(std::string("too slow\\n")
                 + \(context.inputLine)

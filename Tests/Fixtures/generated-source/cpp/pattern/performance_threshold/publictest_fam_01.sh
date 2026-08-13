@@ -31,10 +31,9 @@ int main() {
     auto x = 1;
     try {
         auto ck_started = std::chrono::steady_clock::now();
-        auto result = classify(x);
+        classify(x);
         double ck_elapsed_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - ck_started).count();
-        (void)result;
         if (ck_elapsed_ms > 0.5) {
             ck::failed(std::string("too slow\n")
                 + "  input:    " + "x=" + ck::format(x) + "\n"
