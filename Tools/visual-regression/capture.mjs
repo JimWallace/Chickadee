@@ -77,6 +77,18 @@ async function main() {
             code, pre, kbd, samp, .mono, [class*="mono"] {
               font-family: 'DejaVu Sans Mono', monospace !important;
             }
+            /* Relative timestamps are masked, but the mask cannot hide their
+               LAYOUT: the phrase's width ("just now" vs "2 minutes ago")
+               varies run-to-run and drives auto table-column widths, which
+               shifted every column of the students table by a few px and
+               failed the diff while the dark capture of the same DOM passed.
+               Pin the box so the phrase cannot move the layout. */
+            .js-relative-time {
+              display: inline-block !important;
+              width: 9ch !important;
+              overflow: hidden !important;
+              white-space: nowrap !important;
+            }
           `,
         });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle

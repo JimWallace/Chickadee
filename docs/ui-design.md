@@ -146,9 +146,11 @@ of action buttons" and four pill implementations; the page-style ratchet
   `.inline-form` — forms and the inline error banner (never native
   `alert()`).
 - **`_flash` partial** + `.flash-*` — see page anatomy above.
-- **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`** — the page
-  header row and its secondary line.  Cluster multiple left/right items
-  inside with `.toolbar`.
+- **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`**,
+  **`.titlebar-subtitle`** — the page header row and its secondary line
+  (`.page-subtitle` renders as the titlebar's *sibling*;
+  `.titlebar-subtitle` stacks *inside* its left cell).  Cluster multiple
+  left/right items inside with `.toolbar`.
 - **`.page-section`**, **`.section-intro`**, **`.section-note`** — section
   wrapper, its lead-in paragraph, its italic aside.
 - **`.toolbar`** (+ `--end`), `.row-actions-tight` — horizontal control
@@ -160,9 +162,14 @@ of action buttons" and four pill implementations; the page-style ratchet
 - **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
-- **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
-  forms.
+- **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear panel
+  forms; compose with **`.popover-panel`** to float the panel beside its
+  trigger (drops back into flow on phones).
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
+- **Editor-built forms** (`test-editor-modal.js` and friends):
+  `.editor-modal-*`, `.editor-stack`, `.editor-cm-mount`,
+  `.field-stack--grow/--narrow`, `.input-mono`, and the toggled value cues
+  `.input-expression` / `.input-attention` / `.input-invalid`.
 
 If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
@@ -323,12 +330,16 @@ moderate/minor ratchet down via `a11y-baseline.json`.
 - **Shrinking the spacing lattice** → when a step's last usage disappears,
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.
-- **Migration queue** (known page-local duplicates the ratchet will squeeze
-  out over time; convert opportunistically when touching these pages): the
-  two `.bs-*` namespaces on the brightspace pages, `.storage-bar` /
-  `.activity-filter` toolbar variants, the `.student-subtitle` /
-  `.history-subtitle` family, `.submissions-table` / `.import-result-table`
-  bottom-margin variants, and `course-student-submissions`' absolutely
-  positioned `.action-panel` (a future `.popover-panel` component).
+- **Migration queue** (known duplicates the ratchets will squeeze out over
+  time; convert opportunistically when touching these files): the remaining
+  JS styling decisions, concentrated in `pattern-family-editor.js` and
+  `suite-table.js` (the ratchet count names the total); the leftover small
+  muted-text variants (`.mcp-none`, `.extension-note`, `.activity-category`);
+  and the parked design decisions — whether tabbed pages get a
+  visually-hidden `h1`, and the dashboard cards' ARIA roles (both are the
+  measured moderate/minor axe findings behind the a11y baseline).  The
+  original page-local CSS queue — the `.bs-*` namespaces, toolbar and
+  subtitle variants, and the `.action-panel` popover — was converted in the
+  follow-up pass to #1381.
 - **Future ratchets** (candidates, not yet enforced): `font-weight` and
   `line-height` scales.
