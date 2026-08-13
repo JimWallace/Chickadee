@@ -648,20 +648,28 @@ extension WorkerDaemon {
                     studentNotebookName: job.submissionFilename.map {
                         URL(fileURLWithPath: $0).lastPathComponent
                     })
-                return (
-                    refused.map(protectedFileSkippedWarning) + warnings,
+                // nil `forcedLanguage` means the extractor trusted the
+                // notebook's own metadata, which for an unrecognised kernel
+                // falls back to Python — so the hint has to agree. Spelled
+                // `?? .python` at the call site rather than behind a named
+                // constant: `no-language-defaults.sh` permits a nil-coalescing
+                // fallback precisely because it stays VISIBLE here, and hiding
+                // it behind a name is the shape that guard exists to prevent.
+                let hintLanguage = forcedLanguage ?? .python
+                // The hint names the student's file. When the upload carries no
+                // filename — every ARCHIVE submission, since a zip stores nil —
+                // it is derived from what the submission directory actually
+                // held, which is the only place the student's own files can
+                // still be told apart from the instructor's. Without it the
+                // generated C++ wrapper globbed the merged workspace and graded
+                // `helpers.cpp` instead of `solution.cpp` (#1390).
+                let studentModule =
                     preferredStudentModuleFilename(
                         submissionFilename: job.submissionFilename,
-                        // nil means the extractor trusted the notebook's own
-                        // metadata, which for an unrecognised kernel falls back
-                        // to Python — so the hint has to agree, and both sites
-                        // spell `?? .python` rather than sharing a named
-                        // constant. That is deliberate: `no-language-defaults.sh`
-                        // permits a nil-coalescing fallback precisely because it
-                        // stays VISIBLE at the call site, and hiding it behind a
-                        // name is the shape that guard exists to prevent.
-                        language: forcedLanguage ?? .python)
-                )
+                        language: hintLanguage)
+                    ?? studentModuleFromSubmittedFiles(
+                        in: paths.submissionDir, language: hintLanguage)
+                return (refused.map(protectedFileSkippedWarning) + warnings, studentModule)
             }
         }
     }

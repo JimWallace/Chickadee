@@ -187,6 +187,41 @@ func preferredStudentModuleFilename(
     return nil
 }
 
+/// The student's own source file, chosen from what the SUBMISSION contained.
+///
+/// The fallback for when `preferredStudentModuleFilename` has nothing to go on,
+/// which is every archive upload: a zip carries no filename
+/// (`fallbackFilename = isZip ? nil : …`), so no hint was written at all and the
+/// generated C++ wrapper fell back to globbing `*.cpp` in the merged workspace —
+/// where it took the alphabetically-first candidate and graded the instructor's
+/// `helpers.cpp` instead of the student's `solution.cpp` (#1390).
+///
+/// PROVENANCE, NOT NAME. This reads the submission directory, before the merge,
+/// so every file it can see came from the upload. That is the distinction the
+/// wrapper cannot make — by the time it runs, the student's code and the
+/// instructor's support files are one directory with no way to tell them apart.
+///
+/// Root-level only, because the hint is a bare filename the runtimes resolve
+/// beside themselves. Sorted, so a multi-file upload picks deterministically
+/// rather than by enumeration order; any of the student's own files is a better
+/// answer than an instructor's.
+func studentModuleFromSubmittedFiles(
+    in submissionDirectory: URL, language: AssignmentLanguage
+) -> String? {
+    let wanted = language.sourceFileExtension.lowercased()
+    let entries =
+        (try? FileManager.default.contentsOfDirectory(
+            at: submissionDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles])) ?? []
+    return
+        entries
+        .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true }
+        .map(\.lastPathComponent)
+        .filter { ($0 as NSString).pathExtension.lowercased() == wanted }
+        .min()
+}
+
 func stagedSubmissionDestination(
     submissionDirectory: URL,
     submittedFilename: String
