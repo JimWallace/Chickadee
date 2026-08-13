@@ -19,6 +19,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import fs from "node:fs";
 import path from "node:path";
 import { seed } from "./seed.mjs";
+import { pageList } from "./pages.mjs";
 
 const baseURL = process.argv[2];
 if (!baseURL) {
@@ -33,14 +34,8 @@ async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
   const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
 
-  const PAGES = [
-    { name: "login", path: "/login", state: null },
-    { name: "student-dashboard", path: "/", state: studentState },
-    { name: "student-submit", path: `/testsetups/${setupID}/submit`, state: studentState },
-    { name: "instructor-assignments", path: "/instructor", state: instructorState },
-    { name: "admin-dashboard", path: "/admin", state: instructorState },
-    { name: "submission-pending", path: resultsPath, state: studentState },
-  ];
+  // Page list is shared with the visual capture — see pages.mjs.
+  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
 
   const browser = await chromium.launch();
   const hard = [];   // critical + serious

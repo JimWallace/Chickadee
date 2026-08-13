@@ -3,7 +3,7 @@
 Connected agents
 #endexport
 #export("content"):
-<section class="admin-section">
+<section class="page-section">
     <h2 class="agents-heading">Connected agents</h2>
     <p class="agents-intro">
         AI agents authorized to author course content on

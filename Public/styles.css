@@ -80,6 +80,10 @@
     --nav-fg: rgba(255, 255, 255, .85);
     --nav-fg-muted: rgba(255, 255, 255, .6);
 
+    /* Modal scrim — dims the page behind a blocking dialog.  A black-alpha
+       wash reads correctly on both schemes, so no dark-mode override. */
+    --overlay-bg: rgba(0, 0, 0, .55);
+
     /* The one elevation shadow — pop-out menus, dropdowns, floating
        panels.  Dark mode needs a stronger alpha to read at all. */
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
@@ -197,6 +201,7 @@ a { color: var(--blue); }
 .flash-success { background: var(--success-bg); color: var(--success-fg); }
 .flash-error   { background: var(--danger-bg);  color: var(--danger-fg); }
 .flash-neutral { background: var(--gray-100);   color: var(--gray-700); }
+.flash-warning { background: var(--warning-bg); color: var(--gray-800); }
 
 /* ── Nav ─────────────────────────────────────────────── */
 
@@ -1047,20 +1052,26 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: 1rem;
 }
 
-/* ── Admin dashboard ─────────────────────────────────── */
+/* ── Page sections ───────────────────────────────────── */
 
-.admin-section {
+/* THE generic page-section wrapper: a heading plus its content, on any
+   chrome page (admin, instructor, account).  Renamed from .admin-section,
+   whose name lied once non-admin pages adopted it.  Distinct from
+   .section-block (the suite editor's per-test-section grouping) and
+   .submission-section-block (results grouping). */
+.page-section {
     margin-bottom: 2.5rem;
 }
 
-.admin-section h2 {
+.page-section h2 {
     margin-bottom: .9rem;
 }
 
 /* ── Section tab bar (admin + instructor) ────────────── */
-/* Inlined into each page rather than a Leaf fragment: LeafKit 1.x raises a
-   false-positive "cyclically referenced" error on #extend of a shared
-   partial here. */
+/* Markup lives in _admin-tabs.leaf / _instructor-tabs.leaf — one shared
+   partial per area.  (A comment here used to claim LeafKit rejected a shared
+   partial with a false cycle error; the #1266 investigation discredited that
+   class of diagnosis, and the partials render fine.) */
 
 .admin-tabs,
 .instructor-tabs {
@@ -1447,16 +1458,17 @@ code { font-family: var(--font-mono); font-size: .9em; }
    names instead of inline style="" attributes.  Page-unique styling still
    lives in each page; these are only the patterns that recurred widely. */
 
-/* Success/confirmation banner (distinct from the red .error-box / neutral
-   .notice-box) — green-outlined, sits above page content. */
-.notice-banner {
-    margin-bottom: 1rem;
-    padding: 1rem;
-    border: 1px solid var(--green);
-    border-radius: var(--radius-lg);
-    background: var(--success-bg);
+/* Body copy on the error page (error.leaf).  GLOBAL rather than page-local
+   because the class NAME is a cross-page contract:
+   ChickadeeUI.extractErrorMessage (Public/chickadee-ui.js, loaded on every
+   page) scrapes failed fetch bodies for class="error-message".  A page-local
+   rename would pass every style guard and silently break error extraction
+   site-wide. */
+.error-message {
+    color: var(--gray-600);
+    max-width: 28rem;
+    margin: 0;
 }
-.notice-banner p { margin: 0; color: var(--green); font-weight: 600; }
 
 /* A title row: heading on the left, actions on the right, wrapping on
    narrow screens.  The heading inside sheds its default margin. */
@@ -1470,6 +1482,49 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .page-titlebar h1, .page-titlebar h2 { margin: 0; }
 .page-titlebar--baseline { align-items: baseline; }
+
+/* Secondary line directly under a .page-titlebar (username + role, course
+   name).  The negative top margin tucks it against the titlebar it follows. */
+.page-subtitle {
+    margin: -.75rem 0 1.5rem;
+    color: var(--text-secondary);
+}
+
+/* Lead-in paragraph directly under a section heading. */
+.section-intro {
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+    max-width: 60rem;
+}
+
+/* Aside/caveat paragraph inside a section. */
+.section-note {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Muted flavour of .field-note, for hints inside a form label. */
+.field-note--muted {
+    display: block;
+    color: var(--text-secondary);
+}
+
+/* Neutral rounded tag — runner capability tags, MCP course chips.  Not a
+   .tier badge: chips carry no status colour. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .2rem .55rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    color: var(--gray-700);
+    font-size: var(--text-sm);
+    line-height: 1.2;
+}
+.chip-row { display: flex; flex-wrap: wrap; gap: .45rem; }
 
 /* Horizontal cluster of controls (button groups, inline actions). */
 .toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -1959,6 +2014,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .suite-name-cell { display: flex; align-items: center; gap: .4rem; }
 .suite-root-drop { height: 2rem; text-align: center; font-size: var(--text-xs); color: var(--gray-500); cursor: default; }
 .suite-root-drop.drop-hover { background: var(--hover-bg); }
+/* Insertion indicator while dragging a whole SECTION over another section
+   block (suite-table.js toggles these beside tr.drop-before/-after).  These
+   were assigned by the JS but styled nowhere, so a section drag showed no
+   indicator at all.  Box-shadow lines rather than borders so the 2px
+   indicator cannot shift the block's layout mid-drag. */
+.section-block.section-drop-before { box-shadow: 0 -2px 0 0 var(--blue); }
+.section-block.section-drop-after  { box-shadow: 0 2px 0 0 var(--blue); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
 
@@ -2004,6 +2066,37 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    --filter-width custom property (so desktop is unchanged) and span the full
    row on phones. */
 .filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
+
+/* ── Idle-logout dialog (idle-logout.js) ─────────────── */
+/* Styled here rather than by the JS-injected stylesheet idle-logout.js used
+   to carry, which held nine hardcoded colours, an off-palette #1b6ef3 blue,
+   and a private dark-mode block — a fork of the design system that no guard
+   could see.  The dialog's buttons are plain .btn / .btn-primary; only the
+   scrim, card, countdown, and action row are idle-specific.  Visibility is
+   the `hidden` attribute (the global [hidden] pin beats display:flex). */
+.cd-idle-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-bg);
+}
+.cd-idle-card {
+    max-width: 26rem;
+    width: calc(100% - 2rem);
+    background: var(--surface);
+    color: var(--gray-900);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-pop);
+    line-height: 1.45;
+}
+.cd-idle-card h2 { margin: 0 0 .5rem; font-size: var(--text-xl); }
+.cd-idle-card p { margin: .25rem 0 1rem; }
+.cd-idle-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+.cd-idle-actions { display: flex; gap: .6rem; justify-content: flex-end; flex-wrap: wrap; }
 
 @media (max-width: 640px) {
     /* Let the top nav wrap onto multiple lines instead of overflowing the

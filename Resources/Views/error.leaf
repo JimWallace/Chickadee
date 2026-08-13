@@ -31,17 +31,14 @@
     font-size: 5em;  /* display glyph — 5x body size */
     font-weight: 700;
     line-height: 1;
-    color: var(--gray-300);
+    /* gray-500, not lighter: the glyph is text to axe, and gray-300 on the
+       page background fails even the large-text contrast threshold. */
+    color: var(--gray-500);
     letter-spacing: -.05em;
 }
 .error-title {
     margin: 0;
     font-size: var(--text-2xl);
-}
-.error-message {
-    color: var(--gray-600);
-    max-width: 28rem;
-    margin: 0;
 }
 </style>
 #endexport

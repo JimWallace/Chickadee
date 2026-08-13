@@ -3,21 +3,9 @@
 Students
 #endexport
 #export("content"):
-<nav class="instructor-tabs" aria-label="Instructor sections">
-    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="instructor-tab" href="/instructor/activity"#if(activeInstructorTab == "activity"): aria-current="page"#endif>Activity</a>
-    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
-    <a class="instructor-tab" href="/instructor/slip-days"#if(activeInstructorTab == "slip-days"): aria-current="page"#endif>Slip days</a>
-    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
-</nav>
+#extend("_instructor-tabs")
 
-#if(flashSuccess):
-<div class="notice-banner students-flash"><p>#(flashSuccess)</p></div>
-#endif
-#if(flashError):
-<div class="form-error students-flash">#(flashError)</div>
-#endif
+#extend("_flash")
 
 <div class="students-titlebar">
     <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
@@ -27,7 +15,7 @@ Students
         #csrfFormField()
         <label class="form-label students-mode-label">
             <select name="enrollmentMode" class="form-input students-mode-select"
-                    onchange="this.form.submit()">
+                    aria-label="Enrolment mode" onchange="this.form.submit()">
                 <option value="open"   #if(courseEnrollmentMode == "open"):selected#endif>Open enrolment</option>
                 <option value="auto"   #if(courseEnrollmentMode == "auto"):selected#endif>Auto enrolment</option>
                 <option value="closed" #if(courseEnrollmentMode == "closed"):selected#endif>Closed enrolment</option>
@@ -184,7 +172,6 @@ Students
     flex-wrap: wrap;
     margin-bottom: .75rem;
 }
-.students-flash { margin-bottom: .75rem; }
 .students-add-staff { margin: 0; }
 .students-title { font-size: var(--text-lg); font-weight: 600; margin: 0; }
 .students-mode-form { margin: 0; }

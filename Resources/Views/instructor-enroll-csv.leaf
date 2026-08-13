@@ -12,7 +12,7 @@ Enrol from CSV — #(courseCode)
 <div class="form-error section-gap">#(error)</div>
 #endif
 
-<section class="admin-section">
+<section class="page-section">
     <h2>Add students</h2>
     <p class="enroll-csv-intro">
         Upload a CSV file, type user IDs directly, or both — supplied IDs are merged. Unknown IDs are recorded as

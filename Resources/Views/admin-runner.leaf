@@ -3,7 +3,7 @@
 Runner #(runner.workerID)
 #endexport
 #export("content"):
-<section class="admin-section">
+<section class="page-section">
     <div data-runner-id="#(runner.workerID)" class="runner-header">
         <div>
             <h2 class="runner-header-title"><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="runner-badge-offline" style="display:none">Offline</span></h2>
@@ -13,9 +13,9 @@ Runner #(runner.workerID)
                 <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
             </p>
             #if(!tags.isEmpty):
-            <div class="runner-tag-list">
+            <div class="chip-row runner-tags">
                 #for(tag in tags):
-                <span class="runner-tag">#(tag)</span>
+                <span class="chip">#(tag)</span>
                 #endfor
             </div>
             #endif
@@ -35,16 +35,16 @@ Runner #(runner.workerID)
         </div>
     </div>
 
-    <div class="runner-stat-grid">
-        <div class="admin-stat"><strong>Passed</strong><span>#(summary.passedCount)</span></div>
-        <div class="admin-stat"><strong>Failed</strong><span>#(summary.failedCount)</span></div>
-        <div class="admin-stat"><strong>Errored</strong><span>#(summary.errorCount)</span></div>
-        <div class="admin-stat"><strong>Timed Out</strong><span>#(summary.timeoutCount)</span></div>
+    <div class="diagnostics-cards section-gap">
+        <div class="diagnostic-card"><span class="diagnostic-label">Passed</span><span class="diagnostic-value">#(summary.passedCount)</span></div>
+        <div class="diagnostic-card"><span class="diagnostic-label">Failed</span><span class="diagnostic-value">#(summary.failedCount)</span></div>
+        <div class="diagnostic-card"><span class="diagnostic-label">Errored</span><span class="diagnostic-value">#(summary.errorCount)</span></div>
+        <div class="diagnostic-card"><span class="diagnostic-label">Timed Out</span><span class="diagnostic-value">#(summary.timeoutCount)</span></div>
     </div>
 </section>
 
-<section class="admin-section">
-    <h3 class="section-heading-flush">Recent Jobs</h3>
+<section class="page-section">
+    <h3>Recent Jobs</h3>
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
@@ -81,8 +81,8 @@ Runner #(runner.workerID)
     #endif
 </section>
 
-<section class="admin-section">
-    <h3 class="section-heading-flush">Recent Snapshots</h3>
+<section class="page-section">
+    <h3>Recent Snapshots</h3>
     #if(snapshots.isEmpty):
     <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
     #else:
@@ -130,47 +130,8 @@ Runner #(runner.workerID)
 .runner-meta {
     min-width: 220px;
 }
-.runner-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
-    margin-bottom: 1.25rem;
-}
-.section-heading-flush {
-    margin-top: 0;
-}
-.admin-stat {
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    padding: .8rem .9rem;
-    display: flex;
-    justify-content: space-between;
-    gap: .75rem;
-    background: var(--gray-50);
-}
-.admin-stat strong {
-    color: var(--muted);
-    font-size: var(--text-base);
-}
-.admin-stat span {
-    font-weight: 700;
-}
-.runner-tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .45rem;
+.runner-tags {
     margin-top: .6rem;
-}
-.runner-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: .2rem .55rem;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--gray-200);
-    background: var(--gray-50);
-    color: var(--gray-700);
-    font-size: var(--text-sm);
-    line-height: 1.2;
 }
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>

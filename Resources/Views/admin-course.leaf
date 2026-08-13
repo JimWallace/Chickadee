@@ -4,17 +4,17 @@
 #endexport
 #export("content"):
 #if(isNew):
-<div class="course-page-head course-page-head--between">
-    <h1 class="course-page-title">New Course</h1>
+<div class="page-titlebar">
+    <h1>New Course</h1>
     <a href="/admin" class="btn">Cancel</a>
 </div>
 
 #if(error == "course_fields_required"):
-<div class="form-error course-alert-gap">Course code and name are required.</div>
+<div class="form-error">Course code and name are required.</div>
 #endif
 
 <!-- ── Create course ───────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Course details</h2>
     <form method="post" action="/admin/courses"
           class="course-form">
@@ -31,8 +31,9 @@
     </form>
 </section>
 #else:
-<div class="course-page-head course-page-head--detail">
-    <h1 class="course-page-title">#(course.code) — #(course.name)</h1>
+<div class="page-titlebar">
+    <div class="toolbar">
+    <h1>#(course.code) — #(course.name)</h1>
     #if(course.isArchived):
     <span class="tier tier-closed">archived</span>
     #else:
@@ -45,8 +46,9 @@
     #else:
     <span class="tier tier-closed">closed enrolment</span>
     #endif
-    <div class="course-head-actions">
-        <form method="post" action="/admin/courses/#(course.id)/archive" class="course-form-flush">
+    </div>
+    <div class="toolbar">
+        <form method="post" action="/admin/courses/#(course.id)/archive" class="form-flush">
             #csrfFormField()
             #if(course.isArchived):
             <button class="btn action-danger" type="submit"
@@ -61,7 +63,7 @@
 </div>
 
 <!-- ── Edit course ─────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Edit course</h2>
     <form method="post" action="/admin/courses/#(course.id)/edit"
           class="course-form">
@@ -110,7 +112,7 @@
 #endif
 
 <!-- ── Assignments ─────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Assignments (#(assignmentCount))</h2>
     #if(assignments.isEmpty):
     <p class="empty">No assignments for this course.</p>
@@ -152,11 +154,12 @@
 </section>
 
 <!-- ── Enrolled students ────────────────────────────── -->
-<section class="admin-section">
-    <div class="course-enroll-head">
-        <h2 class="course-page-title">Enrolled students (#(course.enrollmentCount))</h2>
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Enrolled students (#(course.enrollmentCount))</h2>
         #if(!isNew):
-        <form method="post" action="/admin/courses/#(course.id)/enrollment-mode" class="course-form-flush">
+        <div class="toolbar">
+        <form method="post" action="/admin/courses/#(course.id)/enrollment-mode" class="form-flush">
             #csrfFormField()
             <label class="form-label course-enroll-label">
                 Enrolment
@@ -170,7 +173,7 @@
         </form>
         #if(!course.isArchived):
         <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
-              enctype="multipart/form-data" class="course-csv-form">
+              enctype="multipart/form-data" class="form-flush">
             #csrfFormField()
             <label class="btn btn-primary course-csv-label">
                 Enrol from CSV
@@ -179,6 +182,7 @@
             </label>
         </form>
         #endif
+        </div>
         #endif
     </div>
     #if(enrolledUsers.isEmpty):
@@ -243,25 +247,6 @@
 </section>
 
 <style>
-.course-page-head {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 1.5rem;
-}
-.course-page-head--between {
-    justify-content: space-between;
-    gap: 1rem;
-}
-.course-page-head--detail {
-    gap: .75rem;
-}
-.course-page-title {
-    margin: 0;
-}
-.course-alert-gap {
-    margin-bottom: 1rem;
-}
 .course-form {
     display: flex;
     gap: .5rem;
@@ -289,24 +274,8 @@
 .course-form-submit {
     align-self: flex-end;
 }
-.course-head-actions {
-    margin-left: auto;
-    display: flex;
-    gap: .5rem;
-    align-items: center;
-}
-.course-form-flush {
-    margin: 0;
-}
 .course-bs-meta {
     margin-top: .5rem;
-}
-.course-enroll-head {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
 }
 .course-enroll-label {
     font-size: var(--text-base);
@@ -315,10 +284,6 @@
 .course-enroll-select {
     display: block;
     font-size: var(--text-base);
-}
-.course-csv-form {
-    margin: 0;
-    margin-left: auto;
 }
 .course-csv-label {
     cursor: pointer;

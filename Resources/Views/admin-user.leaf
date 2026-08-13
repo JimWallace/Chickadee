@@ -3,16 +3,16 @@
 Courses — #if(displayName):#(displayName)#else:#(username)#endif
 #endexport
 #export("content"):
-<div class="user-page-head">
-    <h1 class="user-page-title">
+<div class="page-titlebar">
+    <h1>
         #if(displayName):#(displayName)#else:#(username)#endif — Courses
     </h1>
 </div>
-<p class="user-page-subtitle">
+<p class="page-subtitle">
     @#(username) · #(role)
 </p>
 
-<section class="admin-section">
+<section class="page-section">
     <h2>Enrolled courses</h2>
     #if(enrolledCourses.isEmpty):
     <p class="empty">Not enrolled in any courses.</p>
@@ -33,7 +33,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
                 <td>
                     <form method="post"
                           action="/admin/users/#(targetUserID)/unenroll/#(course.id)"
-                          class="form-inline-display">
+                          class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-icon" type="submit"
                                 title="Remove from course" aria-label="Remove from course">
@@ -48,7 +48,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
     #endif
 </section>
 
-<section class="admin-section">
+<section class="page-section">
     <h2>Add to course</h2>
     #if(availableCourses.isEmpty):
     <p class="empty">
@@ -74,23 +74,6 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 </section>
 
 <style>
-.user-page-head {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-.user-page-title {
-    margin: 0;
-}
-.user-page-subtitle {
-    color: var(--gray-600);
-    margin-top: -.75rem;
-    margin-bottom: 1.5rem;
-}
-.form-inline-display {
-    display: inline;
-}
 .user-enroll-form {
     display: flex;
     gap: .5rem;

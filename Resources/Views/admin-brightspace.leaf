@@ -4,25 +4,11 @@ LEARN
 #endexport
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
-<nav class="admin-tabs" aria-label="Admin sections">
-    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
-    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
-    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
-    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
-    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
-    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
-</nav>
-<section class="admin-section">
-    #if(flashSuccess):
-    <div class="flash flash-success" role="status">#(flashSuccess)</div>
-    #endif
-    #if(flashError):
-    <div class="flash flash-error" role="alert">#(flashError)</div>
-    #endif
+#extend("_admin-tabs")
+<section class="page-section">
+    #extend("_flash")
 
-    <p class="bs-intro">
+    <p class="section-intro">
         LEARN grade sync runs as one D2L service account. The app credentials
         (URL / App ID / App Key) come from the server environment; this page sets
         the matching <strong>Valence user key</strong> — harvested from your
@@ -31,7 +17,7 @@ LEARN
     </p>
 
     #if(!configured):
-    <p class="bs-muted">
+    <p class="text-muted">
         Not configured. Set <code>BRIGHTSPACE_URL</code>,
         <code>BRIGHTSPACE_APP_ID</code>, and <code>BRIGHTSPACE_APP_KEY</code> in
         the server environment, then reload this page to set the user key.
@@ -41,8 +27,8 @@ LEARN
         <dt>Status</dt>
         <dd>
             #if(authorized):
-            <span class="tier tier-public">Authorized</span>
-            #if(keySource == "env"):<span class="bs-muted">(using key from env)</span>#endif
+            <span class="tier tier-open">Authorized</span>
+            #if(keySource == "env"):<span class="text-muted">(using key from env)</span>#endif
             #else:
             <span class="tier tier-closed">Not authorized</span>
             #endif
@@ -51,7 +37,7 @@ LEARN
         <dd><code>#(baseURL)</code></dd>
         #if(identityName):
         <dt>Authorized as</dt>
-        <dd>#(identityName)#if(capturedAt): <span class="bs-muted">— #(capturedAt)</span>#endif</dd>
+        <dd>#(identityName)#if(capturedAt): <span class="text-muted">— #(capturedAt)</span>#endif</dd>
         #endif
     </dl>
 
@@ -59,7 +45,7 @@ LEARN
         #if(authorized):
         <form method="post" action="/admin/brightspace/test" class="inline-form">
             #csrfFormField()
-            <button class="btn btn-secondary" type="submit">Test connection</button>
+            <button class="btn" type="submit">Test connection</button>
         </form>
         #endif
         #if(keySource == "authorized"):
@@ -73,7 +59,7 @@ LEARN
 
     <div class="bs-manual">
         <h3 class="bs-manual-heading">Set the user key</h3>
-        <p class="bs-muted">
+        <p class="text-muted">
             Harvest the <strong>User ID</strong> and <strong>User Key</strong> for
             your service account from your institution's credential service (e.g.
             UW's <code>d2l-api-cred.fast.uwaterloo.ca</code>), then paste them here —
@@ -91,20 +77,13 @@ LEARN
         </form>
     </div>
 
-    <p class="bs-muted bs-footnote">
+    <p class="text-muted bs-footnote">
         Instructors map assignments to grade items and watch grades flow on
         their course's LEARN tab; this page only sets the shared connection.
     </p>
     #endif
 </section>
 <style>
-.bs-intro {
-    color: var(--muted);
-    margin-top: 0;
-}
-.bs-muted {
-    color: var(--muted);
-}
 .bs-status {
     display: grid;
     grid-template-columns: 9rem 1fr;

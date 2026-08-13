@@ -10,7 +10,7 @@ My Account
 #endif
 
 <!-- ── User info ──────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Account info</h2>
     <dl class="detail-grid">
         <dt>Username</dt>
@@ -31,12 +31,12 @@ My Account
 </section>
 
 <!-- ── Your data ──────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>Your data</h2>
     #if(exportNotice == "started"):
-    <div class="notice-banner"><p>Your data export is being prepared. This page will refresh when it is ready.</p></div>
+    <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
     #elseif(exportNotice == "in_progress"):
-    <div class="notice-banner"><p>Your data export is already being prepared. This page will refresh when it is ready.</p></div>
+    <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
     #endif
     #if(exportError == "rate_limited"):
     <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>
@@ -48,7 +48,7 @@ My Account
         uploaded), grading results, and account activity records — delivered
         as a single zip archive. Limit one export per day.</p>
     #if(exportStatus == "pending"):
-    <p id="export-pending"><span class="badge badge-info">In progress</span>
+    <p id="export-pending"><span class="chip">In progress</span>
         Requested #(exportRequestedAtDisplay). Preparing your export can take
         a few minutes.</p>
     <script src="/account-export.js?v=#appVersion()"></script>
@@ -71,7 +71,7 @@ My Account
 </section>
 
 <!-- ── My Courses ─────────────────────────────────────────── -->
-<section class="admin-section">
+<section class="page-section">
     <h2>My courses</h2>
     #if(enrolledCourses.isEmpty):
     <p class="empty">You are not enrolled in any courses.
@@ -83,7 +83,7 @@ My Account
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th></th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>
@@ -103,9 +103,9 @@ My Account
                                 onclick="return confirm('Leave #(course.code)?')">Leave</button>
                     </form>
                     #elseif(course.enrollmentMode == "auto"):
-                    <span class="badge badge-info" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
+                    <span class="chip" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
                     #else:
-                    <span class="badge badge-secondary" title="Managed by instructor — contact them to be removed">Managed</span>
+                    <span class="chip" title="Managed by instructor — contact them to be removed">Managed</span>
                     #endif
                 </td>
             </tr>
@@ -117,14 +117,14 @@ My Account
 
 <!-- ── Available Courses ──────────────────────────────────── -->
 #if(!availableCourses.isEmpty):
-<section class="admin-section">
+<section class="page-section">
     <h2>Available courses</h2>
     <table class="results-table">
         <thead>
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th></th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>

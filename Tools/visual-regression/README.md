@@ -13,9 +13,21 @@ other check; a baseline diff catches that class on the introducing PR.
 
 ## Pages × schemes
 
-`login`, `student-dashboard`, `student-submit`, `submission-pending`,
-`instructor-assignments`, `admin-dashboard` — each as `--light` and `--dark`.
-Page names are the baseline filenames; add pages in `capture.mjs`.
+One representative per page-anatomy family (see "Page archetypes" in
+`docs/ui-design.md`): `login`, `student-dashboard`, `student-submit`,
+`submission-pending`, `student-account`, `error-404`,
+`instructor-assignments`, `instructor-students`, `instructor-slip-days`,
+`admin-dashboard`, `admin-users`, `admin-alerts`, `admin-course-new` — each
+as `--light` and `--dark`. Page names are the baseline filenames; the list
+lives in `pages.mjs`, shared by the capture and the a11y scan so the two
+cannot drift. (`admin-audit` is deliberately excluded: its rows are
+per-run UUIDs and timestamps.)
+
+A page captured with **no committed baseline** bootstraps per page: the run
+passes with a loud warning and the capture is uploaded in the
+`visual-baselines-bootstrap` artifact — commit it to `baselines/` in the
+same PR to flip the page to enforcing. Baselines are CI-canonical, so this
+artifact round-trip is the normal way to add a page.
 
 ## Running locally
 

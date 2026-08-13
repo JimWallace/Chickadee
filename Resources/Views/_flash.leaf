@@ -1,0 +1,16 @@
+<!-- The one flash rendering (docs/ui-design.md, "Flash banners").  Every page
+     includes this partial instead of hand-rolling banner markup, so the visual
+     treatment and the ARIA roles cannot fork per page: the UI audit found a
+     second banner dialect (green outline, no roles) that had split cleanly
+     along the admin/instructor line.  Handles the two context conventions in
+     use: flashSuccess / flashError (post-redirect one-shots) and the
+     assignment editors' pre-redirect notice. -->
+#if(flashSuccess):
+<div class="flash flash-success" role="status">#(flashSuccess)</div>
+#endif
+#if(notice):
+<div class="flash flash-success" role="status">#(notice)</div>
+#endif
+#if(flashError):
+<div class="flash flash-error" role="alert">#(flashError)</div>
+#endif

@@ -5,11 +5,7 @@
 </div>
 #endif
 
-#if(notice):
-<div class="notice-banner">
-    <p>#(notice)</p>
-</div>
-#endif
+#extend("_flash")
 
 <!-- `data-ck-inplace` marks every form on this page whose handler answers with
      a redirect to the chromed standalone editor.  That is right standalone and

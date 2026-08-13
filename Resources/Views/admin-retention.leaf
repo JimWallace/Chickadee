@@ -4,35 +4,21 @@ Retention
 #endexport
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
-<nav class="admin-tabs" aria-label="Admin sections">
-    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
-    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
-    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
-    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
-    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
-    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
-</nav>
-<section class="admin-section">
-    #if(flashSuccess):
-    <div class="flash flash-success" role="status">#(flashSuccess)</div>
-    #endif
-    #if(flashError):
-    <div class="flash flash-error" role="alert">#(flashError)</div>
-    #endif
+#extend("_admin-tabs")
+<section class="page-section">
+    #extend("_flash")
 
-    <p class="retention-intro">
+    <p class="section-intro">
         Archived courses can be restored at any time. #(retentionDays) days
         after a course is archived, an admin may permanently delete it and all
         its data. <strong>Deletion cannot be undone.</strong>
     </p>
 
     #if(rows.isEmpty):
-    <p class="retention-muted">No archived courses. The retention clock starts when a course is archived.</p>
+    <p class="text-muted">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
     #if(deletableCount > 0):
-    <p class="retention-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
+    <p class="text-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
     #endif
     <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
@@ -92,13 +78,6 @@ Retention
     #endif
 </section>
 <style>
-.retention-intro {
-    color: var(--muted);
-    margin-top: 0;
-}
-.retention-muted {
-    color: var(--muted);
-}
 .retention-col-date {
     width: 11rem;
 }

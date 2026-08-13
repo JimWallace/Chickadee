@@ -3,31 +3,19 @@
 MCP
 #endexport
 #export("content"):
-<nav class="instructor-tabs" aria-label="Instructor sections">
-    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="instructor-tab" href="/instructor/activity"#if(activeInstructorTab == "activity"): aria-current="page"#endif>Activity</a>
-    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
-    <a class="instructor-tab" href="/instructor/slip-days"#if(activeInstructorTab == "slip-days"): aria-current="page"#endif>Slip days</a>
-    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
-</nav>
+#extend("_instructor-tabs")
 
 #if(!hasActiveCourse):
-<section class="mcp-panel-section">
+<section class="page-section">
     <p class="empty">Select a course to manage its authoring voice.</p>
 </section>
 #else:
 
-#if(flashSuccess):
-<div class="notice-banner mcp-panel-flash"><p>#(flashSuccess)</p></div>
-#endif
-#if(flashError):
-<div class="form-error mcp-panel-flash">#(flashError)</div>
-#endif
+#extend("_flash")
 
-<section class="mcp-panel-section">
+<section class="page-section">
     <h2>Authoring voice — #(courseCode)</h2>
-    <p class="mcp-panel-intro">
+    <p class="section-intro">
         Chickadee's MCP server lets a connected agent author assignment content on course
         staff's behalf. The guide below is what agents receive when they author for
         #(courseCode): it governs the register, vocabulary, and conventions of the
@@ -35,28 +23,28 @@ MCP
         Edit it to set your own — tone, notation, the textbook you refer to, the domain your
         examples come from.
     </p>
-    <p class="mcp-panel-note">#(sourceNote)</p>
+    <p class="section-note">#(sourceNote)</p>
     #if(mcpDisabled):
-    <p class="mcp-panel-note">
+    <p class="section-note">
         The MCP server is currently disabled on this deployment, so no agents can connect.
         Changes saved here take effect once it is enabled.
     </p>
     #endif
     #if(readOnlyNote):
-    <p class="mcp-panel-note">#(readOnlyNote)</p>
+    <p class="section-note">#(readOnlyNote)</p>
     #endif
-    <form method="post" action="/instructor/mcp" class="mcp-panel-form">
+    <form method="post" action="/instructor/mcp" class="guide-form">
         #csrfFormField()
         <label class="form-label">
             Guide text
-            <textarea class="form-input mcp-panel-textarea" name="instructions" rows="24"
+            <textarea class="form-input guide-textarea" name="instructions" rows="24"
                       maxlength="#(maxLength)"#if(!canEdit): disabled#endif>#(guidanceText)</textarea>
-            <span class="mcp-panel-hint">Plain text, up to #(maxLength) characters. Saved changes
+            <span class="field-note field-note--muted">Plain text, up to #(maxLength) characters. Saved changes
                 reach agents the next time they connect. Emptying the box restores the Chickadee
                 default.</span>
         </label>
         #if(canEdit):
-        <div class="mcp-panel-buttons">
+        <div class="toolbar">
             <button class="btn btn-primary" type="submit">Save</button>
             #if(showResetButton):
             <button class="btn" type="submit" name="action" value="reset">Reset to Chickadee default</button>
@@ -68,14 +56,8 @@ MCP
 
 #endif
 <style>
-.mcp-panel-section { margin-top: 1.5rem; }
-.mcp-panel-flash { margin-top: 1rem; }
-.mcp-panel-intro { margin: .75rem 0 1rem; color: var(--text-secondary); max-width: 60rem; }
-.mcp-panel-note { margin-bottom: 1rem; color: var(--text-secondary); font-style: italic; }
-.mcp-panel-form { display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; }
-.mcp-panel-textarea { display: block; margin-top: .25rem; width: 100%; resize: vertical; font-family: var(--font-mono); font-size: var(--text-sm); }
-.mcp-panel-hint { display: block; margin-top: .25rem; color: var(--text-secondary); font-size: var(--text-sm); }
-.mcp-panel-buttons { display: flex; gap: .75rem; }
+.guide-form { display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; }
+.guide-textarea { display: block; margin-top: .25rem; width: 100%; resize: vertical; font-family: var(--font-mono); font-size: var(--text-sm); }
 </style>
 #endexport
 #endextend
