@@ -21,6 +21,30 @@ import Testing
         #expect(classifyScriptInterpreter(name: "t.r", source: "") == .rscript)
         #expect(classifyScriptInterpreter(name: "t.lua", source: "") == .lua)
         #expect(classifyScriptInterpreter(name: "t.LUA", source: "") == .lua)
+        // The three added after this list was written. `.java` is the one that
+        // matters most: it is a documented hand-written-suite path and nothing
+        // pinned it.
+        #expect(classifyScriptInterpreter(name: "t.m", source: "") == .octave)
+        #expect(classifyScriptInterpreter(name: "t.rkt", source: "") == .racket)
+        #expect(classifyScriptInterpreter(name: "t.java", source: "") == .java)
+    }
+
+    /// The node-before-java shebang ordering is load-bearing and was untested.
+    ///
+    /// "javascript" CONTAINS "java", so checking Java first claims every
+    /// `#!/usr/bin/env javascript` script — the same hazard as bash-before-sh,
+    /// one letter further along. The classifier's own comment says so; this is
+    /// what stops someone alphabetising the list and breaking it silently.
+    @Test func shebangOrderingKeepsJavascriptOutOfJava() {
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env javascript\n") == .node)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env java\n") == .java)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env node\n") == .node)
+        // The original of the same hazard, kept beside it so the pair reads as
+        // one rule rather than two accidents.
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/bin/bash\n") == .bash)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/bin/sh\n") == .sh)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env racket\n") == .racket)
+        #expect(classifyScriptInterpreter(name: "run", source: "#!/usr/bin/env octave\n") == .octave)
     }
 
     @Test func extensionlessShebang() {
