@@ -253,6 +253,54 @@ import Testing
         #expect(noThrow.stdout.contains("no error raised"))
     }
 
+    /// The guard passed on a NON-STATIC method and then every scored case
+    /// failed to compile with "non-static method cannot be referenced from a
+    /// static context" — so the one test whose job is to explain the problem
+    /// said everything was fine (#1349). Forgetting `static` is the most common
+    /// Java intro mistake.
+    @Test func theExistenceGuardRejectsANonStaticMethod() throws {
+        guard Self.javacAvailable else { return }
+        let script = renderJavaExistenceGuard(
+            family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
+        let nonStatic = try Self.execute(
+            script: script, submission: Self.solution("public int f(int x) { return x * 2; }"))
+        #expect(nonStatic.code == 1, "a non-static method passed the guard: \(nonStatic.stdout)")
+        #expect(
+            nonStatic.stdout.contains("static"),
+            "the failure did not say the method is not static: \(nonStatic.stdout)")
+
+        // A private static method is equally uncallable, and equally confusing
+        // to be told "is not defined" about.
+        let priv = try Self.execute(
+            script: script,
+            submission: Self.solution("private static int f(int x) { return x * 2; }"))
+        #expect(priv.code == 1, "a private method passed the guard: \(priv.stdout)")
+
+        // And the ordinary case still passes.
+        let good = try Self.execute(
+            script: script, submission: Self.solution("static int f(int x) { return x * 2; }"))
+        #expect(good.code == 0, "a correct submission failed the guard: \(good.stdout)")
+    }
+
+    /// A successful compile's warnings must not ride into a PASSING test's
+    /// `longResult` (#1349). Raw types produce javac's "unchecked or unsafe
+    /// operations" note, which is the everyday way a student trips this.
+    @Test func compilerWarningsDoNotReachAPassingResult() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(Self.family(.boundaryEquality, expected: .int(1)))
+        let good = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                """
+                @SuppressWarnings("rawtypes")
+                static int f(int x) { java.util.List l = new java.util.ArrayList(); l.add(x); return l.size(); }
+                """))
+        #expect(good.code == 0, "the submission did not pass: \(good.stdout) \(good.stderr)")
+        #expect(
+            !good.stderr.contains("warning"),
+            "a compiler warning reached a passing test's longResult: \(good.stderr)")
+    }
+
     /// A `void` method is the most idiomatic target for this kind — a
     /// `withdraw`/`validate` that throws rather than returns. The renderer
     /// emitted an EXPRESSION lambda, and `ck.Thunk.run()` returns `Object`, so

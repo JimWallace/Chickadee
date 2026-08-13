@@ -46,5 +46,8 @@ int main() {
     ck::passed("Raised as expected: " + what);
 }
 CHICKADEE_GENERATED_SOURCE
-g++ -std=c++20 -O0 .ck_src_fam_01.cpp -o .ck_bin_fam_01 1>&2 || exit 2
+if ! g++ -std=c++20 -O0 .ck_src_fam_01.cpp -o .ck_bin_fam_01 >.ck_build_log 2>&1; then
+    cat .ck_build_log 1>&2
+    exit 2
+fi
 exec ./.ck_bin_fam_01

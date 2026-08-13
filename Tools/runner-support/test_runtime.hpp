@@ -81,6 +81,16 @@ inline std::string json_escape(const std::string& s) {
 }
 [[noreturn]] inline void errored(const std::string& msg) {
     std::cerr << msg << "\n";
+    // A shortResult footer, even though the exit code already says `error`.
+    // The shell contract takes the LAST non-empty stdout line as the summary,
+    // so without one a student's own final print became the one-line summary of
+    // a harness error — e.g. a prompt "Enter a value: " where the row should
+    // have read "the reference implementation raised" (#1349). Python's runtime
+    // has always emitted this.
+    const auto newline = msg.find('\n');
+    const std::string summary = newline == std::string::npos ? msg : msg.substr(0, newline);
+    std::cout << "{\"shortResult\": \"" << json_escape(summary.empty() ? "error" : summary)
+              << "\"}\n";
     std::exit(2);
 }
 

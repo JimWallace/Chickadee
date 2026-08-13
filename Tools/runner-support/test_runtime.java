@@ -75,6 +75,16 @@ class ck {
         // premature exit, and would report the less specific of the two —
         // hiding the message this call exists to deliver.
         System.out.println(SENTINEL);
+        // A shortResult footer, even though the exit code already says `error`.
+        // The shell contract takes the LAST non-empty stdout line as the
+        // summary, so without one a student's own final print became the
+        // one-line summary of a harness error (#1349). Python's runtime has
+        // always emitted this; the sentinel line above is stripped by the
+        // wrapper, so this is what remains.
+        int ckNewline = msg == null ? -1 : msg.indexOf('\n');
+        String ckSummary = msg == null ? "" : (ckNewline < 0 ? msg : msg.substring(0, ckNewline));
+        if (ckSummary.isEmpty()) ckSummary = "error";
+        System.out.println("{\"shortResult\": \"" + jsonEscape(ckSummary) + "\"}");
         System.out.flush();
         System.err.println(msg);
         System.err.flush();

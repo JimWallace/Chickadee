@@ -32,15 +32,27 @@ import Testing
         #expect(Self.gppAvailable, "g++ absent: every C++ renderer execution test skipped silently")
     }
 
+    /// Stages a workspace with the runtime but NO C++ file and no student hint
+    /// — "the upload contained nothing gradeable", which the wrapper has to
+    /// answer for itself before it ever reaches the compiler.
+    static func executeWithoutSubmission(
+        script: String
+    ) throws -> (
+        code: Int32, stdout: String, stderr: String
+    ) {
+        try execute(script: script, submission: nil)
+    }
+
     /// Runs a rendered wrapper in a workspace holding the canonical runtime,
-    /// the submission, and the student hint. Returns (exitCode, stdout).
+    /// the submission, and the student hint.
+    ///
     /// Returns stderr as well as stdout, because they carry different halves
     /// of the contract: `ck::failed` writes its JSON to stdout, while
     /// `ck::errored` writes to stderr — which is what becomes `longResult`.
     /// A test that only read stdout could not tell a reference failure's
     /// message from an empty one.
     static func execute(
-        script: String, submission: String, inputs: String? = nil
+        script: String, submission: String?, inputs: String? = nil
     ) throws -> (code: Int32, stdout: String, stderr: String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-cpprender-\(UUID().uuidString)")
@@ -51,11 +63,13 @@ import Testing
         let runtime = repoRoot.appendingPathComponent("Tools/runner-support/test_runtime.hpp")
         try FileManager.default.copyItem(
             at: runtime, to: dir.appendingPathComponent("test_runtime.hpp"))
-        try submission.write(
-            to: dir.appendingPathComponent("solution.cpp"), atomically: true, encoding: .utf8)
-        try "solution.cpp".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
+        if let submission {
+            try submission.write(
+                to: dir.appendingPathComponent("solution.cpp"), atomically: true, encoding: .utf8)
+            try "solution.cpp".write(
+                to: dir.appendingPathComponent(".chickadee_student_module"),
+                atomically: true, encoding: .utf8)
+        }
         if let inputs {
             try inputs.write(
                 to: dir.appendingPathComponent("_ck_inputs.hpp"), atomically: true, encoding: .utf8)
@@ -252,6 +266,42 @@ import Testing
             submission: "#include <cstdio>\nint f(int) { std::puts(\"nope\"); return 0; }\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains("wrong output"))
+    }
+
+    /// A missing submission is the student's to fix, so the 0-point existence
+    /// guard reports it as a graded FAIL with a readable message — which is
+    /// what Java has always done for the same student state, while C++ said
+    /// `error` because its no-submission check runs before the compile step
+    /// (#1349).
+    @Test func theExistenceGuardFailsRatherThanErrorsOnAMissingSubmission() throws {
+        guard Self.gppAvailable else { return }
+        let script = renderCppExistenceGuard(
+            family: Self.family(.boundaryEquality, expected: .int(9)), specHash: "h")
+        // An upload with no C++ in it at all: the wrapper finds no candidate.
+        let missing = try Self.executeWithoutSubmission(script: script)
+        #expect(
+            missing.code == 1,
+            "a missing submission was an error rather than a graded fail: \(missing.code)")
+        #expect(missing.stdout.contains("not defined"), "no readable message: \(missing.stdout)")
+    }
+
+    /// A successful compile's warnings must not ride into a PASSING test's
+    /// `longResult` (#1349).
+    @Test func compilerWarningsDoNotReachAPassingResult() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
+        let good = try Self.execute(
+            script: script,
+            submission: """
+                int f(int x) {
+                    int unused_variable = 5;   // -Wall would warn; g++ still compiles
+                    return x * x;
+                }
+                """)
+        #expect(good.code == 0, "the submission did not pass: \(good.stdout) \(good.stderr)")
+        #expect(
+            !good.stderr.contains("warning:"),
+            "a compiler warning reached a passing test's longResult: \(good.stderr)")
     }
 
     /// The save-time validator tells authors to name the exception CLASS, and

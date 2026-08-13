@@ -122,10 +122,25 @@ func renderJavaExistenceGuard(family: PatternFamily, specHash: String) -> String
         public class \(className) {
             public static void main(String[] ckArgs) {
                 Class<?> ckClass = \(qualified.className).class;
+                boolean ckFound = false;
+                boolean ckPrivate = false;
                 for (java.lang.reflect.Method ckM : ckClass.getDeclaredMethods()) {
-                    if (ckM.getName().equals("\(qualified.methodName)")) {
+                    if (!ckM.getName().equals("\(qualified.methodName)")) continue;
+                    ckFound = true;
+                    int ckMods = ckM.getModifiers();
+                    if (java.lang.reflect.Modifier.isPrivate(ckMods)) { ckPrivate = true; continue; }
+                    if (java.lang.reflect.Modifier.isStatic(ckMods)) {
                         ck.passed("\(target) is defined");
                     }
+                }
+                // Found, but not callable the way every generated case calls it.
+                // Reported separately because "is not defined" sent a student
+                // hunting for a method that is right there.
+                if (ckPrivate) {
+                    ck.failed("`\(target)` is `private`; the tests call it from another class.");
+                }
+                if (ckFound) {
+                    ck.failed("`\(target)` is defined but not `static`; the tests call it as `\(target)(...)`.");
                 }
                 ck.failed("`\(target)` is not defined");
             }
@@ -154,16 +169,28 @@ private func javaShellWrapper(
     compileFailureIsTestFailure: Bool = false,
     compileFailureMessage: String = ""
 ) -> String {
+    // The build log goes to a file and is emitted only when the compile FAILS.
+    // Sent straight to stderr it also rode a SUCCESSFUL compile into the
+    // student's `longResult` — so a passing test displayed javac's
+    // "uses unchecked or unsafe operations" note as though it were output
+    // worth reading (#1349).
+    let compileCommand = "javac -encoding UTF-8 -cp . -d . \(className).java test_runtime.java"
     let compileStep: String
     if compileFailureIsTestFailure {
         compileStep = """
-            if ! javac -cp . -d . \(className).java test_runtime.java 1>&2; then
+            if ! \(compileCommand) 2>.ck_build_log; then
+                cat .ck_build_log 1>&2
                 printf '%s\\n' \(shellSingleQuoted("{\"shortResult\": \"\(compileFailureMessage)\"}"))
                 exit 1
             fi
             """
     } else {
-        compileStep = "javac -cp . -d . \(className).java test_runtime.java 1>&2 || exit 2"
+        compileStep = """
+            if ! \(compileCommand) 2>.ck_build_log; then
+                cat .ck_build_log 1>&2
+                exit 2
+            fi
+            """
     }
     return """
         #!/bin/sh
