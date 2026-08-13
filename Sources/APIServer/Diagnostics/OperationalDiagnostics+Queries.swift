@@ -277,6 +277,17 @@ extension OperationalDiagnosticsService {
             try await APISubmissionDiagnostics.query(on: db)
                 .filter(\.$finishedAt < jobCutoff)
                 .delete()
+            // Rows whose job never reported completion keep a NULL
+            // finished_at, which `< cutoff` never matches — so they used to
+            // accumulate permanently (#1382 item 8). Age them out on
+            // created_at at the same window: once a full retention period has
+            // passed, the job is not going to finish, and the row's value as
+            // a stuck-job breadcrumb has long been superseded by the health
+            // alerts and logs from the incident itself.
+            try await APISubmissionDiagnostics.query(on: db)
+                .filter(\.$finishedAt == nil)
+                .filter(\.$createdAt < jobCutoff)
+                .delete()
             // Browser-side telemetry: one row per JS error, kernel boot failure
             // and grading failover, each carrying a message and a stack. It was
             // the only diagnostics table with no retention at all, while being

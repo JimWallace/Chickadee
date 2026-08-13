@@ -509,6 +509,62 @@ import VaporTesting
         }
     }
 
+    /// Never-finished `submission_diagnostics` rows (a job that died before
+    /// reporting) keep a NULL `finished_at`, which the retention filter's
+    /// `< cutoff` never matches — so they used to accumulate permanently.
+    /// They now age out on `created_at` at the same window, while recent
+    /// in-flight rows and finished rows keep their existing behaviour
+    /// (#1382 item 8).
+    @Test func prunePassAgesOutNeverFinishedSubmissionDiagnostics() async throws {
+        try await withApp(app) { _ in
+            let retentionDays = app.diagnostics.configuration.jobMetricRetentionDays
+            let expired = Date().addingTimeInterval(-Double(retentionDays + 5) * 86400)
+
+            let staleID = try await makeSubmissionDiagnostics(
+                submissionID: "sub_diag_stale", finishedAt: nil, createdAt: expired)
+            let freshID = try await makeSubmissionDiagnostics(
+                submissionID: "sub_diag_fresh", finishedAt: nil, createdAt: Date())
+            let finishedOldID = try await makeSubmissionDiagnostics(
+                submissionID: "sub_diag_done_old", finishedAt: expired, createdAt: expired)
+            let finishedNewID = try await makeSubmissionDiagnostics(
+                submissionID: "sub_diag_done_new", finishedAt: Date(), createdAt: expired)
+
+            await app.diagnostics.pruneNow(on: app.db, logger: app.logger)
+
+            #expect(
+                try await APISubmissionDiagnostics.find(staleID, on: app.db) == nil,
+                "A never-finished row past the retention window is aged out")
+            #expect(
+                try await APISubmissionDiagnostics.find(freshID, on: app.db) != nil,
+                "A recent in-flight row survives")
+            #expect(
+                try await APISubmissionDiagnostics.find(finishedOldID, on: app.db) == nil,
+                "A finished row past retention is pruned, as before")
+            #expect(
+                try await APISubmissionDiagnostics.find(finishedNewID, on: app.db) != nil,
+                "A recently finished row survives regardless of its creation time")
+        }
+    }
+
+    /// Like `makeClientDiagnostic`: `created_at` is a `.create` timestamp, so
+    /// it is stamped on save and then backdated with an update. The row's id
+    /// carries a foreign key to `submissions`, so each needs a real
+    /// submission behind it.
+    private func makeSubmissionDiagnostics(
+        submissionID: String, finishedAt: Date?, createdAt: Date
+    ) async throws -> String {
+        let (setup, _) = try await makeSubmission(submissionID: submissionID)
+        let row = APISubmissionDiagnostics()
+        row.id = submissionID
+        row.testSetupID = try setup.requireID()
+        row.kind = APISubmission.Kind.student
+        row.finishedAt = finishedAt
+        try await row.create(on: app.db)
+        row.createdAt = createdAt
+        try await row.update(on: app.db)
+        return submissionID
+    }
+
     /// Regression test for the admin runner page showing `Total < Queue
     /// Wait`. Models the production failure mode: the runner's wall clock
     /// is offset relative to the server, so the runner-reported
