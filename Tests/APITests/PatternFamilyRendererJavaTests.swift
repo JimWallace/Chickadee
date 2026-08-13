@@ -287,6 +287,33 @@ import Testing
         #expect(bad.code == 1, "mismatched output passed: \(bad.stdout)")
     }
 
+    /// A throw from the student's code during a stdout-capturing kind must
+    /// still deliver its verdict.
+    ///
+    /// `beginCapture` swaps `System.out` for a buffer that `endCapture`
+    /// restores, and a throw unwinds past `endCapture` — so the catch handler's
+    /// `ck.failed` printed the SENTINEL into the discarded buffer, the wrapper
+    /// found no sentinel, and an ordinary exception was reported as exit 2
+    /// "Does the submission call System.exit?" (#1344). The exit code is the
+    /// regression: it must be 1 (a graded fail), not 2.
+    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
+        let thrown = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                "static void f(int x) { throw new IllegalStateException(\"boom\"); }"))
+        #expect(
+            thrown.code == 1,
+            "a throwing submission was not a graded fail: \(thrown.stdout) \(thrown.stderr)")
+        #expect(
+            !thrown.stderr.contains("System.exit"),
+            "an ordinary exception was blamed on System.exit: \(thrown.stderr)")
+        #expect(
+            thrown.stdout.contains(GeneratedMessage.unexpectedException),
+            "the verdict never reached stdout — the capture was still installed: \(thrown.stdout)")
+    }
+
     // MARK: - variableEquality
 
     @Test func variableEqualityReadsAStaticField() throws {

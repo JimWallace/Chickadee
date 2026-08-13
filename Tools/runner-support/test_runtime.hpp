@@ -216,7 +216,7 @@ std::string format(const T&) {
 // rdbuf-swapping misses printf, and a course cannot control which one a
 // student reaches for.
 class CaptureStdout {
-    int saved_;
+    int saved_ = -1;
     static constexpr const char* path_ = ".ck_stdout_capture";
 
   public:
@@ -225,19 +225,49 @@ class CaptureStdout {
         std::cout.flush();
         saved_ = dup(1);
         int tmp = open(path_, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        // A capture we cannot set up must not read as "the student printed
+        // nothing": that fails a correct submission for a harness problem.
+        // Un-checked, a failed open made this `dup2(-1, 1)` and every
+        // comparison ran against an empty string.
+        if (saved_ < 0 || tmp < 0) {
+            if (tmp >= 0) ::close(tmp);
+            errored("Could not capture stdout for this test.");
+        }
         dup2(tmp, 1);
         // Qualified: inside namespace ck, a bare `close` is ck::close (the
         // tolerance comparison), not POSIX close(2).
         ::close(tmp);
     }
-    std::string finish() {
+
+    /// Puts the real stdout back, if it is still redirected. Idempotent.
+    ///
+    /// THE DESTRUCTOR IS THE POINT. A throw from the student's code unwinds
+    /// past `finish()`, and the enclosing catch handler then reports its
+    /// verdict — which, with fd 1 still pointing at the capture file, was
+    /// written into that file and never reached the runner. stdout came back
+    /// empty, so the shell contract synthesized a bare "failed" with no
+    /// reason for what was an ordinary exception.
+    void restore() {
+        if (saved_ < 0) return;
         std::fflush(stdout);
         std::cout.flush();
         dup2(saved_, 1);
         ::close(saved_);
+        saved_ = -1;
+    }
+
+    ~CaptureStdout() { restore(); }
+
+    std::string finish() {
+        restore();
         std::ifstream in(path_);
-        return std::string(
+        std::string captured(
             (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        // The capture file is an implementation detail of this class, not an
+        // artefact the next test should be able to see.
+        std::remove(path_);
+        return captured;
     }
 };
 
