@@ -86,7 +86,7 @@
             if (!btn) return;
             var filename = btn.getAttribute('data-filename');
             if (!filename) return;
-            if (!ChickadeeUI.confirmAction('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
+            if (!await ChickadeeUI.confirmAction('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
             try {
                 var resp = await fetch(config.deleteURL(filename), {
                     method: 'DELETE',

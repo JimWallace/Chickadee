@@ -115,19 +115,46 @@ if (root) {
 // which runs before inplace-forms.js's own submit listener (app.js loads
 // first) — and that one bails on `defaultPrevented`, so a cancelled submit
 // stays cancelled.
+// The dialog behind this seam is now a real one (ChickadeeUI.confirmAction),
+// which means the answer arrives in a promise rather than blocking the event
+// loop. A listener cannot wait, so the shape is: always cancel the action,
+// ask, and REPLAY it if the answer was yes. The replay re-dispatches the
+// original interaction — a click on the element, or requestSubmit() on the
+// form with its original submitter — so everything layered around it (row-click
+// navigation, inplace-forms.js's own submit listener, formaction) sees exactly
+// what it saw before, and the marker below keeps the replay from asking again.
 (function confirmActions() {
-    function accepted(el) {
-        const message = el.getAttribute('data-confirm');
-        return !message || window.confirm(message);
+    const replaying = new WeakSet();
+
+    function replayClick(el) {
+        replaying.add(el);
+        try { el.click(); } finally { replaying.delete(el); }
+    }
+
+    function replaySubmit(form, submitter) {
+        replaying.add(form);
+        try {
+            // requestSubmit() fires the submit event (submit() deliberately
+            // does not), which is what inplace-forms.js listens for.
+            if (form.requestSubmit) form.requestSubmit(submitter || undefined);
+            else form.submit();
+        } finally {
+            replaying.delete(form);
+        }
     }
 
     document.addEventListener('click', (e) => {
         const el = e.target instanceof Element ? e.target.closest('[data-confirm]') : null;
         // A <form data-confirm> asks on submit, not on every click inside it.
         if (!el || el.tagName === 'FORM') return;
-        if (accepted(el)) return;
+        if (replaying.has(el)) return;
+        const message = el.getAttribute('data-confirm');
+        if (!message) return;
         e.preventDefault();
         e.stopPropagation();
+        window.ChickadeeUI.confirmAction(message, el).then((ok) => {
+            if (ok) replayClick(el);
+        });
     }, true);
 
     document.addEventListener('submit', (e) => {
@@ -136,7 +163,14 @@ if (root) {
         // A submitter with its own question already asked during the click —
         // the secondary "Clear"/"Remove" buttons that carry `formaction`.
         if (e.submitter && e.submitter.hasAttribute('data-confirm')) return;
-        if (!accepted(form)) e.preventDefault();
+        if (replaying.has(form)) return;
+        const message = form.getAttribute('data-confirm');
+        if (!message) return;
+        const submitter = e.submitter || null;
+        e.preventDefault();
+        window.ChickadeeUI.confirmAction(message, form).then((ok) => {
+            if (ok) replaySubmit(form, submitter);
+        });
     });
 }());
 

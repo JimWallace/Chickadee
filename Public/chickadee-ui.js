@@ -52,10 +52,105 @@
     //
     // The JS-side entry to the same seam `data-confirm` uses (app.js). A call
     // site that has no element to hang an attribute on — a delete triggered
-    // from inside an editor's own click handler — asks here, so replacing the
-    // native dialog later is still a one-place change.
-    function confirmAction(message) {
-        return window.confirm(message);
+    // from inside an editor's own click handler — asks here.
+    //
+    // This used to be `window.confirm`, with a comment saying it existed so
+    // the native dialog could be replaced in one place. This is that
+    // replacement, and it covers all 41 destructive confirmations (36
+    // `data-confirm` attributes across 18 templates, 5 direct callers):
+    // unenroll a student, delete a section, delete a test script, delete a
+    // pattern family, remove a support file. The native dialog was the one
+    // piece of UI outside the design system — unthemed, unstyleable, invisible
+    // to the axe scan, and rendered by the browser chrome rather than the page
+    // it belongs to. It is the sibling of the native alerting call the S9 slice
+    // removed, and it outlived that slice only because nobody had written the
+    // dialog. (Naming that call in prose here would trip the guard that keeps
+    // it at zero — the scanner cannot tell markup from prose about markup, the
+    // same lesson as the Leaf-comment finding in #1266.)
+    //
+    // It returns a PROMISE, which is the one thing callers must know: a real
+    // dialog cannot block the event loop the way the native one did.
+    // `data-confirm` callers are unaffected (app.js replays the action for
+    // them); the five direct callers await it.
+    function confirmAction(message, nearEl) {
+        if (typeof document === 'undefined' || !document.createElement) {
+            return Promise.resolve(true);
+        }
+        return new Promise(function (resolve) {
+            var previouslyFocused = document.activeElement;
+            var overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+
+            var card = document.createElement('div');
+            card.className = 'modal-card modal-card--confirm';
+            // alertdialog, not dialog: this interrupts to ask about something
+            // consequential, and screen readers announce the message on open.
+            card.setAttribute('role', 'alertdialog');
+            card.setAttribute('aria-modal', 'true');
+
+            var body = document.createElement('div');
+            body.className = 'modal-body confirm-message';
+            body.textContent = message;
+            var messageID = 'ck-confirm-message';
+            body.id = messageID;
+            card.setAttribute('aria-describedby', messageID);
+            card.setAttribute('aria-label', 'Confirm');
+
+            var foot = document.createElement('div');
+            foot.className = 'modal-foot';
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn';
+            cancel.textContent = 'Cancel';
+            var confirm = document.createElement('button');
+            confirm.type = 'button';
+            confirm.className = 'btn btn-primary';
+            confirm.textContent = 'Confirm';
+            foot.appendChild(cancel);
+            foot.appendChild(confirm);
+
+            card.appendChild(body);
+            card.appendChild(foot);
+            overlay.appendChild(card);
+            (nearEl && nearEl.ownerDocument ? nearEl.ownerDocument.body : document.body).appendChild(overlay);
+
+            var settled = false;
+            function close(result) {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('keydown', onKeydown, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                // Put focus back where the user left it, or the page silently
+                // drops them at the top of the document.
+                if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+                resolve(result);
+            }
+
+            function onKeydown(event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close(false);
+                    return;
+                }
+                if (event.key !== 'Tab') return;
+                // Two focusable elements, so the trap is a cycle between them.
+                event.preventDefault();
+                (document.activeElement === confirm ? cancel : confirm).focus();
+            }
+
+            cancel.addEventListener('click', function () { close(false); });
+            confirm.addEventListener('click', function () { close(true); });
+            // A click on the scrim is a cancel, as it is for every other modal
+            // here; a click inside the card is not.
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) close(false);
+            });
+            document.addEventListener('keydown', onKeydown, true);
+
+            // Cancel takes focus: the safe choice should be the one an
+            // accidental Enter lands on.
+            cancel.focus();
+        });
     }
 
     // ── Action failures ──

@@ -155,6 +155,15 @@ of action buttons" and four pill implementations; the page-style ratchet
 - **`.form`**, `.form--wide`, `.form-input`, `.form-error`, `.form-flush`,
   `.inline-form` — forms and the inline error banner (never native
   `alert()`).
+- **`.modal-overlay` / `.modal-card`** (+ `--confirm`) — the one blocking
+  dialog shape.  A destructive action asks with `data-confirm="…"` in
+  markup (app.js handles it) or `await ChickadeeUI.confirmAction(msg)`
+  where there is no element to mark; both render the same themed
+  `role="alertdialog"`.  It returns a **promise** — the native dialog it
+  replaced could block the event loop and this cannot — so the
+  `data-confirm` seam cancels the interaction, asks, and replays it on
+  yes.  Never call the native one: `check-styles.sh` holds it at zero,
+  as it does for native alerting.
 - **`_flash` partial** + `.flash-*` — see page anatomy above.
 - **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`** — the page
   header row and its secondary line.  Cluster multiple left/right items

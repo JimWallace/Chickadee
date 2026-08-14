@@ -189,14 +189,14 @@
     // target, so a DOM-injected value cannot redirect the POST off-site or to
     // a javascript: URL (CodeQL, js/xss-through-dom).
     document.querySelectorAll('.js-section-delete-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', async function () {
             var name = btn.getAttribute('data-name');
             var action = btn.getAttribute('data-action');
             if (!action) return;
             var url;
             try { url = new URL(action, window.location.origin); } catch (_) { return; }
             if (url.origin !== window.location.origin) return;
-            if (!ChickadeeUI.confirmAction('Delete section “' + name + '”? Its assignments will become ungrouped.')) return;
+            if (!await ChickadeeUI.confirmAction('Delete section “' + name + '”? Its assignments will become ungrouped.')) return;
             var form = document.createElement('form');
             form.method = 'post';
             form.action = url.href;
