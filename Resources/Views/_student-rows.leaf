@@ -44,7 +44,7 @@
                 <div class="students-row-actions">
                     #if(student.isPending):
                     <details class="ext-details form-flush">
-                        <summary class="btn action-btn action-btn-tight" title="Register this student now"
+                        <summary class="btn action-btn action-btn-icon" title="Register this student now"
                                  aria-label="Register pending student">Register</summary>
                         <form method="post" action="#(student.registerURL)" class="ext-panel">
                             #csrfFormField()

@@ -261,7 +261,7 @@ Create Assignment
                     </select>
                 </label>
             </div>
-            <button class="btn btn-primary btn-tiny" type="button" id="add-gen-tests-btn">Add Selected Tests to Suite</button>
+            <button class="btn btn-primary btn-compact" type="button" id="add-gen-tests-btn">Add Selected Tests to Suite</button>
         </div>
     </div>
 

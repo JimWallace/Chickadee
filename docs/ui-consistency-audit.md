@@ -630,6 +630,37 @@ affected visual-regression baselines.
 add the retired modifier names to a forbidden-list grep so they cannot
 return.
 
+**Status: done,** with the plan corrected in two places by looking at the
+call sites.
+
+*The straggler list was wrong.* Of the five bare-`btn` "primary submits"
+F5 named, **two are correct as they stand** — alerts' "Send test alert"
+and instructor-mcp's "Reset to Chickadee default" are secondary actions
+sitting beside a `btn-primary`, which is exactly the grammar. And the
+audit missed one: account's "Request data export", the sole action of its
+section. So four changed, not five.
+
+*The size fold went differently than proposed.* The plan said fold
+`btn-tiny` and `action-btn-tight` into `btn-compact`; the call sites say
+these are two axes, not one. `btn-tiny` was doing two unrelated jobs — on
+a `.btn` it is a second size (folded into `btn-compact`), while on an
+`.action-btn` it barely changed anything, because `.action-btn` already
+sets that font size and near-identical padding (dropped as noise).
+`action-btn-tight` is a narrow variant of `.action-btn`, not of `.btn`,
+and its twin is `action-btn-icon` — 2px apart, for the same job — so the
+fold is tight→icon, which makes those dense-row targets slightly *larger*.
+The clinching evidence for the `.btn` fold: `assignments.leaf` carried two
+"Save" buttons in the same role at different sizes (`btn-compact` on one
+section header, `btn-tiny` on another).
+
+Two buttons had no `type=` and were JS-driven, so the implicit `submit`
+was simply wrong; both now say `type="button"`. Class order is normalised
+(`btn action-btn action-btn-icon action-danger`). Save-label microcopy was
+audited against the stated rule and **left alone** — the eight strings F5
+counted are mostly correct disambiguation ("Save secret" and "Save
+webhook" each sit on a page with several forms), and churning
+user-visible text without a defect to fix is not consolidation.
+
 ### S7 — Page skeletons and the shadow vocabulary (L, page-by-page track)
 
 One PR per page (or pair), each: convert to its archetype, replace

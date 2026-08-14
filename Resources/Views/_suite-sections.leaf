@@ -48,9 +48,9 @@
                       #if(sectionFormsInPlace):data-ck-inplace#endif>
                     #csrfFormField()
                     <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
-                    <button class="btn btn-primary btn-tiny" type="submit">Save</button>
+                    <button class="btn btn-primary btn-compact" type="submit">Save</button>
                 </form>
-                <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
+                <button class="btn action-btn action-danger section-delete-btn" type="button"
                         data-action="#(sectionActionBase)/#(sec.sectionID)/delete#(sectionActionQuery)"
                         data-name="#(sec.name)">Delete</button>
                 <button class="btn-link section-edit-cancel icon-btn-text" type="button"

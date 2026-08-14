@@ -141,7 +141,17 @@ The audit that produced this rule found sixteen page-local names for "a row
 of action buttons" and four pill implementations; the page-style ratchet
 (below) now makes the private copy the expensive option.
 
-- **`.btn`**, `.btn-primary`, `.action-btn`, `.action-danger` — buttons.
+- **Buttons** — one grammar (UI audit S6):
+  - a form's primary submit is `btn btn-primary`; secondary actions beside it
+    are `btn`;
+  - an action inside a table row or toolbar is `btn action-btn`, `+ action-danger`
+    when destructive, `+ action-btn-icon` when icon-only (which then needs an
+    `aria-label`, and its icon comes from the sprite);
+  - **two sizes only**: default and `btn-compact` for `.btn`;
+    `action-btn-icon` is the one narrow variant of `.action-btn`.
+  - class order is `btn action-btn action-btn-icon action-danger`.
+  - Every `<button>` declares `type=` — an omitted type submits, which is the
+    wrong default for a JS-driven control.
 - **`.form`**, `.form--wide`, `.form-input`, `.form-error`, `.form-flush`,
   `.inline-form` — forms and the inline error banner (never native
   `alert()`).

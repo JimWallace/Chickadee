@@ -322,6 +322,21 @@ if [ -n "${s5_inline}${s5_raw}" ]; then
   echo
 fi
 
+# S6: one size modifier per button component. `btn-tiny` and `action-btn-tight`
+# were second sizes for jobs `btn-compact` and `action-btn-icon` already did —
+# which is how one page ended up with two same-role "Save" buttons at different
+# sizes. Retired names must not come back; check-class-resolution.sh catches a
+# name with no rule, but not a name someone re-adds a rule for.
+s6_retired="$(grep -rnE 'btn-tiny|action-btn-tight' "${views[@]}" Public/*.js Public/*.css || true)"
+if [ -n "$s6_retired" ]; then
+  status=1
+  echo "ERROR: retired button size modifier."
+  echo "       Buttons have two sizes: default and btn-compact (.btn), and"
+  echo "       action-btn-icon is the one narrow variant of .action-btn."
+  printf '%s\n' "$s6_retired" | sed 's/^/  /'
+  echo
+fi
+
 # ── 5. Class names must resolve ──────────────────────────────────────────────
 scripts/check-class-resolution.sh || status=1
 

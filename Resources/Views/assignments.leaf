@@ -96,9 +96,9 @@
                     <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>Chickadee</option>
                     <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>Student Browser</option>
                 </select>
-                <button class="btn btn-primary btn-tiny" type="submit">Save</button>
+                <button class="btn btn-primary btn-compact" type="submit">Save</button>
             </form>
-            <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
+            <button class="btn action-btn action-danger section-delete-btn" type="button"
                     data-action="/instructor/sections/#(section.sectionID)/delete"
                     data-name="#(section.name)">Delete</button>
             <button class="btn-link section-edit-cancel icon-btn-text" type="button"
@@ -110,7 +110,7 @@
          with the assignments in the drag-orderable table below). -->
     <div class="content-lane">
         <details class="add-section-details popup-anchor content-item-add">
-            <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
+            <summary class="btn action-btn summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
                 <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
                     #csrfFormField()
@@ -199,7 +199,7 @@
          with the ungrouped assignments in the drag-orderable table below). -->
     <div class="content-lane">
         <details class="add-section-details popup-anchor content-item-add">
-            <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
+            <summary class="btn action-btn summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
                 <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
                     #csrfFormField()

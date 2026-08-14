@@ -62,14 +62,14 @@
                         <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" data-confirm="Send this submission back to the testing queue?" class="form-flush">
                             #csrfFormField()
                             <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
-                            <button class="btn action-btn action-btn-tight" type="submit"
+                            <button class="btn action-btn action-btn-icon" type="submit"
                                     aria-label="Re-test latest submission" title="Re-test latest submission">
                                 <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
                             </button>
                         </form>
                     #endif
                     <details class="ext-details form-flush">
-                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
                         <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override" class="ext-panel">
@@ -94,7 +94,7 @@
                     <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="form-flush">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
-                        <button class="btn action-btn action-danger action-btn-tight" type="submit"
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 aria-label="Reset notebook to starter" title="Reset notebook to starter (past submissions unaffected)">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                         </button>
@@ -103,7 +103,7 @@
                     <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/regrant-reveal-token" data-confirm="Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it." class="form-flush">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
-                        <button class="btn action-btn action-btn-tight" type="submit"
+                        <button class="btn action-btn action-btn-icon" type="submit"
                                 aria-label="Re-grant secret-reveal token" title="Re-grant secret-reveal token (student spent theirs)">
                             <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
                         </button>

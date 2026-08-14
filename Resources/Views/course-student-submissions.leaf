@@ -91,13 +91,13 @@
                     #if(row.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
+                        <button class="btn action-btn action-btn-icon" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
                         </button>
                     </form>
                     #endif
                     <details class="ext-details action-form-flush">
-                        <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg>
                             #else:
@@ -123,7 +123,7 @@
                         </form>
                     </details>
                     <details class="ext-details action-form-flush">
-                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
                         <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
@@ -146,7 +146,7 @@
                     </details>
                     <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                         </button>
                     </form>
@@ -234,13 +234,13 @@
                     #if(row.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
+                        <button class="btn action-btn action-btn-icon" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
                         </button>
                     </form>
                     #endif
                     <details class="ext-details action-form-flush">
-                        <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg>
                             #else:
@@ -266,7 +266,7 @@
                         </form>
                     </details>
                     <details class="ext-details action-form-flush">
-                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
                         <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
@@ -289,7 +289,7 @@
                     </details>
                     <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                         </button>
                     </form>
