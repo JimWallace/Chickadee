@@ -126,6 +126,11 @@
 #endif
 #endif
 <main class="main#if(fullBleed): main-fullbleed#endif" id="main-content">
+    <!-- Flash banners render ONCE, here, for every page (UI audit S9).  Nine
+         pages used to include the partial themselves, which meant a redirect
+         that set a flash on any other page silently rendered nothing — the
+         handler had done its job and the user saw no confirmation. -->
+    #extend("_flash")
     #import("content")
 </main>
 <script src="/app.js?v=#appVersion()"></script>

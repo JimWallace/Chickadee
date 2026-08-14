@@ -773,6 +773,34 @@ admin-mcp keeps its custom body (it renders a copyable `<code>` value —
 genuinely not a text flash). Visual-regression baselines cover the
 layout shift risk on the captured pages.
 
+**Status: done.** Both alert ratchets reached **zero**: there is no native
+`alert()` left in any template or first-party script. The seven
+`suite-table.js` calls and the four support-file delete calls now use
+`ChickadeeUI.showActionError` — an inline `.form-error role="alert"` banner
+placed at the top of the surface that failed, the same channel
+`inplace-forms.js` and the multipart upload already used. That also ends a
+split *inside one widget*: the support-file control reported upload
+failures in a status line and delete failures in a modal dialog.
+
+The nine role-less status spans became `role="status" aria-live="polite"`,
+so progress and completion are announced rather than silently repainted.
+`_flash` now renders **once from `base.leaf`** and the nine per-page
+includes are gone — which fixes a real defect the audit only implied: a
+redirect that set a flash on any of the other ~20 pages rendered nothing at
+all, so the handler did its work and the user saw no confirmation.
+
+The modal overlay moved off `style.cssText` onto `.modal-overlay` /
+`.modal-card`, so its scrim uses `--overlay-bg` (it had a raw `rgba()` with
+no dark-mode value) and its card uses the one elevation token; showing and
+hiding is now the `hidden` attribute rather than a JS `display` write.
+`JS_STYLE_DECISION_BASELINE` 122 → 118.
+
+**A bug in the guard itself surfaced here, and is worth the note:** with
+`set -o pipefail`, a `grep` that matches nothing exits 1, so both alert
+ratchets *crashed the whole script at exactly the count they exist to
+reach*. A ratchet that fails at its own goal has never been tested at its
+goal; the greps now tolerate the empty case.
+
 ---
 
 ## Decisions taken vs deferred

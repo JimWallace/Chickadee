@@ -5,7 +5,6 @@ Students
 #export("content"):
 #extend("_instructor-tabs")
 
-#extend("_flash")
 
 <div class="students-titlebar">
     <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>

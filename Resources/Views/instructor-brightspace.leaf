@@ -25,7 +25,6 @@ LEARN
 </section>
 #else:
 
-#extend("_flash")
 
 <!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
 <section class="bs-section">

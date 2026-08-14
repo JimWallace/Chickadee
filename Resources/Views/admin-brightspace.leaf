@@ -6,7 +6,6 @@ LEARN
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
-    #extend("_flash")
 
     <p class="section-intro">
         LEARN grade sync runs as one D2L service account. The app credentials

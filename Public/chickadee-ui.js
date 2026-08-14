@@ -57,6 +57,40 @@
         return window.confirm(message);
     }
 
+    // ── Action failures ──
+    //
+    // The one blocking-error channel (UI audit S9): an inline `.form-error`
+    // banner with `role="alert"`, placed at the top of the surface the action
+    // belongs to, matching what inplace-forms.js and the multipart-upload
+    // handler already do.
+    //
+    // It replaces the native modal dialog the editors used, which stopped the
+    // page to say something the page could show in place — and which, on the
+    // support-file widget, meant one control reported its *upload* failures in
+    // a status line and its *delete* failures in a modal.
+    //
+    // `nearEl` names the surface: the banner goes at the top of that element's
+    // nearest section, so a failure appears next to the thing that failed
+    // rather than at the top of a long editor.
+    function showActionError(message, nearEl) {
+        if (typeof document === 'undefined') return;
+        var host = null;
+        if (nearEl && nearEl.closest) {
+            host = nearEl.closest('.page-section, .section-block, .editor-panel, form') || null;
+        }
+        host = host || document.querySelector('.main') || document.body;
+        var banner = host.querySelector(':scope > .action-error-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.className = 'form-error action-error-banner';
+            banner.setAttribute('role', 'alert');
+            host.insertBefore(banner, host.firstChild);
+        }
+        banner.textContent = message;
+        if (banner.scrollIntoView) banner.scrollIntoView({ block: 'nearest' });
+        return banner;
+    }
+
     // ── Fetch error handling ──
     //
     // One error-message extractor for failed fetch bodies (#1126 — two
@@ -515,6 +549,7 @@
         escapeAttr: escapeHtml,
         getCsrfToken: getCsrfToken,
         confirmAction: confirmAction,
+        showActionError: showActionError,
         setStatus: setStatus,
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,

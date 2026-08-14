@@ -10,7 +10,6 @@ Create Assignment
 </div>
 #endif
 
-#extend("_flash")
 
 <form class="form form--wide" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
     #csrfFormField()
@@ -90,7 +89,7 @@ Create Assignment
                 <button class="btn action-btn" type="button" id="add-support-file-btn"
                         title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
                 <input type="file" id="support-file-upload-input" hidden multiple>
-                <span id="support-file-upload-status" class="upload-status-inline"></span>
+                <span id="support-file-upload-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </div>
             #endif
         </div>
@@ -248,7 +247,7 @@ Create Assignment
         <div class="gen-tests-row">
             <span class="gen-tests-title">Generate Starter Tests</span>
             <button class="btn btn-sm" type="button" id="scan-solution-btn">Scan Solution for Functions</button>
-            <span id="scan-status" class="editor-status"></span>
+            <span id="scan-status" class="editor-status" role="status" aria-live="polite"></span>
         </div>
         <div id="scan-results" style="display:none">
             <p class="card-meta gen-tests-prompt">Select the functions to generate starter tests for:</p>
@@ -518,12 +517,12 @@ Create Assignment
                 );
                 if (!resp.ok) {
                     var errText = await resp.text();
-                    alert('Remove failed: ' + resp.status + ' ' + errText);
+                    ChickadeeUI.showActionError('Remove failed: ' + resp.status + ' ' + errText, btn);
                     return;
                 }
                 window.location.reload();
             } catch (e) {
-                alert('Remove failed: ' + e.message);
+                ChickadeeUI.showActionError('Remove failed: ' + e.message, btn);
             }
         });
     })();

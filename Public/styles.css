@@ -2092,6 +2092,34 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 /* Filter/search inputs keep their authored desktop width via the
    --filter-width custom property (so desktop is unchanged) and span the full
    row on phones. */
+/* Modal overlay + card (test-editor-modal.js). The scrim uses the palette's
+   --overlay-bg rather than a raw rgba(), so it has a dark-mode value; the card
+   uses the one elevation token (UI audit S9). `hidden` does the showing and
+   hiding, so JS toggles an attribute rather than writing display. */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-bg);
+}
+.modal-overlay[hidden] { display: none; }
+.modal-card {
+    background: var(--surface);
+    color: var(--gray-900);
+    border-radius: var(--radius-lg);
+    width: min(960px, 96vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-pop);
+}
+
+/* Injected by ChickadeeUI.showActionError — the one blocking-error surface,
+   shared with inplace-forms.js's banner (UI audit S9). */
+.action-error-banner { margin-bottom: .75rem; }
 .filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
 /* Label preceding a list-filter control — one look for the live
    (data-list-filter) and GET-form (activity/audit) variants alike. */

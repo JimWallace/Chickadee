@@ -67,11 +67,11 @@ if [ -n "$inline_violations" ]; then
 fi
 
 # ── 3. No new native alert() in templates ───────────────────────────────────
-# Baseline = pre-existing alert()s (rare support-file error paths in the
-# assignment editors).  This may only go DOWN; new alert()s must use the
-# inline .form-error banner instead.
-ALERT_BASELINE=4
-alert_count="$(grep -rho 'alert(' "${views[@]}" | wc -l | tr -d ' ')"
+# At ZERO as of the S9 feedback-channel consolidation: every blocking error
+# now uses the inline .form-error banner (ChickadeeUI.showActionError). The
+# baseline may only go DOWN, so from here the rule is absolute.
+ALERT_BASELINE=0
+alert_count="$( { grep -rho 'alert(' "${views[@]}" || true; } | wc -l | tr -d ' ')"
 if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
   status=1
   echo "ERROR: new native alert() in a template (found ${alert_count}, baseline ${ALERT_BASELINE})."
@@ -88,9 +88,9 @@ fi
 # which the template glob never sees — so an alert() could be laundered out of
 # scope by the very move 3b encourages.  Top-level Public/*.js only; the
 # vendored/generated trees (Public/pyodide, Public/jupyterlite, Public/vendor,
-# Public/runner-wasm) are not ours to lint.
-JS_ALERT_BASELINE=7
-js_alert_count="$(grep -ho 'alert(' Public/*.js | wc -l | tr -d ' ')"
+# Public/runner-wasm) are not ours to lint.  Also at ZERO as of S9.
+JS_ALERT_BASELINE=0
+js_alert_count="$( { grep -ho 'alert(' Public/*.js || true; } | wc -l | tr -d ' ')"
 if [ "$js_alert_count" -gt "$JS_ALERT_BASELINE" ]; then
   status=1
   echo "ERROR: new native alert() in first-party JS (found ${js_alert_count}, baseline ${JS_ALERT_BASELINE})."
@@ -141,7 +141,7 @@ fi
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=122
+JS_STYLE_DECISION_BASELINE=118
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true

@@ -111,5 +111,5 @@
                     No cases yet.  Add at least one to save this family.
                 </p>
             </div>
-    <span id="family-editor-status" class="editor-status"></span>
+    <span id="family-editor-status" class="editor-status" role="status" aria-live="polite"></span>
 </div>
