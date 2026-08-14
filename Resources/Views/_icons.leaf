@@ -1,9 +1,17 @@
 <!-- Icon sprite: every icon in the UI, once (UI audit S4).
 
-     Rendered inline at the top of <body> by base.leaf and referenced with
-     <svg class="icon"><use href="#i-name"/></svg>. Same-document <use> is
-     deliberate: an external sprite file would be one more fetch that can fail,
-     and its failure mode is an icon-only button rendering as an empty box.
+     Rendered inline at the top of the body by base.leaf. A call site is a
+     svg carrying class "icon" wrapping a use element whose href is a same-page
+     fragment naming one of the symbol ids below; copy a live one rather than
+     working from this description. Same-document use is deliberate: an external
+     sprite file would be one more fetch that can fail, and its failure mode is
+     an icon-only button rendering as an empty box.
+
+     Described rather than quoted on purpose. A fragment reference written in
+     prose is indistinguishable from a real one to any scanner reading this
+     file, so an example here registers as a call site — which is how a sweep
+     for unresolved icon references reported a dangling id that exists only in
+     this comment. Same shape as the #1266 Leaf-comment finding.
 
      Before this the geometries were pasted verbatim at 55 call sites — the
      trash can alone appeared 15 times across three byte-level variants (two in

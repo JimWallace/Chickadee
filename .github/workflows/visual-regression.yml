@@ -82,6 +82,16 @@ jobs:
         working-directory: Tools/visual-regression
         run: ./run-a11y.sh
 
+      # The capture above screenshots ~300ms after load, so it never observes a
+      # background table repaint — the seam where the shared filter, sort, poll
+      # and icon-sprite components meet. Each failure there is silent (icons
+      # become empty boxes, the sort reverts, the filter forgets), so it needs
+      # its own assertions rather than a picture. Reuses this job's server and
+      # browser; adds a few seconds.
+      - name: Table repaint probe
+        working-directory: Tools/visual-regression
+        run: ./run-repaint-probe.sh
+
       - name: Upload visual diffs
         if: failure()
         uses: actions/upload-artifact@v4

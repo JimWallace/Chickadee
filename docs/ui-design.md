@@ -353,6 +353,16 @@ CI job also runs the axe-core accessibility scan (`run-a11y.sh`) over those
 pages in both schemes: critical/serious violations are zero-tolerance,
 moderate/minor ratchet down via `a11y-baseline.json`.
 
+A screenshot cannot see everything, though — the capture fires ~300 ms after
+load, so it never observes a table's **background repaint**, where the shared
+filter, sort, poll and icon-sprite components have to keep working together.
+Each of those fails silently there (icons become empty boxes, the sort reverts
+to server order, the filter forgets what was typed), and a diff of two
+screenshots that both show the failure agrees with itself. `run-repaint-probe.sh`
+asserts those four properties directly and runs as a third step of the same
+job. If you change any of those components, that probe is the check that will
+tell you.
+
 ## Extending the system
 
 - **New colour** → add the token pair to both `:root` blocks, then use

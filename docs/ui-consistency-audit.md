@@ -29,13 +29,12 @@ needs them.
 (all at baseline). Every slice below shrinks at least one of these and must
 lower the baseline in the same PR.
 
-**Where they ended up** after S0–S9 (S7 is a first pass; the rest are
-complete):
+**Where they ended up** after S0–S9, all slices complete:
 
 | ratchet | at audit | now |
 |---|---|---|
 | `INLINE_SCRIPT_BASELINE` | 1968 | **1317** |
-| `PAGE_STYLE_BASELINE` | 913 | **760** |
+| `PAGE_STYLE_BASELINE` | 913 | **689** |
 | `JS_STYLE_DECISION_BASELINE` | 122 | **118** |
 | `ALERT_BASELINE` | 4 | **0** |
 | `JS_ALERT_BASELINE` | 7 | **0** |
@@ -47,6 +46,30 @@ geometry outside the sprite (S4), native confirmation outside the seam
 (S5), and the retired button size modifiers (S6). Three of the five are
 **absolute rules rather than ratchets**, because their conversions reached
 zero in one pass.
+
+**Where the remaining inline script is**, since the ratchet is a number and a
+number does not say where to look next. It sits in nine templates, and 41% of
+it is the two authoring surfaces this audit deliberately left alone:
+
+| template | lines | |
+|---|---:|---|
+| `_assignment-edit-body.leaf` | 325 | out of scope — owned by the #1269 decomposition |
+| `assignment-new.leaf` | 254 | out of scope — same pair |
+| `admin.leaf` | 230 | dashboard cards and charts |
+| `assignments.leaf` | 223 | section drag-authoring |
+| `instructor-brightspace.leaf` | 116 | grade-item mapping |
+| `instructor-students.leaf` | 111 | roster actions |
+| `base.leaf` | 77 | shared bootstrapping — correct where it is |
+| `admin-runner.leaf`, `assignment-submissions.leaf` | 77 | |
+
+The authoring pair is the largest remaining prize and also the riskiest to
+touch, for the reason `leaf-decomposition-review.md` gives: these are the two
+highest-traffic authoring surfaces, and a shared partial that gets the
+create-vs-edit differences subtly wrong is worse than two honest copies. The
+JS in them, though, is a different question from the markup — that review
+found the create page was the *stale fork* in every case it examined, and
+fixing three of those forks removed three live defects. Anyone picking this up
+should start there rather than with the templates.
 
 ---
 
@@ -570,6 +593,22 @@ to `1em` so a glyph tracks the text of the button it sits in, replacing
 hardcoded `width="13"`. Visual regression is pixel-identical across both
 schemes, which is the evidence the substitution was faithful.
 
+A closing sweep confirmed the set is an exact bijection — 17 symbols
+defined, 17 referenced, nothing unresolved and nothing dead. That check is
+worth keeping in mind because an unresolved reference is the one sprite
+failure that is *invisible*: the icon renders as empty space, and visual
+regression would accept it in both schemes as readily as it accepted the
+real glyphs.
+
+The sweep's only hit was the sprite file's **own comment**, which
+illustrated a call site by quoting one — so a reader-of-files counted the
+example as a reference and reported a symbol that does not exist. Nothing
+rendered wrong; the comment now describes the shape instead of quoting it.
+This is the #1266 Leaf-comment finding in a third place, and the
+generalisation has now earned its wording: any scanner reading a file
+cannot distinguish markup from prose about markup, so documentation that
+quotes an identifier creates a phantom use of it.
+
 ### S5 — One confirmation seam (S/M)
 
 **Target state.** No inline `onclick`/`onsubmit` confirm handlers. A
@@ -737,8 +776,8 @@ Each page PR regenerates its visual-regression baseline if listed in
 document supersedes as the inventory of record — the queue keeps only
 what remains).
 
-**Status: first pass done** — items 1, 2, 5 and the cross-cutting families
-from item 7, plus D6. What landed:
+**Status: done, in two passes.** The **first pass** took items 1, 2, 5 and
+the cross-cutting families from item 7, plus D6. What landed:
 
 - **instructor-students** uses `.page-titlebar` and an `<h2>`, so the
   `<h1>` that was restyled to *look* like an h2 is gone with its clone.
@@ -830,6 +869,14 @@ expiry, and it is the same reading as recency.
 Audit and retention stay absolute and monospaced, deliberately: there the
 exact instant is the content.
 
+**`relative-time.js` loads from `<head>`, not the end of `<body>`** — the
+same placement, for the same documented reason, as `chickadee-ui.js`: page
+inline scripts call it during parse. Loading it at the end of `<body>`
+(where this slice first put it) threw `ChickadeeRelativeTime is not defined`
+on the students page on every load. Caught by the repaint probe below, not
+by any existing gate: the render tests prove a page *resolves*, and a
+screenshot of a page whose script died still looks right.
+
 ### S9 — Feedback channels (M)
 
 **Target state:** two channels. Passive/progress feedback is a
@@ -911,14 +958,71 @@ goal; the greps now tolerate the empty case.
 - Anything behind the grading contract, MCP surface, or JupyterLite
   vendoring.
 
+## Verifying the widgets actually still work together
+
+`Tools/visual-regression/run-repaint-probe.sh` covers the one interaction
+nothing else does, and **runs in CI** as a step of the `visual` job — it
+reuses that job's already-built server and browser, so enforcing it costs
+seconds. A verification tool that has to be remembered is not infrastructure;
+this one now fails the PR.
+
+The visual capture screenshots ~300 ms after load, so it never sees a
+**background repaint** — which means the seam where four of these slices meet
+was untested: the poll swaps in server-rendered rows (S3), which must still
+resolve sprite icons (S4), still carry the sort the user chose (S2), and still
+respect the filter box (S1). Every one of those fails *silently*: icons become
+empty boxes, the sort reverts to server order, the filter forgets what was
+typed. A screenshot comparison cannot catch any of them, because both sides
+would agree.
+
+It earned its keep immediately, catching the `<head>` ordering regression
+above. It has also been **watched to fail**: with `table-poll.js`'s interval
+neutered, it reports two failures rather than passing, which is the only
+evidence that a green run means anything.
+
+That exercise found a defect in the probe itself. It originally slept a fixed
+7 s per stage — 2 s of slack over a 5 s poll, tight enough to make a loaded CI
+runner a false failure. Worse, the *filter* check passed **vacuously** against
+a dead poll: with nothing repainting the rows, they stay hidden, which is
+exactly what the check asserts. Both stages now stamp a row and wait for the
+stamp to be replaced, so each assertion is tied to a repaint that
+demonstrably landed and "no repaint arrived" is reported as its own failure.
+A check that cannot distinguish success from the absence of the mechanism it
+tests is worse than no check, because it reads as coverage.
+
+Two of its earlier failures were the probe being wrong rather than the code,
+and both are worth knowing:
+
+- **Clicking a sort header suppresses the poll**, because focus lands on a
+  button *inside* the table and the poll deliberately pauses while focus is
+  in the table. That is the guard working; the probe now blurs first, as a
+  person does when they stop interacting.
+- **A stamp on the `<tbody>` survives a repaint**, because the swap assigns
+  `tbody.innerHTML` — the children are replaced, the element is not. The
+  probe stamps a row.
+
 ## Tracking
 
-Suggested issue structure: one epic ("UI widget-layer consolidation"),
-one issue per slice S0–S9 (S7 as a checklist issue with per-page boxes).
-Each slice PR: lowers its ratchet(s) in the same PR, runs
-`scripts/check-styles.sh` + affected render tests + the JS gate
-(`scripts/eslint.sh`, `node --test Tests/BrowserRunnerJSTests/*.mjs`),
-and regenerates visual-regression baselines when a captured page's look
-changes. This document is updated per slice with a "Status" line per
-finding, in the manner of `multi-language-audit.md`, so a later reader
-does not chase a fixed defect.
+The arc shipped as one PR per slice, in dependency order, each landing on
+`main` before the next was rebased onto it. S7 needed two passes and so two
+PRs; everything else was one. That discipline is what the per-slice "Status"
+lines above record, in the manner of `multi-language-audit.md`, so a later
+reader does not chase a fixed defect.
+
+Every slice PR held to the same contract, and a later widget change should
+too:
+
+- **Lower the ratchet in the same PR that earns it.** A slice that shrinks a
+  count and leaves the baseline alone hands the headroom to the next person
+  who wants to add a copy.
+- **Add the guard that closes the idiom**, not just the instances. Five of
+  these slices left a guard behind; three are absolute rules rather than
+  ratchets, because their conversion reached zero in one pass and an absolute
+  rule is the stronger invariant.
+- **Run `scripts/check-styles.sh`, the affected render tests, and the JS gate**
+  (`scripts/eslint.sh`, `node --test Tests/BrowserRunnerJSTests/*.mjs`).
+- **Regenerate visual-regression baselines in the same PR** when a captured
+  page's look changes, so the baseline diff is reviewed beside the cause.
+
+The one thing none of that covers is the widgets' *interaction*, which is why
+the repaint probe exists and now runs in CI.
