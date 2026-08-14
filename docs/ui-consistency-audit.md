@@ -571,6 +571,39 @@ listener reads the submitter).
 baseline 45 → 0 in this slice, then the guard forbids reintroduction.
 This mirrors exactly how `alert()` is already ratcheted.
 
+**Status: done.** All 43 template attributes are now `data-confirm`, and the
+seven JS call sites route through `ChickadeeUI.confirmAction`. Because the
+conversion reached zero in one pass, the guard is an **absolute rule**
+rather than a ratchet: a native `confirm(` outside the seam fails CI.
+
+Clicks are intercepted in the **capture** phase, which is a small upgrade
+on what the inline attributes did: a cancelled delete now also stops the
+handlers layered around the button (row-click navigation, popover toggles),
+where `return false` from an inline `onclick` only stopped the default.
+Submits stay in the bubble phase, where they run before
+`inplace-forms.js`'s listener — which already bails on `defaultPrevented`,
+so a cancelled submit stays cancelled inside the workbench too. A submitter
+carrying its own question (the `formaction` "Clear"/"Remove" buttons) asks
+that question and not the form's.
+
+Two drifted wordings were unified while converting, as planned: the
+reset-notebook pair keeps the longer sentence (it states that the student
+gets the fresh starter automatically — the fact an instructor needs before
+clicking), and the remove-support-file pair keeps "Tests that read it will
+fail", which is true on both pages where the edit page's "Students who
+already use it" was not.
+
+Verified in a real browser rather than by inspection, since a broken seam
+fails *open* — every destructive action would go through unasked:
+cancelling blocks the POST, accepting sends it, and a `formaction`
+submitter asks its own question and posts to its own action.
+
+One process note worth keeping: the first version of the guard failed on
+its own documentation, because the comment quoted the idiom it forbids.
+That is the `#1266` Leaf-comment lesson in a new place — **a scanner cannot
+tell markup from prose about markup** — and the fix is the same one that
+finding produced: describe the forbidden syntax, do not quote it.
+
 ### S6 — Button and label grammar (M)
 
 **Target state,** codified in `ui-design.md`'s component vocabulary:

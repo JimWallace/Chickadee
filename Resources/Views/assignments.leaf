@@ -499,7 +499,7 @@ tr.assignment-draggable td {
         btn.addEventListener('click', function () {
             var name = btn.getAttribute('data-name');
             var action = btn.getAttribute('data-action');
-            if (!confirm('Delete section \u201c' + name + '\u201d? Its assignments will become ungrouped.')) return;
+            if (!ChickadeeUI.confirmAction('Delete section \u201c' + name + '\u201d? Its assignments will become ungrouped.')) return;
             var form = document.createElement('form');
             form.method = 'post';
             form.action = action;

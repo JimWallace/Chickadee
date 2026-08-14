@@ -76,7 +76,7 @@
                         <div class="content-item-attachment">
                             <a href="#(att.downloadURL)">#(att.displayName)</a>
                             <span class="text-muted content-item-attachment-size">#(att.sizeLabel)</span>
-                            <form method="post" action="/instructor/content-items/#(item.content.id)/attachments/#(att.id)/delete" onsubmit="return confirm('Remove this file?')">
+                            <form method="post" action="/instructor/content-items/#(item.content.id)/attachments/#(att.id)/delete" data-confirm="Remove this file?">
                                 #csrfFormField()
                                 <button class="btn action-btn action-danger btn-tiny" type="submit">Remove</button>
                             </form>
@@ -86,7 +86,7 @@
                     #endif
                 </div>
             </details>
-            <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
+            <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" data-confirm="Delete this material?">
                 #csrfFormField()
                 <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
             </form>
@@ -186,7 +186,7 @@
                 </form>
             </details>
             <form method="post" action="/instructor/setup/#(item.assignment.setupID)/delete"
-                  onsubmit="return confirm('Delete this unpublished setup? This cannot be undone.')">
+                  data-confirm="Delete this unpublished setup? This cannot be undone.">
                 #csrfFormField()
                 <button class="btn action-btn action-danger" type="submit"
                         aria-label="Delete setup" title="Delete setup">
@@ -209,7 +209,7 @@
                     <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                 </a>
                 <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
-                      onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
+                      data-confirm="Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.">
                     #csrfFormField()
                     <button class="btn action-btn" type="submit"
                             aria-label="Duplicate assignment" title="Duplicate assignment">
@@ -217,7 +217,7 @@
                     </button>
                 </form>
                 <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
-                      onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
+                      data-confirm="Retest every submission for this assignment? The worker will re-grade each one against the current test suite.">
                     #csrfFormField()
                     <button class="btn action-btn" type="submit"
                             aria-label="Retest all submissions" title="Retest all submissions">
@@ -225,7 +225,7 @@
                     </button>
                 </form>
                 <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
-                      onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
+                      data-confirm="Delete this assignment? Students will no longer see it.">
                     #csrfFormField()
                     <button class="btn action-btn action-danger" type="submit"
                             aria-label="Delete assignment" title="Delete assignment">

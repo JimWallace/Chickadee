@@ -509,7 +509,7 @@ Create Assignment
             if (!btn) return;
             var filename = btn.getAttribute('data-filename');
             if (!filename || !draftID) return;
-            if (!confirm('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
+            if (!ChickadeeUI.confirmAction('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
             try {
                 var resp = await fetch(
                     '/instructor/new/draft/scripts/' + encodeURIComponent(filename)

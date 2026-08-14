@@ -52,10 +52,10 @@
             #csrfFormField()
             #if(course.isArchived):
             <button class="btn action-danger" type="submit"
-                    onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
+                    data-confirm="Unarchive #(course.code)? Students will be able to see it again.">Unarchive</button>
             #else:
             <button class="btn action-danger" type="submit"
-                    onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">Archive</button>
+                    data-confirm="Archive #(course.code)? Students will no longer see this course.">Archive</button>
             #endif
         </form>
         <a href="/admin/courses/#(course.id)/export" class="btn">Export bundle</a>
@@ -234,7 +234,7 @@
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-icon" type="submit"
                                 title="Remove from course" aria-label="Remove from course"
-                                onclick="return confirm('Remove @#(user.username) from #(course.code)?')">
+                                data-confirm="Remove @#(user.username) from #(course.code)?">
                             <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                         </button>
                     </form>
