@@ -27,6 +27,17 @@ func currentManifestGradingMode(_ manifest: String?) -> String {
     return (dict["gradingMode"] as? String) ?? "worker"
 }
 
+/// Reads the `graderOnlyFiles` list straight from a manifest JSON string —
+/// same access pattern as `currentManifestGradingMode` — empty when the field
+/// is absent or the manifest can't be parsed.
+func currentManifestGraderOnlyFiles(_ manifest: String?) -> [String] {
+    guard
+        let manifest,
+        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
+    else { return [] }
+    return (dict["graderOnlyFiles"] as? [String]) ?? []
+}
+
 /// Sets the test setup's `gradingMode` to `mode` when it differs.  Returns the
 /// effective mode.
 ///
@@ -34,8 +45,12 @@ func currentManifestGradingMode(_ manifest: String?) -> String {
 /// notebook page to host the browser runner, so the stored value could never
 /// execute (`TestProperties.effectiveGradingMode` would pin it to worker
 /// anyway — the refusal keeps the stored state honest rather than silently
-/// inert).  The section-adoption paths check the submission mode first and
-/// skip the sync, so this guard only fires on an explicit request.
+/// inert).  Also refuses `browser` while the manifest marks grader-only
+/// files: browser grading ships the whole setup workspace into the student's
+/// kernel, which is exactly what a grader-only mark exists to prevent —
+/// `author_script` refuses the same combination from the other side.  The
+/// section-adoption paths check both conditions first and skip the sync, so
+/// these guards only fire on an explicit request.
 func setManifestGradingMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
@@ -44,6 +59,11 @@ func setManifestGradingMode(
     {
         throw AppError.badRequest(
             reason: uploadModeGradingConflictMessage)
+    }
+    if mode == GradingMode.browser.rawValue,
+        !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
+    {
+        throw AppError.badRequest(reason: graderOnlyGradingConflictMessage)
     }
     if currentManifestGradingMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { dict in
@@ -58,6 +78,14 @@ func setManifestGradingMode(
 let uploadModeGradingConflictMessage =
     "An upload-only assignment is graded by the native worker; it cannot use browser grading. "
     + "Switch the grading mode to \"worker\" first."
+
+/// One message for every door of the grader-only/browser refusal (mode
+/// switch, zip upload — and `author_script`, which words the same rule from
+/// the marking direction). Browser grading streams the setup workspace into
+/// the student's kernel, so a grader-only file cannot be withheld there.
+let graderOnlyGradingConflictMessage =
+    "This assignment marks grader-only files, which browser grading would deliver to every "
+    + "student's kernel. Remove the graderOnly marks first, or keep worker grading."
 
 /// The upload-only-language coherence rule's message, shared by the
 /// setup-upload API, the submission-mode editor and the MCP tools.

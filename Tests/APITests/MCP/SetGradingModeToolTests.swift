@@ -74,4 +74,41 @@ import Vapor
             }
         }
     }
+
+    private let workerGraderOnlyManifest =
+        #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":["answers.py"],"testSuites":[],"timeLimitSeconds":10}"#
+
+    /// Browser grading delivers the setup workspace into the student's kernel,
+    /// so a manifest marking grader-only files refuses the switch — the
+    /// reverse of author_script's refusal to mark files on a browser-graded
+    /// assignment. Before this door closed, author-under-worker-then-switch
+    /// reached the combination every authoring surface half-forbids.
+    @Test func refusesBrowserWhileManifestMarksGraderOnlyFiles() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, manifest: workerGraderOnlyManifest)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await SetGradingModeTool().execute(
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            }
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(setup.decodedManifest()?.gradingMode.rawValue == "worker")
+        }
+    }
+
+    /// The refusal is scoped to marked files: a worker-graded assignment with
+    /// none switches to browser exactly as before.
+    @Test func allowsBrowserWhenNoGraderOnlyFilesMarked() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let workerManifest =
+                #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+            let assignment = try await fixture(on: app, manifest: workerManifest)
+            let out = try await SetGradingModeTool().execute(
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            #expect(out.gradingMode == "browser")
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(setup.decodedManifest()?.gradingMode.rawValue == "browser")
+        }
+    }
 }

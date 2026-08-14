@@ -258,6 +258,55 @@ import VaporTesting
         }
     }
 
+    /// A zip-borne manifest pairing browser grading with grader-only files is
+    /// refused at upload, like the upload-only + browser pair beside it: the
+    /// browser path delivers the whole workspace to the student's kernel, so
+    /// the marks could not be honored. The refusal fires during manifest
+    /// validation, before the zip's own contents are checked.
+    @Test func uploadRejectsGraderOnlyFilesWithBrowserGrading() async throws {
+        try await withApp(app) { _ in
+            let fx = try await setupInstructorWithBothCourses(activeCode: "LCGO", archivedCode: "LCGP")
+
+            let boundary = "LCGraderOnly"
+            let manifest =
+                #"{"schemaVersion":1,"gradingMode":"browser","graderOnlyFiles":["answers.py"],"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+            var body = ByteBufferAllocator().buffer(capacity: 512)
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+            body.writeString(fx.csrf)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"manifest\"\r\n\r\n")
+            body.writeString(manifest)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"courseID\"\r\n\r\n")
+            body.writeString(fx.active.courseID.uuidString)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString(
+                "Content-Disposition: form-data; name=\"files\"; filename=\"setup.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n\r\n")
+            body.writeString("PK")
+            body.writeString("\r\n--\(boundary)--\r\n")
+
+            try await app.asyncTest(
+                .POST, "/api/v1/testsetups",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .unprocessableEntity,
+                        "grader-only + browser manifest must be rejected, got \(res.status)")
+                    let bodyText = res.body.string
+                    #expect(
+                        bodyText.contains("grader-only"),
+                        "rejection should carry the grader-only conflict message, got: \(bodyText)")
+                })
+        }
+    }
+
     @Test func uploadRejectsUnparseableMinimumRunnerVersion() async throws {
         try await withApp(app) { _ in
             let fx = try await setupInstructorWithBothCourses(activeCode: "LCMV", archivedCode: "LCMW")

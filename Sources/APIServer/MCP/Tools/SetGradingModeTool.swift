@@ -78,6 +78,14 @@ struct SetGradingModeTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: uploadModeGradingConflictMessage)
         }
+        // Same treatment for grader-only files: author_script refuses marking
+        // them on a browser-graded assignment, and this is the reverse door.
+        if mode == GradingMode.browser.rawValue,
+            !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
+        {
+            throw MCPToolError.invalidArguments(
+                tool: Self.name, detail: graderOnlyGradingConflictMessage)
+        }
         let effective = try await setManifestGradingMode(setup: setup, to: mode, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, gradingMode: effective)
     }

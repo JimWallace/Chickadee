@@ -63,9 +63,11 @@ struct BrowserRunnerRoutes: RouteCollection {
         // Grader-only files (answer keys, reserved holdout sets) must never reach
         // a browser-graded student — the whole stored zip is streamed into the
         // kernel's filesystem, which a determined student can inspect. Stream a filtered
-        // copy with those entries removed. The common case declares none (a
-        // grader-only file forces worker grading, see docs/datasets.md), so the
-        // empty case takes the no-copy streaming fast path.
+        // copy with those entries removed. Every authoring door now refuses the
+        // grader-only + browser combination (author_script, set_grading_mode, the
+        // zip upload; section adoption keeps worker grading), so this filter is
+        // the backstop for setups that predate the rule — the common case
+        // declares none and takes the no-copy streaming fast path.
         let graderOnly = setup.decodedManifest()?.graderOnlyFiles ?? []
         guard !graderOnly.isEmpty else {
             return try await req.fileio.asyncStreamFile(at: setup.zipPath)

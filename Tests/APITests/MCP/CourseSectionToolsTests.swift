@@ -87,6 +87,41 @@ import Vapor
         }
     }
 
+    /// Moving an assignment whose manifest marks grader-only files into a
+    /// browser-default section keeps worker grading rather than failing the
+    /// move — the same skip the upload-only rule gets. Adopting browser would
+    /// deliver the withheld files to every student's kernel.
+    @Test func setAssignmentSectionKeepsWorkerWhenGraderOnlyFilesMarked() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let fx = try await fixture(on: app)
+            let courseID = try fx.course.requireID()
+            try await makeTestSetup(
+                on: app, id: "setup_go", courseID: courseID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":["answers.py"],"testSuites":[],"timeLimitSeconds":10}"#
+            )
+            let holdoutAssignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_go", courseID: courseID, title: "Holdout Lab")
+            let section = try await makeSection(
+                on: app, name: "Labs", mode: "browser", order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
+
+            let out = try await SetAssignmentCourseSectionTool().execute(
+                .init(
+                    assignmentPublicID: holdoutAssignment.publicID,
+                    courseSectionID: sectionID.uuidString),
+                context(app))
+            #expect(out.gradingMode == "worker")
+
+            // The move itself succeeded; the mode did not adopt.
+            let reloaded = try #require(try await APIAssignment.find(holdoutAssignment.id, on: app.db))
+            #expect(reloaded.sectionID == sectionID)
+            let setup = try #require(try await APITestSetup.find("setup_go", on: app.db))
+            #expect(setup.decodedManifest()?.gradingMode.rawValue == "worker")
+        }
+    }
+
     @Test func setAssignmentSectionMovesAndSyncsGradingMode() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

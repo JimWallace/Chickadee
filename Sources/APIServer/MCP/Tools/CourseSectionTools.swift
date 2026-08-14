@@ -278,12 +278,15 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         {
             sectionName = section.name
             if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
-                // An upload-only assignment keeps worker grading rather than
-                // adopting a browser default (which would be refused — no
-                // notebook page to grade in); the move itself still succeeds.
+                // An upload-only assignment — or one marking grader-only
+                // files — keeps worker grading rather than adopting a browser
+                // default (which would be refused: no notebook page to grade
+                // in, or withheld files the browser path would deliver); the
+                // move itself still succeeds.
                 if section.defaultGradingMode == GradingMode.browser.rawValue,
                     currentManifestSubmissionMode(setup.manifest)
                         == SubmissionMode.uploadOnly.rawValue
+                        || !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
                 {
                     gradingMode = currentManifestGradingMode(setup.manifest)
                 } else {
