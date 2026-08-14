@@ -134,7 +134,6 @@ Runner #(runner.workerID)
     margin-top: .6rem;
 }
 </style>
-<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';

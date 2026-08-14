@@ -193,6 +193,27 @@ If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
 copies, and the page-style ratchet fails CI on growth.
 
+## Timestamps
+
+Two renderings, chosen by what the reader is asking (UI audit S8):
+
+- **Human activity** — "last seen", "authorized", "last used", "fired",
+  "completed", an activity feed — renders **relative** via
+  `<td class="js-relative-time" data-iso="…">`, which
+  `Public/relative-time.js` (loaded from `base.leaf`) rewrites to "3 hours
+  ago" and gives an absolute `title`.  The reader wants recency, and a
+  relative value answers that at a glance.  A **countdown** (a token's
+  expiry) is the same case: "in 3 days" beats a date.
+- **Forensic or compliance** times — the audit log, retention dates —
+  render **absolute**, in `--font-mono`, deliberately.  Here the exact
+  instant *is* the content, and "2 months ago" would destroy it.
+
+The server-formatted string stays in the cell as the no-JS fallback, so a
+column degrades to an absolute date rather than to nothing.  Staleness
+questions ("is this runner offline?") use
+`ChickadeeRelativeTime.isStale(iso)`, whose threshold is the client half of
+`RunnerStaleness` — never a hand-written `Date.now() - t > …` comparison.
+
 ## Class names must resolve
 
 A class name assigned in a template or in first-party `Public/*.js` must

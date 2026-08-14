@@ -28,9 +28,9 @@ Connected agents
                 <td>#(row.agentName)</td>
                 #if(isAdmin):<td><code>#(row.owner)</code></td>#endif
                 <td><code>#(row.scope)</code></td>
-                <td class="time">#(row.createdAt)</td>
-                <td class="time">#if(row.lastUsedAt):#(row.lastUsedAt)#else:—#endif</td>
-                <td class="time">#(row.expiresAt)</td>
+                <td class="time js-relative-time" data-iso="#(row.createdAt)">#(row.createdAt)</td>
+                <td class="time#if(row.lastUsedAt): js-relative-time#endif"#if(row.lastUsedAt): data-iso="#(row.lastUsedAt)"#endif>#if(row.lastUsedAt):#(row.lastUsedAt)#else:—#endif</td>
+                <td class="time js-relative-time" data-iso="#(row.expiresAt)">#(row.expiresAt)</td>
                 <td>
                     #if(row.revoked):
                     <span class="text-muted">Revoked</span>

@@ -24,6 +24,11 @@ import Vapor
 /// One row of the timeline, already formatted for display.
 struct CourseActivityRow: Encodable, Sendable {
     let timestamp: String
+    /// The same instant in ISO-8601, for `js-relative-time` to render as
+    /// "3 hours ago" with the absolute value in the tooltip. Activity is
+    /// human-activity, which the timestamp policy renders relative
+    /// (docs/ui-design.md); `timestamp` remains the no-JS fallback.
+    let timestampISO: String
     let actor: String
     /// Coarse grouping shown as a chip: "Content edit" or the audit category.
     let category: String
@@ -66,9 +71,11 @@ enum CourseActivityService {
             .prefix(limit)
 
         let formatter = waterlooDateTimeFormatter()
+        let iso = ISO8601DateFormatter()
         return merged.map { entry in
             CourseActivityRow(
                 timestamp: formatter.string(from: entry.sortKey),
+                timestampISO: iso.string(from: entry.sortKey),
                 actor: entry.actor,
                 category: entry.category,
                 summary: entry.summary,

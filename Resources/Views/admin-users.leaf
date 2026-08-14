@@ -52,7 +52,6 @@ Users
     display: inline;
 }
 </style>
-<script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 <script src="/table-poll.js?v=#appVersion()"></script>

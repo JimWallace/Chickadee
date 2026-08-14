@@ -45,7 +45,7 @@ Activity
             <tbody>
                 #for(row in rows):
                 <tr>
-                    <td>#(row.timestamp)</td>
+                    <td class="js-relative-time" data-iso="#(row.timestampISO)">#(row.timestamp)</td>
                     <td>#(row.actor)</td>
                     <td>
                         <span class="activity-category">#(row.category)</span>

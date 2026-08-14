@@ -22,6 +22,10 @@
          script tags, and they reference ChickadeeUI at parse time
          (e.g. csrf-token captures). -->
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
+    <!-- Same reason, same place: page inline scripts call
+         ChickadeeRelativeTime.applyRelativeTimes() during parse, so it cannot
+         wait for the end of <body>. -->
+    <script src="/relative-time.js?v=#appVersion()"></script>
 </head>
 <body#if(fullBleed): class="page-fullbleed"#endif>
 #extend("_icons")
