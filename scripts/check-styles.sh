@@ -10,7 +10,7 @@ set -euo pipefail
 #   * Shared styling lives in Public/styles.css; page-unique styling lives in a
 #     page-local <style> block with role-named classes.
 #   * No inline style="" in templates EXCEPT a JS-toggled `display:none` initial
-#     state or a CSS custom-property assignment (e.g. style="--filter-width:220px").
+#     state or a CSS custom-property assignment (e.g. style="--wb-left-width:42%").
 #   * No new native alert() in templates or first-party Public/*.js — use the
 #     inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
@@ -306,7 +306,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=689
+PAGE_STYLE_BASELINE=688
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -338,6 +338,28 @@ if [ -n "${s1_hack}${s1_local}" ]; then
   echo "       Use input[data-list-filter] (Public/list-filter.js) — it owns"
   echo "       both the row matching and the autofill suppression."
   { [ -n "$s1_hack" ] && printf '%s\n' "$s1_hack"; [ -n "$s1_local" ] && printf '%s\n' "$s1_local"; } | sed 's/^/  /'
+  echo
+fi
+
+# S1 (cont.): one control means one DRESS, not just one implementation. Five
+# filter boxes shared list-filter.js and still came in three widths — two inline
+# --filter-width values plus a page-local flex basis — because the property read
+# as a per-page dial. It is declared once in styles.css (:root) and may not be
+# re-assigned in a template.
+#
+# The rest of the contract (a .filter-group wrapper, type=search, no markup
+# autocomplete, live-or-GET-form) is structural, so it is asserted by walking the
+# tags in Tests/APITests/ListFilterMarkupTests.swift rather than counted here —
+# a count is a weak proxy for containment, and this file's own rule is to parse
+# structure rather than search the document.
+s1_width="$(grep -rn -- '--filter-width' "${views[@]}" || true)"
+if [ -n "$s1_width" ]; then
+  status=1
+  echo "ERROR: a template assigns --filter-width."
+  echo "       The list filter is one width, declared in styles.css (:root)."
+  echo "       If one filter genuinely needs another, add a named modifier"
+  echo "       class there — not an inline value review cannot see."
+  printf '%s\n' "$s1_width" | sed 's/^/  /'
   echo
 fi
 

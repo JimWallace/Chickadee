@@ -75,6 +75,12 @@
     --radius-lg: .5rem;   /* cards, tables, modals, callouts */
     --radius-full: 999px; /* pills, round icon buttons */
 
+    /* The one list-filter width (.filter-input).  Declared here rather than
+       per page: three pages each dialled their own inline value (280px /
+       220px / a 260px flex basis), so five boxes doing one job came in three
+       sizes.  A template may not assign this — scripts/check-styles.sh 4c. */
+    --filter-width: 16rem;
+
     /* Nav foreground pair — the nav is black in both schemes, so no
        dark-mode override is needed. */
     --nav-fg: rgba(255, 255, 255, .85);
@@ -2153,9 +2159,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    it push the whole page wider. */
 .table-scroll { overflow-x: auto; }
 
-/* Filter/search inputs keep their authored desktop width via the
-   --filter-width custom property (so desktop is unchanged) and span the full
-   row on phones. */
+/* Filter/search inputs are one width everywhere (--filter-width, declared in
+   :root) and span the full row on phones. */
 /* Modal overlay + card (test-editor-modal.js). The scrim uses the palette's
    --overlay-bg rather than a raw rgba(), so it has a dark-mode value; the card
    uses the one elevation token (UI audit S9). `hidden` does the showing and
@@ -2301,7 +2306,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 /* Injected by ChickadeeUI.showActionError — the one blocking-error surface,
    shared with inplace-forms.js's banner (UI audit S9). */
 .action-error-banner { margin-bottom: .75rem; }
-.filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
+.filter-input { width: var(--filter-width); max-width: 100%; }
 /* Label preceding a list-filter control — one look for the live
    (data-list-filter) and GET-form (activity/audit) variants alike. */
 .filter-label { font-size: var(--text-sm); color: var(--muted); }
@@ -2309,7 +2314,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    together instead of stranding the label (the students titlebar wraps).
    Inside a group the input's flex basis takes over from its width. */
 .filter-group { display: flex; align-items: center; gap: .5rem; }
-.filter-group > .filter-input { flex: 1 1 var(--filter-width, 16rem); width: auto; min-width: 0; }
+.filter-group > .filter-input { flex: 1 1 var(--filter-width); width: auto; min-width: 0; }
+/* "Showing 12 of 340", minted into the group by list-filter.js and empty while
+   the box is. It is the live region too, so a screen reader hears the result of
+   a filter that otherwise just removes rows silently. */
+.filter-status { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; }
+/* Collapsed when it says nothing, so a cleared filter leaves no flex gap
+   behind in the group. */
+.filter-status:empty { display: none; }
 
 /* ── Idle-logout dialog (idle-logout.js) ─────────────── */
 /* Styled here rather than by the JS-injected stylesheet idle-logout.js used

@@ -11,8 +11,8 @@ Users
             <label class="filter-label" for="users-filter">Filter</label>
             <input id="users-filter" class="form-input filter-input" type="search"
                    placeholder="Filter by name, username or role…"
-                   style="--filter-width:280px"
-                   data-list-filter="users-table">
+                   data-list-filter="users-table"
+                   data-list-filter-empty="No users match this filter.">
         </span>
     </div>
     <div class="table-scroll"><table class="results-table sortable-table" id="users-table"
