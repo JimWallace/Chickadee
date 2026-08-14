@@ -109,7 +109,7 @@ fi
 # attributes or a JSON island).  Baseline = total non-blank lines inside
 # <script> bodies across all templates; it may only go DOWN.  <script src=…>
 # includes and single-line <script>…</script> elements don't count.
-INLINE_SCRIPT_BASELINE=1548
+INLINE_SCRIPT_BASELINE=1317
 inline_script_count="$(
   awk '
     /<script[^>]*src=/ { next }

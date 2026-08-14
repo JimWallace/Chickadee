@@ -938,6 +938,60 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    /// `?fragment=rows` renders the SAME partial the page renders, so the
+    /// 5-second poll and the page cannot drift.  Before this the poll rebuilt
+    /// every row as a JS string — a second copy of the markup that could (and
+    /// did) diverge from the template silently.
+    @Test func usersDataFragmentRendersTheSameRowsPartial() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            _ = try await makeUser(username: "fragment_user", role: "instructor")
+
+            try await app.asyncTest(
+                .GET, "/admin/users-data?fragment=rows",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    // Rows only — no <table>, no <thead>: the client swaps this
+                    // into the existing tbody.
+                    #expect(body.contains("<tr>"))
+                    #expect(!body.contains("<table"))
+                    #expect(!body.contains("<thead"))
+                    #expect(body.contains("fragment_user"))
+                    // The full row markup the page renders, not a reduced copy:
+                    // the role form, its CSRF field, and the sortable timestamp.
+                    #expect(body.contains("name='_csrf'"))
+                    #expect(body.contains("js-relative-time"))
+                })
+        }
+    }
+
+    /// The runners feed keeps its JSON representation (the runner-detail page's
+    /// poll reads it) and gains a rows fragment for the dashboard table.
+    @Test func runnersFeedServesBothJSONAndFragment() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+
+            try await app.asyncTest(
+                .GET, "/admin/runners",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType == .json)
+                })
+            try await app.asyncTest(
+                .GET, "/admin/runners?fragment=rows",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(!String(buffer: res.body).contains("<table"))
+                })
+        }
+    }
+
     /// A system-generated poll (carrying `X-Background-Refresh`) must not count
     /// as activity, so a dashboard left open in a tab can't keep a user logged
     /// in past the idle timeout.  A normal request still refreshes activity.

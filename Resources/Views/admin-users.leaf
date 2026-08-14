@@ -16,7 +16,8 @@ Users
         </span>
     </div>
     <div class="table-scroll"><table class="results-table sortable-table" id="users-table"
-           data-sort-initial="last-seen:desc" data-sort-tiebreak="username">
+           data-sort-initial="last-seen:desc" data-sort-tiebreak="username"
+           data-poll-url="/admin/users-data?fragment=rows" data-poll-interval="5000">
         <thead>
             <tr>
                 <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
@@ -28,58 +29,7 @@ Users
             </tr>
         </thead>
         <tbody>
-        #for(user in users):
-            <tr>
-                <td>
-                    #if(user.displayName):
-                        #(user.displayName)
-                    #else:
-                        —
-                    #endif
-                </td>
-                <td><code>#(user.username)</code></td>
-                <td>
-                    #if(user.role == "mcp"):
-                    <code class="role-fixed">mcp</code>
-                    #else:
-                    <form method="post" action="/admin/users/#(user.id)/role"
-                          class="role-form">
-                        #csrfFormField()
-                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
-                        <select id="role-#(user.id)" name="role" class="form-input role-select">
-                            <option value="user"  #if(user.role == "user"):selected#endif>user</option>
-                            <option value="admin" #if(user.role == "admin"):selected#endif>admin</option>
-                        </select>
-                        <button class="btn action-btn" type="submit">Save</button>
-                    </form>
-                    #endif
-                </td>
-                <td class="time js-relative-time col-hide-phone" data-iso="#(user.lastSeenAt)">
-                    #if(user.lastSeenAt):
-                        #(user.lastSeenAt)
-                    #else:
-                        —
-                    #endif
-                </td>
-                <td class="time js-relative-time col-hide-phone" data-iso="#(user.createdAt)">#(user.createdAt)</td>
-                <td>
-                    <div class="user-actions">
-                        <a href="/admin/users/#(user.id)"
-                           class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                        </a>
-                        <form method="post" action="/admin/users/#(user.id)/delete" class="user-delete-form">
-                            #csrfFormField()
-                            <button class="btn action-btn action-danger action-btn-icon" type="submit"
-                                    title="Delete user" aria-label="Delete user"
-                                    onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                            </button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-        #endfor
+        #extend("_user-rows")
         </tbody>
     </table></div>
 </section>
@@ -105,107 +55,6 @@ Users
 <script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
-<script>
-(function () {
-    'use strict';
-
-    var usersTable = document.getElementById('users-table');
-    if (!usersTable) return;
-    var usersBody = usersTable.querySelector('tbody');
-    if (!usersBody) return;
-
-    ChickadeeRelativeTime.applyRelativeTimes(document);
-
-    var usersFilter = document.getElementById('users-filter');
-
-    // ── Auto-refresh ─────────────────────────────────────────────────
-    // Poll /admin/users-data every few seconds and repaint the table so
-    // last-seen times and new/removed users stay current without a manual
-    // reload.  The X-Background-Refresh header tells the server this is a
-    // system-generated poll, so it does NOT reset the session idle timer
-    // (a dashboard left open in a tab can't keep an admin logged in).
-
-    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
-    var escapeHtml = ChickadeeUI.escapeHtml;
-
-    var deleteIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
-    var editIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
-
-    function buildUserRow(user, csrfToken) {
-        var id = escapeHtml(user.id);
-        var username = escapeHtml(user.username);
-        var displayName = user.displayName ? escapeHtml(user.displayName) : '—';
-        var lastSeen = user.lastSeenAt ? escapeHtml(user.lastSeenAt) : '';
-        var created = escapeHtml(user.createdAt);
-        var csrfField = '<input type="hidden" name="_csrf" value="' + escapeHtml(csrfToken) + '">';
-        function roleOption(value) {
-            return '<option value="' + value + '"' + (user.role === value ? ' selected' : '') + '>' + value + '</option>';
-        }
-        // mcp service accounts render read-only so they can't be flipped to a
-        // human role by mistake; humans get the user|admin toggle (#417 G2).
-        var roleCell = user.role === 'mcp'
-            ? '<code class="role-fixed">mcp</code>'
-            : '<form method="post" action="/admin/users/' + id + '/role" class="role-form">'
-                + csrfField
-                + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
-                + '<select id="role-' + id + '" name="role" class="form-input role-select">'
-                    + roleOption('user') + roleOption('admin')
-                + '</select>'
-                + '<button class="btn action-btn" type="submit">Save</button>'
-            + '</form>';
-        return '<tr>'
-            + '<td>' + displayName + '</td>'
-            + '<td><code>' + username + '</code></td>'
-            + '<td>' + roleCell + '</td>'
-            + '<td class="time js-relative-time col-hide-phone" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
-            + '<td class="time js-relative-time col-hide-phone" data-iso="' + created + '">' + created + '</td>'
-            + '<td>'
-                + '<div class="user-actions">'
-                    + '<a href="/admin/users/' + id + '" class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">' + editIcon + '</a>'
-                    + '<form method="post" action="/admin/users/' + id + '/delete" class="user-delete-form">'
-                        + csrfField
-                        + '<button class="btn action-btn action-danger action-btn-icon" type="submit" title="Delete user" aria-label="Delete user"'
-                            + ' onclick="return confirm(\'Delete this user? Their enrollments will be removed. They can log in again to restore their account.\')">' + deleteIcon + '</button>'
-                    + '</form>'
-                + '</div>'
-            + '</td>'
-        + '</tr>';
-    }
-
-    function repaintUsers(rows) {
-        if (!Array.isArray(rows)) return;
-        var csrfToken = ChickadeeUI.getCsrfToken();
-        usersBody.innerHTML = rows.map(function (u) { return buildUserRow(u, csrfToken); }).join('');
-        ChickadeeRelativeTime.applyRelativeTimes(usersBody);
-        ChickadeeSortableTable.apply(usersTable);
-        ChickadeeListFilter.apply(usersFilter);
-    }
-
-    async function pollUsers() {
-        // Skip when the tab is hidden, or while an admin is mid-interaction
-        // with the table or filter (repaint would yank focus / a half-open
-        // role <select> out from under them).
-        if (document.hidden) return;
-        if (usersTable.contains(document.activeElement)) return;
-        if (usersFilter && document.activeElement === usersFilter) return;
-        try {
-            var res = await fetch('/admin/users-data', {
-                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
-                cache: 'no-store'
-            });
-            if (res.redirected || res.status === 401 || res.status === 403) {
-                // Session expired server-side — surface the login redirect.
-                window.location.reload();
-                return;
-            }
-            if (!res.ok) return;
-            repaintUsers(await res.json());
-        } catch (_) {
-            // Keep the current rows on transient polling errors.
-        }
-    }
-    setInterval(pollUsers, 5000);
-})();
-</script>
+<script src="/table-poll.js?v=#appVersion()"></script>
 #endexport
 #endextend

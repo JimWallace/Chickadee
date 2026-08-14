@@ -102,15 +102,28 @@ extension InstructorDashboardRoutes {
 
     // MARK: - GET /instructor/students-data
 
-    /// JSON feed backing the Students-tab auto-refresh.  Returns the same
-    /// rows the page rendered with, so last-seen times and newly enrolled /
-    /// removed students stay current without a manual reload.  Returns an
-    /// empty array when no course is active (the table simply clears).
+    /// Feed backing the Students-tab auto-refresh.  Returns the same rows the
+    /// page rendered with, so last-seen times and newly enrolled / removed
+    /// students stay current without a manual reload.  Empty when no course is
+    /// active (the table simply clears).
+    ///
+    /// Two representations, one query:
+    ///   * `?fragment=rows` renders `_student-rows.leaf` — the SAME partial the
+    ///     page renders, so the poll cannot drift from the page (it used to
+    ///     rebuild every row as a JS string, including a whole register-student
+    ///     popover, and the two copies diverged by construction);
+    ///   * anything else keeps the JSON array, unchanged, for other consumers.
     @Sendable
-    func studentsData(req: Request) async throws -> [EnrolledStudentRow] {
+    func studentsData(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
-        guard let activeCourseUUID = courseState.activeCourseUUID else { return [] }
+        let wantsFragment = req.query[String.self, at: "fragment"] == "rows"
+
+        guard let activeCourseUUID = courseState.activeCourseUUID else {
+            return wantsFragment
+                ? Response(status: .ok, headers: ["Content-Type": "text/html; charset=utf-8"], body: .init(string: ""))
+                : try await [EnrolledStudentRow]().encodeResponse(for: req)
+        }
         let roster = try await loadEnrolledStudentRows(
             req: req,
             activeCourseUUID: activeCourseUUID,
@@ -118,6 +131,31 @@ extension InstructorDashboardRoutes {
             fmt: waterlooDateTimeFormatter(),
             isoFormatter: ISO8601DateFormatter()
         )
-        return roster.rows
+        guard wantsFragment else {
+            return try await roster.rows.encodeResponse(for: req)
+        }
+
+        let canManageRoster =
+            user.isAdmin || (courseState.active?.role ?? .student) >= .instructor
+        let courseIsArchived = try await APICourse.find(activeCourseUUID, on: req.db)?.isArchived ?? false
+        let ctx = StudentRowsFragmentContext(
+            currentUser: CurrentUserContext(
+                user: user,
+                activeCourse: courseState.active,
+                enrolledCourses: courseState.all
+            ),
+            enrolledStudents: roster.rows,
+            rosterReadOnly: courseIsArchived || !canManageRoster
+        )
+        return try await req.view.render("_student-rows", ctx).encodeResponse(for: req)
     }
+}
+
+/// Context for the rows-only fragment of the roster table.  Carries exactly
+/// what `_student-rows.leaf` reads — no more, so the fragment cannot start
+/// depending on page-level state the poll does not compute.
+struct StudentRowsFragmentContext: Encodable {
+    let currentUser: CurrentUserContext
+    let enrolledStudents: [EnrolledStudentRow]
+    let rosterReadOnly: Bool
 }

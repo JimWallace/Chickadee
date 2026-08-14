@@ -167,7 +167,8 @@ struct GetRunnerDetailTool: DiagnosticTool {
             avgExecutionMs: nil,
             avgQueueWaitMs: nil,
             avgExecutionFormatted: nil,
-            avgQueueWaitFormatted: nil)
+            avgQueueWaitFormatted: nil,
+            isOffline: RunnerStaleness.isOffline(lastActive: latest.recordedAt))
     }
 
     private func capabilityTags(profile: RunnerProfile?) -> [String] {
