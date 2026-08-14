@@ -52,11 +52,12 @@ Students
           class="students-learn-status"></span>
     #endif
     #endif
-    <input id="enrolled-filter" class="form-input filter-input students-filter" type="search" autocomplete="off"
-           style="--filter-width:220px"
-           placeholder="Filter by name or username…"
-           aria-label="Filter enrolled students"
-           readonly onfocus="this.removeAttribute('readonly')">
+    <span class="filter-group students-filter">
+        <label class="filter-label" for="enrolled-filter">Filter</label>
+        <input id="enrolled-filter" class="form-input filter-input" type="search"
+               placeholder="Filter by name or username…"
+               data-list-filter="enrolled-students-table">
+    </span>
 </div>
 
 <table class="results-table" id="enrolled-students-table"
@@ -178,7 +179,7 @@ Students
 .students-mode-label { font-size: var(--text-base); margin: 0; }
 .students-mode-select { display: block; font-size: var(--text-base); }
 .students-learn-status { font-size: var(--text-sm); color: var(--gray-500); }
-.students-filter { flex: 1 1 220px; }
+.students-filter { flex: 1 1 260px; }
 .students-pending-name { color: var(--gray-500); }
 .students-pending-note { font-size: var(--text-2xs); color: var(--gray-500); margin-left: .4rem; }
 .students-pending-username { color: var(--gray-500); }
@@ -222,6 +223,7 @@ Students
 }
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
+<script src="/list-filter.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -352,14 +354,6 @@ Students
         if (activeHeader) activeHeader.textContent = sortAsc ? '↑' : '↓';
     }
 
-    function applyFilter() {
-        if (!filter) return;
-        var query = filter.value.trim().toLowerCase();
-        Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
-            row.hidden = query ? !(row.textContent || '').toLowerCase().includes(query) : false;
-        });
-    }
-
     // ── LEARN classlist reconciliation ───────────────────────────────
     // After a "Check against LEARN" run, rows whose student is no longer on
     // the LEARN classlist get a "not registered on LEARN" badge.  The id set
@@ -438,8 +432,6 @@ Students
         if (href) window.location.href = href;
     });
 
-    if (filter) filter.addEventListener('input', applyFilter);
-
     function repaint(rows) {
         if (!Array.isArray(rows)) return;
         var csrfToken = ChickadeeUI.getCsrfToken();
@@ -454,7 +446,7 @@ Students
         }
         ChickadeeRelativeTime.applyRelativeTimes(tbody);
         sortRows();
-        applyFilter();
+        ChickadeeListFilter.apply(filter);
         updateEmptyState();
         applyLearnFlags();
     }

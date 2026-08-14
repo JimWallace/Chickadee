@@ -7,10 +7,13 @@ Users
 #extend("_admin-tabs")
 <section class="page-section">
     <div class="toolbar toolbar--end section-gap">
-        <input id="users-filter" class="form-input filter-input" type="search" autocomplete="off"
-               placeholder="Filter by name, username or role…"
-               style="--filter-width:280px" aria-label="Filter users"
-               readonly onfocus="this.removeAttribute('readonly')">
+        <span class="filter-group">
+            <label class="filter-label" for="users-filter">Filter</label>
+            <input id="users-filter" class="form-input filter-input" type="search"
+                   placeholder="Filter by name, username or role…"
+                   style="--filter-width:280px"
+                   data-list-filter="users-table">
+        </span>
     </div>
     <div class="table-scroll"><table class="results-table" id="users-table">
         <thead>
@@ -115,6 +118,7 @@ Users
 }
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
+<script src="/list-filter.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -210,21 +214,6 @@ Users
     }
 
     var usersFilter = document.getElementById('users-filter');
-    function applyUserFilter() {
-        if (!usersFilter) return;
-        var query = usersFilter.value.trim().toLowerCase();
-        Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
-            if (!query) { row.hidden = false; return; }
-            var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
-            var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
-            var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
-            var role     = roleEl ? roleEl.value.toLowerCase() : '';
-            row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
-        });
-    }
-    if (usersFilter) {
-        usersFilter.addEventListener('input', applyUserFilter);
-    }
 
     // ── Auto-refresh ─────────────────────────────────────────────────
     // Poll /admin/users-data every few seconds and repaint the table so
@@ -288,7 +277,7 @@ Users
         if (activeUserHeader) {
             sortUsersByHeader(activeUserHeader, activeUserDirection);
         }
-        applyUserFilter();
+        ChickadeeListFilter.apply(usersFilter);
     }
 
     async function pollUsers() {

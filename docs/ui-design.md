@@ -153,6 +153,13 @@ of action buttons" and four pill implementations; the page-style ratchet
   wrapper, its lead-in paragraph, its italic aside.
 - **`.toolbar`** (+ `--end`), `.row-actions-tight` — horizontal control
   clusters; filter rows are `.toolbar .toolbar--end .section-gap`.
+- **`.filter-group`** — the one list-filter control: a `.filter-label` +
+  `.filter-input[type=search]` pair that wraps as a unit.  Live filtering is
+  `input[data-list-filter="<table-id>"]` (`Public/list-filter.js` — it owns
+  the row matching, the select-value rule, and autofill suppression; never
+  re-implement it in a page script).  Server-side GET filters (activity,
+  audit) wear the same label/input dress plus Filter/Clear buttons.
+  Placeholder microcopy on live filters: "Filter by &lt;matched fields&gt;…".
 - **`.field-inline`**, `.field-stack`, `.field-note` (+ `--muted`),
   `.input-compact` — form-field layout and hints.
 - **`.results-table`** (+ `.table-scroll`), `.sortable-table` behaviour.

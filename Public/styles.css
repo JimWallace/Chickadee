@@ -2071,6 +2071,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    --filter-width custom property (so desktop is unchanged) and span the full
    row on phones. */
 .filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
+/* Label preceding a list-filter control — one look for the live
+   (data-list-filter) and GET-form (activity/audit) variants alike. */
+.filter-label { font-size: var(--text-sm); color: var(--muted); }
+/* Label + input as one flex unit, so a wrapping toolbar row carries them
+   together instead of stranding the label (the students titlebar wraps).
+   Inside a group the input's flex basis takes over from its width. */
+.filter-group { display: flex; align-items: center; gap: .5rem; }
+.filter-group > .filter-input { flex: 1 1 var(--filter-width, 16rem); width: auto; min-width: 0; }
 
 /* ── Idle-logout dialog (idle-logout.js) ─────────────── */
 /* Styled here rather than by the JS-injected stylesheet idle-logout.js used

@@ -374,6 +374,22 @@ already have roster visibility, so no new data exposure — but it needs a
 small endpoint and is UX polish, not consistency; recommend deferring
 until the unified control has been used for a term.
 
+**Status: done.** `Public/list-filter.js` (unit-tested) plus
+`.filter-group`/`.filter-label` landed; the three inline copies are gone
+and guard 4c in `check-styles.sh` keeps both replaced idioms (a page-local
+filter function, the readonly-until-focus hack in markup) from returning.
+Convergence adopted the admin-users select-value matching everywhere — the
+whole-row copies matched every row for "ta"/"instructor", because a role
+`<select>`'s option labels are row text; the shared component's unit test
+pins that rule. Two deliberate narrowings of the plan as written: the
+autofill-suppression count went three → two, not one (`admin-mcp`'s
+`autocomplete="new-password"` stays — the right tool for a real form field
+that must never be offered saved credentials; the component owns the
+form-less-filter case), and the GET-form inputs keep a plain
+`autocomplete="off"` since they sit inside real forms. Visual-regression
+baselines regenerated for instructor-students (the filter row wraps as a
+label+input unit) and admin-users (visible label).
+
 ### S2 — One sortable table (M)
 
 **Target state.** `Public/sortable-table.js` is the only sort
