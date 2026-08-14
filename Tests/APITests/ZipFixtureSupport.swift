@@ -25,8 +25,10 @@
 // in the suite.
 //
 // The lock has to cover CONSTRUCTION, not just the spawn — that is what the
-// header above means by "the whole Process API surface" — so the `Process` and
-// its `Pipe`s are built inside the closure rather than handed to it.
+// header above means by "the whole Process API surface".
+// `runZipProcessCapturingStdout` builds the `Process` and its `Pipe` inside
+// the locked window, so routing through it is what keeps this fixture inside
+// the serialization regime.
 
 import Core
 import Foundation
@@ -43,16 +45,12 @@ func writeZipFixture(
     to zipPath: String,
     sourceLocation: SourceLocation = #_sourceLocation
 ) throws {
-    let status = try withZipProcessLock { () throws -> Int32 in
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        process.currentDirectoryURL = directory
-        process.arguments = ["-q", "-r", zipPath, "."]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        return process.terminationStatus
-    }
-    #expect(status == 0, "zip command must succeed", sourceLocation: sourceLocation)
+    let result = try runZipProcessCapturingStdout(
+        executablePath: "/usr/bin/zip",
+        arguments: ["-q", "-r", zipPath, "."],
+        workingDirectory: directory
+    )
+    #expect(
+        result.terminationStatus == 0, "zip command must succeed",
+        sourceLocation: sourceLocation)
 }

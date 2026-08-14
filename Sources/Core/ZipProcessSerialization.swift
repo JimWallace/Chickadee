@@ -19,32 +19,44 @@
 //
 // Both mitigations now live here and are used by every zip subprocess:
 //
-//   1. `withZipProcessLock { ... }` serializes the entire zip Process
-//      lifecycle (Process + Pipe construction, property setting, spawn,
-//      and, for sync paths, the wait and read).  Async paths release
-//      inside the continuation closure once the spawn returns; the
-//      terminationHandler runs on Foundation's monitoring queue and
-//      resumes the continuation independently.
+//   1. `withZipProcessLock { ... }` serializes the racy window only:
+//      Process + Pipe construction, property setting, and the spawn.
+//      Everything after the spawn happens outside the lock — the async
+//      path (`ZipArchiver.swift`'s `runZipProcess`) releases once the
+//      spawn returns and lets the terminationHandler resume the
+//      continuation from Foundation's monitoring queue, and the sync
+//      helper below (`runZipProcessCapturingStdout`) drains stdout and
+//      waits for exit after releasing.  Concurrent zip operations
+//      overlap everything but their spawns.
 //
 //   2. `runProcessWithEFAULTRetry(_:)` retries `Process.run()` once
 //      after a 10 ms backoff if it throws `NSPOSIXErrorDomain` /
 //      `EFAULT`.  Absorbs the residual race that the lock can't catch
 //      (cross-process kernel state, etc.).
 //
-// Zip operations are infrequent (test setup upload, course bundle
-// import, suite save, support-file extraction).  The cost of both
-// mitigations is negligible.
+// The sync paths originally held the lock across the child's whole
+// runtime (spawn + drain + wait).  That was tolerable while zip
+// subprocesses were rare (test setup upload, course bundle import), but
+// the notebook-open and dashboard paths now list/extract zip entries
+// per page view, and a whole-runtime lock is a server-wide cap of one
+// zip operation at a time — with each contender parking a
+// cooperative-pool thread in a blocking `NSLock.lock()`.  The lock's
+// scope is therefore the spawn window only, which is all the Foundation
+// race ever spanned; the child's runtime was never part of it, as the
+// async path demonstrated from the day it was written.
 
 import Foundation
 
-/// Process-wide lock held across the **entire** zip subprocess
-/// lifecycle.  See file header for rationale.
+/// Process-wide lock held across zip subprocess **construction + spawn**.
+/// See file header for rationale.
 private let zipProcessLock = NSLock()
 
 /// Serializes `body` against every other zip Process invocation in the
-/// codebase.  Use for the synchronous extract / list / extract-entry
-/// paths.  Async paths can hold the lock just for the spawn — see
-/// `ZipArchiver.swift`'s `runZipProcess`.
+/// codebase.  `body` must contain only the racy window — Process/Pipe
+/// construction through `run()` — never the child's drain or wait.
+/// Prefer `runZipProcessCapturingStdout` (sync) or the manual
+/// acquire/release pair in `ZipArchiver.swift`'s `runZipProcess` (async)
+/// over calling this directly.
 public func withZipProcessLock<T>(_ body: () throws -> T) rethrows -> T {
     zipProcessLock.lock()
     defer { zipProcessLock.unlock() }
@@ -77,4 +89,48 @@ public func runProcessWithEFAULTRetry(_ proc: Process) throws {
         Thread.sleep(forTimeInterval: 0.01)
         try proc.run()
     }
+}
+
+/// Exit status + captured stdout of a synchronous zip subprocess run.
+public struct ZipProcessResult: Sendable {
+    public let terminationStatus: Int32
+    public let stdout: Data
+}
+
+/// Runs a zip/unzip subprocess synchronously: construction + spawn under
+/// the process-wide zip lock, stdout drain + exit wait **outside** it.
+/// This is the one sync entry point — every synchronous zip subprocess
+/// in the codebase goes through here so the narrow lock scope and the
+/// EFAULT retry cannot be forgotten at a call site.
+///
+/// stdout is always drained (an undrained pipe deadlocks the child once
+/// it writes past the ~64 KB OS pipe buffer); callers that don't need it
+/// just ignore `ZipProcessResult.stdout`.  stderr is sunk to the null
+/// device — every former call site discarded it, and the null device
+/// can't fill.
+public func runZipProcessCapturingStdout(
+    executablePath: String,
+    arguments: [String],
+    workingDirectory: URL? = nil
+) throws -> ZipProcessResult {
+    let (process, stdoutPipe) = try withZipProcessLock { () throws -> (Process, Pipe) in
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        if let workingDirectory {
+            process.currentDirectoryURL = workingDirectory
+        }
+        // CLOEXEC before the spawn: with the lock no longer held across the
+        // drain, another zip child can be spawned while this one's stdout is
+        // being read — it must not inherit this write end, or the drain
+        // below cannot reach EOF until that unrelated child exits (#1233).
+        let stdoutPipe = closeOnExecPipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = FileHandle.nullDevice
+        try runProcessWithEFAULTRetry(process)
+        return (process, stdoutPipe)
+    }
+    let stdout = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return ZipProcessResult(terminationStatus: process.terminationStatus, stdout: stdout)
 }

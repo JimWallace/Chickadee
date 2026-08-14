@@ -107,27 +107,15 @@ public func listZipContents(zipPath: String) throws -> [String] {
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
     }
-    // Serialize the entire Process lifecycle (see ZipProcessSerialization.swift).
-    // Sync path holds the lock across read + wait too since both touch
-    // the same Pipe / Process state.
-    return try withZipProcessLock {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        proc.arguments = ["-Z1", zipPath]
-        // CLOEXEC before the spawn: an unrelated process started concurrently
-        // must not inherit these write ends, or the drain below cannot reach
-        // EOF until that process exits (#1233).
-        let outPipe = closeOnExecPipe()
-        proc.standardOutput = outPipe
-        proc.standardError = closeOnExecPipe()  // discard
-        try runProcessWithEFAULTRetry(proc)
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
-        // unzip -Z1 exits 0 (OK) or 11 (no matching files) — both are fine here.
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return output.split(separator: "\n", omittingEmptySubsequences: true)
-            .map(String.init)
-    }
+    // Spawn serialized, drain + wait overlapped (see ZipProcessSerialization.swift).
+    let result = try runZipProcessCapturingStdout(
+        executablePath: "/usr/bin/unzip",
+        arguments: ["-Z1", zipPath]
+    )
+    // unzip -Z1 exits 0 (OK) or 11 (no matching files) — both are fine here.
+    let output = String(data: result.stdout, encoding: .utf8) ?? ""
+    return output.split(separator: "\n", omittingEmptySubsequences: true)
+        .map(String.init)
 }
 
 // MARK: - Private helper
