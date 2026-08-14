@@ -88,6 +88,58 @@ if (root) {
     }
 }
 
+// ── Destructive-action confirmation ────────────────────────────────────────
+// One seam for "are you sure?" (UI audit S5). A form or control declares the
+// question in markup:
+//
+//   <form … data-confirm="Delete this assignment? Students will lose access.">
+//   <button … data-confirm="Revoke this agent? It loses access immediately.">
+//
+// It replaces 49 hand-written inline handlers (an onclick or onsubmit whose
+// body called the native dialog directly). Those were not just repetitive:
+// the same action carried different wording on different pages, and the two
+// pages that rebuilt rows in JS carried a *second* copy of each message that
+// could drift from the first.
+//
+// It is also the seam any future improvement needs. Swapping the native
+// dialog for a styled one, or requiring a typed course code before a
+// destructive delete, is a change to this function — not to 49 call sites.
+//
+// (The guard in check-styles.sh greps for the native call, and cannot tell
+// markup from prose about markup — so this comment describes the old idiom
+// rather than quoting it. Same lesson as the Leaf-comment finding in #1266.)
+//
+// Clicks are handled in the CAPTURE phase so a cancelled action also stops the
+// handlers layered around it (row-click navigation, popover toggles) rather
+// than merely stopping the default. Submits are handled in the bubble phase,
+// which runs before inplace-forms.js's own submit listener (app.js loads
+// first) — and that one bails on `defaultPrevented`, so a cancelled submit
+// stays cancelled.
+(function confirmActions() {
+    function accepted(el) {
+        const message = el.getAttribute('data-confirm');
+        return !message || window.confirm(message);
+    }
+
+    document.addEventListener('click', (e) => {
+        const el = e.target instanceof Element ? e.target.closest('[data-confirm]') : null;
+        // A <form data-confirm> asks on submit, not on every click inside it.
+        if (!el || el.tagName === 'FORM') return;
+        if (accepted(el)) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!(form instanceof Element) || !form.matches('[data-confirm]')) return;
+        // A submitter with its own question already asked during the click —
+        // the secondary "Clear"/"Remove" buttons that carry `formaction`.
+        if (e.submitter && e.submitter.hasAttribute('data-confirm')) return;
+        if (!accepted(form)) e.preventDefault();
+    });
+}());
+
 // ── Nav dropdown menus ─────────────────────────────────────────────────────
 // Click-to-open menus for nav items that carry more than one option (the
 // Instructor course picker, the account/log-out menu).  Each is a

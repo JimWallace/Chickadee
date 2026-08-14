@@ -304,6 +304,24 @@ if [ -n "$s4_svg" ]; then
   echo
 fi
 
+# S5: destructive confirmation is data-confirm (handled in app.js). An inline
+# onclick/onsubmit confirm attribute is the idiom it replaced — 49 of them,
+# with the same action worded differently on different pages. Keeping the
+# question in markup is also what makes replacing the native dialog later a
+# one-place change; a call site that re-adds `confirm(` opts itself out of it.
+s5_inline="$(grep -rnE 'on(click|submit)="return (window\.)?confirm\(' "${views[@]}" || true)"
+s5_raw="$(grep -rnE '(^|[^.\w])confirm\(' "${views[@]}" Public/*.js \
+  | grep -v 'ChickadeeUI.confirmAction' | grep -v 'window.confirm' || true)"
+if [ -n "${s5_inline}${s5_raw}" ]; then
+  status=1
+  echo "ERROR: a native confirm() outside the shared seam."
+  echo "       Declare the question in markup with data-confirm=\"…\", or call"
+  echo "       ChickadeeUI.confirmAction(msg) where there is no element to mark."
+  { [ -n "$s5_inline" ] && printf '%s\n' "$s5_inline"
+    [ -n "$s5_raw" ] && printf '%s\n' "$s5_raw"; } | sed 's/^/  /'
+  echo
+fi
+
 # ── 5. Class names must resolve ──────────────────────────────────────────────
 scripts/check-class-resolution.sh || status=1
 

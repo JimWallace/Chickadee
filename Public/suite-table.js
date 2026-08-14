@@ -1202,7 +1202,7 @@
                 var item2 = findByID('check:' + cid2);
                 if (!item2) return;
                 var label = (item2.check && (item2.check.name || item2.check.id)) || cid2;
-                if (!confirm('Delete notebook check "' + label + '"? This removes the generated test script.')) {
+                if (!ChickadeeUI.confirmAction('Delete notebook check "' + label + '"? This removes the generated test script.')) {
                     return;
                 }
                 var remaining = items
@@ -1220,7 +1220,7 @@
             var id = row.getAttribute('data-id');
             var item = findByID(id);
             if (!item) return;
-            if (!confirm('Delete test script "' + item.script + '"? This also removes it as a dependency from other items.')) return;
+            if (!ChickadeeUI.confirmAction('Delete test script "' + item.script + '"? This also removes it as a dependency from other items.')) return;
 
             global.ChickadeeUI.fetchJSON(urls.deleteScript(item.script), {
                 method: 'DELETE', csrfToken: csrfToken
@@ -1276,7 +1276,7 @@
                     ? 'Delete section "' + name + '"?'
                     : 'Delete section "' + name + '"? Its ' + affected + ' test'
                       + (affected === 1 ? '' : 's') + ' will move to Ungrouped.';
-                if (!confirm(msg)) return;
+                if (!ChickadeeUI.confirmAction(msg)) return;
                 var f = document.createElement('form');
                 f.method = 'POST';
                 f.action = action;

@@ -47,6 +47,16 @@
             : (kind === 'ok' || kind === 'success') ? 'var(--green)' : 'var(--gray-500)';
     }
 
+    // ── Destructive-action confirmation ──
+    //
+    // The JS-side entry to the same seam `data-confirm` uses (app.js). A call
+    // site that has no element to hang an attribute on — a delete triggered
+    // from inside an editor's own click handler — asks here, so replacing the
+    // native dialog later is still a one-place change.
+    function confirmAction(message) {
+        return window.confirm(message);
+    }
+
     // ── Fetch error handling ──
     //
     // One error-message extractor for failed fetch bodies (#1126 — two
@@ -504,6 +514,7 @@
         escapeHtml: escapeHtml,
         escapeAttr: escapeHtml,
         getCsrfToken: getCsrfToken,
+        confirmAction: confirmAction,
         setStatus: setStatus,
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,

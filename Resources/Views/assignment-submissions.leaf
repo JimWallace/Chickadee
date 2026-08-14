@@ -59,7 +59,7 @@
             <td>
                 <div class="subm-row-actions">
                     #if(row.hasLatestSubmission):
-                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')" class="form-flush">
+                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" data-confirm="Send this submission back to the testing queue?" class="form-flush">
                             #csrfFormField()
                             <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                             <button class="btn action-btn action-btn-tight" type="submit"
@@ -86,12 +86,12 @@
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.gradeIsOverridden):
-                                <button class="btn action-btn" type="submit" formaction="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override/delete" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                <button class="btn action-btn" type="submit" formaction="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override/delete" formnovalidate data-confirm="Clear this student’s grade override and revert to the auto-graded result?">Clear</button>
                                 #endif
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.')" class="form-flush">
+                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="form-flush">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                         <button class="btn action-btn action-danger action-btn-tight" type="submit"
@@ -100,7 +100,7 @@
                         </button>
                     </form>
                     #if(secretRevealEnabled):#if(row.secretRevealSpent):
-                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/regrant-reveal-token" onsubmit="return confirm('Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it.')" class="form-flush">
+                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/regrant-reveal-token" data-confirm="Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it." class="form-flush">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                         <button class="btn action-btn action-btn-tight" type="submit"

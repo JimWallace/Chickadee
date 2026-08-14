@@ -118,7 +118,7 @@ Admin
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit"
                                 title="Copy course" aria-label="Copy course"
-                                onclick="return confirm('Copy #(course.code)? All test setups and assignments will be duplicated into a new course.')">
+                                data-confirm="Copy #(course.code)? All test setups and assignments will be duplicated into a new course.">
                             <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
                         </button>
                     </form>
@@ -126,7 +126,7 @@ Admin
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-icon" type="submit"
                                 title="Archive course" aria-label="Archive course"
-                                onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">
+                                data-confirm="Archive #(course.code)? Students will no longer see this course.">
                             <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>
                         </button>
                     </form>

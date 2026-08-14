@@ -100,7 +100,7 @@ My Account
                     <form method="post" action="/account/unenroll/#(course.id)" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
-                                onclick="return confirm('Leave #(course.code)?')">Leave</button>
+                                data-confirm="Leave #(course.code)?">Leave</button>
                     </form>
                     #elseif(course.enrollmentMode == "auto"):
                     <span class="chip" title="Auto-enrolled — contact your instructor to be removed">Auto</span>

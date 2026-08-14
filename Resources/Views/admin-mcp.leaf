@@ -127,7 +127,7 @@ MCP
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
-                                    onclick="return confirm('Delete this MCP account? Existing tokens stay valid until they expire.')">Delete</button>
+                                    data-confirm="Delete this MCP account? Existing tokens stay valid until they expire.">Delete</button>
                         </form>
                     </div>
                 </td>
@@ -171,7 +171,7 @@ MCP
                     <form method="post" action="/agents/#(grant.id)/revoke" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
-                                onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
+                                data-confirm="Revoke this agent? It will lose access immediately.">Revoke</button>
                     </form>
                     #endif
                 </td>

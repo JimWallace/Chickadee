@@ -2247,7 +2247,7 @@
                     if (idx2 < 0) return;
                     var family = familiesState[idx2];
                     var caseCount = (family.cases || []).length;
-                    if (!confirm('Delete pattern family "' + family.name + '"? This removes '
+                    if (!ChickadeeUI.confirmAction('Delete pattern family "' + family.name + '"? This removes '
                                  + caseCount + ' generated test script' + (caseCount === 1 ? '' : 's') + '.')) {
                         return;
                     }

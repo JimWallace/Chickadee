@@ -77,7 +77,7 @@ LEARN
         </form>
         #endif
         <form method="post" action="/instructor/brightspace/disconnect" class="inline-form"
-              onsubmit="return confirm('Disconnect your LEARN account? Courses that push grades as you will pause until someone reconnects.')">
+              data-confirm="Disconnect your LEARN account? Courses that push grades as you will pause until someone reconnects.">
             #csrfFormField()
             <button class="btn action-btn action-danger" type="submit">Disconnect my account</button>
         </form>
@@ -174,7 +174,7 @@ LEARN
                     #if(!courseIsArchived):
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
                           class="inline-form"
-                          onsubmit="return confirm('Re-push every student's best grade for #(row.title) to LEARN?')">
+                          data-confirm="Re-push every student's best grade for #(row.title) to LEARN?">
                         #csrfFormField()
                         <button class="btn action-btn bs-push-btn" type="submit"
                                 title="Re-push all grades for #(row.title)"
@@ -225,7 +225,7 @@ LEARN
                         <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
                     </a>
                     <form method="post" action="#(student.unenrollURL)" class="inline-form"
-                          onsubmit="return confirm('Remove #(student.displayName) from this course?')">
+                          data-confirm="Remove #(student.displayName) from this course?">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Remove from course" aria-label="Remove from course">

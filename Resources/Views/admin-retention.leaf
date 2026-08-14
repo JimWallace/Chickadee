@@ -51,7 +51,7 @@ Retention
                             #csrfFormField()
                             <button class="btn action-btn action-btn-icon" type="submit"
                                     title="Restore course" aria-label="Restore course"
-                                    onclick="return confirm('Restore #(row.code)? Students will be able to see it again and its retention clock resets.')">
+                                    data-confirm="Restore #(row.code)? Students will be able to see it again and its retention clock resets.">
                                 <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                             </button>
                         </form>
@@ -64,7 +64,7 @@ Retention
                             #csrfFormField()
                             <button class="btn action-btn action-danger action-btn-icon" type="submit"
                                     title="Delete course" aria-label="Delete course"
-                                    onclick="return confirm('Permanently delete #(row.code) and ALL its data — course, assignments, test suites, and submissions? This cannot be undone.')">
+                                    data-confirm="Permanently delete #(row.code) and ALL its data — course, assignments, test suites, and submissions? This cannot be undone.">
                                 <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                             </button>
                         </form>

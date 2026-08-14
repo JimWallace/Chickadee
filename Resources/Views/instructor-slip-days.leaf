@@ -113,7 +113,7 @@ Slip days
                             #endif
                             #if(spend.canRefund):
                             <form method="post" action="/instructor/slip-days/refund" class="inline-form"
-                                  onsubmit="return confirm('Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed).')">
+                                  data-confirm="Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed).">
                                 #csrfFormField()
                                 <input type="hidden" name="spendID" value="#(spend.id)">
                                 <button class="btn action-btn" type="submit">Refund</button>

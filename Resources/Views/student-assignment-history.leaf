@@ -40,7 +40,7 @@
                 </a>
             </td>
             <td>
-                <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.submissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')" class="inline-form">
+                <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.submissionID)/retest" data-confirm="Send this submission back to the testing queue?" class="inline-form">
                     #csrfFormField()
                     <input type="hidden" name="returnTo" value="#(historyPath)">
                     <button class="btn action-btn action-btn-icon" type="submit" title="Re-test submission" aria-label="Re-test submission">

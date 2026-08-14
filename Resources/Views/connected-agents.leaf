@@ -38,7 +38,7 @@ Connected agents
                     <form method="post" action="/agents/#(row.id)/revoke" class="agents-revoke-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
-                                onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
+                                data-confirm="Revoke this agent? It will lose access immediately.">Revoke</button>
                     </form>
                     #endif
                 </td>

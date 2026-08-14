@@ -89,7 +89,7 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
@@ -117,7 +117,7 @@
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
-                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
+                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate data-confirm="Remove this student’s extension on this assignment?">Remove</button>
                                 #endif
                             </div>
                         </form>
@@ -139,12 +139,12 @@
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.gradeIsOverridden):
-                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate data-confirm="Clear this student’s grade override and revert to the auto-graded result?">Clear</button>
                                 #endif
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
@@ -232,7 +232,7 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
@@ -260,7 +260,7 @@
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
-                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
+                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate data-confirm="Remove this student’s extension on this assignment?">Remove</button>
                                 #endif
                             </div>
                         </form>
@@ -282,12 +282,12 @@
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.gradeIsOverridden):
-                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate data-confirm="Clear this student’s grade override and revert to the auto-graded result?">Clear</button>
                                 #endif
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>

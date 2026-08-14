@@ -124,7 +124,7 @@
                     </a>
                     #endif
                     #if(item.setup.isOpen && item.setup.hasNotebook && item.setup.submissionMode != "uploadOnly"):
-                    <form method="post" action="/testsetups/#(item.setup.id)/reset-notebook" onsubmit="return confirm('Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected.')" class="inline-form">
+                    <form method="post" action="/testsetups/#(item.setup.id)/reset-notebook" data-confirm="Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected." class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Reset notebook to starter (discards current edits; past submissions unaffected)"

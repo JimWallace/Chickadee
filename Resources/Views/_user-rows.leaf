@@ -42,7 +42,7 @@
                             #csrfFormField()
                             <button class="btn action-btn action-danger action-btn-icon" type="submit"
                                     title="Delete user" aria-label="Delete user"
-                                    onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">
+                                    data-confirm="Delete this user? Their enrollments will be removed. They can log in again to restore their account.">
                                 <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                             </button>
                         </form>
