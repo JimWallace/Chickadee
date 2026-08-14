@@ -162,7 +162,15 @@ of action buttons" and four pill implementations; the page-style ratchet
   Placeholder microcopy on live filters: "Filter by &lt;matched fields&gt;…".
 - **`.field-inline`**, `.field-stack`, `.field-note` (+ `--muted`),
   `.input-compact` — form-field layout and hints.
-- **`.results-table`** (+ `.table-scroll`), `.sortable-table` behaviour.
+- **`.results-table`** (+ `.table-scroll`), **`.sortable-table`** — the one
+  column sort (`Public/sortable-table.js`).  Markup:
+  `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
+  `<button class="sort-header">`; the cell's sort value is `data-sort-value`,
+  else `data-iso`, else a contained `<select>`'s value, else its text.
+  `data-sort-initial="<key>:desc"` declares the load-time sort and
+  `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
+  `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
+  glyph — the guard fails on both.
 - **`.diagnostics-cards`** + `.diagnostic-card/-label/-value` — stat tiles.
 - **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).

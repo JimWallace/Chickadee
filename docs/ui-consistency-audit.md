@@ -425,6 +425,27 @@ forbids `data-sort-key`/`.sort-icon` reappearing in templates.
 `Tools/visual-regression/pages.mjs`, so regenerate baselines in the same
 PR.
 
+**Status: done.** All six tables (admin workers + courses, admin-users,
+assignment-submissions, instructor-students) now run
+`Public/sortable-table.js`; the five page-local sorters and all three
+affordance dialects are gone. The upgrade absorbed what each copy had
+learned — collator comparison, `<select>`-value cells, `data-iso` doubling
+as the sort value, "12/15" sorting as 12, the `-1` duration sentinel,
+named tie-breaks — and added the two pieces none could share:
+`data-sort-initial="<key>:desc"` (a load-time sort declared in markup, so
+a page needs no script to open on "newest first") and `apply(table)` (the
+missing re-apply API that was the *reason* the polling pages hand-rolled).
+Keyboard support stopped being per-page code and became a real `<button>`.
+Column identity is by `data-sort-key`, not index, so conditionally-rendered
+columns cannot misalign a tie-break. Guard 4c grew an S2 clause covering
+all three regressions: a page-local sorter, a page-local glyph, and a
+`data-sort-type` th with no `.sort-header` button (decorative markup that
+sorts nothing). Ratchets: `INLINE_SCRIPT_BASELINE` 1934 → 1548 (−386 lines,
+the largest single drop so far), `PAGE_STYLE_BASELINE` 902 → 842. One
+render test asserted a deleted JS call string and now asserts the
+declarative attribute instead — a better test, pinning the contract rather
+than the implementation.
+
 ### S3 — Poll repaints without JS row builders (L)
 
 **Target state.** A polled table's rows exist in exactly one place — a
