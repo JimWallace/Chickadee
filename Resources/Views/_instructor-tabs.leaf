@@ -1,6 +1,14 @@
 <!-- The instructor section tab bar, shared by every instructor-area page.
      The active tab comes from the activeInstructorTab context value each
      handler sets. -->
+<h1 class="visually-hidden">Instructor —
+#if(activeInstructorTab == "overview"):Overview#endif
+#if(activeInstructorTab == "activity"):Activity#endif
+#if(activeInstructorTab == "students"):Students#endif
+#if(activeInstructorTab == "slip-days"):Slip days#endif
+#if(activeInstructorTab == "brightspace"):LEARN#endif
+#if(activeInstructorTab == "mcp"):MCP#endif
+</h1>
 <nav class="instructor-tabs" aria-label="Instructor sections">
     <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="instructor-tab" href="/instructor/activity"#if(activeInstructorTab == "activity"): aria-current="page"#endif>Activity</a>

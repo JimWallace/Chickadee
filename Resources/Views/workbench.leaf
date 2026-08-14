@@ -78,16 +78,6 @@
 .wb-pane-edit { padding: 0 .75rem; }
 
 /* Degraded right pane: the assignment has no notebook on disk yet. */
-.wb-nonotebook {
-    margin: 2rem auto;
-    max-width: 32rem;
-    padding: 1.25rem 1.5rem;
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-}
-.wb-nonotebook-title { margin: .2rem 0 .5rem; font-size: var(--text-lg); }
-.wb-nonotebook-text { margin: 0; color: var(--gray-700); font-size: var(--text-base); }
 
 .wb-splitter {
     width: .5rem;
@@ -233,9 +223,9 @@
             <!-- No notebook on disk yet.  The edit half stays fully usable —
                  uploading a starter is one of the things it is for — so this
                  pane says so rather than 404ing the page. -->
-            <div class="wb-nonotebook" role="note">
-                <h2 class="wb-nonotebook-title">No notebook yet</h2>
-                <p class="wb-nonotebook-text">
+            <div class="standin-panel" role="note">
+                <h2 class="standin-panel-title">No notebook yet</h2>
+                <p class="standin-panel-text">
                     This assignment has no starter notebook. Upload one in the
                     Files table on the left and it will open here.
                 </p>

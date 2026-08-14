@@ -29,6 +29,25 @@ needs them.
 (all at baseline). Every slice below shrinks at least one of these and must
 lower the baseline in the same PR.
 
+**Where they ended up** after S0–S9 (S7 is a first pass; the rest are
+complete):
+
+| ratchet | at audit | now |
+|---|---|---|
+| `INLINE_SCRIPT_BASELINE` | 1968 | **1317** |
+| `PAGE_STYLE_BASELINE` | 913 | **760** |
+| `JS_STYLE_DECISION_BASELINE` | 122 | **118** |
+| `ALERT_BASELINE` | 4 | **0** |
+| `JS_ALERT_BASELINE` | 7 | **0** |
+| axe moderate/minor | 12 | **6** |
+
+Five new guards joined them, each closing the specific idiom its slice
+replaced: the list-filter idioms (S1), the sort dialects (S2), inline SVG
+geometry outside the sprite (S4), native confirmation outside the seam
+(S5), and the retired button size modifiers (S6). Three of the five are
+**absolute rules rather than ratchets**, because their conversions reached
+zero in one pass.
+
 ---
 
 ## Findings
@@ -717,6 +736,48 @@ Each page PR regenerates its visual-regression baseline if listed in
 `pages.mjs`, and updates `ui-design.md`'s migration queue (which this
 document supersedes as the inventory of record — the queue keeps only
 what remains).
+
+**Status: first pass done** — items 1, 2, 5 and the cross-cutting families
+from item 7, plus D6. What landed:
+
+- **instructor-students** uses `.page-titlebar` and an `<h2>`, so the
+  `<h1>` that was restyled to *look* like an h2 is gone with its clone.
+- **instructor-activity** uses `.page-section` and `.section-intro`; its
+  private `.activity-intro` and the `.section-block` misuse are gone.
+- **The diagnostics wrapper** is one global `.diagnostics-section`. D6 is
+  fixed, and the three names turned out **not** to be identical — two used
+  `margin-bottom: 1.25rem`, admin used `padding-bottom: 1rem` *on top of*
+  `.page-section`'s 2.5rem, so the admin dashboard had 56px where the
+  instructor dashboard had 20px for the same card row. One value now.
+- **The subtitle family** is one `.titlebar-subtitle`. It is a **sibling**
+  of `.page-subtitle`, not the same thing: one sits inside the titlebar
+  (small top margin), the other follows it (negative top margin). Four
+  page-local copies collapse into the missing sibling.
+- **`.popover-panel`** is a real component (the queued name), so
+  `course-student-submissions` no longer restyles the global `.ext-details`
+  from a page block, and `app.js` floats it by that name.
+- **The stand-in panel** (`workbench` ≡ `_notebook-body`, byte-identical)
+  is one `.standin-panel`.
+
+**The accessibility finding this produced is the most valuable part.**
+Converting students to the archetype tripped the axe ratchet — a tabbed
+page has no `<h1>`, because the archetype says the tab bar is the title.
+That was true of **all five** tabbed pages already; the students conversion
+just made the count grow. The fix belongs in the tab partials, not the
+baseline: each now emits a visually-hidden `<h1>` naming the active section
+("Instructor — Students"), which is the heading a screen reader needs and
+no visual change at all. Moderate/minor violations **12 → 6**, and
+`assignments.leaf`'s stray `<h1>` (an F9 deviation) became the
+`.page-heading` the archetype wanted, which also stopped it being the one
+page with two `<h1>`s.
+
+`PAGE_STYLE_BASELINE` 842 → 760 (913 at the audit's start).
+
+**Not yet done, and deliberately left for a later pass:** the brightspace
+pair's private skeleton (item 3), admin-storage/admin-runner (item 4), the
+`course-student-submissions` 135-line duplicated row block (item 5's
+extraction half), and the long tail's remaining muted-hint and mono-textarea
+families (item 7).
 
 ### S8 — Timestamp policy (S)
 

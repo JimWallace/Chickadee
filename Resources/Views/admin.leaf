@@ -5,7 +5,7 @@ Admin
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-<section class="page-section admin-diagnostics">
+<section class="diagnostics-section">
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card diagnostic-card-cyclable" data-activity-card
                  role="button" tabindex="0" aria-label="Active users, last 24 hours. Press to change the time window.">
@@ -140,9 +140,6 @@ Admin
 </section>
 
 <style>
-.admin-diagnostics {
-    padding-bottom: 1rem;
-}
 /* Clickable diagnostic-card + sparkline styles are global (styles.css),
    shared with the instructor dashboard. */
 .admin-section-head {

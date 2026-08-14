@@ -6,16 +6,14 @@ Activity
 #extend("_instructor-tabs")
 
 #if(!hasActiveCourse):
-<section class="section-block">
+<section class="page-section">
     <p class="empty">Select a course to see its activity.</p>
 </section>
 #else:
 
-<section class="section-block">
-    <div class="section-header">
-        <h2>Recent activity</h2>
-    </div>
-    <p class="activity-intro">
+<section class="page-section">
+    <h2>Recent activity</h2>
+    <p class="section-intro">
         Content edits and course events for this course, newest first. Every
         content edit is a recoverable version of the assignment it names.
     </p>
@@ -79,11 +77,6 @@ Activity
 #endexport
 #endextend
 <style>
-.activity-intro {
-    color: var(--muted);
-    font-size: var(--text-sm);
-    margin-bottom: 1rem;
-}
 .activity-col-when { width: 11rem; }
 .activity-col-who { width: 9rem; }
 .activity-col-where { width: 14rem; }

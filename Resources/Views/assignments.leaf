@@ -5,11 +5,11 @@
 #export("content"):
 #extend("_instructor-tabs")
 #if(currentUser.activeCourse):
-<h1>#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+<h2 class="page-heading">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h2>
 #else:
-<h1>Assignments</h1>
+<h2 class="page-heading">Assignments</h2>
 #endif
-<section class="instructor-diagnostics">
+<section class="diagnostics-section">
     <div class="diagnostics-cards">
         <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="submissions"
                  role="button" tabindex="0"
@@ -273,9 +273,6 @@
 #endif
 
 <style>
-.instructor-diagnostics {
-    margin-bottom: 1.25rem;
-}
 .assignment-name-cell {
     display: inline-flex;
     align-items: center;

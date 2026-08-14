@@ -186,7 +186,7 @@ if (root) {
 
 // ── Floating action popovers (per-student extension / grade-override) ────────
 // The <details class="ext-details"> panels on the roster and submission pages
-// hold an .action-panel or .ext-panel form. They live inside .results-table,
+// hold a .popover-panel or .ext-panel form. They live inside .results-table,
 // which clips its overflow (for the rounded corners), so a panel on a row near
 // the bottom of the table is cut off — the Save button disappears below the
 // table edge and can't even be scrolled to.
@@ -201,7 +201,7 @@ if (root) {
 // Delegated on the document (capture phase — `toggle` does not bubble) so
 // panels rebuilt by a background poll repaint keep floating without rebinding.
 (function floatingActionPopovers() {
-    const PANEL_SELECTOR = '.action-panel, .ext-panel';
+    const PANEL_SELECTOR = '.popover-panel, .ext-panel';
 
     const GAP = 6;      // px between the summary button and the panel
     const MARGIN = 8;   // min px kept clear of every viewport edge

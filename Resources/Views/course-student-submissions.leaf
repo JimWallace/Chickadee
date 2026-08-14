@@ -6,7 +6,7 @@
 <div class="page-titlebar page-titlebar--baseline">
     <div>
         <h1>#(studentName)</h1>
-        <p class="student-subtitle">
+        <p class="titlebar-subtitle">
             <strong>#(studentUsername)</strong> in #(courseName)
         </p>
     </div>
@@ -89,14 +89,14 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
                         </button>
                     </form>
                     #endif
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-icon ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg>
@@ -104,7 +104,7 @@
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
+                        <form method="post" action="#(row.extensionSavePath)" class="popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 New deadline for this student
@@ -122,11 +122,11 @@
                             </div>
                         </form>
                     </details>
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 Override grade (%)
@@ -144,7 +144,7 @@
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
@@ -232,14 +232,14 @@
             <td>
                 <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="action-form-flush">
+                    <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
                             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
                         </button>
                     </form>
                     #endif
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-icon ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
                             #if(row.hasExtension):
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg>
@@ -247,7 +247,7 @@
                             <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
+                        <form method="post" action="#(row.extensionSavePath)" class="popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 New deadline for this student
@@ -265,11 +265,11 @@
                             </div>
                         </form>
                     </details>
-                    <details class="ext-details action-form-flush">
+                    <details class="ext-details form-flush">
                         <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="popover-panel">
                             #csrfFormField()
                             <label class="ext-field-label">
                                 Override grade (%)
@@ -287,7 +287,7 @@
                             </div>
                         </form>
                     </details>
-                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="action-form-flush">
+                    <form method="post" action="#(row.resetPath)" data-confirm="Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit." class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
                             <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
@@ -303,10 +303,6 @@
 
 #endif
 <style>
-.student-subtitle {
-    margin: .35rem 0 0;
-    color: var(--gray-700);
-}
 .section-group-heading {
     font-size: var(--text-lg);
     font-weight: 600;
@@ -326,35 +322,6 @@
     flex-wrap: nowrap;
     align-items: center;
 }
-.action-form-flush {
-    margin: 0;
-}
-.ext-details {
-    position: relative;
-}
-.action-panel {
-    position: absolute;
-    top: calc(100% + .3rem);
-    right: 0;
-    z-index: 10;
-    max-width: calc(100vw - 2rem);
-    display: flex;
-    flex-direction: column;
-    gap: .3rem;
-    padding: .5rem;
-    background: var(--gray-50);
-    border: 1px solid var(--gray-300);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-pop);
-}
-@media (max-width: 640px) {
-    /* On a phone the absolutely-positioned popover can't be trusted to fit
-       beside the rightmost cell — drop it into static flow under the row,
-       matching the assignment-submissions extension form. */
-    .action-panel {
-        position: static;
-        max-width: none;
-    }
 }
 </style>
 #endexport

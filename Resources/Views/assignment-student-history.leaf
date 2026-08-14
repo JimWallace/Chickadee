@@ -7,7 +7,7 @@
     <h1>#(assignmentTitle)</h1>
     <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions">Back to Assignment Summary</a>
 </div>
-<p class="history-student-id">Student ID: <strong>#(studentID)</strong></p>
+<p class="titlebar-subtitle">Student ID: <strong>#(studentID)</strong></p>
 
 #if(rows.isEmpty):
 <p class="empty">No submissions yet.</p>
@@ -50,10 +50,6 @@
 </table>
 #endif
 <style>
-.history-student-id {
-    margin-top: 0;
-    color: var(--gray-700);
-}
 </style>
 #endexport
 #endextend
