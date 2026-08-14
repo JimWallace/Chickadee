@@ -1,43 +1,17 @@
 # Behaviour-only class hooks that predate the js- prefix convention
-# (docs/ui-design.md, "Class names must resolve").  Every name here is
-# assigned in a template or Public/*.js as a JS hook — selected by script,
-# never styled.  SHRINK-ONLY: remove an entry when the hook is renamed to
-# js-* or gains a stylesheet rule (check-class-resolution.sh fails on stale
-# entries); never add one for new code — new behaviour hooks take the js-
-# prefix instead.
+# (docs/ui-design.md, "Class names must resolve").  SHRINK-ONLY: remove an
+# entry when the hook is renamed to js-* or gains a stylesheet rule
+# (check-class-resolution.sh fails on stale entries); never add one for new
+# code — new behaviour hooks take the js- prefix instead.
 #
-# The pattern-family, suite/section, inputs and achievements editors' hooks
-# were renamed to js-* (or styled, for the ones that carried real styling)
-# in the 2026-08 ratchet pass; what remains is the cross-page row/anchor
-# hooks and the course-content editor.
+# The 2026-08 ratchet passes renamed every editor- and page-owned hook to
+# js-* and dropped the tokens that nothing read or styled.  ONE deliberate
+# survivor remains:
+#
+# sortable-table — the opt-in marker the column-sort component documents
+# (`.sortable-table` + th > button.sort-header, ui-design.md).  Renaming it
+# would churn every sortable table in the app for zero drift risk, and
+# giving it a stylesheet rule would style tables that opted into behaviour,
+# not appearance.  It stays a named, documented exception.
 
-
-# Content items (course content editor)
-content-item-add
-content-item-delete-form
-content-item-edit-details
-content-item-form
-content-item-link
-content-item-row
-
-# Row/anchor hooks in tables and panels
-bs-grade-id-hidden
-check-delete-btn
-check-edit-btn
-family-delete-btn
-family-edit-btn
-nb-fallback
-publish-due-date
-role-cell
-role-fixed
-slip-day-summary
-subm-trend-spark
-submission-actions
-support-file-delete-btn
-tier-secret-badge
-
-# Error-banner anchors (inplace-forms.js)
-inplace-error-banner
-
-# Sortable-table opt-in marker (sortable-table.js)
 sortable-table

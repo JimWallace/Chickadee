@@ -17,7 +17,7 @@
                 <a href="#(student.submissionsURL)"><code>#(student.username)</code></a>
                 #endif
             </td>
-            <td class="role-cell">
+            <td>
                 #if(student.isPending):
                 <span class="students-pending-role">(pending)</span>
                 #elseif(rosterReadOnly):

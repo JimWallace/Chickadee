@@ -29,7 +29,7 @@
         <div class="diagnostic-label"><span class="diagnostic-window-chip" data-subm-chip>#(metric.windowChip)</span> #(metric.label)</div>
         <div class="diagnostic-value" data-subm-value>#(metric.value)</div>
         #for(win in metric.windows):
-        <div class="diagnostic-spark subm-trend-spark" data-subm-window="#(win.key)" data-subm-headline="#(win.headline)" aria-hidden="true"#if(win.initiallyHidden): hidden#endif>
+        <div class="diagnostic-spark js-subm-trend-spark" data-subm-window="#(win.key)" data-subm-headline="#(win.headline)" aria-hidden="true"#if(win.initiallyHidden): hidden#endif>
             #for(bar in win.bars):
             <div class="spark-slot" title="#(bar.title)"><span class="spark-fill#if(bar.isEmpty): spark-fill-empty#endif" style="--bar-h:#(bar.heightPercent)%"></span></div>
             #endfor

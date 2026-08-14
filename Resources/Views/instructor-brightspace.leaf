@@ -130,7 +130,7 @@ LEARN
                           class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="brightspace">
-                        <input type="hidden" name="gradeObjectID" class="bs-grade-id-hidden">
+                        <input type="hidden" name="gradeObjectID" class="js-bs-grade-id-hidden">
                         <label class="visually-hidden" for="bs-go-#(row.assignmentID)">LEARN Assessment for #(row.title)</label>
                         <input class="form-input bs-grade-input" type="text"
                                id="bs-go-#(row.assignmentID)" list="bs-grade-objects"

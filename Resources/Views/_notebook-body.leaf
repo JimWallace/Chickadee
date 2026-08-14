@@ -16,10 +16,10 @@
 .nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
 .nb-notice-title { margin: .2rem 0 .5rem; }
 .nb-notice-text { margin: 0; color: var(--gray-700); }
-.nb-fallback-title { margin: .2rem 0; }
-.nb-fallback-text { margin: .4rem 0; }
-.nb-fallback-diagnostic { margin-top: .6rem; }
-.nb-fallback-pre { white-space: pre-wrap; font-size: .85em; margin: .4rem 0; }
+.js-nb-fallback-title { margin: .2rem 0; }
+.js-nb-fallback-text { margin: .4rem 0; }
+.js-nb-fallback-diagnostic { margin-top: .6rem; }
+.js-nb-fallback-pre { white-space: pre-wrap; font-size: .85em; margin: .4rem 0; }
 
 /* Proactive low-memory hint (revealed by notebook-preflight.js on a low-RAM
    device). Non-blocking and dismissible — the editor still loads beneath it. */
@@ -53,7 +53,7 @@
 @media (max-width: 640px) {
     .notebook-header,
     #jl-frame,
-    #nb-fallback,
+    #js-nb-fallback,
     #nb-device-warning,
     #nb-browser-support-warning,
     #nb-results,
@@ -158,24 +158,24 @@
     src="about:blank"
     loading="eager">
 </iframe>
-<section id="nb-fallback" class="nb-fallback" role="alert" hidden>
-    <h2 class="nb-fallback-title">Editor didn&rsquo;t load</h2>
-    <p class="nb-fallback-text">
+<section id="js-nb-fallback" class="js-nb-fallback" role="alert" hidden>
+    <h2 class="js-nb-fallback-title">Editor didn&rsquo;t load</h2>
+    <p class="js-nb-fallback-text">
         The in-browser notebook editor didn&rsquo;t start in your browser.
         You can still submit your assignment by uploading your <code>.ipynb</code> file directly.
     </p>
-    <p class="nb-fallback-text">
+    <p class="js-nb-fallback-text">
         <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
     </p>
-    <p class="nb-fallback-text">
+    <p class="js-nb-fallback-text">
         Still stuck? You can
         <a id="nb-reset-editor-link" href="/reset-editor">reset the notebook editor</a>
         &mdash; this clears cached editor data in your browser (your submitted
         work is safe) so the kernel can start fresh.
     </p>
-    <details class="nb-fallback-diagnostic">
+    <details class="js-nb-fallback-diagnostic">
         <summary>Diagnostic details</summary>
-        <pre id="nb-fallback-details" class="nb-fallback-pre"></pre>
+        <pre id="js-nb-fallback-details" class="js-nb-fallback-pre"></pre>
     </details>
 </section>
 <div id="nb-results" class="nb-results" hidden></div>

@@ -394,8 +394,8 @@
                 + '<td><input type="number" class="form-input cell-input points-input js-suite-family-points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test"></td>'
                 + '<td class="time"><div class="cell-actions">'
                 +   ChickadeeUI.accordion.CARET_HTML
-                +   '<button class="btn action-btn action-btn-icon family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
-                +   '<button class="btn action-btn action-btn-icon action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon js-family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon action-danger js-family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
                 + '</tr>';
         }
@@ -425,8 +425,8 @@
                 + '<td><input type="number" class="form-input cell-input points-input js-suite-check-points" min="0" max="100" value="' + points + '"></td>'
                 + '<td class="time"><div class="cell-actions">'
                 +   ChickadeeUI.accordion.CARET_HTML
-                +   '<button class="btn action-btn action-btn-icon check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
-                +   '<button class="btn action-btn action-btn-icon action-danger check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon js-check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon action-danger js-check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
                 + '</tr>';
         }
@@ -1187,7 +1187,7 @@
         // pre-populated; Delete drops the check and re-saves the list via the
         // single PUT /suite write path.
         container.addEventListener('click', function (e) {
-            var editBtn = e.target.closest && e.target.closest('.check-edit-btn');
+            var editBtn = e.target.closest && e.target.closest('.js-check-edit-btn');
             if (editBtn) {
                 let row = editBtn.closest('tr[data-kind="check"]');
                 if (!row) return;
@@ -1202,7 +1202,7 @@
                 });
                 return;
             }
-            var delBtn = e.target.closest && e.target.closest('.check-delete-btn');
+            var delBtn = e.target.closest && e.target.closest('.js-check-delete-btn');
             if (delBtn) {
                 var row2 = delBtn.closest('tr[data-kind="check"]');
                 if (!row2) return;

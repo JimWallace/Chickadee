@@ -2217,8 +2217,8 @@
                      || document.getElementById('suite-config-body');
         if (suiteBody) {
             suiteBody.addEventListener('click', function (e) {
-                var editBtn = e.target && e.target.closest('.family-edit-btn');
-                var delBtn  = e.target && e.target.closest('.family-delete-btn');
+                var editBtn = e.target && e.target.closest('.js-family-edit-btn');
+                var delBtn  = e.target && e.target.closest('.js-family-delete-btn');
                 if (editBtn) {
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });

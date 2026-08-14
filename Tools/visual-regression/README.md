@@ -82,3 +82,26 @@ together. Baselines are
 **CI-canonical**: regenerate them in the CI image (or trust the bootstrap
 artifact) rather than committing captures from a host with different font
 rendering.
+
+## Running in a Claude remote container
+
+The remote-execution image pre-installs Playwright browsers at
+`/opt/pw-browsers` (with `PLAYWRIGHT_BROWSERS_PATH` pointing there and
+downloads disabled), but the browser build there tracks the image, not this
+package's lockfile — so a newer `playwright` from `npm ci` will look for a
+`chromium_headless_shell-<rev>` directory the image does not have and fail
+with "Executable doesn't exist". Do not run `npx playwright install`
+(downloads are disabled by policy). Bridge the layout instead — symlink the
+expected revision directory to the installed binary:
+
+```
+ls /opt/pw-browsers
+mkdir -p /opt/pw-browsers/chromium_headless_shell-REV/chrome-headless-shell-linux64
+ln -sf /opt/pw-browsers/chromium_headless_shell-OLDREV/chrome-linux/headless_shell /opt/pw-browsers/chromium_headless_shell-REV/chrome-headless-shell-linux64/chrome-headless-shell
+```
+
+with REV taken from the error message and OLDREV from the `ls`. The compare
+then runs against a slightly different Chromium than CI captured the
+baselines on; the anti-aliasing budget absorbs it in practice, but treat a
+borderline diff on text-heavy pages as suspect and let the CI `visual` job
+arbitrate.

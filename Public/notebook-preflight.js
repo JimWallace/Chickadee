@@ -9,7 +9,7 @@
 //   2. watchdog_timeout — the iframe loaded but the JupyterLite kernel
 //                          didn't become ready within the watchdog window.
 //
-// On either failure: hide the iframe, reveal the #nb-fallback section
+// On either failure: hide the iframe, reveal the #js-nb-fallback section
 // containing a direct .ipynb upload picker, and POST a record to
 // /api/v1/client-diagnostics so the instructor dashboard can surface the
 // affected student.
@@ -106,8 +106,8 @@
         _failureShown = true;
 
         const frame    = document.getElementById('jl-frame');
-        const fallback = document.getElementById('nb-fallback');
-        const details  = document.getElementById('nb-fallback-details');
+        const fallback = document.getElementById('js-nb-fallback');
+        const details  = document.getElementById('js-nb-fallback-details');
         const submit   = document.getElementById('nb-submit');
 
         if (frame)    frame.style.display = 'none';
@@ -119,8 +119,8 @@
         // same fallback panel (which already offers .ipynb upload + reset link),
         // instead of the generic "Editor didn't load" message.
         if (info.variant === 'memory' && fallback) {
-            const titleEl = fallback.querySelector('.nb-fallback-title');
-            const textEl  = fallback.querySelector('.nb-fallback-text');
+            const titleEl = fallback.querySelector('.js-nb-fallback-title');
+            const textEl  = fallback.querySelector('.js-nb-fallback-text');
             if (titleEl) titleEl.textContent = 'Your browser ran low on memory';
             if (textEl) {
                 textEl.textContent =
@@ -311,10 +311,10 @@
         if (_slowNoticeShown || _failureShown) return;
         _slowNoticeShown = true;
 
-        const fallback = document.getElementById('nb-fallback');
+        const fallback = document.getElementById('js-nb-fallback');
         if (fallback) {
-            const titleEl = fallback.querySelector('.nb-fallback-title');
-            const textEl  = fallback.querySelector('.nb-fallback-text');
+            const titleEl = fallback.querySelector('.js-nb-fallback-title');
+            const textEl  = fallback.querySelector('.js-nb-fallback-text');
             if (titleEl) titleEl.textContent = 'The editor is taking a while to load';
             if (textEl) {
                 textEl.textContent =

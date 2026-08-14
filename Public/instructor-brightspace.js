@@ -56,7 +56,7 @@
     function wireForms(byId, byName) {
         document.querySelectorAll('.bs-grade-form').forEach(function (form) {
             var visibleInput = form.querySelector('.bs-grade-input');
-            var hiddenInput = form.querySelector('.bs-grade-id-hidden');
+            var hiddenInput = form.querySelector('.js-bs-grade-id-hidden');
             if (!visibleInput || !hiddenInput) return;
             var rawId = visibleInput.dataset.rawId || '';
             if (rawId && byId[rawId]) {

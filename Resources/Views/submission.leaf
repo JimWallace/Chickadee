@@ -24,7 +24,7 @@ Submission #(submissionID)
 <div class="submission-header">
     <div class="submission-header-row">
         <h1>Submission</h1>
-        <div class="submission-actions">
+        <div>
             <a class="btn action-btn" href="/api/v1/submissions/#(submissionID)/download">#if(submissionFilename):Download #(submissionFilename)#else:Download submission#endif</a>
             #if(openInNotebookURL):
             <a class="btn action-btn" href="#(openInNotebookURL)">Open in notebook</a>
@@ -180,7 +180,7 @@ Submission #(submissionID)
     #endif
     #if(sec.secretSummary):
     <div class="tier-summary-row tier-summary-secret">
-        <span class="tier tier-secret-badge">secret</span>
+        <span class="tier">secret</span>
         <span class="tier-summary-counts">#(sec.secretSummary.passCount) passed, #(sec.secretSummary.failCount) failed#if(sec.secretSummary.errorCount): , #(sec.secretSummary.errorCount) error(s)#endif</span>
         <span class="tier-summary-note">— hidden tests in this section; they count toward your grade, but individual tests aren't shown</span>
     </div>

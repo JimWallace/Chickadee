@@ -1,13 +1,16 @@
-# UI ratchet — handoff for the next pass (2026-08)
+# UI ratchet — the maintainability epic, closed (2026-08)
 
-The widget-layer audit ([ui-consistency-audit.md](ui-consistency-audit.md))
-shipped as S0–S10 and is closed. This brief is for whoever continues the
-ratchet: where the remaining mass actually sits, which of it is mechanical,
-and the traps that will cost you a day if you walk into them cold.
+**This epic is complete.** The widget-layer audit
+([ui-consistency-audit.md](ui-consistency-audit.md)) shipped as S0–S10; the
+editor-conversion pass and the inline-script pass (both 2026-08-14) closed
+the two big tracks it left open; the tail pass closed the allowlist. This
+document is now the closure record plus the standing rules for what comes
+next. Nothing here is a work list any more — per-page revision work starts
+from ["For the per-page revision work"](#for-the-per-page-revision-work) at
+the bottom.
 
-**Updated after the editor-conversion pass (2026-08-14),** which took the
-brief's items 1–3 and the #1384 salvage in one PR. Everything below is
-measured, not estimated. Re-measure before you act — the commands are given.
+Everything below is measured, not estimated. Re-measure before trusting a
+number that gates a decision — the commands are given.
 
 > **Update (2026-08, the inline-script pass): the inline-script track is
 > complete.** Every template's multi-line `<script>` body moved into a
@@ -37,7 +40,7 @@ measured, not estimated. Re-measure before you act — the commands are given.
 | `ALERT_BASELINE` | 4 | **0** | absolute |
 | `JS_ALERT_BASELINE` | 7 | **0** | absolute |
 | axe moderate/minor | 12 | **0** | absolute in practice |
-| class-resolution allowlist | 67 | **22** | shrink-only |
+| class-resolution allowlist | 67 | **1** | `sortable-table`, the documented exception |
 
 Every ratchet is at its count, so *any* growth fails CI. The audit's three
 absolute rules (icon geometry outside the sprite, native confirmation
@@ -98,25 +101,29 @@ for f in Public/*.js; do n=$( { grep -ho 'style="' "$f" || true; grep -hoE '\.st
 
 ---
 
-## What is actually left, in the order I would take it
+## The tail pass (closed the epic)
 
-Both big tracks are now closed — the JS-styling track by the editor pass,
-the inline-script track by the externalization pass. What remains is small:
+The last 21 removable allowlist entries went in the final pass, each by
+what it actually was rather than by blanket rename:
 
-### 1. The 22 remaining allowlist entries
+- **10 hooks JS genuinely reads** took the `js-` prefix
+  (`js-check-edit-btn`/`-delete-btn`, `js-family-edit-btn`/`-delete-btn`,
+  `js-support-file-delete-btn`, `js-publish-due-date`, `js-nb-fallback`,
+  `js-subm-trend-spark`, `js-bs-grade-id-hidden`,
+  `js-inplace-error-banner`), renamed at every assignment and query site.
+- **11 tokens nothing read or styled were dropped outright** — the
+  `content-item-*` six, `role-cell`, `role-fixed`, `slip-day-summary`,
+  `submission-actions`, `tier-secret-badge`. Each was verified unread
+  (including dynamically-built selectors) and unstyled before removal;
+  they were leftovers of earlier eras doing literally nothing.
+- **`sortable-table` stays, deliberately**, as the allowlist's single
+  documented entry: it is the sort component's opt-in marker, renaming it
+  would churn every sortable table for zero drift risk, and a stylesheet
+  rule for it would be a lie (it opts into behaviour, not appearance).
 
-`content-item-*` (6, course-content editor), the cross-page row/anchor
-hooks (14), `inplace-error-banner`, and `sortable-table`. All are the same
-mechanical rename — the reason they are second is only that they spread
-across more templates per name than the editor hooks did. `sortable-table`
-is the one to leave: it is the opt-in marker the sort component documents,
-so renaming it would churn every sortable table for zero drift risk.
-
-### 2. `PAGE_STYLE_BASELINE` = 689
-
-No slice plan ever existed for this one; it shrinks opportunistically when
-a page block's pattern is promoted into the component vocabulary. Not worth
-a dedicated pass.
+`PAGE_STYLE_BASELINE` (689) never had a slice plan and does not need one:
+it shrinks opportunistically when a page block's pattern is promoted into
+the component vocabulary during page revisions.
 
 ### Historical: where the inline-script mass sat
 
@@ -203,3 +210,35 @@ The contract every slice held to, and the reason the ratchets actually moved:
 `visual` job and covers the seam where the shared filter, sort, poll and icon
 sprite meet — the interactions that fail silently and that a screenshot
 comparison cannot catch, because both sides would agree.
+
+---
+
+## For the per-page revision work
+
+The epic's end state is the starting contract for revising individual
+pages. In practice it means:
+
+- **The rulebook is [ui-design.md](ui-design.md)**, and it is enforced, not
+  aspirational: tokens (palette/type/radius/spacing), the component
+  vocabulary, the page archetypes, `js-` hooks, class resolution, and the
+  absolute rules (no alerts, no raw confirm, no icon geometry outside the
+  sprite, no inline template script, no JS-written colour/typography, no
+  non-custom-prop `style=` anywhere). A revision that fights the guards is
+  wrong by definition — extend the vocabulary instead, in `styles.css`,
+  with the ui-design.md catalog updated in the same PR.
+- **Every page's behaviour lives in a lintable, testable wiring file**
+  (`Public/<page>.js`), and its styling in named classes. Redesigning a
+  page means editing exactly those two layers plus the template's markup —
+  there is no third place for logic or appearance to hide any more.
+- **Budgets are spent, not banked.** Ratchets sit at their counts; a page
+  revision that adds a page-local `<style>` line must remove one somewhere
+  (or promote the pattern to the global sheet). That is intentional
+  pressure toward the vocabulary.
+- **Evidence over eyeballs:** a page revision changes pixels on purpose, so
+  its PR regenerates the affected visual baselines (Trap 2's rule: revert
+  every capture the diff cannot explain) and keeps axe at zero. New
+  interactive seams deserve a repaint-probe assertion, not just a
+  screenshot.
+- **The per-page fine-tuning epic should keep this file closed.** New
+  systemic debt goes in a new document against a new audit — this one
+  records where the maintainability line was drawn and why.

@@ -9,7 +9,7 @@
 
     var card = document.querySelector('[data-subm-trend]');
     if (!card) return;
-    var sparks = Array.prototype.slice.call(card.querySelectorAll('.subm-trend-spark'));
+    var sparks = Array.prototype.slice.call(card.querySelectorAll('.js-subm-trend-spark'));
     if (sparks.length < 2) return;
     var chip = card.querySelector('[data-subm-chip]');
     var valueEl = card.querySelector('[data-subm-value]');
