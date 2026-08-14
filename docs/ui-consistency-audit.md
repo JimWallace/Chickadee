@@ -530,6 +530,27 @@ byte-variants of the trash can collapse to one symbol.
 `INLINE_SVG_BASELINE` counting `<svg` occurrences in templates that are
 not `class="icon"` uses (start at the residual count, ratchet to ~0).
 
+**Status: done.** 58 call sites now reference 17 `<symbol>`s in
+`Resources/Views/_icons.leaf`. Two deviations from the plan, both
+deliberate. The sprite is **inlined by `base.leaf`, not fetched** as
+`/icons.svg`: an external sprite is one more request that can fail, and its
+failure mode is an icon-only button rendering as an empty box — same-document
+`<use>` cannot fail that way, needs no CSP allowance, and costs no round
+trip. And the guard is not a ratchet but an **absolute rule**: geometry
+(`<path d=`, `<polyline points=`, `<circle cx=`) may appear only in the
+sprite file, which was reachable in one pass and is a stronger invariant
+than a shrinking count.
+
+The sprite was **generated from the geometries it replaces** rather than
+hand-transcribed — an early hand-typed mapping was quietly wrong in several
+entries, and a mis-copied path is invisible in review — so every symbol is
+byte-identical to the shape it replaced. The exception is the LEARN push
+icon, the one glyph from a foreign set (filled, 16×16, visibly heavier
+than its neighbours), redrawn in the house 24×24 stroked style. Size moved
+to `1em` so a glyph tracks the text of the button it sits in, replacing
+hardcoded `width="13"`. Visual regression is pixel-identical across both
+schemes, which is the evidence the substitution was faithful.
+
 ### S5 — One confirmation seam (S/M)
 
 **Target state.** No inline `onclick`/`onsubmit` confirm handlers. A

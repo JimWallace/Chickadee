@@ -607,6 +607,24 @@ textarea.form-input {
     letter-spacing: .01em;
 }
 
+/* ── Icons ────────────────────────────────────────────
+   One sprite (Resources/Views/_icons.leaf, inlined by base.leaf); every icon
+   is <svg class="icon"><use href="#i-name"/></svg>. The sprite itself never
+   renders — only its symbols, pulled in by <use>. Size tracks the text an
+   icon sits with (1em), so a glyph in a compact button shrinks with it. */
+.icon-sprite { display: none; }
+.icon {
+    width: 1.08em;
+    height: 1.08em;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -.15em;
+}
+
 /* Sortable tables (see Public/sortable-table.js) — the ONE sort affordance:
    a real header button, so keyboard and focus come from the platform. A
    header toggles asc/desc; the ↕/↑/↓ glyph reflects the current direction. */

@@ -156,13 +156,7 @@
         }
 
         var TRASH_SVG =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" '
-            + 'fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
-            + 'stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline>'
-            + '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>'
-            + '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>'
-            + '<line x1="10" y1="11" x2="10" y2="17"></line>'
-            + '<line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+            '<svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>';
 
         function addEmptyRow(tbody) {
             var fontSize = rowOptions.inputFontSize ? 'font-size:' + rowOptions.inputFontSize + ';' : '';

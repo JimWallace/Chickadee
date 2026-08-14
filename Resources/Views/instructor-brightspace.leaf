@@ -179,10 +179,7 @@ LEARN
                         <button class="btn action-btn bs-push-btn" type="submit"
                                 title="Re-push all grades for #(row.title)"
                                 aria-label="Re-push all grades for #(row.title)">
-                            <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-                                <path d="M8 1.5a.5.5 0 0 1 .5.5v8.793l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 10.793V2a.5.5 0 0 1 .5-.5z"/>
-                                <path d="M1 13.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5z"/>
-                            </svg>
+                            <svg class="icon" aria-hidden="true"><use href="#i-push-down"/></svg>
                         </button>
                     </form>
                     #endif
@@ -225,14 +222,14 @@ LEARN
                 <td class="bs-roster-actions">
                     <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
                        title="Match this student's LEARN ID" aria-label="Match this student's LEARN ID">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
                     </a>
                     <form method="post" action="#(student.unenrollURL)" class="inline-form"
                           onsubmit="return confirm('Remove #(student.displayName) from this course?')">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Remove from course" aria-label="Remove from course">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                         </button>
                     </form>
                 </td>

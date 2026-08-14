@@ -288,6 +288,22 @@ if [ -n "${s2_impl}${s2_glyph}${s2_orphan}" ]; then
   echo
 fi
 
+# S4: icons come from the sprite (Resources/Views/_icons.leaf), referenced as
+# <svg class="icon"><use href="#i-name"/></svg>. Raw path data anywhere else is
+# a new copy of a shape that already exists — the trash can had fifteen, in
+# three byte-level variants, which is how "change the delete icon" became a
+# grep-and-pray. The sprite is the one file allowed to hold geometry.
+s4_svg="$(grep -rln '<path d=\|<polyline points=\|<circle cx=' "${views[@]}" Public/*.js \
+  | grep -v 'Resources/Views/_icons.leaf' || true)"
+if [ -n "$s4_svg" ]; then
+  status=1
+  echo "ERROR: inline SVG geometry outside the icon sprite."
+  echo "       Add a <symbol> to Resources/Views/_icons.leaf and reference it:"
+  echo "       <svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-name\"/></svg>"
+  printf '%s\n' "$s4_svg" | sed 's/^/  /'
+  echo
+fi
+
 # ── 5. Class names must resolve ──────────────────────────────────────────────
 scripts/check-class-resolution.sh || status=1
 

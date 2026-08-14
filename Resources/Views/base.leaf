@@ -24,6 +24,7 @@
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
 </head>
 <body#if(fullBleed): class="page-fullbleed"#endif>
+#extend("_icons")
 <!-- Site chrome — the nav, the colour bar, and the course tabs.  Suppressed
      when `embedded` is set, i.e. when this page is being rendered *into a pane*
      of the assignment workbench (`workbench.leaf`) rather than as a top-level
