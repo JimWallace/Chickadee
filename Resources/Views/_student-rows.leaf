@@ -24,7 +24,7 @@
                 #(student.role)
                 #else:
                 <form method="post" action="/courses/#(currentUser.activeCourse.id)/role/#(student.id)"
-                      class="inline-form students-role-form">
+                      class="inline-form form-flush">
                     #csrfFormField()
                     <select name="role" class="form-input students-role-select" aria-label="Per-course role"
                             onchange="this.form.submit()">

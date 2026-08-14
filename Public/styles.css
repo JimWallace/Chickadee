@@ -1229,9 +1229,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .ext-panel-actions { display: flex; gap: .3rem; }
 /* While app.js floats a popover to position:fixed (escaping the table's
    overflow clip) it reads as an overlay, so it carries the pop elevation.
-   .action-panel already has the shadow statically; .ext-panel gains it only
+   .popover-panel already has the shadow statically; .ext-panel gains it only
    while floated so its in-flow rendering is unchanged. */
-.ext-panel.is-floating, .action-panel.is-floating { box-shadow: var(--shadow-pop); z-index: 10; }
+.ext-panel.is-floating, .popover-panel.is-floating { box-shadow: var(--shadow-pop); z-index: 10; }
 
 /* ── Submission view (submission.leaf) ───────────────── */
 /* Migrated out of submission.leaf's embedded <style> block (v0.4.x UI audit)
@@ -1511,6 +1511,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
    name).  The negative top margin tucks it against the titlebar it follows. */
 .page-subtitle {
     margin: -.75rem 0 1.5rem;
+    color: var(--text-secondary);
+}
+/* The subtitle line INSIDE a .page-titlebar (a student's ID under their name),
+   as distinct from .page-subtitle, which follows the titlebar block and so
+   pulls itself up. Four page-local copies of this existed under four names
+   (UI audit S7). */
+.titlebar-subtitle {
+    margin: .35rem 0 0;
     color: var(--text-secondary);
 }
 
@@ -2116,6 +2124,60 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     flex-direction: column;
     box-shadow: var(--shadow-pop);
 }
+
+/* The lead heading of a tabbed page's content, where the page's own <h1> is
+   the visually-hidden one in the tab bar. Sized like the h1 it replaces so the
+   page reads unchanged (UI audit S7). */
+.page-heading {
+    font-size: var(--text-2xl);
+    margin: 0 0 1rem;
+}
+
+/* Row-anchored popover panel (the per-student extension / grade-override
+   forms). Absolutely positioned under its summary button, promoted to fixed
+   by app.js when open so it escapes the table's overflow clip; on a phone the
+   media query drops it into static flow, where it cannot overflow. Was a page
+   block on course-student-submissions, which also had to restyle the global
+   .ext-details to position it (UI audit S7). */
+.ext-details { position: relative; }
+.popover-panel {
+    position: absolute;
+    top: calc(100% + .3rem);
+    right: 0;
+    z-index: 10;
+    max-width: calc(100vw - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    padding: .5rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-pop);
+}
+@media (max-width: 640px) {
+    .popover-panel { position: static; max-width: none; }
+}
+
+/* A centred explanatory panel standing in for content that cannot render here
+   — no notebook selected, or a viewport too small for the editor. Two pages
+   carried byte-identical copies under different names (UI audit S7). */
+.standin-panel {
+    margin: 2rem auto;
+    max-width: 32rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+.standin-panel-title { margin: .2rem 0 .5rem; font-size: var(--text-lg); }
+.standin-panel-text { margin: 0; color: var(--gray-700); font-size: var(--text-base); }
+
+/* The section that holds a row of .diagnostics-cards. Three page-local names
+   did this (admin-/instructor-/assignment-diagnostics), and one of them was
+   applied on a page whose stylesheet never defined it — so those cards lost
+   their gap (UI audit D6/S7). */
+.diagnostics-section { margin-bottom: 1.25rem; }
 
 /* Injected by ChickadeeUI.showActionError — the one blocking-error surface,
    shared with inplace-forms.js's banner (UI audit S9). */

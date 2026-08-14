@@ -7,7 +7,7 @@ Runner #(runner.workerID)
     <div data-runner-id="#(runner.workerID)" class="runner-header">
         <div>
             <h2 class="runner-header-title"><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="runner-badge-offline"#if(!runner.isOffline): style="display:none"#endif>Offline</span></h2>
-            <p class="runner-subhead">
+            <p class="titlebar-subtitle">
                 <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
                 ·
                 <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
@@ -122,10 +122,6 @@ Runner #(runner.workerID)
 }
 .runner-header-title {
     margin: 0;
-}
-.runner-subhead {
-    margin: .4rem 0 0;
-    color: var(--muted);
 }
 .runner-meta {
     min-width: 220px;

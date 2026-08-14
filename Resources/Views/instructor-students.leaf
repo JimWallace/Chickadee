@@ -6,11 +6,11 @@ Students
 #extend("_instructor-tabs")
 
 
-<div class="students-titlebar">
-    <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
+<div class="page-titlebar students-titlebar">
+    <h2>Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h2>
     #if(currentUser.activeCourse):
     #if(!rosterReadOnly):
-    <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" class="students-mode-form">
+    <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" class="form-flush">
         #csrfFormField()
         <label class="form-label students-mode-label">
             <select name="enrollmentMode" class="form-input students-mode-select"
@@ -78,27 +78,20 @@ Students
 <p class="empty" id="no-students-msg"#if(hasEnrolledStudents): hidden#endif>No students enrolled yet.</p>
 
 <style>
-.students-titlebar {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    flex-wrap: wrap;
-    margin-bottom: .75rem;
-}
+/* The global .page-titlebar puts the title left and actions right; this page
+   adds only what is genuinely its own: the actions cluster wraps, because the
+   roster carries five controls plus a filter. */
+.students-titlebar { flex-wrap: wrap; gap: .75rem; }
 .students-add-staff { margin: 0; }
-.students-title { font-size: var(--text-lg); font-weight: 600; margin: 0; }
-.students-mode-form { margin: 0; }
 .students-mode-label { font-size: var(--text-base); margin: 0; }
 .students-mode-select { display: block; font-size: var(--text-base); }
 .students-learn-status { font-size: var(--text-sm); color: var(--gray-500); }
 .students-filter { flex: 1 1 260px; }
-.students-pending-name { color: var(--gray-500); }
+/* One rule for every muted cell in a pending row (was three identical ones). */
+.students-pending-name, .students-pending-username, .students-pending-role { color: var(--gray-500); }
 .students-pending-note { font-size: var(--text-2xs); color: var(--gray-500); margin-left: .4rem; }
-.students-pending-username { color: var(--gray-500); }
 .students-unenroll-btn { padding: .25rem .35rem; }
-.students-role-form { margin: 0; }
 .students-role-select { display: inline-block; font-size: var(--text-sm); padding: .1rem .3rem; }
-.students-pending-role { color: var(--gray-500); }
 .students-row-actions { display: flex; align-items: center; gap: .3rem; }
 .students-register-hint { font-size: var(--text-2xs); color: var(--gray-600); margin: 0 0 .2rem; }
 .student-row-link {

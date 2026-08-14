@@ -4,6 +4,16 @@
      a LeafKit false-positive cycle error; the #1266 investigation showed those
      historical Leaf diagnoses were unreliable, and the render tests prove the
      shared partial resolves. -->
+<h1 class="visually-hidden">Admin —
+#if(activeAdminTab == "overview"):Overview#endif
+#if(activeAdminTab == "users"):Users#endif
+#if(activeAdminTab == "storage"):Storage#endif
+#if(activeAdminTab == "retention"):Retention#endif
+#if(activeAdminTab == "brightspace"):LEARN#endif
+#if(activeAdminTab == "mcp"):MCP#endif
+#if(activeAdminTab == "audit"):Audit Log#endif
+#if(activeAdminTab == "alerts"):Health Alerts#endif
+</h1>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>

@@ -7,7 +7,7 @@
     <h1>#(assignmentTitle)</h1>
 </div>
 
-<section class="assignment-diagnostics">
+<section class="diagnostics-section">
     #extend("_diagnostic-cards")
 </section>
 
@@ -117,9 +117,6 @@
 </table>
 #endif
 <style>
-.assignment-diagnostics {
-    margin-bottom: 1.25rem;
-}
 .subm-row-actions {
     display: flex;
     gap: .2rem;
