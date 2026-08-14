@@ -572,21 +572,31 @@ extension OperationalDiagnosticsService {
             )
         )
 
+        // Non-pass outcomes log at info — they are what the documented triage
+        // flow greps for (docs/operational-diagnostics.md). Passes log at
+        // debug: they carry no diagnostic signal beyond the counts already in
+        // assignment_result_summary, and at info a 40-test green suite wrote
+        // ~40 formatted records through the synchronous console handler per
+        // result. A silenced debug record still builds its metadata dict, but
+        // skips the handler's formatting and the serialized stdout write —
+        // which is where the per-result cost was.
         for outcome in collection.outcomes {
-            logger.info(
-                "observability",
-                metadata: logMetadata(
-                    event: .testResultSummary,
-                    submission: submission,
-                    context: context,
-                    extra: [
-                        "test_id": .string(normalizedTestID(for: outcome)),
-                        "status": .string(outcome.status.rawValue),
-                        "execution_ms": .stringConvertible(outcome.executionTimeMs),
-                        "error_message_summary": .string(compactSummary(outcome.shortResult)),
-                    ]
-                )
+            let metadata = logMetadata(
+                event: .testResultSummary,
+                submission: submission,
+                context: context,
+                extra: [
+                    "test_id": .string(normalizedTestID(for: outcome)),
+                    "status": .string(outcome.status.rawValue),
+                    "execution_ms": .stringConvertible(outcome.executionTimeMs),
+                    "error_message_summary": .string(compactSummary(outcome.shortResult)),
+                ]
             )
+            if outcome.status == .pass {
+                logger.debug("observability", metadata: metadata)
+            } else {
+                logger.info("observability", metadata: metadata)
+            }
         }
 
         logger.info(

@@ -125,7 +125,10 @@ Server-side structured log events include:
 - `result_received`
 - `job_finalised`
 - `assignment_result_summary`
-- `test_result_summary`
+- `test_result_summary` — per test outcome; **info for fail/error/timeout,
+  debug for pass** (a green suite contributes no per-test records at the
+  production log level; the pass/fail counts are in
+  `assignment_result_summary`)
 - `job_recovery`
 
 Runner-side structured log events include:

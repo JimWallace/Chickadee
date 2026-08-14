@@ -1,5 +1,6 @@
 import Fluent
 import Foundation
+import Logging
 import Testing
 import VaporTesting
 
@@ -817,5 +818,111 @@ import VaporTesting
 
     private func encodedBody<T: Encodable>(_ value: T) throws -> ByteBuffer {
         ByteBuffer(data: try JSONEncoder().encode(value))
+    }
+
+    // MARK: - test_result_summary log levels
+
+    /// Per-outcome `test_result_summary` records log non-pass outcomes at
+    /// info — they are what the documented triage flow greps for — and passes
+    /// at debug, so a green suite contributes no per-test records at the
+    /// production log level. The capturing handler accepts every level, so
+    /// the assertion pins the level each record was *emitted* at, not a
+    /// threshold effect.
+    @Test func testResultSummaryLogsPassesAtDebugAndFailuresAtInfo() async throws {
+        try await withApp(app) { _ in
+            let (_, submission) = try await makeSubmission(submissionID: "sub_log_levels")
+            submission.workerID = "runner-log-levels"
+            submission.status = "assigned"
+            try await submission.update(on: app.db)
+
+            func outcome(_ name: String, _ status: TestStatus) -> TestOutcome {
+                TestOutcome(
+                    testName: name,
+                    testClass: nil,
+                    tier: .pub,
+                    status: status,
+                    shortResult: status == .pass ? "passed" : "expected 42, got 41",
+                    longResult: nil,
+                    executionTimeMs: 10,
+                    memoryUsageBytes: nil,
+                    attemptNumber: 1,
+                    isFirstPassSuccess: false
+                )
+            }
+            let collection = TestOutcomeCollection(
+                submissionID: try submission.requireID(),
+                testSetupID: submission.testSetupID,
+                attemptNumber: submission.attemptNumber ?? 1,
+                buildStatus: .passed,
+                compilerOutput: nil,
+                outcomes: [outcome("public.passing", .pass), outcome("public.failing", .fail)],
+                totalTests: 2,
+                passCount: 1,
+                failCount: 1,
+                errorCount: 0,
+                timeoutCount: 0,
+                executionTimeMs: 20,
+                jobStartedAt: Date(timeIntervalSince1970: 4_000),
+                runnerVersion: "runner-test/1.0",
+                timestamp: Date(timeIntervalSince1970: 4_001)
+            )
+
+            let sink = CapturedRecordSink()
+            var logger = Logger(label: "observability.level.test")
+            logger.handler = LevelCapturingLogHandler(sink: sink)
+
+            await app.diagnostics.recordWorkerResult(
+                collection: collection, submission: submission, on: app.db, logger: logger)
+
+            let testRecords = sink.records.filter { $0.metadata["event"] == "test_result_summary" }
+            #expect(testRecords.count == 2)
+            let passing = try #require(testRecords.first { $0.metadata["test_id"]?.contains("passing") == true })
+            #expect(passing.level == .debug)
+            let failing = try #require(testRecords.first { $0.metadata["test_id"]?.contains("failing") == true })
+            #expect(failing.level == .info)
+        }
+    }
+}
+
+// MARK: - Capturing log handler
+
+private final class CapturedRecordSink: @unchecked Sendable {
+    // @unchecked: every access to `stored` holds `lock`. A LogHandler is a
+    // value type copied into the Logger, so the shared mutable store has to
+    // sit behind a reference the handler captures.
+    struct Record {
+        let level: Logger.Level
+        let metadata: [String: String]
+    }
+
+    private let lock = NSLock()
+    private var stored: [Record] = []
+
+    func append(level: Logger.Level, metadata: Logger.Metadata) {
+        lock.lock()
+        defer { lock.unlock() }
+        stored.append(Record(level: level, metadata: metadata.mapValues { "\($0)" }))
+    }
+
+    var records: [Record] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+}
+
+private struct LevelCapturingLogHandler: LogHandler {
+    let sink: CapturedRecordSink
+
+    var metadata: Logger.Metadata = [:]
+    var logLevel: Logger.Level = .trace
+
+    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+        get { metadata[key] }
+        set { metadata[key] = newValue }
+    }
+
+    func log(event: LogEvent) {
+        sink.append(level: event.level, metadata: event.metadata ?? [:])
     }
 }
