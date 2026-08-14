@@ -134,7 +134,7 @@
         var lastSelectedKind = 'boundary_equality';
 
         /// Reads section variables for the given family id out of the
-        /// server-rendered `.section-vars-body` tbody in the family row's
+        /// server-rendered `.js-section-vars-body` tbody in the family row's
         /// enclosing section block.  Returns `{ vars, sectionName }`.
         /// Picks up any unsaved edits to the Shared Inputs table too —
         /// auto-compute sees the live value the instructor just typed,
@@ -148,11 +148,11 @@
             if (!block) return { vars: [], sectionName: null, sectionID: null };
             var sectionID = block.getAttribute('data-section-id') || null;
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
-            var varTbody = block.querySelector('tbody.section-vars-body');
+            var varTbody = block.querySelector('tbody.js-section-vars-body');
             if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
-            var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
-                var name = (tr.querySelector('.section-var-name') || {}).value || '';
-                var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
+            var vars = Array.from(varTbody.querySelectorAll('tr.js-section-var-row')).map(function (tr) {
+                var name = (tr.querySelector('.js-section-var-name') || {}).value || '';
+                var raw  = (tr.querySelector('.js-section-var-value') || {}).value || '';
                 name = name.trim();
                 if (!name) return null;
                 var parsed;
@@ -176,11 +176,11 @@
             var block = document.querySelector('.section-block[data-section-id="' + safe + '"]');
             if (!block) return { vars: [], sectionName: null, sectionID: null };
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
-            var varTbody = block.querySelector('tbody.section-vars-body');
+            var varTbody = block.querySelector('tbody.js-section-vars-body');
             if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
-            var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
-                var name = (tr.querySelector('.section-var-name') || {}).value || '';
-                var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
+            var vars = Array.from(varTbody.querySelectorAll('tr.js-section-var-row')).map(function (tr) {
+                var name = (tr.querySelector('.js-section-var-name') || {}).value || '';
+                var raw  = (tr.querySelector('.js-section-var-value') || {}).value || '';
                 name = name.trim();
                 if (!name) return null;
                 var parsed;
@@ -479,7 +479,7 @@
         }
 
         function rebuildCasesHeader(paramNames) {
-            var th = ['<th style="width:2.25rem">#</th>', '<th>Label</th>'];
+            var th = ['<th class="case-num-col">#</th>', '<th>Label</th>'];
             if (!paramNames.length) {
                 th.push('<th>Args (JSON)</th>');
             } else {
@@ -494,24 +494,24 @@
                     var hd = currentParamHasDefault && currentParamHasDefault[i];
                     var labelBase = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
                     var labelFull = hd
-                        ? (labelBase + '<span style="color:var(--gray-500);font-weight:normal"> ?</span>')
+                        ? (labelBase + '<span class="th-note"> ?</span>')
                         : labelBase;
-                    th.push('<th><code style="font-size:.7rem">' + labelFull + '</code></th>');
+                    th.push('<th><code class="th-code">' + labelFull + '</code></th>');
                 });
             }
             var expectedHeader = currentReturnType
-                ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
+                ? 'Expected <code class="th-code">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
             // A differential family authors no expected value — the reference
             // computes one per case. The column stays (the row layout is
             // positional) and says so instead.
             if (kindInput && kindInput.value === 'differential') {
-                expectedHeader = 'Expected <span style="color:var(--gray-500);font-weight:normal">'
+                expectedHeader = 'Expected <span class="th-note">'
                     + '(computed by the reference)</span>';
             }
             th.push('<th>' + expectedHeader + '</th>');
-            th.push('<th>Hint <span style="color:var(--gray-500);font-weight:normal">(optional)</span></th>');
-            th.push('<th style="width:4rem"></th>');
+            th.push('<th>Hint <span class="th-note">(optional)</span></th>');
+            th.push('<th class="fv-action-col"></th>');
             casesHeader.innerHTML = th.join('');
         }
 
@@ -528,12 +528,12 @@
             var argVarRefs   = Array.isArray(c.argVarRefs)   ? c.argVarRefs   : [];
             var tds = [];
             // Column 1: auto-numbered sequence (readonly, regenerated on reorder).
-            tds.push('<td class="pf-case-num" style="text-align:center;color:var(--gray-500);font-size:.75rem"></td>');
-            tds.push('<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" placeholder="e.g. bmi < 18.5 is underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
+            tds.push('<td class="js-pf-case-num cell-num"></td>');
+            tds.push('<td><input type="text" class="form-input js-pf-case-label cell-input cell-input--fill" value="' + escHtml(c.label) + '" placeholder="e.g. bmi < 18.5 is underweight"></td>');
 
             if (!paramNames.length) {
                 // No param names yet — single free-form JSON args field.
-                tds.push('<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+                tds.push('<td><input type="text" class="form-input js-pf-case-args cell-input cell-input--fill input-mono" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]"></td>');
             } else {
                 paramNames.forEach(function (_, i) {
                     // Display precedence: variable reference (`$name`) > literal
@@ -559,7 +559,7 @@
                         ? '\u2014 ' + languageLabel() + ' default \u2014'
                         : '\u2014 default \u2014';
                     var placeholder = hasDefault ? defaultHint : 'e.g. 18.49 or underweight';
-                    tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+                    tds.push('<td><input type="text" class="form-input js-pf-case-arg cell-input cell-input--fill input-mono" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '"></td>');
                 });
             }
             // Expected cell. Display precedence: per-student ref (`$name`,
@@ -567,16 +567,16 @@
             var expectedDisplay = c.expectedVarRef
                 ? '$' + c.expectedVarRef
                 : (c.expected == null ? '' : renderTypedCellValue(c.expected));
-            tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(expectedDisplay) + '" placeholder="e.g. underweight or $expr" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
-            tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" placeholder="shown to students on failure" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
-            tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
+            tds.push('<td><input type="text" class="form-input js-pf-case-expected cell-input cell-input--fill input-mono" value="' + escHtml(expectedDisplay) + '" placeholder="e.g. underweight or $expr"></td>');
+            tds.push('<td><input type="text" class="form-input js-pf-case-hint cell-input cell-input--fill" value="' + escHtml(c.hint || '') + '" placeholder="shown to students on failure"></td>');
+            tds.push('<td><button type="button" class="btn action-btn action-danger btn-xs js-pf-case-remove">Remove</button></td>');
 
             var tr = document.createElement('tr');
             tr.innerHTML = tds.join('');
             casesBody.appendChild(tr);
             // Author-set expected values — a literal OR a per-student `$ref` —
             // are marked manual so the auto-computer doesn't overwrite them.
-            var expCell = tr.querySelector('.pf-case-expected');
+            var expCell = tr.querySelector('.js-pf-case-expected');
             if (expCell && expCell.value.trim() !== '') {
                 expCell.dataset.manual = '1';
                 refreshExpectedCellHighlight(expCell, collectDeclaredInputNames());
@@ -586,7 +586,7 @@
         }
 
         function renumberCases() {
-            Array.from(casesBody.querySelectorAll('.pf-case-num')).forEach(function (td, i) {
+            Array.from(casesBody.querySelectorAll('.js-pf-case-num')).forEach(function (td, i) {
                 var n = i + 1;
                 td.textContent = (n < 10 ? '0' + n : String(n));
             });
@@ -704,19 +704,19 @@
                     return fv.name && fv.name.trim() === v.name;
                 });
                 var tr = document.createElement('tr');
-                tr.className = 'pf-var-section-row';
+                tr.className = 'js-pf-var-section-row';
                 tr.setAttribute('data-section-var', '1');
                 var preview = '';
                 try { preview = JSON.stringify(v.value); }
                 catch (_) { preview = String(v.value); }
-                var textDeco = familyShadow ? 'line-through' : 'none';
+                var shadowCls = familyShadow ? ' cell-shadowed' : '';
                 var shadowNote = familyShadow
-                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber);margin-left:.4rem">shadowed by family variable below</span>'
+                    ? '<span class="cell-warn-note">shadowed by family variable below</span>'
                     : '';
                 tr.innerHTML =
                     '<td></td>'
-                  + '<td style="vertical-align:top;padding:.3rem .4rem"><code style="font-family:monospace;font-size:.8rem;text-decoration:' + textDeco + '">' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
-                  + '<td style="vertical-align:top;padding:.3rem .4rem;font-family:monospace;font-size:.78rem;color:var(--gray-600);text-decoration:' + textDeco + '">' + escHtml(preview) + '</td>'
+                  + '<td class="cell-tight"><code class="cell-code' + shadowCls + '">' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
+                  + '<td class="cell-tight cell-preview' + shadowCls + '">' + escHtml(preview) + '</td>'
                   + '<td></td>';
                 variablesBody.appendChild(tr);
             });
@@ -728,14 +728,14 @@
                     // and value pass their checks.  Replaces the v0.4.94
                     // "✓ referenced as $name" / "✓ parsed as dict" text
                     // lines beneath each input.
-                    '<td class="pf-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green);font-size:1rem"></td>'
-                  + '<td style="vertical-align:top">'
-                  +   '<input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
+                    '<td class="js-pf-var-row-valid cell-check-col"></td>'
+                  + '<td>'
+                  +   '<input type="text" class="form-input js-pf-var-name cell-input cell-input--fill input-mono" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database">'
                   + '</td>'
-                  + '<td style="vertical-align:top">'
-                  +   '<input type="text" class="form-input pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
+                  + '<td>'
+                  +   '<input type="text" class="form-input js-pf-var-value cell-input cell-input--fill input-mono" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]">'
                   + '</td>'
-                  + '<td style="vertical-align:top"><button type="button" class="btn action-btn action-danger pf-var-remove" data-var-index="' + i + '" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
+                  + '<td><button type="button" class="btn action-btn action-danger btn-xs js-pf-var-remove" data-var-index="' + i + '">Remove</button></td>';
                 variablesBody.appendChild(tr);
                 refreshVarRowStatus(tr);
             });
@@ -755,24 +755,21 @@
         /// until something's typed — no placeholder noise.
         function refreshVarRowStatus(row) {
             if (!row) return;
-            var nameEl   = row.querySelector('.pf-var-name');
-            var valueEl  = row.querySelector('.pf-var-value');
-            var validEl  = row.querySelector('.pf-var-row-valid');
+            var nameEl   = row.querySelector('.js-pf-var-name');
+            var valueEl  = row.querySelector('.js-pf-var-value');
+            var validEl  = row.querySelector('.js-pf-var-row-valid');
             if (!nameEl || !valueEl || !validEl) return;
 
             var name   = nameEl.value.trim();
             var rawVal = valueEl.value;
 
-            // Name validity.
+            // Name validity.  An empty row stays silent — not an error.
             var nameOk = false;
             var nameError = null;
-            if (!name) {
-                // Empty row — silent, not an error.
-                nameEl.style.borderColor = '';
-            } else if (!isValidServerIdentifier(name)) {
+            if (name && !isValidServerIdentifier(name)) {
                 nameError = 'Use letters, digits and underscores, starting with a letter or underscore.';
-            } else {
-                var allNames = Array.from(variablesBody.querySelectorAll('.pf-var-name'))
+            } else if (name) {
+                var allNames = Array.from(variablesBody.querySelectorAll('.js-pf-var-name'))
                     .map(function (el) { return el.value.trim(); });
                 var dup = allNames.filter(function (n) { return n === name; }).length > 1;
                 if (dup) {
@@ -781,23 +778,18 @@
                     nameOk = true;
                 }
             }
-            nameEl.style.borderColor = nameError ? 'var(--red)' : '';
+            nameEl.classList.toggle('input-invalid', !!nameError);
             nameEl.title = nameError || '';
 
-            // Value validity.
+            // Value validity.  Empty stays silent until typed; the bare-string
+            // fallback (almost always a typo in dict/list JSON) gets the amber
+            // needs-a-look cue.
             var parsed = tryParseVarValue(rawVal);
-            var valueOk = false;
-            var valueError = null;
-            if (parsed.kind === 'empty') {
-                valueEl.style.borderColor = '';  // silent until typed
-            } else if (parsed.strict) {
-                valueOk = true;
-                valueEl.style.borderColor = '';
-            } else {
-                // Bare-string fallback — almost always a typo in dict/list JSON.
-                valueError = 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.';
-                valueEl.style.borderColor = 'var(--amber)';
-            }
+            var valueOk = parsed.kind !== 'empty' && !!parsed.strict;
+            var valueError = (parsed.kind !== 'empty' && !parsed.strict)
+                ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.'
+                : null;
+            valueEl.classList.toggle('input-attention', !!valueError);
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');
 
             // Row-level checkmark: only when BOTH are valid.
@@ -818,14 +810,14 @@
         /// red-flag a valid per-student ref.
         function collectDeclaredInputNames() {
             var names = new Set();
-            Array.from(variablesBody ? variablesBody.querySelectorAll('.pf-var-name') : []).forEach(function (el) {
+            Array.from(variablesBody ? variablesBody.querySelectorAll('.js-pf-var-name') : []).forEach(function (el) {
                 var n = (el.value || '').trim();
                 if (n && isValidServerIdentifier(n)) names.add(n);
             });
             (currentSectionVariables || []).forEach(function (v) {
                 if (v && v.name && isValidServerIdentifier(v.name)) names.add(v.name);
             });
-            Array.from(document.querySelectorAll('.global-input-name')).forEach(function (el) {
+            Array.from(document.querySelectorAll('.js-global-input-name')).forEach(function (el) {
                 var n = (el.value || '').trim();
                 if (n && isValidServerIdentifier(n)) names.add(n);
             });
@@ -834,10 +826,10 @@
 
         function refreshAllArgCellVarHighlighting() {
             var declaredVarNames = collectDeclaredInputNames();
-            Array.from(casesBody ? casesBody.querySelectorAll('.pf-case-arg') : []).forEach(function (cell) {
+            Array.from(casesBody ? casesBody.querySelectorAll('.js-pf-case-arg') : []).forEach(function (cell) {
                 refreshArgCellHighlight(cell, declaredVarNames);
             });
-            Array.from(casesBody ? casesBody.querySelectorAll('.pf-case-expected') : []).forEach(function (cell) {
+            Array.from(casesBody ? casesBody.querySelectorAll('.js-pf-case-expected') : []).forEach(function (cell) {
                 refreshExpectedCellHighlight(cell, declaredVarNames);
             });
         }
@@ -845,44 +837,34 @@
         function refreshArgCellHighlight(cell, declaredNames) {
             var raw = (cell.value || '').trim();
             var match = raw.match(VAR_REF_RE);
-            cell.style.fontStyle = '';
-            cell.style.color = '';
-            cell.style.borderColor = '';
+            cell.classList.remove('input-ref-ok', 'input-ref-missing');
             cell.title = '';
             if (!match) return;
             var name = match[1];
             if (declaredNames && declaredNames.has(name)) {
-                cell.style.fontStyle = 'italic';
-                cell.style.color = 'var(--green)';
+                cell.classList.add('input-ref-ok');
                 cell.title = 'Bound to input $' + name;
             } else {
-                cell.style.color = 'var(--red)';
-                cell.style.borderColor = 'var(--red)';
+                cell.classList.add('input-ref-missing');
                 cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
             }
         }
 
         /// Highlight for the Expected cell.  A `$name` ref gets the green/red
-        /// treatment (per-student expected); a non-ref literal is left alone so
-        /// it keeps any auto-compute / manual styling rather than being cleared
-        /// when an unrelated keystroke triggers a bulk refresh.
+        /// treatment (per-student expected); a non-ref literal only sheds the
+        /// ref cues, keeping any auto-compute / manual styling rather than
+        /// being cleared when an unrelated keystroke triggers a bulk refresh.
         function refreshExpectedCellHighlight(cell, declaredNames) {
             var raw = (cell.value || '').trim();
             var match = raw.match(VAR_REF_RE);
-            if (!match) {
-                cell.style.fontStyle = '';
-                cell.style.borderColor = '';
-                return;  // leave color/title to auto-compute / manual styling
-            }
+            cell.classList.remove('input-ref-ok', 'input-ref-missing');
+            if (!match) return;  // leave title to auto-compute / manual styling
             var name = match[1];
-            cell.style.fontStyle = 'italic';
             if (declaredNames && declaredNames.has(name)) {
-                cell.style.color = 'var(--green)';
-                cell.style.borderColor = '';
+                cell.classList.add('input-ref-ok');
                 cell.title = '$' + name + ' — per-student expected (resolved at grading time)';
             } else {
-                cell.style.color = 'var(--red)';
-                cell.style.borderColor = 'var(--red)';
+                cell.classList.add('input-ref-missing');
                 cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
             }
         }
@@ -898,8 +880,8 @@
             var rows = Array.from(variablesBody.querySelectorAll('tr'));
             var out = [];
             rows.forEach(function (row, i) {
-                var nameEl  = row.querySelector('.pf-var-name');
-                var valueEl = row.querySelector('.pf-var-value');
+                var nameEl  = row.querySelector('.js-pf-var-name');
+                var valueEl = row.querySelector('.js-pf-var-value');
                 var name    = (nameEl  ? nameEl.value  : '').trim();
                 var rawVal  = (valueEl ? valueEl.value : '').trim();
                 if (!name && !rawVal) return; // empty row — drop silently
@@ -942,14 +924,14 @@
                 var rows = variablesBody ? variablesBody.querySelectorAll('tr') : [];
                 var last = rows[rows.length - 1];
                 if (last) {
-                    var nameInputNew = last.querySelector('.pf-var-name');
+                    var nameInputNew = last.querySelector('.js-pf-var-name');
                     if (nameInputNew) nameInputNew.focus();
                 }
             });
         }
         if (variablesBody) {
             variablesBody.addEventListener('click', function (e) {
-                var btn = e.target && e.target.closest('.pf-var-remove');
+                var btn = e.target && e.target.closest('.js-pf-var-remove');
                 if (!btn) return;
                 // Sync first so the other rows' in-progress edits don't
                 // disappear when we drop this one.
@@ -1123,15 +1105,15 @@
             var out = [];
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
-                var label = row.querySelector('.pf-case-label').value.trim();
-                var rawExp = row.querySelector('.pf-case-expected').value;
+                var label = row.querySelector('.js-pf-case-label').value.trim();
+                var rawExp = row.querySelector('.js-pf-case-expected').value;
                 if (rawExp.trim() === '') rawExp = '';
                 var caseNum = (i + 1 < 10 ? '0' + (i + 1) : String(i + 1));
                 var args = [];
                 var argsProvided = [];
                 var argVarRefs   = [];
                 if (paramNames.length === 0) {
-                    var rawArgs = (row.querySelector('.pf-case-args') || {}).value || '';
+                    var rawArgs = (row.querySelector('.js-pf-case-args') || {}).value || '';
                     rawArgs = rawArgs.trim();
                     if (rawArgs !== '') {
                         try { args = JSON.parse(rawArgs); }
@@ -1142,7 +1124,7 @@
                     argVarRefs   = args.map(function () { return null; });
                 } else {
                     for (var a = 0; a < paramNames.length; a++) {
-                        var cell = row.querySelector('.pf-case-arg[data-arg-index="' + a + '"]');
+                        var cell = row.querySelector('.js-pf-case-arg[data-arg-index="' + a + '"]');
                         var raw = cell ? cell.value : '';
                         var trimmed = raw.trim();
                         var paramTypeHint = currentParamTypes ? currentParamTypes[a] : null;
@@ -1201,7 +1183,7 @@
                     }
                 }
                 if (!label) throw new Error('Case ' + caseNum + ': label is required');
-                var hintCell = row.querySelector('.pf-case-hint');
+                var hintCell = row.querySelector('.js-pf-case-hint');
                 var hint = hintCell ? hintCell.value.trim() : '';
                 var caseObj = {
                     key: caseNum,
@@ -1230,12 +1212,12 @@
         function readCasesFromTableRaw() {
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             return rows.map(function (row) {
-                var label = row.querySelector('.pf-case-label').value;
-                var rawExp = row.querySelector('.pf-case-expected').value;
+                var label = row.querySelector('.js-pf-case-label').value;
+                var rawExp = row.querySelector('.js-pf-case-expected').value;
                 var args = [];
                 var argsProvided = [];
                 var argVarRefs   = [];
-                var cells = row.querySelectorAll('.pf-case-arg');
+                var cells = row.querySelectorAll('.js-pf-case-arg');
                 if (cells.length) {
                     Array.from(cells).forEach(function (c, idx) {
                         var raw = c.value;
@@ -1258,7 +1240,7 @@
                         argVarRefs.push(null);
                     });
                 } else {
-                    var single = row.querySelector('.pf-case-args');
+                    var single = row.querySelector('.js-pf-case-args');
                     if (single) {
                         try { args = JSON.parse(single.value); if (!Array.isArray(args)) args = []; } catch (_) { args = []; }
                         argsProvided = args.map(function () { return true; });
@@ -1276,7 +1258,7 @@
                 } else if (rawExpTrim !== '') {
                     expected = coerceByType(rawExp, currentReturnType);
                 }
-                var hintCell = row.querySelector('.pf-case-hint');
+                var hintCell = row.querySelector('.js-pf-case-hint');
                 var hint = hintCell ? hintCell.value.trim() : '';
                 var obj = {
                     label: label,
@@ -1539,7 +1521,7 @@
             addCaseRow(null, paramNames);
         });
         casesBody.addEventListener('click', function (e) {
-            var btn = e.target && e.target.closest('.pf-case-remove');
+            var btn = e.target && e.target.closest('.js-pf-case-remove');
             if (btn) {
                 var tr = btn.closest('tr');
                 if (tr) tr.remove();
@@ -2018,14 +2000,14 @@
         function rescheduleAutoComputeForVariableRefCases() {
             if (!casesBody) return;
             Array.from(casesBody.querySelectorAll('tr')).forEach(function (row) {
-                var hasVarRef = Array.from(row.querySelectorAll('.pf-case-arg'))
+                var hasVarRef = Array.from(row.querySelectorAll('.js-pf-case-arg'))
                     .some(function (cell) {
                         var v = (cell.value || '').trim();
                         return VAR_REF_RE.test(v);
                     });
                 if (!hasVarRef) return;
                 // Don't clobber the instructor's manual expected value.
-                var expectedEl = row.querySelector('.pf-case-expected');
+                var expectedEl = row.querySelector('.js-pf-case-expected');
                 if (expectedEl && expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
                 scheduleAutoCompute(row);
             });
@@ -2058,7 +2040,7 @@
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
             if (!paramNames.length) return;  // fallback JSON-args mode: no auto-compute
 
-            var expectedEl = row.querySelector('.pf-case-expected');
+            var expectedEl = row.querySelector('.js-pf-case-expected');
             if (!expectedEl) return;
             if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
             // A per-student `$name` Expected is resolved server-side per
@@ -2078,8 +2060,8 @@
             });
             if (variablesBody) {
                 Array.from(variablesBody.querySelectorAll('tr')).forEach(function (vrow) {
-                    var n = (vrow.querySelector('.pf-var-name') || {}).value;
-                    var v = (vrow.querySelector('.pf-var-value') || {}).value;
+                    var n = (vrow.querySelector('.js-pf-var-name') || {}).value;
+                    var v = (vrow.querySelector('.js-pf-var-value') || {}).value;
                     if (!n) return;
                     n = n.trim();
                     if (!isValidServerIdentifier(n)) return;
@@ -2091,7 +2073,7 @@
 
             var args = [];
             for (var i = 0; i < paramNames.length; i++) {
-                var cell = row.querySelector('.pf-case-arg[data-arg-index="' + i + '"]');
+                var cell = row.querySelector('.js-pf-case-arg[data-arg-index="' + i + '"]');
                 var raw = cell ? cell.value : '';
                 if (raw.trim() === '') {
                     // Optional param with a default: skip it so the
@@ -2115,6 +2097,11 @@
             callSolution(fnName, args, { captureStdout: captureStdout }).then(function (res) {
                 if (!row.parentElement) return;
                 if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
+                // Every outcome repaints the cell's cue from a clean slate —
+                // stale cues from a previous compute must not linger.
+                expectedEl.classList.remove(
+                    'input-auto', 'input-attention', 'input-invalid',
+                    'input-ref-ok', 'input-ref-missing');
                 if (res.ok && res.returnedNone) {
                     // The solution function returned None.  Don't write
                     // the string "null" to the cell — that used to
@@ -2126,16 +2113,14 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned None';
                     expectedEl.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
-                    expectedEl.style.borderColor = 'var(--amber)';
-                    expectedEl.style.color = '';
+                    expectedEl.classList.add('input-attention');
                     delete expectedEl.dataset.autoComputed;
                 } else if (res.ok) {
                     expectedEl.placeholder = 'e.g. underweight';
                     expectedEl.value = renderTypedCellValue(res.value);
                     expectedEl.dataset.autoComputed = '1';
                     expectedEl.title = 'Auto-computed from solution notebook';
-                    expectedEl.style.color = 'var(--gray-500)';
-                    expectedEl.style.borderColor = '';
+                    expectedEl.classList.add('input-auto');
                 } else if (res.timedOut) {
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ ' + res.error;
@@ -2148,7 +2133,7 @@
                     expectedEl.title = res.error.indexOf('notebook load') >= 0
                         ? 'A top-level cell in the solution notebook ran longer than ' + (LOAD_TIMEOUT_MS / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
                         : 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
-                    expectedEl.style.borderColor = 'var(--red)';
+                    expectedEl.classList.add('input-invalid');
                 } else if (res.unsupported) {
                     // The solution returned a value of a type that
                     // doesn't round-trip through JSON in a way the
@@ -2167,8 +2152,7 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned ' + reasonText;
                     expectedEl.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
-                    expectedEl.style.borderColor = 'var(--amber)';
-                    expectedEl.style.color = '';
+                    expectedEl.classList.add('input-attention');
                     delete expectedEl.dataset.autoComputed;
                 } else {
                     // v0.4.112: surface the failure in the cell itself
@@ -2178,7 +2162,7 @@
                     // function / etc.
                     expectedEl.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
                     expectedEl.title = 'Solution raised: ' + res.error;
-                    expectedEl.style.borderColor = 'var(--red)';
+                    expectedEl.classList.add('input-invalid');
                 }
             });
         }
@@ -2186,28 +2170,29 @@
         casesBody.addEventListener('input', function (e) {
             var t = e.target;
             if (!t || !t.classList) return;
-            if (t.classList.contains('pf-case-arg')) {
+            if (t.classList.contains('js-pf-case-arg')) {
                 // Live-highlight the `$name` binding state so the instructor
                 // can see whether their ref resolves (family + section vars +
                 // Global Inputs / `=` expressions).
                 refreshArgCellHighlight(t, collectDeclaredInputNames());
                 scheduleAutoCompute(t.closest('tr'));
-            } else if (t.classList.contains('pf-case-expected')) {
+            } else if (t.classList.contains('js-pf-case-expected')) {
                 // Live-highlight a per-student `$name` Expected ref; mark the
                 // cell manual so auto-compute won't clobber an author value.
                 // Clearing the cell re-enables auto-compute.
                 refreshExpectedCellHighlight(t, collectDeclaredInputNames());
                 if (VAR_REF_RE.test(t.value.trim())) {
+                    t.classList.remove('input-auto');
                     t.dataset.manual = '1';
                     delete t.dataset.autoComputed;
                 } else if (t.value.trim() === '') {
-                    t.style.color = '';
+                    t.classList.remove('input-auto');
                     t.title = '';
                     delete t.dataset.manual;
                     delete t.dataset.autoComputed;
                     scheduleAutoCompute(t.closest('tr'));
                 } else {
-                    t.style.color = '';
+                    t.classList.remove('input-auto');
                     t.title = '';
                     t.dataset.manual = '1';
                     delete t.dataset.autoComputed;
@@ -2225,8 +2210,8 @@
                      || document.getElementById('suite-config-body');
         if (suiteBody) {
             suiteBody.addEventListener('click', function (e) {
-                var editBtn = e.target && e.target.closest('.family-edit-btn');
-                var delBtn  = e.target && e.target.closest('.family-delete-btn');
+                var editBtn = e.target && e.target.closest('.js-family-edit-btn');
+                var delBtn  = e.target && e.target.closest('.js-family-delete-btn');
                 if (editBtn) {
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });

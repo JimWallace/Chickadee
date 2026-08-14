@@ -15,17 +15,17 @@
 
     var core = ChickadeeInputsCore;
     var editor = core.createEditor({
-        row: 'global-input-row',
-        name: 'global-input-name',
-        value: 'global-input-value',
-        valid: 'global-input-row-valid',
-        remove: 'global-input-remove'
+        row: 'js-global-input-row',
+        name: 'js-global-input-name',
+        value: 'js-global-input-value',
+        valid: 'js-global-input-row-valid',
+        remove: 'js-global-input-remove'
     }, {});
 
     function init() {
         var block = document.getElementById('global-inputs-block');
         if (!block) return;
-        var tbody = block.querySelector('tbody.global-inputs-body');
+        var tbody = block.querySelector('tbody.js-global-inputs-body');
         var addBtn = document.getElementById('global-input-add');
         var status = document.getElementById('global-inputs-status');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
@@ -78,16 +78,16 @@
         editor.refreshAllRows(tbody);
 
         block.addEventListener('input', function (e) {
-            var tr = e.target.closest && e.target.closest('tr.global-input-row');
+            var tr = e.target.closest && e.target.closest('tr.js-global-input-row');
             if (tr) {
                 editor.refreshAllRows(tbody);
                 saver.schedule();
             }
         });
         block.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.global-input-remove');
+            var btn = e.target.closest && e.target.closest('.js-global-input-remove');
             if (btn && block.contains(btn)) {
-                var tr = btn.closest('tr.global-input-row');
+                var tr = btn.closest('tr.js-global-input-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
             }
         });

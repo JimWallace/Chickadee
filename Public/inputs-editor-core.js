@@ -88,7 +88,9 @@
 
     /// Creates the panel-specific editor helpers.  `classes` names the CSS
     /// hooks: { row, name, value, valid, remove }; `rowOptions` tunes the
-    /// generated row markup: { inputFontSize, removeCell: 'class'|'inline' }.
+    /// generated row markup: { removeCell: 'class'|'inline' }.  Styling is
+    /// the shared editor-table cell vocabulary (styles.css), identical to
+    /// the server-rendered rows of the same tables.
     function createEditor(classes, rowOptions) {
         rowOptions = rowOptions || {};
 
@@ -108,7 +110,7 @@
                     nameOk = false;
                 }
             }
-            nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
+            nameEl.classList.toggle('input-invalid', !!(name && !nameOk));
             nameEl.title = (name && RESERVED_NAMES[name])
                 ? "'" + name + "' is reserved for Chickadee's personalization seed."
                 : '';
@@ -132,19 +134,15 @@
                     : 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.';
             }
 
-            // Reset all classification cues, then apply the current one so
-            // toggling between modes doesn't leave stale colours.
-            valueEl.style.borderColor = '';
-            valueEl.style.backgroundColor = '';
+            // Classification cues are classes (styles.css: .input-expression is
+            // the green per-student tint, .input-attention the amber
+            // needs-a-look border — both with dark-mode values via the
+            // palette); toggling both every pass means switching modes cannot
+            // leave a stale cue behind.
             valueEl.title = hint;
-            if (classified.kind === 'expression') {
-                // Subtle green tint keeps per-student rows visually distinct
-                // from literal rows on both light and dark themes.
-                valueEl.style.backgroundColor = 'rgba(45, 143, 71, .07)';
-                if (!valueOk) valueEl.style.borderColor = 'var(--amber)';
-            } else if (rawVal && !valueOk) {
-                valueEl.style.borderColor = 'var(--amber)';
-            }
+            valueEl.classList.toggle('input-expression', classified.kind === 'expression');
+            valueEl.classList.toggle('input-attention',
+                classified.kind === 'expression' ? !valueOk : !!(rawVal && !valueOk));
 
             if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
         }
@@ -159,23 +157,22 @@
             '<svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>';
 
         function addEmptyRow(tbody) {
-            var fontSize = rowOptions.inputFontSize ? 'font-size:' + rowOptions.inputFontSize + ';' : '';
             var removeCellOpen = rowOptions.removeCell === 'inline'
-                ? '<td style="width:2.5rem;text-align:right">'
+                ? '<td class="cell-remove">'
                 : '<td class="time">'; // right-aligned utility cell
-            var removeBtnStyle = rowOptions.removeCell === 'inline'
-                ? ' style="padding:.2rem .4rem;display:inline-flex;align-items:center"'
+            var removeBtnClass = rowOptions.removeCell === 'inline'
+                ? ' icon-btn-xs'
                 : '';
             var tr = document.createElement('tr');
             tr.className = classes.row;
             tr.innerHTML =
-                '<td style="width:14rem;white-space:nowrap">'
-              +   '<span class="' + classes.valid + '" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>'
-              +   '<input type="text" class="form-input ' + classes.name + '" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;' + fontSize + 'font-family:monospace">'
+                '<td class="cell-name">'
+              +   '<span class="' + classes.valid + ' cell-check"></span>'
+              +   '<input type="text" class="form-input ' + classes.name + ' cell-input input-mono" value="" placeholder="Input Name">'
               + '</td>'
-              + '<td><input type="text" class="form-input ' + classes.value + '" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\' style="width:100%;padding:.2rem .4rem;' + fontSize + 'font-family:monospace"></td>'
+              + '<td><input type="text" class="form-input ' + classes.value + ' cell-input cell-input--fill input-mono" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\'></td>'
               + removeCellOpen
-              +   '<button type="button" class="btn action-btn action-danger ' + classes.remove + '" title="Remove input" aria-label="Remove input"' + removeBtnStyle + '>'
+              +   '<button type="button" class="btn action-btn action-danger' + removeBtnClass + ' ' + classes.remove + '" title="Remove input" aria-label="Remove input">'
               +   TRASH_SVG + '</button></td>';
             tbody.appendChild(tr);
             refreshRow(tr, tbody);

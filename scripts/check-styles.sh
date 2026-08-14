@@ -141,7 +141,13 @@ fi
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=118
+# At the floor as of the editor-surface conversion: what remains is app.js's
+# runtime-computed popover geometry (the one sanctioned direct-write use),
+# chickadee-ui.js's flash colour + collapse-animation overflow writes and a
+# --bar-h custom-property assignment (the sanctioned pattern, counted
+# crudely), workbench.js's --wb-left-width setProperty (same), and a
+# .style.fontSize READ in jl-cell-perf-patch.js.
+JS_STYLE_DECISION_BASELINE=14
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true

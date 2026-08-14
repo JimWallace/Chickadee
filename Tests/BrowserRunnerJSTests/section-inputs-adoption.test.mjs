@@ -69,11 +69,11 @@ test('the shared core classifies a section expression as an expression', () => {
 
 test('a mixed literal/expression panel builds a payload carrying both keys', () => {
   const editor = Core.createEditor({
-    row: 'section-var-row',
-    name: 'section-var-name',
-    value: 'section-var-value',
-    valid: 'section-var-row-valid',
-    remove: 'section-var-remove',
+    row: 'js-section-var-row',
+    name: 'js-section-var-name',
+    value: 'js-section-var-value',
+    valid: 'js-section-var-row-valid',
+    remove: 'js-section-var-remove',
   });
 
   // Minimal stand-in for the rows the panel reads; only the two input

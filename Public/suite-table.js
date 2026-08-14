@@ -9,7 +9,7 @@
 //     updates item.sectionID; clears dependsOn to avoid orphan parents;
 //     debounced `PUT /suite` persists)
 //   - handles tier / points / display-name inline edits on rows
-//   - handles section rename toggle (.section-edit-toggle / -cancel),
+//   - handles section rename toggle (.js-section-edit-toggle / -cancel),
 //     section delete (JS confirm + dynamic form POST), and section
 //     drag-reorder (AJAX `POST /suite-sections/reorder`)
 //
@@ -354,16 +354,16 @@
                 + '<td' + indent + '><div class="suite-name-cell">'
                 +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
                 +   connector
-                +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
+                +   '<input type="text" class="form-input js-suite-display-name cell-input cell-input--name" value="' + nameVal + '">'
                 +   depBadgeHTML(item.dependsOn)
                 + '</div></td>'
-                + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                + '<td><select class="form-input js-suite-tier cell-input">'
                 +   tierOptions(item.tier)
                 + '</select></td>'
-                + '<td><input type="number" class="form-input suite-points" min="0" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-                +   '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.script) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
-                +   '<button class="btn action-btn action-danger suite-delete-btn" type="button" title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
+                + '<td><input type="number" class="form-input js-suite-points cell-input cell-input--points" min="0" max="100" value="' + pts + '"></td>'
+                + '<td class="time"><div class="cell-actions">'
+                +   '<button class="btn action-btn action-btn-icon js-suite-edit-btn" type="button" data-filename="' + escAttr(item.script) + '" title="Edit script" aria-label="Edit script"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon action-danger js-suite-delete-btn" type="button" title="Delete script" aria-label="Delete script"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
                 + '</tr>';
         }
@@ -381,21 +381,21 @@
                 + '<td' + indent + '><div class="suite-name-cell">'
                 +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
                 +   connector
-                +   '<div style="display:flex;flex-direction:column;gap:.15rem">'
-                +     '<strong style="font-size:.85rem">' + escHtml(family.name || family.id || '') + '</strong>'
-                +     '<span class="card-meta" style="font-size:.72rem">' + caseText + '</span>'
+                +   '<div class="cell-stack">'
+                +     '<strong class="cell-title">' + escHtml(family.name || family.id || '') + '</strong>'
+                +     '<span class="card-meta hint-xs">' + caseText + '</span>'
                 +   '</div>'
                 + '</div></td>'
-                + '<td><select class="form-input suite-family-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                + '<td><select class="form-input js-suite-family-tier cell-input">'
                 +   ['public','secret','release'].map(function (t) {
                         return '<option value="' + t + '"' + (t === tier ? ' selected' : '') + '>' + t + '</option>';
                     }).join('')
                 + '</select></td>'
-                + '<td><input type="number" class="form-input suite-family-points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap;align-items:center">'
+                + '<td><input type="number" class="form-input js-suite-family-points cell-input cell-input--points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test"></td>'
+                + '<td class="time"><div class="cell-actions">'
                 +   ChickadeeUI.accordion.CARET_HTML
-                +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
-                +   '<button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon js-family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon action-danger js-family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
                 + '</tr>';
         }
@@ -412,21 +412,21 @@
                 + '<td' + indent + '><div class="suite-name-cell">'
                 +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>'
                 +   connector
-                +   '<div style="display:flex;flex-direction:column;gap:.15rem">'
-                +     '<strong style="font-size:.85rem">' + escHtml(label) + '</strong>'
-                +     '<span class="card-meta" style="font-size:.72rem">' + escHtml(kind || 'notebook check') + '</span>'
+                +   '<div class="cell-stack">'
+                +     '<strong class="cell-title">' + escHtml(label) + '</strong>'
+                +     '<span class="card-meta hint-xs">' + escHtml(kind || 'notebook check') + '</span>'
                 +   '</div>'
                 + '</div></td>'
-                + '<td><select class="form-input suite-check-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                + '<td><select class="form-input js-suite-check-tier cell-input">'
                 +   ['public','secret','release'].map(function (t) {
                         return '<option value="' + t + '"' + (t === tier ? ' selected' : '') + '>' + t + '</option>';
                     }).join('')
                 + '</select></td>'
-                + '<td><input type="number" class="form-input suite-check-points" min="0" max="100" value="' + points + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap;align-items:center">'
+                + '<td><input type="number" class="form-input js-suite-check-points cell-input cell-input--points" min="0" max="100" value="' + points + '"></td>'
+                + '<td class="time"><div class="cell-actions">'
                 +   ChickadeeUI.accordion.CARET_HTML
-                +   '<button class="btn action-btn check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
-                +   '<button class="btn action-btn action-danger check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check" style="padding:.3rem .45rem"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon js-check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
+                +   '<button class="btn action-btn action-btn-icon action-danger js-check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
                 + '</tr>';
         }
@@ -447,8 +447,14 @@
             if (!el || !container.contains(el)) return null;
             var row = el.closest && el.closest('tr[data-id]');
             if (!row) return null;
-            var cls = (el.className || '').split(/\s+/).filter(function (c) {
-                return c && c.indexOf('form-') !== 0;
+            // The js- behaviour hook is the element's identity within its row;
+            // styling classes (form-*, cell-*) are shared across cells and
+            // would restore focus to the wrong control.
+            var classes = (el.className || '').split(/\s+/);
+            var cls = classes.filter(function (c) {
+                return c.indexOf('js-') === 0;
+            })[0] || classes.filter(function (c) {
+                return c && c.indexOf('form-') !== 0 && c.indexOf('cell-') !== 0;
             })[0];
             if (!cls) return null;
             var start = null, end = null;
@@ -782,7 +788,7 @@
         function captureLiveEdit() {
             var el = document.activeElement;
             if (!el || !container.contains(el) || !el.classList) return null;
-            if (el.classList.contains('suite-display-name')) {
+            if (el.classList.contains('js-suite-display-name')) {
                 var row = el.closest('tr[data-kind="script"]');
                 if (!row) return null;
                 return {
@@ -1131,8 +1137,8 @@
             if (scriptRow) {
                 var item = findByID(scriptRow.getAttribute('data-id'));
                 if (!item) return;
-                var tierEl = scriptRow.querySelector('.suite-tier');
-                var ptsEl  = scriptRow.querySelector('.suite-points');
+                var tierEl = scriptRow.querySelector('.js-suite-tier');
+                var ptsEl  = scriptRow.querySelector('.js-suite-points');
                 if (tierEl) item.tier = tierEl.value;
                 if (ptsEl)  item.points = Math.max(0, parseInt(ptsEl.value) || 0);
                 schedulePush();
@@ -1142,8 +1148,8 @@
             if (familyRow) {
                 var fitem = findByID(familyRow.getAttribute('data-id'));
                 if (!fitem || !fitem.family) return;
-                var tierElF = familyRow.querySelector('.suite-family-tier');
-                var ptsElF  = familyRow.querySelector('.suite-family-points');
+                var tierElF = familyRow.querySelector('.js-suite-family-tier');
+                var ptsElF  = familyRow.querySelector('.js-suite-family-points');
                 var nextDefaults = Object.assign({}, fitem.family.defaults || {});
                 if (tierElF) nextDefaults.tier = tierElF.value;
                 if (ptsElF)  nextDefaults.points = Math.max(0, parseInt(ptsElF.value) || 0);
@@ -1155,8 +1161,8 @@
             if (checkRow) {
                 var citem = findByID(checkRow.getAttribute('data-id'));
                 if (!citem || !citem.check) return;
-                var tierElC = checkRow.querySelector('.suite-check-tier');
-                var ptsElC  = checkRow.querySelector('.suite-check-points');
+                var tierElC = checkRow.querySelector('.js-suite-check-tier');
+                var ptsElC  = checkRow.querySelector('.js-suite-check-points');
                 var nextCheck = Object.assign({}, citem.check);
                 if (tierElC) nextCheck.tier = tierElC.value;
                 if (ptsElC)  nextCheck.points = Math.max(0, parseInt(ptsElC.value) || 0);
@@ -1167,7 +1173,7 @@
 
         container.addEventListener('input', function (e) {
             var target = e.target;
-            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
+            if (!target || !target.classList || !target.classList.contains('js-suite-display-name')) return;
             var row = target.closest('tr[data-kind="script"]');
             if (!row) return;
             var item = findByID(row.getAttribute('data-id'));
@@ -1178,7 +1184,7 @@
 
         container.addEventListener('change', function (e) {
             var target = e.target;
-            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
+            if (!target || !target.classList || !target.classList.contains('js-suite-display-name')) return;
             schedulePush();
         });
 
@@ -1187,7 +1193,7 @@
         // pre-populated; Delete drops the check and re-saves the list via the
         // single PUT /suite write path.
         container.addEventListener('click', function (e) {
-            var editBtn = e.target.closest && e.target.closest('.check-edit-btn');
+            var editBtn = e.target.closest && e.target.closest('.js-check-edit-btn');
             if (editBtn) {
                 let row = editBtn.closest('tr[data-kind="check"]');
                 if (!row) return;
@@ -1202,7 +1208,7 @@
                 });
                 return;
             }
-            var delBtn = e.target.closest && e.target.closest('.check-delete-btn');
+            var delBtn = e.target.closest && e.target.closest('.js-check-delete-btn');
             if (delBtn) {
                 var row2 = delBtn.closest('tr[data-kind="check"]');
                 if (!row2) return;
@@ -1221,7 +1227,7 @@
                 return;
             }
 
-            var btn = e.target.closest && e.target.closest('.suite-delete-btn');
+            var btn = e.target.closest && e.target.closest('.js-suite-delete-btn');
             if (!btn) return;
             var row = btn.closest('tr[data-kind="script"]');
             if (!row) return;
@@ -1249,7 +1255,7 @@
         // ── Section-header inline edit (rename toggle + delete) ──
 
         container.addEventListener('click', function (e) {
-            var toggle = e.target.closest && e.target.closest('.section-edit-toggle');
+            var toggle = e.target.closest && e.target.closest('.js-section-edit-toggle');
             if (toggle) {
                 var header = toggle.closest('.section-header');
                 if (!header) return;
@@ -1263,7 +1269,7 @@
                 }
                 return;
             }
-            var cancel = e.target.closest && e.target.closest('.section-edit-cancel');
+            var cancel = e.target.closest && e.target.closest('.js-section-edit-cancel');
             if (cancel) {
                 var header2 = cancel.closest('.section-header');
                 if (!header2) return;
@@ -1273,7 +1279,7 @@
                 if (edit2) edit2.style.display = 'none';
                 return;
             }
-            var del = e.target.closest && e.target.closest('.section-delete-btn');
+            var del = e.target.closest && e.target.closest('.js-section-delete-btn');
             if (del) {
                 var action = del.getAttribute('data-action');
                 var name = del.getAttribute('data-name') || 'this section';

@@ -16,18 +16,18 @@
 
     var core = ChickadeeInputsCore;
     var editor = core.createEditor({
-        row: 'section-var-row',
-        name: 'section-var-name',
-        value: 'section-var-value',
-        valid: 'section-var-row-valid',
-        remove: 'section-var-remove'
-    }, { inputFontSize: '.78rem', removeCell: 'inline' });
+        row: 'js-section-var-row',
+        name: 'js-section-var-name',
+        value: 'js-section-var-value',
+        valid: 'js-section-var-row-valid',
+        remove: 'js-section-var-remove'
+    }, { removeCell: 'inline' });
 
     /// Per-form auto-save with debounce + in-flight coalescing.  Returns
     /// a public { flush } object that the main-form submit handler can
     /// await before letting the assignment save through.
     function wireAutoSave(form) {
-        var tbody = form.querySelector('tbody.section-vars-body');
+        var tbody = form.querySelector('tbody.js-section-vars-body');
         if (!tbody) return { flush: function () { return Promise.resolve(); } };
 
         function doPost() {
@@ -58,16 +58,16 @@
         editor.refreshAllRows(tbody);
 
         form.addEventListener('input', function (e) {
-            var tr = e.target.closest && e.target.closest('tr.section-var-row');
+            var tr = e.target.closest && e.target.closest('tr.js-section-var-row');
             if (tr) {
                 editor.refreshAllRows(tbody);
                 saver.schedule();
             }
         });
         form.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.section-var-remove');
+            var btn = e.target.closest && e.target.closest('.js-section-var-remove');
             if (btn && form.contains(btn)) {
-                var tr = btn.closest('tr.section-var-row');
+                var tr = btn.closest('tr.js-section-var-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
             }
         });
@@ -87,12 +87,12 @@
         // "+ Add Input" buttons (one per section).  Buttons live in the
         // section header, not inside the form, so look up the form by
         // data-section-id.
-        document.querySelectorAll('button.section-var-add').forEach(function (btn) {
+        document.querySelectorAll('button.js-section-var-add').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var sid = btn.getAttribute('data-section-id') || '';
                 var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
                 if (!form) return;
-                var tbody = form.querySelector('tbody.section-vars-body');
+                var tbody = form.querySelector('tbody.js-section-vars-body');
                 if (tbody) editor.addEmptyRow(tbody);
             });
         });

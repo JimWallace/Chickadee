@@ -217,21 +217,21 @@
         </div>
     </div>
     <table class="results-table" id="global-inputs-table">
-        <tbody class="global-inputs-body">
+        <tbody class="js-global-inputs-body">
             #for(v in globalVariableRows):
-            <tr class="global-input-row">
-                <td class="section-var-namecell">
-                    <span class="global-input-row-valid section-var-valid"></span>
-                    <input type="text" class="form-input global-input-name global-input-name-input"
+            <tr class="js-global-input-row">
+                <td class="cell-name">
+                    <span class="js-global-input-row-valid cell-check"></span>
+                    <input type="text" class="form-input js-global-input-name cell-input input-mono"
                            value="#(v.name)" placeholder="Input Name">
                 </td>
                 <td>
-                    <input type="text" class="form-input global-input-value global-input-value-input"
+                    <input type="text" class="form-input js-global-input-value cell-input cell-input--fill input-mono"
                            value="#(v.valueJSON)"
                            placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
                 </td>
                 <td class="time">
-                    <button type="button" class="btn action-btn action-danger global-input-remove"
+                    <button type="button" class="btn action-btn action-danger js-global-input-remove"
                             title="Remove input" aria-label="Remove input">
                         <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                     </button>
@@ -361,7 +361,7 @@
         <!-- Conditions (individual + classWide).  The signal dropdown options
              render from AchievementSignalPresentation (the single source of
              truth); the row layout is cloned per condition by the editor JS. -->
-        <div class="am-scope-field am-conditions-wrap" data-scope="individual classWide">
+        <div class="js-am-scope-field" data-scope="individual classWide">
             <div class="subhead-label">
                 Earned when
                 <select class="form-input form-input--inline" id="am-match">
@@ -374,15 +374,15 @@
             <button type="button" class="btn action-btn" id="am-add-condition">+ Add condition</button>
         </div>
 
-        <label class="form-label field-gap am-scope-field" data-scope="classWide">
+        <label class="form-label field-gap js-am-scope-field" data-scope="classWide">
             Class share &#8805; (%)
             <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
         </label>
-        <label class="form-label field-gap am-scope-field" data-scope="classWide">
+        <label class="form-label field-gap js-am-scope-field" data-scope="classWide">
             Bonus points
             <input type="number" class="form-input" id="am-points" min="0">
         </label>
-        <label class="form-label field-gap am-scope-field" data-scope="record">
+        <label class="form-label field-gap js-am-scope-field" data-scope="record">
             Ranked by
             <select class="form-input" id="am-recordDimension">
                 <option value="firstToSubmit">First to submit</option>
@@ -401,7 +401,7 @@
                 <option value="#(opt.value)" data-unit="#(opt.unit)" data-is-test="#(opt.isTest)">#(opt.label)</option>
                 #endfor
             </select>
-            <select class="form-input am-cond-comparator">
+            <select class="form-input js-am-cond-comparator">
                 <option value="atLeast">at least</option>
                 <option value="atMost">at most</option>
                 <option value="equals">exactly</option>
@@ -550,7 +550,7 @@
     // ── Section inputs JS extracted to Public/section-inputs-editor.js
     //    (loaded above).
     //
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // Per-section "+ Add Test" buttons (`.js-section-add-test-btn`) are upgraded
     // in place by the unified Test Editor modal (test-editor-modal.js) into a
     // <details> dropdown of the test-type catalog. Picking a type stashes
     // `window.__chickadeeTargetSection` and opens the modal already in that
@@ -652,7 +652,7 @@
             return;
         }
         // Edit an existing saved script → shell (renderer fetches the body).
-        var se = t.closest && t.closest('.suite-edit-btn');
+        var se = t.closest && t.closest('.js-suite-edit-btn');
         if (se) {
             var name = se.getAttribute('data-filename');
             if (name) modal.open({ editing: { mechanism: 'script', id: name, item: { script: name, hint: scriptHint(name) } } });

@@ -100,8 +100,8 @@
                     + '<td>' + summary(row) + '</td>'
                     + '<td class="time">'
                     + ChickadeeUI.accordion.CARET_HTML + ' '
-                    + '<button type="button" class="btn action-btn ach-edit" data-i="' + i + '">Edit</button> '
-                    + '<button type="button" class="btn action-btn action-danger ach-remove" data-i="' + i + '">Remove</button>'
+                    + '<button type="button" class="btn action-btn js-ach-edit" data-i="' + i + '">Edit</button> '
+                    + '<button type="button" class="btn action-btn action-danger js-ach-remove" data-i="' + i + '">Remove</button>'
                     + '</td>';
                 tbody.appendChild(tr);
             });
@@ -156,7 +156,7 @@
             container.appendChild(condTemplate.content.cloneNode(true));
             var rowEl = container.lastElementChild;
             var sig = rowEl.querySelector('.am-cond-signal');
-            var cmp = rowEl.querySelector('.am-cond-comparator');
+            var cmp = rowEl.querySelector('.js-am-cond-comparator');
             var val = rowEl.querySelector('.am-cond-value');
             var unit = rowEl.querySelector('.am-cond-unit');
             var ref = rowEl.querySelector('.am-cond-testref');
@@ -210,7 +210,7 @@
 
             function showScopeFields() {
                 var scope = scopeSel.value;
-                Array.prototype.slice.call(host.querySelectorAll('.am-scope-field')).forEach(function (f) {
+                Array.prototype.slice.call(host.querySelectorAll('.js-am-scope-field')).forEach(function (f) {
                     var scopes = (f.getAttribute('data-scope') || '').split(/\s+/);
                     f.style.display = scopes.indexOf(scope) >= 0 ? '' : 'none';
                 });
@@ -259,7 +259,7 @@
                             }
                             return {
                                 signal: signal,
-                                comparator: rowEl.querySelector('.am-cond-comparator').value,
+                                comparator: rowEl.querySelector('.js-am-cond-comparator').value,
                                 value: Number(rowEl.querySelector('.am-cond-value').value || 0)
                             };
                         });
@@ -292,9 +292,9 @@
         if (addBtn) addBtn.addEventListener('click', function () { expand(-1); });
 
         block.addEventListener('click', function (e) {
-            var edit = e.target.closest && e.target.closest('.ach-edit');
+            var edit = e.target.closest && e.target.closest('.js-ach-edit');
             if (edit) { expand(Number(edit.getAttribute('data-i'))); return; }
-            var rm = e.target.closest && e.target.closest('.ach-remove');
+            var rm = e.target.closest && e.target.closest('.js-ach-remove');
             if (rm) {
                 var ri = Number(rm.getAttribute('data-i'));
                 var snapshot = state.slice();

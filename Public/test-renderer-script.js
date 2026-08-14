@@ -109,10 +109,12 @@ import {
         });
     }
 
-    function el(tag, attrs, style) {
+    // Styling rides on classes from styles.css (the editor-form vocabulary) —
+    // the third `style` parameter this helper used to take is gone, so a new
+    // call site cannot smuggle a style string past the CSS guards.
+    function el(tag, attrs) {
         var node = document.createElement(tag);
         if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) node.setAttribute(k, attrs[k]);
-        if (style) node.style.cssText = style;
         return node;
     }
 
@@ -161,21 +163,21 @@ import {
             statusFn = (ctx && ctx.setStatus) || function () {};
 
             // Filename + template controls (create only).
-            newControls = el('div', null, 'display:flex;flex-direction:column;gap:.5rem');
-            var nameLabel = el('label', null, 'font-size:.85rem;display:flex;flex-direction:column;gap:.2rem');
+            newControls = el('div', { 'class': 'editor-stack' });
+            var nameLabel = el('label', { 'class': 'field-stack' });
             nameLabel.appendChild(document.createTextNode('Filename'));
             nameInput = el('input', {
-                type: 'text', 'class': 'form-input',
+                type: 'text', 'class': 'form-input editor-input',
                 placeholder: 'e.g. test_correctness.' + extensionFor(null)
-            }, 'padding:.3rem .5rem;font-size:.85rem');
+            });
             nameLabel.appendChild(nameInput);
             newControls.appendChild(nameLabel);
 
-            var tplRow = el('div', null, 'display:flex;align-items:center;gap:.5rem;flex-wrap:wrap');
-            var tplCaption = el('span', null, 'font-size:.8rem;color:var(--gray-500)');
+            var tplRow = el('div', { 'class': 'toolbar' });
+            var tplCaption = el('span', { 'class': 'card-meta' });
             tplCaption.textContent = 'Template:';
             tplRow.appendChild(tplCaption);
-            templateSel = el('select', { 'class': 'form-input' }, 'padding:.25rem .5rem;font-size:.8rem;max-width:28rem');
+            templateSel = el('select', { 'class': 'form-input editor-input' });
             templateGroups().forEach(function (g) {
                 var og = el('optgroup', { label: g.group });
                 g.items.forEach(function (it) { var o = el('option', { value: it.value }); o.textContent = it.label; og.appendChild(o); });
@@ -183,31 +185,31 @@ import {
             });
             var blank = el('option', { value: 'blank' }); blank.textContent = 'Blank'; templateSel.appendChild(blank);
             tplRow.appendChild(templateSel);
-            applyBtn = el('button', { type: 'button', 'class': 'btn' }, 'padding:.2rem .6rem;font-size:.8rem');
+            applyBtn = el('button', { type: 'button', 'class': 'btn btn-sm' });
             applyBtn.textContent = 'Apply';
             tplRow.appendChild(applyBtn);
             newControls.appendChild(tplRow);
             bodyEl.appendChild(newControls);
 
             // CodeMirror mount.
-            cmMount = el('div', { id: 'cm-editor-mount' }, 'min-height:240px;border:1px solid var(--border);border-radius:.3rem;overflow:auto;font-size:.875rem');
+            cmMount = el('div', { id: 'cm-editor-mount', 'class': 'editor-cm-mount' });
             bodyEl.appendChild(cmMount);
 
             // Hint (shown to students on failure) + per-test time limit —
             // visible in all modes, side by side on one row.
-            var metaRow = el('div', null, 'display:flex;align-items:flex-end;gap:.6rem;flex-wrap:wrap');
-            var hintLabel = el('label', null, 'font-size:.8rem;display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:16rem');
+            var metaRow = el('div', { 'class': 'toolbar' });
+            var hintLabel = el('label', { 'class': 'field-stack field-stack--grow' });
             hintLabel.appendChild(document.createTextNode('Hint (optional — shown to students when this test fails)'));
-            hintInput = el('input', { type: 'text', 'class': 'form-input', placeholder: 'e.g. Re-read the function’s docstring for the expected return type.' }, 'padding:.25rem .5rem;font-size:.85rem');
+            hintInput = el('input', { type: 'text', 'class': 'form-input editor-input', placeholder: 'e.g. Re-read the function’s docstring for the expected return type.' });
             hintLabel.appendChild(hintInput);
             metaRow.appendChild(hintLabel);
-            var limitLabel = el('label', null, 'font-size:.8rem;display:flex;flex-direction:column;gap:.2rem;width:11rem');
+            var limitLabel = el('label', { 'class': 'field-stack field-stack--narrow' });
             limitLabel.appendChild(document.createTextNode('Time limit (s, blank = default)'));
             timeLimitInput = el('input', {
-                type: 'number', 'class': 'form-input', min: '1', max: '600',
+                type: 'number', 'class': 'form-input editor-input', min: '1', max: '600',
                 placeholder: 'assignment default',
                 title: 'Seconds this one test may run before it is killed and recorded as a timeout. Blank inherits the assignment default.'
-            }, 'padding:.25rem .5rem;font-size:.85rem');
+            });
             limitLabel.appendChild(timeLimitInput);
             metaRow.appendChild(limitLabel);
             bodyEl.appendChild(metaRow);

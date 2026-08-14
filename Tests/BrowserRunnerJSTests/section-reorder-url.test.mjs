@@ -83,7 +83,7 @@ test('both authoring pages supply a reorderSections builder', async () => {
 test('the create page no longer binds its own section handlers', async () => {
   const src = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
   // suite-table.js owns all three; the page used to bind duplicates on top.
-  for (const marker of ['section-edit-toggle', 'section-edit-cancel', 'section-delete-btn']) {
+  for (const marker of ['js-section-edit-toggle', 'js-section-edit-cancel', 'js-section-delete-btn']) {
     assert.ok(
       !src.includes(`closest('.${marker}')`),
       `create page still binds a handler for .${marker}; suite-table.js owns it`,

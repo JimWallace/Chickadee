@@ -5,60 +5,11 @@
 # js-* or gains a stylesheet rule (check-class-resolution.sh fails on stale
 # entries); never add one for new code — new behaviour hooks take the js-
 # prefix instead.
-
-
-# Achievements editor (achievements-editor.js)
-ach-edit
-ach-remove
-am-cond-comparator
-am-conditions-wrap
-am-scope-field
-
-# Pattern-family editor (pattern-family-editor.js)
-pf-case-arg
-pf-case-args
-pf-case-expected
-pf-case-expected-col
-pf-case-hint
-pf-case-label
-pf-case-num
-pf-case-remove
-pf-var-name
-pf-var-remove
-pf-var-row-valid
-pf-var-section-row
-pf-var-value
-
-# Suite table + sections (suite-table.js, section-items-dnd.js)
-assignments-body
-section-add-test-btn
-section-delete-btn
-section-edit-cancel
-section-edit-toggle
-section-var-add
-section-var-name
-section-var-remove
-section-var-row
-section-var-row-valid
-section-var-value
-section-vars-body
-suite-check-points
-suite-check-tier
-suite-delete-btn
-suite-display-name
-suite-edit-btn
-suite-family-points
-suite-family-tier
-suite-points
-suite-tier
-
-# Inputs editors (inputs-editor-core.js)
-global-input-name
-global-input-remove
-global-input-row
-global-input-row-valid
-global-input-value
-global-inputs-body
+#
+# The assignment-editor surface (pattern-family editor, suite table, inputs
+# editors, achievements editor) was swept to js- names in the ratchet
+# follow-up pass; what remains below is the smaller tail of hooks on other
+# surfaces.
 
 # Content items (course content editor)
 content-item-add
@@ -70,10 +21,6 @@ content-item-row
 
 # Row/anchor hooks in tables and panels
 bs-grade-id-hidden
-check-delete-btn
-check-edit-btn
-family-delete-btn
-family-edit-btn
 nb-fallback
 publish-due-date
 role-cell
@@ -89,5 +36,3 @@ inplace-error-banner
 
 # Sortable-table opt-in marker (sortable-table.js)
 sortable-table
-
-# Ungrouped

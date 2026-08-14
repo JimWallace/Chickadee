@@ -181,6 +181,22 @@ of action buttons" and four pill implementations; the page-style ratchet
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
   glyph — the guard fails on both.
+- **Editor-table cells** — the dense tables the assignment editors build in
+  JS (suite table, pattern-family cases/variables, inputs panels) and their
+  server-rendered twins share one cell vocabulary: `.cell-input`
+  (+ `--fill`/`--name`/`--points` widths), `.cell-name` + `.cell-check` /
+  `.cell-check-col`, `.cell-remove`, `.cell-num`, `.cell-stack` +
+  `.cell-title`, locked rows `.cell-tight`/`.cell-code`/`.cell-preview`
+  (+ `.cell-shadowed`, `.cell-warn-note`), JS-rebuilt headers `.th-code` /
+  `.th-note`, action clusters `.cell-actions`.  **Value-state cues are
+  toggled classes**, never JS-written colours: `.input-expression`
+  (per-student `=` tint), `.input-attention` (amber), `.input-invalid`
+  (red), `.input-ref-ok` / `.input-ref-missing` (`$name` resolution),
+  `.input-auto` (auto-computed), `.input-mono` (monospace control).
+- **`.modal-overlay`/`.modal-card`** + `.modal-head`/`-title`/`-close`/
+  `-body`/`-foot`, **`.editor-stack`**, `.editor-cm-mount`,
+  `.field-stack--grow`/`--narrow`, `.editor-input`, `.editor-status` — the
+  Test Editor modal shell and the editor-built forms inside it.
 - **`.diagnostics-cards`** + `.diagnostic-card/-label/-value` — stat tiles.
 - **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
@@ -266,6 +282,13 @@ direct `.style` writes.
 Existing violations are a **shrink-only ratchet**
 (`JS_STYLE_DECISION_BASELINE` in `scripts/check-styles.sh`): `style="…"`
 strings, non-`display` `.style` writes, and `cssText` may only decrease.
+The editor surface (pattern-family editor, suite table, inputs editors,
+test-editor modal, both test renderers) was converted to class toggles in
+the ratchet follow-up pass, which took the baseline to its floor — what the
+count still sees is the sanctioned remainder: `app.js`'s popover geometry,
+two custom-property writes the crude grep cannot tell apart from styling,
+the flash/collapse behaviour in `chickadee-ui.js`, and one `.style` read.
+A new entry above that floor is a regression, not headroom.
 
 ## Page-local styles
 

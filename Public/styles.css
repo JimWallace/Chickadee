@@ -1921,11 +1921,64 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .section-spacer { flex: 1; }
 .section-vars-form { margin: .25rem 0 .5rem; }
 .section-vars-table { font-size: var(--text-sm); width: 100%; }
-.section-var-namecell { width: 14rem; white-space: nowrap; }
-.section-var-valid { display: inline-block; width: 1rem; color: var(--green); font-size: var(--text-md); text-align: center; }
-.section-var-name-input { width: calc(100% - 1.5rem); padding: .2rem .4rem; font-size: var(--text-sm); font-family: monospace; }
-.section-var-value-input { width: 100%; padding: .2rem .4rem; font-size: var(--text-sm); font-family: monospace; }
-.section-var-removecell { width: 2.5rem; text-align: right; }
+
+/* ── Editor-table cells ─────────────────────────────────
+   One vocabulary for the dense tables the assignment editors build in JS
+   (suite-table.js, pattern-family-editor.js, inputs-editor-core.js) and
+   their server-rendered twins in the suite-section and global-inputs
+   markup.  The builders assign these classes instead of writing style
+   strings (docs/ui-design.md, "JS does not make styling decisions"), and
+   sharing them with the server-rendered rows keeps the two from drifting
+   apart — the JS-added section rows ran a different font size than the
+   server-rendered rows of the same table until this block unified them. */
+/* Form control sized for a dense table cell; width comes from the column
+   role, not baked into the control. */
+.cell-input { padding: .2rem .4rem; font-size: var(--text-sm); }
+.cell-input--fill { width: 100%; }
+.cell-input--name { width: 12rem; }   /* suite display-name column */
+.cell-input--points { width: 4rem; }  /* numeric points column */
+/* Leading cell carrying the row-valid check plus the name input, which
+   shares the cell's width with the 1rem check. */
+.cell-name { width: 14rem; white-space: nowrap; }
+.cell-name .cell-input { width: calc(100% - 1.5rem); }
+.cell-check { display: inline-block; width: 1rem; color: var(--green); font-size: var(--text-md); text-align: center; }
+/* The td form of the row-valid check (its own leading column). */
+.cell-check-col { vertical-align: middle; text-align: center; color: var(--green); font-size: var(--text-md); }
+/* Right-aligned remove-button cell. */
+.cell-remove { width: 2.5rem; text-align: right; }
+/* Auto-numbered sequence cell (case tables). */
+.cell-num { text-align: center; color: var(--gray-500); font-size: var(--text-xs); }
+/* Read-only (locked) value cells: tightened padding, code-shaped name,
+   muted preview.  A locked row shadowed by a same-named family variable
+   is struck through and carries an inline amber note. */
+.cell-tight { padding: .3rem .4rem; }
+.cell-code { font-size: var(--text-sm); }
+.cell-preview { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--gray-600); }
+.cell-shadowed { text-decoration: line-through; }
+.cell-warn-note { font-size: var(--text-2xs); color: var(--amber); margin-left: .4rem; }
+/* Stacked title + meta inside a suite-row name cell. */
+.cell-stack { display: flex; flex-direction: column; gap: .15rem; }
+.cell-title { font-size: var(--text-base); }
+/* Case-table header annotations (the pattern-family editor rebuilds its
+   header row in JS): a code-shaped type note and a de-emphasized hint. */
+.th-code { font-size: var(--text-2xs); font-weight: normal; }
+.th-note { color: var(--gray-500); font-weight: normal; }
+
+/* ── Editor value-state cues ────────────────────────────
+   Toggled by the editors on form controls.  Classes rather than JS-written
+   colours so every cue has a dark-mode value via the palette.  Sheet order
+   is deliberate: when a transition briefly stacks two cues, the red
+   invalid/broken-ref border outranks the amber attention border, which
+   outranks the informational tints. */
+.input-auto { color: var(--gray-500); }        /* value auto-computed from the solution */
+.input-expression { background: color-mix(in srgb, var(--green) 7%, var(--surface)); } /* per-student `=` row */
+.input-ref-ok { font-style: italic; color: var(--green); }  /* `$name` resolves */
+.input-attention { border-color: var(--amber); }            /* needs a look */
+.input-invalid { border-color: var(--red); }                /* rejected name/value */
+.input-ref-missing { font-style: italic; color: var(--red); border-color: var(--red); } /* `$name` undeclared */
+/* Monospace form control (names, JSON/code-shaped values). */
+.input-mono { font-family: var(--font-mono); }
+
 .icon-btn-xs { padding: .2rem .4rem; display: inline-flex; align-items: center; }
 
 /* Small inline icon-button (edit/cancel pencils in section + assignment headers). */
@@ -1951,10 +2004,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .assign-header-edit { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--gray-50); }
 .assign-header-edit-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
 .field-gap { margin-bottom: .5rem; }
-
-/* Global-inputs editor rows (edit page). */
-.global-input-name-input { width: calc(100% - 1.5rem); padding: .2rem .4rem; font-family: monospace; }
-.global-input-value-input { width: 100%; padding: .2rem .4rem; font-family: monospace; }
 
 /* Suite editor container + editor-block header headings. */
 .suite-editor-section { margin-top: 1.25rem; }
@@ -1990,8 +2039,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .gen-template-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .4rem; }
 .gen-template-label { font-size: var(--text-sm); display: flex; align-items: center; gap: .3rem; }
 .gen-tests-prompt { margin-bottom: .4rem; }
-/* Right-aligned action buttons inside a table cell (notebook files table). */
-.cell-actions { display: flex; gap: .4rem; justify-content: flex-end; flex-wrap: wrap; }
+/* Right-aligned action buttons inside a table cell (notebook files table,
+   suite rows).  Centered cross-axis so an accordion caret sits level with
+   the buttons beside it. */
+.cell-actions { display: flex; gap: .4rem; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
 /* Inline upload-status text (colour also set by JS on error). */
 .upload-status-inline { font-size: var(--text-sm); color: var(--gray-500); margin-left: .5rem; }
 /* A function checkbox item in the generate-tests checklist (built in JS). */
@@ -2123,6 +2174,42 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-pop);
+}
+/* The card's internals (test-editor-modal.js builds them in JS): pinned
+   header/footer bars around a scrolling body. */
+.modal-head,
+.modal-foot {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    flex-shrink: 0;
+}
+.modal-head { border-bottom: 1px solid var(--border); }
+.modal-foot { border-top: 1px solid var(--border); }
+.modal-title { font-weight: 600; flex: 1; }
+.modal-close { font-size: var(--text-lg); color: var(--gray-500); padding: .1rem .3rem; }
+.modal-body {
+    padding: .75rem 1rem;
+    overflow: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+/* Vertical stack of editor fields/cards (the modal's mechanism panels and
+   the test-renderer-built forms). */
+.editor-stack { display: flex; flex-direction: column; gap: .6rem; }
+/* Field-stack width modifiers for editor rows. */
+.field-stack--grow { flex: 1; min-width: 16rem; }
+.field-stack--narrow { width: 11rem; }
+/* CodeMirror host box in the Test Editor. */
+.editor-cm-mount {
+    min-height: 240px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: auto;
+    font-size: var(--text-base);
 }
 
 /* The lead heading of a tabbed page's content, where the page's own <h1> is
