@@ -11,7 +11,6 @@ Slip days
 </section>
 #else:
 
-#extend("_flash")
 
 <section class="page-section">
     <h2>Slip days — #(courseCode)</h2>

@@ -6,7 +6,6 @@ Server Health Alerts
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
-    #extend("_flash")
 
     #if(!enabled):
     <div class="flash flash-neutral" role="status">

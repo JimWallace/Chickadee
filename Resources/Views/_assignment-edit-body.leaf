@@ -5,7 +5,6 @@
 </div>
 #endif
 
-#extend("_flash")
 
 <!-- `data-ck-inplace` marks every form on this page whose handler answers with
      a redirect to the chromed standalone editor.  That is right standalone and
@@ -114,7 +113,7 @@
                 <button class="btn action-btn" type="button" id="add-support-file-btn"
                         title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
                 <input type="file" id="support-file-upload-input" hidden multiple>
-                <span id="support-file-upload-status" class="upload-status-inline"></span>
+                <span id="support-file-upload-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </div>
         </div>
         <table class="results-table" id="notebook-files-table">
@@ -214,7 +213,7 @@
         <h2>Global Inputs</h2>
         <div class="toolbar toolbar--end">
             <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
-            <span id="global-inputs-status" class="upload-status-inline"></span>
+            <span id="global-inputs-status" class="upload-status-inline" role="status" aria-live="polite"></span>
         </div>
     </div>
     <table class="results-table" id="global-inputs-table">
@@ -270,7 +269,7 @@
                        id="suite-default-time-limit" value="#(timeLimitSeconds)"
                        title="Seconds each test may run before it is killed and recorded as a timeout. Individual tests can override this in the test editor.">
                 s
-                <span id="suite-default-limit-status" class="upload-status-inline"></span>
+                <span id="suite-default-limit-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </label>
             <!-- Add Section — form POST + full page reload.  Mirrors the
                  dashboard pattern (Resources/Views/assignments.leaf:29-51)
@@ -320,7 +319,7 @@
         <h2>Achievements</h2>
         <div class="toolbar toolbar--end">
             <button type="button" class="btn action-btn" id="achievement-add">+ Add Achievement</button>
-            <span id="achievements-status" class="upload-status-inline"></span>
+            <span id="achievements-status" class="upload-status-inline" role="status" aria-live="polite"></span>
         </div>
     </div>
     <table class="results-table" id="achievements-table">
@@ -760,12 +759,12 @@
             );
             if (!resp.ok) {
                 var errText = await resp.text();
-                alert('Remove failed: ' + resp.status + ' ' + errText);
+                ChickadeeUI.showActionError('Remove failed: ' + resp.status + ' ' + errText, btn);
                 return;
             }
             ChickadeeUI.refreshEditSurface();
         } catch (e) {
-            alert('Remove failed: ' + e.message);
+            ChickadeeUI.showActionError('Remove failed: ' + e.message, btn);
         }
     });
 })();

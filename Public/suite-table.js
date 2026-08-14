@@ -35,6 +35,14 @@
 (function (global) {
     'use strict';
 
+    // Where a blocking suite-editor error is shown: the editor's own container
+    // when it is on the page, else the shared helper's fallback. Looked up per
+    // call rather than captured, because the edit surface is re-rendered in
+    // place (ChickadeeUI.refreshEditSurface) and a captured node goes stale.
+    function suiteErrorHost() {
+        return document.getElementById('suite-sections');
+    }
+
     // ── Upload classification (folded in from the retired suite-list.js,
     // #1126 — that file was ~90% dead; only this classification survived) ──
     //
@@ -590,7 +598,7 @@
         function expandInlineEditor(opts) {
             opts = opts || {};
             var renderer = (window.ChickadeeTestRenderers || {})[opts.mechanism];
-            if (!renderer) { alert('This test type is unavailable — reload the page.'); return; }
+            if (!renderer) { ChickadeeUI.showActionError('This test type is unavailable — reload the page.', suiteErrorHost()); return; }
 
             // Section: caller-supplied, else inherited from the edited item's row.
             var sectionID = (opts.sectionID != null) ? opts.sectionID : null;
@@ -625,7 +633,7 @@
                 var tb = container.querySelector('tbody[data-section-id="' + sidSel + '"]')
                     || container.querySelector('tbody[data-section-id=""]')
                     || container.querySelector('tbody');
-                if (!tb) { alert('No section to add this test to.'); return; }
+                if (!tb) { ChickadeeUI.showActionError('No section to add this test to.', suiteErrorHost()); return; }
                 var rootDrop = tb.querySelector('.suite-root-drop');
                 if (rootDrop) tb.insertBefore(tr, rootDrop); else tb.appendChild(tr);
             }
@@ -815,8 +823,8 @@
                 // would wipe the instructor's other unsaved mutations).
                 console.error('Suite save failed:', err);
                 var msg = (err && err.message) ? err.message : String(err);
-                alert('Suite save failed: ' + msg
-                    + '\n\nYour edit is still in the page — try again, or reload to recover.');
+                ChickadeeUI.showActionError('Suite save failed: ' + msg
+                    + ' — your edit is still in the page, so try again, or reload to recover.', suiteErrorHost());
             })
             .finally(function () {
                 pushInFlight = false;
@@ -1112,7 +1120,7 @@
             })
             .catch(function (err) {
                 console.error('Section reorder failed:', err);
-                alert('Section reorder failed: ' + (err.message || err) + '\n\nReload the page to recover.');
+                ChickadeeUI.showActionError('Section reorder failed: ' + (err.message || err) + ' — reload the page to recover.', suiteErrorHost());
             });
         }
 
@@ -1209,7 +1217,7 @@
                     .filter(function (it) { return it.kind === 'check' && it.checkID !== cid2; })
                     .map(function (it) { return it.check; });
                 saveChecksViaSuite(remaining)
-                    .catch(function (err) { alert('Could not delete check: ' + (err.message || err)); });
+                    .catch(function (err) { ChickadeeUI.showActionError('Could not delete check: ' + (err.message || err), suiteErrorHost()); });
                 return;
             }
 
@@ -1234,7 +1242,7 @@
                 schedulePush();
             })
             .catch(function (err) {
-                alert('Could not delete: ' + (err.message || err));
+                ChickadeeUI.showActionError('Could not delete: ' + (err.message || err), suiteErrorHost());
             });
         });
 
@@ -1323,7 +1331,7 @@
                         });
                     });
                 });
-                chain.catch(function (err) { alert('Upload failed: ' + (err.message || err)); });
+                chain.catch(function (err) { ChickadeeUI.showActionError('Upload failed: ' + (err.message || err), suiteErrorHost()); });
             });
         }
 

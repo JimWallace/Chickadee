@@ -142,15 +142,15 @@
         overlay.id = 'test-editor-overlay';
         overlay.setAttribute('role', 'dialog');
         overlay.setAttribute('aria-modal', 'true');
-        overlay.style.cssText =
-            'display:none;position:fixed;inset:0;z-index:1000;align-items:center;' +
-            'justify-content:center;background:rgba(0,0,0,.5)';
+        // Styling lives in styles.css (.modal-overlay / .modal-card): the scrim
+        // used a raw rgba() here, which bypassed the --overlay-bg token and so
+        // had no dark-mode value, and the card hand-rolled a shadow the palette
+        // already owns (UI audit S9).
+        overlay.className = 'modal-overlay';
+        overlay.hidden = true;
 
         var card = document.createElement('div');
-        card.style.cssText =
-            'background:var(--surface);color:var(--gray-900);border-radius:.5rem;' +
-            'width:min(960px,96vw);max-height:92vh;display:flex;flex-direction:column;' +
-            'box-shadow:0 8px 32px rgba(0,0,0,.25)';
+        card.className = 'modal-card';
 
         // A kind this assignment's language cannot render is DISABLED with its
         // reason, not hidden. The menu offered all ten check kinds on every
@@ -339,12 +339,12 @@
             if (typeSelect.value !== kind) typeSelect.value = kind;
             refreshDescription();
             enterMode(mechanism, kind);
-            overlay.style.display = 'flex';
+            overlay.hidden = false;
             setTimeout(function () { if (!editingItem && !opts.presetType) typeSelect.focus(); }, 0);
         }
 
         function close() {
-            overlay.style.display = 'none';
+            overlay.hidden = true;
             if (activeRenderer && typeof activeRenderer.cleanup === 'function') {
                 try { activeRenderer.cleanup(); } catch (e) { /* ignore */ }
             }
@@ -383,7 +383,7 @@
         closeBtn.addEventListener('click', close);
         overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && overlay.style.display !== 'none') close();
+            if (e.key === 'Escape' && !overlay.hidden) close();
         });
 
         // ── "+ Add Test" dropdown ──────────────────────────────────────────
