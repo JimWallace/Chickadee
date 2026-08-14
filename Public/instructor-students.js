@@ -70,7 +70,10 @@
 
     if (learnBtn) learnBtn.addEventListener('click', checkAgainstLearn);
 
-    // Row-click navigation (delegated so it survives repaints).
+    // Row-click navigation (delegated so it survives repaints).  data-href is
+    // server-rendered and always an in-app path; resolving it against the
+    // origin and requiring same-origin keeps a DOM-injected value from ever
+    // becoming a javascript: or cross-site navigation (CodeQL, js/xss-through-dom).
     table.addEventListener('click', function (event) {
         var t = event.target;
         if (!(t instanceof Element)) return;
@@ -78,7 +81,10 @@
         var row = t.closest('tr.student-row-link');
         if (!row) return;
         var href = row.getAttribute('data-href');
-        if (href) window.location.href = href;
+        if (!href) return;
+        var url;
+        try { url = new URL(href, window.location.origin); } catch (_) { return; }
+        if (url.origin === window.location.origin) window.location.href = url.href;
     });
 
     // The roster's own count: students plus pending pre-enrolments, matching

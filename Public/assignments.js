@@ -184,14 +184,22 @@
         });
     });
 
+    // data-action is server-rendered and always an in-app path; resolve it
+    // against the origin and require same-origin before it becomes a form
+    // target, so a DOM-injected value cannot redirect the POST off-site or to
+    // a javascript: URL (CodeQL, js/xss-through-dom).
     document.querySelectorAll('.section-delete-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var name = btn.getAttribute('data-name');
             var action = btn.getAttribute('data-action');
+            if (!action) return;
+            var url;
+            try { url = new URL(action, window.location.origin); } catch (_) { return; }
+            if (url.origin !== window.location.origin) return;
             if (!ChickadeeUI.confirmAction('Delete section “' + name + '”? Its assignments will become ungrouped.')) return;
             var form = document.createElement('form');
             form.method = 'post';
-            form.action = action;
+            form.action = url.href;
             document.body.appendChild(form);
             form.submit();
         });
