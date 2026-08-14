@@ -6,7 +6,7 @@ LEARN
 #extend("_instructor-tabs")
 
 #if(hasActiveCourse):
-<div class="bs-tabbar">
+<div class="toolbar toolbar--end section-gap">
     #if(canSyncNow):
     <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
         #csrfFormField()
@@ -20,15 +20,15 @@ LEARN
 
 #if(!brightspaceSyncEnabled):
 #elseif(!hasActiveCourse):
-<section class="bs-section">
+<section class="page-section">
     <p class="empty">Select a course to manage its LEARN grade sync.</p>
 </section>
 #else:
 
 
 <!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Connection</h2>
+<section class="page-section">
+    <h2>Connection</h2>
     #if(account.connected):
     <p class="bs-conn-line">Your LEARN account: <strong>#(account.identity)</strong>#(account.since)</p>
     #else:
@@ -58,7 +58,7 @@ LEARN
                name="userKey" autocomplete="off" required>
         <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
     </form>
-    <p class="card-meta bs-section-note">
+    <p class="section-note">
         Paste the Valence User ID + User Key minted for your own account (see the
         LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
     </p>
@@ -95,9 +95,9 @@ LEARN
 </section>
 
 <!-- ── Assignment → grade-item mapping ────────────────────── -->
-<section class="bs-section">
-    <div class="bs-mapping-head">
-        <h2 class="bs-h2">Grade-item mapping</h2>
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Grade-item mapping</h2>
         #if(!courseIsArchived):
         <form method="post" action="/instructor/brightspace/auto-map" class="inline-form">
             #csrfFormField()
@@ -141,7 +141,7 @@ LEARN
                 </td>
                 <td class="bs-col-synced">
                     #if(row.hasSyncActivity):
-                    <span class="bs-count bs-count-ok" title="Synced to LEARN">#(row.syncedCount)</span>
+                    <span class="bs-count chip-ok" title="Synced to LEARN">#(row.syncedCount)</span>
                     #else:
                     <span class="card-meta">—</span>
                     #endif
@@ -149,9 +149,9 @@ LEARN
                 <td class="bs-col-failed">
                     #if(row.hasSyncActivity):
                     #if(row.hasErrored):
-                    <span class="bs-count bs-count-err" title="Failed to push">#(row.erroredCount)</span>
+                    <span class="bs-count chip-err" title="Failed to push">#(row.erroredCount)</span>
                     #else:
-                    <span class="bs-count bs-count-ok">0</span>
+                    <span class="bs-count chip-ok">0</span>
                     #endif
                     #else:
                     <span class="card-meta">—</span>
@@ -191,9 +191,9 @@ LEARN
 </section>
 
 <!-- ── Class Roster ────────────────────────────────────────── -->
-<section class="bs-section">
-    <div class="bs-mapping-head">
-        <h2 class="bs-h2">Class Roster</h2>
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Class Roster</h2>
         #if(canReconcile):
         <form method="post" action="/instructor/brightspace/reconcile-now" class="inline-form">
             #csrfFormField()
@@ -203,7 +203,7 @@ LEARN
         #endif
     </div>
     #if(!courseLinked):
-    <p class="card-meta bs-section-note">
+    <p class="section-note">
         Link this course to its LEARN org unit (in the Connection panel above) to check
         whether each student's grade can be delivered to the LEARN gradebook.
     </p>
@@ -244,12 +244,6 @@ LEARN
 #endif
 
 <style>
-.bs-section { margin-bottom: 2rem; }
-.bs-tabbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
-.bs-h2 { font-size: var(--text-lg); font-weight: 600; margin: 0 0 .6rem; }
-.bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-.bs-mapping-head .bs-h2 { margin: 0; }
-.bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
 .bs-grade-input { width: 14rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-sync-detail { font-size: var(--text-2xs); }
@@ -257,8 +251,6 @@ LEARN
     display: inline-block; font-size: var(--text-base); font-weight: 600;
     white-space: nowrap;
 }
-.bs-count-ok { color: var(--green); }
-.bs-count-err { color: var(--red); }
 .bs-col-synced, .bs-col-failed { text-align: center; width: 5rem; }
 .bs-push-btn { padding: .25rem .5rem; line-height: 1; }
 .bs-issue-cell {
@@ -276,8 +268,6 @@ LEARN
 .bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
 .bs-test-result { margin: .3rem 0; font-size: var(--text-base); }
-.bs-test-ok { color: var(--green); }
-.bs-test-err { color: var(--red); }
 </style>
 <script>
 (function () {
@@ -301,10 +291,10 @@ LEARN
                 return res.json();
             }).then(function (result) {
                 out.textContent = result.message;
-                out.className = 'bs-test-result ' + (result.ok ? 'bs-test-ok' : 'bs-test-err');
+                out.className = 'bs-test-result ' + (result.ok ? 'chip-ok' : 'chip-err');
             }).catch(function () {
                 out.textContent = 'The connection test could not be run.';
-                out.className = 'bs-test-result bs-test-err';
+                out.className = 'bs-test-result chip-err';
             });
         });
     }

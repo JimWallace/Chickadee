@@ -436,7 +436,9 @@ import VaporTesting
                     // Synced = 1 distinct student (A), not 2 result rows; Failed = 1 (B).
                     #expect(html.contains("title=\"Synced to LEARN\">1<"))
                     #expect(!html.contains("title=\"Synced to LEARN\">2<"))
-                    #expect(html.contains("bs-count-err"))
+                    // The failed count renders in the shared error style (was .bs-count-err,
+                    // one of two identical green/red pairs this page carried).
+                    #expect(html.contains("chip-err"))
                 })
         }
     }

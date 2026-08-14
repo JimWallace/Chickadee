@@ -773,11 +773,31 @@ page with two `<h1>`s.
 
 `PAGE_STYLE_BASELINE` 842 → 760 (913 at the audit's start).
 
-**Not yet done, and deliberately left for a later pass:** the brightspace
-pair's private skeleton (item 3), admin-storage/admin-runner (item 4), the
-`course-student-submissions` 135-line duplicated row block (item 5's
-extraction half), and the long tail's remaining muted-hint and mono-textarea
-families (item 7).
+**Second pass** finished the list. The brightspace pair's private skeleton
+is gone (`.bs-section`/`.bs-h2`/`.bs-tabbar`/`.bs-mapping-head` →
+`.page-section`/`h2`/`.toolbar--end`/`.page-titlebar`; `.bs-status` →
+`.detail-grid`; the **two** identical green/red pairs *inside one file* →
+one global `.chip-ok`/`.chip-err`). `admin-storage`'s `.storage-bar` →
+`.page-titlebar--baseline`/`.toolbar--end`. `admin-runner` became the
+Titlebar page it always was — the drill-down sibling of `admin-course` and
+`admin-user` — which gives it the `<h1>` it lacked and moves its sections
+from `<h3>` to `<h2>`.
+
+`course-student-submissions`' duplicated row block is one partial
+(`_student-assignment-rows.leaf`): the two blocks were **verified
+byte-identical apart from the list they looped over** before extracting,
+and the page went 330 → 60 lines. Its Leaf sub-context needed a *stored*
+property, not a computed one — a synthesized `Encodable` encodes only
+stored properties, so a computed one is simply absent and Leaf fails with
+"expressions should resolve to a single dictionary value". Worth knowing
+before writing the next sub-context.
+
+The long tail closed too: `.textarea-mono` (three copies that differed only
+in which of the same five declarations each remembered), `.form-stack`
+(three copies whose only real difference — the max-width — is now a custom
+property), and two more `.section-intro` copies.
+
+`PAGE_STYLE_BASELINE` 760 → 689.
 
 ### S8 — Timestamp policy (S)
 

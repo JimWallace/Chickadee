@@ -144,7 +144,8 @@ extension StudentCourseRoutes {
                 sections: sectionContexts,
                 ungroupedRows: ungroupedRows,
                 hasSections: !allSections.isEmpty,
-                hasUngrouped: !ungroupedRows.isEmpty
+                hasUngrouped: !ungroupedRows.isEmpty,
+                ungroupedRowsContext: StudentAssignmentRowsContext(rows: ungroupedRows)
             )
         )
     }

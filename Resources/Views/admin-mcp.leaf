@@ -44,7 +44,7 @@ MCP
         <p class="mcp-token-caption"><strong>Access token for #(mintedFor)</strong>
             &middot; scopes: <code>#(mintedScopes)</code> &middot; expires after #(tokenTTLSeconds)s.
             Copy it now — it is shown only once.</p>
-        <textarea readonly rows="4" class="form-input mcp-token-area"
+        <textarea readonly rows="4" class="form-input textarea-mono"
                   onclick="this.select()">#(mintedToken)</textarea>
     </div>
     #endif
@@ -185,12 +185,6 @@ MCP
 </section>
 <style>
 .mcp-token-caption { margin: .1rem 0 .5rem; }
-.mcp-token-area {
-    width: 100%;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    box-sizing: border-box;
-}
 .mcp-issuer-note {
     color: var(--gray-600);
     font-size: var(--text-sm);
