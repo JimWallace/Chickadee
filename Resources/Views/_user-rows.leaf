@@ -10,7 +10,7 @@
                 <td><code>#(user.username)</code></td>
                 <td>
                     #if(user.role == "mcp"):
-                    <code class="role-fixed">mcp</code>
+                    <code>mcp</code>
                     #else:
                     <form method="post" action="/admin/users/#(user.id)/role"
                           class="role-form">

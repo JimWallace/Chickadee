@@ -167,7 +167,7 @@ Create Assignment
                         <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
                     </td>
                     <td class="time">
-                        <button class="btn action-btn action-danger support-file-delete-btn" type="button"
+                        <button class="btn action-btn action-danger js-support-file-delete-btn" type="button"
                                 data-filename="#(supportFile.name)">Remove</button>
                     </td>
                 </tr>

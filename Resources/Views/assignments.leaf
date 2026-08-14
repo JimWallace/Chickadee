@@ -109,10 +109,10 @@
     <!-- Toolbar: add ungraded reference material to this section (interleaved
          with the assignments in the drag-orderable table below). -->
     <div class="content-lane">
-        <details class="add-section-details popup-anchor content-item-add">
+        <details class="add-section-details popup-anchor">
             <summary class="btn action-btn summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
+                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
                     #csrfFormField()
                     <input type="hidden" name="sectionID" value="#(section.sectionID)">
                     <label class="form-label">Title
@@ -198,10 +198,10 @@
     <!-- Toolbar: add ungraded reference material with no section (interleaved
          with the ungrouped assignments in the drag-orderable table below). -->
     <div class="content-lane">
-        <details class="add-section-details popup-anchor content-item-add">
+        <details class="add-section-details popup-anchor">
             <summary class="btn action-btn summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
+                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
                     #csrfFormField()
                     <input type="hidden" name="sectionID" value="">
                     <label class="form-label">Title

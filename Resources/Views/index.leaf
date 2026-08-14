@@ -9,7 +9,7 @@
 <h1>Assignments</h1>
 #endif
 #if(slipDaySummary):
-<p class="text-muted slip-day-summary">#(slipDaySummary)</p>
+<p class="text-muted">#(slipDaySummary)</p>
 #endif
 #if(!hasAny):
 #if(currentUser.activeCourse):
@@ -29,7 +29,7 @@
     <tbody>
     #for(item in group.items):
     #if(item.isContent):
-        <tr class="content-item-row">
+        <tr>
             <td>
                 <span class="content-item-kind">#(item.content.kindLabel)</span>
                 <span class="content-item-title">#(item.content.title)</span>
@@ -37,8 +37,8 @@
                 #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
             </td>
             <td colspan="4" class="col-hide-phone content-item-links">
-                #for(link in item.content.links):<a class="content-item-link" href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor
-                #for(att in item.content.attachments):<a class="content-item-link" href="#(att.downloadURL)">#(att.displayName)</a>#endfor
+                #for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor
+                #for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor
             </td>
             <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
         </tr>

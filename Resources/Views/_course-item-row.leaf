@@ -10,7 +10,7 @@
      section - which is every assignment on a course that has never created a
      section - rendered without them. -->
 #if(item.isContent):
-    <tr class="content-item-row" data-content-item-id="#(item.content.id)">
+    <tr data-content-item-id="#(item.content.id)">
         <td>
             <span class="assignment-name-cell">
                 <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
@@ -23,10 +23,10 @@
         <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor#for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor</td>
         <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
         <td class="content-item-actions">
-            <details class="popup-anchor content-item-edit-details">
+            <details class="popup-anchor">
                 <summary class="btn action-btn summary-btn">Edit</summary>
                 <div class="add-section-popup card">
-                    <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form content-item-form">
+                    <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form">
                         #csrfFormField()
                         <label class="form-label">Title
                             <input class="form-input editor-input" type="text" name="title" value="#(item.content.title)" required>
@@ -86,7 +86,7 @@
                     #endif
                 </div>
             </details>
-            <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" data-confirm="Delete this material?">
+            <form method="post" action="/instructor/content-items/#(item.content.id)/delete" data-confirm="Delete this material?">
                 #csrfFormField()
                 <button class="btn action-btn action-danger" type="submit">Delete</button>
             </form>
@@ -179,7 +179,7 @@
                     </label>
                     <label class="form-label publish-label">
                         Due date (optional)
-                        <input class="form-input publish-due-date editor-input" type="datetime-local" name="dueAt">
+                        <input class="form-input js-publish-due-date editor-input" type="datetime-local" name="dueAt">
                     </label>
                     <div class="publish-uw-warning card-meta" style="display:none"></div>
                     <button class="btn btn-primary btn-compact" type="submit">Create draft</button>

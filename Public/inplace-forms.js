@@ -39,10 +39,10 @@
     // same reason: a native dialog inside a pane is a modal over one third of
     // the screen with no indication of which half raised it.
     function showError(form, msg) {
-        var banner = form.querySelector('.inplace-error-banner');
+        var banner = form.querySelector('.js-inplace-error-banner');
         if (!banner) {
             banner = document.createElement('div');
-            banner.className = 'form-error inplace-error-banner';
+            banner.className = 'form-error js-inplace-error-banner';
             banner.setAttribute('role', 'alert');
             form.insertBefore(banner, form.firstChild);
         }
@@ -51,7 +51,7 @@
     }
 
     function clearError(form) {
-        var banner = form.querySelector('.inplace-error-banner');
+        var banner = form.querySelector('.js-inplace-error-banner');
         if (banner) banner.remove();
     }
 

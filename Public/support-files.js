@@ -17,7 +17,7 @@
 //
 // Expects the shared markup ids: #add-support-file-btn,
 // #support-file-upload-input, #support-file-upload-status, and per-row
-// .support-file-delete-btn[data-filename] buttons.
+// .js-support-file-delete-btn[data-filename] buttons.
 (function () {
     'use strict';
 
@@ -82,7 +82,7 @@
         }
 
         document.body.addEventListener('click', async function (ev) {
-            var btn = ev.target.closest && ev.target.closest('.support-file-delete-btn');
+            var btn = ev.target.closest && ev.target.closest('.js-support-file-delete-btn');
             if (!btn) return;
             var filename = btn.getAttribute('data-filename');
             if (!filename) return;
