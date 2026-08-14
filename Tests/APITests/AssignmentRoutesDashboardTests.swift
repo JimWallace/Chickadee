@@ -648,8 +648,10 @@ import VaporTesting
                             row.contains("/instructor/\(assignment.publicID)/workbench"),
                             "Row for \(assignment.publicID) must link to the workbench"
                         )
+                        // The button carries the vanity path on data-copy-url;
+                        // Public/assignments.js owns the delegated click handler.
                         #expect(
-                            row.contains("copyAssignmentURL("),
+                            row.contains("data-copy-url="),
                             "Row for \(assignment.publicID) must offer the copy-student-link button"
                         )
                     }

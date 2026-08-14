@@ -294,6 +294,10 @@ Create Assignment
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 <script id="assignment-language-seed" type="application/json">#rawJSON(assignmentLanguageJSON)</script>
+<!-- Page facts for Public/assignment-new-page.js (loaded at the foot of
+     the page): the draft ID (null before the first notebook upload) and
+     whether a solution notebook exists yet. -->
+<script id="new-assignment-config" type="application/json">{"draftID":#rawJSON(draftIDJSON),"hasSolutionNotebook":#if(solutionNotebook):true#else:false#endif}</script>
 <script src="/authoring-language.js?v=#appVersion()"></script>
 
 <!-- ── Notebook Check editor ────────────────────────────────────────────
@@ -313,74 +317,16 @@ Create Assignment
      wired to draft-scoped URLs.  After a save, the page reloads so the
      server-rendered suite table picks up the newly generated scripts. -->
 <script src="/pattern-family-editor.js?v=#appVersion()"></script>
-<script>
-(function () {
-    var draftID = #rawJSON(draftIDJSON);
-    if (!draftID) return;  // No draft yet — user hasn't uploaded a solution notebook
-    var csrfToken = ChickadeeUI.getCsrfToken();
-    var seed = document.getElementById('pattern-families-seed');
-    var initialFamilies = [];
-    if (seed) {
-        try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
-        catch (e) { initialFamilies = []; }
-    }
-    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
-        draftID: draftID,
-        csrfToken: csrfToken,
-        initialFamilies: initialFamilies,
-        urls: {
-            solutionNotebook: function () {
-                return '/instructor/new/draft/solution-notebook?draftID=' + encodeURIComponent(draftID);
-            },
-            scanNotebook: function () { return '/instructor/scan-notebook'; }
-        }
-    });
-})();
-</script>
 
 
 <!-- ── Unified Suite Table ─────────────────────────────────────────────────
-     v0.4.132: the create page now shares `suite-table.js` with the edit
-     page (lines 809-841 in assignment-edit.leaf).  All section CRUD
-     goes through draft-scoped endpoints — see
+     The create page shares `suite-table.js` with the edit page; the two
+     differ only in the URL wiring their page files pass in
+     (Public/assignment-new-page.js here, Public/assignment-edit-page.js
+     there).  All section CRUD goes through draft-scoped endpoints — see
      AssignmentRoutes+DraftSections.swift. -->
 #if(draftID):
 <script src="/suite-table.js?v=#appVersion()"></script>
-<script>
-(function () {
-    var draftID = #rawJSON(draftIDJSON);
-    if (!draftID) return;
-    var csrfToken = ChickadeeUI.getCsrfToken();
-    var suiteTable = window.initSuiteTable({
-        assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
-        csrfToken: csrfToken,
-        formSelector: 'form#new-assignment-form',
-        urls: {
-            putSuite: function () {
-                return '/instructor/new/draft/suite?draftID=' + encodeURIComponent(draftID);
-            },
-            deleteScript: function (name) {
-                return '/instructor/new/draft/scripts/' + encodeURIComponent(name)
-                     + '?draftID=' + encodeURIComponent(draftID);
-            },
-            uploadScript: function () {
-                return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
-            },
-            reorderSections: function () {
-                return '/instructor/new/draft/suite-sections/reorder?draftID='
-                     + encodeURIComponent(draftID);
-            }
-        }
-    });
-    // Window globals the Test Editor renderers call to persist through the
-    // single PUT /suite write path.
-    window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
-    window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
-    window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
-    window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
-    window.chickadeeGetSuiteItems          = suiteTable.getItems;
-})();
-</script>
 
 <!-- Section inputs editor — the same shared modules the edit page loads
      (Public/inputs-editor-core.js + Public/section-inputs-editor.js).  Until
@@ -394,7 +340,7 @@ Create Assignment
 <script src="/section-inputs-editor.js?v=#appVersion()"></script>
 
 <!-- Section header view/edit toggle, section delete, and section
-     drag-reorder are all owned by suite-table.js (wired above), which this
+     drag-reorder are all owned by suite-table.js, which this
      page and the edit page both load.  This page used to bind its own copies
      on top: the toggle/delete pair on `document` and the drag pair on the
      same #suite-sections element suite-table uses, so both fired.  Section
@@ -403,172 +349,14 @@ Create Assignment
      mode a ReferenceError, so its POST never went out at all. -->
 #endif
 
-<!-- The Generate Starter Tests panel.  Loaded unconditionally, because the
-     panel's own init is in the form-level block below and runs whether or not
-     a draft exists yet — with no draft it reports that one is needed. -->
+<!-- The Generate Starter Tests panel.  Loaded unconditionally, because its
+     init (in assignment-new-page.js) runs whether or not a draft exists yet
+     — with no draft it reports that one is needed. -->
 <script src="/generated-starter-tests.js?v=#appVersion()"></script>
 
-<!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->
-<script>
-(function () {
-    'use strict';
-
-    var csrfToken = ChickadeeUI.getCsrfToken();
-
-    // ── Notebook upload buttons ────────────────────────────────────────
-    // Open hidden file pickers, then submit the main form to the draft
-    // endpoint with a `draftAction` field so the server saves the file
-    // bytes and reloads the page on the same draft.
-    function wireNotebookUpload(btnID, inputID, draftActionValue) {
-        var btn       = document.getElementById(btnID);
-        var fileInput = document.getElementById(inputID);
-        if (!btn || !fileInput) return;
-        btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
-        fileInput.addEventListener('change', function () {
-            if (fileInput.files.length === 0) return;
-            var form = document.getElementById('new-assignment-form');
-            var inp = document.createElement('input');
-            inp.type = 'hidden';
-            inp.name = 'draftAction';
-            inp.value = draftActionValue;
-            form.appendChild(inp);
-            form.action = '/instructor/new/draft';
-            form.requestSubmit();
-        });
-    }
-    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'upload-assignment-notebook');
-    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'upload-solution-notebook');
-
-    // ── Support file upload / delete ───────────────────────────────────
-    // Reads each picked file as text and POSTs it to the draft scripts
-    // endpoint with `tier: "support"` (no manifest entry → not a test
-    // script).  Delete fires `DELETE /draft/scripts/:filename`.  Mirrors
-    // assignment-edit.leaf:1577-1662; same flow, draft-scoped URLs.
-    (function () {
-        var draftID = #rawJSON(draftIDJSON);
-        var addBtn  = document.getElementById('add-support-file-btn');
-        var fileEl  = document.getElementById('support-file-upload-input');
-        var statusEl = document.getElementById('support-file-upload-status');
-
-        function setStatus(msg, isError) {
-            ChickadeeUI.setStatus(statusEl, msg, isError ? 'error' : undefined);
-        }
-
-        function readAsText(file) {
-            return new Promise(function (resolve, reject) {
-                var reader = new FileReader();
-                reader.onload  = function () { resolve(reader.result); };
-                reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
-                reader.readAsText(file);
-            });
-        }
-
-        async function uploadSupportFile(file) {
-            var content = await readAsText(file);
-            var resp = await fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                credentials: 'same-origin',
-                body: JSON.stringify({
-                    filename: file.name,
-                    content:  content,
-                    tier:     'support',
-                    isTest:   false
-                })
-            });
-            if (!resp.ok) {
-                var errText = await resp.text();
-                throw new Error(resp.status + ': ' + errText);
-            }
-        }
-
-        if (draftID && addBtn && fileEl) {
-            addBtn.addEventListener('click', function () { fileEl.click(); });
-            fileEl.addEventListener('change', async function () {
-                if (!fileEl.files || fileEl.files.length === 0) return;
-                setStatus('Uploading…', false);
-                try {
-                    for (var i = 0; i < fileEl.files.length; i++) {
-                        await uploadSupportFile(fileEl.files[i]);
-                    }
-                    setStatus('Uploaded.', false);
-                    window.location.reload();
-                } catch (e) {
-                    setStatus('Upload failed — ' + e.message, true);
-                } finally {
-                    fileEl.value = '';
-                }
-            });
-        }
-
-        // Delegated delete handler — works whether or not a draft exists
-        // (rows only render when one does, but defensive nonetheless).
-        document.body.addEventListener('click', async function (ev) {
-            var btn = ev.target.closest && ev.target.closest('.support-file-delete-btn');
-            if (!btn) return;
-            var filename = btn.getAttribute('data-filename');
-            if (!filename || !draftID) return;
-            if (!ChickadeeUI.confirmAction('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
-            try {
-                var resp = await fetch(
-                    '/instructor/new/draft/scripts/' + encodeURIComponent(filename)
-                        + '?draftID=' + encodeURIComponent(draftID),
-                    { method: 'DELETE', headers: { 'x-csrf-token': csrfToken }, credentials: 'same-origin' }
-                );
-                if (!resp.ok) {
-                    var errText = await resp.text();
-                    ChickadeeUI.showActionError('Remove failed: ' + resp.status + ' ' + errText, btn);
-                    return;
-                }
-                window.location.reload();
-            } catch (e) {
-                ChickadeeUI.showActionError('Remove failed: ' + e.message, btn);
-            }
-        });
-    })();
-
-    // ── Generate Starter Tests ────────────────────────────────────────
-    // The flow itself lives in /generated-starter-tests.js so it is linted
-    // and testable; only the page's own facts are passed in from here.
-    initGeneratedStarterTests({
-        csrfToken: csrfToken,
-        #if(draftID):
-        draftID: #rawJSON(draftIDJSON),
-        #else:
-        draftID: null,
-        #endif
-        #if(solutionNotebook):
-        solutionNotebookURL: '/instructor/new/draft/solution-notebook?draftID=#(draftID)'
-        #else:
-        solutionNotebookURL: null
-        #endif
-    });
-
-    // ── UWaterloo important-date proximity warning ────────────────────
-    (function () {
-        var dueAtInput = document.getElementById('dueAt');
-        var warning    = document.getElementById('uw-date-warning');
-        if (!dueAtInput || !warning) return;
-        dueAtInput.addEventListener('change', function () { ChickadeeUI.checkUWDates(dueAtInput.value, warning); });
-    })();
-
-    // ── Grading mode hint ─────────────────────────────────────────────
-    (function () {
-        var sectionSelect = document.getElementById('sectionID');
-        var hint = document.getElementById('grading-mode-hint');
-        if (!sectionSelect || !hint) return;
-        function updateHint() {
-            var selected = sectionSelect.options[sectionSelect.selectedIndex];
-            var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') { hint.textContent = 'ⓘ This section uses Student Browser grading by default.'; hint.style.display = ''; }
-            else if (mode === 'worker') { hint.textContent = 'ⓘ This section uses Chickadee grading by default.'; hint.style.display = ''; }
-            else { hint.style.display = 'none'; }
-        }
-        sectionSelect.addEventListener('change', updateHint);
-        updateHint();
-    })();
-})();
-</script>
+<!-- Notebook upload buttons, support files, the Generate Starter Tests
+     panel init, the UW-date warning and the grading-mode hint are all
+     wired by Public/assignment-new-page.js at the foot of the page. -->
 <!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
      One modal for "+ Add Test"; picking a type morphs the body in place.
      The notebook-check form is a body renderer (test-renderer-check.js, fed
@@ -576,43 +364,10 @@ Create Assignment
      existing overlays during the staged rollout (the shell shows a
      "Continue →" button for those).  Renderer scripts load before the shell
      so they self-register first. -->
-<script>
-// Per-page config for the script renderer.  New-assignment draft: creating
-// scripts only (editing a saved script isn't a draft-page flow → no content
-// URL); the body persists via PUT /suite (suite-table's saveScriptViaSuite).
-window.ChickadeeScriptRendererConfig = {
-    csrfToken: ChickadeeUI.getCsrfToken(),
-    scriptContentURL: null,
-    uploadFilesInputID: null
-};
-</script>
 <script src="/test-renderer-check.js?v=#appVersion()"></script>
 <script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
-<script>
-(function () {
-    var csrfToken = ChickadeeUI.getCsrfToken();
-    window.initTestEditorModal({ csrfToken: csrfToken });
-    var modal = window.__chickadeeTestEditorModal;
-
-    // Edit an existing notebook check → shell, pre-populated from the suite row.
-    document.body.addEventListener('click', function (ev) {
-        var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
-        if (!el) return;
-        ev.preventDefault();
-        var id = el.getAttribute('data-edit-check-id');
-        var item = null;
-        if (typeof window.chickadeeGetSuiteItems === 'function') {
-            var match = window.chickadeeGetSuiteItems().find(function (i) {
-                return i.kind === 'check' && i.check && i.check.id === id;
-            });
-            item = match ? match.check : null;
-        }
-        if (item && modal) {
-            modal.open({ editing: { mechanism: 'check', id: id, item: item } });
-        }
-    });
-})();
-</script>
+<script src="/support-files.js?v=#appVersion()"></script>
+<script src="/assignment-new-page.js?v=#appVersion()"></script>
 #endexport
 #endextend

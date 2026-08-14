@@ -241,15 +241,18 @@ variants that exist nowhere and silently rendered as unstyled text.
 Page behaviour belongs in a **`Public/*.js` file**, loaded with
 `<script src>` — there it is ESLint-checked and unit-testable
 (`Tests/BrowserRunnerJSTests`).  Inline `<script>` blocks in templates are
-invisible to every tool (ESLint can't parse Leaf-interpolated JS) and are
-why the CSP still allows inline script, so their total size is a
-**shrink-only ratchet** (`INLINE_SCRIPT_BASELINE` in
-`scripts/check-styles.sh`): new inline lines fail CI.
+invisible to every tool (ESLint can't parse Leaf-interpolated JS), so the
+rule is **absolute** (guard 3b in `scripts/check-styles.sh`): no template
+may open a multi-line `<script>` body.  The 2026-08 conversion moved every
+page's blocks out; the one deliberate holdout is `base.leaf`'s
+multipart-CSRF interceptor, held by its own shrink-only line ratchet
+(`INLINE_SCRIPT_BASELINE`).
 
 The extraction pattern: the template carries page data — `data-*`
-attributes or a `<script type="application/json">` island — and the
-external file reads it.  When you shrink or extract a block, lower the
-baseline in the same PR.
+attributes or a **single-line** `<script type="application/json">` island —
+and a per-page wiring file reads it (`assignment-edit-page.js` /
+`assignment-new-page.js` are the worked examples: shared editor modules,
+per-page URL builders).
 
 ### JS does not make styling decisions
 

@@ -125,55 +125,9 @@ Runner #(runner.workerID)
     margin-top: .6rem;
 }
 </style>
-<script>
-(function () {
-    'use strict';
-
-    var offlineBadge = document.getElementById('runner-offline-badge');
-
-    // The badge's initial state is server-rendered; this keeps it honest as
-    // the page ages without a reload, using the shared staleness rule.
-    function updateOfflineBadge() {
-        if (!offlineBadge) return;
-        var laEl = document.getElementById('runner-last-active');
-        var laIso = laEl ? laEl.getAttribute('data-iso') : null;
-        offlineBadge.style.display = ChickadeeRelativeTime.isStale(laIso) ? '' : 'none';
-    }
-    ChickadeeRelativeTime.applyRelativeTimes();
-    updateOfflineBadge();
-
-    // Poll the runners endpoint every 5 seconds and update the live-status
-    // fields in the header (version, hostname, last active) without a full
-    // page reload. This mirrors what the main /admin page already does.
-    var RUNNER_ID = (document.querySelector('[data-runner-id]') || {})
-        .getAttribute ? document.querySelector('[data-runner-id]').getAttribute('data-runner-id') : '';
-
-    setInterval(function () {
-        if (document.hidden) return;
-        ChickadeeRelativeTime.applyRelativeTimes();
-        updateOfflineBadge();
-        if (!RUNNER_ID) return;
-        fetch('/admin/runners', { headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' }, cache: 'no-store' })
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (rows) {
-                if (!Array.isArray(rows)) return;
-                var runner = rows.find(function (w) { return w.workerID === RUNNER_ID; });
-                if (!runner) return;
-                var vEl  = document.getElementById('runner-version');
-                var hEl  = document.getElementById('runner-hostname');
-                var laEl = document.getElementById('runner-last-active');
-                if (vEl)  vEl.textContent = runner.runnerVersion || 'Unknown version';
-                if (hEl)  hEl.textContent = runner.hostname      || 'Unknown host';
-                if (laEl && runner.lastActive) {
-                    laEl.setAttribute('data-iso', runner.lastActive);
-                    laEl.textContent = ChickadeeRelativeTime.formatRelative(runner.lastActive);
-                    laEl.title = new Date(runner.lastActive).toLocaleString();
-                }
-            })
-            .catch(function () {});
-    }, 5000);
-})();
-</script>
+<!-- Offline badge + 5s live-status poll are wired by
+     Public/admin-runner.js. -->
+<script src="/admin-runner.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend
