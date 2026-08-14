@@ -342,31 +342,24 @@ if [ -n "${s1_hack}${s1_local}" ]; then
 fi
 
 # S1 (cont.): one control means one DRESS, not just one implementation. Five
-# filter boxes shared list-filter.js and still came in three widths (two inline
-# --filter-width values plus a page-local flex basis) and two structures (three
-# in a .filter-group, two loose in a toolbar, so their label could strand from
-# their input on a narrow row). Both are now settled in styles.css:
-#   * --filter-width is declared in :root and may not be re-assigned per page.
-#   * every .filter-input sits in a .filter-group with its .filter-label.
-# The second is counted per file rather than parsed: a file's .filter-group
-# count must cover its .filter-input count.
+# filter boxes shared list-filter.js and still came in three widths — two inline
+# --filter-width values plus a page-local flex basis — because the property read
+# as a per-page dial. It is declared once in styles.css (:root) and may not be
+# re-assigned in a template.
+#
+# The rest of the contract (a .filter-group wrapper, type=search, no markup
+# autocomplete, live-or-GET-form) is structural, so it is asserted by walking the
+# tags in Tests/APITests/ListFilterMarkupTests.swift rather than counted here —
+# a count is a weak proxy for containment, and this file's own rule is to parse
+# structure rather than search the document.
 s1_width="$(grep -rn -- '--filter-width' "${views[@]}" || true)"
-s1_loose=""
-for view in "${views[@]}"; do
-  n_input="$(grep -c 'filter-input' "$view" || true)"
-  [ "${n_input:-0}" -eq 0 ] && continue
-  n_group="$(grep -c 'filter-group' "$view" || true)"
-  if [ "${n_group:-0}" -lt "${n_input:-0}" ]; then
-    s1_loose+="  ${view}: ${n_input} filter-input, ${n_group} filter-group"$'\n'
-  fi
-done
-if [ -n "${s1_width}${s1_loose}" ]; then
+if [ -n "$s1_width" ]; then
   status=1
-  echo "ERROR: a list filter departs from the shared control's dress."
-  echo "       --filter-width is one value in styles.css (:root) — do not"
-  echo "       re-assign it per page; wrap every .filter-input and its"
-  echo "       .filter-label in a .filter-group so the pair wraps as a unit."
-  { [ -n "$s1_width" ] && printf '%s\n' "$s1_width" | sed 's/^/  /'; printf '%s' "$s1_loose"; }
+  echo "ERROR: a template assigns --filter-width."
+  echo "       The list filter is one width, declared in styles.css (:root)."
+  echo "       If one filter genuinely needs another, add a named modifier"
+  echo "       class there — not an inline value review cannot see."
+  printf '%s\n' "$s1_width" | sed 's/^/  /'
   echo
 fi
 

@@ -168,13 +168,21 @@ of action buttons" and four pill implementations; the page-style ratchet
   `.filter-input` sits in one, GET-form filters included, and every one is
   `--filter-width` wide — that custom property is declared once in `:root`
   and is **not** a per-page dial (five boxes once came in three sizes).
-  Live filtering is `input[data-list-filter="<table-id>"]`
-  (`Public/list-filter.js` — it owns the row matching, the select-value
-  rule, and autofill suppression for *every* `.filter-input`, so a filter
-  never carries `autocomplete` in markup; never re-implement it in a page
-  script).  Server-side GET filters (activity, audit) wear the same dress
-  plus Filter/Clear buttons, and load the same script for the suppression.
-  Placeholder microcopy on live filters: "Filter by &lt;matched fields&gt;…".
+  A page declares only the wrapper, the classes, `data-list-filter` naming
+  the table, and `data-list-filter-empty` wording its no-match message;
+  `Public/list-filter.js` derives the rest — which columns are searchable
+  (the ones the table declares sortable, so the Actions column's buttons and
+  panels are not matched), term matching, the `role="status"` result count,
+  the no-match message, Escape-to-clear, `aria-controls`, and autofill
+  suppression for *every* `.filter-input`, so a filter never carries
+  `autocomplete` in markup.  Never re-implement any of it in a page script.
+  Server-side GET filters (activity, audit) wear the same dress plus
+  Filter/Clear buttons, and load the same script for the suppression and
+  Escape.  Placeholder microcopy on live filters: "Filter by
+  &lt;matched fields&gt;…"; `data-list-filter-empty` names the row type
+  ("No students match this filter.").  The markup contract is asserted by
+  `Tests/APITests/ListFilterMarkupTests.swift`, which walks the tags rather
+  than searching the document.
 - **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`), `.field-note`
   (+ `--muted`), `.field-help`, `.input-compact`, `.editor-input`,
   `.select-xs` — form-field layout, hints, and the compact control sizes.

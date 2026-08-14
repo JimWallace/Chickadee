@@ -447,10 +447,48 @@ strengths — and the difference was legible in the markup, which is how it
 was noticed. `--filter-width` now lives in `:root` only, every
 `.filter-input` sits in a `.filter-group`, the component suppresses on
 every `.filter-input` (binding live filtering only where a table is named),
-and guard 4c fails on a per-page width or a group-less filter. General
-lesson for the remaining slices: a shared implementation with a per-page
-size knob is a shared implementation that will drift, and the knob is
-worth guarding the day it is introduced.
+and the markup contract is asserted structurally. General lesson for the
+remaining slices: a shared implementation with a per-page size knob is a
+shared implementation that will drift, and the knob is worth guarding the
+day it is introduced.
+
+**What re-reading the component against its actual usage then found.**
+Sharing the *implementation* had also frozen three defects in place, each
+invisible because the component behaved identically everywhere:
+
+1. **It matched markup, not data.** Whole-row `textContent` includes the
+   Actions column. On instructor-students a *pending* row's Actions cell
+   holds a collapsed registration panel, so on a roster of students the
+   query `student` matched every pending row through the field label
+   "Student number (optional)", and `email` matched them too. This is the
+   pre-S1 `ta` bug — a role `<select>`'s option labels are all row text —
+   which was fixed as a special case rather than as the rule it was an
+   instance of. Searchable columns are now the ones the table declares
+   sortable (`th[data-sort-key]`), which reuses a convention the table
+   already states and excludes the Actions column by construction.
+2. **Filtering to nothing was silent on all three pages.** The component
+   deferred empty state to pages on the grounds that "no rows at all" and
+   "nothing matches" are different sentences. They are — but
+   instructor-students' message counts tbody rows *including the ones the
+   filter hid*, so it stayed hidden exactly when it was needed, and the
+   other two pages have no such message. Different sentences is an argument
+   for the component owning both, not neither.
+3. **No announcement.** Rows vanished with no live region.
+
+Two smaller things came out of the same read: `sortable-table.js`'s
+`cellValue` comment claims its `<select>` rule is "the same rule
+list-filter.js uses" while the filter implements only that one of its four
+cases — the correct resolution is that the rules diverge on purpose (sort by
+the machine value, filter by the displayed text), which is now written down
+in both; and matching now folds diacritics and ANDs whitespace-separated
+terms, because "Munoz" not finding "Muñoz" is not an edge case on a real
+roster.
+
+Measured after: 6–9× less work per keystroke (0.34 ms vs 3.16 ms at 5,000
+rows), from caching folded cell text in a `WeakMap` keyed by the `<tr>` —
+a poll repaint replaces the rows, so invalidation is free — writing
+`hidden` only on change, and skipping the string work for already-hidden
+rows when a keystroke narrows the query.
 
 ### S2 — One sortable table (M)
 

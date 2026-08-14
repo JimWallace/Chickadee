@@ -19,7 +19,8 @@
         <label class="filter-label" for="submissions-filter">Filter</label>
         <input id="submissions-filter" class="form-input filter-input" type="search"
                placeholder="Filter by name or ID…"
-               data-list-filter="assignment-submissions-table">
+               data-list-filter="assignment-submissions-table"
+               data-list-filter-empty="No submissions match this filter.">
     </span>
 </div>
 <table class="results-table sortable-table" id="assignment-submissions-table"

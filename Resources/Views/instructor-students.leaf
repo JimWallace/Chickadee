@@ -55,7 +55,8 @@ Students
         <label class="filter-label" for="enrolled-filter">Filter</label>
         <input id="enrolled-filter" class="form-input filter-input" type="search"
                placeholder="Filter by name or username…"
-               data-list-filter="enrolled-students-table">
+               data-list-filter="enrolled-students-table"
+               data-list-filter-empty="No students match this filter.">
     </span>
 </div>
 
