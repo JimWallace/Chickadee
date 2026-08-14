@@ -9,6 +9,22 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.103] - 2026-08-14
+
+### Fixed
+
+- **Grader-only files and browser grading can no longer be combined.**
+  `author_script` already refused marking a file grader-only on a
+  browser-graded assignment, but the combination was still reachable from the
+  other side: switching a worker-graded assignment with grader-only files to
+  browser grading succeeded, leaving every student's kernel boot to rebuild a
+  filtered setup zip per download — and any tests referencing the withheld
+  files broken. `set_grading_mode` and the zip upload now refuse the pair
+  (matching the existing upload-only/browser refusal), section adoption keeps
+  worker grading instead of failing the move, and the per-download filter
+  remains as the backstop for setups created before the rule.
+
+
 ## [0.5.102] - 2026-08-14
 
 ### Changed
