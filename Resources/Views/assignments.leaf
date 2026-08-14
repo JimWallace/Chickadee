@@ -11,34 +11,34 @@
 #endif
 <section class="diagnostics-section">
     <div class="diagnostics-cards">
-        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="submissions"
+        <div class="diagnostic-card diagnostic-card-cyclable" data-idash-card="submissions"
                  role="button" tabindex="0"
                  aria-label="Submissions, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Submissions</div>
             <div class="diagnostic-value" id="idash-submissions">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeStudents"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeStudents"
                  role="button" tabindex="0"
                  aria-label="Active students, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Active Students</div>
             <div class="diagnostic-value" id="idash-active-students">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeAssignments"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeAssignments"
                  role="button" tabindex="0"
                  aria-label="Active assignments, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Active Assignments</div>
             <div class="diagnostic-value" id="idash-active-assignments">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="browserErrors"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-idash-card="browserErrors"
                  role="button" tabindex="0"
                  aria-label="Browser errors, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Browser Errors</div>
             <div class="diagnostic-value" id="idash-browser-errors">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
+        </div>
     </div>
 </section>
 <div class="section-toolbar">
