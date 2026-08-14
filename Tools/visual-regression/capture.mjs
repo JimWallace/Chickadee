@@ -79,6 +79,21 @@ async function main() {
             }
           `,
         });
+        // Freeze the width of every masked relative-time cell.
+        //
+        // A mask box is sized to the element it covers, and these elements are
+        // sized by their text — which is a live phrase ("now", "1 minute ago",
+        // "2 minutes ago") derived from a session created seconds earlier. So
+        // the SAME page could produce different mask widths between two runs,
+        // or even between the light and dark passes of one run, and the diff
+        // read as a real change. That is exactly what it did: a roster page
+        // came back 0.3% different in CI and identical locally, in light only.
+        // Replacing the text with a constant makes the box a constant.
+        await page.evaluate(() => {
+          document.querySelectorAll(".js-relative-time").forEach((el) => {
+            el.textContent = "0000-00-00 00:00";
+          });
+        });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle
         const file = path.join(outDir, `${p.name}--${scheme}.png`);
         await page.screenshot({
