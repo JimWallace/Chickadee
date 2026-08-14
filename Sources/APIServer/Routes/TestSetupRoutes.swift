@@ -98,6 +98,15 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
         }
 
+        // Grader-only files under browser grading would deliver the withheld
+        // bytes to every student's kernel — refused at every authoring door
+        // (`author_script` from the marking side, `set_grading_mode` from the
+        // mode side) and here so a zip-borne manifest can't smuggle the
+        // combination in either.
+        if manifest.gradingMode == .browser, !manifest.graderOnlyFiles.isEmpty {
+            throw AppError.unprocessable(reason: graderOnlyGradingConflictMessage)
+        }
+
         // An assignment in a language with no editor kernel is upload-only
         // by construction (EditorSupport.uploadOnly), so a notebook submission
         // mode would promise students an editor that cannot serve them.  Asked
