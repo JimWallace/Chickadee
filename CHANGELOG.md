@@ -9,6 +9,30 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.106] - 2026-08-14
+
+### Changed
+
+- **Per-test result log records for passing outcomes moved to debug level.**
+  Result ingest emitted one info-level `test_result_summary` record per test
+  outcome through the synchronous console handler — ~43 formatted records for
+  a green 40-test suite, per result. Failures, errors and timeouts (what the
+  documented triage flow greps for) stay at info; passes now log at debug,
+  and their counts remain in `assignment_result_summary`.
+
+### Added
+
+- **Postgres sessions carry statement and idle-in-transaction timeouts.**
+  Every pooled connection (main and MCP pools) now starts with
+  `statement_timeout = 60s` and `idle_in_transaction_session_timeout = 5min`,
+  so a pathological query or a wedged transaction can no longer hold a pooled
+  connection indefinitely — the missing third bound after the #1159
+  pool-starvation fixes (pool size, cached dashboard reads). The compose
+  Postgres template also documents modest `shared_buffers`/`max_connections`
+  tuning; the stock 100-connection ceiling is below the app's pool ceiling on
+  large hosts.
+
+
 ## [0.5.105] - 2026-08-14
 
 ### Changed
