@@ -115,12 +115,12 @@
                 <div class="assignment-actions-cell">
                     #if(item.setup.canEdit && item.setup.submissionMode != "uploadOnly" && (item.setup.gradingMode == "browser" || item.setup.hasNotebook)):
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.notebookURL)" title="Edit" aria-label="Edit">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                     </a>
                     #endif
                     #if(item.setup.isOpen && item.setup.gradingMode != "browser"):
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.submitURL)" title="Upload" aria-label="Upload">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/><path d="M4 21h16"/></svg>
+                        <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
                     </a>
                     #endif
                     #if(item.setup.isOpen && item.setup.hasNotebook && item.setup.submissionMode != "uploadOnly"):
@@ -129,7 +129,7 @@
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Reset notebook to starter (discards current edits; past submissions unaffected)"
                                 aria-label="Reset notebook to starter">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                         </button>
                     </form>
                     #endif
@@ -137,7 +137,7 @@
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.slipDayURL)"
                        title="#(item.setup.slipDayActionLabel)"
                        aria-label="#(item.setup.slipDayActionLabel)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
                     </a>
                     #endif
                 </div>
