@@ -326,16 +326,16 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 
     guard (try? zipData.write(to: tmp)) != nil else { return false }
 
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-l", tmp.path]
-    let pipe = closeOnExecPipe()
-    proc.standardOutput = pipe
-    proc.standardError = closeOnExecPipe()
-    guard (try? proc.run()) != nil else { return false }
-    let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
-    let output = String(data: outputData, encoding: .utf8) ?? ""
+    // Must go through the shared helper: a naked `run()` here races every
+    // lock-serialized zip spawn in the codebase (Foundation's EFAULT race —
+    // see ZipProcessSerialization.swift).
+    guard
+        let result = try? runZipProcessCapturingStdout(
+            executablePath: "/usr/bin/unzip",
+            arguments: ["-l", tmp.path]
+        )
+    else { return false }
+    let output = String(data: result.stdout, encoding: .utf8) ?? ""
     return output.contains(".ipynb")
 }
 
