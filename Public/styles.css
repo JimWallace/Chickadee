@@ -1439,10 +1439,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
     align-items: center;
 }
 
-/* Square-ish icon-only action button (edit / upload / reset glyphs). */
+/* Square-ish icon-only action button (edit / upload / reset glyphs) — the ONE
+   narrow variant of .action-btn. A second, 2px-tighter variant existed for the
+   same job and made two dense rows differ for no reason (UI audit S6). */
 .action-btn-icon { padding: .3rem .45rem; }
-/* Compact action button used in dense submission/roster table rows. */
-.action-btn-tight { padding: .25rem .35rem; }
 
 /* Wrapper form that should not introduce vertical rhythm (inline action).
    display:inline is a no-op for flex-item forms (flex blockifies children),
@@ -1968,8 +1968,11 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .popup-form { margin: 0; gap: .6rem; }
 /* Standard compact editor field control + compact button sizes. */
 .editor-input { font-size: var(--text-base); padding: .3rem .5rem; }
+/* The ONE size modifier for .btn. Buttons come in two sizes: default, and
+   compact for popovers and dense section headers. A third size had drifted in
+   and put two same-role "Save" buttons at different sizes on one page, which
+   is why there are now only two (UI audit S6). */
 .btn-compact { font-size: var(--text-base); padding: .3rem .6rem; }
-.btn-tiny { font-size: var(--text-sm); padding: .25rem .5rem; }
 .select-xs { padding: .2rem .5rem; font-size: var(--text-sm); }
 
 /* Generate-starter-tests panel internals. */

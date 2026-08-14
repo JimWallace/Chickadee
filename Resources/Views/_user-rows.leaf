@@ -40,7 +40,7 @@
                         </a>
                         <form method="post" action="/admin/users/#(user.id)/delete" class="user-delete-form">
                             #csrfFormField()
-                            <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                            <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                     title="Delete user" aria-label="Delete user"
                                     data-confirm="Delete this user? Their enrollments will be removed. They can log in again to restore their account.">
                                 <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>

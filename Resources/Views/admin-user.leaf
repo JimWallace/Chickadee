@@ -35,7 +35,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
                           action="/admin/users/#(targetUserID)/unenroll/#(course.id)"
                           class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Remove from course" aria-label="Remove from course">
                             <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                         </button>

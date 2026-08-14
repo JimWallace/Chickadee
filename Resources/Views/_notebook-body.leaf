@@ -76,7 +76,7 @@
             #if(isTemplateView):
             <span class="nb-closed-notice">Editing the template &mdash; placeholders stand as written.</span>
             #elseif(showSubmit):
-            <button class="btn btn-primary" id="nb-submit">Submit</button>
+            <button class="btn btn-primary" type="button" id="nb-submit">Submit</button>
             #elseif(isReadOnly):
             <span class="nb-closed-notice">This assignment is closed &mdash; view only.</span>
             #elseif(isClosed):

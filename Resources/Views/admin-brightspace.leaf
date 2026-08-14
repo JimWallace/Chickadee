@@ -73,7 +73,7 @@ LEARN
             <label class="bs-field">User Key
                 <input type="text" name="userKey" autocomplete="off" spellcheck="false" required>
             </label>
-            <button class="btn" type="submit">Save &amp; verify</button>
+            <button class="btn btn-primary" type="submit">Save &amp; verify</button>
         </form>
     </div>
 

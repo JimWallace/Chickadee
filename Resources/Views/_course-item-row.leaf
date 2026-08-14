@@ -24,7 +24,7 @@
         <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
         <td class="content-item-actions">
             <details class="popup-anchor content-item-edit-details">
-                <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
+                <summary class="btn action-btn summary-btn">Edit</summary>
                 <div class="add-section-popup card">
                     <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form content-item-form">
                         #csrfFormField()
@@ -78,7 +78,7 @@
                             <span class="text-muted content-item-attachment-size">#(att.sizeLabel)</span>
                             <form method="post" action="/instructor/content-items/#(item.content.id)/attachments/#(att.id)/delete" data-confirm="Remove this file?">
                                 #csrfFormField()
-                                <button class="btn action-btn action-danger btn-tiny" type="submit">Remove</button>
+                                <button class="btn action-btn action-danger" type="submit">Remove</button>
                             </form>
                         </div>
                         #endfor
@@ -88,7 +88,7 @@
             </details>
             <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" data-confirm="Delete this material?">
                 #csrfFormField()
-                <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
+                <button class="btn action-btn action-danger" type="submit">Delete</button>
             </form>
         </td>
     </tr>

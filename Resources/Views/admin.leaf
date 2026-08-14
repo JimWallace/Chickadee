@@ -50,7 +50,7 @@ Admin
                        value="#(workerSecret)"
                        autocomplete="new-password"
                        placeholder="Worker shared secret">
-                <button class="btn" type="submit">Save secret</button>
+                <button class="btn btn-primary" type="submit">Save secret</button>
             </form>
         </div>
     </div>
@@ -81,7 +81,7 @@ Admin
         <h2>Courses</h2>
         <div class="admin-courses-actions">
             <a href="/admin/courses/new" class="btn">Create course</a>
-            <button class="btn btn-primary" id="importCourseBtn">Import course</button>
+            <button class="btn btn-primary" type="button" id="importCourseBtn">Import course</button>
         </div>
     </div>
 
@@ -124,7 +124,7 @@ Admin
                     </form>
                     <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Archive course" aria-label="Archive course"
                                 data-confirm="Archive #(course.code)? Students will no longer see this course.">
                             <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>

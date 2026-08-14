@@ -63,7 +63,7 @@ MCP
                autocomplete="new-password"
                placeholder="agent name, e.g. course-bot"
                aria-label="New MCP account username">
-        <button class="btn" type="submit">Create account</button>
+        <button class="btn btn-primary" type="submit">Create account</button>
     </form>
 
     <div class="table-scroll"><table class="results-table sortable-table">
