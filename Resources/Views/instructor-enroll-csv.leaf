@@ -9,7 +9,7 @@ Enrol from CSV — #(courseCode)
 </div>
 
 #if(error):
-<div class="form-error section-gap">#(error)</div>
+<div class="form-error section-gap" role="alert">#(error)</div>
 #endif
 
 <section class="page-section">

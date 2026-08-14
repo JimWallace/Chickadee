@@ -161,10 +161,11 @@ Runner #(runner.workerID)
         .getAttribute ? document.querySelector('[data-runner-id]').getAttribute('data-runner-id') : '';
 
     setInterval(function () {
+        if (document.hidden) return;
         ChickadeeRelativeTime.applyRelativeTimes();
         updateOfflineBadge();
         if (!RUNNER_ID) return;
-        fetch('/admin/runners')
+        fetch('/admin/runners', { headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' }, cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (rows) {
                 if (!Array.isArray(rows)) return;

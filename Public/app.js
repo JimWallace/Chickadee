@@ -133,11 +133,11 @@ if (root) {
 }());
 
 // ── Floating action popovers (per-student extension / grade-override) ────────
-// The <details class="ext-details"> panels on the student-submissions page use
-// an absolutely-positioned .action-panel that opens downward. They live inside
-// .results-table, which clips its overflow (for the rounded corners), so a
-// panel on a row near the bottom of the table is cut off — the Save button
-// disappears below the table edge and can't even be scrolled to.
+// The <details class="ext-details"> panels on the roster and submission pages
+// hold an .action-panel or .ext-panel form. They live inside .results-table,
+// which clips its overflow (for the rounded corners), so a panel on a row near
+// the bottom of the table is cut off — the Save button disappears below the
+// table edge and can't even be scrolled to.
 //
 // When a panel opens, promote it to position:fixed and place it next to its
 // summary button, clamped to stay fully within the viewport: below the button
@@ -145,10 +145,11 @@ if (root) {
 // scroll if it is somehow taller than the screen. position:fixed also escapes
 // the table's overflow clip. Phones keep the CSS static-flow panel (the
 // max-width:640px rule), which is in normal flow and never overflows.
+//
+// Delegated on the document (capture phase — `toggle` does not bubble) so
+// panels rebuilt by a background poll repaint keep floating without rebinding.
 (function floatingActionPopovers() {
-    const details = Array.from(document.querySelectorAll('details.ext-details'))
-        .filter((d) => d.querySelector('.action-panel'));
-    if (details.length === 0) return;
+    const PANEL_SELECTOR = '.action-panel, .ext-panel';
 
     const GAP = 6;      // px between the summary button and the panel
     const MARGIN = 8;   // min px kept clear of every viewport edge
@@ -157,16 +158,23 @@ if (root) {
 
     let active = null;  // the <details> whose panel is currently floated
 
-    const clear = (panel) => FLOATED.forEach((prop) => { panel.style[prop] = ''; });
+    const panelOf = (d) => d.querySelector(PANEL_SELECTOR);
+
+    const clear = (panel) => {
+        if (!panel) return;
+        panel.classList.remove('is-floating');
+        FLOATED.forEach((prop) => { panel.style[prop] = ''; });
+    };
 
     function place(d) {
         const summary = d.querySelector('summary');
-        const panel = d.querySelector('.action-panel');
+        const panel = panelOf(d);
         if (!summary || !panel) return;
         // On phones the CSS drops the panel into static flow — leave it there.
         if (isPhone()) { clear(panel); return; }
 
         // Float it, cap its height to the viewport, and measure at the cap.
+        panel.classList.add('is-floating');
         panel.style.position = 'fixed';
         panel.style.right = 'auto';
         panel.style.overflowY = 'auto';
@@ -193,19 +201,20 @@ if (root) {
 
     const reposition = () => { if (active && active.open) place(active); };
 
-    details.forEach((d) => {
-        d.addEventListener('toggle', () => {
-            if (d.open) {
-                // Native <details> allow several open at once; only float one.
-                if (active && active !== d) active.open = false;
-                active = d;
-                place(d);
-            } else {
-                clear(d.querySelector('.action-panel'));
-                if (active === d) active = null;
-            }
-        });
-    });
+    document.addEventListener('toggle', (e) => {
+        const d = e.target;
+        if (!(d instanceof Element) || !d.matches('details.ext-details')) return;
+        if (!panelOf(d)) return;
+        if (d.open) {
+            // Native <details> allow several open at once; only float one.
+            if (active && active !== d) active.open = false;
+            active = d;
+            place(d);
+        } else {
+            clear(panelOf(d));
+            if (active === d) active = null;
+        }
+    }, true);
 
     // Keep the floated panel glued to its button as the page scrolls/resizes.
     // Capture phase so it also fires for scrolls inside nested scroll areas.
