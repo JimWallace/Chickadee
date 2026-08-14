@@ -15,14 +15,15 @@ Users
                    data-list-filter="users-table">
         </span>
     </div>
-    <div class="table-scroll"><table class="results-table" id="users-table">
+    <div class="table-scroll"><table class="results-table sortable-table" id="users-table"
+           data-sort-initial="last-seen:desc" data-sort-tiebreak="username">
         <thead>
             <tr>
-                <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
-                <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
-                <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
-                <th class="time col-hide-phone" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
-                <th class="time col-hide-phone" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
+                <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
+                <th data-sort-key="username" data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
+                <th data-sort-key="role" data-sort-type="text"><button class="sort-header" type="button">Role</button></th>
+                <th class="time col-hide-phone" data-sort-key="last-seen" data-sort-type="date"><button class="sort-header" type="button">Last Seen</button></th>
+                <th class="time col-hide-phone" data-sort-key="joined" data-sort-type="date"><button class="sort-header" type="button">Joined</button></th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -83,22 +84,6 @@ Users
     </table></div>
 </section>
 <style>
-#users-table th[data-sort-key] {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-#users-table th[data-sort-key]::after {
-    content: "  ⇅";
-    color: var(--gray-500);
-    font-size: var(--text-xs);
-}
-#users-table th[data-sort-key].sort-asc::after {
-    content: "  ↑";
-}
-#users-table th[data-sort-key].sort-desc::after {
-    content: "  ↓";
-}
 .role-form {
     display: flex;
     gap: .4rem;
@@ -119,6 +104,7 @@ Users
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/list-filter.js?v=#appVersion()"></script>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -128,90 +114,7 @@ Users
     var usersBody = usersTable.querySelector('tbody');
     if (!usersBody) return;
 
-    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-
-    var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
-    var activeUserHeader = null;
-    var activeUserDirection = 'asc';
-
-    function clearUserSortIndicators() {
-        userHeaders.forEach(function (header) {
-            header.classList.remove('sort-asc', 'sort-desc');
-            header.setAttribute('aria-sort', 'none');
-        });
-    }
-
-    function dateValueFromCell(cell) {
-        if (!cell) return 0;
-        var iso = cell.getAttribute('data-iso');
-        var date = iso ? new Date(iso) : new Date((cell.textContent || '').trim());
-        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-    }
-
-    function readUserCellValue(row, index, type, sortKey) {
-        var cell = row.children[index];
-        if (!cell) return '';
-        if (type === 'date') {
-            return dateValueFromCell(cell);
-        }
-        if (sortKey === 'role') {
-            var roleSelect = cell.querySelector('select[name="role"]');
-            if (roleSelect) return roleSelect.value || '';
-        }
-        return (cell.textContent || '').trim();
-    }
-
-    function sortUsersByHeader(header, direction) {
-        var index = userHeaders.indexOf(header);
-        if (index < 0) return;
-        var type = header.getAttribute('data-sort-type') || 'text';
-        var sortKey = header.getAttribute('data-sort-key') || '';
-        var rows = Array.from(usersBody.querySelectorAll('tr'));
-        rows.sort(function (lhs, rhs) {
-            var lv = readUserCellValue(lhs, index, type, sortKey);
-            var rv = readUserCellValue(rhs, index, type, sortKey);
-            var result = 0;
-            if (type === 'date') {
-                result = lv - rv;
-            } else {
-                result = collator.compare(String(lv), String(rv));
-            }
-            if (result === 0) {
-                var lhsUsername = (lhs.children[1] && lhs.children[1].textContent || '').trim();
-                var rhsUsername = (rhs.children[1] && rhs.children[1].textContent || '').trim();
-                result = collator.compare(lhsUsername, rhsUsername);
-            }
-            return direction === 'asc' ? result : -result;
-        });
-        rows.forEach(function (row) { usersBody.appendChild(row); });
-        clearUserSortIndicators();
-        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
-        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
-        activeUserHeader = header;
-        activeUserDirection = direction;
-    }
-
-    userHeaders.forEach(function (header) {
-        header.addEventListener('click', function () {
-            var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
-            sortUsersByHeader(header, nextDirection);
-        });
-        header.addEventListener('keydown', function (event) {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
-            sortUsersByHeader(header, nextDirection);
-        });
-    });
-
     ChickadeeRelativeTime.applyRelativeTimes(document);
-
-    if (userHeaders.length) {
-        var defaultUserHeader = userHeaders.find(function (header) {
-            return header.getAttribute('data-sort-key') === 'last-seen';
-        }) || userHeaders[0];
-        sortUsersByHeader(defaultUserHeader, 'desc');
-    }
 
     var usersFilter = document.getElementById('users-filter');
 
@@ -274,9 +177,7 @@ Users
         var csrfToken = ChickadeeUI.getCsrfToken();
         usersBody.innerHTML = rows.map(function (u) { return buildUserRow(u, csrfToken); }).join('');
         ChickadeeRelativeTime.applyRelativeTimes(usersBody);
-        if (activeUserHeader) {
-            sortUsersByHeader(activeUserHeader, activeUserDirection);
-        }
+        ChickadeeSortableTable.apply(usersTable);
         ChickadeeListFilter.apply(usersFilter);
     }
 

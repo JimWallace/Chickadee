@@ -23,14 +23,15 @@
                data-list-filter="assignment-submissions-table">
     </span>
 </div>
-<table class="results-table" id="assignment-submissions-table">
+<table class="results-table sortable-table" id="assignment-submissions-table"
+       data-sort-initial="history:desc" data-sort-tiebreak="surname">
     <thead>
         <tr>
-            <th data-sort-key="surname" data-sort-type="text" tabindex="0" aria-sort="none">Surname</th>
-            <th data-sort-key="given_names" data-sort-type="text" tabindex="0" aria-sort="none">Given Names</th>
-            <th class="col-hide-phone" data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
-            <th data-sort-key="grade" data-sort-type="number" tabindex="0" aria-sort="none">Grade</th>
-            <th class="col-hide-phone" data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
+            <th data-sort-key="surname" data-sort-type="text"><button class="sort-header" type="button">Surname</button></th>
+            <th data-sort-key="given_names" data-sort-type="text"><button class="sort-header" type="button">Given Names</button></th>
+            <th class="col-hide-phone" data-sort-key="student_id" data-sort-type="text"><button class="sort-header" type="button">Student ID</button></th>
+            <th data-sort-key="grade" data-sort-type="number"><button class="sort-header" type="button">Grade</button></th>
+            <th class="col-hide-phone" data-sort-key="history" data-sort-type="date"><button class="sort-header" type="button">History</button></th>
             <th>Action</th>
         </tr>
     </thead>
@@ -41,7 +42,7 @@
             <td>#(row.givenNames)</td>
             <td class="col-hide-phone"><strong>#(row.studentID)</strong>#if(secretRevealEnabled):#if(row.secretRevealSpent): <span title="Student spent their secret-reveal token — secret test results are visible to them">🔓</span>#endif#endif</td>
             <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
-            <td class="col-hide-phone" data-ts="#(row.latestSubmittedAtEpoch)">
+            <td class="col-hide-phone" data-sort-value="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
                     <div class="submission-history-cell">
                         #if(row.hasLatestSubmission):
@@ -125,118 +126,9 @@
     flex-wrap: wrap;
     align-items: center;
 }
-#assignment-submissions-table th[data-sort-key] {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-#assignment-submissions-table th[data-sort-key]::after {
-    content: "  ⇅";
-    color: var(--gray-500);
-    font-size: var(--text-xs);
-}
-#assignment-submissions-table th[data-sort-key].sort-asc::after {
-    content: "  ↑";
-}
-#assignment-submissions-table th[data-sort-key].sort-desc::after {
-    content: "  ↓";
-}
 </style>
 <script src="/list-filter.js?v=#appVersion()"></script>
-<script>
-(function () {
-    var table = document.getElementById('assignment-submissions-table');
-    if (!table) return;
-    var tbody = table.querySelector('tbody');
-    if (!tbody) return;
-    var headers = Array.from(table.querySelectorAll('th[data-sort-key]'));
-    if (!headers.length) return;
-    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-    var activeHeader = null;
-    var activeDirection = 'asc';
-
-    function normalizeNumber(value) {
-        var match = (value || '').match(/-?\d+(\.\d+)?/);
-        return match ? Number(match[0]) : Number.NEGATIVE_INFINITY;
-    }
-
-    function readCellValue(row, index, type) {
-        var cell = row.children[index];
-        if (!cell) return type === 'number' || type === 'datetime' ? Number.NEGATIVE_INFINITY : '';
-        if (type === 'datetime') {
-            var ts = parseInt(cell.getAttribute('data-ts') || '0', 10);
-            return isNaN(ts) ? 0 : ts;
-        }
-        var text = (cell.textContent || '').trim();
-        if (type === 'number') {
-            return normalizeNumber(text);
-        }
-        return text;
-    }
-
-    function clearSortIndicators() {
-        headers.forEach(function (header) {
-            header.classList.remove('sort-asc', 'sort-desc');
-            header.setAttribute('aria-sort', 'none');
-        });
-    }
-
-    function sortByHeader(header, direction) {
-        var index = headers.indexOf(header);
-        if (index < 0) return;
-        var type = header.getAttribute('data-sort-type') || 'text';
-        var rows = Array.from(tbody.querySelectorAll('tr'));
-        rows.sort(function (lhs, rhs) {
-            var lv = readCellValue(lhs, index, type);
-            var rv = readCellValue(rhs, index, type);
-            var result = 0;
-            if (type === 'number' || type === 'datetime') {
-                result = lv - rv;
-            } else {
-                result = collator.compare(String(lv), String(rv));
-            }
-            if (result === 0) {
-                // tie-break: surname (col 0), then given names (col 1)
-                var ls = (lhs.children[0] && lhs.children[0].textContent || '').trim();
-                var rs = (rhs.children[0] && rhs.children[0].textContent || '').trim();
-                result = collator.compare(ls, rs);
-                if (result === 0) {
-                    var lg = (lhs.children[1] && lhs.children[1].textContent || '').trim();
-                    var rg = (rhs.children[1] && rhs.children[1].textContent || '').trim();
-                    result = collator.compare(lg, rg);
-                }
-            }
-            return direction === 'asc' ? result : -result;
-        });
-        rows.forEach(function (row) { tbody.appendChild(row); });
-        clearSortIndicators();
-        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
-        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
-        activeHeader = header;
-        activeDirection = direction;
-    }
-
-    headers.forEach(function (header) {
-        header.addEventListener('click', function () {
-            var nextDirection = (activeHeader === header && activeDirection === 'asc') ? 'desc' : 'asc';
-            sortByHeader(header, nextDirection);
-        });
-        header.addEventListener('keydown', function (event) {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            var nextDirection = (activeHeader === header && activeDirection === 'asc') ? 'desc' : 'asc';
-            sortByHeader(header, nextDirection);
-        });
-    });
-
-    // Default: most recent submissions at top (History column, descending)
-    var historyHeader = headers.find(function (h) { return h.getAttribute('data-sort-key') === 'history'; });
-    if (historyHeader) {
-        sortByHeader(historyHeader, 'desc');
-    }
-
-})();
-</script>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 <script>
 // Submissions stat card: cycle the pre-rendered 24h/7d/30d sparklines on
 // click/Enter/Space. Each window's bars are server-rendered (the 24h view is

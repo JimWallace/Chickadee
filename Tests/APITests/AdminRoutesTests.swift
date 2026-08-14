@@ -319,7 +319,10 @@ private struct PassthroughResponder: AsyncResponder {
                     #expect(res.status == .ok)
                     let body = String(buffer: res.body)
                     #expect(body.contains("data-sort-key=\"last-seen\""))
-                    #expect(body.contains("sortUsersByHeader(defaultUserHeader, 'desc');"))
+                    // The load-time sort is declared in markup and applied by
+                    // the shared sortable-table.js, so this asserts the
+                    // declaration rather than a page script's call.
+                    #expect(body.contains("data-sort-initial=\"last-seen:desc\""))
                     let recentIndex = try #require(body.range(of: "recent_seen")?.lowerBound)
                     let olderIndex = try #require(body.range(of: "older_seen")?.lowerBound)
                     let neverIndex = try #require(body.range(of: "never_seen")?.lowerBound)

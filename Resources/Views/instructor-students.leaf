@@ -60,16 +60,17 @@ Students
     </span>
 </div>
 
-<table class="results-table" id="enrolled-students-table"
+<table class="results-table sortable-table" id="enrolled-students-table"
+       data-sort-initial="last-seen:desc" data-sort-tiebreak="username"
        data-archived="#if(courseIsArchived):true#else:false#endif"
        data-can-manage="#if(canManageRoster):true#else:false#endif"
        data-course-id="#(currentUser.activeCourse.id)">
     <thead>
         <tr>
-            <th class="sortable" data-col="0">Name <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="1">Username <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="2">Role <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="3">Last Seen <span class="sort-icon">⇕</span></th>
+            <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
+            <th data-sort-key="username" data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
+            <th data-sort-key="role" data-sort-type="text"><button class="sort-header" type="button">Role</button></th>
+            <th data-sort-key="last-seen" data-sort-type="date"><button class="sort-header" type="button">Last Seen</button></th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -189,14 +190,6 @@ Students
 .students-pending-role { color: var(--gray-500); }
 .students-row-actions { display: flex; align-items: center; gap: .3rem; }
 .students-register-hint { font-size: var(--text-2xs); color: var(--gray-600); margin: 0 0 .2rem; }
-#enrolled-students-table th.sortable {
-    cursor: pointer;
-    user-select: none;
-}
-#enrolled-students-table th.sortable .sort-icon {
-    color: var(--gray-500);
-    font-size: var(--text-xs);
-}
 .student-row-link {
     cursor: pointer;
 }
@@ -224,6 +217,7 @@ Students
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/list-filter.js?v=#appVersion()"></script>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -238,19 +232,8 @@ Students
     var canManage = table.getAttribute('data-can-manage') === 'true';
     var courseId = table.getAttribute('data-course-id') || '';
 
-    var sortCol = 3;
-    var sortAsc = false;
-
     // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
     var escapeHtml = ChickadeeUI.escapeHtml;
-
-    // Role cells contain a <select>; sort by its value, not the combined
-    // option-label text.
-    function cellSortText(cell) {
-        if (!cell) return '';
-        var sel = cell.querySelector('select');
-        return (sel ? sel.value : cell.textContent).trim().toLowerCase();
-    }
 
     var deleteIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 
@@ -328,32 +311,6 @@ Students
         if (emptyMsg) emptyMsg.hidden = tbody.querySelectorAll('tr').length > 0;
     }
 
-    function sortRows() {
-        var rows = Array.from(tbody.querySelectorAll('tr'));
-        rows.sort(function (a, b) {
-            var result;
-            if (sortCol === 3) {
-                var aISO = a.cells[3] ? a.cells[3].getAttribute('data-iso') : '';
-                var bISO = b.cells[3] ? b.cells[3].getAttribute('data-iso') : '';
-                result = (aISO ? new Date(aISO).getTime() : 0) - (bISO ? new Date(bISO).getTime() : 0);
-            } else {
-                var aText = cellSortText(a.cells[sortCol]);
-                var bText = cellSortText(b.cells[sortCol]);
-                result = aText.localeCompare(bText);
-            }
-            if (result === 0) {
-                var aUser = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
-                var bUser = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
-                result = aUser.localeCompare(bUser);
-            }
-            return sortAsc ? result : -result;
-        });
-        rows.forEach(function (row) { tbody.appendChild(row); });
-        table.querySelectorAll('th.sortable .sort-icon').forEach(function (icon) { icon.textContent = '⇕'; });
-        var activeHeader = table.querySelector('th.sortable[data-col="' + sortCol + '"] .sort-icon');
-        if (activeHeader) activeHeader.textContent = sortAsc ? '↑' : '↓';
-    }
-
     // ── LEARN classlist reconciliation ───────────────────────────────
     // After a "Check against LEARN" run, rows whose student is no longer on
     // the LEARN classlist get a "not registered on LEARN" badge.  The id set
@@ -408,19 +365,6 @@ Students
 
     if (learnBtn) learnBtn.addEventListener('click', checkAgainstLearn);
 
-    table.querySelectorAll('th.sortable').forEach(function (th) {
-        th.addEventListener('click', function () {
-            var col = parseInt(th.getAttribute('data-col'), 10);
-            if (sortCol === col) {
-                sortAsc = !sortAsc;
-            } else {
-                sortCol = col;
-                sortAsc = true;
-            }
-            sortRows();
-        });
-    });
-
     // Row-click navigation (delegated so it survives repaints).
     table.addEventListener('click', function (event) {
         var t = event.target;
@@ -445,15 +389,16 @@ Students
             }).length);
         }
         ChickadeeRelativeTime.applyRelativeTimes(tbody);
-        sortRows();
+        ChickadeeSortableTable.apply(table);
         ChickadeeListFilter.apply(filter);
         updateEmptyState();
         applyLearnFlags();
     }
 
     // ── Initial paint ────────────────────────────────────────────────
+    // Sorting is declared in markup (data-sort-initial) and applied by
+    // sortable-table.js on load.
     ChickadeeRelativeTime.applyRelativeTimes(document);
-    sortRows();
     updateEmptyState();
     applyLearnFlags();
 

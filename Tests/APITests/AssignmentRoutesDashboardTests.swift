@@ -367,8 +367,10 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("id=\"enrolled-students-table\""))
-                    #expect(html.contains("var sortCol = 3;"))
-                    #expect(html.contains("var sortAsc = false;"))
+                    // The load-time sort is declared in markup and applied by
+                    // the shared sortable-table.js, so this asserts the
+                    // declaration rather than a page script's variables.
+                    #expect(html.contains("data-sort-initial=\"last-seen:desc\""))
                     let recentIndex = try #require(html.range(of: "recent_seen_student")?.lowerBound)
                     let olderIndex = try #require(html.range(of: "older_seen_student")?.lowerBound)
                     let neverIndex = try #require(html.range(of: "never_seen_student")?.lowerBound)

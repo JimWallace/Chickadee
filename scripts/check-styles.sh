@@ -109,7 +109,7 @@ fi
 # attributes or a JSON island).  Baseline = total non-blank lines inside
 # <script> bodies across all templates; it may only go DOWN.  <script src=…>
 # includes and single-line <script>…</script> elements don't count.
-INLINE_SCRIPT_BASELINE=1934
+INLINE_SCRIPT_BASELINE=1548
 inline_script_count="$(
   awk '
     /<script[^>]*src=/ { next }
@@ -232,7 +232,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=902
+PAGE_STYLE_BASELINE=842
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -264,6 +264,27 @@ if [ -n "${s1_hack}${s1_local}" ]; then
   echo "       Use input[data-list-filter] (Public/list-filter.js) — it owns"
   echo "       both the row matching and the autofill suppression."
   { [ -n "$s1_hack" ] && printf '%s\n' "$s1_hack"; [ -n "$s1_local" ] && printf '%s\n' "$s1_local"; } | sed 's/^/  /'
+  echo
+fi
+
+# S2: column sorting is Public/sortable-table.js (.sortable-table +
+# th > button.sort-header). The two dialects it replaced must not return: a
+# page-local sort implementation, or a page-local sort affordance (the
+# th[data-sort-key]::after glyph CSS, the .sort-icon span). A th that declares
+# data-sort-type must carry the shared button, or it is decorative markup that
+# sorts nothing.
+s2_impl="$(grep -rnE 'function sort[A-Za-z]*(ByHeader|Rows|Array)' "${views[@]}" || true)"
+s2_glyph="$(grep -rnE 'data-sort-key\]::after|class="sort-icon"' "${views[@]}" Public/*.css || true)"
+s2_orphan="$(grep -rn 'data-sort-type' "${views[@]}" | grep -v 'sort-header' || true)"
+if [ -n "${s2_impl}${s2_glyph}${s2_orphan}" ]; then
+  status=1
+  echo "ERROR: a page re-implements the shared sortable-table idiom."
+  echo "       Use .sortable-table + <th data-sort-key data-sort-type>"
+  echo "       <button class=\"sort-header\">, and Public/sortable-table.js's"
+  echo "       apply() to restore the sort after a repaint."
+  { [ -n "$s2_impl" ] && printf '%s\n' "$s2_impl"
+    [ -n "$s2_glyph" ] && printf '%s\n' "$s2_glyph"
+    [ -n "$s2_orphan" ] && printf '%s\n' "$s2_orphan"; } | sed 's/^/  /'
   echo
 fi
 
