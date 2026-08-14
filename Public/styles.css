@@ -1237,7 +1237,13 @@ code { font-family: var(--font-mono); font-size: .9em; }
    overflow clip) it reads as an overlay, so it carries the pop elevation.
    .popover-panel already has the shadow statically; .ext-panel gains it only
    while floated so its in-flow rendering is unchanged. */
-.ext-panel.is-floating, .popover-panel.is-floating { box-shadow: var(--shadow-pop); z-index: 10; }
+.ext-panel.is-floating, .popover-panel.is-floating {
+    position: fixed;
+    right: auto;
+    overflow-y: auto;
+    box-shadow: var(--shadow-pop);
+    z-index: 10;
+}
 
 /* ── Submission view (submission.leaf) ───────────────── */
 /* Migrated out of submission.leaf's embedded <style> block (v0.4.x UI audit)
@@ -1426,6 +1432,11 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .content-item-attachment-size { font-size: var(--text-xs); }
 
 .text-muted { color: var(--gray-600); }
+/* Status-line text colours (ChickadeeUI.setStatus toggles these; a JS-written
+   colour literal would bypass the palette and its dark-mode values). */
+.text-error { color: var(--red); }
+.text-ok { color: var(--green); }
+.text-quiet { color: var(--gray-500); }
 
 .due-extension-note { font-size: var(--text-xs); color: var(--gray-600); }
 
@@ -1583,6 +1594,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     gap: .2rem;
     font-size: var(--text-base);
 }
+/* Width modifiers for a field-stack sharing an editor row. */
+.field-stack--grow { flex: 1 1 16rem; }
+.field-stack--narrow { width: 11rem; }
 /* Compact form control sizing for dense toolbars/editor rows. */
 .input-compact { font-size: var(--text-base); padding: .2rem .5rem; }
 
@@ -1929,10 +1943,33 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .section-vars-table { font-size: var(--text-sm); width: 100%; }
 .section-var-namecell { width: 14rem; white-space: nowrap; }
 .section-var-valid { display: inline-block; width: 1rem; color: var(--green); font-size: var(--text-md); text-align: center; }
-.section-var-name-input { width: calc(100% - 1.5rem); padding: .2rem .4rem; font-size: var(--text-sm); font-family: monospace; }
-.section-var-value-input { width: 100%; padding: .2rem .4rem; font-size: var(--text-sm); font-family: monospace; }
 .section-var-removecell { width: 2.5rem; text-align: right; }
 .icon-btn-xs { padding: .2rem .4rem; display: inline-flex; align-items: center; }
+
+/* Form control embedded in a dense table cell (inputs, case and suite rows).
+   Server-rendered rows and the JS row builders share these, so the two
+   renderings of the same row cannot drift apart. */
+.cell-input { width: 100%; padding: .2rem .4rem; font-size: var(--text-sm); }
+/* Modifier: leaves room for the 1rem validity check sharing the cell. */
+.cell-input--with-check { width: calc(100% - 1.5rem); }
+/* Monospace form control (identifiers, JSON, expressions). */
+.input-mono { font-family: var(--font-mono); }
+/* Points column control in suite rows. */
+.points-input { width: 4rem; }
+
+/* Value-state cues the editors toggle by class (never by .style writes —
+   these carry palette colours, so a JS-written literal here would be the
+   invisible-on-dark hazard): a per-student `=` expression rides a green
+   tint; a value needing a second look an amber border; an invalid one a red
+   border; an auto-computed expected value is muted until the author takes
+   it over; a `$name` reference renders italic green when it resolves and
+   italic red when it does not. */
+.input-expression { background: color-mix(in srgb, var(--green) 8%, var(--surface)); }
+.input-attention { border-color: var(--amber); }
+.input-invalid { border-color: var(--red); }
+.input-computed { color: var(--gray-500); }
+.input-ref-ok { font-style: italic; color: var(--green); }
+.input-ref-broken { font-style: italic; color: var(--red); border-color: var(--red); }
 
 /* Small inline icon-button (edit/cancel pencils in section + assignment headers). */
 .icon-btn-text { display: inline-flex; align-items: center; padding: .1rem .25rem; color: var(--gray-500); }
@@ -1957,10 +1994,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .assign-header-edit { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--gray-50); }
 .assign-header-edit-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
 .field-gap { margin-bottom: .5rem; }
-
-/* Global-inputs editor rows (edit page). */
-.global-input-name-input { width: calc(100% - 1.5rem); padding: .2rem .4rem; font-family: monospace; }
-.global-input-value-input { width: 100%; padding: .2rem .4rem; font-family: monospace; }
 
 /* Suite editor container + editor-block header headings. */
 .suite-editor-section { margin-top: 1.25rem; }
@@ -1987,7 +2020,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
    and put two same-role "Save" buttons at different sizes on one page, which
    is why there are now only two (UI audit S6). */
 .btn-compact { font-size: var(--text-base); padding: .3rem .6rem; }
-.select-xs { padding: .2rem .5rem; font-size: var(--text-sm); }
+.select-xs { padding: .2rem .5rem; font-size: var(--text-sm); max-width: 100%; }
 
 /* Generate-starter-tests panel internals. */
 .gen-tests-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
@@ -1996,8 +2029,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .gen-template-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .4rem; }
 .gen-template-label { font-size: var(--text-sm); display: flex; align-items: center; gap: .3rem; }
 .gen-tests-prompt { margin-bottom: .4rem; }
-/* Right-aligned action buttons inside a table cell (notebook files table). */
-.cell-actions { display: flex; gap: .4rem; justify-content: flex-end; flex-wrap: wrap; }
+/* Right-aligned action buttons inside a table cell (notebook files table,
+   suite rows). */
+.cell-actions { display: flex; gap: .4rem; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
 /* Inline upload-status text (colour also set by JS on error). */
 .upload-status-inline { font-size: var(--text-sm); color: var(--gray-500); margin-left: .5rem; }
 /* A function checkbox item in the generate-tests checklist (built in JS). */
@@ -2013,6 +2047,18 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .fv-name-col { width: 12rem; }
 .fv-action-col { width: 4rem; }
 .case-num-col { width: 2.25rem; }
+/* Auto-numbered leading cell of a case row. */
+.pf-case-num { text-align: center; color: var(--gray-500); font-size: var(--text-xs); }
+/* Row-level validity checkmark cell of a variable row. */
+.pf-var-row-valid { vertical-align: middle; text-align: center; color: var(--green); font-size: var(--text-md); }
+/* Locked section-variable rows at the top of the family Variables table;
+   .is-shadowed marks a row a same-named family variable overrides. */
+.pf-var-section-row td { padding: .3rem .4rem; }
+.pf-var-section-row code { font-family: var(--font-mono); font-size: var(--text-sm); }
+td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--gray-600); }
+.pf-var-section-row.is-shadowed code,
+.pf-var-section-row.is-shadowed td.pf-var-locked-value { text-decoration: line-through; }
+.pf-var-shadow-note { font-size: var(--text-2xs); color: var(--amber); margin-left: .4rem; }
 
 /* Instructor dashboard (assignments.leaf): section toolbar + per-section bits. */
 .section-toolbar { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
@@ -2053,6 +2099,10 @@ tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
 tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
 tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .suite-name-cell { display: flex; align-items: center; gap: .4rem; }
+.suite-name-input { width: 12rem; }
+/* Title + meta-line stack inside a suite row's name cell. */
+.cell-stack { display: flex; flex-direction: column; gap: .15rem; }
+.cell-title { font-size: var(--text-base); }
 .suite-root-drop { height: 2rem; text-align: center; font-size: var(--text-xs); color: var(--gray-500); cursor: default; }
 .suite-root-drop.drop-hover { background: var(--hover-bg); }
 /* Insertion indicator while dragging a whole SECTION over another section
@@ -2129,6 +2179,41 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-pop);
+}
+.modal-head,
+.modal-foot {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    flex-shrink: 0;
+}
+.modal-head { border-bottom: 1px solid var(--border); }
+.modal-foot { border-top: 1px solid var(--border); gap: .6rem; }
+.modal-title { font-weight: 600; flex: 1; }
+.modal-close { font-size: var(--text-lg); color: var(--gray-500); padding: .1rem .3rem; }
+.modal-body {
+    padding: .75rem 1rem;
+    overflow: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+.modal-status { font-size: var(--text-sm); color: var(--gray-500); margin-left: .5rem; }
+/* Reserves a line for the test-kind description so the modal doesn't jump. */
+.modal-desc { min-height: 1.2em; line-height: 1.3; }
+/* Fine-print help line under an editor-built control. */
+.field-help { margin: 0; font-size: var(--text-2xs); color: var(--gray-600); }
+/* Vertical stack of editor-built fields/cards (test-editor modal panels). */
+.editor-stack { display: flex; flex-direction: column; gap: .5rem; }
+/* CodeMirror host box in the Test Editor. */
+.editor-cm-mount {
+    min-height: 240px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: auto;
+    font-size: var(--text-base);
 }
 
 /* The lead heading of a tabbed page's content, where the page's own <h1> is

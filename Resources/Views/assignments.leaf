@@ -80,7 +80,7 @@
         <div class="section-view">
             <strong>#(section.name)</strong>
             <span class="section-mode-note">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
-            <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+            <button class="btn-link js-section-edit-toggle icon-btn-text" type="button"
                     title="Edit section" aria-label="Edit section">
                 <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
             </button>
@@ -98,10 +98,10 @@
                 </select>
                 <button class="btn btn-primary btn-compact" type="submit">Save</button>
             </form>
-            <button class="btn action-btn action-danger section-delete-btn" type="button"
+            <button class="btn action-btn action-danger js-section-delete-btn" type="button"
                     data-action="/instructor/sections/#(section.sectionID)/delete"
                     data-name="#(section.name)">Delete</button>
-            <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+            <button class="btn-link js-section-edit-cancel icon-btn-text" type="button"
                     aria-label="Cancel" title="Cancel">✕</button>
         </div>
     </div>
@@ -170,7 +170,7 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody class="assignments-body" data-section-id="#(section.sectionID)">
+        <tbody data-section-id="#(section.sectionID)">
         #if(section.items.isEmpty):
         <tr class="section-empty-row">
             <td colspan="6" class="section-empty-cell">

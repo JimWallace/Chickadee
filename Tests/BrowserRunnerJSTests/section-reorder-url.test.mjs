@@ -107,7 +107,7 @@ test('the create page no longer binds its own section handlers', async () => {
   const wiring = await fs.readFile(path.resolve('Public/assignment-new-page.js'), 'utf8');
   // suite-table.js owns all three; the page used to bind duplicates on top.
   for (const src of [template, wiring]) {
-    for (const marker of ['section-edit-toggle', 'section-edit-cancel', 'section-delete-btn']) {
+    for (const marker of ['js-section-edit-toggle', 'js-section-edit-cancel', 'js-section-delete-btn']) {
       assert.ok(
         !src.includes(`closest('.${marker}')`),
         `create page still binds a handler for .${marker}; suite-table.js owns it`,

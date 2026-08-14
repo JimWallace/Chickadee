@@ -146,7 +146,7 @@
 
     document.body.addEventListener('click', function (ev) {
         var t = ev.target;
-        var se = t.closest && t.closest('.suite-edit-btn');
+        var se = t.closest && t.closest('.js-suite-edit-btn');
         if (!se) return;
         var name = se.getAttribute('data-filename');
         if (name) modal.open({ editing: { mechanism: 'script', id: name, item: { script: name, hint: scriptHint(name) } } });

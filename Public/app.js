@@ -206,7 +206,9 @@ if (root) {
     const GAP = 6;      // px between the summary button and the panel
     const MARGIN = 8;   // min px kept clear of every viewport edge
     const isPhone = () => window.matchMedia('(max-width: 640px)').matches;
-    const FLOATED = ['position', 'left', 'top', 'right', 'maxHeight', 'overflowY'];
+    // Geometry the JS computes per-open; the static float styling
+    // (position:fixed etc.) lives on .is-floating in styles.css.
+    const FLOATED = ['left', 'top', 'maxHeight'];
 
     let active = null;  // the <details> whose panel is currently floated
 
@@ -227,9 +229,6 @@ if (root) {
 
         // Float it, cap its height to the viewport, and measure at the cap.
         panel.classList.add('is-floating');
-        panel.style.position = 'fixed';
-        panel.style.right = 'auto';
-        panel.style.overflowY = 'auto';
         panel.style.maxHeight = (window.innerHeight - 2 * MARGIN) + 'px';
         panel.style.left = '0px';
         panel.style.top = '0px';

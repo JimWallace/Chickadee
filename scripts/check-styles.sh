@@ -164,7 +164,7 @@ fi
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=118
+JS_STYLE_DECISION_BASELINE=10
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true
@@ -179,6 +179,57 @@ if [ "$js_style_count" -gt "$JS_STYLE_DECISION_BASELINE" ]; then
   echo "       the class (or sets a --custom-property). See docs/ui-design.md."
 elif [ "$js_style_count" -lt "$JS_STYLE_DECISION_BASELINE" ]; then
   echo "note: JS styling decisions dropped to ${js_style_count}; lower JS_STYLE_DECISION_BASELINE in scripts/check-styles.sh."
+fi
+
+# ── 3d. JS may not write colour or typography via .style — absolute ──────────
+# The worst class of JS styling decision: a colour or type property written
+# from script bypasses the palette (no dark-mode value — invisible-on-dark
+# waiting to happen) and the type scale. The editors' validity cues were 30
+# of these; all are toggled classes now (.input-invalid, .input-ref-ok, …,
+# styles.css), and the count reached zero in one pass, so the rule is
+# absolute rather than a ratchet. Writes only — a .style read stays legal.
+s3d="$(grep -rnE '\.style\.(color|background|backgroundColor|borderColor|border|outline|boxShadow|fontStyle|fontSize|fontFamily|font|textDecoration)\s*=' Public/*.js || true)"
+if [ -n "$s3d" ]; then
+  status=1
+  echo "ERROR: a colour/typography property written via .style in first-party JS."
+  echo "       Toggle a class from Public/styles.css instead, so the value rides"
+  echo "       the palette and the type scale (docs/ui-design.md)."
+  printf '%s\n' "$s3d" | sed 's/^/  /'
+  echo
+fi
+
+# ── 3e. style=\" in a JS-built HTML string must be custom-prop-only ──────────
+# The same rule templates already live under (section 2): a style attribute
+# inside a generated-HTML string may only assign CSS custom properties (e.g.
+# the meter's --bar-h) or the JS-toggled display:none initial state. Anything
+# else is a styling decision the CSS guards cannot see. The editors' row
+# builders held ~50 of these; all are classes now, so the rule is absolute.
+js_inline_violations=""
+while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
+  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+  ok=1
+  IFS=';' read -ra decls <<< "$value"
+  for decl in "${decls[@]}"; do
+    d="$(printf '%s' "$decl" | tr -d '[:space:]')"
+    [ -z "$d" ] && continue
+    case "$d" in
+      display:none) ;;
+      --*:*) ;;            # CSS custom-property assignment
+      *) ok=0 ;;
+    esac
+  done
+  [ "$ok" -eq 0 ] && js_inline_violations+="  ${hit}"$'\n'
+done < <(grep -rno 'style="[^"]*"' Public/*.js || true)
+
+if [ -n "$js_inline_violations" ]; then
+  status=1
+  echo "ERROR: disallowed style=\"\" inside a JS-built HTML string."
+  echo "       Use a class from Public/styles.css. A style attribute in generated"
+  echo "       markup may only assign a --custom-prop or the display:none initial"
+  echo "       state — the same rule templates follow."
+  printf '%s' "$js_inline_violations"
+  echo
 fi
 
 # ── 4. No duplicated / shadowed selectors in page <style> blocks ─────────────

@@ -101,7 +101,7 @@
                             <th>Label</th>
                             <!-- One arg column per detected parameter; columns are rebuilt
                                  dynamically when the function changes. -->
-                            <th class="pf-case-expected-col">Expected</th>
+                            <th>Expected</th>
                             <th class="fv-action-col"></th>
                         </tr>
                     </thead>

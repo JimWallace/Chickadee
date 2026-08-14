@@ -163,7 +163,7 @@
     }
 
     // ── Section edit mode ─────────────────────────────────────────────────────
-    document.querySelectorAll('.section-edit-toggle').forEach(function (btn) {
+    document.querySelectorAll('.js-section-edit-toggle').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var header = btn.closest('.section-header');
             if (!header) return;
@@ -175,7 +175,7 @@
         });
     });
 
-    document.querySelectorAll('.section-edit-cancel').forEach(function (btn) {
+    document.querySelectorAll('.js-section-edit-cancel').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var header = btn.closest('.section-header');
             if (!header) return;
@@ -188,7 +188,7 @@
     // against the origin and require same-origin before it becomes a form
     // target, so a DOM-injected value cannot redirect the POST off-site or to
     // a javascript: URL (CodeQL, js/xss-through-dom).
-    document.querySelectorAll('.section-delete-btn').forEach(function (btn) {
+    document.querySelectorAll('.js-section-delete-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var name = btn.getAttribute('data-name');
             var action = btn.getAttribute('data-action');
