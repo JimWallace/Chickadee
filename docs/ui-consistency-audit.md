@@ -731,6 +731,24 @@ columns, brightspace last-sync, slip-day dates; hoist the
 offline-threshold rule into `relative-time.js`
 (`ChickadeeRelativeTime.isStale(iso, ms)`) for the two inline copies.
 
+**Status: done** (the `isStale` hoist and the dead include landed early, in
+S3 and S0 respectively). `relative-time.js` now loads from `base.leaf`,
+retiring five per-page includes — the arrangement that let a page load it
+with nothing to render. Converted: the activity feed's "When" (the one
+column that needed a new server field, `timestampISO`, since its display
+string is Waterloo-formatted), and the agent tables' Authorized / Last used
+/ Expires on both `connected-agents` and the admin MCP tab.
+
+Those agent columns turned out to need **no server change at all**: their
+"formatted" strings were already ISO-8601, so the page had been showing
+users raw `2026-08-14T03:04:09Z` timestamps. Marking them up both fixes
+that and gives the policy's tooltip for free. Expiry is included under the
+policy as a **countdown** — "in 3 days" is what a reader wants from an
+expiry, and it is the same reading as recency.
+
+Audit and retention stay absolute and monospaced, deliberately: there the
+exact instant is the content.
+
 ### S9 — Feedback channels (M)
 
 **Target state:** two channels. Passive/progress feedback is a

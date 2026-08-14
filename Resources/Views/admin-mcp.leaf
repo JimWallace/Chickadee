@@ -79,7 +79,7 @@ MCP
         #for(account in accounts):
             <tr>
                 <td><code>#(account.username)</code></td>
-                <td class="time">#(account.createdAt)</td>
+                <td class="time js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</td>
                 <td>
                     <div class="mcp-course-cell">
                         #for(c in account.enrolledCourses):
@@ -161,9 +161,9 @@ MCP
                 <td>#(grant.agentName)</td>
                 <td><code>#(grant.owner)</code></td>
                 <td><code>#(grant.scope)</code></td>
-                <td class="time">#(grant.createdAt)</td>
-                <td class="time">#if(grant.lastUsedAt):#(grant.lastUsedAt)#else:—#endif</td>
-                <td class="time">#(grant.expiresAt)</td>
+                <td class="time js-relative-time" data-iso="#(grant.createdAt)">#(grant.createdAt)</td>
+                <td class="time#if(grant.lastUsedAt): js-relative-time#endif"#if(grant.lastUsedAt): data-iso="#(grant.lastUsedAt)"#endif>#if(grant.lastUsedAt):#(grant.lastUsedAt)#else:—#endif</td>
+                <td class="time js-relative-time" data-iso="#(grant.expiresAt)">#(grant.expiresAt)</td>
                 <td>
                     #if(grant.revoked):
                     <span class="text-muted">Revoked</span>

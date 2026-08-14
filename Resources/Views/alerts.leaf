@@ -123,7 +123,6 @@ Server Health Alerts
     </table></div>
     #endif
 </section>
-<script src="/relative-time.js?v=#appVersion()"></script>
 <style>
 .alerts-webhook-input { flex: 1; min-width: min(320px, 100%); }
 .alerts-test-form { margin-bottom: 1.5rem; }

@@ -183,7 +183,6 @@ tr.runner-row-offline {
     opacity: .5;
 }
 </style>
-<script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 <script src="/table-poll.js?v=#appVersion()"></script>
 <script>
