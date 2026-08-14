@@ -3,10 +3,11 @@
 The widget-layer audit ([ui-consistency-audit.md](ui-consistency-audit.md))
 shipped as S0–S10 and is closed. This brief is for whoever continues the
 ratchet: where the remaining mass actually sits, which of it is mechanical,
-and the two traps that will cost you a day if you walk into them cold.
+and the traps that will cost you a day if you walk into them cold.
 
-Everything below is measured against `main` at the close of S10, not
-estimated. Re-measure before you act — the commands are given.
+**Updated after the editor-conversion pass (2026-08-14),** which took the
+brief's items 1–3 and the #1384 salvage in one PR. Everything below is
+measured, not estimated. Re-measure before you act — the commands are given.
 
 ---
 
@@ -16,39 +17,65 @@ estimated. Re-measure before you act — the commands are given.
 |---|---:|---:|---|
 | `INLINE_SCRIPT_BASELINE` | 1968 | **1317** | none — sits at the count |
 | `PAGE_STYLE_BASELINE` | 913 | **689** | none |
-| `JS_STYLE_DECISION_BASELINE` | 122 | **118** | none |
+| `JS_STYLE_DECISION_BASELINE` | 122 | **10** | none — see below |
 | `ALERT_BASELINE` | 4 | **0** | absolute |
 | `JS_ALERT_BASELINE` | 7 | **0** | absolute |
 | axe moderate/minor | 12 | **0** | absolute in practice |
-| class-resolution allowlist | — | **67** | shrink-only |
+| class-resolution allowlist | 67 | **22** | shrink-only |
 
-Every ratchet is at its count, so *any* growth fails CI. Five guards were
-added by the audit; three are absolute rules rather than ratchets (icon
-geometry outside the sprite, native confirmation outside the seam, the
-retired button size modifiers).
+Every ratchet is at its count, so *any* growth fails CI. Two more idioms
+became **absolute rules** in the editor pass (check-styles 3d/3e): no
+colour/typography property written via `.style` in `Public/*.js`, and no
+`style="…"` in a JS-built HTML string beyond a custom-prop or
+`display:none`. The remaining 10 ratchet counts are the residue the greps
+cannot classify — computed geometry in `app.js` (5), the collapse-animation
+overflow toggles and the compliant `--bar-h` meter in `chickadee-ui.js` (3),
+`workbench.js`'s sanctioned `setProperty` (1), and a `.style.fontSize`
+*read* in `jl-cell-perf-patch.js` (1). Do not chase these; they are the
+pattern, not the problem.
+
+## What the editor pass closed (was items 1–3 of this brief)
+
+The pattern-family / suite authoring surface owned 64% of the JS-styling
+ratchet and 43 of the 67 allowlist entries. All of it is converted:
+
+- `pattern-family-editor.js` (54 → 0), `suite-table.js` (22 → 0),
+  `test-editor-modal.js` (12 → 0), `inputs-editor-core.js` (12 → 0), the
+  two `test-renderer-*.js` (4 → 0), plus `setStatus`'s colour write in
+  `chickadee-ui.js` and the static half of `app.js`'s popover float (now on
+  `.is-floating`).
+- The vocabulary they now share is in `styles.css` and the ui-design.md
+  catalog: `.cell-input` (+ `--with-check`), `.input-mono`,
+  `.points-input`, `.suite-name-input`, the `.input-*` value-state cues,
+  the `.modal-*` shell family, `.editor-stack`, `.editor-cm-mount`,
+  `.cell-stack`/`.cell-title`, `.field-help`, `.text-error/-ok/-quiet`.
+- The inputs editors' JS-built rows now carry the same classes as the
+  server-rendered template rows, which removed real drift (a `.95rem` vs
+  `1rem` validity check, a `.78rem` vs `.8rem` input font).
+- The `js-` sweep renamed every behaviour-only hook the editors owned
+  (`js-pf-case-*`, `js-suite-*`, `js-section-*`, `js-global-input*`,
+  `js-am-*`, `js-ach-*`); `pf-case-num`, `pf-var-row-valid` and
+  `pf-var-section-row` gained stylesheet rules instead (they carried real
+  styling). Three dead tokens were dropped outright (`pf-case-expected-col`,
+  `am-conditions-wrap`, the `assignments-body` class).
+
+Reproduce the measurements:
+
+```
+bash scripts/check-styles.sh
+```
+
+```
+for f in Public/*.js; do n=$( { grep -ho 'style="' "$f" || true; grep -hoE '\.style\.[a-zA-Z]+' "$f" | grep -v '\.style\.display' || true; grep -ho 'cssText' "$f" || true; } | wc -l); [ "$n" -gt 0 ] && echo "$n $f"; done | sort -rn
+```
 
 ---
 
-## The headline: one surface owns almost everything that is left
+## What is actually left, in the order I would take it
 
-The pattern-family / suite authoring surface is not merely *a* remaining
-target — it dominates three of the four open ratchets at once.
+### 1. `INLINE_SCRIPT_BASELINE` = 1317 — now the only big number
 
-**`JS_STYLE_DECISION_BASELINE` = 118**, by file:
-
-| file | count | share |
-|---|---:|---|
-| `pattern-family-editor.js` | 54 | 46% |
-| `suite-table.js` | 22 | 19% |
-| `test-editor-modal.js` | 12 | |
-| `inputs-editor-core.js` | 12 | |
-| `app.js` | 8 | |
-| everything else | 10 | |
-
-Two files are **64%** of it.
-
-**`INLINE_SCRIPT_BASELINE` = 1317**, by template — the two authoring pages
-are 44%:
+By template, the two authoring pages are 44%:
 
 | template | lines |
 |---|---:|
@@ -61,95 +88,31 @@ are 44%:
 | `base.leaf` | 77 — correct where it is |
 | `admin-runner` + `assignment-submissions` | 77 |
 
-**The 67-entry class-resolution allowlist**, by owning surface: `pf-*` 13,
-`section-*` 11, `suite-*` 9, `global-input-*` 5, `am-*` 3, `ach-*` 2 —
-43 of 67 from the same editors.
+Extraction is the `data-*`/JSON-island pattern (ui-design.md "Page-local
+scripts"). Take one template per PR; lower the baseline in the same PR.
 
-Reproduce all three:
+### 2. The 22 remaining allowlist entries
 
-```
-bash scripts/check-styles.sh
-```
-
-```
-for f in Public/*.js; do n=$( { grep -ho 'style="' "$f" || true; grep -hoE '\.style\.[a-zA-Z]+' "$f" | grep -v '\.style\.display' || true; grep -ho 'cssText' "$f" || true; } | wc -l); [ "$n" -gt 0 ] && echo "$n $f"; done | sort -rn
-```
+`content-item-*` (6, course-content editor), the cross-page row/anchor
+hooks (14), `inplace-error-banner`, and `sortable-table`. All are the same
+mechanical rename — the reason they are second is only that they spread
+across more templates per name than the editor hooks did. `sortable-table`
+is the one to leave: it is the opt-in marker the sort component documents,
+so renaming it would churn every sortable table for zero drift risk.
 
 ---
 
-## Low-hanging fruit, in the order I would take it
+## The traps
 
-### 1. `pattern-family-editor.js` cell styling — the single best ratio
+### Trap 1 (RESOLVED): PR #1384
 
-54 of 118 JS style decisions, and they are **repeated literals**, not
-per-case logic. The same string recurs across the case-table builders:
+Salvaged and closed by the editor pass. Its inputs-editor/value-cue half
+landed (as `.input-expression`/`-attention`/`-invalid`, `.input-mono`,
+`.editor-stack`, `.editor-cm-mount`); its modal vocabulary landed under the
+S9 `.modal-*` names rather than its `.editor-modal-*` ones; its CSS half
+was already done by S7/S7b. Nothing left to mine there.
 
-```
-style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"
-```
-
-Three or four shared classes absorb nearly all of it: a table-cell input, a
-narrow column, a muted inline note, a compact remove button.
-
-This is also a **token-layer** fix, not only a ratchet fix. Those literals
-bypass the scales the CSS guards enforce: `font-size:.7rem` is not a step
-(`--text-2xs` is `.72rem`), and bare `font-family:monospace` is exactly what
-`ui-design.md` forbids in favour of `--font-mono`. The guards cannot see any
-of it because it lives in a JS string.
-
-Note 25 of the 30 `borderColor`/`color` writes in the whole codebase are in
-this one file — validity cues that want toggled classes with dark-mode
-values, since a hardcoded colour here is invisible-on-dark waiting to happen.
-
-**Expected:** `JS_STYLE_DECISION_BASELINE` 118 → roughly 60. Low risk: it is
-one file, covered by frontend tests, and the visual harness captures the
-pages it renders.
-
-### 2. `suite-table.js` — the same job, 22 more
-
-Same shape, same fix, and it shares the `suite-*` allowlist entries. Doing it
-right after (1) means the classes from (1) already exist.
-
-### 3. The `js-` prefix sweep — mechanical, shrinks a third ratchet
-
-The 67 allowlist entries are behaviour-only hooks predating the convention.
-Renaming `pf-case-remove` → `js-pf-case-remove` (and its JS selector) removes
-an entry with no styling risk. 43 belong to the two files above, so fold this
-into (1) and (2) rather than doing it as its own pass.
-
-**Do not** add allowlist entries. It is shrink-only by contract.
-
----
-
-## The two traps
-
-### Trap 1: PR #1384 is stale and half-superseded. Do not just rebase it.
-
-`claude/ui-rendering-rules-al968b`, open draft, based on `ad9e84b` — which
-predates the entire S0–S10 series. Its **CSS-vocabulary half was independently
-redone** by S7/S7b, in some cases differently:
-
-| #1384 proposed | status now |
-|---|---|
-| `.bs-*` → global vocabulary | **done in S7b** (`.bs-status` → `.detail-grid`; the green/red pairs → `.chip-ok`/`.chip-err`) |
-| `.storage-bar` → `.page-titlebar--baseline` | **done in S7b** |
-| `.titlebar-subtitle` | **done in S7** |
-| `.popover-panel` | **done in S7** |
-| VR determinism / relative-time pinning | **done differently** — `capture.mjs` freezes the masked text |
-| `.editor-modal-*`, `.input-expression` / `-attention` / `-invalid`, `.editor-stack`, `.editor-cm-mount`, `.input-mono` | **still unique — this is the valuable part** |
-
-Its ratchet numbers are also wrong now: it claims 913 → 811 and 122 → 100,
-against actual 689 and 118.
-
-**Recommendation:** do not rebase it wholesale. Salvage the JS-styling half
-(which overlaps items 1–2 above and is the same work), and close it with a
-note rather than fighting the conflicts. Verify before trusting this table:
-
-```
-for c in editor-modal input-expression editor-cm-mount input-mono titlebar-subtitle popover-panel chip-ok; do grep -q "\.$c" Public/styles.css && echo "$c PRESENT" || echo "$c absent"; done
-```
-
-### Trap 2: regenerating visual baselines rewrites more than you changed
+### Trap 2 (still live): regenerating visual baselines rewrites more than you changed
 
 `run-visual.sh --update` rewrote **12** captures for a change touching five
 templates that cannot affect `login`, `student-submit`, `student-dashboard`

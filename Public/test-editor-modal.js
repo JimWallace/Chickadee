@@ -178,22 +178,22 @@
         }).join('');
 
         card.innerHTML =
-            '<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
-            '  <div id="test-editor-title" style="font-weight:600;flex:1">Add Test</div>' +
-            '  <button type="button" id="test-editor-close" class="btn-link" aria-label="Close" title="Close" style="font-size:1.1rem;color:var(--gray-500);padding:.1rem .3rem">✕</button>' +
+            '<div class="modal-head">' +
+            '  <div id="test-editor-title" class="modal-title">Add Test</div>' +
+            '  <button type="button" id="test-editor-close" class="btn-link modal-close" aria-label="Close" title="Close">✕</button>' +
             '</div>' +
-            '<div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.6rem">' +
-            '  <label id="test-editor-type-row" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">' +
+            '<div class="modal-body">' +
+            '  <label id="test-editor-type-row" class="field-stack">' +
             '    What do you want to test?' +
-            '    <select class="form-input" id="test-editor-type" style="padding:.3rem .5rem;font-size:.85rem">' + optionsHTML + '</select>' +
-            '    <span id="test-editor-desc" class="card-meta" style="font-size:.78rem;line-height:1.3;min-height:1.2em"></span>' +
+            '    <select class="form-input editor-input" id="test-editor-type">' + optionsHTML + '</select>' +
+            '    <span id="test-editor-desc" class="card-meta modal-desc"></span>' +
             '  </label>' +
-            '  <div id="test-editor-body" style="display:flex;flex-direction:column;gap:.6rem"></div>' +
+            '  <div id="test-editor-body" class="editor-stack"></div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border);flex-shrink:0">' +
+            '<div class="modal-foot">' +
             '  <button class="btn btn-primary" id="test-editor-save" type="button">Save</button>' +
             '  <button class="btn" id="test-editor-cancel" type="button">Cancel</button>' +
-            '  <span id="test-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>' +
+            '  <span id="test-editor-status" class="modal-status"></span>' +
             '</div>';
 
         overlay.appendChild(card);
@@ -238,9 +238,8 @@
 
         function showPanel(mechanism) {
             Object.keys(panels).forEach(function (m) {
+                panels[m].el.classList.add('editor-stack');
                 panels[m].el.style.display = (m === mechanism) ? 'flex' : 'none';
-                panels[m].el.style.flexDirection = 'column';
-                panels[m].el.style.gap = '.6rem';
             });
         }
 
@@ -387,7 +386,7 @@
         });
 
         // ── "+ Add Test" dropdown ──────────────────────────────────────────
-        // Each server-rendered `.section-add-test-btn` is upgraded in place to a
+        // Each server-rendered `.js-section-add-test-btn` is upgraded in place to a
         // <details> dropdown whose menu is the instructor-facing catalog,
         // grouped. Picking a type stashes the target section and opens the modal
         // already in that type (`presetType`) — no redundant picker inside the
@@ -420,7 +419,7 @@
         }
 
         function enhanceAddTestButtons() {
-            var btns = document.querySelectorAll('.section-add-test-btn');
+            var btns = document.querySelectorAll('.js-section-add-test-btn');
             for (var i = 0; i < btns.length; i++) {
                 var btn = btns[i];
                 if (!btn.parentNode) continue;

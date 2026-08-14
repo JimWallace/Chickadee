@@ -170,8 +170,23 @@ of action buttons" and four pill implementations; the page-style ratchet
   re-implement it in a page script).  Server-side GET filters (activity,
   audit) wear the same label/input dress plus Filter/Clear buttons.
   Placeholder microcopy on live filters: "Filter by &lt;matched fields&gt;…".
-- **`.field-inline`**, `.field-stack`, `.field-note` (+ `--muted`),
-  `.input-compact` — form-field layout and hints.
+- **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`), `.field-note`
+  (+ `--muted`), `.field-help`, `.input-compact`, `.editor-input`,
+  `.select-xs` — form-field layout, hints, and the compact control sizes.
+- **`.cell-input`** (+ `--with-check`), `.input-mono`, `.points-input`,
+  `.suite-name-input` — form controls embedded in dense table cells (inputs
+  panels, case tables, suite rows).  Server-rendered rows and JS row
+  builders share these, so the two renderings of one row cannot drift.
+- **Value-state cues** — `.input-expression` (green per-student tint),
+  `.input-attention` (amber), `.input-invalid` (red), `.input-computed`
+  (muted), `.input-ref-ok` / `.input-ref-broken` (italic green/red `$name`
+  refs).  Editors toggle these classes; they never write the colours.
+- **`.modal-overlay`**, `.modal-card`, `.modal-head/-body/-foot`,
+  `.modal-title/-close/-status/-desc` — the one modal shell
+  (test-editor-modal.js).  `hidden` does the showing and hiding.
+- **`.editor-stack`**, `.editor-cm-mount`, `.cell-stack`, `.cell-title`,
+  `.cell-actions` — editor-built layout: vertical field stacks, the
+  CodeMirror host, and table-cell title/meta and action clusters.
 - **`.results-table`** (+ `.table-scroll`), **`.sortable-table`** — the one
   column sort (`Public/sortable-table.js`).  Markup:
   `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
@@ -185,6 +200,8 @@ of action buttons" and four pill implementations; the page-style ratchet
 - **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
+  `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
+  (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
 - **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
   forms.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
@@ -263,9 +280,23 @@ including an injected stylesheet with its own private dark-mode block
 *geometry* (popover positioning in `app.js`) is the one sanctioned use of
 direct `.style` writes.
 
-Existing violations are a **shrink-only ratchet**
-(`JS_STYLE_DECISION_BASELINE` in `scripts/check-styles.sh`): `style="…"`
-strings, non-`display` `.style` writes, and `cssText` may only decrease.
+Two idioms reached zero in the 2026-08 editor conversion and are now
+**absolute rules** in `scripts/check-styles.sh`, not ratchets:
+
+- **No colour or typography property written via `.style`** (`color`,
+  `background(-color)`, `border(-color)`, `outline`, `box-shadow`,
+  `font-*`, `text-decoration`).  A colour written from script has no
+  dark-mode value; toggle a class whose rule rides the palette
+  (the `.input-*` value-state cues are the pattern).
+- **A `style="…"` attribute inside a JS-built HTML string may only assign
+  a custom property or the `display:none` initial state** — the same rule
+  templates follow (`chickadee-ui.js`'s `--bar-h` meter is the sanctioned
+  example).
+
+What remains counted by the **shrink-only ratchet**
+(`JS_STYLE_DECISION_BASELINE` in `scripts/check-styles.sh`) is the residue
+the greps cannot classify: computed geometry writes, `setProperty` calls,
+and `.style` reads.  It may only decrease.
 
 ## Page-local styles
 

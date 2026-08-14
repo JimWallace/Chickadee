@@ -5,60 +5,12 @@
 # js-* or gains a stylesheet rule (check-class-resolution.sh fails on stale
 # entries); never add one for new code — new behaviour hooks take the js-
 # prefix instead.
+#
+# The pattern-family, suite/section, inputs and achievements editors' hooks
+# were renamed to js-* (or styled, for the ones that carried real styling)
+# in the 2026-08 ratchet pass; what remains is the cross-page row/anchor
+# hooks and the course-content editor.
 
-
-# Achievements editor (achievements-editor.js)
-ach-edit
-ach-remove
-am-cond-comparator
-am-conditions-wrap
-am-scope-field
-
-# Pattern-family editor (pattern-family-editor.js)
-pf-case-arg
-pf-case-args
-pf-case-expected
-pf-case-expected-col
-pf-case-hint
-pf-case-label
-pf-case-num
-pf-case-remove
-pf-var-name
-pf-var-remove
-pf-var-row-valid
-pf-var-section-row
-pf-var-value
-
-# Suite table + sections (suite-table.js, section-items-dnd.js)
-assignments-body
-section-add-test-btn
-section-delete-btn
-section-edit-cancel
-section-edit-toggle
-section-var-add
-section-var-name
-section-var-remove
-section-var-row
-section-var-row-valid
-section-var-value
-section-vars-body
-suite-check-points
-suite-check-tier
-suite-delete-btn
-suite-display-name
-suite-edit-btn
-suite-family-points
-suite-family-tier
-suite-points
-suite-tier
-
-# Inputs editors (inputs-editor-core.js)
-global-input-name
-global-input-remove
-global-input-row
-global-input-row-valid
-global-input-value
-global-inputs-body
 
 # Content items (course content editor)
 content-item-add
@@ -89,5 +41,3 @@ inplace-error-banner
 
 # Sortable-table opt-in marker (sortable-table.js)
 sortable-table
-
-# Ungrouped

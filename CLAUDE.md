@@ -1125,8 +1125,10 @@ the `format-lint` CI job) — keep them green:
   interpolated families (`status-…` etc.) are pinned by
   `StatusClassStylesheetTests` iterating the enum instead.
 - **JS makes no styling decisions** — it toggles classes or sets a custom
-  property (`--wb-left-width` pattern); `style="…"` strings, non-display
-  `.style` writes and `cssText` ratchet down only
+  property (`--wb-left-width` pattern). Two absolute rules: no colour or
+  typography property written via `.style`, and a `style="…"` in a JS-built
+  HTML string may only assign a custom prop or `display:none`. The residue
+  (computed geometry, `setProperty`, `.style` reads) ratchets down only
   (`JS_STYLE_DECISION_BASELINE`).
 - **The nginx maintenance page mirrors the palette by value** —
   `scripts/check-maintenance-palette.sh` fails when a colour there stops

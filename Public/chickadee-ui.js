@@ -37,14 +37,15 @@
     // ── Status line ──
     //
     // The one status-line setter (#1126 — this existed as six drifted
-    // copies).  Sets the element's text and palette colour by kind:
-    // 'error' → red, 'ok'/'success' → green, anything else → gray.
+    // copies).  Sets the element's text and colour-class by kind:
+    // 'error' → .text-error, 'ok'/'success' → .text-ok, else .text-quiet.
     function setStatus(el, text, kind) {
         if (!el) return;
         el.textContent = text || '';
-        el.style.color = kind === 'error'
-            ? 'var(--red)'
-            : (kind === 'ok' || kind === 'success') ? 'var(--green)' : 'var(--gray-500)';
+        el.classList.remove('text-error', 'text-ok', 'text-quiet');
+        el.classList.add(kind === 'error'
+            ? 'text-error'
+            : (kind === 'ok' || kind === 'success') ? 'text-ok' : 'text-quiet');
     }
 
     // ── Destructive-action confirmation ──

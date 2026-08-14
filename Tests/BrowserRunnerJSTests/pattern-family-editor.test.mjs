@@ -271,7 +271,7 @@ test("editor carries the per-student expectedVarRef + Global-Inputs wiring", () 
     'editor must serialize a $name Expected cell into expectedVarRef');
   assert.ok(editorSource.includes('collectDeclaredInputNames'),
     'editor must union Global Input names so per-student refs are not red-flagged');
-  assert.ok(editorSource.includes('global-input-name'),
+  assert.ok(editorSource.includes('js-global-input-name'),
     'editor must read Global Input names from the DOM');
 });
 
