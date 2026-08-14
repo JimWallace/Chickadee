@@ -201,7 +201,7 @@
             <div class="row-actions-tight">
                 <button class="btn action-btn" type="button"
                         title="Copy student link" aria-label="Copy student link"
-                        onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
+                        data-copy-url="#(item.assignment.vanityURL)">
                     <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
                 </button>
                 <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/workbench"

@@ -9,13 +9,29 @@ and the traps that will cost you a day if you walk into them cold.
 brief's items 1–3 and the #1384 salvage in one PR. Everything below is
 measured, not estimated. Re-measure before you act — the commands are given.
 
+> **Update (2026-08, the inline-script pass): the inline-script track is
+> complete.** Every template's multi-line `<script>` body moved into a
+> `Public/*.js` file — seven page-wiring files plus the shared
+> `support-files.js` (the upload/delete flow both authoring pages had
+> forked) — and guard 3b became an **absolute rule**: no template may open
+> a multi-line inline script, except `base.leaf`'s multipart-CSRF
+> interceptor, which stays by design under its own shrink-only ratchet
+> (`INLINE_SCRIPT_BASELINE=74`). Two findings from the conversion worth
+> knowing: the old counter's single-line rule did not recognise the JSON
+> seed islands (attributes defeated its `<script>` match), so the historic
+> 1317 included template prose the leaked state swallowed — the corrected
+> counter is in guard 3b; and the `.suite-edit-upload-btn` wiring on the
+> edit page was dead (nothing renders that class since the per-script
+> upload flow), with its Swift regression test passing vacuously by
+> matching the wiring string in the page HTML.
+
 ---
 
 ## Where things stand
 
 | ratchet | at audit | now | headroom |
 |---|---:|---:|---|
-| `INLINE_SCRIPT_BASELINE` | 1968 | **1317** | none — sits at the count |
+| `INLINE_SCRIPT_BASELINE` | 1968 | **74** (base.leaf only; rule absolute elsewhere) | none |
 | `PAGE_STYLE_BASELINE` | 913 | **689** | none |
 | `JS_STYLE_DECISION_BASELINE` | 122 | **10** | none — see below |
 | `ALERT_BASELINE` | 4 | **0** | absolute |
@@ -23,14 +39,17 @@ measured, not estimated. Re-measure before you act — the commands are given.
 | axe moderate/minor | 12 | **0** | absolute in practice |
 | class-resolution allowlist | 67 | **22** | shrink-only |
 
-Every ratchet is at its count, so *any* growth fails CI. Two more idioms
-became **absolute rules** in the editor pass (check-styles 3d/3e): no
-colour/typography property written via `.style` in `Public/*.js`, and no
-`style="…"` in a JS-built HTML string beyond a custom-prop or
-`display:none`. The remaining 10 ratchet counts are the residue the greps
-cannot classify — computed geometry in `app.js` (5), the collapse-animation
-overflow toggles and the compliant `--bar-h` meter in `chickadee-ui.js` (3),
-`workbench.js`'s sanctioned `setProperty` (1), and a `.style.fontSize`
+Every ratchet is at its count, so *any* growth fails CI. The audit's three
+absolute rules (icon geometry outside the sprite, native confirmation
+outside the seam, the retired button size modifiers) have gained three
+more: the editor pass made colour/typography `.style` writes and
+non-custom-prop `style="…"` strings in `Public/*.js` absolute (check-styles
+3d/3e), and the inline-script pass made guard 3b absolute (the note above).
+
+The remaining 10 styling-decision counts are the residue the greps cannot
+classify — computed geometry in `app.js` (5), the collapse-animation
+overflow toggles and the compliant `--bar-h` meter in `chickadee-ui.js`
+(3), `workbench.js`'s sanctioned `setProperty` (1), and a `.style.fontSize`
 *read* in `jl-cell-perf-patch.js` (1). Do not chase these; they are the
 pattern, not the problem.
 
@@ -59,6 +78,14 @@ ratchet and 43 of the 67 allowlist entries. All of it is converted:
   styling). Three dead tokens were dropped outright (`pf-case-expected-col`,
   `am-conditions-wrap`, the `assignments-body` class).
 
+A merge lesson from the two passes landing the same day: the hook renames
+and the script externalization compose only if the externalized wiring
+files adopt the renames — three freshly-moved `querySelector`s still said
+`.section-edit-toggle` while the markup said `js-section-edit-toggle`, a
+breakage no guard sees because the resolution check reads assignments, not
+queries. When a rename pass and a move pass cross, grep the moved files
+for the old names before trusting a green merge.
+
 Reproduce the measurements:
 
 ```
@@ -73,9 +100,28 @@ for f in Public/*.js; do n=$( { grep -ho 'style="' "$f" || true; grep -hoE '\.st
 
 ## What is actually left, in the order I would take it
 
-### 1. `INLINE_SCRIPT_BASELINE` = 1317 — now the only big number
+Both big tracks are now closed — the JS-styling track by the editor pass,
+the inline-script track by the externalization pass. What remains is small:
 
-By template, the two authoring pages are 44%:
+### 1. The 22 remaining allowlist entries
+
+`content-item-*` (6, course-content editor), the cross-page row/anchor
+hooks (14), `inplace-error-banner`, and `sortable-table`. All are the same
+mechanical rename — the reason they are second is only that they spread
+across more templates per name than the editor hooks did. `sortable-table`
+is the one to leave: it is the opt-in marker the sort component documents,
+so renaming it would churn every sortable table for zero drift risk.
+
+### 2. `PAGE_STYLE_BASELINE` = 689
+
+No slice plan ever existed for this one; it shrinks opportunistically when
+a page block's pattern is promoted into the component vocabulary. Not worth
+a dedicated pass.
+
+### Historical: where the inline-script mass sat
+
+The per-template counts of the retired 1317-line baseline, kept because
+they say where each page's wiring file came from:
 
 | template | lines |
 |---|---:|
@@ -87,18 +133,6 @@ By template, the two authoring pages are 44%:
 | `instructor-students.leaf` | 111 |
 | `base.leaf` | 77 — correct where it is |
 | `admin-runner` + `assignment-submissions` | 77 |
-
-Extraction is the `data-*`/JSON-island pattern (ui-design.md "Page-local
-scripts"). Take one template per PR; lower the baseline in the same PR.
-
-### 2. The 22 remaining allowlist entries
-
-`content-item-*` (6, course-content editor), the cross-page row/anchor
-hooks (14), `inplace-error-banner`, and `sortable-table`. All are the same
-mechanical rename — the reason they are second is only that they spread
-across more templates per name than the editor hooks did. `sortable-table`
-is the one to leave: it is the opt-in marker the sort component documents,
-so renaming it would churn every sortable table for zero drift risk.
 
 ---
 
@@ -135,7 +169,9 @@ rest of the change was pixel-neutral.
   wrong is worse than two honest copies. **Their JS is a different question
   from their markup** — that review found the create page was the *stale fork*
   every time it looked, and fixing three forks removed three live defects.
-  Start with the JS.
+  Start with the JS. *(Done: the JS lives in `assignment-edit-page.js` /
+  `assignment-new-page.js` plus the shared `support-files.js`; the markup
+  stays two honest copies, and the judgement above still holds for it.)*
 - **S1b person typeahead.** Deferred until the unified filter has real usage.
   Still the right call; nothing has changed.
 - **Styled `<dialog>` confirmations and converging the two overlays.** The

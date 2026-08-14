@@ -364,6 +364,12 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
     background: var(--gray-100);
 }
 
+/* Transient confirmation state (e.g. a copy-link button after a successful
+   copy); toggled by JS, cleared after a moment. */
+.action-copied {
+    color: var(--green);
+}
+
 /* ── Forms ───────────────────────────────────────────── */
 
 .form {

@@ -101,33 +101,56 @@ elif [ "$js_alert_count" -lt "$JS_ALERT_BASELINE" ]; then
   echo "note: JS alert() count dropped to ${js_alert_count}; lower JS_ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
-# ── 3b. Inline <script> line-count ratchet (#1135) ───────────────────────────
+# ── 3b. Inline <script> is closed (#1135; conversion completed 2026-08) ──────
 # JS inside a template <script> block is invisible to every tool — ESLint
 # can't parse Leaf-interpolated JS, CodeQL skips it, node --check can't run
-# it — and it's why the CSP still allows inline script.  New page behaviour
-# belongs in a lintable Public/*.js file (template carries data via data-*
-# attributes or a JSON island).  Baseline = total non-blank lines inside
-# <script> bodies across all templates; it may only go DOWN.  <script src=…>
-# includes and single-line <script>…</script> elements don't count.
-INLINE_SCRIPT_BASELINE=1317
-inline_script_count="$(
+# it.  Page behaviour lives in Public/*.js files (loaded with <script src>);
+# a template carries data via data-* attributes or a single-line JSON island.
+# The 2026-08 pass externalized every page's blocks, so what was a
+# total-line ratchet is now an absolute rule: no template may open a
+# multi-line <script> body — except base.leaf, whose multipart-CSRF
+# interceptor is the one deliberate holdout (docs/ui-ratchet-handoff.md);
+# that block is held by its own shrink-only line ratchet below.
+# <script src=…> includes and single-line <script …>…</script> elements
+# (the JSON seed islands) don't count.
+INLINE_SCRIPT_ALLOWED_FILE="Resources/Views/base.leaf"
+INLINE_SCRIPT_BASELINE=74
+count_inline_script() {
+  # Non-blank lines inside multi-line <script> bodies.  A single-line
+  # element must match on "<script" (not "<script>"): the JSON islands carry
+  # id/type attributes, and treating them as block openers leaks the
+  # in-script state across the rest of the file.
   awk '
     /<script[^>]*src=/ { next }
-    /<script>/ && /<\/script>/ { next }
+    /<script/ && /<\/script>/ { next }
     /<script/ { inscript = 1; next }
     /<\/script>/ { inscript = 0; next }
     inscript && NF > 0 { n++ }
     END { print n + 0 }
-  ' "${views[@]}"
-)"
-if [ "$inline_script_count" -gt "$INLINE_SCRIPT_BASELINE" ]; then
+  ' "$1"
+}
+inline_script_offenders=""
+for f in "${views[@]}"; do
+  [ "$f" = "$INLINE_SCRIPT_ALLOWED_FILE" ] && continue
+  n="$(count_inline_script "$f")"
+  [ "$n" -gt 0 ] && inline_script_offenders+="  ${f} (${n} lines)"$'\n'
+done
+if [ -n "$inline_script_offenders" ]; then
   status=1
-  echo "ERROR: inline <script> grew (${inline_script_count} lines, baseline ${INLINE_SCRIPT_BASELINE})."
-  echo "       Put new page JS in a Public/*.js file (loaded with <script src>)"
-  echo "       so it is linted and testable; pass page data via data-* attributes"
-  echo "       or a JSON island.  See docs/ui-design.md."
-elif [ "$inline_script_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
-  echo "note: inline <script> lines dropped to ${inline_script_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
+  echo "ERROR: multi-line inline <script> in a template."
+  echo "       Put page JS in a Public/*.js file (loaded with <script src>) so it"
+  echo "       is linted and testable; pass page data via data-* attributes or a"
+  echo "       single-line JSON island.  See docs/ui-design.md."
+  printf '%s' "$inline_script_offenders"
+  echo
+fi
+base_inline_count="$(count_inline_script "$INLINE_SCRIPT_ALLOWED_FILE")"
+if [ "$base_inline_count" -gt "$INLINE_SCRIPT_BASELINE" ]; then
+  status=1
+  echo "ERROR: base.leaf's inline <script> grew (${base_inline_count} lines, baseline ${INLINE_SCRIPT_BASELINE})."
+  echo "       New behaviour belongs in a Public/*.js file, base.leaf included."
+elif [ "$base_inline_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
+  echo "note: base.leaf's inline <script> dropped to ${base_inline_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
 fi
 
 # ── 3c. JS styling-decision ratchet ─────────────────────────────────────────
