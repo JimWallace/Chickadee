@@ -170,6 +170,43 @@ enum DatabaseConfigurationError: Error, LocalizedError {
     }
 }
 
+/// Session-level bounds sent to Postgres as startup parameters on every
+/// pooled connection (both the main and the least-privilege MCP pool).
+///
+/// #1159 was a pool-starvation incident: one slow admin-dashboard scan held
+/// its event loop's only connection and starved every other query on that
+/// loop. The pool is now 4/loop and the dashboard reads are cached, but
+/// nothing bounded how long a single pathological statement could hold a
+/// pooled connection — these do. Values are deliberate constants, not
+/// configuration: they exist to be generous ceilings that only a defect can
+/// reach, so there is nothing an operator should tune.
+enum PostgresSessionBounds {
+    /// 60 s: far above any legitimate single statement (the widest query in
+    /// the app is the 72 h-clamped metrics window; migrations at current
+    /// data sizes are sub-second), far below "holds a pooled connection
+    /// indefinitely". Applies to migrations too — a future migration
+    /// genuinely expected to exceed it should `SET statement_timeout = 0`
+    /// for its own session rather than raising this.
+    static let statementTimeoutMs = 60_000
+
+    /// 5 min: kills sessions idle *inside a transaction*. Generous because
+    /// the course-bundle import legitimately writes files between statements
+    /// of its import transaction; a connection wedged mid-transaction now
+    /// dies in minutes instead of never.
+    static let idleInTransactionSessionTimeoutMs = 300_000
+
+    /// The exact parameter list appended to both pools' startup options.
+    /// Postgres rejects an unknown parameter name at connection time, so a
+    /// typo here fails the whole `api-tests-postgres` lane loudly rather
+    /// than silently binding nothing.
+    static var startupParameters: [(String, String)] {
+        [
+            ("statement_timeout", String(statementTimeoutMs)),
+            ("idle_in_transaction_session_timeout", String(idleInTransactionSessionTimeoutMs)),
+        ]
+    }
+}
+
 extension DatabaseID {
     static let chickadee = DatabaseID(string: "chickadee")
     /// Optional dedicated pool for the MCP path, backed by a least-privilege
@@ -238,6 +275,9 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
         if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
             configuration.searchPath = searchPath
         }
+        configuration.coreConfiguration.options.additionalStartupParameters +=
+            PostgresSessionBounds.startupParameters
+
         // Default 4/loop on Postgres (#1159): the driver default of 1/loop is
         // the documented ConnectionPoolTimeoutError incident class — one
         // long-held connection per event loop starves every other query on
@@ -267,6 +307,8 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
                 mcpConfiguration.searchPath = searchPath
             }
+            mcpConfiguration.coreConfiguration.options.additionalStartupParameters +=
+                PostgresSessionBounds.startupParameters
             app.databases.use(
                 .postgres(configuration: mcpConfiguration, maxConnectionsPerEventLoop: poolSize),
                 as: .mcp)
