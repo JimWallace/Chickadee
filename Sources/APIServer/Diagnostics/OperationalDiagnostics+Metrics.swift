@@ -61,8 +61,15 @@ extension OperationalDiagnosticsService {
         let loadPoints = try await runnerLoadPoints(since: windowStart, on: req.db)
         let activeSnapshots = await req.application.workerActivityStore.snapshotsSortedByRecent()
             .filter { now.timeIntervalSince($0.lastActive) <= configuration.activeRunnerWindowSeconds }
+        // Only the columns the summary fold below reads — hydrating full
+        // rows here was the same shape the timeseries endpoint had (#1382
+        // item 7); see metricsTimeSeriesSnapshot for why the fold itself
+        // stays in Swift.
         let recentMetrics = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$completedAt >= windowStart)
+            .field(\.$finalStatus)
+            .field(\.$queueWaitMs)
+            .field(\.$executionMs)
             .all()
         let maxQueueDepth = try await maxQueueDepthSince(windowStart: windowStart, now: now, on: req.db)
         let peakLoadSnapshot = peakLoadPoint(from: loadPoints)
@@ -133,18 +140,31 @@ extension OperationalDiagnosticsService {
         )
         let window = resolved.window
 
-        // Runner snapshots are pre-aggregated per bucket (in SQL on Postgres);
-        // request / job metrics are submission-bound, so they stay raw.
+        // Runner snapshots are pre-aggregated per bucket (in SQL on Postgres).
         let runners = try await runnerTimeseriesSummaries(window: window, on: req.db)
 
+        // Request / job metrics stay a Swift fold over raw rows, but only the
+        // columns the accumulators read are hydrated (the window is clamped
+        // to 72h, so the row count is bounded).  The per-bucket p95 is why
+        // the fold cannot move into SQL: SQLite has no percentile aggregate,
+        // and Postgres `percentile_disc` picks rank ceil(n·p) (1-based) where
+        // `MetricBucketAccumulators.percentile` picks floor((n−1)·p)
+        // (0-based) — they disagree at e.g. n = 10, so a SQL path would
+        // silently change reported percentiles per backend.  Unordered on
+        // purpose: the accumulators bucket by index and sort within
+        // `percentile95`, so a DB sort here is wasted work.
         let requestMetrics = try await APIRequestMetric.query(on: req.db)
             .filter(\.$finishedAt >= window.windowStart)
-            .sort(\.$finishedAt, .ascending)
+            .field(\.$finishedAt)
+            .field(\.$durationMs)
             .all()
 
         let jobMetrics = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$completedAt >= window.windowStart)
-            .sort(\.$completedAt, .ascending)
+            .field(\.$completedAt)
+            .field(\.$finalStatus)
+            .field(\.$queueWaitMs)
+            .field(\.$executionMs)
             .all()
 
         let requests = MetricBucketAccumulators.accumulateRequestMetrics(requestMetrics, window: window)
