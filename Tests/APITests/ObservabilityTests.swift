@@ -377,6 +377,12 @@ import VaporTesting
                     #expect(payload.activeRunners >= 1)
                     #expect(payload.jobsProcessed24h == 1)
                     #expect(payload.queueWait.averageMs != nil)
+                    // The fixture metric is the only row, so every summary
+                    // statistic must equal its values exactly — pinning the
+                    // numbers, not just their presence.
+                    #expect(payload.queueWait.p95Ms == 1000)
+                    #expect(payload.execution.averageMs == 4000)
+                    #expect(payload.execution.p95Ms == 4000)
                     #expect(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count == 1)
                     #expect(payload.runnerLoads.isEmpty == false)
                     #expect(payload.compatibility.compatibleAssignmentAttempts == 0)
@@ -393,7 +399,14 @@ import VaporTesting
                     #expect(payload.windowHours == 24)
                     #expect(payload.bucketMinutes == 15)
                     #expect(payload.buckets.isEmpty == false)
-                    #expect(payload.buckets.contains(where: { $0.completedJobs == 1 }))
+                    // Each fixture is its bucket's only member, so the
+                    // per-bucket p95s must equal the fixture values exactly.
+                    let jobBucket = payload.buckets.first(where: { $0.completedJobs == 1 })
+                    #expect(jobBucket?.passedCount == 1)
+                    #expect(jobBucket?.queueWaitP95Ms == 1000)
+                    #expect(jobBucket?.executionP95Ms == 4000)
+                    let requestBucket = payload.buckets.first(where: { $0.requestCount == 1 })
+                    #expect(requestBucket?.requestP95Ms == 150)
                     #expect(
                         payload.buckets.contains(where: {
                             ($0.requestCount > 0) || ($0.avgRunnerUtilizationPercent != nil)
