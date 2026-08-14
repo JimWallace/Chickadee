@@ -41,6 +41,20 @@ struct CourseStudentSubmissionsContext: Encodable {
     let ungroupedRows: [StudentAssignmentRow]
     let hasSections: Bool
     let hasUngrouped: Bool
+
+    /// The ungrouped rows in the same shape a section has, so the rows partial
+    /// can be rendered from one definition for both cases (it reads `rows`).
+    /// STORED, not computed: a synthesized `Encodable` only encodes stored
+    /// properties, so a computed one is simply absent from the render context
+    /// and Leaf fails with "expressions should resolve to a single dictionary
+    /// value".
+    let ungroupedRowsContext: StudentAssignmentRowsContext
+}
+
+/// The one thing `_student-assignment-rows.leaf` needs. A section already
+/// satisfies this shape, so it is passed directly.
+struct StudentAssignmentRowsContext: Encodable {
+    let rows: [StudentAssignmentRow]
 }
 
 struct StudentAssignmentSectionContext: Encodable {

@@ -2133,6 +2133,34 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     margin: 0 0 1rem;
 }
 
+/* A form whose fields stack vertically, capped so lines stay readable. Three
+   pages carried this rule with three different max-widths; the width is the
+   only thing that varied, so it is a custom property (UI audit S7). */
+.form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: var(--form-stack-width, 480px);
+}
+
+/* A textarea holding code or machine text (a token, a CSV paste, an authoring
+   guide). Three page-local copies differed only in which of the same five
+   declarations they remembered (UI audit S7). */
+.textarea-mono {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: .25rem;
+    resize: vertical;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
+/* Inline pass/fail colouring for a count or a one-line result. Two identical
+   green/red pairs lived in one page block, under four names (UI audit S7). */
+.chip-ok { color: var(--green); }
+.chip-err { color: var(--red); }
+
 /* Row-anchored popover panel (the per-student extension / grade-override
    forms). Absolutely positioned under its summary button, promoted to fixed
    by app.js when open so it escapes the table's overflow clip; on a phone the

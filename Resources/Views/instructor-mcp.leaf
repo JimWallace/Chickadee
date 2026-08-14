@@ -32,11 +32,11 @@ MCP
     #if(readOnlyNote):
     <p class="section-note">#(readOnlyNote)</p>
     #endif
-    <form method="post" action="/instructor/mcp" class="guide-form">
+    <form method="post" action="/instructor/mcp" class="form-stack" style="--form-stack-width:60rem">
         #csrfFormField()
         <label class="form-label">
             Guide text
-            <textarea class="form-input guide-textarea" name="instructions" rows="24"
+            <textarea class="form-input textarea-mono" name="instructions" rows="24"
                       maxlength="#(maxLength)"#if(!canEdit): disabled#endif>#(guidanceText)</textarea>
             <span class="field-note field-note--muted">Plain text, up to #(maxLength) characters. Saved changes
                 reach agents the next time they connect. Emptying the box restores the Chickadee
@@ -55,8 +55,6 @@ MCP
 
 #endif
 <style>
-.guide-form { display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; }
-.guide-textarea { display: block; margin-top: .25rem; width: 100%; resize: vertical; font-family: var(--font-mono); font-size: var(--text-sm); }
 </style>
 #endexport
 #endextend

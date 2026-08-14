@@ -22,7 +22,7 @@ LEARN
         the server environment, then reload this page to set the user key.
     </p>
     #else:
-    <dl class="bs-status">
+    <dl class="detail-grid section-gap">
         <dt>Status</dt>
         <dd>
             #if(authorized):
@@ -40,7 +40,7 @@ LEARN
         #endif
     </dl>
 
-    <div class="bs-actions">
+    <div class="toolbar">
         #if(authorized):
         <form method="post" action="/admin/brightspace/test" class="inline-form">
             #csrfFormField()
@@ -57,7 +57,7 @@ LEARN
     </div>
 
     <div class="bs-manual">
-        <h3 class="bs-manual-heading">Set the user key</h3>
+        <h3>Set the user key</h3>
         <p class="text-muted">
             Harvest the <strong>User ID</strong> and <strong>User Key</strong> for
             your service account from your institution's credential service (e.g.
@@ -76,43 +76,17 @@ LEARN
         </form>
     </div>
 
-    <p class="text-muted bs-footnote">
+    <p class="section-note">
         Instructors map assignments to grade items and watch grades flow on
         their course's LEARN tab; this page only sets the shared connection.
     </p>
     #endif
 </section>
 <style>
-.bs-status {
-    display: grid;
-    grid-template-columns: 9rem 1fr;
-    gap: .4rem 1rem;
-    margin: 1rem 0;
-}
-.bs-status dt {
-    font-weight: 600;
-}
-.bs-status dd {
-    margin: 0;
-}
-.bs-actions {
-    display: flex;
-    gap: .6rem;
-    flex-wrap: wrap;
-    margin: 1rem 0;
-}
-.bs-footnote {
-    font-size: var(--text-base);
-    margin-bottom: 0;
-}
 .bs-manual {
     margin-top: 1.5rem;
     padding-top: 1rem;
     border-top: 1px solid var(--border);
-}
-.bs-manual-heading {
-    margin: 0 0 .4rem;
-    font-size: var(--text-md);
 }
 .bs-manual-form {
     display: flex;

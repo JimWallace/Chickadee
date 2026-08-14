@@ -6,7 +6,7 @@ Storage
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="diagnostics-section">
-    <div class="storage-bar storage-bar--end">
+    <div class="toolbar toolbar--end section-gap">
         <span class="storage-meta">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
     </div>
     <div class="diagnostics-cards">
@@ -19,12 +19,12 @@ Storage
     </div>
 </section>
 <section class="page-section">
-    <div class="storage-bar">
-        <h2 class="storage-bar-title">By Assignment</h2>
+    <div class="page-titlebar page-titlebar--baseline">
+        <h2>By Assignment</h2>
         <span class="storage-meta">Largest first</span>
     </div>
     #if(storage.assignments.isEmpty):
-    <p class="storage-muted">No assignments yet.</p>
+    <p class="text-muted">No assignments yet.</p>
     #else:
     <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
@@ -53,26 +53,9 @@ Storage
     #endif
 </section>
 <style>
-.storage-bar {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: .5rem;
-    margin-bottom: 1rem;
-}
-.storage-bar--end {
-    justify-content: flex-end;
-}
-.storage-bar-title {
-    margin: 0;
-}
 .storage-meta {
     color: var(--gray-600);
     font-size: var(--text-base);
-}
-.storage-muted {
-    color: var(--muted);
 }
 .storage-num {
     text-align: right;

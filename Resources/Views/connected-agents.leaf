@@ -5,7 +5,7 @@ Connected agents
 #export("content"):
 <section class="page-section">
     <h2 class="agents-heading">Connected agents</h2>
-    <p class="agents-intro">
+    <p class="section-intro">
         AI agents authorized to author course content on
         #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol.
         Revoking stops the agent immediately; any access token it holds lapses within minutes.
@@ -52,7 +52,6 @@ Connected agents
 </section>
 <style>
 .agents-heading { margin-top: 0; }
-.agents-intro { color: var(--gray-600); font-size: var(--text-base); max-width: 60ch; }
 .agents-revoke-form { display: inline; }
 </style>
 #endexport
