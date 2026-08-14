@@ -151,9 +151,18 @@ struct AdminRoutes: RouteCollection {
     // Polls send the `X-Background-Refresh` header so they don't count as
     // session activity (see UserActivityMiddleware).
 
+    /// Two representations, one query: `?fragment=rows` renders
+    /// `_user-rows.leaf` — the SAME partial the page renders, so the poll
+    /// cannot drift from the page — and anything else keeps the JSON array
+    /// unchanged for other consumers.
     @Sendable
-    func usersData(req: Request) async throws -> [AdminUserRow] {
-        try await fetchUserRows(on: req.db)
+    func usersData(req: Request) async throws -> Response {
+        let rows = try await fetchUserRows(on: req.db)
+        guard req.query[String.self, at: "fragment"] == "rows" else {
+            return try await rows.encodeResponse(for: req)
+        }
+        return try await req.view.render("_user-rows", UserRowsFragmentContext(users: rows))
+            .encodeResponse(for: req)
     }
 
     /// Loads every user, ordered most-recently-seen first (NULL last_seen

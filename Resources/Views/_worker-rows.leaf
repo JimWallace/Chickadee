@@ -1,0 +1,24 @@
+            #for(worker in workers):
+                <tr data-load="#(worker.assignedJobs)"
+                    data-max-jobs="#(worker.maxConcurrentJobs)"#if(worker.isOffline): class="runner-row-offline"#endif>
+                    <td data-sort-value="#(worker.workerID)">
+                        <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
+                        #if(worker.isOffline):<span class="runner-badge-offline">Offline</span>#endif
+                        #if(worker.hostname != ""):
+                            <br><span class="worker-host">#(worker.hostname)</span>
+                        #endif
+                    </td>
+                    <td data-sort-value="#(worker.runnerVersion)">#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
+                    <td class="time#if(worker.assignedJobs > 0): runner-load-busy#endif" data-sort-value="#(worker.assignedJobs)">
+                        #if(worker.maxConcurrentJobs > 0):
+                            #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
+                        #else:
+                            #(worker.assignedJobs)
+                        #endif
+                    </td>
+                    <td class="time" data-sort-value="#(worker.jobsProcessed)">#(worker.jobsProcessed)</td>
+                    <td class="time" data-sort-value="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
+                    <td class="time" data-sort-value="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
+                    <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
+                </tr>
+            #endfor

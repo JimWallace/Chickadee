@@ -56,7 +56,8 @@ Admin
     </div>
 
     <div class="table-scroll"><table id="workers-table" class="results-table sortable-table"
-            data-sort-initial="runner:asc" data-sort-tiebreak="runner">
+            data-sort-initial="runner:asc" data-sort-tiebreak="runner"
+            data-poll-url="/admin/runners?fragment=rows" data-poll-interval="5000">
             <thead>
                 <tr>
                     <th data-sort-key="runner" data-sort-type="text"><button class="sort-header" type="button">Runner</button></th>
@@ -69,29 +70,7 @@ Admin
                 </tr>
             </thead>
             <tbody id="workers-body">
-            #for(worker in workers):
-                <tr data-load="#(worker.assignedJobs)"
-                    data-max-jobs="#(worker.maxConcurrentJobs)">
-                    <td data-sort-value="#(worker.workerID)">
-                        <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
-                        #if(worker.hostname != ""):
-                            <br><span class="worker-host">#(worker.hostname)</span>
-                        #endif
-                    </td>
-                    <td data-sort-value="#(worker.runnerVersion)">#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
-                    <td class="time#if(worker.assignedJobs > 0): runner-load-busy#endif" data-sort-value="#(worker.assignedJobs)">
-                        #if(worker.maxConcurrentJobs > 0):
-                            #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
-                        #else:
-                            #(worker.assignedJobs)
-                        #endif
-                    </td>
-                    <td class="time" data-sort-value="#(worker.jobsProcessed)">#(worker.jobsProcessed)</td>
-                    <td class="time" data-sort-value="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
-                    <td class="time" data-sort-value="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
-                    <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
-                </tr>
-            #endfor
+            #extend("_worker-rows")
             </tbody>
         </table></div>
 </section>
@@ -206,6 +185,7 @@ tr.runner-row-offline {
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
+<script src="/table-poll.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -337,68 +317,18 @@ tr.runner-row-offline {
         });
     });
 
-    function renderWorkers(workers) {
-        workers = Array.isArray(workers) ? workers.slice() : [];
-        totalRunnerCount = workers.length;
-        totalRunnerCapacity = workers.reduce(function (sum, worker) {
-            return sum + Number(worker.maxConcurrentJobs || 0);
-        }, 0);
-        totalAssignedJobs = workers.reduce(function (sum, worker) {
-            return sum + Number(worker.assignedJobs || 0);
-        }, 0);
-        if (!Array.isArray(workers) || workers.length === 0) {
-            workersBody.innerHTML = '';
-            renderMaxLoadSummary();
-            return;
-        }
-
-        workersBody.innerHTML = workers.map(function (worker) {
-            var id = escapeHtml(worker.workerID || '');
-            var hostname = escapeHtml(worker.hostname || '');
-            var version = escapeHtml(worker.runnerVersion || '');
-            var assignedJobs = worker.assignedJobs == null ? 0 : worker.assignedJobs;
-            var maxJobs = worker.maxConcurrentJobs == null ? 0 : worker.maxConcurrentJobs;
-            var jobsProcessed = worker.jobsProcessed == null ? 0 : worker.jobsProcessed;
-            var avgRun = escapeHtml(worker.avgExecutionFormatted || '');
-            var avgWait = escapeHtml(worker.avgQueueWaitFormatted || '');
-            var lastActive = escapeHtml(worker.lastActive || '');
-            var detailURL = '/admin/runners/' + encodeURIComponent(worker.workerID || '');
-
-            // Runners not seen in the last 5 minutes are considered offline.
-            var lastActiveMs = lastActive ? new Date(lastActive).getTime() : 0;
-            var isOffline = lastActiveMs > 0 && (Date.now() - lastActiveMs) > 5 * 60 * 1000;
-
-            var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
-                + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
-                + (hostname ? '<br><span class="worker-host">' + hostname + '</span>' : '');
-            var loadCell = maxJobs > 0
-                ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
-                : String(assignedJobs);
-            var loadClass = assignedJobs > 0 ? ' runner-load-busy' : '';
-
-            return '<tr'
-                + (isOffline ? ' class="runner-row-offline"' : '')
-                + ' data-load="' + assignedJobs + '"'
-                + ' data-max-jobs="' + maxJobs + '"'
-                + '>'
-                + '<td data-sort-value="' + id + '">' + idCell + '</td>'
-                + '<td data-sort-value="' + version + '">' + (version || '—') + '</td>'
-                + '<td class="time' + loadClass + '" data-sort-value="' + assignedJobs + '">' + loadCell + '</td>'
-                + '<td class="time" data-sort-value="' + jobsProcessed + '">' + jobsProcessed + '</td>'
-                + '<td class="time" data-sort-value="' + (worker.avgExecutionMs == null ? -1 : worker.avgExecutionMs) + '">' + (avgRun || '—') + '</td>'
-                + '<td class="time" data-sort-value="' + (worker.avgQueueWaitMs == null ? -1 : worker.avgQueueWaitMs) + '">' + (avgWait || '—') + '</td>'
-                + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
-                + '</tr>';
-        }).join('');
-        ChickadeeRelativeTime.applyRelativeTimes(workersBody);
-        ChickadeeSortableTable.apply(workersTable);
-        renderMaxLoadSummary();
-    }
-
     var workersTable = document.getElementById('workers-table');
+    if (workersTable) {
+        // table-poll.js swaps in server-rendered rows and re-applies the
+        // shared behaviours; the Max Load summary is this page's own read of
+        // them, so it re-derives from the fresh DOM.
+        workersTable.addEventListener('chickadee:table-repaint', function () {
+            recomputeLoadSummaryFromTable();
+            renderMaxLoadSummary();
+        });
+    }
     setInterval(function () {
         ChickadeeRelativeTime.applyRelativeTimes(document);
-        refreshWorkers();
     }, 5000);
     setInterval(refreshCards, 60000);
 

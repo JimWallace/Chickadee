@@ -13,8 +13,17 @@ extension AdminRoutes {
     // MARK: - GET /admin/runners
 
     @Sendable
-    func runners(req: Request) async throws -> [AdminWorkerRow] {
-        try await makeWorkerRows(req: req)
+    /// Two representations, one query: `?fragment=rows` renders
+    /// `_worker-rows.leaf` — the SAME partial the dashboard renders, so the
+    /// poll cannot drift from the page — and anything else keeps the JSON
+    /// array unchanged (the runner-detail page's poll reads it).
+    func runners(req: Request) async throws -> Response {
+        let rows = try await makeWorkerRows(req: req)
+        guard req.query[String.self, at: "fragment"] == "rows" else {
+            return try await rows.encodeResponse(for: req)
+        }
+        return try await req.view.render("_worker-rows", WorkerRowsFragmentContext(workers: rows))
+            .encodeResponse(for: req)
     }
 
     // MARK: - GET /admin/runners/:runnerID
@@ -99,7 +108,8 @@ extension AdminRoutes {
             avgExecutionMs: avg?.avgExecutionMs,
             avgQueueWaitMs: avg?.avgQueueWaitMs,
             avgExecutionFormatted: avg?.avgExecutionMs.map(formatMs),
-            avgQueueWaitFormatted: avg?.avgQueueWaitMs.map(formatMs)
+            avgQueueWaitFormatted: avg?.avgQueueWaitMs.map(formatMs),
+            isOffline: RunnerStaleness.isOffline(lastActive: latestSnapshot.recordedAt)
         )
     }
 
@@ -299,7 +309,8 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
             avgExecutionMs: avgExec,
             avgQueueWaitMs: avgWait,
             avgExecutionFormatted: avgExec.map(formatMs),
-            avgQueueWaitFormatted: avgWait.map(formatMs)
+            avgQueueWaitFormatted: avgWait.map(formatMs),
+            isOffline: RunnerStaleness.isOffline(lastActive: snapshot.lastActive)
         )
     }
     .sorted { lhs, rhs in

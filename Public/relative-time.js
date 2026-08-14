@@ -44,9 +44,24 @@
         });
     }
 
+    // "Has this thing gone quiet?" — the client half of the server's
+    // RunnerStaleness rule (5 minutes without a check-in reads as offline).
+    // Lived as two copy-pasted `Date.now() - t > 5 * 60 * 1000` expressions in
+    // page scripts; both are gone, and the server now decides the initial
+    // state so first paint and later ticks agree.
+    var STALE_AFTER_MS = 5 * 60 * 1000;
+
+    function isStale(isoString, thresholdMs) {
+        if (!isoString) return false;
+        var t = new Date(isoString).getTime();
+        if (Number.isNaN(t)) return false;
+        return (Date.now() - t) > (thresholdMs || STALE_AFTER_MS);
+    }
+
     global.ChickadeeRelativeTime = {
         formatRelative: formatRelative,
-        applyRelativeTimes: applyRelativeTimes
+        applyRelativeTimes: applyRelativeTimes,
+        isStale: isStale
     };
 
     if (document.readyState === 'loading') {

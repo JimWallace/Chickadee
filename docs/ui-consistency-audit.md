@@ -481,6 +481,38 @@ existing page render tests unchanged. CSRF note: the fragment carries the
 same `#csrfFormField()` forms the page does, so token freshness matches
 today's behaviour (the JS builders already inlined the meta token).
 
+**Status: done.** All three polls now swap in server-rendered rows from the
+same Leaf partials the pages use (`_student-rows`, `_user-rows`,
+`_worker-rows`), reached by `?fragment=rows` on the existing endpoints;
+the JSON representation is untouched for every other consumer. The three
+JS row builders are gone, and with them the second copies of the role
+`<select>` forms, the CSRF fields, the trash/pencil SVGs and an entire
+register-pending-student popover.
+
+The polling itself turned out to be shared too, so it is one component
+(`Public/table-poll.js`, opted into with `data-poll-url`) rather than three
+rewrites — which is what made D8 disappear rather than be fixed: the guard
+set (hidden tab, focus inside the table, focus in the filter) and the
+`X-Background-Refresh` header are now properties of the mechanism, not of
+whichever page remembered them. Page-specific work rides a
+`chickadee:table-repaint` event, so the roster's count and LEARN badges and
+the dashboard's Max Load summary stay page code without forking the poll.
+
+Two things fell out of doing it. **`admin-users.leaf` now has no inline
+script at all** (330 → 60 lines). And the runner "offline" rule moved to
+the server (`RunnerStaleness`, with `ChickadeeRelativeTime.isStale` as its
+client half), which fixed a real defect neither the audit nor the plan had
+spotted: the badge was computed only *during a poll*, so a freshly loaded
+dashboard showed no offline badges until the first tick — the badge marked
+"you have waited five seconds", not "this runner is down".
+
+Also caught here: S2 had left a dangling `refreshWorkers()` call in
+`admin.leaf` — a ReferenceError every 5 s on the admin dashboard, invisible
+to ESLint because it lives in an inline template script. That is precisely
+the blind spot the inline-script ratchet exists to shrink, and S3 removes
+the last of that page's polling code. Fixed here and called out on the S2
+PR.
+
 ### S4 — One icon set (M)
 
 **Target state.** `Public/icons.svg` — a single same-origin SVG sprite of

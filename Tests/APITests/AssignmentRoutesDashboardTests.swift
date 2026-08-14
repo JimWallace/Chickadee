@@ -381,6 +381,56 @@ import VaporTesting
         }
     }
 
+    /// `?fragment=rows` renders the SAME partial the Students page renders, so
+    /// the 5-second roster poll and the page cannot drift.  The JS row builder
+    /// this replaced duplicated the whole row — including a register-pending
+    /// popover — in a second place that no template test could see.
+    @Test func studentsDataFragmentRendersTheSameRowsPartial() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let student = try await arInsertStudent(
+                username: "fragment_student", displayName: "Fragment Student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/students-data?fragment=rows",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Rows only — the client swaps these into the existing tbody.
+                    #expect(!html.contains("<table"))
+                    #expect(!html.contains("<thead"))
+                    #expect(html.contains("fragment_student"))
+                    // Full row markup, not a reduced copy: the row-link class,
+                    // the per-course role form, and its CSRF field.
+                    #expect(html.contains("student-row-link"))
+                    #expect(html.contains("name='_csrf'"))
+                })
+        }
+    }
+
+    /// The JSON representation stays for any other consumer.
+    @Test func studentsDataStillServesJSONByDefault() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/students-data",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType == .json)
+                })
+        }
+    }
+
     /// Regression guard for v0.4.126 — admin/instructor users enrolled in a
     /// course (a common pattern: instructor enrolls themselves to test their
     /// own assignment via the same flow as a student) used to inflate the

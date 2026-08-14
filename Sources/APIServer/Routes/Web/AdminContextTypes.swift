@@ -29,6 +29,12 @@ struct AdminWorkerRow: Content {
     let avgExecutionFormatted: String?
     /// Human-readable form of `avgQueueWaitMs` (e.g. "3s", "200ms"), or nil.
     let avgQueueWaitFormatted: String?
+    /// True when the runner has not checked in within
+    /// `RunnerStaleness.offlineAfter`. Computed on the server so the first
+    /// render and every background refresh agree — the client-side copy this
+    /// replaced only ran during a poll, so a freshly loaded dashboard showed
+    /// no offline badges at all until the first tick.
+    let isOffline: Bool
 }
 
 struct AdminCourseRow: Encodable {
@@ -166,6 +172,18 @@ struct AdminContext: Encodable {
 struct AdminUsersContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
+    let users: [AdminUserRow]
+}
+
+/// Context for the rows-only fragment of the runners table (`?fragment=rows`).
+struct WorkerRowsFragmentContext: Encodable {
+    let workers: [AdminWorkerRow]
+}
+
+/// Context for the rows-only fragment of the users table (`?fragment=rows`).
+/// Carries exactly what `_user-rows.leaf` reads, so the fragment cannot start
+/// depending on page-level state the poll does not compute.
+struct UserRowsFragmentContext: Encodable {
     let users: [AdminUserRow]
 }
 
