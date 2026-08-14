@@ -7,7 +7,7 @@ Admin
 #extend("_admin-tabs")
 <section class="diagnostics-section">
     <div class="diagnostics-cards" id="diagnostics-cards">
-        <article class="diagnostic-card diagnostic-card-cyclable" data-activity-card
+        <div class="diagnostic-card diagnostic-card-cyclable" data-activity-card
                  role="button" tabindex="0" aria-label="Active users, last 24 hours. Press to change the time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip" id="activity-card-window">24h</span> Active Users</div>
             <div class="diagnostic-value" id="activity-card-value">—</div>
@@ -16,25 +16,25 @@ Admin
                 <div class="spark-slot" data-count="#(bucket.count)" data-label="#(bucket.label)"><span class="spark-fill"></span></div>
             #endfor
             </div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-card="jobsProcessed"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-card="jobsProcessed"
                  role="button" tabindex="0" aria-label="Jobs processed, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Jobs Processed</div>
             <div class="diagnostic-value" id="diag-jobs-processed">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-card="load"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-card="load"
                  role="button" tabindex="0" aria-label="Max load, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Max Load</div>
             <div class="diagnostic-value" id="diag-max-load">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-card="queueWaitP95Ms"
+        </div>
+        <div class="diagnostic-card diagnostic-card-cyclable" data-card="queueWaitP95Ms"
                  role="button" tabindex="0" aria-label="P95 wait time, last 24 hours. Press to change time window.">
             <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> P95 Wait Time</div>
             <div class="diagnostic-value" id="diag-queue-p95">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
+        </div>
     </div>
 </section>
 

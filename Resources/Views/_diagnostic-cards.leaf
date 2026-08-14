@@ -23,7 +23,7 @@
 <div class="diagnostics-cards">
     #for(metric in metrics):
     #if(metric.cyclable):
-    <article class="diagnostic-card diagnostic-card-cyclable" data-subm-trend
+    <div class="diagnostic-card diagnostic-card-cyclable" data-subm-trend
              role="button" tabindex="0"
              aria-label="Submissions over time. Press to change the time window between 24 hours, 7 days, and 30 days.">
         <div class="diagnostic-label"><span class="diagnostic-window-chip" data-subm-chip>#(metric.windowChip)</span> #(metric.label)</div>
@@ -35,9 +35,9 @@
             #endfor
         </div>
         #endfor
-    </article>
+    </div>
     #else:
-    <article class="diagnostic-card">
+    <div class="diagnostic-card">
         <div class="diagnostic-label">#(metric.label)</div>
         <div class="diagnostic-value">#(metric.value)</div>
         #if(metric.hasSpark):
@@ -48,7 +48,7 @@
         </div>
         <span class="visually-hidden">#(metric.sparkSummary)</span>
         #endif
-    </article>
+    </div>
     #endif
     #endfor
 </div>

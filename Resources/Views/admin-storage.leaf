@@ -11,10 +11,10 @@ Storage
     </div>
     <div class="diagnostics-cards">
         #for(row in storage.rows):
-        <article class="diagnostic-card">
+        <div class="diagnostic-card">
             <div class="diagnostic-label">#(row.label)</div>
             <div class="diagnostic-value">#(row.formatted)</div>
-        </article>
+        </div>
         #endfor
     </div>
 </section>

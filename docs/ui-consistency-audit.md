@@ -29,7 +29,8 @@ needs them.
 (all at baseline). Every slice below shrinks at least one of these and must
 lower the baseline in the same PR.
 
-**Where they ended up** after S0–S9, all slices complete:
+**Where they ended up** after S0–S10, all slices complete (S10 was not in the
+original plan — see its section):
 
 | ratchet | at audit | now |
 |---|---|---|
@@ -38,7 +39,7 @@ lower the baseline in the same PR.
 | `JS_STYLE_DECISION_BASELINE` | 122 | **118** |
 | `ALERT_BASELINE` | 4 | **0** |
 | `JS_ALERT_BASELINE` | 7 | **0** |
-| axe moderate/minor | 12 | **6** |
+| axe moderate/minor | 12 | **0** |
 
 Five new guards joined them, each closing the specific idiom its slice
 replaced: the list-filter idioms (S1), the sort dialects (S2), inline SVG
@@ -928,6 +929,33 @@ hiding is now the `hidden` attribute rather than a JS `display` write.
 ratchets *crashed the whole script at exactly the count they exist to
 reach*. A ratchet that fails at its own goal has never been tested at its
 goal; the greps now tolerate the empty case.
+
+### S10 — The axe ratchet to zero (S)
+
+**Status: done.** Not part of the original plan — these two defects were
+*surfaced by* the audit's own work, in the sense that S7's visually-hidden
+`<h1>` took the count 12 → 6 and made the remaining six legible as two real
+issues rather than noise.
+
+- **`role="button"` on an `<article>`** — the clickable statistic cards on
+  both dashboards. `<article>` carries an implicit `article` role, so
+  overriding it with `button` is a role the element does not permit, and
+  assistive software may describe the card wrongly. A `<button>` element is
+  not available here: its content model is phrasing content and these cards
+  contain block children. So the interactive cards are `<div role="button">`.
+  Since *every* `<article>` in the codebase was a `.diagnostic-card`, all
+  eleven became `<div>` — a dashboard stat tile is not a syndicatable
+  article, and the component now renders as one element everywhere rather
+  than two depending on whether it happens to be clickable.
+- **`alerts.leaf` skipped a heading level** — three `<h3>` sections under the
+  tab partial's `<h1>`, so heading-based navigation jumped h1 → h3. The
+  Admin-tabbed archetype says sections open at `<h2>`; they do now. This is
+  an archetype conformance gap S7 missed only because `alerts.leaf` was not
+  in its converted set.
+
+`a11y-baseline.json` 6 → **0**. The scan now reports no violations of any
+severity, which makes the a11y check an absolute rule in practice: the next
+regression cannot hide inside headroom.
 
 ---
 
