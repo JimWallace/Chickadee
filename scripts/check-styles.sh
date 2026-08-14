@@ -109,7 +109,7 @@ fi
 # attributes or a JSON island).  Baseline = total non-blank lines inside
 # <script> bodies across all templates; it may only go DOWN.  <script src=…>
 # includes and single-line <script>…</script> elements don't count.
-INLINE_SCRIPT_BASELINE=1968
+INLINE_SCRIPT_BASELINE=1934
 inline_script_count="$(
   awk '
     /<script[^>]*src=/ { next }
@@ -232,7 +232,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=913
+PAGE_STYLE_BASELINE=902
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -249,6 +249,22 @@ if [ "$page_style_count" -gt "$PAGE_STYLE_BASELINE" ]; then
   echo "       vocabulary), or hoist the new pattern there as a named component."
 elif [ "$page_style_count" -lt "$PAGE_STYLE_BASELINE" ]; then
   echo "note: page <style> lines dropped to ${page_style_count}; lower PAGE_STYLE_BASELINE in scripts/check-styles.sh."
+fi
+
+# ── 4c. Consolidated widget idioms may not fork back (ui-consistency-audit) ─
+# S1: live list filtering is Public/list-filter.js (input[data-list-filter]).
+# The two idioms it replaced must not return: a page-local filter
+# implementation in an inline script, or the readonly-until-focus autofill
+# hack hand-carried in template markup (the component owns that suppression).
+s1_hack="$(grep -rn "onfocus=\"this\.removeAttribute('readonly')\"" "${views[@]}" || true)"
+s1_local="$(grep -rnE 'function apply[A-Za-z]*Filter' "${views[@]}" || true)"
+if [ -n "${s1_hack}${s1_local}" ]; then
+  status=1
+  echo "ERROR: a page re-implements the shared list-filter idiom."
+  echo "       Use input[data-list-filter] (Public/list-filter.js) — it owns"
+  echo "       both the row matching and the autofill suppression."
+  { [ -n "$s1_hack" ] && printf '%s\n' "$s1_hack"; [ -n "$s1_local" ] && printf '%s\n' "$s1_local"; } | sed 's/^/  /'
+  echo
 fi
 
 # ── 5. Class names must resolve ──────────────────────────────────────────────

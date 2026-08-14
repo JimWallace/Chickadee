@@ -27,10 +27,8 @@ Audit Log
                 #endfor
             </select>
         </label>
-        <label class="field-inline">
-            <span>Actor contains</span>
-            <input type="text" name="actor" value="#(filterActor)" placeholder="username" autocomplete="off" class="form-input input-compact" />
-        </label>
+        <label class="filter-label" for="audit-actor">Filter by person</label>
+        <input id="audit-actor" type="search" name="actor" value="#(filterActor)" placeholder="username" autocomplete="off" class="form-input filter-input" />
         <button type="submit" class="btn">Filter</button>
         #if(filtered):
         <a href="/admin/audit" class="btn">Clear</a>

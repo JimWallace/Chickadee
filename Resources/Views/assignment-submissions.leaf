@@ -15,10 +15,13 @@
 <p class="empty">No student users found.</p>
 #else:
 <div class="toolbar toolbar--end section-gap">
-    <input id="submissions-filter" class="form-input filter-input" type="search" autocomplete="off"
-           placeholder="Filter by name or ID…"
-           style="--filter-width:220px" aria-label="Filter students"
-           readonly onfocus="this.removeAttribute('readonly')">
+    <span class="filter-group">
+        <label class="filter-label" for="submissions-filter">Filter</label>
+        <input id="submissions-filter" class="form-input filter-input" type="search"
+               placeholder="Filter by name or ID…"
+               style="--filter-width:220px"
+               data-list-filter="assignment-submissions-table">
+    </span>
 </div>
 <table class="results-table" id="assignment-submissions-table">
     <thead>
@@ -139,6 +142,7 @@
     content: "  ↓";
 }
 </style>
+<script src="/list-filter.js?v=#appVersion()"></script>
 <script>
 (function () {
     var table = document.getElementById('assignment-submissions-table');
@@ -231,17 +235,6 @@
         sortByHeader(historyHeader, 'desc');
     }
 
-    var filter = document.getElementById('submissions-filter');
-    if (filter && tbody) {
-        filter.addEventListener('input', function () {
-            var query = filter.value.trim().toLowerCase();
-            Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
-                if (!query) { row.hidden = false; return; }
-                var text = (row.textContent || '').toLowerCase();
-                row.hidden = !text.includes(query);
-            });
-        });
-    }
 })();
 </script>
 <script>
