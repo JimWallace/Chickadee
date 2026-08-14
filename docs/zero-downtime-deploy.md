@@ -304,6 +304,43 @@ column the old code reads) would break the old color too, and auto-rollback of t
 
 ---
 
+## Static editor assets and the container topology
+
+`deploy/nginx.conf` serves the vendored editor asset trees (`/vendor/`,
+`/jupyterlite/build/`, `/jupyterlite/extensions/`, each kernel's
+`kernel_packages/`) straight from disk when the server runs from a host
+checkout, falling back to the app for anything absent — the allowlist,
+headers and cache split mirror `EditorAssetFastPathMiddleware` exactly, and
+`/jupyterlite/files/users/` never matches a static location, so the
+per-student auth boundary is preserved by construction.
+
+The blue-green container deployment cannot take that path as-is. The data
+volume's `Public` is a symlink to `/app/Public` inside whichever container
+created it (`deploy/docker-entrypoint.sh`) — chosen deliberately so a
+redeploy never re-copies ~400 MB of vendored bytes — and a
+container-internal symlink target is unresolvable from the host, so host
+nginx takes the `@chickadee_app` fallback for every asset request there.
+That is safe (it is exactly the pre-static behaviour, served by
+`EditorAssetFastPathMiddleware`), just not faster.
+
+Adopting host-side static serving for the container topology would take,
+per deploy color:
+
+- materialising the image's `Public/` where the host can read it — e.g. a
+  per-color named volume (`-v chickadee-public-<color>:/app/Public`), which
+  Docker populates from the image at container create, on the idle color
+  before cutover so the deploy gap does not grow;
+- flipping an nginx `root`-carrying include at cutover exactly the way
+  `bluegreen-deploy.sh` already flips the upstream include;
+- garbage-collecting the retired color's volume.
+
+That reintroduces a per-new-image ~400 MB copy and adds a second cutover
+artifact — a topology decision, not a config edit. Until someone makes it
+deliberately, the app-served path remains the container deployment's
+design.
+
+---
+
 ## Open items to confirm on the host (Phase 1)
 
 - Run the one-time nginx upstream edit and confirm `nginx -t` passes.
