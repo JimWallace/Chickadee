@@ -998,18 +998,16 @@ import VaporTesting
                     #expect(
                         html.contains("/suite-table.js"),
                         "Create page must load suite-table.js once a draft exists (v0.4.132)")
+                    // The wiring itself (chickadeeAddExistingSuiteScript, the
+                    // draft-scoped script endpoints) lives in the page's
+                    // external wiring file since the inline-script conversion;
+                    // Tests/BrowserRunnerJSTests/section-reorder-url.test.mjs
+                    // pins its contents.
                     #expect(
-                        html.contains("chickadeeAddExistingSuiteScript"),
+                        html.contains("/assignment-new-page.js"),
                         """
-                        Create page must wire chickadeeAddExistingSuiteScript so \
-                        generated/edited scripts land in the suite editor live
-                        """
-                    )
-                    #expect(
-                        html.contains("/instructor/new/draft/scripts"),
-                        """
-                        Generated scripts and the CodeMirror save flow must POST to \
-                        the draft scripts endpoint, not bundle into the multipart submit
+                        Create page must load its wiring file so generated/edited \
+                        scripts land in the suite editor live
                         """
                     )
                 })
@@ -1017,8 +1015,16 @@ import VaporTesting
         }
     }
 
-    /// Bug #1 regression: the edit assignment page must include JavaScript for the edit button
-    /// on newly uploaded (not-yet-saved) suite file rows.
+    /// Bug #1 regression, restated for the current upload flow: a file picked
+    /// on the edit page is POSTed to the scripts endpoint immediately and
+    /// lands as a standard suite row, whose edit button (`suite-edit-btn`) is
+    /// rendered by suite-table.js and wired to the Test Editor modal by
+    /// assignment-edit-page.js.  Both files must therefore be loaded.  (The
+    /// original assertion looked for `suite-edit-upload-btn` — a queued-upload
+    /// edit button from the pre-v0.4.132 flow that nothing renders anymore;
+    /// it kept passing only because the dead wiring branch's *string* appeared
+    /// in the page's inline script, which the inline-script conversion
+    /// removed.)
     @Test func editAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
@@ -1049,10 +1055,12 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    // The rowHTML JS function for new (uploaded) items must contain the edit-button class.
                     #expect(
-                        html.contains("suite-edit-upload-btn"),
-                        "Edit assignment page must contain suite-edit-upload-btn for newly uploaded suite items")
+                        html.contains("/suite-table.js"),
+                        "Edit page must load suite-table.js, which renders the edit button on every script row")
+                    #expect(
+                        html.contains("/assignment-edit-page.js"),
+                        "Edit page must load its wiring file, which opens the Test Editor modal from the edit button")
                 })
 
         }

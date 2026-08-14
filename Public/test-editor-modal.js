@@ -475,6 +475,23 @@
             }
         });
 
+        // Edit an existing notebook-check row (any element carrying
+        // data-edit-check-id) → open the shell pre-populated from the current
+        // suite state.  Both authoring pages used to carry an identical copy
+        // of this delegation in their inline wiring; the shell owns it so the
+        // two cannot fork.
+        document.body.addEventListener('click', function (e) {
+            var el = e.target && e.target.closest && e.target.closest('[data-edit-check-id]');
+            if (!el) return;
+            e.preventDefault();
+            var id = el.getAttribute('data-edit-check-id');
+            if (typeof global.chickadeeGetSuiteItems !== 'function') return;
+            var match = global.chickadeeGetSuiteItems().find(function (i) {
+                return i.kind === 'check' && i.check && i.check.id === id;
+            });
+            if (match) open({ editing: { mechanism: 'check', id: id, item: match.check } });
+        });
+
         var api = { open: open, close: close };
         global.__chickadeeTestEditorModal = api;
         return api;

@@ -62,10 +62,12 @@ test('the old derivation is gone from suite-table.js', async () => {
 });
 
 // The two pages produce different URL shapes. Pin both, because the shape
-// difference is exactly what the old derivation got wrong.
+// difference is exactly what the old derivation got wrong.  The wiring lives
+// in the per-page Public/*.js files (the inline-script conversion), not the
+// templates.
 test('both authoring pages supply a reorderSections builder', async () => {
-  const create = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
-  const edit = await fs.readFile(path.resolve('Resources/Views/_assignment-edit-body.leaf'), 'utf8');
+  const create = await fs.readFile(path.resolve('Public/assignment-new-page.js'), 'utf8');
+  const edit = await fs.readFile(path.resolve('Public/assignment-edit-page.js'), 'utf8');
 
   assert.ok(create.includes('reorderSections:'), 'create page must pass reorderSections');
   assert.ok(
@@ -80,17 +82,40 @@ test('both authoring pages supply a reorderSections builder', async () => {
   );
 });
 
-test('the create page no longer binds its own section handlers', async () => {
-  const src = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
-  // suite-table.js owns all three; the page used to bind duplicates on top.
-  for (const marker of ['section-edit-toggle', 'section-edit-cancel', 'section-delete-btn']) {
+// The Swift render tests can only see that a page loads its wiring file; the
+// wiring the create-page test used to grep out of the served HTML is pinned
+// here instead: both pages hand generated/edited scripts to the suite table's
+// single write path, and the create page targets the draft-scoped scripts
+// endpoint.
+test('both authoring pages wire the suite write path', async () => {
+  for (const rel of ['Public/assignment-new-page.js', 'Public/assignment-edit-page.js']) {
+    const src = await fs.readFile(path.resolve(rel), 'utf8');
     assert.ok(
-      !src.includes(`closest('.${marker}')`),
-      `create page still binds a handler for .${marker}; suite-table.js owns it`,
+      src.includes('chickadeeAddExistingSuiteScript'),
+      `${rel} must wire chickadeeAddExistingSuiteScript`,
     );
   }
+  const create = await fs.readFile(path.resolve('Public/assignment-new-page.js'), 'utf8');
   assert.ok(
-    !src.includes('draggingHeader'),
-    'create page still carries its own section drag-reorder handler',
+    create.includes('/instructor/new/draft/scripts'),
+    'create page must POST scripts to the draft scripts endpoint',
   );
+});
+
+test('the create page no longer binds its own section handlers', async () => {
+  const template = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
+  const wiring = await fs.readFile(path.resolve('Public/assignment-new-page.js'), 'utf8');
+  // suite-table.js owns all three; the page used to bind duplicates on top.
+  for (const src of [template, wiring]) {
+    for (const marker of ['section-edit-toggle', 'section-edit-cancel', 'section-delete-btn']) {
+      assert.ok(
+        !src.includes(`closest('.${marker}')`),
+        `create page still binds a handler for .${marker}; suite-table.js owns it`,
+      );
+    }
+    assert.ok(
+      !src.includes('draggingHeader'),
+      'create page still carries its own section drag-reorder handler',
+    );
+  }
 });

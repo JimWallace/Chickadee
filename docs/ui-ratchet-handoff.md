@@ -8,13 +8,31 @@ and the two traps that will cost you a day if you walk into them cold.
 Everything below is measured against `main` at the close of S10, not
 estimated. Re-measure before you act — the commands are given.
 
+> **Update (2026-08, the inline-script pass): the inline-script track is
+> complete.** Every template's multi-line `<script>` body moved into a
+> `Public/*.js` file — seven page-wiring files plus the shared
+> `support-files.js` (the upload/delete flow both authoring pages had
+> forked) — and guard 3b became an **absolute rule**: no template may open
+> a multi-line inline script, except `base.leaf`'s multipart-CSRF
+> interceptor, which stays by design under its own shrink-only ratchet
+> (`INLINE_SCRIPT_BASELINE=74`). Two findings from the conversion worth
+> knowing: the old counter's single-line rule did not recognise the JSON
+> seed islands (attributes defeated its `<script>` match), so the historic
+> 1317 included template prose the leaked state swallowed — the corrected
+> counter is in guard 3b; and the `.suite-edit-upload-btn` wiring on the
+> edit page was dead (nothing renders that class since the per-script
+> upload flow), with its Swift regression test passing vacuously by
+> matching the wiring string in the page HTML. The table below is the
+> pre-pass record; the sections on the JS-styling ratchet and the
+> allowlist sweep remain the live work list.
+
 ---
 
 ## Where things stand
 
 | ratchet | at audit | now | headroom |
 |---|---:|---:|---|
-| `INLINE_SCRIPT_BASELINE` | 1968 | **1317** | none — sits at the count |
+| `INLINE_SCRIPT_BASELINE` | 1968 | **74** (base.leaf only; rule absolute elsewhere) | none |
 | `PAGE_STYLE_BASELINE` | 913 | **689** | none |
 | `JS_STYLE_DECISION_BASELINE` | 122 | **118** | none |
 | `ALERT_BASELINE` | 4 | **0** | absolute |
@@ -25,7 +43,8 @@ estimated. Re-measure before you act — the commands are given.
 Every ratchet is at its count, so *any* growth fails CI. Five guards were
 added by the audit; three are absolute rules rather than ratchets (icon
 geometry outside the sprite, native confirmation outside the seam, the
-retired button size modifiers).
+retired button size modifiers). The inline-script pass made a fourth
+absolute (guard 3b, above).
 
 ---
 
@@ -48,7 +67,9 @@ target — it dominates three of the four open ratchets at once.
 Two files are **64%** of it.
 
 **`INLINE_SCRIPT_BASELINE` = 1317**, by template — the two authoring pages
-are 44%:
+are 44% *(historical: this whole column went to zero in the inline-script
+pass; the per-template counts are kept because they say where each page's
+wiring file came from)*:
 
 | template | lines |
 |---|---:|
@@ -172,7 +193,9 @@ rest of the change was pixel-neutral.
   wrong is worse than two honest copies. **Their JS is a different question
   from their markup** — that review found the create page was the *stale fork*
   every time it looked, and fixing three forks removed three live defects.
-  Start with the JS.
+  Start with the JS. *(Done: the JS lives in `assignment-edit-page.js` /
+  `assignment-new-page.js` plus the shared `support-files.js`; the markup
+  stays two honest copies, and the judgement above still holds for it.)*
 - **S1b person typeahead.** Deferred until the unified filter has real usage.
   Still the right call; nothing has changed.
 - **Styled `<dialog>` confirmations and converging the two overlays.** The

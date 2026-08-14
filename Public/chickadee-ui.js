@@ -156,18 +156,28 @@
     // `series` is an array of numbers / nulls (null = "no data", drawn as an
     // empty slot). `labels` supplies the per-bar tooltip prefix and
     // `formatPoint(value)` formats the value in the tooltip. Shared by the
-    // admin and instructor dashboard diagnostic cards.
-    function renderSparkline(container, series, labels, formatPoint) {
+    // admin and instructor dashboard diagnostic cards, and (via `opts`) the
+    // admin Active Users card, which used to carry its own fork of this
+    // markup:
+    //   opts.floorPct    – floor the bar height of any populated (> 0) bucket
+    //                      so a lone entry shows a visible bar, not a 2px
+    //                      sliver indistinguishable from an empty one
+    //   opts.zeroIsEmpty – draw a zero-valued bucket with the empty-slot
+    //                      styling, not just a null one
+    function renderSparkline(container, series, labels, formatPoint, opts) {
         if (!container) return;
         series = Array.isArray(series) ? series : [];
         labels = Array.isArray(labels) ? labels : [];
+        opts = opts || {};
         var format = typeof formatPoint === 'function' ? formatPoint : function (v) { return String(v); };
         var max = series.reduce(function (m, v) { return v == null ? m : Math.max(m, v); }, 0);
         container.innerHTML = series.map(function (value, i) {
             var pct = (value != null && max > 0) ? (value / max) * 100 : 0;
+            if (opts.floorPct > 0 && value > 0 && pct > 0) pct = Math.max(pct, opts.floorPct);
+            var empty = value == null || (opts.zeroIsEmpty && !value);
             var title = (labels[i] || '') + ': ' + (value == null ? 'no data' : format(value));
             return '<div class="spark-slot" title="' + escapeHtml(title) + '">'
-                + '<span class="spark-fill' + (value == null ? ' spark-fill-empty' : '')
+                + '<span class="spark-fill' + (empty ? ' spark-fill-empty' : '')
                 + '" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
                 + '</div>';
         }).join('');

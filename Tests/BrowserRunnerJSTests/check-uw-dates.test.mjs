@@ -15,11 +15,14 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const ChickadeeUI = require('../../Public/chickadee-ui.js');
 
-// The three templates that used to carry their own copy.
+// The three surfaces that used to carry their own inline copy.  Each
+// template's wiring now lives in a Public/*.js page file (the inline-script
+// conversion), so the call site to verify is the wiring file; the template
+// itself must stay free of any checkUWDates code.
 const FORMERLY_INLINED = [
-  'Resources/Views/assignment-new.leaf',
-  'Resources/Views/_assignment-edit-body.leaf',
-  'Resources/Views/assignments.leaf',
+  { template: 'Resources/Views/assignment-new.leaf', wiring: 'Public/assignment-new-page.js' },
+  { template: 'Resources/Views/_assignment-edit-body.leaf', wiring: 'Public/assignment-edit-page.js' },
+  { template: 'Resources/Views/assignments.leaf', wiring: 'Public/assignments.js' },
 ];
 
 function fakeEl() {
@@ -108,15 +111,20 @@ test('the three-day margin is applied on both sides, and a far date hides', asyn
 });
 
 test('no template re-declares checkUWDates inline', async () => {
-  for (const rel of FORMERLY_INLINED) {
-    const src = await fs.readFile(path.resolve(rel), 'utf8');
+  for (const { template, wiring } of FORMERLY_INLINED) {
+    const templateSrc = await fs.readFile(path.resolve(template), 'utf8');
     assert.ok(
-      !/function\s+checkUWDates\s*\(/.test(src),
-      `${rel} declares checkUWDates inline; call ChickadeeUI.checkUWDates instead`,
+      !templateSrc.includes('checkUWDates'),
+      `${template} carries checkUWDates code; the page wiring lives in ${wiring}`,
+    );
+    const wiringSrc = await fs.readFile(path.resolve(wiring), 'utf8');
+    assert.ok(
+      !/function\s+checkUWDates\s*\(/.test(wiringSrc),
+      `${wiring} declares checkUWDates locally; call ChickadeeUI.checkUWDates instead`,
     );
     assert.ok(
-      src.includes('ChickadeeUI.checkUWDates('),
-      `${rel} should reach the warning through ChickadeeUI.checkUWDates`,
+      wiringSrc.includes('ChickadeeUI.checkUWDates('),
+      `${wiring} should reach the warning through ChickadeeUI.checkUWDates`,
     );
   }
 });
