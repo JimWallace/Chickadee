@@ -51,7 +51,7 @@ Students
           class="students-learn-status"></span>
     #endif
     #endif
-    <span class="filter-group students-filter">
+    <span class="filter-group">
         <label class="filter-label" for="enrolled-filter">Filter</label>
         <input id="enrolled-filter" class="form-input filter-input" type="search"
                placeholder="Filter by name or username…"
@@ -86,7 +86,6 @@ Students
 .students-mode-label { font-size: var(--text-base); margin: 0; }
 .students-mode-select { display: block; font-size: var(--text-base); }
 .students-learn-status { font-size: var(--text-sm); color: var(--gray-500); }
-.students-filter { flex: 1 1 260px; }
 /* One rule for every muted cell in a pending row (was three identical ones). */
 .students-pending-name, .students-pending-username, .students-pending-role { color: var(--gray-500); }
 .students-pending-note { font-size: var(--text-2xs); color: var(--gray-500); margin-left: .4rem; }

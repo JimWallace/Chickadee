@@ -20,11 +20,14 @@
 // convention). Empty-state messages stay the page's concern — "no rows at
 // all" and "nothing matches" are different sentences.
 //
-// Autofill suppression: these are form-less search fields whose id and
-// placeholder look credential-ish to browser heuristics, and
-// autocomplete="off" alone is ignored by password managers.
+// Autofill suppression covers EVERY .filter-input, live or GET-form. These
+// are search fields whose id and placeholder look credential-ish to browser
+// heuristics, and autocomplete="off" alone is ignored by password managers;
 // readonly-until-first-focus is the one reliable suppression, owned here so
-// pages stop hand-carrying the hack in markup.
+// pages stop hand-carrying it in markup. Scoping it to data-list-filter is
+// what left the activity/audit boxes carrying a bare autocomplete="off" the
+// component's own comment calls insufficient — two suppression strengths for
+// one control. Live filtering still binds only where a target table is named.
 (function (global) {
     'use strict';
 
@@ -56,14 +59,16 @@
         input.addEventListener('focus', function () {
             input.removeAttribute('readonly');
         }, { once: true });
-        input.addEventListener('input', function () { apply(input); });
+        if (input.hasAttribute('data-list-filter')) {
+            input.addEventListener('input', function () { apply(input); });
+        }
     }
 
     function init() {
-        document.querySelectorAll('input[data-list-filter]').forEach(enhance);
+        document.querySelectorAll('input.filter-input').forEach(enhance);
     }
 
-    global.ChickadeeListFilter = { apply: apply, rowMatchText: rowMatchText };
+    global.ChickadeeListFilter = { apply: apply, rowMatchText: rowMatchText, enhance: enhance };
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {

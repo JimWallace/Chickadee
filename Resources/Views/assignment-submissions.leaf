@@ -19,7 +19,6 @@
         <label class="filter-label" for="submissions-filter">Filter</label>
         <input id="submissions-filter" class="form-input filter-input" type="search"
                placeholder="Filter by name or ID…"
-               style="--filter-width:220px"
                data-list-filter="assignment-submissions-table">
     </span>
 </div>

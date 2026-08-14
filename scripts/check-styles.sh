@@ -10,7 +10,7 @@ set -euo pipefail
 #   * Shared styling lives in Public/styles.css; page-unique styling lives in a
 #     page-local <style> block with role-named classes.
 #   * No inline style="" in templates EXCEPT a JS-toggled `display:none` initial
-#     state or a CSS custom-property assignment (e.g. style="--filter-width:220px").
+#     state or a CSS custom-property assignment (e.g. style="--wb-left-width:42%").
 #   * No new native alert() in templates or first-party Public/*.js — use the
 #     inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
@@ -306,7 +306,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=689
+PAGE_STYLE_BASELINE=688
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -338,6 +338,35 @@ if [ -n "${s1_hack}${s1_local}" ]; then
   echo "       Use input[data-list-filter] (Public/list-filter.js) — it owns"
   echo "       both the row matching and the autofill suppression."
   { [ -n "$s1_hack" ] && printf '%s\n' "$s1_hack"; [ -n "$s1_local" ] && printf '%s\n' "$s1_local"; } | sed 's/^/  /'
+  echo
+fi
+
+# S1 (cont.): one control means one DRESS, not just one implementation. Five
+# filter boxes shared list-filter.js and still came in three widths (two inline
+# --filter-width values plus a page-local flex basis) and two structures (three
+# in a .filter-group, two loose in a toolbar, so their label could strand from
+# their input on a narrow row). Both are now settled in styles.css:
+#   * --filter-width is declared in :root and may not be re-assigned per page.
+#   * every .filter-input sits in a .filter-group with its .filter-label.
+# The second is counted per file rather than parsed: a file's .filter-group
+# count must cover its .filter-input count.
+s1_width="$(grep -rn -- '--filter-width' "${views[@]}" || true)"
+s1_loose=""
+for view in "${views[@]}"; do
+  n_input="$(grep -c 'filter-input' "$view" || true)"
+  [ "${n_input:-0}" -eq 0 ] && continue
+  n_group="$(grep -c 'filter-group' "$view" || true)"
+  if [ "${n_group:-0}" -lt "${n_input:-0}" ]; then
+    s1_loose+="  ${view}: ${n_input} filter-input, ${n_group} filter-group"$'\n'
+  fi
+done
+if [ -n "${s1_width}${s1_loose}" ]; then
+  status=1
+  echo "ERROR: a list filter departs from the shared control's dress."
+  echo "       --filter-width is one value in styles.css (:root) — do not"
+  echo "       re-assign it per page; wrap every .filter-input and its"
+  echo "       .filter-label in a .filter-group so the pair wraps as a unit."
+  { [ -n "$s1_width" ] && printf '%s\n' "$s1_width" | sed 's/^/  /'; printf '%s' "$s1_loose"; }
   echo
 fi
 

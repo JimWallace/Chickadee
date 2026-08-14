@@ -433,6 +433,25 @@ form-less-filter case), and the GET-form inputs keep a plain
 baselines regenerated for instructor-students (the filter row wraps as a
 label+input unit) and admin-users (visible label).
 
+**Follow-up (2026-08).** Both narrowings above turned out to be where the
+drift survived, and the answer in each case was that *one control* has to
+mean one dress, not just one implementation. Sharing `list-filter.js` left
+the five boxes in three widths (`--filter-width` read as a per-page dial:
+280px on admin-users, 220px on submissions, a 260px flex basis on students)
+and two structures (activity and audit stayed loose in their form toolbars,
+so the `.filter-group` wrap-as-a-unit rule never applied to them). The
+split autofill idiom was the same shape: the GET-form inputs' plain
+`autocomplete="off"` is the very suppression the component's header comment
+calls insufficient, so two inputs doing one job had two suppression
+strengths — and the difference was legible in the markup, which is how it
+was noticed. `--filter-width` now lives in `:root` only, every
+`.filter-input` sits in a `.filter-group`, the component suppresses on
+every `.filter-input` (binding live filtering only where a table is named),
+and guard 4c fails on a per-page width or a group-less filter. General
+lesson for the remaining slices: a shared implementation with a per-page
+size knob is a shared implementation that will drift, and the knob is
+worth guarding the day it is introduced.
+
 ### S2 — One sortable table (M)
 
 **Target state.** `Public/sortable-table.js` is the only sort

@@ -109,3 +109,44 @@ test('a missing target table is a no-op, not a throw', () => {
   ListFilter.apply(makeInput('anything', 'no-such-table'));
   ListFilter.apply(null);
 });
+
+// An input stub that records what enhance() does to it.
+function makeEnhanceable({ listFilter = null } = {}) {
+  const attrs = listFilter === null ? {} : { 'data-list-filter': listFilter };
+  return {
+    attrs,
+    listeners: [],
+    hasAttribute: (name) => Object.prototype.hasOwnProperty.call(attrs, name),
+    setAttribute: (name, value) => { attrs[name] = value; },
+    removeAttribute: (name) => { delete attrs[name]; },
+    addEventListener: function (type, fn) { this.listeners.push({ type, fn }); },
+  };
+}
+
+// The autofill suppression covers every .filter-input, not only the live ones.
+// Scoping it to data-list-filter is what left the two GET-form filters
+// (activity, audit) with a bare autocomplete="off" in markup — the suppression
+// this module's own header calls insufficient — so one control had two
+// strengths depending on the page. If this test fails, that split is back.
+test('a GET-form filter (no target table) still gets full suppression', () => {
+  const ListFilter = loadModule({ rows: [] });
+  const input = makeEnhanceable();
+
+  ListFilter.enhance(input);
+  assert.equal(input.attrs.autocomplete, 'off');
+  assert.equal(input.hasAttribute('readonly'), true, 'readonly-until-focus applies');
+  assert.deepEqual(input.listeners.map((l) => l.type), ['focus'],
+    'no input listener without a target table');
+
+  input.listeners[0].fn();
+  assert.equal(input.hasAttribute('readonly'), false, 'focus releases readonly');
+});
+
+test('a live filter gets the suppression and the input binding', () => {
+  const ListFilter = loadModule({ rows: [] });
+  const input = makeEnhanceable({ listFilter: 'the-table' });
+
+  ListFilter.enhance(input);
+  assert.equal(input.attrs.autocomplete, 'off');
+  assert.deepEqual(input.listeners.map((l) => l.type), ['focus', 'input']);
+});

@@ -19,9 +19,11 @@ Activity
     </p>
 
     <form class="toolbar section-gap" method="get" action="/instructor/activity">
-        <label class="filter-label" for="activity-actor">Filter by person</label>
-        <input class="form-input filter-input" id="activity-actor" type="search" name="actor"
-               value="#(filterActor)" placeholder="username" autocomplete="off">
+        <span class="filter-group">
+            <label class="filter-label" for="activity-actor">Filter by person</label>
+            <input class="form-input filter-input" id="activity-actor" type="search"
+                   name="actor" value="#(filterActor)" placeholder="username">
+        </span>
         <button type="submit" class="btn">Filter</button>
         #if(filtered):
         <a href="/instructor/activity" class="btn">Clear</a>
@@ -74,8 +76,6 @@ Activity
 </section>
 
 #endif
-#endexport
-#endextend
 <style>
 .activity-col-when { width: 11rem; }
 .activity-col-who { width: 9rem; }
@@ -93,3 +93,6 @@ Activity
     word-break: break-word;
 }
 </style>
+<script src="/list-filter.js?v=#appVersion()"></script>
+#endexport
+#endextend

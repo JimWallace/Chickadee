@@ -164,11 +164,16 @@ of action buttons" and four pill implementations; the page-style ratchet
 - **`.toolbar`** (+ `--end`), `.row-actions-tight` — horizontal control
   clusters; filter rows are `.toolbar .toolbar--end .section-gap`.
 - **`.filter-group`** — the one list-filter control: a `.filter-label` +
-  `.filter-input[type=search]` pair that wraps as a unit.  Live filtering is
-  `input[data-list-filter="<table-id>"]` (`Public/list-filter.js` — it owns
-  the row matching, the select-value rule, and autofill suppression; never
-  re-implement it in a page script).  Server-side GET filters (activity,
-  audit) wear the same label/input dress plus Filter/Clear buttons.
+  `.filter-input[type=search]` pair that wraps as a unit.  Every
+  `.filter-input` sits in one, GET-form filters included, and every one is
+  `--filter-width` wide — that custom property is declared once in `:root`
+  and is **not** a per-page dial (five boxes once came in three sizes).
+  Live filtering is `input[data-list-filter="<table-id>"]`
+  (`Public/list-filter.js` — it owns the row matching, the select-value
+  rule, and autofill suppression for *every* `.filter-input`, so a filter
+  never carries `autocomplete` in markup; never re-implement it in a page
+  script).  Server-side GET filters (activity, audit) wear the same dress
+  plus Filter/Clear buttons, and load the same script for the suppression.
   Placeholder microcopy on live filters: "Filter by &lt;matched fields&gt;…".
 - **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`), `.field-note`
   (+ `--muted`), `.field-help`, `.input-compact`, `.editor-input`,
@@ -310,7 +315,9 @@ A page `<style>` block is for styling that genuinely exists on one page only.
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).
 - No inline `style=""` except a JS-toggled `display:none` initial state or a
-  custom-property assignment (`style="--filter-width:220px"`).
+  custom-property assignment (`style="--wb-left-width:42%"`).  A component's
+  own token is not automatically a per-page dial: `--filter-width` is
+  guarded against exactly this use.
 - Values inside page blocks follow the same token rules as the global sheet.
 - **Total page-block size is a shrink-only ratchet**
   (`PAGE_STYLE_BASELINE` in `scripts/check-styles.sh`).  Concept drift lives
