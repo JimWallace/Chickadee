@@ -15,8 +15,8 @@ import js from '@eslint/js';
 // short — but "short" no longer means "hang everything off ChickadeeUI",
 // which is how that module reached eighteen unrelated functions behind one
 // name.  A genuinely separate concern gets its own file and its own name
-// (ChickadeeSparkline); only things that really are shared low-level
-// utilities — escaping, CSRF, fetch — belong on ChickadeeUI.
+// (ChickadeeSparkline, ChickadeeAccordion); only things that really are shared
+// low-level utilities — escaping, CSRF, fetch — belong on ChickadeeUI.
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
@@ -24,6 +24,10 @@ const chickadeeGlobals = {
   // chickadee-ui.js: drawing a chart is not the same kind of thing as
   // escaping a string.
   ChickadeeSparkline: 'readonly',
+  // Public/accordion-row.js — the inline detail-row editor the suite and
+  // achievements tables expand, split out of chickadee-ui.js: a widget with its
+  // own DOM contract is not the same kind of thing as escaping a string.
+  ChickadeeAccordion: 'readonly',
   // Public/authoring-language.js — the assignment's language facts, read by
   // every authoring editor.
   ChickadeeLanguage: 'readonly',

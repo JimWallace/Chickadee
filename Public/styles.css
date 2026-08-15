@@ -1835,7 +1835,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* Inline editor (accordion) hosted in a detail row beneath a suite/achievement
    row.  Shared by the suite editor (suite-table.js) and the achievements editor
-   (achievements-editor.js) through ChickadeeUI.accordion. */
+   (achievements-editor.js) through ChickadeeUI.accordion, which delegates to
+   ChickadeeAccordion in Public/accordion-row.js. */
 .suite-row-expanded > td { background: var(--gray-100); }
 /* A continuous left accent bar ties the open editor to its row (mirrors the
    status colour-strips at .status-pass &c.). */
