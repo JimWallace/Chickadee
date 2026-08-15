@@ -162,7 +162,7 @@ struct AdminRoutes: RouteCollection {
             return try await rows.encodeResponse(for: req)
         }
         return try await req.view.render("_user-rows", UserRowsFragmentContext(users: rows))
-            .encodeResponse(for: req)
+            .encodePollFragment(for: req)
     }
 
     /// Loads every user, ordered most-recently-seen first (NULL last_seen

@@ -23,7 +23,7 @@ extension AdminRoutes {
             return try await rows.encodeResponse(for: req)
         }
         return try await req.view.render("_worker-rows", WorkerRowsFragmentContext(workers: rows))
-            .encodeResponse(for: req)
+            .encodePollFragment(for: req)
     }
 
     // MARK: - GET /admin/runners/:runnerID
