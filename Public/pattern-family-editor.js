@@ -2216,7 +2216,7 @@
         var suiteBody = document.getElementById('suite-sections')
                      || document.getElementById('suite-config-body');
         if (suiteBody) {
-            suiteBody.addEventListener('click', function (e) {
+            suiteBody.addEventListener('click', async function (e) {
                 var editBtn = e.target && e.target.closest('.js-family-edit-btn');
                 var delBtn  = e.target && e.target.closest('.js-family-delete-btn');
                 if (editBtn) {
@@ -2239,7 +2239,7 @@
                     if (idx2 < 0) return;
                     var family = familiesState[idx2];
                     var caseCount = (family.cases || []).length;
-                    if (!ChickadeeUI.confirmAction('Delete pattern family "' + family.name + '"? This removes '
+                    if (!await ChickadeeUI.confirmAction('Delete pattern family "' + family.name + '"? This removes '
                                  + caseCount + ' generated test script' + (caseCount === 1 ? '' : 's') + '.')) {
                         return;
                     }
