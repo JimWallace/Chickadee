@@ -258,7 +258,7 @@
         activeView = pane.view;
         if (staleChip) staleChip.hidden = true;
 
-        ChickadeeUI.refreshNotebookSurface(nextURL).then(function (ok) {
+        ChickadeeSurfaceSwap.refreshNotebookSurface(nextURL).then(function (ok) {
             if (!ok) return;  // swapHalf already reloaded
             try {
                 window.history.pushState({ file: pane.file, view: pane.view }, '', nextURL);
@@ -293,7 +293,7 @@
         if (!url) { window.location.reload(); return; }
         activeFile = st.file;
         activeView = st.view;
-        ChickadeeUI.refreshNotebookSurface(url).then(syncViewControls);
+        ChickadeeSurfaceSwap.refreshNotebookSurface(url).then(syncViewControls);
     });
 
     viewButtons.forEach(function (btn) {

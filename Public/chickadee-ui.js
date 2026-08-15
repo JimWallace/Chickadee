@@ -14,6 +14,19 @@
 // Loaded from the <head> of base.leaf, so it is available to inline page
 // scripts and template-loaded modules, which execute during document parse
 // — BEFORE the scripts included at the end of <body> (app.js et al).
+//
+// What belongs here is the low-level shared utility: escaping, the CSRF token,
+// a status line, a fetch wrapper, an error extractor, a confirmation dialog.
+// This module once held eighteen functions behind that one name, which is how
+// a chart renderer and an accordion came to be loaded by every page in the
+// product. Those are their own concerns and have their own files and names:
+//
+//   ChickadeeSparkline    Public/sparkline.js      dashboard bar renderer
+//   ChickadeeAccordion    Public/accordion-row.js  inline detail-row editor
+//   ChickadeeSurfaceSwap  Public/surface-swap.js   in-place workbench refresh
+//
+// A new cross-file concern gets a file and a name of its own. Add to this one
+// only what really is a shared low-level utility.
 (function () {
     'use strict';
 
@@ -248,42 +261,6 @@
         });
     }
 
-    // The sparkline renderer moved to Public/sparkline.js: rendering a chart is
-    // not a shared utility in the same sense as escaping a string, and this
-    // module — loaded from base.leaf on every page — had accumulated eighteen
-    // unrelated functions behind one name.
-    //
-    // `ChickadeeUI.renderSparkline` stays as the call surface so that no call
-    // site changes in the same commit as the move; repointing them at
-    // `ChickadeeSparkline.render` and dropping this is a later, separate step.
-    // The lookup happens at CALL time, so the two files' load order does not
-    // matter and this file gains no dependency on the other having run.
-    function renderSparkline(container, series, labels, formatPoint, opts) {
-        return root.ChickadeeSparkline.render(container, series, labels, formatPoint, opts);
-    }
-
-    // ── Shared accordion (inline detail-row editor) ──────────────────────────
-    //
-    // The implementation moved to Public/accordion-row.js as
-    // `ChickadeeAccordion`. It is a widget with its own DOM contract and its
-    // own animation rules, not a shared utility in the sense that escaping a
-    // string is, and it was living in the module base.leaf loads on every page
-    // for the sake of two authoring pages.
-    //
-    // `ChickadeeUI.accordion` stays as the call surface so that no call site
-    // changes in the same commit as the move; repointing the suite and
-    // achievements editors at `ChickadeeAccordion` and dropping this is a
-    // later, separate step. Each member is looked up at CALL time, so the two
-    // files' load order does not matter — including `CARET_HTML`, which is a
-    // getter for exactly that reason: reading it eagerly here would capture
-    // whatever the other file had defined at the moment this one ran.
-    var accordion = {
-        get CARET_HTML() { return root.ChickadeeAccordion.CARET_HTML; },
-        build: function (opts) { return root.ChickadeeAccordion.build(opts); },
-        open: function (parts, parentRow) { return root.ChickadeeAccordion.open(parts, parentRow); },
-        close: function (tr, opts) { return root.ChickadeeAccordion.close(tr, opts); }
-    };
-
     // Tell the assignment-workbench shell that something on this page changed
     // in a way the *other* pane cares about.
     //
@@ -321,25 +298,6 @@
             // CustomEvent unavailable (very old browser). The surface stays
             // correct on its own; only the cross-half hint is lost.
         }
-    }
-
-    // ── Re-rendering the surface you are on ──────────────────────────────────
-    //
-    // The implementation moved to Public/surface-swap.js as
-    // `ChickadeeSurfaceSwap`. It is the largest of the concerns split out of
-    // this module and the one with the most rules of its own: a fetch, a parse,
-    // a node-identity discipline, and the only place in the frontend that
-    // deliberately turns markup into running code.
-    //
-    // Both names stay here as the call surface so that no call site changes in
-    // the same commit as the move, and both resolve at CALL time so the two
-    // files' load order does not matter.
-    function refreshEditSurface() {
-        return root.ChickadeeSurfaceSwap.refreshEditSurface();
-    }
-
-    function refreshNotebookSurface(url) {
-        return root.ChickadeeSurfaceSwap.refreshNotebookSurface(url);
     }
 
     // Warns when a chosen date falls within three days of a UWaterloo
@@ -394,11 +352,7 @@
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
         notifyWorkbench: notifyWorkbench,
-        checkUWDates: checkUWDates,
-        refreshEditSurface: refreshEditSurface,
-        refreshNotebookSurface: refreshNotebookSurface,
-        renderSparkline: renderSparkline,
-        accordion: accordion
+        checkUWDates: checkUWDates
     };
 
     // Node export for the .mjs unit tests (Tests/BrowserRunnerJSTests);

@@ -71,10 +71,12 @@ function load({ response, hasShell = true } = {}) {
     URLSearchParams: class { constructor(fd) { this.fd = fd; } },
     ChickadeeUI: {
       getCsrfToken: () => 'csrf-token-value',
-      refreshEditSurface: () => scheduled.push('refresh'),
       // The shared extractor the real page uses (chickadee-ui.js); the banner
       // text is its output, so stubbing it keeps this file about inplace-forms.
       extractErrorMessage: (text) => text,
+    },
+    ChickadeeSurfaceSwap: {
+      refreshEditSurface: () => scheduled.push('refresh'),
     },
     setTimeout: (fn) => { fn(); return 1; },
     fetch: (url, opts) => {

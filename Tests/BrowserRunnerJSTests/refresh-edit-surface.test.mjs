@@ -1,5 +1,5 @@
-// Unit tests for ChickadeeUI.refreshEditSurface — how the assignment editor
-// re-renders itself after a write.
+// Unit tests for ChickadeeSurfaceSwap.refreshEditSurface — how the assignment
+// editor re-renders itself after a write.
 //
 // Renamed and re-specified in #1266. It used to read `data-ck-panel-url` off
 // <body> and hand it to `location.replace`, because the editor lived in a

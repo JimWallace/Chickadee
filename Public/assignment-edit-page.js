@@ -161,7 +161,7 @@
         deleteURL: function (name) {
             return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
         },
-        onChange: function () { ChickadeeUI.refreshEditSurface(); }
+        onChange: function () { ChickadeeSurfaceSwap.refreshEditSurface(); }
     });
 
     // ── BrightSpace grade-item picker ───────────────────────────────────────

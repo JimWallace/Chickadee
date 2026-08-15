@@ -113,7 +113,7 @@
                 // to the shell), and a `.then` is a microtask. Reloading here
                 // would start tearing this document down in the same turn the
                 // caller is still queued behind.
-                setTimeout(function () { ChickadeeUI.refreshEditSurface(); }, 0);
+                setTimeout(function () { ChickadeeSurfaceSwap.refreshEditSurface(); }, 0);
                 return true;
             }
             return res.text().then(function (text) {
