@@ -121,7 +121,7 @@ extension InstructorDashboardRoutes {
 
         guard let activeCourseUUID = courseState.activeCourseUUID else {
             return wantsFragment
-                ? Response(status: .ok, headers: ["Content-Type": "text/html; charset=utf-8"], body: .init(string: ""))
+                ? Response.emptyPollFragment(for: req)
                 : try await [EnrolledStudentRow]().encodeResponse(for: req)
         }
         let roster = try await loadEnrolledStudentRows(
@@ -147,7 +147,7 @@ extension InstructorDashboardRoutes {
             enrolledStudents: roster.rows,
             rosterReadOnly: courseIsArchived || !canManageRoster
         )
-        return try await req.view.render("_student-rows", ctx).encodeResponse(for: req)
+        return try await req.view.render("_student-rows", ctx).encodePollFragment(for: req)
     }
 }
 
