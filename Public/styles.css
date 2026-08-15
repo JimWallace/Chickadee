@@ -75,11 +75,13 @@
     --radius-lg: .5rem;   /* cards, tables, modals, callouts */
     --radius-full: 999px; /* pills, round icon buttons */
 
-    /* The one list-filter width (.filter-input).  Declared here rather than
-       per page: three pages each dialled their own inline value (280px /
-       220px / a 260px flex basis), so five boxes doing one job came in three
-       sizes.  A template may not assign this — scripts/check-styles.sh 4c. */
+    /* Component widths, declared once rather than dialled per page. Both of
+       these were inline values in templates first, and both drifted: three
+       filter boxes in three sizes, two form stacks 2rem apart for no recorded
+       reason. A template may not assign either — scripts/check-styles.sh 4c;
+       a genuinely different width is a named modifier (.form-stack--wide). */
     --filter-width: 16rem;
+    --form-stack-width: 30rem;
 
     /* Nav foreground pair — the nav is black in both schemes, so no
        dark-mode override is needed. */
@@ -2236,8 +2238,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    max-width: var(--form-stack-width, 480px);
+    max-width: var(--form-stack-width);
 }
+/* One variant, for a form whose content genuinely wants the room: the MCP tab
+   is a full authoring-guide textarea, not a column of fields. The property was
+   a per-page dial before — 60rem here, 32rem on slip days (2rem off the
+   default, for no reason anyone recorded) — which is exactly how --filter-width
+   produced five filter boxes in three sizes. A width is a decision the design
+   system makes once, or a named variant; never an inline number in a template. */
+.form-stack--wide { --form-stack-width: 60rem; }
 
 /* A textarea holding code or machine text (a token, a CSV paste, an authoring
    guide). Three page-local copies differed only in which of the same five

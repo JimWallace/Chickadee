@@ -328,9 +328,12 @@ A page `<style>` block is for styling that genuinely exists on one page only.
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).
 - No inline `style=""` except a JS-toggled `display:none` initial state or a
-  custom-property assignment (`style="--wb-left-width:42%"`).  A component's
-  own token is not automatically a per-page dial: `--filter-width` is
-  guarded against exactly this use.
+  **per-datum** custom-property assignment (`style="--bar-h:63%"`, a chart
+  bar's height from the row being rendered).  A component's own token is
+  **not** a per-page dial: `--filter-width` and `--form-stack-width` were
+  both used as one and both drifted, so the guard now allows only the
+  per-datum props it names.  A genuinely different width is the token's
+  value or a named modifier class (`.form-stack--wide`) in `styles.css`.
 - Values inside page blocks follow the same token rules as the global sheet.
 - **Total page-block size is a shrink-only ratchet**
   (`PAGE_STYLE_BASELINE` in `scripts/check-styles.sh`).  Concept drift lives
