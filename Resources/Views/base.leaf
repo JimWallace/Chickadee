@@ -29,6 +29,7 @@
          does not matter: the re-exports look the delegate up at call time. -->
     <script src="/sparkline.js?v=#appVersion()"></script>
     <script src="/accordion-row.js?v=#appVersion()"></script>
+    <script src="/surface-swap.js?v=#appVersion()"></script>
     <!-- Same reason, same place: page inline scripts call
          ChickadeeRelativeTime.applyRelativeTimes() during parse, so it cannot
          wait for the end of <body>. -->

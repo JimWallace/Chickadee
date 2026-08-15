@@ -28,7 +28,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 
-const source = await fs.readFile(path.resolve('Public/chickadee-ui.js'), 'utf8');
+const source = await fs.readFile(path.resolve('Public/surface-swap.js'), 'utf8');
 
 /// A minimal element stub: enough surface for the swap path to run.
 ///
@@ -116,15 +116,18 @@ function load(opts = {}) {
   };
   window.parent = window;
 
+  // `self`, because surface-swap.js resolves its global as
+  // `typeof self !== 'undefined' ? self : this`.
   const context = vm.createContext({
     window,
     document,
     globalThis: {},
+    self: window,
     fetch: window.fetch,
     DOMParser: window.DOMParser,
   });
   vm.runInContext(source, context);
-  return { ui: window.ChickadeeUI, calls, half, freshHalf };
+  return { ui: window.ChickadeeSurfaceSwap, calls, half, freshHalf };
 }
 
 test('refreshEditSurface: swaps the edit half in place, never navigating', async () => {
