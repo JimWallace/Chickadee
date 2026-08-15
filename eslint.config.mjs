@@ -15,8 +15,9 @@ import js from '@eslint/js';
 // short — but "short" no longer means "hang everything off ChickadeeUI",
 // which is how that module reached eighteen unrelated functions behind one
 // name.  A genuinely separate concern gets its own file and its own name
-// (ChickadeeSparkline, ChickadeeAccordion); only things that really are shared
-// low-level utilities — escaping, CSRF, fetch — belong on ChickadeeUI.
+// (ChickadeeSparkline, ChickadeeAccordion, ChickadeeSurfaceSwap); only things
+// that really are shared low-level utilities — escaping, CSRF, fetch — belong
+// on ChickadeeUI.
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
@@ -28,6 +29,10 @@ const chickadeeGlobals = {
   // achievements tables expand, split out of chickadee-ui.js: a widget with its
   // own DOM contract is not the same kind of thing as escaping a string.
   ChickadeeAccordion: 'readonly',
+  // Public/surface-swap.js — re-renders half of the merged workbench in place.
+  // Reached through ChickadeeUI's re-exports, so it is declared here for the
+  // one file that names it.
+  ChickadeeSurfaceSwap: 'readonly',
   // Public/authoring-language.js — the assignment's language facts, read by
   // every authoring editor.
   ChickadeeLanguage: 'readonly',
