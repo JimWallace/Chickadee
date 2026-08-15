@@ -8,10 +8,9 @@
 //
 // NOT covered here: `runInlineScripts`, which re-executes script elements from
 // swapped HTML. It is internal to `swapHalf` and unexported, so reaching it
-// would mean widening the public API to suit a test. Its CONTRACT is now
-// written down in the source; covering its behaviour needs a `swapHalf`
-// harness (DOMParser, importNode, the keepElement identity rule), which is its
-// own slice.
+// would mean widening the public API to suit a test. It is reached through its
+// only caller instead — see `swap-half.test.mjs`, which drives it behind a
+// real-enough DOM (DOMParser, importNode, the keepElement identity rule).
 //
 // Each of these exists because it replaced drifted copies — escapeHtml
 // replaced per-file variants that disagreed on which characters they escaped,
