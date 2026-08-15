@@ -393,7 +393,7 @@
                 + '</select></td>'
                 + '<td><input type="number" class="form-input cell-input points-input js-suite-family-points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test"></td>'
                 + '<td class="time"><div class="cell-actions">'
-                +   ChickadeeUI.accordion.CARET_HTML
+                +   ChickadeeAccordion.CARET_HTML
                 +   '<button class="btn action-btn action-btn-icon js-family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
                 +   '<button class="btn action-btn action-btn-icon action-danger js-family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
@@ -424,7 +424,7 @@
                 + '</select></td>'
                 + '<td><input type="number" class="form-input cell-input points-input js-suite-check-points" min="0" max="100" value="' + points + '"></td>'
                 + '<td class="time"><div class="cell-actions">'
-                +   ChickadeeUI.accordion.CARET_HTML
+                +   ChickadeeAccordion.CARET_HTML
                 +   '<button class="btn action-btn action-btn-icon js-check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check"><svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>'
                 +   '<button class="btn action-btn action-btn-icon action-danger js-check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>'
                 + '</div></td>'
@@ -581,7 +581,7 @@
                 renderSuspended = false;
                 if (renderPendingFlag) { renderPendingFlag = false; renderTree(); }
             }
-            var finishNow = ChickadeeUI.accordion.close(d.detailRow, {
+            var finishNow = ChickadeeAccordion.close(d.detailRow, {
                 immediate: !!immediate,
                 parentRow: parentRow,
                 onDone: onTornDown
@@ -616,7 +616,7 @@
             // renderers are singletons, so two live editors can't coexist.
             collapseInlineEditor(true);
 
-            var parts = ChickadeeUI.accordion.build({ colspan: 4 });
+            var parts = ChickadeeAccordion.build({ colspan: 4 });
             var tr = parts.tr;
             var host = parts.host;
             var saveBtn = parts.saveBtn;
@@ -677,7 +677,7 @@
             });
             cancelBtn.addEventListener('click', function () { collapseInlineEditor(false); });
 
-            ChickadeeUI.accordion.open(parts, parentRow);
+            ChickadeeAccordion.open(parts, parentRow);
         }
 
         /// Entry point for the "+ Add Test" dropdown to author a NEW inline test

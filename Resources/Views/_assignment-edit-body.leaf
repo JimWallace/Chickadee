@@ -456,6 +456,7 @@
          existing notebook-check row for editing.
        * Renderer scripts load before the modal shell so they self-register
          first. -->
+<script src="/accordion-row.js?v=#appVersion()"></script>
 <script src="/suite-table.js?v=#appVersion()"></script>
 <script src="/inputs-editor-core.js?v=#appVersion()"></script>
 <script src="/section-inputs-editor.js?v=#appVersion()"></script>

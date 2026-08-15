@@ -99,7 +99,7 @@
                     + '<td>' + esc(SCOPE_LABEL[row.scope] || row.scope) + '</td>'
                     + '<td>' + summary(row) + '</td>'
                     + '<td class="time">'
-                    + ChickadeeUI.accordion.CARET_HTML + ' '
+                    + ChickadeeAccordion.CARET_HTML + ' '
                     + '<button type="button" class="btn action-btn js-ach-edit" data-i="' + i + '">Edit</button> '
                     + '<button type="button" class="btn action-btn action-danger js-ach-remove" data-i="' + i + '">Remove</button>'
                     + '</td>';
@@ -143,7 +143,7 @@
             var o = open;
             open = null;
             var parent = o.index >= 0 ? tbody.querySelector('tr[data-i="' + o.index + '"]') : null;
-            var finishNow = ChickadeeUI.accordion.close(o.detailRow, {
+            var finishNow = ChickadeeAccordion.close(o.detailRow, {
                 immediate: !!immediate,
                 parentRow: parent,
                 onDone: function () { lingeringClose = null; }
@@ -189,7 +189,7 @@
             var parent = index >= 0 ? tbody.querySelector('tr[data-i="' + index + '"]') : null;
             var row = index >= 0 ? (state[index] || {}) : { scope: 'individual' };
 
-            var parts = ChickadeeUI.accordion.build({ colspan: 4 });
+            var parts = ChickadeeAccordion.build({ colspan: 4 });
             var tr = parts.tr;
             var host = parts.host;
             var saveBtn = parts.saveBtn;
@@ -285,7 +285,7 @@
             });
             cancelBtn.addEventListener('click', function () { collapse(false); });
 
-            ChickadeeUI.accordion.open(parts, parent);
+            ChickadeeAccordion.open(parts, parent);
         }
 
         var addBtn = document.getElementById('achievement-add');

@@ -326,6 +326,7 @@ Create Assignment
      there).  All section CRUD goes through draft-scoped endpoints — see
      AssignmentRoutes+DraftSections.swift. -->
 #if(draftID):
+<script src="/accordion-row.js?v=#appVersion()"></script>
 <script src="/suite-table.js?v=#appVersion()"></script>
 
 <!-- Section inputs editor — the same shared modules the edit page loads
