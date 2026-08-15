@@ -75,7 +75,7 @@
         }
     ];
 
-    var renderSpark = ChickadeeUI.renderSparkline;
+    var renderSpark = ChickadeeSparkline.render;
 
     function renderSparkCard(config) {
         if (!cardsPayload || !config.cardEl) return;

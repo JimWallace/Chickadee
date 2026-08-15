@@ -36,7 +36,7 @@
             card.valueEl.textContent = data.headline == null ? '—' : String(data.headline);
             var chip = card.cardEl.querySelector('.diagnostic-window-chip');
             if (chip) chip.textContent = win.label;
-            ChickadeeUI.renderSparkline(
+            ChickadeeSparkline.render(
                 card.cardEl.querySelector('.diagnostic-spark'),
                 data.series, win.bucketLabels || [],
                 card.unit ? unitLabel(card.unit) : function (v) { return String(v); });

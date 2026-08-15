@@ -307,6 +307,7 @@ tr.assignment-draggable td {
 <!-- Diagnostic cards, section reorder/edit/delete, copy-student-link
      buttons and the publish-form UW-date warning are wired by
      Public/assignments.js. -->
+<script src="/sparkline.js?v=#appVersion()"></script>
 <script src="/assignments.js?v=#appVersion()"></script>
 #endexport
 #endextend

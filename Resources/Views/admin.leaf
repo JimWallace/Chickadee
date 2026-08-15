@@ -184,6 +184,7 @@ tr.runner-row-offline {
 <script src="/table-poll.js?v=#appVersion()"></script>
 <!-- Load summary, diagnostic cards, the Active Users card and the
      import-course picker are wired by Public/admin-dashboard.js. -->
+<script src="/sparkline.js?v=#appVersion()"></script>
 <script src="/admin-dashboard.js?v=#appVersion()"></script>
 #endexport
 #endextend
