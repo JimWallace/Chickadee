@@ -140,7 +140,7 @@ private func runZipProcess(
         // terminationHandler runs on Foundation's queue and resumes the
         // continuation independently.
         acquireZipProcessLock()
-        let proc = Process()
+        let proc = makeZipProcess()
         proc.executableURL = URL(fileURLWithPath: executablePath)
         proc.arguments = arguments
         if let dir = workingDirectory {
