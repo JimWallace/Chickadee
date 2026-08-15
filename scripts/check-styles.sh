@@ -352,14 +352,33 @@ fi
 # tags in Tests/APITests/ListFilterMarkupTests.swift rather than counted here —
 # a count is a weak proxy for containment, and this file's own rule is to parse
 # structure rather than search the document.
-s1_width="$(grep -rn -- '--filter-width' "${views[@]}" || true)"
-if [ -n "$s1_width" ]; then
+# The rule generalizes past the filter, because the filter was the SECOND
+# instance: --form-stack-width was a per-page dial too (60rem on the MCP tab,
+# 32rem on slip days — 2rem off the default, for no reason anyone recorded).
+# So an inline custom property may only carry a value that varies per DATUM,
+# not per page. --bar-h is the honest case: a chart bar's height comes from the
+# row the server is rendering and cannot live in a stylesheet. A width that
+# differs because someone preferred it there is a design decision, and belongs
+# in styles.css as the token's value or as a named modifier class.
+PER_DATUM_INLINE_PROPS="--bar-h"
+inline_prop_violations=""
+while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
+  name="$(printf '%s' "$hit" | sed -E 's/.*style="[[:space:]]*(--[A-Za-z0-9_-]+).*/\1/')"
+  case " $PER_DATUM_INLINE_PROPS " in
+    *" $name "*) ;;
+    *) inline_prop_violations+="  ${hit}"$'\n' ;;
+  esac
+done < <(grep -rno 'style="--[^"]*"' "${views[@]}" || true)
+
+if [ -n "$inline_prop_violations" ]; then
   status=1
-  echo "ERROR: a template assigns --filter-width."
-  echo "       The list filter is one width, declared in styles.css (:root)."
-  echo "       If one filter genuinely needs another, add a named modifier"
-  echo "       class there — not an inline value review cannot see."
-  printf '%s\n' "$s1_width" | sed 's/^/  /'
+  echo "ERROR: a template assigns a component custom property inline."
+  echo "       A component's width is one decision, declared in styles.css"
+  echo "       (:root), or a named modifier class there — never an inline"
+  echo "       number, which no review reads and every page can differ on."
+  echo "       Inline custom props are for per-DATUM values only (${PER_DATUM_INLINE_PROPS})."
+  printf '%s' "$inline_prop_violations"
   echo
 fi
 
