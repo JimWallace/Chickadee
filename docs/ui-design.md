@@ -204,7 +204,9 @@ of action buttons" and four pill implementations; the page-style ratchet
   column sort (`Public/sortable-table.js`).  Markup:
   `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
   `<button class="sort-header">`; the cell's sort value is `data-sort-value`,
-  else `data-iso`, else a contained `<select>`'s value, else its text.
+  else `data-iso`, else a contained `<select>`'s value, else its text — the
+  MACHINE value, deliberately not the displayed text `.filter-input` matches
+  (you sort Last Seen by its ISO and filter it by "2 hours ago").
   `data-sort-initial="<key>:desc"` declares the load-time sort and
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
