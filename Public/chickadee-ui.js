@@ -248,35 +248,18 @@
         });
     }
 
-    // Renders a sparkline (one bar per series entry) into `container`.
-    // `series` is an array of numbers / nulls (null = "no data", drawn as an
-    // empty slot). `labels` supplies the per-bar tooltip prefix and
-    // `formatPoint(value)` formats the value in the tooltip. Shared by the
-    // admin and instructor dashboard diagnostic cards, and (via `opts`) the
-    // admin Active Users card, which used to carry its own fork of this
-    // markup:
-    //   opts.floorPct    – floor the bar height of any populated (> 0) bucket
-    //                      so a lone entry shows a visible bar, not a 2px
-    //                      sliver indistinguishable from an empty one
-    //   opts.zeroIsEmpty – draw a zero-valued bucket with the empty-slot
-    //                      styling, not just a null one
+    // The sparkline renderer moved to Public/sparkline.js: rendering a chart is
+    // not a shared utility in the same sense as escaping a string, and this
+    // module — loaded from base.leaf on every page — had accumulated eighteen
+    // unrelated functions behind one name.
+    //
+    // `ChickadeeUI.renderSparkline` stays as the call surface so that no call
+    // site changes in the same commit as the move; repointing them at
+    // `ChickadeeSparkline.render` and dropping this is a later, separate step.
+    // The lookup happens at CALL time, so the two files' load order does not
+    // matter and this file gains no dependency on the other having run.
     function renderSparkline(container, series, labels, formatPoint, opts) {
-        if (!container) return;
-        series = Array.isArray(series) ? series : [];
-        labels = Array.isArray(labels) ? labels : [];
-        opts = opts || {};
-        var format = typeof formatPoint === 'function' ? formatPoint : function (v) { return String(v); };
-        var max = series.reduce(function (m, v) { return v == null ? m : Math.max(m, v); }, 0);
-        container.innerHTML = series.map(function (value, i) {
-            var pct = (value != null && max > 0) ? (value / max) * 100 : 0;
-            if (opts.floorPct > 0 && value > 0 && pct > 0) pct = Math.max(pct, opts.floorPct);
-            var empty = value == null || (opts.zeroIsEmpty && !value);
-            var title = (labels[i] || '') + ': ' + (value == null ? 'no data' : format(value));
-            return '<div class="spark-slot" title="' + escapeHtml(title) + '">'
-                + '<span class="spark-fill' + (empty ? ' spark-fill-empty' : '')
-                + '" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
-                + '</div>';
-        }).join('');
+        return root.ChickadeeSparkline.render(container, series, labels, formatPoint, opts);
     }
 
     // ── Shared accordion (inline detail-row editor) ──────────────────────────

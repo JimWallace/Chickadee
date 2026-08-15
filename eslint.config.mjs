@@ -12,11 +12,18 @@ import js from '@eslint/js';
 
 // Globals the classic scripts share by assignment onto window (defined in
 // chickadee-ui.js / grading-shared.js, consumed everywhere).  Keep this list
-// short — new cross-file API should hang off ChickadeeUI rather than adding
-// names.
+// short — but "short" no longer means "hang everything off ChickadeeUI",
+// which is how that module reached eighteen unrelated functions behind one
+// name.  A genuinely separate concern gets its own file and its own name
+// (ChickadeeSparkline); only things that really are shared low-level
+// utilities — escaping, CSRF, fetch — belong on ChickadeeUI.
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
+  // Public/sparkline.js — the dashboard bar renderer, split out of
+  // chickadee-ui.js: drawing a chart is not the same kind of thing as
+  // escaping a string.
+  ChickadeeSparkline: 'readonly',
   // Public/authoring-language.js — the assignment's language facts, read by
   // every authoring editor.
   ChickadeeLanguage: 'readonly',
