@@ -477,6 +477,27 @@
     /// double-bind. The inline blocks bind nothing to `document`/`window`
     /// themselves; the two module-level listeners that do (suite-table's
     /// dragover and pageshow) carry their own once-per-document guards.
+    /// Re-execute the inline scripts in a freshly swapped pane.
+    ///
+    /// CONTRACT, which this function had never had written down. A `<script>`
+    /// inserted by parsing HTML does not run — that is a deliberate platform
+    /// rule — so a pane swap has to re-create the elements to get their page
+    /// wiring back. That makes this the one place in the frontend that turns
+    /// markup into running code on purpose, and the boundary is therefore:
+    ///
+    ///   * `root` must be a fragment the SERVER rendered for this same-origin
+    ///     page (what `swapHalf` fetched). Never call it on markup that came
+    ///     from a user, a message body, or any other document.
+    ///   * `[src]` scripts are excluded by the selector: a swap re-runs page
+    ///     wiring, it does not re-fetch modules.
+    ///   * a `type` other than `text/javascript` is DATA — the JSON seed
+    ///     islands the authoring pages carry — and is left untouched, both
+    ///     because re-running it is meaningless and because a re-created
+    ///     element must keep its type to still be findable.
+    ///
+    /// It is internal on purpose: `swapHalf` is the only caller and the only
+    /// context where the first rule can be guaranteed. Exporting it would make
+    /// that guarantee someone else's to keep.
     function runInlineScripts(root) {
         var scripts = root.querySelectorAll('script:not([src])');
         Array.prototype.forEach.call(scripts, function (old) {
