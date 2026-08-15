@@ -422,15 +422,19 @@ fi
 # S5: destructive confirmation is data-confirm (handled in app.js). An inline
 # onclick/onsubmit confirm attribute is the idiom it replaced — 49 of them,
 # with the same action worded differently on different pages. Keeping the
-# question in markup is also what makes replacing the native dialog later a
-# one-place change; a call site that re-adds `confirm(` opts itself out of it.
+# question in markup is what made replacing the native dialog a one-place
+# change, and that replacement has now happened: ChickadeeUI.confirmAction
+# renders a real dialog, so the NATIVE call is at zero and the exemption this
+# check used to carry for it is gone. The rule is now absolute, like the
+# alert() ratchets above — the native dialog was the last piece of UI outside
+# the design system, unthemed and invisible to the axe scan.
 s5_inline="$(grep -rnE 'on(click|submit)="return (window\.)?confirm\(' "${views[@]}" || true)"
 s5_raw="$(grep -rnE '(^|[^.\w])confirm\(' "${views[@]}" Public/*.js \
-  | grep -v 'ChickadeeUI.confirmAction' | grep -v 'window.confirm' || true)"
+  | grep -v 'ChickadeeUI.confirmAction' || true)"
 if [ -n "${s5_inline}${s5_raw}" ]; then
   status=1
-  echo "ERROR: a native confirm() outside the shared seam."
-  echo "       Declare the question in markup with data-confirm=\"…\", or call"
+  echo "ERROR: a native confirm() — the shared dialog is the only one."
+  echo "       Declare the question in markup with data-confirm=\"…\", or await"
   echo "       ChickadeeUI.confirmAction(msg) where there is no element to mark."
   { [ -n "$s5_inline" ] && printf '%s\n' "$s5_inline"
     [ -n "$s5_raw" ] && printf '%s\n' "$s5_raw"; } | sed 's/^/  /'
