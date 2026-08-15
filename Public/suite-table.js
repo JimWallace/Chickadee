@@ -111,6 +111,43 @@
     var boundDocumentDragover = false;
     var boundPageshow = false;
 
+    // Which drop indicator belongs on a row the pointer is over.
+    //
+    // Pure, and exported, because it is the whole correctness content of the
+    // `dragover` handler: everything around it is bookkeeping about when to
+    // touch the DOM. `relY` is the pointer's position within the row, 0 at its
+    // top edge and 1 at its bottom.
+    //
+    // The middle band adopts — makes the dragged row a child of the target —
+    // but only when that produces a dependency the server will actually expand:
+    //
+    //   * across sections a dep token does not resolve, so only a same-section
+    //     hover can adopt;
+    //   * a check is always a leaf in the dependency graph (v0.4.x), so neither
+    //     end of the edge may be one;
+    //   * a target that already depends on something, or that already has
+    //     children in this section, would make the graph a chain or a cycle.
+    //
+    // Anything the middle band refuses falls back to before/after on the
+    // half-way line, so the row still has somewhere to land.
+    //
+    // `targetHasChildren` is a THUNK, not a boolean: answering it is a scan of
+    // every item in the suite, and the cheap tests above it refuse most hovers
+    // before it is needed. Taking it as a value would evaluate it on every
+    // hover, including the majority that cannot adopt anyway.
+    function dropZoneFor(opts) {
+        var relY = opts.relY;
+        if (relY < 0.3) return 'drop-before';
+        if (relY > 0.7) return 'drop-after';
+        var canAdopt = opts.sameSection
+            && !opts.targetIsChild
+            && !opts.targetIsCheck
+            && !opts.dragIsCheck
+            && !opts.targetHasChildren();
+        if (canAdopt) return 'drop-adopt';
+        return relY < 0.5 ? 'drop-before' : 'drop-after';
+    }
+
     function initSuiteTable(config) {
         config = config || {};
         var csrfToken = config.csrfToken || '';
@@ -144,6 +181,27 @@
         var items    = [];
         var dragID        = null;   // row drag
         var dragSectionID = null;   // section header drag
+
+        // What `dragover` needs to know about the row being dragged, and where
+        // the pointer last was.
+        //
+        // `dragover` fires continuously while the pointer moves — on the order
+        // of one event per frame — and everything it needs about the DRAGGED
+        // row is fixed for the whole gesture: `dragID` is set once at dragstart
+        // and cleared at dragend. Looking it up per event (three separate O(n)
+        // scans of `items`, two of them the identical `findByID(dragID)`) is
+        // work the gesture already knows the answer to.
+        //
+        // `lastOverKey` is the other half: the pointer spends most of a drag
+        // over a row it was already over, and re-deciding an unchanged drop
+        // target means a full-container `querySelectorAll` to clear indicators
+        // and a `getBoundingClientRect()` — a forced synchronous reflow — for
+        // an answer that cannot have changed. Reflow-per-event is the shape
+        // that caused the post-boot editor freeze (docs/browser-freeze-
+        // investigation.md); it does not belong on a hot path here either.
+        var dragItem      = null;   // the dragged row's item, resolved once
+        var dragIsCheck   = false;  // …and whether it is a check
+        var lastOverKey   = null;   // target row + section + zone last decided
         var pushTimer = null;
         var pushInFlight = false;
         var pushPending = false;
@@ -917,6 +975,9 @@
                 if (!row) { e.preventDefault(); return; }
                 dragID = row.getAttribute('data-id');
                 dragSectionID = null;
+                dragItem = findByID(dragID);
+                dragIsCheck = !!(dragItem && dragItem.kind === 'check');
+                lastOverKey = null;
                 e.dataTransfer.effectAllowed = 'move';
                 try { e.dataTransfer.setData('text/plain', dragID); } catch (_) {}
                 row.classList.add('suite-row-dragging');
@@ -931,6 +992,9 @@
                 if (!sid) { e.preventDefault(); return; }
                 dragSectionID = sid;
                 dragID = null;
+                dragItem = null;
+                dragIsCheck = false;
+                lastOverKey = null;
                 e.dataTransfer.effectAllowed = 'move';
                 try { e.dataTransfer.setData('text/plain', 'section:' + sid); } catch (_) {}
                 block.classList.add('section-dragging');
@@ -942,6 +1006,9 @@
         container.addEventListener('dragend', function () {
             dragID = null;
             dragSectionID = null;
+            dragItem = null;
+            dragIsCheck = false;
+            lastOverKey = null;
             stopAutoScroll();
             container.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
             container.querySelectorAll('.section-dragging').forEach(function (r) { r.classList.remove('section-dragging'); });
@@ -951,48 +1018,79 @@
         container.addEventListener('dragover', function (e) {
             if (dragSectionID) {
                 e.preventDefault();
-                clearDropIndicators();
+                // Same decide-then-write discipline as the row drag below.
                 var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
-                if (!overBlock) return;
-                var overSid = overBlock.getAttribute('data-section-id');
-                if (!overSid || overSid === dragSectionID) return;
-                var brect = overBlock.getBoundingClientRect();
-                var afterBlock = e.clientY > brect.top + brect.height / 2;
-                overBlock.classList.add(afterBlock ? 'section-drop-after' : 'section-drop-before');
+                var overSid = overBlock ? overBlock.getAttribute('data-section-id') : null;
+                var blockKey = null;
+                var blockClass = null;
+                if (overBlock && overSid && overSid !== dragSectionID) {
+                    var brect = overBlock.getBoundingClientRect();
+                    blockClass = e.clientY > brect.top + brect.height / 2
+                        ? 'section-drop-after' : 'section-drop-before';
+                    blockKey = overSid + ':' + blockClass;
+                }
+                if (blockKey !== lastOverKey) {
+                    lastOverKey = blockKey;
+                    clearDropIndicators();
+                    if (overBlock && blockClass) overBlock.classList.add(blockClass);
+                }
                 return;
             }
             if (!dragID) return;
+            // Unconditional: this is what makes the row a valid drop target,
+            // and it is the one thing every dragover must still do.
             e.preventDefault();
-            clearDropIndicators();
+
+            // Decide first, write second. Everything below computes WHICH
+            // indicator belongs on WHICH element; the DOM is only touched if
+            // that answer changed since the last event.
+            var overKey = null;     // identifies the decision, for comparison
+            var overEl = null;      // the element to mark
+            var overClass = null;   // the class to mark it with
+
             var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-            if (rootZone) { rootZone.classList.add('drop-hover'); return; }
-            var target = e.target.closest && e.target.closest('tr[data-id]');
-            if (!target) return;
-            var tid = target.getAttribute('data-id');
-            if (tid === dragID) return;
-            var tbody = target.closest('tbody[data-section-id]');
-            var dragItem = findByID(dragID);
-            var targetSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
-            var sameSection = dragItem && ((dragItem.sectionID || '') === (targetSid || ''));
-            var rect  = target.getBoundingClientRect();
-            var relY  = (e.clientY - rect.top) / rect.height;
-            // Adopt onto a check row would produce a `check:<id>` dep
-            // token, which the server doesn't expand — checks are always
-            // leaf nodes in the dependency graph for v0.4.x.
-            var targetItem = findByID(tid);
-            var targetIsCheck = targetItem && targetItem.kind === 'check';
-            var dragItemHover = findByID(dragID);
-            var dragIsCheck = dragItemHover && dragItemHover.kind === 'check';
-            if (relY < 0.3) {
-                target.classList.add('drop-before');
-            } else if (relY > 0.7) {
-                target.classList.add('drop-after');
-            } else if (sameSection && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)
-                       && !targetIsCheck && !dragIsCheck) {
-                target.classList.add('drop-adopt');
+            if (rootZone) {
+                var rootBody = rootZone.closest('tbody[data-section-id]');
+                overEl = rootZone;
+                overClass = 'drop-hover';
+                overKey = 'root:' + (rootBody ? (rootBody.getAttribute('data-section-id') || '') : '');
             } else {
-                target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
+                var target = e.target.closest && e.target.closest('tr[data-id]');
+                var tid = target ? target.getAttribute('data-id') : null;
+                // A null key means "nothing is a target here" — off any row, or
+                // over the row being dragged — which still has to clear a stale
+                // indicator, exactly as the unconditional clear used to.
+                if (target && tid !== dragID) {
+                    var tbody = target.closest('tbody[data-section-id]');
+                    var targetSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
+                    var sameSection = dragItem && ((dragItem.sectionID || '') === (targetSid || ''));
+                    var rect = target.getBoundingClientRect();
+                    var relY = (e.clientY - rect.top) / rect.height;
+                    // Adopt onto a check row would produce a `check:<id>` dep
+                    // token, which the server doesn't expand — checks are always
+                    // leaf nodes in the dependency graph for v0.4.x.
+                    var targetItem = findByID(tid);
+                    var targetIsCheck = !!(targetItem && targetItem.kind === 'check');
+                    // `targetItem` already answers isChild(tid); calling it here
+                    // would scan `items` a second time for the same row.
+                    var targetIsChild = !!(targetItem && targetItem.dependsOn && targetItem.dependsOn.length > 0);
+                    overClass = dropZoneFor({
+                        relY: relY,
+                        sameSection: sameSection,
+                        targetIsChild: targetIsChild,
+                        targetHasChildren: function () { return hasChildrenInSection(dragID, targetSid); },
+                        targetIsCheck: targetIsCheck,
+                        dragIsCheck: dragIsCheck
+                    });
+                    overEl = target;
+                    overKey = tid + ':' + overClass;
+                }
             }
+
+            if (overKey === lastOverKey) return;
+            lastOverKey = overKey;
+            clearDropIndicators();
+            if (overEl) overEl.classList.add(overClass);
         });
 
         container.addEventListener('dragleave', function (e) {
@@ -1714,6 +1812,7 @@
     if (typeof module === 'object' && module.exports) {
         module.exports = {
             classify: classify,
+            dropZoneFor: dropZoneFor,
             classifyFile: classifyFile,
             isLikelyScriptName: isLikelyScriptName,
             hasRecognizedScriptShebang: hasRecognizedScriptShebang,
