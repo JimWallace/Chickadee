@@ -22,6 +22,12 @@
          script tags, and they reference ChickadeeUI at parse time
          (e.g. csrf-token captures). -->
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
+    <!-- Concerns split out of chickadee-ui.js, which had grown to eighteen
+         unrelated functions behind one name.  Loaded here beside it because
+         ChickadeeUI still re-exports them as its call surface, and it must be
+         complete by the time an inline page script runs.  Order between the two
+         does not matter: the re-exports look the delegate up at call time. -->
+    <script src="/sparkline.js?v=#appVersion()"></script>
     <!-- Same reason, same place: page inline scripts call
          ChickadeeRelativeTime.applyRelativeTimes() during parse, so it cannot
          wait for the end of <body>. -->
