@@ -235,7 +235,10 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
   `Public/relative-time.js` (loaded from `base.leaf`) rewrites to "3 hours
   ago" and gives an absolute `title`.  The reader wants recency, and a
   relative value answers that at a glance.  A **countdown** (a token's
-  expiry) is the same case: "in 3 days" beats a date.
+  expiry) is the same case: "in 3 days" beats a date.  The component
+  **keeps ticking** — at a cadence set by the freshest stamp on the page,
+  paused while the tab is hidden and caught up on return — so a page needs
+  no timer of its own and a stamp is never older than the tab.
 - **Forensic or compliance** times — the audit log, retention dates —
   render **absolute**, in `--font-mono`, deliberately.  Here the exact
   instant *is* the content, and "2 months ago" would destroy it.
