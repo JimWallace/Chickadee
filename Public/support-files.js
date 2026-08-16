@@ -11,6 +11,7 @@
 //     uploadURL:   () => POST target for {filename, content, tier, isTest}
 //     deleteURL:   (name) => DELETE target for one stored support file
 //     datasetsURL: () => GET/PUT target for {datasets: [DatasetSpec]}
+//                  (a spec is {file, kind, sampleSize, stratumColumn?})
 //     onChange:    () => run after a successful upload batch or delete
 //                  (the edit surface re-renders in place; the create page
 //                  reloads its draft)
@@ -83,12 +84,43 @@
                 var toggle = row.querySelector('.js-dataset-toggle');
                 var field = row.querySelector('.js-dataset-size-field');
                 var size = row.querySelector('.js-dataset-size');
+                var stratumField = row.querySelector('.js-dataset-stratum-field');
+                var stratum = row.querySelector('.js-dataset-stratum');
                 if (!toggle || !field || !size) return;
                 var spec = byFile[row.getAttribute('data-support-file')];
                 toggle.checked = !!spec;
                 field.hidden = !spec;
                 size.value = (spec && spec.sampleSize != null) ? String(spec.sampleSize) : '';
+                if (stratumField) stratumField.hidden = !spec;
+                if (stratum) stratum.value = (spec && spec.stratumColumn) || '';
             });
+        }
+
+        // The spec a row currently describes. The KIND is derived from whether
+        // a column is named, rather than being a separate control: a stratified
+        // sample is exactly "a sample, balanced across this column", and a
+        // second widget asking the same question in different words is how the
+        // two would come to disagree.
+        function specFor(row, filename, sampleSize) {
+            var stratum = row.querySelector('.js-dataset-stratum');
+            var column = stratum ? stratum.value.trim() : '';
+            if (!column) {
+                return { file: filename, kind: 'rowSample', sampleSize: sampleSize };
+            }
+            return {
+                file: filename,
+                kind: 'stratifiedSample',
+                sampleSize: sampleSize,
+                stratumColumn: column
+            };
+        }
+
+        // The row count a row is currently showing, or null when it is blank
+        // or not a positive integer.
+        function sampleSizeIn(row) {
+            var size = row.querySelector('.js-dataset-size');
+            var value = parseInt(size && size.value, 10);
+            return value > 0 ? value : null;
         }
 
         function fetchSpecs() {
@@ -136,29 +168,32 @@
             if (!filename) return;
             var size = row.querySelector('.js-dataset-size');
             var field = row.querySelector('.js-dataset-size-field');
+            var stratumField = row.querySelector('.js-dataset-stratum-field');
 
             if (target.classList.contains('js-dataset-toggle')) {
                 if (!target.checked) {
                     if (field) field.hidden = true;
+                    if (stratumField) stratumField.hidden = true;
                     commit(filename, null, row);
                     return;
                 }
-                var sampleRows = parseInt(size && size.value, 10);
-                if (!(sampleRows > 0)) sampleRows = DEFAULT_SAMPLE_ROWS;
+                var sampleRows = sampleSizeIn(row) || DEFAULT_SAMPLE_ROWS;
                 if (size) size.value = String(sampleRows);
                 if (field) {
                     field.hidden = false;
                     if (size && size.focus) { size.focus(); size.select(); }
                 }
-                commit(filename, { file: filename, kind: 'rowSample', sampleSize: sampleRows }, row);
+                if (stratumField) stratumField.hidden = false;
+                commit(filename, specFor(row, filename, sampleRows), row);
                 return;
             }
 
-            if (target.classList.contains('js-dataset-size')) {
+            if (target.classList.contains('js-dataset-size')
+                || target.classList.contains('js-dataset-stratum')) {
                 var toggle = row.querySelector('.js-dataset-toggle');
                 if (toggle && !toggle.checked) return;
-                var entered = parseInt(target.value, 10);
-                if (!(entered > 0)) {
+                var entered = sampleSizeIn(row);
+                if (entered === null) {
                     // Refuse rather than send: the server would reject it too,
                     // and an inline message beside the field is a better answer
                     // than a banner. Resync puts the saved number back.
@@ -166,7 +201,7 @@
                     resync();
                     return;
                 }
-                commit(filename, { file: filename, kind: 'rowSample', sampleSize: entered }, row);
+                commit(filename, specFor(row, filename, entered), row);
             }
         });
     }

@@ -25,6 +25,9 @@ struct SetDatasetTool: ContentTool {
         let filename: String
         /// Rows each student receives. Required unless `remove` is true.
         let sampleSize: Int?
+        /// A column name to balance the sample across; omitted for a plain
+        /// row sample.
+        let stratumColumn: String?
         /// True to clear the dataset mark (the file becomes an ordinary shared
         /// support file again).
         let remove: Bool?
@@ -33,6 +36,10 @@ struct SetDatasetTool: ContentTool {
     struct DatasetEntry: Encodable, Sendable {
         let file: String
         let sampleSize: Int?
+        /// "rowSample" or "stratifiedSample" — reported so an agent can read
+        /// back which kind of slice a file is marked for, not just that it is.
+        let kind: String
+        let stratumColumn: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -51,7 +58,12 @@ struct SetDatasetTool: ContentTool {
         + "The full uploaded file becomes the server-side pool; students never see it. Structural "
         + "checks (columns, dtypes, figure counts) are unaffected; exact-value checks against the "
         + "shared file would break, so pair datasets with structural or per-student checks. Pick "
-        + "sampleSize large enough that every category a groupby exercise needs still appears. Like "
+        + "sampleSize large enough that every category a groupby exercise needs still appears — or "
+        + "pass stratumColumn to have the sample balanced across that column's distinct values, "
+        + "which guarantees every category survives into every student's copy (including a rare one "
+        + "a plain sample would usually drop). A stratum column must exist in the file's header and "
+        + "have no more distinct values than sampleSize; both are checked here, against the file. "
+        + "Like "
         + "the web editor's dataset control this does not close the assignment or re-run validation "
         + "(the suite is unchanged); existing submissions pick up their slice on the next regrade. "
         + "List support files with get_support_files (dataset marks are reported there); pass "
@@ -70,6 +82,14 @@ struct SetDatasetTool: ContentTool {
                 "description": .string(
                     "Data rows each student receives (>= 1; the header row is always kept). "
                         + "Required unless remove is true."),
+            ]),
+            "stratumColumn": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Optional. A column name from the file's header; the sample is then apportioned "
+                        + "across that column's distinct values so every category appears in every "
+                        + "student's slice. Must have no more distinct values than sampleSize. Omit "
+                        + "for a plain random row sample."),
             ]),
             "remove": .object([
                 "type": .string("boolean"),
@@ -134,15 +154,32 @@ struct SetDatasetTool: ContentTool {
                     detail: "\"\(cleaned)\" is not a support file — only support data files can "
                         + "be per-student datasets.")
             }
+            // The same check the web endpoints run, from the same place: a
+            // stratum column has to exist in this file and have no more
+            // categories than the sample has rows. The materializer degrades
+            // quietly on both at delivery time, so this is where an agent finds
+            // out — with the file's real column names in the message.
+            if let issue = DatasetSpecValidation.issue(
+                with: spec(from: input, filename: cleaned),
+                sourceCSV: extractZipEntry(zipPath: setup.zipPath, entryName: cleaned)
+                    .flatMap { String(data: $0, encoding: .utf8) })
+            {
+                throw MCPToolError.invalidArguments(tool: Self.name, detail: issue)
+            }
         }
 
+        let written = spec(from: input, filename: cleaned)
         try await mutateManifest(setup: setup, on: context.db) { dict in
             var specs = (dict["datasets"] as? [[String: Any]]) ?? []
+            // Replaced, never appended — two specs for one file would disagree
+            // about how many rows a student gets, and both PUT endpoints reject
+            // such a pair outright.
             specs.removeAll { ($0["file"] as? String) == cleaned }
             if !remove {
-                var spec: [String: Any] = ["file": cleaned, "kind": "rowSample"]
-                if let sampleSize = input.sampleSize { spec["sampleSize"] = sampleSize }
-                specs.append(spec)
+                var entry: [String: Any] = ["file": cleaned, "kind": written.kind.rawValue]
+                if let sampleSize = written.sampleSize { entry["sampleSize"] = sampleSize }
+                if let column = written.stratumColumn { entry["stratumColumn"] = column }
+                specs.append(entry)
             }
             if specs.isEmpty {
                 dict.removeValue(forKey: "datasets")
@@ -152,8 +189,27 @@ struct SetDatasetTool: ContentTool {
         }
 
         let datasets = (setup.decodedManifest()?.datasets ?? []).map {
-            DatasetEntry(file: $0.file, sampleSize: $0.sampleSize)
+            DatasetEntry(
+                file: $0.file, sampleSize: $0.sampleSize,
+                kind: $0.kind.rawValue, stratumColumn: $0.stratumColumn)
         }
         return Output(assignmentPublicID: assignment.publicID, datasets: datasets)
+    }
+
+    /// The spec this call would write, built once and used for both the
+    /// validation and the manifest entry — so the thing that is checked is the
+    /// thing that is stored.
+    ///
+    /// A blank `stratumColumn` reads as "no column": an agent clearing the
+    /// field means a plain row sample, not a stratified spec that fails
+    /// validation on the emptiness it just asked for.
+    private func spec(from input: Input, filename: String) -> DatasetSpec {
+        let column = input.stratumColumn?.trimmingCharacters(in: .whitespaces)
+        let stratum = (column?.isEmpty ?? true) ? nil : column
+        return DatasetSpec(
+            file: filename,
+            kind: stratum == nil ? .rowSample : .stratifiedSample,
+            sampleSize: input.sampleSize,
+            stratumColumn: stratum)
     }
 }

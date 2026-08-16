@@ -50,6 +50,11 @@ struct EditableSuiteRow: Encodable {
     /// Rows each student receives for a dataset row; nil = whole file (and nil
     /// on every non-dataset row).
     let datasetSampleSize: Int?
+    /// The column a stratified dataset balances across; nil for a plain row
+    /// sample. The control derives the spec's kind from this being set, so it
+    /// has to travel with the row or an edit would rewrite a stratified spec
+    /// into a plain one.
+    let datasetStratumColumn: String?
 
     /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
     var displayNameOrEmpty: String { displayName ?? "" }
@@ -58,6 +63,9 @@ struct EditableSuiteRow: Encodable {
     /// the number field renders blank rather than "nil" (same reason
     /// `displayNameOrEmpty` exists).
     var datasetSampleSizeText: String { datasetSampleSize.map(String.init) ?? "" }
+
+    /// The stratum column as an input-ready string — empty when there is none.
+    var datasetStratumColumnOrEmpty: String { datasetStratumColumn ?? "" }
 
     /// The dataset pair defaults to "not a dataset": every construction site
     /// but the two support-file row builders is describing a test script, and
@@ -72,7 +80,8 @@ struct EditableSuiteRow: Encodable {
         points: Int,
         displayName: String?,
         isDataset: Bool = false,
-        datasetSampleSize: Int? = nil
+        datasetSampleSize: Int? = nil,
+        datasetStratumColumn: String? = nil
     ) {
         self.name = name
         self.url = url
@@ -84,6 +93,7 @@ struct EditableSuiteRow: Encodable {
         self.displayName = displayName
         self.isDataset = isDataset
         self.datasetSampleSize = datasetSampleSize
+        self.datasetStratumColumn = datasetStratumColumn
     }
 
     /// Display name if set, otherwise the filename stem (extension stripped).
@@ -111,9 +121,11 @@ struct EditableSuiteRow: Encodable {
         case displayName
         case isDataset
         case datasetSampleSize
+        case datasetStratumColumn
         case displayNameOrEmpty
         case displayNameOrStem
         case datasetSampleSizeText
+        case datasetStratumColumnOrEmpty
         case dependsOnJSON
     }
 
@@ -129,9 +141,11 @@ struct EditableSuiteRow: Encodable {
         try container.encodeIfPresent(displayName, forKey: .displayName)
         try container.encode(isDataset, forKey: .isDataset)
         try container.encodeIfPresent(datasetSampleSize, forKey: .datasetSampleSize)
+        try container.encodeIfPresent(datasetStratumColumn, forKey: .datasetStratumColumn)
         try container.encode(displayNameOrEmpty, forKey: .displayNameOrEmpty)
         try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
         try container.encode(datasetSampleSizeText, forKey: .datasetSampleSizeText)
+        try container.encode(datasetStratumColumnOrEmpty, forKey: .datasetStratumColumnOrEmpty)
         try container.encode(dependsOnJSON, forKey: .dependsOnJSON)
     }
 }

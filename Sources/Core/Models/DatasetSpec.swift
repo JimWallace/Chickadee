@@ -18,8 +18,16 @@
 ///   tabular (CSV) source, keyed to the per-(student, assignment) seed.  The
 ///   header row is always preserved and the chosen rows keep their original
 ///   order.
+/// - `stratifiedSample`: the same, but the sample is apportioned across the
+///   distinct values of `stratumColumn` so every category present in the pool
+///   is still present in the student's slice.  A plain `rowSample` can drop a
+///   rare category entirely, which turns a `groupby` exercise into a different
+///   exercise for that student; this is the fix for that, and the reason the
+///   `set_dataset` advice "pick a sample size large enough that every category
+///   still appears" exists.
 public enum DatasetKind: String, Codable, Sendable, Equatable {
     case rowSample
+    case stratifiedSample
 }
 
 /// Marks one bundled support file as a per-student dataset.
@@ -29,14 +37,28 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// per-student slice is delivered under this same name.
     public let file: String
     public let kind: DatasetKind
-    /// Rows per student for `.rowSample`.  `nil` (or a value ≥ the row count)
-    /// means "the whole file" — every student gets the full source.
+    /// Rows per student.  `nil` (or a value ≥ the row count) means "the whole
+    /// file" — every student gets the full source.
     public let sampleSize: Int?
+    /// The header name of the column whose distinct values are the strata, for
+    /// `.stratifiedSample`.  Nil for `.rowSample`, which has no strata.
+    ///
+    /// Authoring surfaces refuse a `.stratifiedSample` spec without one, and
+    /// refuse a column the file's header does not carry — a stratum column is
+    /// only checkable against the file, and an instructor can fix a typo in
+    /// seconds where a student cannot fix anything.  `DatasetMaterializer`
+    /// still degrades rather than fails when it cannot find the column at
+    /// delivery time, because by then the only reader is a student's grade.
+    public let stratumColumn: String?
 
-    public init(file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil) {
+    public init(
+        file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
+        stratumColumn: String? = nil
+    ) {
         self.file = file
         self.kind = kind
         self.sampleSize = sampleSize
+        self.stratumColumn = stratumColumn
     }
 
     public init(from decoder: Decoder) throws {
@@ -44,5 +66,6 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         file = try c.decode(String.self, forKey: .file)
         kind = try c.decodeIfPresent(DatasetKind.self, forKey: .kind) ?? .rowSample
         sampleSize = try c.decodeIfPresent(Int.self, forKey: .sampleSize)
+        stratumColumn = try c.decodeIfPresent(String.self, forKey: .stratumColumn)
     }
 }

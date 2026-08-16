@@ -29,6 +29,19 @@ public enum DatasetMaterializer {
         switch spec.kind {
         case .rowSample:
             return sampleRows(csv: source, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
+        case .stratifiedSample:
+            // A stratified spec with no column, or one naming a column this
+            // file does not have, degrades to a plain row sample rather than
+            // failing. Authoring refuses both (see `DatasetSpec.stratumColumn`),
+            // so reaching here means the file changed under a saved spec — and
+            // the only reader left is a student being graded, who would rather
+            // have their N rows unstratified than the whole pool everyone else
+            // has. Loud at authoring, forgiving at delivery.
+            guard let column = spec.stratumColumn, !column.isEmpty else {
+                return sampleRows(csv: source, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
+            }
+            return sampleStratifiedRows(
+                csv: source, sampleSize: spec.sampleSize ?? .max, column: column, seedHex: seedHex)
         }
     }
 
@@ -43,17 +56,7 @@ public enum DatasetMaterializer {
     /// it has no data rows, when `sampleSize` is non-positive, or when
     /// `sampleSize` is ≥ the number of data rows.
     static func sampleRows(csv: String, sampleSize: Int, seedHex: String) -> String {
-        // CR+LF is a single Swift `Character` (one extended grapheme cluster),
-        // so `split(separator: "\n")` would not see the LF inside a CRLF line
-        // ending and would return the whole file as one "line".  Normalize to
-        // LF via string replacement (which matches the CRLF grapheme) first.
-        let normalized = csv.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let hadTrailingNewline = normalized.hasSuffix("\n")
-        var lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
-        if hadTrailingNewline, lines.last?.isEmpty == true {
-            lines.removeLast()
-        }
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
         guard lines.count > 1 else { return csv }  // header-only or empty
 
         let header = lines[0]
@@ -74,6 +77,206 @@ public enum DatasetMaterializer {
         out.append(contentsOf: chosen.map { lines[$0] })
         let result = out.joined(separator: "\n")
         return hadTrailingNewline ? result + "\n" : result
+    }
+
+    /// Deterministically sample `sampleSize` data rows apportioned across the
+    /// distinct values of `column`, so every category in the pool survives into
+    /// the student's slice.
+    ///
+    /// Same envelope as `sampleRows`: header preserved, chosen rows in original
+    /// order, LF output, trailing newline mirrored, and the whole file returned
+    /// unchanged when the sample would not be a reduction.  Falls back to a
+    /// plain row sample when `column` is not in the header — the delivery-time
+    /// half of the rule on `DatasetSpec.stratumColumn`.
+    ///
+    /// Apportionment is Hamilton's method with a floor of one row per stratum,
+    /// computed in integer arithmetic (no `Double`: the point of this file is
+    /// that the same inputs give the same bytes on every platform forever, and
+    /// a rounding difference would be an invisible way to lose that).  When the
+    /// budget cannot cover one row per stratum — the file grew categories after
+    /// the spec was saved — the first `sampleSize` strata in file order get one
+    /// row each.
+    static func sampleStratifiedRows(
+        csv: String, sampleSize: Int, column: String, seedHex: String
+    ) -> String {
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
+        guard lines.count > 1 else { return csv }  // header-only or empty
+
+        let header = lines[0]
+        let rowCount = lines.count - 1
+        guard sampleSize > 0, sampleSize < rowCount else { return csv }  // keep everything
+
+        let headerFields = splitCSVLine(header)
+        guard let columnIndex = headerFields.firstIndex(of: column) else {
+            return sampleRows(csv: csv, sampleSize: sampleSize, seedHex: seedHex)
+        }
+
+        // Strata in order of first appearance — a stable order that needs no
+        // string comparison, so no question of collation ever arises.
+        var strataOrder: [String] = []
+        var rowsByStratum: [String: [Int]] = [:]
+        for index in 1..<lines.count {
+            let fields = splitCSVLine(lines[index])
+            // A short row has no value for this column; "" is a category like
+            // any other, and grouping it keeps every row eligible.
+            let value = columnIndex < fields.count ? fields[columnIndex] : ""
+            if rowsByStratum[value] == nil {
+                rowsByStratum[value] = []
+                strataOrder.append(value)
+            }
+            rowsByStratum[value]?.append(index)
+        }
+
+        let sizes = strataOrder.map { rowsByStratum[$0]?.count ?? 0 }
+        let allocation = apportion(sampleSize: sampleSize, sizes: sizes, total: rowCount)
+
+        // One PRNG stream walked in stratum order, so the whole slice is one
+        // deterministic sequence rather than N independent ones.
+        var rng = SplitMix64(seed: fnv1a64(seedHex))
+        var chosen: [Int] = []
+        for (position, stratum) in strataOrder.enumerated() {
+            guard var indices = rowsByStratum[stratum] else { continue }
+            let take = allocation[position]
+            if take <= 0 { continue }
+            if take >= indices.count {
+                chosen.append(contentsOf: indices)
+                continue
+            }
+            for i in 0..<take {
+                let j = i + Int(rng.next(upperBound: UInt64(indices.count - i)))
+                indices.swapAt(i, j)
+            }
+            chosen.append(contentsOf: indices.prefix(take))
+        }
+        chosen.sort()
+
+        var out: [Substring] = [header]
+        out.append(contentsOf: chosen.map { lines[$0] })
+        let result = out.joined(separator: "\n")
+        return hadTrailingNewline ? result + "\n" : result
+    }
+
+    /// Splits `sampleSize` across strata: one row each, then the remainder in
+    /// proportion to stratum size, leftovers to the largest fractional
+    /// remainders (ties to the earlier stratum).  Never allocates more rows
+    /// than a stratum holds.
+    ///
+    /// Returns counts parallel to `sizes`.  Internal rather than private so the
+    /// apportionment can be tested on its own — the row selection around it is
+    /// seeded, and a table of expected splits is far easier to read than a
+    /// slice of a CSV.
+    static func apportion(sampleSize: Int, sizes: [Int], total: Int) -> [Int] {
+        guard !sizes.isEmpty else { return [] }
+        // More strata than rows to give away: one row each to as many strata as
+        // the budget covers, in file order.
+        guard sampleSize > sizes.count else {
+            return sizes.indices.map { $0 < sampleSize ? 1 : 0 }
+        }
+
+        var allocation = sizes.map { min(1, $0) }
+        // Hamilton over the rows left after the floor, against each stratum's
+        // remaining capacity.
+        let spare = sizes.map { max(0, $0 - 1) }
+        let spareTotal = spare.reduce(0, +)
+        let remaining = sampleSize - allocation.reduce(0, +)
+        if remaining > 0, spareTotal > 0 {
+            var remainders: [(index: Int, remainder: Int)] = []
+            for i in sizes.indices {
+                let exact = spare[i] * remaining
+                allocation[i] += exact / spareTotal
+                remainders.append((i, exact % spareTotal))
+            }
+            var leftover = sampleSize - allocation.reduce(0, +)
+            // Largest remainder first; ties by position, so the split is a
+            // function of the inputs alone.
+            remainders.sort { $0.remainder == $1.remainder ? $0.index < $1.index : $0.remainder > $1.remainder }
+            var pass = 0
+            while leftover > 0, pass < remainders.count {
+                let i = remainders[pass].index
+                if allocation[i] < sizes[i] {
+                    allocation[i] += 1
+                    leftover -= 1
+                }
+                pass += 1
+            }
+            // A stratum can be capped out while another still has room (the
+            // proportional pass does not know about caps), so sweep in file
+            // order until the budget is spent or nothing can absorb it.
+            var progressed = true
+            while leftover > 0, progressed {
+                progressed = false
+                for i in sizes.indices where leftover > 0 && allocation[i] < sizes[i] {
+                    allocation[i] += 1
+                    leftover -= 1
+                    progressed = true
+                }
+            }
+        }
+        return allocation
+    }
+
+    /// Splits `csv` into lines with CR/CRLF normalized away, reporting whether
+    /// the input ended with a newline.  Shared by both sampling kinds so their
+    /// line handling cannot drift.
+    ///
+    /// CR+LF is a single Swift `Character` (one extended grapheme cluster), so
+    /// `split(separator: "\n")` would not see the LF inside a CRLF ending and
+    /// would return the whole file as one "line".
+    private static func normalizedLines(of csv: String) -> (lines: [Substring], trailingNewline: Bool) {
+        let normalized = csv.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let hadTrailingNewline = normalized.hasSuffix("\n")
+        var lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
+        if hadTrailingNewline, lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
+        return (lines, hadTrailingNewline)
+    }
+
+    /// Splits one CSV record into fields, honouring double-quoted fields and
+    /// doubled quotes inside them.
+    ///
+    /// Quotes matter here even though the surrounding format assumes no
+    /// embedded newlines: a quoted comma ANYWHERE earlier in the row shifts
+    /// every later field by one, so a naive comma split would read a
+    /// neighbouring column's values as the strata and silently stratify by the
+    /// wrong thing. Embedded newlines remain out of scope — a record is a
+    /// physical line, as `sampleRows` has always assumed.
+    static func splitCSVLine(_ line: Substring) -> [String] {
+        var fields: [String] = []
+        var current = ""
+        var inQuotes = false
+        var iterator = line.makeIterator()
+        var pending: Character?
+        while let character = pending ?? iterator.next() {
+            pending = nil
+            if inQuotes {
+                if character == "\"" {
+                    if let next = iterator.next() {
+                        if next == "\"" {
+                            current.append("\"")  // an escaped quote
+                        } else {
+                            inQuotes = false
+                            pending = next
+                        }
+                    } else {
+                        inQuotes = false
+                    }
+                } else {
+                    current.append(character)
+                }
+                continue
+            }
+            switch character {
+            case "\"": inQuotes = true
+            case ",":
+                fields.append(current)
+                current = ""
+            default: current.append(character)
+            }
+        }
+        fields.append(current)
+        return fields
     }
 }
 

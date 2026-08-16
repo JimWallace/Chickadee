@@ -505,9 +505,48 @@ pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
    above).
 5. **Browser delivery** — only when a personalized dataset is used on a
    browser-graded assignment.
-6. **Phase 1.5** — stratified sampling + the arbitrary-Python `slice` escape
-   hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
-   bridge to Phase 2.
+6. **Phase 1.5** — stratified sampling (shipped; see below). The
+   arbitrary-Python `slice` escape hatch that used to sit in this slice is
+   **not** planned: it was framed here as the bridge to Phase 2, and Phase 2 is
+   declined (#1434), so the escape hatch has nothing to bridge to. Stratified
+   sampling is the ceiling of the current design, not a step past it.
+
+### Stratified sampling (`DatasetKind.stratifiedSample`)
+
+A plain `rowSample` can drop a rare category outright — which quietly turns a
+`groupby` exercise into a different exercise for the student who lost it. A
+stratified spec names a `stratumColumn` and apportions the sample across that
+column's distinct values, so every category in the pool is in every student's
+slice.
+
+The apportionment is Hamilton's method with a floor of one row per stratum,
+in **integer arithmetic** — the point of `DatasetMaterializer` is that the same
+(source, spec, seed) yields the same bytes on every platform forever, and a
+floating-point rounding difference would be an invisible way to lose that.
+A stratum never yields more rows than it holds; leftovers sweep in file order
+to whichever strata still have room.
+
+Two halves of one rule, worth keeping together:
+
+- **Delivery degrades.** A stratified spec whose column the file no longer has
+  falls back to a plain row sample rather than failing — the student gets their
+  N rows unstratified instead of the whole pool everyone else has. By then the
+  only reader is a student being graded, and an error helps them not at all.
+- **Authoring refuses.** `DatasetSpecValidation` runs at every door (both PUTs
+  and `set_dataset`): a stratified spec needs a column, the column must be in
+  the file's header, and `sampleSize` must be at least the number of distinct
+  values — a smaller sample cannot hold every category whatever the
+  apportionment does. The messages name the file's real columns and its category
+  count, because the instructor cannot see the file from the form they are
+  typing into. A `stratumColumn` on a plain `rowSample` is refused too, rather
+  than stored and ignored.
+
+`DatasetSpecValidationTests.everySilentDegradationHasALoudRefusal` pins the
+pairing: every case delivery absorbs quietly is a case saving rejects.
+
+In the Files panel the column is the control — an empty box means a plain
+sample, a column name means a stratified one — so there is no separate kind
+picker for the two to disagree about.
 
 **Authoring surfaces:** two, and they agree by construction.
 

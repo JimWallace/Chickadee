@@ -94,7 +94,8 @@ extension DraftAssignmentRoutes {
                     // and dropping the dataset pair here would blank every mark
                     // on the create page while the edit page still showed it.
                     isDataset: row.isDataset,
-                    datasetSampleSize: row.datasetSampleSize
+                    datasetSampleSize: row.datasetSampleSize,
+                    datasetStratumColumn: row.datasetStratumColumn
                 )
             }
     }
