@@ -88,7 +88,13 @@ extension DraftAssignmentRoutes {
                     order: row.order,
                     dependsOn: row.dependsOn,
                     points: row.points,
-                    displayName: row.displayName
+                    displayName: row.displayName,
+                    // Carried, not re-derived: this rebuild exists only to
+                    // rewrite `url` against the draft-scoped download endpoint,
+                    // and dropping the dataset pair here would blank every mark
+                    // on the create page while the edit page still showed it.
+                    isDataset: row.isDataset,
+                    datasetSampleSize: row.datasetSampleSize
                 )
             }
     }

@@ -159,12 +159,30 @@ Create Assignment
                 <!-- Support files: data fixtures (CSVs, JSON, etc.) bundled
                      with the assignment.  Anything in the draft zip that
                      isn't a test script and isn't a notebook lands here.
-                     v0.4.132 / parity PR 3 of #433. -->
+                     v0.4.132 / parity PR 3 of #433.  The per-student dataset
+                     control is the same markup as the edit page's, driven by
+                     the same Public/support-files.js. -->
                 #for(supportFile in supportFileRows):
                 <tr data-support-file="#(supportFile.name)">
                     <td><strong>Support file</strong></td>
                     <td>
                         <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
+                        <div class="dataset-control">
+                            <label class="dataset-toggle">
+                                <input type="checkbox" class="js-dataset-toggle"
+                                       #if(supportFile.isDataset):checked#endif>
+                                Per-student sample
+                            </label>
+                            <span class="dataset-size-field js-dataset-size-field"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                <input type="number" min="1" step="1"
+                                       class="form-input input-sm dataset-size js-dataset-size"
+                                       value="#(supportFile.datasetSampleSizeText)"
+                                       aria-label="Rows per student from #(supportFile.name)">
+                                rows per student
+                            </span>
+                            <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
+                        </div>
                     </td>
                     <td class="time">
                         <button class="btn action-btn action-danger js-support-file-delete-btn" type="button"

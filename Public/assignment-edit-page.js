@@ -161,6 +161,9 @@
         deleteURL: function (name) {
             return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
         },
+        datasetsURL: function () {
+            return '/instructor/' + encodeURIComponent(assignmentID) + '/datasets';
+        },
         onChange: function () { ChickadeeSurfaceSwap.refreshEditSurface(); }
     });
 

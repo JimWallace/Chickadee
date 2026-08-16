@@ -123,9 +123,9 @@ struct GetSupportFilesTool: ContentTool {
         }
 
         guard let filename = input.filename else {
-            let datasetSpecs = Dictionary(
-                (setup.decodedManifest()?.datasets ?? []).map { ($0.file, $0) },
-                uniquingKeysWith: { first, _ in first })
+            // The same lookup the authoring pages' Files panel reads, so this
+            // listing and that control cannot disagree about a file's mark.
+            let datasetSpecs = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
             let entries = supportNames.sorted().map { name in
                 FileEntry(
                     filename: name,

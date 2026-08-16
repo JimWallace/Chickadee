@@ -21,6 +21,8 @@
 //   PUT    /instructor/new/draft/families?draftID=<id>
 //   POST   /instructor/new/draft/scripts?draftID=<id>
 //   DELETE /instructor/new/draft/scripts/:filename?draftID=<id>
+//   GET    /instructor/new/draft/datasets?draftID=<id>
+//   PUT    /instructor/new/draft/datasets?draftID=<id>
 
 import Core
 import Fluent
@@ -105,6 +107,29 @@ extension DraftAssignmentRoutes {
         let filename = try safeScriptFilename(from: req)
         try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
         return .noContent
+    }
+
+    // MARK: - GET /instructor/new/draft/datasets
+    //
+    // Draft-scoped sibling of `getDatasets` / `putDatasets`, so the create
+    // page's Files panel can mark a per-student dataset before publish rather
+    // than having to publish first and come back. Same shared core, so the two
+    // pages cannot accept different specs.
+
+    @Sendable
+    func getDraftDatasets(req: Request) async throws -> DatasetsResponse {
+        let setup = try await loadDraftSetupForRead(req)
+        return DatasetsResponse(datasets: datasetSpecs(inManifest: setup.manifest))
+    }
+
+    // MARK: - PUT /instructor/new/draft/datasets
+
+    @Sendable
+    func putDraftDatasets(req: Request) async throws -> DatasetsResponse {
+        let setup = try await loadDraftSetupForWrite(req)
+        let body = try req.content.decode(DatasetsBody.self)
+        try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
+        return DatasetsResponse(datasets: datasetSpecs(inManifest: setup.manifest))
     }
 
     // MARK: - GET /instructor/new/draft/files/item?draftID=<id>&name=<filename>

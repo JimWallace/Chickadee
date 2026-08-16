@@ -2046,6 +2046,25 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* A function checkbox item in the generate-tests checklist (built in JS). */
 .fn-check-item { font-size: var(--text-sm); display: flex; align-items: center; gap: .3rem; cursor: pointer; }
 
+/* Per-student dataset control under a support-file name in the Files panel
+   (support-files.js, both authoring pages — hence the global sheet rather
+   than either page's block). The row-count field is shown only while the file
+   is marked, by the `hidden` attribute, so JS toggles an attribute rather
+   than writing display. */
+.dataset-control {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .25rem;
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+}
+.dataset-toggle { display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+.dataset-size-field { display: inline-flex; align-items: center; gap: .3rem; }
+.dataset-size-field[hidden] { display: none; }
+.dataset-size { width: 6rem; }
+
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }
 .subhead-label { font-size: var(--text-base); }
