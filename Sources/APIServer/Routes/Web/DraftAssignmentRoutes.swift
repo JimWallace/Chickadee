@@ -38,6 +38,8 @@ struct DraftAssignmentRoutes: RouteCollection {
         r.post("new", "draft", "scripts", use: createDraftScript)
         r.delete("new", "draft", "scripts", ":filename", use: deleteDraftScript)
         r.get("new", "draft", "files", "item", use: downloadDraftSetupItem)
+        r.get("new", "draft", "datasets", use: getDraftDatasets)
+        r.put("new", "draft", "datasets", use: putDraftDatasets)
         // Draft-scoped suite-section CRUD (mirrors the published routes).
         r.post("new", "draft", "suite-sections", use: createDraftSuiteSection)
         r.post("new", "draft", "suite-sections", "reorder", use: reorderDraftSuiteSections)

@@ -393,16 +393,20 @@ they explore in the editor is exactly what the worker grades.
 
 ### Instructor view
 
-In the **Files** panel (`Resources/Views/assignment-edit.leaf:119–130`) the
-support-file row gains one inline control, modeled on the existing **Global
-Inputs** name+value pattern (`:136–187`):
+In the **Files** panel of both authoring pages
+(`Resources/Views/_assignment-edit-body.leaf` and `assignment-new.leaf`, the
+`supportFileRows` loop) each support-file row carries one inline control. What
+shipped is flatter than the expanding "Personalize ▾" this note first sketched
+— the row count is the only setting, so there was nothing worth hiding behind
+a disclosure:
 
 ```
-Support file   assignment4_vitaldb_cases.csv  [download]   [ Personalize ▾ ] [Remove]
-   └─ expanded:   Sample [ 500 ] rows per student        ✓ saved
+Support file   assignment4_vitaldb_cases.csv                          [Remove]
+               [x] Per-student sample  [ 500 ] rows per student        Saved
 ```
 
-Persisted via a small `PUT /instructor/:id/datasets` endpoint mirroring
+Persisted via `PUT /instructor/:id/datasets` (published) or
+`PUT /instructor/new/draft/datasets?draftID=…` (create page), mirroring
 `PUT /global-variables`. The uploaded file becomes the server-side *source*;
 students receive only their sample.
 
@@ -495,18 +499,42 @@ pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
    beside `PersonalizationSubstitution.gradingInputs`, job-payload plumbing,
    the per-job file write, source-hiding from student-facing zips/symlinks.
 3. **Editor delivery** — per-student file write + symlink suppression.
-4. **UI** — the Files-panel inline control + `PUT /datasets` endpoint.
+4. **UI** — the Files-panel inline control + `PUT /datasets` endpoint (the
+   endpoint shipped with slice 2; the control, and the draft-scoped sibling
+   endpoint the create page needed, landed later — see "Authoring surfaces"
+   above).
 5. **Browser delivery** — only when a personalized dataset is used on a
    browser-graded assignment.
 6. **Phase 1.5** — stratified sampling + the arbitrary-Python `slice` escape
    hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
    bridge to Phase 2.
 
-**Authoring surfaces:** the `PUT /instructor/:id/datasets` endpoint shipped
-with the slices above, but the Files-panel inline control has not landed yet —
-the first shipping authoring surface is the **`set_dataset` MCP tool** (mark a
-bundled support file with a `sampleSize`, `remove:true` to clear;
-`get_support_files` reports `isDataset` / `datasetSampleSize`).
+**Authoring surfaces:** two, and they agree by construction.
+
+- The **Files-panel control** on both authoring pages: each support-file row
+  carries a "Per-student sample" toggle and a row count, saved in place with no
+  page reload. The create page writes through a draft-scoped
+  `GET`/`PUT /instructor/new/draft/datasets`, the edit page through the
+  published `GET`/`PUT /instructor/:id/datasets`; both pairs share one
+  validation + manifest-write core (`DatasetEditHelpers.swift`), so a spec one
+  page accepts is one the other accepts. The behaviour lives once, in
+  `Public/support-files.js`, which both pages already load — the two templates
+  carry the same markup and differ only in the endpoint their page file passes
+  in.
+- The **`set_dataset` MCP tool** (mark a bundled support file with a
+  `sampleSize`, `remove:true` to clear).
+
+Both report from the same lookup — `TestProperties.datasetSpecsByFile`, read by
+`get_support_files` for its `isDataset` / `datasetSampleSize` fields and by the
+two support-row builders for the panel's controls — so the agent surface and
+the web UI cannot describe one file differently.
+
+A PUT **replaces the whole array**; it is not a patch endpoint, so a caller
+sends the complete desired state. Either PUT rejects a body naming one file
+twice, and `set_dataset` drops any existing spec for the file before appending
+its own — two specs for one file would disagree about how many rows a student
+gets, and which one won would be a detail of whichever consumer folded the
+array.
 
 ## Train/test splits & grader-only files (option B)
 

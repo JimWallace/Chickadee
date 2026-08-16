@@ -299,6 +299,19 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `patternFamilies` / `globalExpressions`).
     public let datasets: [DatasetSpec]
 
+    /// The dataset specs keyed by the support filename each one marks, for the
+    /// surfaces that ask "is *this* file a dataset, and at what sample size?"
+    /// — the MCP support-file listing and the authoring pages' Files panel.
+    /// Both read this rather than folding `datasets` themselves, so the agent
+    /// surface and the web UI cannot report different states for one file.
+    /// A duplicate `file` keeps the first spec — a tie-break for manifests that
+    /// arrived by some route other than an authoring door (bundle import, a
+    /// hand-edited zip), since the datasets PUTs reject a body naming one file
+    /// twice and `set_dataset` replaces a file's spec rather than appending.
+    public var datasetSpecsByFile: [String: DatasetSpec] {
+        Dictionary(datasets.map { ($0.file, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
     /// Filenames the instructor has designated as **grader-only** (option B —
     /// see docs/datasets.md): bundled in the test setup so the native worker's
     /// grading scripts can read them, but withheld from every student-facing

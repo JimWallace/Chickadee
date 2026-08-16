@@ -44,9 +44,47 @@ struct EditableSuiteRow: Encodable {
     let dependsOn: [String]  // script names of prerequisites; empty == none
     let points: Int  // grade weight; 1 = default (unweighted)
     let displayName: String?  // optional human-readable name shown to students
+    /// True when this file is marked a per-student dataset (docs/datasets.md).
+    /// Only meaningful on a support row; a test script is never a dataset.
+    let isDataset: Bool
+    /// Rows each student receives for a dataset row; nil = whole file (and nil
+    /// on every non-dataset row).
+    let datasetSampleSize: Int?
 
     /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
     var displayNameOrEmpty: String { displayName ?? "" }
+
+    /// The sample size as an input-ready string — empty when there is none, so
+    /// the number field renders blank rather than "nil" (same reason
+    /// `displayNameOrEmpty` exists).
+    var datasetSampleSizeText: String { datasetSampleSize.map(String.init) ?? "" }
+
+    /// The dataset pair defaults to "not a dataset": every construction site
+    /// but the two support-file row builders is describing a test script, and
+    /// a script is never a per-student dataset.
+    init(
+        name: String,
+        url: String,
+        isTest: Bool,
+        tier: String,
+        order: Int,
+        dependsOn: [String],
+        points: Int,
+        displayName: String?,
+        isDataset: Bool = false,
+        datasetSampleSize: Int? = nil
+    ) {
+        self.name = name
+        self.url = url
+        self.isTest = isTest
+        self.tier = tier
+        self.order = order
+        self.dependsOn = dependsOn
+        self.points = points
+        self.displayName = displayName
+        self.isDataset = isDataset
+        self.datasetSampleSize = datasetSampleSize
+    }
 
     /// Display name if set, otherwise the filename stem (extension stripped).
     /// Used as the default value of the name input in the assignment editor.
@@ -71,8 +109,11 @@ struct EditableSuiteRow: Encodable {
         case dependsOn
         case points
         case displayName
+        case isDataset
+        case datasetSampleSize
         case displayNameOrEmpty
         case displayNameOrStem
+        case datasetSampleSizeText
         case dependsOnJSON
     }
 
@@ -86,8 +127,11 @@ struct EditableSuiteRow: Encodable {
         try container.encode(dependsOn, forKey: .dependsOn)
         try container.encode(points, forKey: .points)
         try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encode(isDataset, forKey: .isDataset)
+        try container.encodeIfPresent(datasetSampleSize, forKey: .datasetSampleSize)
         try container.encode(displayNameOrEmpty, forKey: .displayNameOrEmpty)
         try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
+        try container.encode(datasetSampleSizeText, forKey: .datasetSampleSizeText)
         try container.encode(dependsOnJSON, forKey: .dependsOnJSON)
     }
 }

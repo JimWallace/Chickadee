@@ -117,6 +117,9 @@
                 return '/instructor/new/draft/scripts/' + encodeURIComponent(name)
                      + '?draftID=' + encodeURIComponent(draftID);
             },
+            datasetsURL: function () {
+                return '/instructor/new/draft/datasets?draftID=' + encodeURIComponent(draftID);
+            },
             onChange: function () { window.location.reload(); }
         });
     }

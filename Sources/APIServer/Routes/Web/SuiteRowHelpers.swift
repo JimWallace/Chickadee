@@ -142,6 +142,11 @@ func currentSetupFiles(
             return lhs < rhs
         }
 
+    // Per-student dataset marks, from the one lookup `get_support_files` reads
+    // (`TestProperties.datasetSpecsByFile`) so the Files panel and the MCP
+    // listing cannot report different states for the same file.
+    let datasetSpecs = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
+
     // Generated entries (pattern-family or notebook-check output) are
     // represented by their generator's row in the suite table, so omit
     // them from the raw script list here.
@@ -156,7 +161,9 @@ func currentSetupFiles(
             order: entry?.order ?? (idx + 1),
             dependsOn: entry?.dependsOn ?? [],
             points: entry?.points ?? 1,
-            displayName: entry?.name
+            displayName: entry?.name,
+            isDataset: datasetSpecs[name] != nil,
+            datasetSampleSize: datasetSpecs[name]?.sampleSize
         )
     }
 
@@ -196,6 +203,10 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         return map
     }()
 
+    // Same one lookup as `currentSetupFiles` above, so the create page's Files
+    // panel reports what the edit page's does for the same manifest.
+    let datasetSpecs = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
+
     // Generated entries (pattern-family or notebook-check output) are
     // represented collectively by their family's / check's row in the
     // suite table — hide them from the raw list so instructors don't see
@@ -211,7 +222,9 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
             order: info?.order ?? (idx + 1),
             dependsOn: info?.dependsOn ?? [],
             points: info?.points ?? 1,
-            displayName: info?.name
+            displayName: info?.name,
+            isDataset: datasetSpecs[name] != nil,
+            datasetSampleSize: datasetSpecs[name]?.sampleSize
         )
     }
     .sorted { lhs, rhs in
