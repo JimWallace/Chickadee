@@ -95,7 +95,8 @@ extension DraftAssignmentRoutes {
                     // on the create page while the edit page still showed it.
                     isDataset: row.isDataset,
                     datasetSampleSize: row.datasetSampleSize,
-                    datasetStratumColumn: row.datasetStratumColumn
+                    datasetStratumColumn: row.datasetStratumColumn,
+                    datasetTransforms: row.datasetTransforms
                 )
             }
     }

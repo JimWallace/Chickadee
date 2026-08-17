@@ -491,6 +491,197 @@ For A4 this is **variety, not secrecy** — the sample is meant to be seen, so
 delivering it to the editor/browser is fine. The only thing hidden is the full
 pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
 
+### Expressions read the student's slice, not the pool
+
+The two per-student systems — `=` expressions and datasets — were built
+independently and, for one release, disagreed. `PersonalizationEvaluator` spawns
+its subprocess with the cwd set to the shared support directory so an expression
+can `open("cases.csv")`. That directory holds the instructor's **pool**, and is
+the same directory `DatasetResolver` reads as its *source*. In
+`WorkerJobRoutes.buildJobPayload` the two sat thirteen lines apart and neither
+knew about the other.
+
+The consequence was not a crash but a silent wrong answer. An expression
+computing `df["systolic"].mean()` returned the **pool's** mean, which then
+travelled the `expectedVarRef` path into `_ck_inputs.*` as that student's
+expected value — while the student held a slice with a different mean. Every
+student got the same expected value, and every student's own data disagreed with
+it. Only *structural* checks survived, which is why A4's five checks being
+structural read as a coincidence rather than as the ceiling it was.
+
+`PersonalizationSubstitution.resolve` now resolves the student's slices and hands
+them to the evaluator, which spawns against a private overlay: symlinks to every
+support file, with each declared dataset replaced by that student's bytes. Three
+properties are load-bearing:
+
+- **The shared directory is never written to.** Materializing a student's slice
+  there would hand the next student the previous one's data. The overlay is
+  per-evaluation and lives under the evaluator's existing temp directory.
+- **Same source, same seed, same bytes.** The overlay resolves through
+  `DatasetResolver` — the call the worker and editor already use — so the
+  expression and the student's delivered file agree by construction, not because
+  two call sites were kept in step.
+- **A slice that cannot be written is left absent, not symlinked to the pool.**
+  The expression then fails loudly with "no such file" rather than quietly
+  computing the instructor's answer and shipping it as the student's. This is the
+  one place the usual "forgiving at delivery" rule inverts: forgiveness here
+  means being confidently wrong about a grade.
+
+This is what makes a *value-based* check authorable on a dataset assignment at
+all, and it is the prerequisite for any transform that changes values rather
+than selecting rows.
+
+## Derivation — selection says which rows, a transform says what was done to them
+
+Phase 1 and 1.5 are both **selection**: `rowSample` and `stratifiedSample` decide
+which of the instructor's rows a student receives, and only ever copy bytes.
+**Derivation** alters the values themselves, so the pool becomes a *template*
+and each student gets a variation improvised on it.
+
+The two are separate axes on `DatasetSpec`, deliberately:
+
+```swift
+public let kind: DatasetKind               // SELECTION — unchanged meaning
+public let transforms: [DatasetTransform]  // DERIVATION — decodeIfPresent ?? []
+```
+
+"500 rows balanced by ward, then 2% of `bp_systolic` blanked" is two independent
+decisions. A `DatasetKind` case per combination is how that enum reaches thirty
+cases, so combinations are expressed as a list rather than enumerated. Every
+manifest written before derivation existed decodes to `transforms: []` and
+materializes to exactly the bytes it did before.
+
+**Selection runs first, then transforms in array order.** Both halves are
+load-bearing: transforming after selection means a rate applies to what the
+student actually receives rather than to the pool, and the order is stored
+because blanking then jittering is not jittering then blanking.
+
+### The rules that keep a transform from breaking its own assignment
+
+- **Never touch the schema.** No column added, removed, renamed or reordered.
+  The assignment ships code written against column *names*, and a student whose
+  `df["systolic"]` raises `KeyError` cannot fix that. Rows and within-column
+  values only.
+- **Columns are named explicitly** — there is no wildcard. An instructor who
+  blanks the column a notebook check asserts on has broken their own assignment;
+  making them name it is what lets the save-time check tell them so.
+- **A transform that cannot apply leaves the data alone**, and is refused at
+  save. Same pairing as the stratum column: forgiving at delivery, loud while an
+  instructor can still fix it.
+
+### Determinism, which is harder here than for selection
+
+Selection was platform-independent almost for free because it only copies bytes.
+Generating values is where that stops being free, so three rules are enforced by
+`DatasetTransformApplication.swift`:
+
+1. **No `Double` reaches a delivered byte.** `rate` is an authored number, so it
+   is folded to an integer per-mille once, up front — `(rows * permille) / 1000`
+   — and every per-cell decision after that is integer math.
+2. **Each step draws from its own sub-seeded stream**, keyed on the student's
+   seed plus the step's index, kind *and* column. A shared stream would mean
+   appending a second transform re-rolls the first, silently changing data
+   already delivered to a whole class. Two tests pin this: appending a step
+   leaves the first step's column byte-identical, and adding a column to a step
+   leaves the other column's rows unmoved.
+3. **Nothing iterates a `Dictionary` or `Set`.** Columns are visited in the
+   order the instructor listed them, rows in file order.
+
+A fourth rule is about *how* a cell is blanked: the raw line is edited in place
+rather than split and re-joined. A rebuild would re-quote every other field by
+this codebase's rules rather than the source's, changing bytes in cells the
+transform was never asked to touch.
+
+### `missingValues`
+
+The first derivation, and deliberately the simplest: it blanks a deterministic
+subset of cells in the named columns. Pure string replacement — no type
+inference and no formatting decisions — which is why it goes first. It teaches
+the handling of absent data, which is a real skill in health datasets rather
+than a synthetic difficulty.
+
+Save-time refusals (`DatasetSpecValidation.transformIssue`), each paired with
+something delivery absorbs silently:
+
+| Refused at save | Absorbed at delivery |
+|---|---|
+| a step naming no columns | leaves the data alone |
+| a column the file's header does not carry | that column is skipped |
+| a missing rate, or one outside `0 < rate <= 1` | the step does nothing |
+| a rate too small to reach one row of the sample | integer fold yields 0 cells |
+| the same kind twice on one column | order-dependent in a way nobody authored |
+
+That last row deserves its own note: `(sampleSize * permille) / 1000` is exactly
+what delivery computes, so 1% of a 10-row sample is genuinely zero cells. The
+check knows the sample size and can say so, which is the same move
+`stratifiedSample` makes when a sample is smaller than the category count.
+
+### The Files-panel control
+
+A dataset row carries the derivation step beside its sample size and stratum
+column:
+
+```
+[x] Per-student sample  [ 500 ] rows per student  balanced across [ ward ]
+    blanking [ bp_systolic ] in [ 10 ] % of rows                    Saved
+```
+
+Two design rules carried over from the stratum column:
+
+- **The field carries whether the step exists.** Naming columns creates the
+  step; clearing them removes it. There is no separate checkbox or mode picker,
+  because a second control asking the same question in different words is how
+  the two come to disagree.
+- **Percentages in, fractions stored.** An instructor says "10% of rows"; the
+  spec holds `rate: 0.1`, which delivery folds to an integer count.
+
+**The panel edits one shape, and knows it.** It has fields for no transforms or
+a single `missingValues` step. The model is an ordered list with more kinds to
+come, so a spec authored through MCP can hold something the panel cannot draw —
+two steps, or a future kind. Rendering that into the one pair of fields would
+show half the truth and then save over the other half on the next row-count
+edit, which is the silent-downgrade shape this feature has now produced twice.
+So `EditableSuiteRow.datasetTransformsEditable` asks first, and a spec the panel
+cannot represent renders **disabled**, with a note that the steps are
+agent-authored, and survives unrelated edits intact.
+
+That answer lives in two places on purpose and they are tested separately: Swift
+decides it for the server-rendered first paint, and `Public/support-files.js`
+honours it for every repaint after a save — omitting the `transforms` key
+entirely when its fields are disabled, so the merge carries the stored steps
+through.
+
+### What is NOT built yet
+
+`formatNoise` — inconsistent representations of the same value (stray
+whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
+transform, and the most pedagogically honest of the set: real health data
+arrives like this, and it is **answer-preserving**, so correct parsing yields
+the same result the pool would. It is also the only transform safe to author
+before multi-variant validation exists, for that reason.
+
+`numericJitter` is **not** implemented, and the recommendation is against it.
+`rowSample` already delivers anti-copying, so jitter buys little pedagogy while
+carrying the highest determinism cost and a provenance problem — a jittered
+VitalDB extract is no longer VitalDB, and a student reporting "the mean systolic
+in this cohort is 128" reports a number existing nowhere outside their own file.
+Whether an assignment's prose must disclose that its data is derived is a policy
+call for the maintainer, not a decision this design should make quietly.
+
+### The gap this leaves: validation still exercises one variant
+
+`hasPersonalization` counts expressions and variables, not `datasets`, so
+`materializeValidationGrading` returns early for a dataset-only assignment and
+validation grades against the **instructor's own** seed. For selection that is
+tolerable — the solution sees real rows, just fewer. For derivation it is not: a
+solution that assumes a column is never empty validates green and then fails for
+the students whose seed blanked it.
+
+This is why `missingValues` has no UI yet. Multi-variant validation — running the
+reference solution against N seeds and reporting per-variant results — is the
+gate that has to come before an instructor can reach for a transform from the
+Files panel.
+
 ### Build slices
 
 1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`

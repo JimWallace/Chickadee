@@ -25,7 +25,19 @@ public enum DatasetMaterializer {
     /// Materialize `source` for the given spec and per-student seed.
     /// Returns the source unchanged for any kind/size that implies "the whole
     /// file" so callers can deliver the result unconditionally.
+    ///
+    /// Selection first, then each transform in array order — so a transform's
+    /// rate applies to the rows the student actually receives rather than to the
+    /// pool, and appending a step never re-decides an earlier one.
     public static func materialize(source: String, spec: DatasetSpec, seedHex: String) -> String {
+        let selected = select(source: source, spec: spec, seedHex: seedHex)
+        guard !spec.transforms.isEmpty else { return selected }
+        return spec.transforms.enumerated().reduce(selected) { csv, step in
+            apply(step.element, at: step.offset, to: csv, seedHex: seedHex)
+        }
+    }
+
+    private static func select(source: String, spec: DatasetSpec, seedHex: String) -> String {
         switch spec.kind {
         case .rowSample:
             return sampleRows(csv: source, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
@@ -222,7 +234,7 @@ public enum DatasetMaterializer {
     /// CR+LF is a single Swift `Character` (one extended grapheme cluster), so
     /// `split(separator: "\n")` would not see the LF inside a CRLF ending and
     /// would return the whole file as one "line".
-    private static func normalizedLines(of csv: String) -> (lines: [Substring], trailingNewline: Bool) {
+    static func normalizedLines(of csv: String) -> (lines: [Substring], trailingNewline: Bool) {
         let normalized = csv.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let hadTrailingNewline = normalized.hasSuffix("\n")
@@ -285,7 +297,7 @@ public enum DatasetMaterializer {
 /// standard library's `RandomNumberGenerator` helpers, whose bit-consumption
 /// is not a stable contract.  Intentionally not conforming to
 /// `RandomNumberGenerator` to keep callers off `random(in:using:)`.
-private struct SplitMix64 {
+struct SplitMix64 {
     private var state: UInt64
 
     init(seed: UInt64) { state = seed }
@@ -310,7 +322,7 @@ private struct SplitMix64 {
 
 /// FNV-1a 64-bit hash over a string's UTF-8 bytes.  Deterministic and
 /// dependency-free — used only to fold a 64-hex seed into a PRNG seed.
-private func fnv1a64(_ string: String) -> UInt64 {
+func fnv1a64(_ string: String) -> UInt64 {
     var hash: UInt64 = 0xcbf2_9ce4_8422_2325
     for byte in string.utf8 {
         hash ^= UInt64(byte)

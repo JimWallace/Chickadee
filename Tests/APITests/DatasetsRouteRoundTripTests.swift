@@ -373,6 +373,75 @@ import VaporTesting
         }
     }
 
+    // MARK: - Transforms survive the round trip on both pairs
+
+    @Test func transformsRoundTripThroughBothPairs() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("t")
+            let body = #"""
+                {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":5,
+                "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                """#
+            for path in [
+                "/instructor/\(fx.assignmentID)/datasets",
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)",
+            ] {
+                try await put(path, fx, body: body, expect: .ok, "a transform is storable")
+                let specs = try await get(path, fx)
+                #expect(specs.first?.transforms.count == 1, "\(path) reports it back")
+                #expect(specs.first?.transforms.first?.columns == ["ward"])
+                #expect(specs.first?.transforms.first?.rate == 0.5)
+            }
+        }
+    }
+
+    /// The Files panel owns kind, sampleSize and stratumColumn and nothing else,
+    /// so a payload shaped like the one it sends must not be able to clear a
+    /// transform it never knew about. The panel merges rather than rebuilds
+    /// (`Public/support-files.js`); this pins the server half — a PUT carrying
+    /// the transforms round-trips them rather than normalizing them away.
+    @Test func aControlShapedPayloadCarryingTransformsKeepsThem() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("m")
+            let path = "/instructor/\(fx.assignmentID)/datasets"
+            try await put(
+                path, fx,
+                body: #"""
+                    {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":5,
+                    "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                    """#, expect: .ok, "stored with a transform")
+
+            // What the panel PUTs after the merge: its three fields, plus the
+            // transform block carried forward untouched.
+            try await put(
+                path, fx,
+                body: #"""
+                    {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":9,
+                    "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                    """#, expect: .ok, "a row-count edit")
+
+            let specs = try await get(path, fx)
+            #expect(specs.first?.sampleSize == 9)
+            #expect(specs.first?.transforms.first?.columns == ["ward"])
+        }
+    }
+
+    @Test func aTransformNamingAnUnknownColumnIsRejectedOnBothPairs() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("u")
+            let body = #"""
+                {"datasets":[{"file":"cases.csv","sampleSize":5,
+                "transforms":[{"kind":"missingValues","columns":["nope"],"rate":0.5}]}]}
+                """#
+            try await put(
+                "/instructor/\(fx.assignmentID)/datasets", fx, body: body,
+                expect: .badRequest, "the column must exist in the file")
+            try await put(
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)", fx, body: body,
+                expect: .badRequest, "the draft pair agrees")
+        }
+    }
+
     // MARK: - Two specs for one file are incoherent on either pair
 
     @Test func duplicateSpecsForOneFileAreRejected() async throws {

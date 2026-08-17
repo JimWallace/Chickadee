@@ -128,6 +128,56 @@ import Testing
         #expect((dict["datasetSampleSizeText"] as? String)?.isEmpty == true)
     }
 
+    // MARK: - Derivation fields the panel renders from
+
+    private func row(_ transforms: [DatasetTransform]) -> EditableSuiteRow {
+        EditableSuiteRow(
+            name: "cases.csv", url: "#", isTest: false, tier: "support", order: 1,
+            dependsOn: [], points: 1, displayName: nil,
+            isDataset: true, datasetSampleSize: 25, datasetTransforms: transforms)
+    }
+
+    @Test func aSingleMissingValuesStepIsEditableAndRendersItsFields() throws {
+        let row = row([
+            DatasetTransform(kind: .missingValues, columns: ["systolic", "ward"], rate: 0.25)
+        ])
+        #expect(row.datasetTransformsEditable)
+        // Comma-separated, because that is how the field takes them back.
+        #expect(row.datasetBlankColumnsOrEmpty == "systolic, ward")
+        // Stored as a fraction, shown as the percentage an instructor says.
+        #expect(row.datasetBlankPercentText == "25")
+    }
+
+    @Test func aSpecWithNoTransformsIsEditableAndRendersEmptyFields() throws {
+        #expect(row([]).datasetTransformsEditable)
+        #expect(row([]).datasetBlankColumnsOrEmpty.isEmpty)
+        #expect(row([]).datasetBlankPercentText.isEmpty)
+    }
+
+    /// The panel has fields for one step of one kind. Anything else must render
+    /// as not-editable with EMPTY fields — showing half of a two-step spec is
+    /// how the next unrelated edit would save over the half not shown.
+    @Test func aSpecThePanelCannotRepresentIsNotEditableAndShowsNothing() throws {
+        let twoSteps = row([
+            DatasetTransform(kind: .missingValues, columns: ["systolic"], rate: 0.25),
+            DatasetTransform(kind: .missingValues, columns: ["ward"], rate: 0.5),
+        ])
+        #expect(!twoSteps.datasetTransformsEditable)
+        #expect(twoSteps.datasetBlankColumnsOrEmpty.isEmpty)
+        #expect(twoSteps.datasetBlankPercentText.isEmpty)
+    }
+
+    @Test func theDerivationFieldsReachLeaf() throws {
+        let encoded = try JSONSerialization.jsonObject(
+            with: try JSONEncoder().encode(
+                row([DatasetTransform(kind: .missingValues, columns: ["systolic"], rate: 0.1)])))
+        let dict = try #require(encoded as? [String: Any])
+
+        #expect(dict["datasetTransformsEditable"] as? Bool == true)
+        #expect(dict["datasetBlankColumnsOrEmpty"] as? String == "systolic")
+        #expect(dict["datasetBlankPercentText"] as? String == "10")
+    }
+
     // MARK: - One lookup behind both surfaces
 
     @Test func datasetSpecsByFileKeysEverySpecItsFile() throws {

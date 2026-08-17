@@ -62,12 +62,14 @@ import Vapor
 
     private func run(
         _ app: Application, publicID: String, filename: String,
-        sampleSize: Int? = nil, stratumColumn: String? = nil, remove: Bool? = nil
+        sampleSize: Int? = nil, stratumColumn: String? = nil, remove: Bool? = nil,
+        transforms: [SetDatasetTool.TransformInput]? = nil
     ) async throws -> SetDatasetTool.Output {
         try await SetDatasetTool().execute(
             SetDatasetTool.Input(
                 assignmentPublicID: publicID, filename: filename,
-                sampleSize: sampleSize, stratumColumn: stratumColumn, remove: remove),
+                sampleSize: sampleSize, stratumColumn: stratumColumn, remove: remove,
+                transforms: transforms),
             context(app))
     }
 
@@ -291,6 +293,96 @@ import Vapor
                 sampleSize: 2, stratumColumn: "   ")
             #expect(out.datasets.first?.kind == "rowSample")
             #expect(out.datasets.first?.stratumColumn == nil)
+        }
+    }
+
+    // MARK: - Transforms
+
+    private func blanking(_ columns: [String], rate: Double?) -> SetDatasetTool.TransformInput {
+        SetDatasetTool.TransformInput(kind: "missingValues", columns: columns, rate: rate)
+    }
+
+    @Test func storesAndReportsATransform() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let out = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                transforms: [blanking(["age"], rate: 0.5)])
+
+            #expect(out.datasets.first?.transforms.map(\.kind) == ["missingValues"])
+            #expect(out.datasets.first?.transforms.first?.columns == ["age"])
+            #expect(out.datasets.first?.transforms.first?.rate == 0.5)
+
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let specs = try #require(setup.decodedManifest()?.datasets)
+            #expect(
+                specs.first?.transforms == [
+                    DatasetTransform(kind: .missingValues, columns: ["age"], rate: 0.5)
+                ])
+        }
+    }
+
+    /// The shape that has twice come within a release of shipping: a surface
+    /// rebuilding a spec from only the fields it knows about, so an edit to one
+    /// setting drops another. Changing the sample size must not clear the
+    /// transforms the caller did not mention.
+    @Test func anUnrelatedEditPreservesTransforms() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                transforms: [blanking(["age"], rate: 0.5)])
+
+            // A second call that says nothing about transforms.
+            let out = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 3)
+
+            #expect(out.datasets.first?.sampleSize == 3)
+            #expect(
+                out.datasets.first?.transforms.first?.columns == ["age"],
+                "an edit to sampleSize must not drop the transform")
+        }
+    }
+
+    @Test func anEmptyTransformListClearsThem() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                transforms: [blanking(["age"], rate: 0.5)])
+
+            // Explicitly [] is the caller saying so, unlike omitting the field.
+            let out = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                transforms: [])
+            #expect(out.datasets.first?.transforms.isEmpty == true)
+        }
+    }
+
+    @Test func refusesATransformNamingAColumnTheFileDoesNotHave() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                try await run(
+                    app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                    transforms: [blanking(["nope"], rate: 0.5)])
+            }
+        }
+    }
+
+    @Test func refusesATransformWithNoRate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                try await run(
+                    app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
+                    transforms: [blanking(["age"], rate: nil)])
+            }
         }
     }
 }

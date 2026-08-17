@@ -190,6 +190,26 @@ Create Assignment
                                        placeholder="column (optional)"
                                        aria-label="Column to balance the sample of #(supportFile.name) across">
                             </span>
+                            <span class="dataset-size-field js-dataset-blank-field"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                blanking
+                                <input type="text"
+                                       class="form-input input-sm dataset-stratum js-dataset-blank-columns"
+                                       value="#(supportFile.datasetBlankColumnsOrEmpty)"
+                                       placeholder="columns (optional)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Columns to blank values in for #(supportFile.name)">
+                                in
+                                <input type="number" min="1" max="100" step="1"
+                                       class="form-input input-sm dataset-size js-dataset-blank-percent"
+                                       value="#(supportFile.datasetBlankPercentText)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Percent of rows to blank for #(supportFile.name)">
+                                % of rows
+                            </span>
+                            #if(!supportFile.datasetTransformsEditable):
+                            <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
+                            #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
                         </div>
                     </td>
