@@ -62,12 +62,12 @@ import Vapor
 
     private func run(
         _ app: Application, publicID: String, filename: String,
-        sampleSize: Int? = nil, remove: Bool? = nil
+        sampleSize: Int? = nil, stratumColumn: String? = nil, remove: Bool? = nil
     ) async throws -> SetDatasetTool.Output {
         try await SetDatasetTool().execute(
             SetDatasetTool.Input(
                 assignmentPublicID: publicID, filename: filename,
-                sampleSize: sampleSize, remove: remove),
+                sampleSize: sampleSize, stratumColumn: stratumColumn, remove: remove),
             context(app))
     }
 
@@ -195,6 +195,102 @@ import Vapor
                 _ = try await run(
                     app, publicID: assignment.publicID, filename: "../cases.csv", sampleSize: 2)
             }
+        }
+    }
+
+    // MARK: - Stratified sampling
+    //
+    // The fixture's `cases.csv` is `caseid,age` with three rows, so `age` is a
+    // three-category column — small enough that the sample-size rule bites at
+    // 2 and passes at 3.
+
+    @Test func marksAStratifiedDataset() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let out = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv",
+                sampleSize: 3, stratumColumn: "age")
+            #expect(out.datasets.first?.kind == "stratifiedSample")
+            #expect(out.datasets.first?.stratumColumn == "age")
+
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(
+                setup.decodedManifest()?.datasets == [
+                    DatasetSpec(
+                        file: "cases.csv", kind: .stratifiedSample, sampleSize: 3, stratumColumn: "age")
+                ])
+        }
+    }
+
+    @Test func supportFileListingReportsTheStratum() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv",
+                sampleSize: 3, stratumColumn: "age")
+
+            let listing = try await GetSupportFilesTool().execute(
+                GetSupportFilesTool.Input(
+                    assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
+                context(app))
+            let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
+            #expect(entry.datasetKind == "stratifiedSample")
+            #expect(entry.datasetStratumColumn == "age")
+        }
+    }
+
+    @Test func aPlainMarkReportsItsKindToo() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2)
+
+            let listing = try await GetSupportFilesTool().execute(
+                GetSupportFilesTool.Input(
+                    assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
+                context(app))
+            let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
+            #expect(entry.datasetKind == "rowSample")
+            #expect(entry.datasetStratumColumn == nil)
+        }
+    }
+
+    @Test func rejectsAColumnTheFileDoesNotHave() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await run(
+                    app, publicID: assignment.publicID, filename: "cases.csv",
+                    sampleSize: 3, stratumColumn: "ward")
+            }
+        }
+    }
+
+    @Test func rejectsASampleTooSmallToHoldEveryCategory() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Three distinct ages, two rows to give out.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await run(
+                    app, publicID: assignment.publicID, filename: "cases.csv",
+                    sampleSize: 2, stratumColumn: "age")
+            }
+        }
+    }
+
+    @Test func aBlankColumnMeansAPlainRowSample() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let out = try await run(
+                app, publicID: assignment.publicID, filename: "cases.csv",
+                sampleSize: 2, stratumColumn: "   ")
+            #expect(out.datasets.first?.kind == "rowSample")
+            #expect(out.datasets.first?.stratumColumn == nil)
         }
     }
 }

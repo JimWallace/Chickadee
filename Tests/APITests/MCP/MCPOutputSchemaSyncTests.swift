@@ -67,7 +67,11 @@ import Testing
                 SetDatasetTool.name, SetDatasetTool.outputSchema,
                 SetDatasetTool.Output(
                     assignmentPublicID: "abc123",
-                    datasets: [SetDatasetTool.DatasetEntry(file: "cases.csv", sampleSize: 100)])
+                    datasets: [
+                        SetDatasetTool.DatasetEntry(
+                            file: "cases.csv", sampleSize: 100,
+                            kind: "rowSample", stratumColumn: nil)
+                    ])
             ),
             (
                 SetMinimumRunnerVersionTool.name, SetMinimumRunnerVersionTool.outputSchema,

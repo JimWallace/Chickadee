@@ -181,6 +181,15 @@ Create Assignment
                                        aria-label="Rows per student from #(supportFile.name)">
                                 rows per student
                             </span>
+                            <span class="dataset-size-field js-dataset-stratum-field"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                balanced across
+                                <input type="text"
+                                       class="form-input input-sm dataset-stratum js-dataset-stratum"
+                                       value="#(supportFile.datasetStratumColumnOrEmpty)"
+                                       placeholder="column (optional)"
+                                       aria-label="Column to balance the sample of #(supportFile.name) across">
+                            </span>
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
                         </div>
                     </td>

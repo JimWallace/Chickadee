@@ -55,6 +55,11 @@ func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
 ///   - two specs for the same file, which is incoherent — the two would
 ///     disagree about how many rows a student gets, and which one wins is a
 ///     detail of whichever consumer happens to fold the array.
+///   - a stratified spec that does not fit its file (`DatasetSpecValidation`):
+///     no column named, a column the file does not have, or a sample too small
+///     to hold one row of every category. The materializer degrades quietly on
+///     all three at delivery time, which is only safe because this refuses them
+///     while an instructor is still holding the form.
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: Database
 ) async throws {
@@ -79,6 +84,16 @@ func applyDatasetsEdit(
         }
         guard seenFiles.insert(spec.file).inserted else {
             throw Abort(.badRequest, reason: "Dataset file '\(spec.file)' is listed more than once.")
+        }
+        // Reads the file only when a spec claims to stratify — an ordinary row
+        // sample needs nothing from the bytes, and these files are course
+        // datasets, not small.
+        if spec.kind == .stratifiedSample || spec.stratumColumn != nil {
+            let text = extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)
+                .flatMap { String(data: $0, encoding: .utf8) }
+            if let issue = DatasetSpecValidation.issue(with: spec, sourceCSV: text) {
+                throw Abort(.badRequest, reason: issue)
+            }
         }
     }
 

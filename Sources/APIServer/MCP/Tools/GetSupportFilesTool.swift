@@ -40,6 +40,13 @@ struct GetSupportFilesTool: ContentTool {
         let datasetSampleSize: Int?
         /// True when the file is a per-student dataset (docs/datasets.md).
         let isDataset: Bool
+        /// "rowSample" or "stratifiedSample" for a dataset; nil otherwise.
+        let datasetKind: String?
+        /// The column a stratified dataset balances across; nil otherwise.
+        /// Reported for the same reason the sample size is: an agent that
+        /// cannot read a mark back cannot preserve it, and the Files panel
+        /// shows both.
+        let datasetStratumColumn: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -64,7 +71,8 @@ struct GetSupportFilesTool: ContentTool {
         + "get_solution). Omit filename to list filenames and sizes; pass filename to read that file's "
         + "UTF-8 content, capped at maxBytes (default 65536) with truncated:true when the file is "
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
-        + "dataset marks (isDataset / datasetSampleSize — set them with set_dataset). Write "
+        + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn — set "
+        + "them with set_dataset). Write "
         + "support files with "
         + "author_script(tier:\"support\"). Read-only, instructor-authored content only; use it to "
         + "confirm a data file is actually bundled (and what its columns/rows look like) before "
@@ -131,7 +139,9 @@ struct GetSupportFilesTool: ContentTool {
                     filename: name,
                     sizeBytes: extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0,
                     datasetSampleSize: datasetSpecs[name]?.sampleSize,
-                    isDataset: datasetSpecs[name] != nil)
+                    isDataset: datasetSpecs[name] != nil,
+                    datasetKind: datasetSpecs[name]?.kind.rawValue,
+                    datasetStratumColumn: datasetSpecs[name]?.stratumColumn)
             }
             return Output(
                 assignmentPublicID: assignment.publicID,

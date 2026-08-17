@@ -2064,6 +2064,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .dataset-size-field { display: inline-flex; align-items: center; gap: .3rem; }
 .dataset-size-field[hidden] { display: none; }
 .dataset-size { width: 6rem; }
+/* The column a stratified sample balances across; empty means a plain sample,
+   so the field carries the kind rather than a second control asking the same
+   question in different words. */
+.dataset-stratum { width: 10rem; }
 
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }

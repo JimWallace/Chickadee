@@ -75,7 +75,10 @@ import VaporTesting
             .appendingPathComponent("dsr-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        try Data("id\n1\n2\n3\n".utf8).write(to: root.appendingPathComponent("cases.csv"))
+        // Two columns on purpose: `ward` has two categories (a stratified
+        // sample of 2 fits), `id` has three (so a sample of 2 cannot hold them
+        // all) — the two sides of the stratum rule, in one fixture.
+        try Data("id,ward\n1,3A\n2,3B\n3,3A\n".utf8).write(to: root.appendingPathComponent("cases.csv"))
         try Data("notes".utf8).write(to: root.appendingPathComponent("notes.txt"))
         try writeZipFixture(of: root, to: zipPath)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
@@ -290,6 +293,83 @@ import VaporTesting
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("checked") == false)
             #expect(plain.contains("hidden"))
+        }
+    }
+
+    // MARK: - Stratified specs are checked against the file, at both doors
+    //
+    // `DatasetMaterializer` degrades quietly when a stratified spec does not fit
+    // its file — that is deliberate, since at delivery time the only reader is a
+    // student being graded. It is only safe because the spec cannot be SAVED in
+    // that state, which is what these assert.
+
+    @Test func stratifiedSpecRoundTripsWithItsColumn() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("s")
+            let path = "/instructor/\(fx.assignmentID)/datasets"
+            try await put(
+                path, fx,
+                body:
+                    #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2,"stratumColumn":"ward"}]}"#,
+                expect: .ok, "a column the file has, with room for its categories")
+
+            let stored = try await get(path, fx)
+            #expect(stored.first?.kind == .stratifiedSample)
+            #expect(stored.first?.stratumColumn == "ward")
+            #expect(stored.first?.sampleSize == 2)
+        }
+    }
+
+    @Test func stratifiedSpecRejectionsFireOnBothPairs() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("t")
+            for (label, path) in [
+                ("published", "/instructor/\(fx.assignmentID)/datasets"),
+                ("draft", "/instructor/new/draft/datasets?draftID=\(fx.draftID)"),
+            ] {
+                try await put(
+                    path, fx,
+                    body: #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2}]}"#,
+                    expect: .badRequest, "\(label): a stratified spec needs a column")
+                try await put(
+                    path, fx,
+                    body:
+                        #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2,"stratumColumn":"unit"}]}"#,
+                    expect: .badRequest, "\(label): a column the file does not have")
+                try await put(
+                    path, fx,
+                    body:
+                        #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2,"stratumColumn":"id"}]}"#,
+                    expect: .badRequest, "\(label): a sample too small for every category")
+                try await put(
+                    path, fx,
+                    body:
+                        #"{"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":2,"stratumColumn":"id"}]}"#,
+                    expect: .badRequest, "\(label): a column on a plain sample would be stored and ignored")
+                #expect(try await get(path, fx).isEmpty, "\(label): a rejected write stores nothing")
+            }
+        }
+    }
+
+    @Test func editPageRendersAStratifiedSpecsColumn() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("r")
+            try await put(
+                "/instructor/\(fx.assignmentID)/datasets", fx,
+                body:
+                    #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2,"stratumColumn":"ward"}]}"#,
+                expect: .ok, "a valid stratified spec")
+
+            let html = try await page("/instructor/\(fx.assignmentID)/edit", fx)
+            let marked = try rowMarkup(for: "cases.csv", in: html)
+            #expect(marked.contains("js-dataset-stratum"))
+            #expect(marked.contains("value=\"ward\""), "the saved column reaches the control")
+
+            // Without the column in the row, editing the sample size would
+            // rewrite the spec back to a plain sample — the silent downgrade
+            // this field exists to prevent.
+            let plain = try rowMarkup(for: "notes.txt", in: html)
+            #expect(plain.contains("value=\"\""), "an unmarked file renders an empty column field")
         }
     }
 
