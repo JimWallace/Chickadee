@@ -9,6 +9,66 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.134] - 2026-08-17
+
+### Fixed
+
+- **A personalization expression now reads the student's dataset slice, not the
+  instructor's pool.** `PersonalizationEvaluator` spawned in the shared support
+  directory, which holds the full source pool, so an `=` expression over a
+  per-student dataset — the mechanism an `expectedVarRef` answer key uses —
+  computed the pool's answer and delivered it to every student as their own
+  expected value. Structural notebook checks did not notice; any value-based
+  check was wrong for the whole class, and identical for all of them. The
+  evaluation now runs against a private overlay in which each declared dataset
+  carries that student's bytes, resolved from the same source and seed the
+  delivered file comes from. Assignments declaring no datasets are unaffected.
+
+### Added
+
+- **Per-student datasets can now derive values, not just select rows.** A
+  `DatasetSpec` carries an ordered `transforms` list alongside its selection
+  `kind`, so the instructor's pool becomes a template each student varies on.
+  The first transform is `missingValues`, which blanks a deterministic subset of
+  cells in explicitly named columns — teaching the handling of absent data,
+  which real health datasets arrive with. Selection runs first and transforms in
+  order, each drawing from its own sub-seeded stream so appending a step never
+  re-rolls an earlier one, and no `Double` reaches a delivered byte. A transform
+  never adds, removes, renames or reorders a column. Authored through
+  `set_dataset` and the two datasets endpoints; the Files panel does not offer
+  it yet, and deliberately will not until validation covers more than the
+  instructor's own variant.
+
+### Fixed
+
+- **The Files panel and `set_dataset` no longer rebuild a dataset spec from only
+  the fields they know about.** Both constructed a fresh spec on every edit, so
+  a setting one of them had not been taught about would be dropped by an
+  unrelated change — the shape that came within a release of silently
+  downgrading every stratified spec to a plain sample. Both now carry forward
+  what they were not asked to change. The datasets endpoints also read the
+  source file when a spec carries transforms, not only when it stratifies, so a
+  transform naming a column the file lacks is refused at save rather than
+  ignored at delivery.
+
+### Added
+
+- **The Files panel can now author a `missingValues` step.** A dataset row grows
+  a "blanking … in … % of rows" control beside its sample size and stratum
+  column. As with the stratum column, the field carries whether the step exists
+  — naming columns creates it, clearing them removes it — so there is no mode
+  picker whose state could contradict the fields. Rates are authored as a
+  percentage and stored as the fraction the materializer folds to an integer
+  count.
+
+  The panel edits exactly one shape: no transforms, or a single `missingValues`
+  step. A spec holding anything richer — two steps, or a kind a later release
+  adds — renders with the fields **disabled** and a note that the steps are
+  agent-authored, and an unrelated edit to that row carries them through
+  untouched. Showing half of a two-step spec is how the next row-count edit
+  would save over the half not shown.
+
+
 ## [0.5.133] - 2026-08-17
 
 ### Fixed
