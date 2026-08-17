@@ -25,13 +25,15 @@ import Testing
     }
 
     /// Student-data tables the MCP read path queries: the two the boundary
-    /// accessors filter to validation rows, plus the collection-blob side
-    /// table `loadCollectionJSON` joins in. Grown deliberately by hand — a new
+    /// accessors filter to validation rows, the collection-blob side table
+    /// `loadCollectionJSON` joins in, and the multi-variant validation batch
+    /// `get_validation_result` reports. Grown deliberately by hand — a new
     /// table here must come with a grant AND an RLS policy in the SQL file.
     private static let readTables: [String] = [
         APISubmission.schema,
         APIResult.schema,
         APIResultCollection.schema,
+        ValidationVariant.schema,
     ]
 
     @Test func everyMCPReadTableHasSelectGrant() throws {

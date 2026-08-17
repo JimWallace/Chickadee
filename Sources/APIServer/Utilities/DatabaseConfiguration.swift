@@ -343,6 +343,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
+    app.migrations.add(CreateValidationVariants())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())

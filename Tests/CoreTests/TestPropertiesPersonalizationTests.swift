@@ -47,4 +47,29 @@ import Testing
         #expect(!manifest.hasExpressions)
         #expect(manifest.hasPersonalization)
     }
+
+    // `variesPerStudent` answers a third question — "can two seeds receive
+    // different material?" — and is what multi-variant validation gates on.
+    // Deliberately separate from `hasPersonalization`, whose answer also
+    // steers the worker download path.
+
+    @Test func aDatasetVariesPerStudentWithoutBeingPersonalization() {
+        let manifest = TestProperties(datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
+        #expect(manifest.variesPerStudent)
+        #expect(
+            !manifest.hasPersonalization,
+            "a dataset substitutes nothing — the download path must not change")
+    }
+
+    @Test func expressionsVaryPerStudentButLiteralsDoNot() {
+        #expect(TestProperties(globalExpressions: [expr]).variesPerStudent)
+        #expect(
+            TestProperties(
+                sections: [TestSuiteSection(id: "s1", name: "S1", expressions: [expr])]
+            ).variesPerStudent)
+        #expect(
+            !TestProperties(globalVariables: [literal]).variesPerStudent,
+            "every student gets the same literal, so one validation run covers them all")
+        #expect(!TestProperties().variesPerStudent)
+    }
 }

@@ -104,6 +104,21 @@ struct ResultRoutes: RouteCollection {
                         "Validation \(status) for assignment '\(assignment.title)' (submission \(collection.submissionID))"
                     )
                 }
+
+                // A per-variant run (multi-variant validation) is never the
+                // assignment's linked primary, so the two lookups are
+                // disjoint: this one records the verdict on the variant row
+                // the instructor surfaces read.
+                if let variant = try await ValidationVariant.query(on: req.db)
+                    .filter(\.$submissionID == collection.submissionID)
+                    .first()
+                {
+                    variant.status = status
+                    try await variant.save(on: req.db)
+                    req.logger.info(
+                        "Validation variant \(variant.variantIndex) \(status) for setup \(variant.testSetupID)"
+                    )
+                }
             }
 
             // Award class-wide badges when a student submission earns 100%.

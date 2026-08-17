@@ -442,6 +442,69 @@ import VaporTesting
         }
     }
 
+    // MARK: - The estimate blocks ride the same responses
+    //
+    // The Files panel's estimates disclosure renders from `diagnostics` on the
+    // GET/PUT it already uses — served on the same response so a saved
+    // parameter edit moves the numbers without a second request. Computed by
+    // Core's DatasetDiagnostics, which has its own suite; what is pinned here
+    // is the plumbing: the blocks describe the stored spec against the
+    // bundled file's real bytes, on both pairs.
+
+    private func fullResponse(_ path: String, _ fx: Fixture) async throws -> DatasetsResponse {
+        var response = DatasetsResponse(datasets: [], diagnostics: [])
+        try await app.asyncTest(
+            .GET, path,
+            beforeRequest: { req in req.headers.add(name: .cookie, value: fx.cookie) },
+            afterResponse: { res in
+                #expect(res.status == .ok, "GET \(path) — \(res.body.string)")
+                response = try res.content.decode(DatasetsResponse.self)
+            })
+        return response
+    }
+
+    @Test func datasetsResponsesCarryTheEstimateBlocks() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("g")
+            for path in [
+                "/instructor/\(fx.assignmentID)/datasets",
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)",
+            ] {
+                let putBody = try await put(
+                    path, fx,
+                    body: #"{"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":2}]}"#,
+                    expect: .ok, "marking a bundled file is accepted")
+                #expect(
+                    putBody.contains("\"diagnostics\""),
+                    "\(path): the PUT response carries the estimates for its live repaint")
+
+                let state = try await fullResponse(path, fx)
+                let block = try #require(
+                    state.diagnostics.first, "\(path): a marked CSV gets an estimate block")
+                #expect(block.file == "cases.csv")
+                // Two of the fixture's three rows: shared fraction k/N = 2/3,
+                // expected shared k²/N = 4/3 — the numbers describe the real
+                // bundled bytes, not a placeholder.
+                #expect(block.overlap.poolRows == 3)
+                #expect(block.overlap.rowsPerStudent == 2)
+                #expect(abs(block.overlap.sharedFraction - 2.0 / 3.0) < 1e-9)
+                #expect(abs(block.overlap.expectedSharedRows - 4.0 / 3.0) < 1e-9)
+                #expect(block.divergenceMeasured)
+                #expect(block.classSize == DatasetDiagnostics.defaultClassSize)
+                // `id` is numeric (Wasserstein), `ward` categorical (TV) —
+                // one headline per measure, each naming its column.
+                #expect(block.headlines.count == 2)
+                #expect(block.headlines.map(\.measure) == [.wasserstein, .totalVariation])
+
+                try await put(
+                    path, fx, body: #"{"datasets":[]}"#, expect: .ok, "clearing the mark")
+                #expect(
+                    try await fullResponse(path, fx).diagnostics.isEmpty,
+                    "\(path): no marked file, no estimate blocks")
+            }
+        }
+    }
+
     // MARK: - Two specs for one file are incoherent on either pair
 
     @Test func duplicateSpecsForOneFileAreRejected() async throws {

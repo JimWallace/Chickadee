@@ -39,6 +39,19 @@ function makeInput(value = '', disabled = false) {
   };
 }
 
+/// The estimates disclosure body: collects appended line elements, and
+/// clears them when the control resets `textContent`.
+function makeDiagnosticsBody() {
+  const el = makeInput();
+  el.children = [];
+  el.appendChild = (child) => { el.children.push(child); };
+  Object.defineProperty(el, 'textContent', {
+    set(value) { if (value === '') el.children = []; },
+    get() { return el.children.map((c) => c.textContent).join('\n'); },
+  });
+  return el;
+}
+
 /// One `tr[data-support-file]` carrying the control's six elements.
 function makeRow(filename) {
   const parts = {
@@ -51,6 +64,8 @@ function makeRow(filename) {
     '.js-dataset-blank-columns': makeInput(),
     '.js-dataset-blank-percent': makeInput(),
     '.js-dataset-status': makeInput(),
+    '.js-dataset-diagnostics': makeInput(),
+    '.js-dataset-diagnostics-body': makeDiagnosticsBody(),
   };
   const row = {
     filename,
@@ -68,7 +83,7 @@ function makeRow(filename) {
   return row;
 }
 
-function load({ specs = [] } = {}) {
+function load({ specs = [], diagnostics = null } = {}) {
   const puts = [];
   const bodyHandlers = {};
   let stored = specs.slice();
@@ -79,9 +94,15 @@ function load({ specs = [] } = {}) {
     getElementById: () => null,
     body: { addEventListener(type, fn) { (bodyHandlers[type] ||= []).push(fn); } },
     addEventListener() {},
+    createElement: (tag) => ({ tagName: tag, className: '', textContent: '' }),
     querySelector: () => null,
     querySelectorAll: (sel) => (sel === 'tr[data-support-file]' ? rows : []),
   };
+
+  // The server serves an estimate block per marked file on the same GET/PUT
+  // the controls use; the mock mirrors that by deriving them from whatever is
+  // currently stored (a caller passes `diagnostics` as a per-spec factory).
+  const blocks = () => (diagnostics ? stored.map(diagnostics).filter(Boolean) : []);
 
   const sandbox = { document: doc, Promise, JSON, Error, Object, Array, Math, parseInt, setTimeout };
   sandbox.ChickadeeUI = {
@@ -99,7 +120,7 @@ function load({ specs = [] } = {}) {
         puts.push(body);
         stored = body.datasets.slice();
       }
-      return Promise.resolve({ datasets: stored });
+      return Promise.resolve({ datasets: stored, diagnostics: blocks() });
     },
   };
   sandbox.window = { ChickadeeUI: sandbox.ChickadeeUI };
@@ -280,6 +301,110 @@ test('a re-render disables the fields for a spec the panel cannot represent', as
   // Still disabled, and still not showing half of a two-step spec.
   assert.equal(row.querySelector('.js-dataset-blank-columns').disabled, true);
   assert.equal(row.querySelector('.js-dataset-blank-columns').value, '');
+});
+
+// ── The estimates disclosure ────────────────────────────────────────────────
+
+const sampleBlock = (spec) => ({
+  file: spec.file,
+  overlap: {
+    poolRows: 6388,
+    rowsPerStudent: spec.sampleSize || 6388,
+    expectedSharedRows: 39.1,
+    sharedFraction: 0.078,
+    worstPairSharedRows: 63.2,
+    mostCopyableStratum: spec.stratumColumn
+      ? { value: 'D', poolRows: 5, rowsPerStudent: 2, sharedFraction: 0.4 }
+      : null,
+  },
+  headlines: [
+    { measure: 'wasserstein', column: 'systolic', median: 0.037, worst: 0.061 },
+    { measure: 'totalVariation', column: 'ward', median: 0.02, worst: 0.05 },
+  ],
+  divergenceMeasured: true,
+  classSize: 100,
+});
+
+test('the estimates paint on init from the GET, one line per fact', async () => {
+  const h = load({
+    specs: [{ file: 'cases.csv', kind: 'rowSample', sampleSize: 500 }],
+    diagnostics: sampleBlock,
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  await settle();
+
+  assert.equal(row.querySelector('.js-dataset-diagnostics').hidden, false);
+  const text = row.querySelector('.js-dataset-diagnostics-body').textContent;
+  assert.match(text, /39 of their 500 rows \(7\.8%\)/);
+  assert.match(text, /unluckiest pair in a class of 100 shares about 63/);
+  assert.match(text, /systolic sits about 0\.04 SD/);
+  assert.match(text, /any two students within about 0\.12 SD/);
+  assert.match(text, /ward sits about 0\.02 total-variation/);
+  assert.equal(h.puts.length, 0, 'the first paint is a read, not a write');
+});
+
+test('a stratified block names its most copyable category', async () => {
+  const h = load({
+    specs: [{
+      file: 'cases.csv', kind: 'stratifiedSample', sampleSize: 500, stratumColumn: 'ward',
+    }],
+    diagnostics: sampleBlock,
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  await settle();
+
+  const text = row.querySelector('.js-dataset-diagnostics-body').textContent;
+  assert.match(text, /Most copyable category: "D"/);
+  assert.match(text, /2 of the same 5 pool rows \(40% shared\)/);
+});
+
+test('the estimates repaint from the PUT response when a parameter changes', async () => {
+  const h = load({
+    specs: [{ file: 'cases.csv', kind: 'rowSample', sampleSize: 500 }],
+    diagnostics: (spec) => ({
+      ...sampleBlock(spec),
+      overlap: { ...sampleBlock(spec).overlap, rowsPerStudent: spec.sampleSize },
+    }),
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  row.querySelector('.js-dataset-size').value = '900';
+  await change(h, row, '.js-dataset-size');
+  await settle();
+
+  const text = row.querySelector('.js-dataset-diagnostics-body').textContent;
+  assert.match(text, /of their 900 rows/, 'the numbers follow the saved edit');
+});
+
+test('a row without an estimate block hides the disclosure', async () => {
+  // The server sends no block for an unreadable file (and for an unmarked
+  // one); an empty disclosure would read as a broken panel.
+  const h = load({
+    specs: [{ file: 'cases.csv', kind: 'rowSample', sampleSize: 500 }],
+    diagnostics: null,
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  await settle();
+
+  assert.equal(row.querySelector('.js-dataset-diagnostics').hidden, true);
+});
+
+test('an unmeasured divergence says so instead of showing nothing', async () => {
+  const h = load({
+    specs: [{ file: 'cases.csv', kind: 'rowSample', sampleSize: 500 }],
+    diagnostics: (spec) => ({
+      ...sampleBlock(spec), headlines: [], divergenceMeasured: false,
+    }),
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  await settle();
+
+  const text = row.querySelector('.js-dataset-diagnostics-body').textContent;
+  assert.match(text, /not measured — the file is too large/);
 });
 
 test('a stratified spec keeps its kind when only the blanking changes', async () => {

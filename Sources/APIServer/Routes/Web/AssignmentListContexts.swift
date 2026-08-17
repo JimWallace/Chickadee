@@ -19,10 +19,47 @@ struct AssignmentRow: Encodable {
     let sortOrder: Int?
     let validationStatus: String
     let validationSubmissionID: String?
+    /// Multi-variant validation rollup for the validation cell: "none" (the
+    /// assignment does not vary by student, or no batch has run yet) |
+    /// "pending" | "failed" | "passed".  A flat discriminator plus
+    /// pre-rendered text, because LeafKit 1.14.2 mis-parses compound
+    /// conditions and cannot do the arithmetic.
+    let variantState: String
+    let variantSummaryText: String  // e.g. "1 of 4 variants failed"; "" when none
+    /// The lowest-index failed variant's submission id, for the results link.
+    let failedVariantSubmissionID: String?
     let suiteCount: Int
     let createdAt: String
     let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
     let vanityURL: String?  // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
+}
+
+/// Aggregate of one setup's current validation-variant batch (multi-variant
+/// validation): the reference solution graded against N synthetic per-student
+/// seeds, on top of the primary run.  Fold-down for the listing row.
+struct ValidationVariantSummary {
+    let total: Int
+    let failed: Int
+    let pending: Int
+    let firstFailedSubmissionID: String?
+
+    /// The flat discriminator the template branches on.  Pending wins over
+    /// failed so a half-graded batch reads as still running rather than as a
+    /// settled verdict.
+    var state: String {
+        if total == 0 { return "none" }
+        if pending > 0 { return "pending" }
+        return failed > 0 ? "failed" : "passed"
+    }
+
+    var summaryText: String {
+        switch state {
+        case "pending": return "\(total) variants running"
+        case "failed": return "\(failed) of \(total) variants failed"
+        case "passed": return "\(total) variants passed"
+        default: return ""
+        }
+    }
 }
 
 /// One element of a section's unified item list on the instructor dashboard: a

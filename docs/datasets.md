@@ -657,8 +657,9 @@ through.
 whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
 transform, and the most pedagogically honest of the set: real health data
 arrives like this, and it is **answer-preserving**, so correct parsing yields
-the same result the pool would. It is also the only transform safe to author
-before multi-variant validation exists, for that reason.
+the same result the pool would. (It was once the only transform safe to author
+without multi-variant validation, for that reason; that gate exists now — see
+below — so the ordering constraint is gone.)
 
 ### `numericJitter` is decided against — do not propose it again
 
@@ -686,19 +687,58 @@ question:
 The pedagogy it was reached for is better served by the transforms that keep the
 data honest, and the anti-copying it was reached for already exists.
 
-### The gap this leaves: validation still exercises one variant
+### Multi-variant validation — closing the one-variant gap
 
-`hasPersonalization` counts expressions and variables, not `datasets`, so
-`materializeValidationGrading` returns early for a dataset-only assignment and
-validation grades against the **instructor's own** seed. For selection that is
-tolerable — the solution sees real rows, just fewer. For derivation it is not: a
-solution that assumes a column is never empty validates green and then fails for
-the students whose seed blanked it.
+A validation submission grades the reference solution against the enqueuing
+instructor's own seed — one variant of a per-student assignment. That used to
+be the whole story: `hasPersonalization` counts expressions and variables, not
+`datasets`, so `materializeValidationGrading` returned early for a dataset-only
+assignment and validation proved nothing about the material other students
+receive. For selection that was tolerable — the solution sees real rows, just
+fewer. For derivation it was not: a solution that assumes a column is never
+empty validated green and then failed for the students whose seed blanked it.
 
-This is why `missingValues` has no UI yet. Multi-variant validation — running the
-reference solution against N seeds and reporting per-variant results — is the
-gate that has to come before an instructor can reach for a transform from the
-Files panel.
+Every validation enqueue on an assignment that **varies by student** now also
+grades the solution against `validationVariantCount` (4) synthetic seeds. The
+pieces, and the decisions inside them:
+
+- **The gate is a new predicate, `TestProperties.variesPerStudent`** — a
+  per-student `=` expression or a per-student dataset. Deliberately *not* a
+  widening of `hasPersonalization`, whose answer also steers the worker
+  download path's sidecar behaviour; and literal-only personalization does not
+  count, because every seed receives identical material and N identical runs
+  prove nothing the first one did not.
+- **The seeds are `DatasetDiagnostics.preflightSeed(0..<4)`** — the same
+  derived seeds the Files-panel estimates sample, so the variant a validation
+  grades is material the diagnostics already described. Derived, never random,
+  pinned by test.
+- **A variant is an ordinary `kind == .validation` submission** whose
+  `SubmissionMaterialization` is pinned to the variant seed
+  (`materializeValidationGrading(variantSeedHex:)`). Nothing downstream is
+  new: the `.grading` sidecar, `_ck_inputs.*`, and the dataset slices
+  `buildJobPayload` resolves from the cached `seedHex` all behave exactly as
+  they would for a student holding that seed. With a variant seed the
+  materialization is cached even when there is nothing to substitute — the
+  dataset-only case the primary path deliberately skips.
+- **The batch is recorded in `validation_variants`** (one row per variant:
+  index, seed, submission id, verdict), keyed by test setup because the draft
+  flow enqueues validation before the assignment row exists. Each enqueue
+  *replaces* the setup's batch — and clears it outright when the manifest
+  stops varying, so a stale verdict cannot keep describing an assignment that
+  is no longer per-student. Result ingestion writes each verdict onto its
+  variant row; the assignment's own `validationStatus` still reflects only
+  the primary run.
+- **Surfaces.** The instructor assignments list shows the batch under the
+  validation cell ("4 variants passed" / "1 of 4 variants failed", linking to
+  the failing variant's per-test results — an ordinary submission page). MCP
+  `get_validation_result` reports the batch with each variant's seed and, for
+  failed variants, only its non-passing outcomes.
+- **A failed variant does not (yet) block opening the assignment.** The open
+  gate still reads `validationStatus == "passed"`, i.e. the primary run.
+  Display-first is deliberate for the first release: hard-blocking on variant
+  failures would retroactively freeze existing dataset assignments mid-course
+  the next time they are edited. Revisit once a term's worth of variant
+  verdicts shows the false-positive rate is what it should be (zero).
 
 ### Build slices
 
@@ -783,6 +823,78 @@ twice, and `set_dataset` drops any existing spec for the file before appending
 its own — two specs for one file would disagree about how many rows a student
 gets, and which one won would be a detail of whichever consumer folded the
 array.
+
+## Diagnostics — how different is each student's data?
+
+Two estimates about a dataset spec, shown in the Files panel and recomputed on
+every saved parameter edit. Both are **read-only with respect to delivery**:
+they describe the delivered bytes and never alter one — in particular, no seed
+is ever reject-sampled to satisfy a tolerance, because a slice that depends on
+an acceptance criterion silently changes for every student when the threshold
+moves.
+
+**Overlap — can students copy?** Closed form, per selection kind, behind an
+exhaustive switch over `DatasetKind` (now `CaseIterable` so the completeness
+guard can iterate it):
+
+- `rowSample`: two size-`k` samples of an `N`-row pool share `k²/N` rows in
+  expectation; the reported *shared fraction* is `k/N` — the fraction of one
+  student's rows a peer also holds. Deliberately not Jaccard, whose union
+  denominator is a set neither student has and which shrinks as students
+  diverge, understating copying risk.
+- `stratifiedSample`: `Σₛ kₛ²/Nₛ`, with `kₛ` from the real `apportion` call —
+  never the `k/N` shortcut, which Titu's lemma makes a strict underestimate
+  whenever allocation is non-proportional, and the one-row-per-stratum floor
+  is non-proportional by construction. The consequence worth knowing: **a rare
+  category with 5 pool rows and 2 rows per student is 40% shared** — turning
+  on stratification to protect a rare category makes that category the most
+  copyable part of the assignment. It is invisible in the aggregate number, so
+  the panel names the most copyable stratum explicitly.
+- The worst pair in a class (the pair the instructor hears from) is an
+  extreme-value estimate over the class's C(C−1)/2 pairs, clamped to
+  `[mean, k]`; class size is a stated constant, not configuration.
+
+**Divergence — are students doing the same exercise?** Measured, not derived:
+every sampled slice comes from `DatasetMaterializer.materialize` — the exact
+call delivery makes — over 20 **derived** preflight seeds
+(`DatasetDiagnostics.preflightSeed`, pinned by test so the numbers cannot
+flicker between page loads). Because it measures the shipped bytes, it covers
+every transform automatically, including kinds that do not exist yet. Per
+column: Wasserstein-1 in units of the pool's SD for numeric columns (an exact
+quantile-function integral — a sort, not an optimal-transport solve), total
+variation for categorical. A column's distribution is that of its *observed*
+(non-empty) values: a `missingValues` hole is thinning, not a value, which is
+exactly what MCAR blanking preserves — pinned by the MCAR test. Aggregation is
+max-and-name-the-column, never a mean (an average over 20 columns hides one
+catastrophically skewed column behind 19 fine ones), and the two measures stay
+two headlines because SD-units and TV are not commensurable.
+
+**The asymmetry is the architecture.** Overlap is a function of *selection*
+alone — transforms alter values inside a student's rows and never change which
+rows they hold — so it is closed-form per kind and a new selection kind must
+answer a formula (the `allCases` completeness test fails until it does, and an
+analytic-vs-Monte-Carlo test checks the formula is *right*, not merely
+present). Divergence has no per-kind logic at all. The row-set theorem that
+licenses this split is itself a test (`transformsNeverChangeTheRowSet`); a
+future row-dropping transform fails it, at which point the decomposition — not
+the test — needs revisiting.
+
+**The surface** is the Files panel, not the validation report — a live
+parameter estimate wants to live where the parameters are, moving as the
+instructor edits the row count (multi-variant validation shares the preflight
+seeds but answers a different question at a different time). Each dataset row
+carries a collapsed "Per-student estimates" disclosure; the estimate blocks
+ride the same GET/PUT the controls already use (`DatasetsResponse.diagnostics`,
+computed off the event loop), so a saved edit repaints the numbers with no
+second request. The two estimates pull in opposite directions — more rows per
+student is fairer but more copyable — so the text is deliberately
+informational: no thresholds, no warnings, and no gating on either number
+(instructors may legitimately want to *maximize* divergence). Files above a
+stated byte ceiling skip the divergence sampling and say so; overlap, a single
+pass, is always reported.
+
+`numericJitter` stays dead (see above), and these diagnostics do not assume
+it.
 
 ## Train/test splits & grader-only files (option B)
 
