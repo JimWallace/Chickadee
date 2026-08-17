@@ -22,9 +22,78 @@ struct DatasetsBody: Content {
 }
 
 /// The response of either GET or PUT — the specs as the manifest now holds
-/// them, which is what the Files panel renders its controls from.
+/// them, which is what the Files panel renders its controls from, plus the
+/// per-file estimates its disclosure shows.  Serving the estimates on the
+/// same response is what makes them live: every parameter edit is a PUT, so
+/// the numbers move with the controls without a second request.
 struct DatasetsResponse: Content {
     var datasets: [DatasetSpec]
+    var diagnostics: [DatasetFileDiagnostics]
+}
+
+/// One dataset's estimate block: closed-form overlap (can students copy?)
+/// and measured divergence headlines (are they doing the same exercise?).
+/// Both computed by Core's `DatasetDiagnostics` from the spec and the
+/// bundled file — estimates about the delivered bytes, never a change to
+/// them.  See docs/datasets.md.
+struct DatasetFileDiagnostics: Content {
+    var file: String
+    var overlap: DatasetOverlap
+    /// The worst column per measure (SDs of transport for numeric columns,
+    /// total variation for categorical).  Empty when nothing was measurable.
+    var headlines: [DatasetDivergenceHeadline]
+    /// False when the file was over the sampling ceiling, so only the
+    /// closed-form overlap is reported — stated rather than silently capped.
+    var divergenceMeasured: Bool
+    /// The class size the worst-pair estimate assumes, so the panel can say
+    /// it instead of implying a measured class.
+    var classSize: Int
+}
+
+/// Files above this size skip the divergence measurement — it materializes
+/// the pool once per preflight seed, and the panel is a live control, not a
+/// batch job.  Overlap is a single pass and is always reported.
+private let datasetDivergenceByteCeiling = 4 << 20
+
+/// The estimate blocks for every spec whose source file can be read as text.
+/// A file that cannot be read (or has no data rows) simply has no block —
+/// the panel hides the disclosure rather than showing an empty one.
+///
+/// CPU-bound (the divergence half materializes the pool `defaultSeedCount`
+/// times), so handlers call it through `runBlocking` rather than on the
+/// event loop.
+func datasetDiagnosticsReports(
+    zipPath: String, datasets: [DatasetSpec]
+) -> [DatasetFileDiagnostics] {
+    datasets.compactMap { spec in
+        guard let data = extractZipEntry(zipPath: zipPath, entryName: spec.file),
+            let text = String(data: data, encoding: .utf8),
+            let overlap = DatasetDiagnostics.overlap(spec: spec, sourceCSV: text)
+        else { return nil }
+        let measurable = data.count <= datasetDivergenceByteCeiling
+        let headlines =
+            measurable
+            ? DatasetDiagnostics.headlines(
+                of: DatasetDiagnostics.divergence(spec: spec, sourceCSV: text))
+            : []
+        return DatasetFileDiagnostics(
+            file: spec.file, overlap: overlap, headlines: headlines,
+            divergenceMeasured: measurable, classSize: DatasetDiagnostics.defaultClassSize)
+    }
+}
+
+/// The full panel payload for a setup: its specs plus their estimate blocks,
+/// computed off the event loop.  The one constructor every datasets handler
+/// uses, so the GET and PUT of both pairs cannot disagree about what the
+/// panel is told.
+func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> DatasetsResponse {
+    let specs = datasetSpecs(inManifest: setup.manifest)
+    guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
+    let zipPath = setup.zipPath
+    let diagnostics = try await runBlocking(on: req) {
+        datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
+    }
+    return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
 
 /// Reads the dataset specs off a setup's manifest.  An undecodable manifest
