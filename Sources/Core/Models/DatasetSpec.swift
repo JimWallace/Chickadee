@@ -25,7 +25,7 @@
 ///   exercise for that student; this is the fix for that, and the reason the
 ///   `set_dataset` advice "pick a sample size large enough that every category
 ///   still appears" exists.
-public enum DatasetKind: String, Codable, Sendable, Equatable {
+public enum DatasetKind: String, Codable, Sendable, Equatable, CaseIterable {
     case rowSample
     case stratifiedSample
 }
