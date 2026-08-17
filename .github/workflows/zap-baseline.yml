@@ -18,15 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # RUNNER_SHARED_SECRET is a required compose variable (#1273 unmounted the
-      # data volume from the runner, making the environment its only channel to
-      # the secret), so compose refuses to interpolate without it and the scan
-      # never starts. Server and runner only need to agree, so an ephemeral
-      # value generated per run is sufficient.
+      # Derived from docker-compose.yml rather than written inline here: compose
+      # refuses to start when a ${VAR:?} it requires is unset, and this workflow
+      # runs weekly, so an inline fixture goes stale silently for as long as it
+      # takes someone to open a schedule-only run. The same script is run with
+      # --check by the format-lint job, which is what turns that into a PR-time
+      # failure. See its header.
       - name: Write CI .env
-        run: |
-          printf 'AUTH_MODE=local\nENABLE_NON_SSO_AUTH_MODES=true\nRUNNER_SHARED_SECRET=%s\n' \
-            "$(openssl rand -base64 32)" > .env
+        run: scripts/ci-compose-env.sh
 
       - name: Start application
         run: docker compose up -d --build
