@@ -616,20 +616,57 @@ what delivery computes, so 1% of a 10-row sample is genuinely zero cells. The
 check knows the sample size and can say so, which is the same move
 `stratifiedSample` makes when a sample is smaller than the category count.
 
+### The Files-panel control
+
+A dataset row carries the derivation step beside its sample size and stratum
+column:
+
+```
+[x] Per-student sample  [ 500 ] rows per student  balanced across [ ward ]
+    blanking [ bp_systolic ] in [ 10 ] % of rows                    Saved
+```
+
+Two design rules carried over from the stratum column:
+
+- **The field carries whether the step exists.** Naming columns creates the
+  step; clearing them removes it. There is no separate checkbox or mode picker,
+  because a second control asking the same question in different words is how
+  the two come to disagree.
+- **Percentages in, fractions stored.** An instructor says "10% of rows"; the
+  spec holds `rate: 0.1`, which delivery folds to an integer count.
+
+**The panel edits one shape, and knows it.** It has fields for no transforms or
+a single `missingValues` step. The model is an ordered list with more kinds to
+come, so a spec authored through MCP can hold something the panel cannot draw —
+two steps, or a future kind. Rendering that into the one pair of fields would
+show half the truth and then save over the other half on the next row-count
+edit, which is the silent-downgrade shape this feature has now produced twice.
+So `EditableSuiteRow.datasetTransformsEditable` asks first, and a spec the panel
+cannot represent renders **disabled**, with a note that the steps are
+agent-authored, and survives unrelated edits intact.
+
+That answer lives in two places on purpose and they are tested separately: Swift
+decides it for the server-rendered first paint, and `Public/support-files.js`
+honours it for every repaint after a save — omitting the `transforms` key
+entirely when its fields are disabled, so the merge carries the stored steps
+through.
+
 ### What is NOT built yet
 
-`missingValues` is agent-authored only — `set_dataset` and the two PUT endpoints
-accept it; the Files panel does not offer it. The panel does now **preserve**
-transforms it does not understand rather than dropping them on an unrelated
-edit, which is the property that made shipping the schema before the UI safe.
+`formatNoise` — inconsistent representations of the same value (stray
+whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
+transform, and the most pedagogically honest of the set: real health data
+arrives like this, and it is **answer-preserving**, so correct parsing yields
+the same result the pool would. It is also the only transform safe to author
+before multi-variant validation exists, for that reason.
 
-Two follow-ons are deliberately not here. **Multi-variant validation** (below)
-must land before any transform reaches the UI. And `numericJitter` is not
-implemented: `rowSample` already delivers anti-copying, so jitter buys little
-pedagogy while carrying the highest determinism cost and a provenance problem —
-a jittered VitalDB extract is no longer VitalDB, and a student reporting "the
-mean systolic in this cohort is 128" reports a number existing nowhere outside
-their own file.
+`numericJitter` is **not** implemented, and the recommendation is against it.
+`rowSample` already delivers anti-copying, so jitter buys little pedagogy while
+carrying the highest determinism cost and a provenance problem — a jittered
+VitalDB extract is no longer VitalDB, and a student reporting "the mean systolic
+in this cohort is 128" reports a number existing nowhere outside their own file.
+Whether an assignment's prose must disclose that its data is derived is a policy
+call for the maintainer, not a decision this design should make quietly.
 
 ### The gap this leaves: validation still exercises one variant
 

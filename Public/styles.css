@@ -2068,6 +2068,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
    so the field carries the kind rather than a second control asking the same
    question in different words. */
 .dataset-stratum { width: 10rem; }
+/* Shown instead of the derivation fields when a spec holds transforms the panel
+   cannot represent — it steps aside rather than rendering a partial view it
+   would then save over. */
+.dataset-note { font-style: italic; color: var(--gray-600); }
 
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }

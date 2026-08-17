@@ -44,6 +44,9 @@
     // being marked-with-no-size, which is a spec the server accepts (it means
     // "the whole file") but which reads as an unfinished edit.
     var DEFAULT_SAMPLE_ROWS = 100;
+    // Percent of rows a newly-named blanking column starts at. Low enough that
+    // the data is still workable, high enough to be noticed on a small sample.
+    var DEFAULT_BLANK_PERCENT = 10;
 
     // The dataset control listens on the document, so it is bound once per
     // document rather than once per init — the same guard (and the same
@@ -93,7 +96,44 @@
                 size.value = (spec && spec.sampleSize != null) ? String(spec.sampleSize) : '';
                 if (stratumField) stratumField.hidden = !spec;
                 if (stratum) stratum.value = (spec && spec.stratumColumn) || '';
+
+                var blankField = row.querySelector('.js-dataset-blank-field');
+                if (blankField) blankField.hidden = !spec;
+                var step = editableStep(spec);
+                var columns = row.querySelector('.js-dataset-blank-columns');
+                var percent = row.querySelector('.js-dataset-blank-percent');
+                // A spec whose transforms this panel cannot represent leaves the
+                // fields alone AND disabled: painting a partial view of it is how
+                // the next edit would save over the part not shown.
+                var owned = ownsTransforms(spec);
+                if (columns) {
+                    columns.disabled = !owned;
+                    if (owned) columns.value = step ? (step.columns || []).join(', ') : '';
+                }
+                if (percent) {
+                    percent.disabled = !owned;
+                    if (owned) {
+                        percent.value = (step && step.rate != null)
+                            ? String(Math.round(step.rate * 100)) : '';
+                    }
+                }
             });
+        }
+
+        // The panel edits exactly one shape: no transforms, or a single
+        // missingValues step. The model is an ordered list with more kinds to
+        // come, so a spec authored through MCP can hold something with no fields
+        // here. Saying so explicitly is what lets the panel decline to touch it
+        // rather than quietly narrowing it on the next row-count edit.
+        function ownsTransforms(spec) {
+            var list = (spec && spec.transforms) || [];
+            return list.length === 0
+                || (list.length === 1 && list[0].kind === 'missingValues');
+        }
+
+        function editableStep(spec) {
+            if (!ownsTransforms(spec)) return null;
+            return ((spec && spec.transforms) || [])[0] || null;
         }
 
         // The spec a row currently describes. The KIND is derived from whether
@@ -104,15 +144,44 @@
         function specFor(row, filename, sampleSize) {
             var stratum = row.querySelector('.js-dataset-stratum');
             var column = stratum ? stratum.value.trim() : '';
-            if (!column) {
-                return { file: filename, kind: 'rowSample', sampleSize: sampleSize };
+            var spec = column
+                ? {
+                    file: filename,
+                    kind: 'stratifiedSample',
+                    sampleSize: sampleSize,
+                    stratumColumn: column
+                }
+                : { file: filename, kind: 'rowSample', sampleSize: sampleSize };
+
+            // Only claim `transforms` when the panel's fields are live. When
+            // they are disabled the key is omitted entirely, so the merge in
+            // `commit` carries the stored steps through untouched.
+            var columns = row.querySelector('.js-dataset-blank-columns');
+            if (columns && !columns.disabled) {
+                spec.transforms = blankStepIn(row);
             }
-            return {
-                file: filename,
-                kind: 'stratifiedSample',
-                sampleSize: sampleSize,
-                stratumColumn: column
-            };
+            return spec;
+        }
+
+        // The derivation steps a row describes: one missingValues step when
+        // columns are named, and none otherwise. As with the stratum column, the
+        // field carries whether the step EXISTS rather than a separate checkbox
+        // that could contradict it.
+        function blankStepIn(row) {
+            var columns = row.querySelector('.js-dataset-blank-columns');
+            var percent = row.querySelector('.js-dataset-blank-percent');
+            var named = (columns ? columns.value : '')
+                .split(',')
+                .map(function (name) { return name.trim(); })
+                .filter(function (name) { return name.length > 0; });
+            if (!named.length) return [];
+            var pct = parseInt(percent && percent.value, 10);
+            if (!(pct > 0)) pct = DEFAULT_BLANK_PERCENT;
+            if (percent) percent.value = String(pct);
+            // Authored as a percentage because that is how an instructor says
+            // it; stored as the 0 < rate <= 1 fraction the materializer folds to
+            // an integer count.
+            return [{ kind: 'missingValues', columns: named, rate: pct / 100 }];
         }
 
         // The row count a row is currently showing, or null when it is blank
@@ -191,11 +260,13 @@
             var size = row.querySelector('.js-dataset-size');
             var field = row.querySelector('.js-dataset-size-field');
             var stratumField = row.querySelector('.js-dataset-stratum-field');
+            var blankField = row.querySelector('.js-dataset-blank-field');
 
             if (target.classList.contains('js-dataset-toggle')) {
                 if (!target.checked) {
                     if (field) field.hidden = true;
                     if (stratumField) stratumField.hidden = true;
+                    if (blankField) blankField.hidden = true;
                     commit(filename, null, row);
                     return;
                 }
@@ -206,12 +277,15 @@
                     if (size && size.focus) { size.focus(); size.select(); }
                 }
                 if (stratumField) stratumField.hidden = false;
+                if (blankField) blankField.hidden = false;
                 commit(filename, specFor(row, filename, sampleRows), row);
                 return;
             }
 
             if (target.classList.contains('js-dataset-size')
-                || target.classList.contains('js-dataset-stratum')) {
+                || target.classList.contains('js-dataset-stratum')
+                || target.classList.contains('js-dataset-blank-columns')
+                || target.classList.contains('js-dataset-blank-percent')) {
                 var toggle = row.querySelector('.js-dataset-toggle');
                 if (toggle && !toggle.checked) return;
                 var entered = sampleSizeIn(row);
