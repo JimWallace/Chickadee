@@ -178,6 +178,15 @@ struct LocalRunnerAutoStartStoreKey: StorageKey {
 struct LocalRunnerManagerKey: StorageKey {
     typealias Value = LocalRunnerManager
 }
+struct MCPClientAllowlistStoreKey: StorageKey {
+    typealias Value = MCPClientAllowlistStore
+}
+struct MCPClientAllowlistFilePathKey: StorageKey {
+    typealias Value = String
+}
+struct MCPClientAllowlistOriginsKey: StorageKey {
+    typealias Value = Set<String>
+}
 struct AuthModeKey: StorageKey {
     typealias Value = AuthMode
 }
@@ -285,6 +294,38 @@ extension Application {
                 ?? (DirectoryConfiguration.detect().workingDirectory + ".local-runner-autostart")
         }
         set { storage[LocalRunnerAutoStartFilePathKey.self] = newValue }
+    }
+
+    var mcpClientAllowlistFilePath: String {
+        get {
+            storage[MCPClientAllowlistFilePathKey.self]
+                ?? (DirectoryConfiguration.detect().workingDirectory + ".mcp-client-allowlist")
+        }
+        set { storage[MCPClientAllowlistFilePathKey.self] = newValue }
+    }
+
+    /// The operator-permitted client origins as read at startup.
+    ///
+    /// This is the synchronous snapshot the route-registration guards consult;
+    /// `mcpClientAllowlistStore` is the live copy request handlers check. Mount
+    /// is a boot-time decision, so the two are allowed to diverge if the list is
+    /// edited at runtime — the transports stay mounted and the per-request check
+    /// picks up the change.
+    var mcpClientAllowlistOrigins: Set<String> {
+        get { storage[MCPClientAllowlistOriginsKey.self] ?? [] }
+        set { storage[MCPClientAllowlistOriginsKey.self] = newValue }
+    }
+
+    var mcpClientAllowlistStore: MCPClientAllowlistStore {
+        get {
+            if let existing = storage[MCPClientAllowlistStoreKey.self] {
+                return existing
+            }
+            let created = MCPClientAllowlistStore()
+            storage[MCPClientAllowlistStoreKey.self] = created
+            return created
+        }
+        set { storage[MCPClientAllowlistStoreKey.self] = newValue }
     }
 
     var localRunnerAutoStartStore: LocalRunnerAutoStartStore {

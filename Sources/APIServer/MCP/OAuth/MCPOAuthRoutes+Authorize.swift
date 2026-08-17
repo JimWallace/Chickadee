@@ -32,6 +32,16 @@ extension MCPOAuthRoutes {
         guard client.redirectURIs.contains(query.redirectURI) else {
             throw Abort(.badRequest, reason: "redirect_uri is not registered for this client.")
         }
+        // Deployment policy: only client identities the operator has allowlisted
+        // may be authorized here.  Checked after the redirect_uri is known to be
+        // registered — so the origin tested is one this client actually owns —
+        // and before any consent token is minted.  A plain 403 rather than an
+        // OAuth error redirect: a redirect hands a disallowed client something
+        // to retry-loop on, and the human needs to read why it stopped.
+        guard await req.application.mcpClientAllowlistStore.permits(redirectURI: query.redirectURI)
+        else {
+            throw Abort(.forbidden, reason: Self.clientNotPermittedReason(query.redirectURI))
+        }
 
         // The Authorize button POSTs here and the server 303s to the client's
         // (now-validated) redirect_uri. Browsers enforce `form-action` across
@@ -117,6 +127,18 @@ extension MCPOAuthRoutes {
     /// How long a rendered consent screen stays submittable.
     static let consentRequestTTLSeconds: TimeInterval = 600
 
+    /// Refusal text for a client the operator has not allowlisted.  Names the
+    /// origin so the instructor can tell which tool was stopped, and says
+    /// nothing about how to get it added — that is an operator decision, not a
+    /// self-service one.  Falls back to a generic sentence when the redirect URI
+    /// does not normalize, rather than echoing it back verbatim.
+    static func clientNotPermittedReason(_ redirectURI: String) -> String {
+        guard let origin = MCPClientOrigin.normalized(redirectURI) else {
+            return "This client is not permitted to connect to this deployment."
+        }
+        return "The client at \(origin) is not permitted to connect to this deployment."
+    }
+
     /// True when the user holds no existing non-revoked grant for this client —
     /// drives the "you have not approved this app before" consent warning.
     private static func isFirstApproval(
@@ -190,6 +212,15 @@ extension MCPOAuthRoutes {
             try await surface.permits(user, db: req.db)
         else {
             throw Abort(.forbidden, reason: "Only \(surface.permittedRoleLabel) may authorize agents.")
+        }
+        // Re-check the allowlist for the same reason the role is re-checked: the
+        // consent token stays submittable for `consentRequestTTLSeconds`, and the
+        // operator can remove an origin inside that window.  The frozen record's
+        // redirect URI was just re-validated against the client's registration
+        // above, so it is still the right thing to test.
+        guard await req.application.mcpClientAllowlistStore.permits(redirectURI: record.redirectURI)
+        else {
+            throw Abort(.forbidden, reason: Self.clientNotPermittedReason(record.redirectURI))
         }
         let scopes = resolveScopes(record.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty, !record.codeChallenge.isEmpty, record.codeChallengeMethod == "S256" else {

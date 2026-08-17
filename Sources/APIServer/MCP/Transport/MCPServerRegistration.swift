@@ -127,6 +127,15 @@ func registerMCPRoutes(_ app: Application) throws {
         app.logger.error("\(refusal)")
         return
     }
+    // Fail safe: in production, refuse to mount without an operator-stated
+    // client allowlist — otherwise any client that completes DCR could be
+    // consented to.
+    if let refusal = mcpClientAllowlistRefusal(
+        environment: app.environment, allowedClientOrigins: app.mcpClientAllowlistOrigins)
+    {
+        app.logger.error("\(refusal)")
+        return
+    }
     if let warning = mcpAllowlistWarning(
         environment: app.environment,
         allowedHosts: mcp.allowedHosts,
@@ -173,6 +182,15 @@ func registerMCPOAuthRoutes(
     guard mcp.mode.isMounted,
         let endpoints = MCPEndpoints.resolve(mcp: mcp, security: app.appConfig.security)
     else { return }
+    // The transports above refuse to mount in production without a client
+    // allowlist; the consent flow that authorizes clients *for* them must
+    // refuse too, or an open deployment would still mint codes for any client.
+    if let refusal = mcpClientAllowlistRefusal(
+        environment: app.environment, allowedClientOrigins: app.mcpClientAllowlistOrigins)
+    {
+        app.logger.error("oauth: \(refusal)")
+        return
+    }
 
     let oauth = MCPOAuthRoutes(
         endpoints: endpoints,
@@ -243,6 +261,25 @@ func mcpTransportGuardRefusal(
     return "Refusing to mount /mcp: \(unset.joined(separator: " and ")) unset in production. "
         + "The Host/Origin DNS-rebinding guards must be configured, or set "
         + "MCP_ALLOW_OPEN_GUARDS=true if a trusted reverse proxy pins Host/Origin."
+}
+
+/// The reason to REFUSE mounting the MCP surfaces: production with an empty
+/// operator client allowlist.  Nil means it is safe to mount.
+///
+/// The allowlist is "allow any" when empty (so development and the test corpus
+/// are untouched), which makes this the fail-closed half of the control: a
+/// production deployment must name the client identities it permits, or serve
+/// no MCP surface at all.  Unlike the DNS-rebinding guards there is no
+/// environment-variable override — the operator states the policy by writing
+/// the file, which is the artifact an assessor is being pointed at.
+func mcpClientAllowlistRefusal(
+    environment: Environment, allowedClientOrigins: Set<String>
+) -> String? {
+    guard environment == .production, allowedClientOrigins.isEmpty else { return nil }
+    return "Refusing to mount /mcp: the MCP client allowlist is empty in production. "
+        + "List the permitted client redirect origins, one per line, in "
+        + ".mcp-client-allowlist in the work directory — an empty list would let any "
+        + "registered OAuth client be authorized."
 }
 
 private extension String {

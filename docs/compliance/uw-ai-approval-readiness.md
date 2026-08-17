@@ -132,11 +132,18 @@ deployment attestation from audit F-9, executed on prod:
    applied; the SQL file's verification queries run and recorded.
 2. `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` set; `MCP_ALLOW_OPEN_GUARDS`
    unset.
-3. `MCP_MODE` decision recorded (start `read_only`; move to `read_write` as a
+3. `.mcp-client-allowlist` in the work directory lists the approved client
+   redirect origins, one per line, and the list matches the AI tools approved
+   for the data class in play. This is what answers "which AI tool may
+   connect": both `/oauth/authorize` verbs refuse any other origin with a 403,
+   and production refuses to mount `/mcp`, `/admin-mcp` and the OAuth consent
+   flow while the file is absent or empty, so the control cannot be left off by
+   omission. Record the file's contents at attestation time.
+4. `MCP_MODE` decision recorded (start `read_only`; move to `read_write` as a
    deliberate step — the per-request clamp makes rollback instant).
-4. `AUDIT_LOG_RETENTION_DAYS` matching the PIA's stated retention.
-5. Egress allowlist applied at the deployment layer.
-6. BrightSpace sync remains disabled until F-2 is closed (its own enablement
+5. `AUDIT_LOG_RETENTION_DAYS` matching the PIA's stated retention.
+6. Egress allowlist applied at the deployment layer.
+7. BrightSpace sync remains disabled until F-2 is closed (its own enablement
    is a data-handling change — see Step 5).
 
 ## 5. Step 5 — Ongoing review: keep the record current by construction

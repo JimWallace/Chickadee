@@ -145,6 +145,20 @@ Discovery endpoints come online (all unauthenticated):
 - `GET /.well-known/oauth-authorization-server` — RFC 8414 metadata (authorize / token / register endpoints, JWKS URI, PKCE methods).
 - `GET /.well-known/jwks.json` — the ES256 public signing key (RFC 7517), for token verification.
 
+#### Which clients may connect (`.mcp-client-allowlist`)
+
+Dynamic Client Registration is open, so *any* MCP client can register — but a registration is inert until a course instructor consents at `/oauth/authorize`. Which clients an instructor may consent to is an operator decision, stated in a file in the work directory rather than an environment variable:
+
+```
+# .mcp-client-allowlist — one client redirect origin per line
+https://claude.ai
+http://localhost:6274
+```
+
+Matching is on the **origin** of the client's registered redirect URI (scheme + host + non-default port; the path is ignored), because that is the only client-identifying field that is neither generated per registration (`client_id`) nor self-asserted (`client_name`). `https` is required except for `localhost` / `127.0.0.1`. Blank lines and `#` comments are ignored, and an entry that is not a usable origin is logged at startup rather than silently dropped.
+
+An empty or absent list means "allow any", which is the development default — but **in production the server refuses to mount `/mcp`, `/admin-mcp`, and the OAuth consent flow until the list is non-empty**, logging why. Create the file before deploying with `MCP_MODE` set. Both `/oauth/authorize` verbs enforce the list: the `GET` refuses with 403 before minting a consent token, and the `POST` re-checks on submit, since the consent token stays submittable for ten minutes and the list can change inside that window.
+
 Chickadee acts as its own OAuth 2.1 authorization server, so there are two ways an agent gets a token.
 
 ### Browser OAuth (for MCP clients / connectors)
