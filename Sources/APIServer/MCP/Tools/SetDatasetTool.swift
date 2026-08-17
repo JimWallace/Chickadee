@@ -31,6 +31,16 @@ struct SetDatasetTool: ContentTool {
         /// True to clear the dataset mark (the file becomes an ordinary shared
         /// support file again).
         let remove: Bool?
+        /// Derivation steps applied after sampling. Omitted means "leave whatever
+        /// is already there" — an agent adjusting sampleSize must not silently
+        /// drop the transforms it was not asked about. Send `[]` to clear them.
+        let transforms: [TransformInput]?
+    }
+
+    struct TransformInput: Decodable, Sendable {
+        let kind: String
+        let columns: [String]?
+        let rate: Double?
     }
 
     struct DatasetEntry: Encodable, Sendable {
@@ -40,6 +50,15 @@ struct SetDatasetTool: ContentTool {
         /// back which kind of slice a file is marked for, not just that it is.
         let kind: String
         let stratumColumn: String?
+        /// Reported for the same reason as `kind`: an agent that cannot read a
+        /// file's transforms back cannot tell whether its edit preserved them.
+        let transforms: [TransformEntry]
+    }
+
+    struct TransformEntry: Encodable, Sendable {
+        let kind: String
+        let columns: [String]
+        let rate: Double?
     }
 
     struct Output: Encodable, Sendable {
@@ -95,6 +114,21 @@ struct SetDatasetTool: ContentTool {
                 "type": .string("boolean"),
                 "description": .string("True to clear the dataset mark for this file."),
             ]),
+            "transforms": .object([
+                "type": .string("array"),
+                "description": .string(
+                    "Optional. Derivation steps applied to the student's rows AFTER sampling, in "
+                        + "order. Sampling decides which rows a student gets; a transform alters the "
+                        + "values in them, so the pool becomes a template each student varies on. "
+                        + "Kinds: " + DatasetTransformProse.kinds + ". Each step takes columns (an "
+                        + "explicit list of header names — there is no wildcard, so a column a "
+                        + "notebook check asserts on cannot be altered by accident) and rate (the "
+                        + "fraction of the student's rows affected, above 0 and at most 1). A "
+                        + "transform never adds, removes, renames or reorders a column. Note this "
+                        + "changes the values a student computes over, so pair it with per-student "
+                        + "expected values rather than a fixed one. OMIT this to leave existing "
+                        + "transforms untouched; send [] to clear them."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("filename")]),
         "additionalProperties": .bool(false),
@@ -123,6 +157,13 @@ struct SetDatasetTool: ContentTool {
                 tool: Self.name,
                 detail: "filename must be a bare filename with no path components.")
         }
+
+        // Built once, from the stored spec plus this call's changes, and used
+        // for both the validation and the manifest entry — so the thing that is
+        // checked is the thing that is stored.
+        let written = spec(
+            from: input, filename: cleaned,
+            existing: setup.decodedManifest()?.datasetSpecsByFile[cleaned])
 
         if !remove {
             guard let sampleSize = input.sampleSize, sampleSize >= 1 else {
@@ -160,7 +201,7 @@ struct SetDatasetTool: ContentTool {
             // quietly on both at delivery time, so this is where an agent finds
             // out — with the file's real column names in the message.
             if let issue = DatasetSpecValidation.issue(
-                with: spec(from: input, filename: cleaned),
+                with: written,
                 sourceCSV: extractZipEntry(zipPath: setup.zipPath, entryName: cleaned)
                     .flatMap { String(data: $0, encoding: .utf8) })
             {
@@ -168,7 +209,6 @@ struct SetDatasetTool: ContentTool {
             }
         }
 
-        let written = spec(from: input, filename: cleaned)
         try await mutateManifest(setup: setup, on: context.db) { dict in
             var specs = (dict["datasets"] as? [[String: Any]]) ?? []
             // Replaced, never appended — two specs for one file would disagree
@@ -179,6 +219,15 @@ struct SetDatasetTool: ContentTool {
                 var entry: [String: Any] = ["file": cleaned, "kind": written.kind.rawValue]
                 if let sampleSize = written.sampleSize { entry["sampleSize"] = sampleSize }
                 if let column = written.stratumColumn { entry["stratumColumn"] = column }
+                if !written.transforms.isEmpty {
+                    entry["transforms"] = written.transforms.map { transform -> [String: Any] in
+                        var step: [String: Any] = [
+                            "kind": transform.kind.rawValue, "columns": transform.columns,
+                        ]
+                        if let rate = transform.rate { step["rate"] = rate }
+                        return step
+                    }
+                }
                 specs.append(entry)
             }
             if specs.isEmpty {
@@ -191,7 +240,10 @@ struct SetDatasetTool: ContentTool {
         let datasets = (setup.decodedManifest()?.datasets ?? []).map {
             DatasetEntry(
                 file: $0.file, sampleSize: $0.sampleSize,
-                kind: $0.kind.rawValue, stratumColumn: $0.stratumColumn)
+                kind: $0.kind.rawValue, stratumColumn: $0.stratumColumn,
+                transforms: $0.transforms.map {
+                    TransformEntry(kind: $0.kind.rawValue, columns: $0.columns, rate: $0.rate)
+                })
         }
         return Output(assignmentPublicID: assignment.publicID, datasets: datasets)
     }
@@ -203,13 +255,28 @@ struct SetDatasetTool: ContentTool {
     /// A blank `stratumColumn` reads as "no column": an agent clearing the
     /// field means a plain row sample, not a stratified spec that fails
     /// validation on the emptiness it just asked for.
-    private func spec(from input: Input, filename: String) -> DatasetSpec {
+    private func spec(from input: Input, filename: String, existing: DatasetSpec?) -> DatasetSpec {
         let column = input.stratumColumn?.trimmingCharacters(in: .whitespaces)
         let stratum = (column?.isEmpty ?? true) ? nil : column
         return DatasetSpec(
             file: filename,
             kind: stratum == nil ? .rowSample : .stratifiedSample,
             sampleSize: input.sampleSize,
-            stratumColumn: stratum)
+            stratumColumn: stratum,
+            // Omitted means "leave them alone". Rebuilding a spec from only the
+            // fields a caller mentioned is how this surface twice came within a
+            // release of downgrading data it did not understand; a field is
+            // dropped here only when the caller says so, by sending [].
+            transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [])
+    }
+
+    /// Maps the wire shape to the model. An unrecognised kind is dropped rather
+    /// than guessed at — validation then refuses the spec, naming what is
+    /// supported, instead of silently storing a step that would never run.
+    private static func transforms(from inputs: [TransformInput]) -> [DatasetTransform] {
+        inputs.compactMap { input in
+            guard let kind = DatasetTransform.Kind(rawValue: input.kind) else { return nil }
+            return DatasetTransform(kind: kind, columns: input.columns ?? [], rate: input.rate)
+        }
     }
 }

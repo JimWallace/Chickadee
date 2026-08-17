@@ -50,15 +50,21 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// still degrades rather than fails when it cannot find the column at
     /// delivery time, because by then the only reader is a student's grade.
     public let stratumColumn: String?
+    /// Derivation steps applied to the student's rows after selection, in array
+    /// order (see `DatasetTransform`).  Empty — the decoded default — means the
+    /// student's slice carries the pool's values verbatim, which is every
+    /// dataset authored before derivation existed.
+    public let transforms: [DatasetTransform]
 
     public init(
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
-        stratumColumn: String? = nil
+        stratumColumn: String? = nil, transforms: [DatasetTransform] = []
     ) {
         self.file = file
         self.kind = kind
         self.sampleSize = sampleSize
         self.stratumColumn = stratumColumn
+        self.transforms = transforms
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,5 +73,6 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         kind = try c.decodeIfPresent(DatasetKind.self, forKey: .kind) ?? .rowSample
         sampleSize = try c.decodeIfPresent(Int.self, forKey: .sampleSize)
         stratumColumn = try c.decodeIfPresent(String.self, forKey: .stratumColumn)
+        transforms = try c.decodeIfPresent([DatasetTransform].self, forKey: .transforms) ?? []
     }
 }

@@ -108,6 +108,108 @@ import Testing
         #expect(issue?.contains("'c0'") == true)
     }
 
+    // MARK: - Transforms
+
+    private func withTransforms(
+        _ transforms: [DatasetTransform], sampleSize: Int? = nil
+    )
+        -> DatasetSpec
+    {
+        DatasetSpec(file: "cases.csv", sampleSize: sampleSize, transforms: transforms)
+    }
+
+    private func blank(_ columns: [String], rate: Double?) -> DatasetTransform {
+        DatasetTransform(kind: .missingValues, columns: columns, rate: rate)
+    }
+
+    @Test func aWellFormedTransformPasses() {
+        #expect(
+            DatasetSpecValidation.issue(
+                with: withTransforms([blank(["score"], rate: 0.5)]), sourceCSV: pool) == nil)
+    }
+
+    @Test func aTransformNamingAnUnknownColumnIsRefusedWithTheRealColumns() {
+        let issue = DatasetSpecValidation.issue(
+            with: withTransforms([blank(["scoer"], rate: 0.5)]), sourceCSV: pool)
+        #expect(issue?.contains("'scoer'") == true)
+        // The instructor cannot see the file from the form they are typing into.
+        #expect(issue?.contains("'score'") == true)
+        #expect(issue?.contains("'ward'") == true)
+    }
+
+    @Test func aTransformNamingNoColumnIsRefused() {
+        #expect(
+            DatasetSpecValidation.issue(with: withTransforms([blank([], rate: 0.5)]), sourceCSV: pool)
+                != nil)
+    }
+
+    @Test func aRateOutsideTheAllowedRangeIsRefused() {
+        for rate in [nil, 0, -0.5, 1.5] as [Double?] {
+            #expect(
+                DatasetSpecValidation.issue(
+                    with: withTransforms([blank(["score"], rate: rate)]), sourceCSV: pool) != nil,
+                "rate \(String(describing: rate)) should be refused")
+        }
+        #expect(
+            DatasetSpecValidation.issue(
+                with: withTransforms([blank(["score"], rate: 1)]), sourceCSV: pool) == nil,
+            "a rate of exactly 1 means every row, which is allowed")
+    }
+
+    /// The integer fold `(rows * permille) / 1000` is what delivery uses, so a
+    /// rate below one row's worth of the student's sample does nothing at all.
+    /// The instructor is the only person who can fix that.
+    @Test func aRateTooSmallForTheSampleIsRefused() {
+        let issue = DatasetSpecValidation.issue(
+            with: withTransforms([blank(["score"], rate: 0.01)], sampleSize: 10), sourceCSV: pool)
+        #expect(issue?.contains("affects no rows") == true)
+        // The same rate over a big enough sample is fine.
+        #expect(
+            DatasetSpecValidation.issue(
+                with: withTransforms([blank(["score"], rate: 0.01)], sampleSize: 100),
+                sourceCSV: pool) == nil)
+    }
+
+    @Test func oneKindTwiceOnOneColumnIsRefused() {
+        let issue = DatasetSpecValidation.issue(
+            with: withTransforms([blank(["score"], rate: 0.2), blank(["score"], rate: 0.3)]),
+            sourceCSV: pool)
+        #expect(issue?.contains("more than once") == true)
+    }
+
+    @Test func theSameKindOnDifferentColumnsIsFine() {
+        #expect(
+            DatasetSpecValidation.issue(
+                with: withTransforms([blank(["score"], rate: 0.2), blank(["ward"], rate: 0.3)]),
+                sourceCSV: pool) == nil)
+    }
+
+    @Test func everySilentTransformDegradationHasALoudRefusal() {
+        // Each of these leaves the data untouched at delivery — and each is
+        // refused at save. Untouched data is the right answer for a student
+        // being graded and the wrong answer for an instructor who thinks they
+        // asked for something.
+        let degrading: [DatasetSpec] = [
+            withTransforms([blank(["nope"], rate: 0.5)]),
+            withTransforms([blank([], rate: 0.5)]),
+            withTransforms([blank(["score"], rate: nil)]),
+            withTransforms([blank(["score"], rate: 0)]),
+            withTransforms([blank(["score"], rate: 0.01)], sampleSize: 10),
+        ]
+        for spec in degrading {
+            let delivered = DatasetMaterializer.materialize(
+                source: pool, spec: spec, seedHex: String(repeating: "a1b2", count: 16))
+            let inert = DatasetMaterializer.materialize(
+                source: pool,
+                spec: DatasetSpec(file: spec.file, sampleSize: spec.sampleSize),
+                seedHex: String(repeating: "a1b2", count: 16))
+            #expect(delivered == inert, "delivery absorbs: \(spec)")
+            #expect(
+                DatasetSpecValidation.issue(with: spec, sourceCSV: pool) != nil,
+                "save refuses: \(spec)")
+        }
+    }
+
     // MARK: - The pairing with the materializer
 
     @Test func everySilentDegradationHasALoudRefusal() {

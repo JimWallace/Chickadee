@@ -85,10 +85,13 @@ func applyDatasetsEdit(
         guard seenFiles.insert(spec.file).inserted else {
             throw Abort(.badRequest, reason: "Dataset file '\(spec.file)' is listed more than once.")
         }
-        // Reads the file only when a spec claims to stratify — an ordinary row
-        // sample needs nothing from the bytes, and these files are course
-        // datasets, not small.
-        if spec.kind == .stratifiedSample || spec.stratumColumn != nil {
+        // Reads the file only when a spec claims something CHECKABLE against it
+        // — a stratum column or a transform's columns. An ordinary row sample
+        // needs nothing from the bytes, and these files are course datasets, not
+        // small. The transform arm matters as much as the stratum one: a
+        // transform naming a column the file does not have is absorbed silently
+        // at delivery, so this is the only place it can be reported.
+        if spec.kind == .stratifiedSample || spec.stratumColumn != nil || !spec.transforms.isEmpty {
             let text = extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)
                 .flatMap { String(data: $0, encoding: .utf8) }
             if let issue = DatasetSpecValidation.issue(with: spec, sourceCSV: text) {

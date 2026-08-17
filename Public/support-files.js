@@ -135,12 +135,34 @@
         }
 
         // `spec` null clears the mark for `filename`.
+        // The spec to PUT for `filename`: what this control decided, laid over
+        // whatever the manifest already held for that file.
+        //
+        // The panel owns exactly three fields — kind, sampleSize and
+        // stratumColumn — and a spec can carry more (transforms, and whatever
+        // comes after them). Sending only the fields the panel knows about would
+        // drop the rest on an unrelated edit, which is how a stratified spec
+        // came within a release of being silently downgraded to a plain sample
+        // by someone adjusting a row count. So carry everything forward and
+        // overwrite only what was just set.
+        function merged(current, filename, spec) {
+            var prior = current.filter(function (d) { return d.file === filename; })[0] || {};
+            var out = {};
+            Object.keys(prior).forEach(function (k) { out[k] = prior[k]; });
+            Object.keys(spec).forEach(function (k) { out[k] = spec[k]; });
+            // A plain row sample has no stratum column, and a stale one left
+            // behind would be refused by the server as a spec that stores a
+            // setting its kind ignores.
+            if (out.kind === 'rowSample') delete out.stratumColumn;
+            return out;
+        }
+
         function commit(filename, spec, row) {
             queue = queue.then(function () {
                 ChickadeeUI.setStatus(statusOf(row), 'Saving…');
                 return fetchSpecs().then(function (current) {
                     var next = current.filter(function (d) { return d.file !== filename; });
-                    if (spec) next.push(spec);
+                    if (spec) next.push(merged(current, filename, spec));
                     return ChickadeeUI.fetchJSON(config.datasetsURL(), {
                         method: 'PUT',
                         csrfToken: csrfToken,

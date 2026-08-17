@@ -70,7 +70,7 @@ import Testing
                     datasets: [
                         SetDatasetTool.DatasetEntry(
                             file: "cases.csv", sampleSize: 100,
-                            kind: "rowSample", stratumColumn: nil)
+                            kind: "rowSample", stratumColumn: nil, transforms: [])
                     ])
             ),
             (
