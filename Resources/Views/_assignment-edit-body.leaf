@@ -211,11 +211,11 @@
                             <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
                             #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
-                            <details class="dataset-diagnostics js-dataset-diagnostics"
-                                     #if(!supportFile.isDataset):hidden#endif>
-                                <summary>Per-student estimates</summary>
-                                <span class="dataset-diagnostics-body js-dataset-diagnostics-body"></span>
-                            </details>
+                            <span class="dataset-estimates js-dataset-estimates"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                <span class="dataset-estimate js-dataset-similarity"></span>
+                                <span class="dataset-estimate js-dataset-drift"></span>
+                            </span>
                         </div>
                     </td>
                     <td class="time">

@@ -482,19 +482,14 @@ import VaporTesting
                 let block = try #require(
                     state.diagnostics.first, "\(path): a marked CSV gets an estimate block")
                 #expect(block.file == "cases.csv")
-                // Two of the fixture's three rows: shared fraction k/N = 2/3,
-                // expected shared k²/N = 4/3 — the numbers describe the real
-                // bundled bytes, not a placeholder.
-                #expect(block.overlap.poolRows == 3)
-                #expect(block.overlap.rowsPerStudent == 2)
-                #expect(abs(block.overlap.sharedFraction - 2.0 / 3.0) < 1e-9)
-                #expect(abs(block.overlap.expectedSharedRows - 4.0 / 3.0) < 1e-9)
-                #expect(block.divergenceMeasured)
-                #expect(block.classSize == DatasetDiagnostics.defaultClassSize)
-                // `id` is numeric (Wasserstein), `ward` categorical (TV) —
-                // one headline per measure, each naming its column.
-                #expect(block.headlines.count == 2)
-                #expect(block.headlines.map(\.measure) == [.wasserstein, .totalVariation])
+                // Two of the fixture's three rows: shared fraction k/N = 2/3
+                // — the chip describes the real bundled bytes, not a
+                // placeholder.  Wording itself is pinned in
+                // DatasetEstimateSummaryTests; this is the plumbing.
+                #expect(block.similarityDisplay == "similarity 67%")
+                #expect(block.similarityTitle.contains("3-row pool"))
+                #expect(block.driftDisplay.hasPrefix("drift "))
+                #expect(block.driftTitle.contains("Worst column"))
 
                 try await put(
                     path, fx, body: #"{"datasets":[]}"#, expect: .ok, "clearing the mark")
