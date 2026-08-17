@@ -387,6 +387,20 @@ public struct TestProperties: Codable, Equatable, Sendable {
         hasExpressions || !globalVariables.isEmpty || sections.contains { !$0.variables.isEmpty }
     }
 
+    /// True when two students with different seeds can receive different
+    /// material: a per-student `=` expression, or a per-student dataset slice.
+    /// Literal-only personalization substitutes the same values for everyone,
+    /// so it does not count.
+    ///
+    /// This is the predicate multi-variant validation gates on — a validation
+    /// run against one seed proves nothing about the others exactly when this
+    /// is true.  Deliberately a SEPARATE predicate from `hasPersonalization`,
+    /// which also decides the worker download path's sidecar behaviour;
+    /// widening that one would change what the download route streams.
+    public var variesPerStudent: Bool {
+        hasExpressions || !datasets.isEmpty
+    }
+
     /// Instructor-authored achievements / goals / awards for this assignment —
     /// the generalized form of the hardcoded badge + class-achievement system.
     /// Server-evaluated and display-only; `runnerSanitized()` strips them so a

@@ -73,6 +73,20 @@ func enqueueRunnerValidationSubmission(
 
     try await materialized.saveClaimable(on: req.db)
 
+    // The primary run above grades the enqueuing instructor's own seed — ONE
+    // variant of a per-student assignment. When the manifest varies by seed,
+    // also grade the solution against the derived preflight seeds, so a
+    // solution that only works for some students' material fails validation
+    // instead of failing a student. Best-effort, after the primary is safely
+    // claimable: variant trouble must not block the save.
+    await enqueueValidationVariants(
+        req: req,
+        setupID: setupID,
+        solutionNotebookData: solutionNotebookData,
+        filename: sanitizedFilename,
+        priorValidationCount: priorCount + 1,
+        submitterUserID: resolvedSubmitterID)
+
     // Keep the server-side `shared/{setupID}/solution.py` in lockstep with the
     // reference solution, so a Global Input expression can compute an expected
     // value as `solution.<fn>(...)` — one source of truth — instead of a
@@ -109,6 +123,85 @@ func enqueueRunnerValidationSubmission(
     }
 
     return subID
+}
+
+/// How many synthetic per-student variants a validation batch grades, on top
+/// of the primary run against the instructor's own seed.  A constant, not
+/// configuration.  The seeds are `DatasetDiagnostics.preflightSeed(0..<n)` —
+/// the same derived seeds the Files-panel estimates sample — so a variant
+/// validation grades material the diagnostics already described.
+let validationVariantCount = 4
+
+/// Enqueues the per-variant validation runs for `setupID`, replacing the
+/// setup's previous variant batch outright — or just clearing it when the
+/// manifest no longer varies by student, so a stale batch cannot keep
+/// describing an assignment that stopped being per-student.
+///
+/// Each variant is an ordinary `kind == .validation` submission whose
+/// materialization is pinned to a preflight seed instead of a user's, so the
+/// whole delivery path — the `.grading` sidecar, `_ck_inputs.*`, and the
+/// per-student dataset slices `buildJobPayload` resolves from the cached
+/// `seedHex` — runs exactly as it would for a student holding that seed.
+///
+/// Best-effort like the rest of the validation trigger machinery: a failure
+/// logs and leaves at most a partial batch (rows are written per variant, so
+/// what did enqueue still reports), never blocking the instructor's save.
+func enqueueValidationVariants(
+    req: Request,
+    setupID: String,
+    solutionNotebookData: Data,
+    filename: String,
+    priorValidationCount: Int,
+    submitterUserID: UUID?
+) async {
+    do {
+        try await ValidationVariant.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .delete()
+
+        guard let setup = try await APITestSetup.find(setupID, on: req.db),
+            let manifestData = setup.manifest.data(using: .utf8),
+            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+            manifest.variesPerStudent
+        else { return }
+
+        let submissionsDir = req.application.submissionsDirectory
+        let ext = (filename as NSString).pathExtension
+        for index in 0..<validationVariantCount {
+            let seedHex = DatasetDiagnostics.preflightSeed(index)
+            let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+            // Each variant gets its own stored copy: the `.grading` sidecar
+            // is derived from the submission's `zipPath`, so a shared file
+            // would make every variant's sidecar the same path.
+            let filePath = submissionsDir + "\(subID).\(ext)"
+            try await req.fileio.writeFile(.init(data: solutionNotebookData), at: filePath)
+
+            let submission = APISubmission(
+                id: subID,
+                testSetupID: setupID,
+                zipPath: filePath,
+                attemptNumber: priorValidationCount,
+                filename: filename,
+                userID: submitterUserID,
+                kind: APISubmission.Kind.validation)
+            let materialized = await materializeValidationGrading(
+                submission: submission,
+                setupID: setupID,
+                templateNotebookData: solutionNotebookData,
+                testSetupsDirectory: req.application.testSetupsDirectory,
+                app: req.application,
+                on: req.db,
+                variantSeedHex: seedHex)
+            try await materialized.saveClaimable(on: req.db)
+
+            try await ValidationVariant(
+                testSetupID: setupID, variantIndex: index, seedHex: seedHex,
+                submissionID: subID
+            ).save(on: req.db)
+        }
+    } catch {
+        req.logger.warning("enqueueValidationVariants for \(setupID): \(error)")
+    }
 }
 
 /// Proof that `materializeValidationGrading` ran for a validation submission:
@@ -148,6 +241,13 @@ struct MaterializedValidationSubmission {
 /// The stored `zipPath` keeps its `{{...}}` template, so `get_solution`, the
 /// editor, and re-validation by another user are unaffected.
 ///
+/// `variantSeedHex` pins the whole materialization to a synthetic per-student
+/// seed instead of the submitter's own (multi-variant validation).  With it
+/// set, the seed is cached even when the manifest has nothing to substitute —
+/// a dataset-only assignment personalizes through the seed alone, and the
+/// cached `seedHex` is exactly what `buildJobPayload` hands to
+/// `DatasetResolver`.
+///
 /// Best-effort: never throws out. On any failure the submission is left
 /// un-materialized — the download route then streams the template (grading
 /// fails clearly, but the worker never times out), and `buildJobPayload` falls
@@ -158,7 +258,8 @@ func materializeValidationGrading(
     templateNotebookData: Data,
     testSetupsDirectory: String,
     app: Application,
-    on db: any Database
+    on db: any Database,
+    variantSeedHex: String? = nil
 ) async -> MaterializedValidationSubmission {
     await resolveAndCacheValidationMaterialization(
         submission: submission,
@@ -166,7 +267,8 @@ func materializeValidationGrading(
         templateNotebookData: templateNotebookData,
         testSetupsDirectory: testSetupsDirectory,
         app: app,
-        on: db)
+        on: db,
+        variantSeedHex: variantSeedHex)
     return MaterializedValidationSubmission(submission: submission)
 }
 
@@ -179,7 +281,8 @@ private func resolveAndCacheValidationMaterialization(
     templateNotebookData: Data,
     testSetupsDirectory: String,
     app: Application,
-    on db: any Database
+    on db: any Database,
+    variantSeedHex: String? = nil
 ) async {
     do {
         guard let setup = try await APITestSetup.find(setupID, on: db),
@@ -187,21 +290,31 @@ private func resolveAndCacheValidationMaterialization(
             let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         else { return }
 
-        // Non-personalized assignments: nothing to resolve or cache — the
-        // download route streams the stored zip exactly as before.
-        guard manifest.hasPersonalization else { return }
+        let seedHex: String?
+        if let variantSeedHex {
+            // A synthetic variant run: the seed IS the variant, so it must be
+            // cached even when there is nothing to substitute — a dataset-only
+            // manifest fails `hasPersonalization` yet still varies by seed.
+            seedHex = variantSeedHex
+        } else {
+            // Non-personalized assignments: nothing to resolve or cache — the
+            // download route streams the stored zip exactly as before.
+            guard manifest.hasPersonalization else { return }
 
-        // Resolve the per-(user, assignment) seed when we can. Literal variables
-        // substitute without a seed; only `=` expressions need one.
-        var seedHex: String?
-        if let userID = submission.userID,
-            let assignment = try await APIAssignment.query(on: db)
-                .filter(\.$testSetupID == setupID)
-                .first(),
-            let assignmentID = assignment.id
-        {
-            seedHex = try? await AssignmentSeedStore.ensureSeed(
-                userID: userID, assignmentID: assignmentID, on: db)
+            // Resolve the per-(user, assignment) seed when we can. Literal
+            // variables substitute without a seed; only `=` expressions need
+            // one.
+            var resolved: String?
+            if let userID = submission.userID,
+                let assignment = try await APIAssignment.query(on: db)
+                    .filter(\.$testSetupID == setupID)
+                    .first(),
+                let assignmentID = assignment.id
+            {
+                resolved = try? await AssignmentSeedStore.ensureSeed(
+                    userID: userID, assignmentID: assignmentID, on: db)
+            }
+            seedHex = resolved
         }
 
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"

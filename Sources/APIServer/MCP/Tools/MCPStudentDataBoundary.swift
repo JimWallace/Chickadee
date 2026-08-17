@@ -62,4 +62,18 @@ enum MCPStudentDataBoundary {
             .sort(\.$receivedAt, .descending)
             .first()
     }
+
+    /// A validation variant's most recent result (multi-variant validation).
+    /// The variant row stores the submission id of one `kind == .validation`
+    /// run; resolving it back through the validation filter means this can
+    /// never yield a student row, even from a corrupted variant record.
+    static func variantResult(
+        for variant: ValidationVariant, on db: any Database
+    ) async throws -> APIResult? {
+        guard let submissionID = variant.submissionID,
+            let submission = try await validationSubmission(byID: submissionID, on: db),
+            let id = submission.id
+        else { return nil }
+        return try await latestResult(forSubmissionID: id, on: db)
+    }
 }

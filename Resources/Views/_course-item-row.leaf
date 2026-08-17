@@ -158,6 +158,22 @@
             #else:
             <span class="tier">—</span>
             #endif
+            #if(item.assignment.variantState == "failed"):
+            <div class="cell-subrow">
+                <span class="tier tier-closed" title="The reference solution was also graded against synthetic per-student seeds, and failed on some of them — a student holding one of those seeds would fail through no fault of their own.">#(item.assignment.variantSummaryText)</span>
+                #if(item.assignment.failedVariantSubmissionID):
+                <a href="/submissions/#(item.assignment.failedVariantSubmissionID)">View variant</a>
+                #endif
+            </div>
+            #elseif(item.assignment.variantState == "pending"):
+            <div class="cell-subrow">
+                <span class="tier" title="The reference solution is also being graded against synthetic per-student seeds.">#(item.assignment.variantSummaryText)</span>
+            </div>
+            #elseif(item.assignment.variantState == "passed"):
+            <div class="cell-subrow">
+                <span class="tier tier-open" title="The reference solution also passed against every synthetic per-student seed.">#(item.assignment.variantSummaryText)</span>
+            </div>
+            #endif
         </td>
         <td class="due-col col-hide-phone">#if(item.assignment.dueAt):#(item.assignment.dueAt)#else:—#endif</td>
         <td class="col-hide-phone nowrap">

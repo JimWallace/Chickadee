@@ -118,7 +118,9 @@ extension DatasetDiagnostics {
     /// The worst column per measure (ties to the earlier column), Wasserstein
     /// first.  Aggregating the two measures into one number would invent a
     /// comparison that does not exist, so there are up to two headlines.
-    public static func headlines(of divergences: [DatasetColumnDivergence])
+    public static func headlines(
+        of divergences: [DatasetColumnDivergence]
+    )
         -> [DatasetDivergenceHeadline]
     {
         [.wasserstein, .totalVariation].compactMap { measure in

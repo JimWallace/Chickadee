@@ -247,4 +247,68 @@ import Vapor
             }
         }
     }
+
+    // MARK: - Multi-variant batch
+
+    @Test func reportsTheVariantBatchWithFailingOutcomesOnly() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+
+            // A failed variant with a stored run: one passing and one failing
+            // outcome, of which only the failing one should surface.
+            try await makeTestSubmission(
+                on: app, id: "sub_var0", setupID: "setup_val", userID: testerID(on: app),
+                kind: APISubmission.Kind.validation)
+            try await makeTestResult(
+                on: app, submissionID: "sub_var0",
+                collectionJSON: collectionJSON(
+                    submissionID: "sub_var0",
+                    outcomes: [
+                        outcome("loads", .pass, short: "ok"),
+                        outcome(
+                            "mean is close", .fail, short: "off by 4.2",
+                            long: "expected 121.3, got 125.5"),
+                    ]))
+            let failed = ValidationVariant(
+                testSetupID: "setup_val", variantIndex: 0,
+                seedHex: DatasetDiagnostics.preflightSeed(0), submissionID: "sub_var0")
+            failed.status = ValidationVariant.Status.failed
+            try await failed.save(on: app.db)
+
+            // A still-running variant: reported by status alone.
+            try await makeTestSubmission(
+                on: app, id: "sub_var1", setupID: "setup_val", userID: testerID(on: app),
+                kind: APISubmission.Kind.validation, status: "pending")
+            try await ValidationVariant(
+                testSetupID: "setup_val", variantIndex: 1,
+                seedHex: DatasetDiagnostics.preflightSeed(1), submissionID: "sub_var1"
+            ).save(on: app.db)
+
+            let output = try await run(app, publicID: assignment.publicID)
+            #expect(output.variants.count == 2)
+
+            let first = try #require(output.variants.first)
+            #expect(first.variantIndex == 0)
+            #expect(first.seedHex == DatasetDiagnostics.preflightSeed(0))
+            #expect(first.status == "failed")
+            #expect(first.buildStatus == "passed")
+            #expect(first.failingOutcomes.map(\.testName) == ["mean is close"])
+            #expect(first.failingOutcomes.first?.shortResult == "off by 4.2")
+
+            let second = try #require(output.variants.last)
+            #expect(second.variantIndex == 1)
+            #expect(second.status == "pending")
+            #expect(second.failingOutcomes.isEmpty)
+        }
+    }
+
+    @Test func variantsAreEmptyWhenNoBatchExists() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let output = try await run(app, publicID: assignment.publicID)
+            #expect(output.variants.isEmpty)
+        }
+    }
 }
