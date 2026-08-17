@@ -67,6 +67,9 @@ jobs:
       - name: Check runner wasm size budget
         run: scripts/check-runner-wasm-size.sh
 
+      - name: Check the CI compose fixture covers every required variable
+        run: scripts/ci-compose-env.sh --check
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles
