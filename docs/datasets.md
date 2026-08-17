@@ -660,13 +660,31 @@ arrives like this, and it is **answer-preserving**, so correct parsing yields
 the same result the pool would. It is also the only transform safe to author
 before multi-variant validation exists, for that reason.
 
-`numericJitter` is **not** implemented, and the recommendation is against it.
-`rowSample` already delivers anti-copying, so jitter buys little pedagogy while
-carrying the highest determinism cost and a provenance problem — a jittered
-VitalDB extract is no longer VitalDB, and a student reporting "the mean systolic
-in this cohort is 128" reports a number existing nowhere outside their own file.
-Whether an assignment's prose must disclose that its data is derived is a policy
-call for the maintainer, not a decision this design should make quietly.
+### `numericJitter` is decided against — do not propose it again
+
+Perturbing numeric values per student was the third transform in the original
+handoff. It is **dropped**, deliberately and permanently, on three independent
+grounds. Recorded here in full so the option is not rediscovered as an open
+question:
+
+1. **It buys no pedagogy.** Its only real benefit is anti-copying, and
+   `rowSample` already delivers that. Unlike `missingValues` and `formatNoise`,
+   there is no data-handling skill a student practises because a weight was
+   nudged.
+2. **It is the only transform that distorts a distribution.** `missingValues`
+   chooses rows uniformly at random, independent of the cell's value, so it is
+   MCAR by construction — it thins the data without biasing it. `formatNoise`
+   changes representation, not value, so it is distribution-preserving too.
+   Jitter inflates variance by construction, so every student would compute
+   statistics over a cohort whose spread is wrong by design.
+3. **It costs the most to get right and damages provenance most.** It needs
+   fixed-point arithmetic at the source's own precision to stay deterministic,
+   and a jittered VitalDB extract is no longer VitalDB: a student reporting "the
+   mean systolic in this cohort is 128" reports a number that exists nowhere
+   outside their own file.
+
+The pedagogy it was reached for is better served by the transforms that keep the
+data honest, and the anti-copying it was reached for already exists.
 
 ### The gap this leaves: validation still exercises one variant
 
