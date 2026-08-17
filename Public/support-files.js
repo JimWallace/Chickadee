@@ -12,8 +12,8 @@
 //     deleteURL:   (name) => DELETE target for one stored support file
 //     datasetsURL: () => GET/PUT target for {datasets: [DatasetSpec]}
 //                  (a spec is {file, kind, sampleSize, stratumColumn?}; the
-//                  response also carries per-file `diagnostics` estimate
-//                  blocks the rows' disclosure renders)
+//                  response also carries per-file `diagnostics` blocks of
+//                  ready-made display strings the rows' estimate chips paint)
 //     onChange:    () => run after a successful upload batch or delete
 //                  (the edit surface re-renders in place; the create page
 //                  reloads its draft)
@@ -80,83 +80,33 @@
         }
         function statusOf(row) { return row.querySelector('.js-dataset-status'); }
 
-        // ── The estimates disclosure ────────────────────────────────────────
+        // ── The estimate chips ──────────────────────────────────────────────
         //
-        // The server computes two estimates per dataset (Core's
-        // DatasetDiagnostics; docs/datasets.md) and serves them on the same
-        // GET/PUT the controls use, so the numbers move with every saved
-        // parameter edit.  They describe a band with two bad ends — more rows
-        // is fairer but more copyable — so the text is informational only:
-        // no thresholds, no warning styling.
-
-        function formatPercent(fraction) {
-            var pct = fraction * 100;
-            if (pct >= 99.95) return '100%';
-            return (pct >= 10 ? Math.round(pct) : pct.toFixed(1)) + '%';
-        }
-
-        function formatUnits(value) {
-            return value < 0.005 ? 'under 0.01' : value.toFixed(2);
-        }
-
-        function diagnosticsLines(report) {
-            var lines = [];
-            var overlap = report.overlap;
-            if (overlap) {
-                lines.push('Copying: two students share about '
-                    + Math.round(overlap.expectedSharedRows) + ' of their '
-                    + overlap.rowsPerStudent + ' rows ('
-                    + formatPercent(overlap.sharedFraction)
-                    + '); the unluckiest pair in a class of ' + report.classSize
-                    + ' shares about ' + Math.round(overlap.worstPairSharedRows) + '.');
-                var stratum = overlap.mostCopyableStratum;
-                if (stratum) {
-                    lines.push('Most copyable category: "' + stratum.value
-                        + '" — every student draws ' + stratum.rowsPerStudent
-                        + ' of the same ' + stratum.poolRows + ' pool rows ('
-                        + formatPercent(stratum.sharedFraction) + ' shared).');
-                }
-            }
-            (report.headlines || []).forEach(function (headline) {
-                if (headline.measure === 'wasserstein') {
-                    lines.push('Drift: ' + headline.column + ' sits about '
-                        + formatUnits(headline.median)
-                        + ' SD from the pool for a typical student (worst seed '
-                        + formatUnits(headline.worst) + '; any two students within about '
-                        + formatUnits(2 * headline.worst) + ' SD).');
-                } else {
-                    lines.push('Category drift: ' + headline.column + ' sits about '
-                        + formatUnits(headline.median)
-                        + ' total-variation from the pool (worst seed '
-                        + formatUnits(headline.worst) + ').');
-                }
-            });
-            if (report.divergenceMeasured === false) {
-                lines.push('Distribution drift was not measured — the file is too large to sample quickly.');
-            }
-            return lines;
-        }
-
-        // Paints each row's disclosure from the server's estimate blocks.  A
-        // row with no block (not a dataset, or a file the server could not
-        // read as text) hides the disclosure rather than showing an empty one.
+        // Two concise numbers per dataset row — student-to-student similarity
+        // and drift from the pool — served as ready-made display strings on
+        // the same GET/PUT the controls use, so the numbers move with every
+        // saved parameter edit and the wording lives in one tested place
+        // server-side (DatasetEditHelpers).  The how-it-is-measured detail
+        // rides each chip's hover title.  A row with no block (not a dataset,
+        // or a file the server could not read as text) hides the chips.
         function renderDiagnostics(reports) {
             var byFile = {};
             (reports || []).forEach(function (report) { byFile[report.file] = report; });
             rows().forEach(function (row) {
-                var box = row.querySelector('.js-dataset-diagnostics');
+                var box = row.querySelector('.js-dataset-estimates');
                 if (!box) return;
                 var report = byFile[row.getAttribute('data-support-file')];
                 box.hidden = !report;
-                var body = row.querySelector('.js-dataset-diagnostics-body');
-                if (!report || !body) return;
-                body.textContent = '';
-                diagnosticsLines(report).forEach(function (line) {
-                    var item = document.createElement('span');
-                    item.className = 'dataset-diagnostics-line';
-                    item.textContent = line;
-                    body.appendChild(item);
-                });
+                var similarity = row.querySelector('.js-dataset-similarity');
+                var drift = row.querySelector('.js-dataset-drift');
+                if (similarity) {
+                    similarity.textContent = report ? report.similarityDisplay : '';
+                    similarity.title = report ? report.similarityTitle : '';
+                }
+                if (drift) {
+                    drift.textContent = report ? report.driftDisplay : '';
+                    drift.title = report ? report.driftTitle : '';
+                }
             });
         }
 
@@ -357,8 +307,8 @@
                     if (field) field.hidden = true;
                     if (stratumField) stratumField.hidden = true;
                     if (blankField) blankField.hidden = true;
-                    var diagnostics = row.querySelector('.js-dataset-diagnostics');
-                    if (diagnostics) diagnostics.hidden = true;
+                    var estimates = row.querySelector('.js-dataset-estimates');
+                    if (estimates) estimates.hidden = true;
                     commit(filename, null, row);
                     return;
                 }

@@ -31,23 +31,23 @@ struct DatasetsResponse: Content {
     var diagnostics: [DatasetFileDiagnostics]
 }
 
-/// One dataset's estimate block: closed-form overlap (can students copy?)
-/// and measured divergence headlines (are they doing the same exercise?).
-/// Both computed by Core's `DatasetDiagnostics` from the spec and the
-/// bundled file — estimates about the delivered bytes, never a change to
-/// them.  See docs/datasets.md.
+/// One dataset's estimate chips: two concise numbers the row shows inline —
+/// student-to-student similarity (closed-form overlap) and drift from the
+/// pool (measured divergence) — with the how-it-is-measured detail carried
+/// in each chip's hover title.  Display strings are built HERE, server-side,
+/// so the wording lives in one tested place and the page JS only paints.
+/// Computed by Core's `DatasetDiagnostics`; estimates about the delivered
+/// bytes, never a change to them.  See docs/datasets.md.
 struct DatasetFileDiagnostics: Content {
     var file: String
-    var overlap: DatasetOverlap
-    /// The worst column per measure (SDs of transport for numeric columns,
-    /// total variation for categorical).  Empty when nothing was measurable.
-    var headlines: [DatasetDivergenceHeadline]
-    /// False when the file was over the sampling ceiling, so only the
-    /// closed-form overlap is reported — stated rather than silently capped.
-    var divergenceMeasured: Bool
-    /// The class size the worst-pair estimate assumes, so the panel can say
-    /// it instead of implying a measured class.
-    var classSize: Int
+    /// The whole chip text, e.g. "similarity 8%": the fraction of one
+    /// student's rows a peer is expected to also hold.
+    var similarityDisplay: String
+    var similarityTitle: String
+    /// The whole chip text, e.g. "drift 0.04" — the worst column's typical
+    /// distance from the pool — or "drift —" when nothing was measurable.
+    var driftDisplay: String
+    var driftTitle: String
 }
 
 /// Files above this size skip the divergence measurement — it materializes
@@ -55,9 +55,9 @@ struct DatasetFileDiagnostics: Content {
 /// batch job.  Overlap is a single pass and is always reported.
 private let datasetDivergenceByteCeiling = 4 << 20
 
-/// The estimate blocks for every spec whose source file can be read as text.
+/// The estimate chips for every spec whose source file can be read as text.
 /// A file that cannot be read (or has no data rows) simply has no block —
-/// the panel hides the disclosure rather than showing an empty one.
+/// the panel hides the chips rather than showing empty ones.
 ///
 /// CPU-bound (the divergence half materializes the pool `defaultSeedCount`
 /// times), so handlers call it through `runBlocking` rather than on the
@@ -67,18 +67,100 @@ func datasetDiagnosticsReports(
 ) -> [DatasetFileDiagnostics] {
     datasets.compactMap { spec in
         guard let data = extractZipEntry(zipPath: zipPath, entryName: spec.file),
-            let text = String(data: data, encoding: .utf8),
-            let overlap = DatasetDiagnostics.overlap(spec: spec, sourceCSV: text)
+            let text = String(data: data, encoding: .utf8)
         else { return nil }
-        let measurable = data.count <= datasetDivergenceByteCeiling
-        let headlines =
-            measurable
-            ? DatasetDiagnostics.headlines(
-                of: DatasetDiagnostics.divergence(spec: spec, sourceCSV: text))
-            : []
-        return DatasetFileDiagnostics(
-            file: spec.file, overlap: overlap, headlines: headlines,
-            divergenceMeasured: measurable, classSize: DatasetDiagnostics.defaultClassSize)
+        return datasetEstimateSummary(
+            for: spec, sourceCSV: text,
+            divergenceMeasurable: data.count <= datasetDivergenceByteCeiling)
+    }
+}
+
+/// Builds one file's two chips from its spec and source text, or nil when
+/// the pool has no data rows to estimate.  Pure given its inputs — the
+/// zip-reading and the byte ceiling live in `datasetDiagnosticsReports` —
+/// so the wording and number formatting are testable on plain strings.
+func datasetEstimateSummary(
+    for spec: DatasetSpec, sourceCSV: String, divergenceMeasurable: Bool
+) -> DatasetFileDiagnostics? {
+    guard let overlap = DatasetDiagnostics.overlap(spec: spec, sourceCSV: sourceCSV)
+    else { return nil }
+
+    var similarityTitle =
+        "Two students share about \(Int(overlap.expectedSharedRows.rounded())) of their "
+        + "\(overlap.rowsPerStudent) rows — the expected overlap between independent "
+        + "\(overlap.rowsPerStudent)-row samples of the \(overlap.poolRows)-row pool. "
+        + "The unluckiest pair in a class of \(DatasetDiagnostics.defaultClassSize) shares "
+        + "about \(Int(overlap.worstPairSharedRows.rounded())) rows."
+    if let stratum = overlap.mostCopyableStratum {
+        similarityTitle +=
+            " Most shared category: \"\(stratum.value)\" — every student draws "
+            + "\(stratum.rowsPerStudent) of its \(stratum.poolRows) pool rows "
+            + "(\(estimatePercentText(stratum.sharedFraction)) shared)."
+    }
+
+    let drift = driftChip(for: spec, sourceCSV: sourceCSV, measurable: divergenceMeasurable)
+    return DatasetFileDiagnostics(
+        file: spec.file,
+        similarityDisplay: "similarity \(estimatePercentText(overlap.sharedFraction))",
+        similarityTitle: similarityTitle,
+        driftDisplay: drift.display,
+        driftTitle: drift.title)
+}
+
+/// The drift chip: the worst column's *typical* (median-over-variants)
+/// normalized distance from the pool, as one number.  The column, the
+/// measure and its unit, the unlucky-variant value, and the other measure's
+/// worst column (when both kinds exist) all ride the title.
+private func driftChip(
+    for spec: DatasetSpec, sourceCSV: String, measurable: Bool
+) -> (display: String, title: String) {
+    guard measurable else {
+        return (
+            "drift —",
+            "Distribution drift was not measured — the file is too large to sample quickly."
+        )
+    }
+    let columns = DatasetDiagnostics.divergence(spec: spec, sourceCSV: sourceCSV)
+    guard let worst = columns.max(by: { $0.median < $1.median }) else {
+        return ("drift —", "No measurable columns — nothing observed to compare to the pool.")
+    }
+
+    var title =
+        "How far a student's data drifts from the pool's distribution, measured over "
+        + "\(DatasetDiagnostics.defaultSeedCount) sampled variants; 0 means identical. "
+        + "Worst column: \"\(worst.column)\" — typically \(estimateUnitsText(worst.median)) "
+        + "\(estimateMeasureName(worst.measure)) from the pool, "
+        + "\(estimateUnitsText(worst.worst)) on an unlucky variant."
+    if let other = columns.filter({ $0.measure != worst.measure })
+        .max(by: { $0.median < $1.median })
+    {
+        title +=
+            " Also: \"\(other.column)\" at \(estimateUnitsText(other.median)) "
+            + "\(estimateMeasureName(other.measure))."
+    }
+    return ("drift \(estimateUnitsText(worst.median))", title)
+}
+
+/// A fraction as chip-sized percent text: whole percents from 10% up, one
+/// decimal below, and a floor marker rather than a misleading "0%".
+func estimatePercentText(_ fraction: Double) -> String {
+    let percent = fraction * 100
+    if percent >= 99.95 { return "100%" }
+    if percent >= 10 { return "\(Int(percent.rounded()))%" }
+    if percent >= 0.1 { return String(format: "%.1f%%", percent) }
+    return "<0.1%"
+}
+
+/// A normalized divergence as chip-sized text: two decimals, with a floor
+/// marker rather than a "0.00" that would claim identical distributions.
+func estimateUnitsText(_ value: Double) -> String {
+    value < 0.005 ? "<0.01" : String(format: "%.2f", value)
+}
+
+private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> String {
+    switch measure {
+    case .wasserstein: return "pool standard deviations (Wasserstein-1)"
+    case .totalVariation: return "in total-variation distance (0–1)"
     }
 }
 

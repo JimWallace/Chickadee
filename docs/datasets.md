@@ -883,15 +883,33 @@ the test — needs revisiting.
 parameter estimate wants to live where the parameters are, moving as the
 instructor edits the row count (multi-variant validation shares the preflight
 seeds but answers a different question at a different time). Each dataset row
-carries a collapsed "Per-student estimates" disclosure; the estimate blocks
-ride the same GET/PUT the controls already use (`DatasetsResponse.diagnostics`,
-computed off the event loop), so a saved edit repaints the numbers with no
-second request. The two estimates pull in opposite directions — more rows per
-student is fairer but more copyable — so the text is deliberately
-informational: no thresholds, no warnings, and no gating on either number
-(instructors may legitimately want to *maximize* divergence). Files above a
-stated byte ceiling skip the divergence sampling and say so; overlap, a single
-pass, is always reported.
+shows **two inline chips, one concise number each**: `similarity NN%` (the
+fraction of one student's rows a peer is expected to also hold — a
+student-to-student similarity score) and `drift 0.NN` (the worst column's
+typical normalized distance from the pool). Everything else — the expected
+shared-row count, the unluckiest pair, the most-shared category under
+stratification, which column drifts and in which measure, the unlucky-variant
+value — rides each chip's hover title. This replaced a first-release
+disclosure full of prose sentences, on maintainer feedback: the numbers are
+for glancing at while dragging a row count, and the method belongs behind a
+mouse-over, not in the row. The display strings are built server-side in one
+tested place (`DatasetEditHelpers.datasetEstimateSummary`), and the blocks
+ride the same GET/PUT the controls already use
+(`DatasetsResponse.diagnostics`, computed off the event loop), so a saved
+edit repaints the numbers with no second request. The two estimates pull in
+opposite directions — more rows per student is fairer but more copyable — so
+the chips are deliberately informational: no thresholds, no warnings, and no
+gating on either number (instructors may legitimately want to *maximize*
+divergence). Files above a stated byte ceiling skip the divergence sampling
+and the drift chip says so (`drift —`); overlap, a single pass, is always
+reported.
+
+The drift chip's single number is the max across columns of the *median*
+normalized divergence, whatever that column's measure — a deliberate
+softening of the two-headline rule above for the glanceable layer only: SD
+units and TV still are not commensurable, so the chip never mixes them
+arithmetically (no averaging), and the title always names the column, the
+measure, and the other measure's worst column when both kinds exist.
 
 `numericJitter` stays dead (see above), and these diagnostics do not assume
 it.

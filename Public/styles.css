@@ -2072,15 +2072,16 @@ code { font-family: var(--font-mono); font-size: .9em; }
    cannot represent — it steps aside rather than rendering a partial view it
    would then save over. */
 .dataset-note { font-style: italic; color: var(--gray-600); }
-/* Per-row estimates disclosure: how many rows two students share and how far
-   a slice drifts from the pool (docs/datasets.md).  A band with two bad ends
-   rather than a threshold, so the text is informational and never styled as
-   a warning.  Takes the full row width so it wraps under the inline
-   controls; the `hidden` attribute hides it (no display override here). */
-.dataset-diagnostics { flex-basis: 100%; font-size: var(--text-sm); color: var(--gray-600); }
-.dataset-diagnostics > summary { cursor: pointer; color: var(--gray-500); }
-.dataset-diagnostics-body { display: flex; flex-direction: column; gap: .15rem; margin-top: .25rem; }
-.dataset-diagnostics-line { display: block; }
+/* Per-row estimate chips: student-to-student similarity and drift from the
+   pool (docs/datasets.md), one concise number each, painted by
+   support-files.js from the datasets GET/PUT.  The how-it-is-measured
+   detail rides each chip's hover title — cursor plus dotted underline as
+   the affordance.  A band with two bad ends rather than a threshold, so
+   never styled as a warning.  Inherits the control row's size and colour;
+   an empty chip (before the first fetch lands) takes no space. */
+.dataset-estimates { display: inline-flex; gap: .5rem; }
+.dataset-estimate { cursor: help; text-decoration: underline dotted; text-underline-offset: .15em; }
+.dataset-estimate:empty { display: none; }
 
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }
