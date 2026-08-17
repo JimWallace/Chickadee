@@ -491,6 +491,46 @@ For A4 this is **variety, not secrecy** — the sample is meant to be seen, so
 delivering it to the editor/browser is fine. The only thing hidden is the full
 pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
 
+### Expressions read the student's slice, not the pool
+
+The two per-student systems — `=` expressions and datasets — were built
+independently and, for one release, disagreed. `PersonalizationEvaluator` spawns
+its subprocess with the cwd set to the shared support directory so an expression
+can `open("cases.csv")`. That directory holds the instructor's **pool**, and is
+the same directory `DatasetResolver` reads as its *source*. In
+`WorkerJobRoutes.buildJobPayload` the two sat thirteen lines apart and neither
+knew about the other.
+
+The consequence was not a crash but a silent wrong answer. An expression
+computing `df["systolic"].mean()` returned the **pool's** mean, which then
+travelled the `expectedVarRef` path into `_ck_inputs.*` as that student's
+expected value — while the student held a slice with a different mean. Every
+student got the same expected value, and every student's own data disagreed with
+it. Only *structural* checks survived, which is why A4's five checks being
+structural read as a coincidence rather than as the ceiling it was.
+
+`PersonalizationSubstitution.resolve` now resolves the student's slices and hands
+them to the evaluator, which spawns against a private overlay: symlinks to every
+support file, with each declared dataset replaced by that student's bytes. Three
+properties are load-bearing:
+
+- **The shared directory is never written to.** Materializing a student's slice
+  there would hand the next student the previous one's data. The overlay is
+  per-evaluation and lives under the evaluator's existing temp directory.
+- **Same source, same seed, same bytes.** The overlay resolves through
+  `DatasetResolver` — the call the worker and editor already use — so the
+  expression and the student's delivered file agree by construction, not because
+  two call sites were kept in step.
+- **A slice that cannot be written is left absent, not symlinked to the pool.**
+  The expression then fails loudly with "no such file" rather than quietly
+  computing the instructor's answer and shipping it as the student's. This is the
+  one place the usual "forgiving at delivery" rule inverts: forgiveness here
+  means being confidently wrong about a grade.
+
+This is what makes a *value-based* check authorable on a dataset assignment at
+all, and it is the prerequisite for any transform that changes values rather
+than selecting rows.
+
 ### Build slices
 
 1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`
