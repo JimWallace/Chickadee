@@ -183,6 +183,34 @@ done
 mkdir -p "$OUT_DIR"
 raw="$OUT_DIR/muter-raw.txt"
 
+# The comparability fingerprint, recorded HERE because this is where the tool
+# and toolchain actually are -- the job that merges the shards runs on a
+# different image and could only guess. A mutation score is only meaningful
+# against the configuration that produced it, so the trend marks any run whose
+# fingerprint differs rather than drawing a line between two measurements that
+# are not the same measurement. See Tools/mutation/trend.py.
+python3 - "$config" "$patch_file" "$MUTER_REF" > "$OUT_DIR/env.json" <<'FINGERPRINT'
+import hashlib, json, subprocess, sys
+
+def digest(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
+
+def first_line(*cmd):
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout
+    except OSError:
+        return None
+    return out.splitlines()[0].strip() if out.strip() else None
+
+json.dump({
+    "muterRef": sys.argv[3],
+    "patchHash": digest(sys.argv[2]),
+    "configHash": digest(sys.argv[1]),
+    "swift": first_line("swift", "--version"),
+    "commit": first_line("git", "rev-parse", "HEAD"),
+}, sys.stdout, indent=2, sort_keys=True)
+FINGERPRINT
+
 # Muter's exit status must not abort the run: a low score is a RESULT. A genuine
 # crash surfaces below as zero mutant outcomes, which IS a failure.
 set +e

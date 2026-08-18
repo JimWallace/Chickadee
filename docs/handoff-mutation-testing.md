@@ -3,7 +3,8 @@
 **Status: stock Muter is unusable; a three-line fork works and has been run
 against real source.** Tracking issue: **#1447**. Root cause and measurements:
 [mutation-testing-spike.md](mutation-testing-spike.md). What a real run costs
-and finds: **[mutation-testing-pilot.md](mutation-testing-pilot.md)**.
+and finds: **[mutation-testing-pilot.md](mutation-testing-pilot.md)**. How to
+read a series of runs: [mutation-trend.md](mutation-trend.md).
 
 **If you read one thing:** the blocker is upstream issue
 [muter#307](https://github.com/muter-mutation-testing/muter/issues/307), not a

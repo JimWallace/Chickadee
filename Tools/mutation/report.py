@@ -30,6 +30,7 @@ Only the phantom carries a bogus line.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -114,6 +115,43 @@ def main() -> int:
         fh.write("file\treported_line\ttrue_line\toperator\tsource\n")
         for path, line, operator in sorted(resolved):
             fh.write(f"{path}\t{line}\t{line}\t{operator}\t{source_line(path, line)}\n")
+
+    # A MACHINE-READABLE twin of the markdown, written for the trend tool.
+    # report.md is for a human triaging one run; nothing could read a series of
+    # them without re-parsing prose, so the numbers are emitted once, here,
+    # where they are already known and already phantom-filtered.
+    shard_nums = [int(n) for n in re.findall(r"\d+", label)]
+    json.dump(
+        {
+            "shard": shard_nums[0] if shard_nums else None,
+            "shardCount": shard_nums[1] if len(shard_nums) > 1 else None,
+            "killed": len(killed),
+            # `survived` is the PHANTOM-FILTERED count -- the real holes. It is
+            # deliberately NOT the number in report.md's table, which carries
+            # Muter's raw count so it reconciles with Muter's own summary. Both
+            # are emitted under distinct names because a trend built on the raw
+            # count would read phantoms as regressions.
+            "survived": len(resolved),
+            "reportedSurvived": len(survived),
+            "survivors": [
+                {
+                    "file": path,
+                    "line": line,
+                    "operator": operator,
+                    "source": source_line(path, line),
+                }
+                for path, line, operator in sorted(resolved)
+            ],
+            "phantoms": [
+                {"file": path, "line": line, "operator": operator}
+                for path, line, operator in sorted(phantoms)
+            ],
+            "runtime": TOOK.search(text).group(1) if TOOK.search(text) else None,
+        },
+        open(os.path.join(out_dir, "summary.json"), "w"),
+        indent=2,
+        sort_keys=True,
+    )
 
     out = [f"**{label}**", ""]
     if not rows:

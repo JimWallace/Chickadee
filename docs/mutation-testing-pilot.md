@@ -9,7 +9,9 @@ a measurement rather than an artifact.
 Read [handoff-mutation-testing.md](handoff-mutation-testing.md) first for why
 stock Muter cannot do this, and
 [mutation-testing-spike.md](mutation-testing-spike.md) for the root cause.
-Tracking issue **#1447**.
+For reading a *series* of runs rather than this one — what the score means, and
+the two things that make it move for reasons unrelated to the suite — see
+[mutation-trend.md](mutation-trend.md). Tracking issue **#1447**.
 
 ---
 
