@@ -86,9 +86,16 @@
         // and drift from the pool — served as ready-made display strings on
         // the same GET/PUT the controls use, so the numbers move with every
         // saved parameter edit and the wording lives in one tested place
-        // server-side (DatasetEditHelpers).  The how-it-is-measured detail
-        // rides each chip's hover title.  A row with no block (not a dataset,
-        // or a file the server could not read as text) hides the chips.
+        // server-side (DatasetEditHelpers).  A row with no block (not a
+        // dataset, or a file the server could not read as text) hides the
+        // chips, as does a chip whose number is not measurable.
+        function paintChip(chip, text, title) {
+            if (!chip) return;
+            chip.textContent = text || '';
+            chip.title = title || '';
+            chip.hidden = !text;
+        }
+
         function renderDiagnostics(reports) {
             var byFile = {};
             (reports || []).forEach(function (report) { byFile[report.file] = report; });
@@ -97,16 +104,10 @@
                 if (!box) return;
                 var report = byFile[row.getAttribute('data-support-file')];
                 box.hidden = !report;
-                var similarity = row.querySelector('.js-dataset-similarity');
-                var drift = row.querySelector('.js-dataset-drift');
-                if (similarity) {
-                    similarity.textContent = report ? report.similarityDisplay : '';
-                    similarity.title = report ? report.similarityTitle : '';
-                }
-                if (drift) {
-                    drift.textContent = report ? report.driftDisplay : '';
-                    drift.title = report ? report.driftTitle : '';
-                }
+                paintChip(row.querySelector('.js-dataset-similarity'),
+                    report && report.similarityDisplay, report && report.similarityTitle);
+                paintChip(row.querySelector('.js-dataset-drift'),
+                    report && report.driftDisplay, report && report.driftTitle);
             });
         }
 

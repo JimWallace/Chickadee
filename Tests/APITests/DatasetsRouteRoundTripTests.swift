@@ -253,6 +253,20 @@ import VaporTesting
         return String(rest[..<end.lowerBound])
     }
 
+    /// Whether the ONE element carrying `hook` is hidden — read off that
+    /// element's own open tag rather than by searching the whole row, which
+    /// silently became a different question the moment any other element in
+    /// the row started rendering hidden (the estimate chips, which begin
+    /// hidden and appear when their numbers arrive).
+    private func isHidden(_ hook: String, in row: String) throws -> Bool {
+        let at = try #require(row.range(of: hook), "no element carrying \(hook)")
+        let opened = try #require(
+            row[..<at.lowerBound].lastIndex(of: "<"), "\(hook) is not inside a tag")
+        let closed = try #require(
+            row[at.upperBound...].firstIndex(of: ">"), "the tag holding \(hook) never closes")
+        return row[opened...closed].contains("hidden")
+    }
+
     @Test func editPageRendersTheDatasetControlFromTheStoredSpec() async throws {
         try await withApp(app) { _ in
             let fx = try await fixture("e")
@@ -266,12 +280,16 @@ import VaporTesting
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"), "a marked file renders a checked toggle")
             #expect(marked.contains("value=\"25\""), "and its stored row count")
-            #expect(marked.contains("hidden") == false, "and shows the row-count field")
+            #expect(
+                try isHidden("js-dataset-size-field", in: marked) == false,
+                "and shows the row-count field")
 
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("js-dataset-toggle"))
             #expect(plain.contains("checked") == false, "an unmarked file renders an unchecked toggle")
-            #expect(plain.contains("hidden"), "and keeps its row-count field hidden")
+            #expect(
+                try isHidden("js-dataset-size-field", in: plain),
+                "and keeps its row-count field hidden")
         }
     }
 
@@ -288,11 +306,11 @@ import VaporTesting
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"))
             #expect(marked.contains("value=\"8\""))
-            #expect(marked.contains("hidden") == false)
+            #expect(try isHidden("js-dataset-size-field", in: marked) == false)
 
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("checked") == false)
-            #expect(plain.contains("hidden"))
+            #expect(try isHidden("js-dataset-size-field", in: plain))
         }
     }
 
@@ -487,7 +505,7 @@ import VaporTesting
                 // placeholder.  Wording itself is pinned in
                 // DatasetEstimateSummaryTests; this is the plumbing.
                 #expect(block.similarityDisplay == "similarity 67%")
-                #expect(block.similarityTitle.contains("3-row pool"))
+                #expect(block.similarityTitle.contains("Unluckiest pair"))
                 #expect(block.driftDisplay.hasPrefix("drift "))
                 #expect(block.driftTitle.contains("Worst column"))
 

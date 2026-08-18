@@ -23,7 +23,7 @@ struct DatasetsBody: Content {
 
 /// The response of either GET or PUT — the specs as the manifest now holds
 /// them, which is what the Files panel renders its controls from, plus the
-/// per-file estimates its disclosure shows.  Serving the estimates on the
+/// per-file estimates its chips show.  Serving the estimates on the
 /// same response is what makes them live: every parameter edit is a PUT, so
 /// the numbers move with the controls without a second request.
 struct DatasetsResponse: Content {
@@ -33,9 +33,11 @@ struct DatasetsResponse: Content {
 
 /// One dataset's estimate chips: two concise numbers the row shows inline —
 /// student-to-student similarity (closed-form overlap) and drift from the
-/// pool (measured divergence) — with the how-it-is-measured detail carried
-/// in each chip's hover title.  Display strings are built HERE, server-side,
-/// so the wording lives in one tested place and the page JS only paints.
+/// pool (measured divergence).  Each title is a PHRASE naming what its number
+/// measures, within `datasetEstimateTitleWordCap`; how the estimates are
+/// computed is in docs/datasets.md, because a hover title is not a place a
+/// reader can be sent.  Display strings are built HERE, server-side, so the
+/// wording lives in one tested place and the page JS only paints.
 /// Computed by Core's `DatasetDiagnostics`; estimates about the delivered
 /// bytes, never a change to them.  See docs/datasets.md.
 struct DatasetFileDiagnostics: Content {
@@ -49,6 +51,14 @@ struct DatasetFileDiagnostics: Content {
     var driftDisplay: String
     var driftTitle: String
 }
+
+/// The word budget for a chip's hover title, matching the cap
+/// `scripts/check-ui-vocabulary.sh` enforces on titles written in templates.
+/// These are assembled from measured numbers rather than written in markup,
+/// so the script cannot see them and `DatasetEstimateSummaryTests` holds the
+/// same line instead.  A tooltip is hover-only and unsearchable: it names
+/// what the number is, and docs/datasets.md explains it.
+let datasetEstimateTitleWordCap = 20
 
 /// Files above this size skip the divergence measurement — it materializes
 /// the pool once per preflight seed, and the panel is a live control, not a
@@ -86,16 +96,13 @@ func datasetEstimateSummary(
     else { return nil }
 
     var similarityTitle =
-        "Two students share about \(Int(overlap.expectedSharedRows.rounded())) of their "
-        + "\(overlap.rowsPerStudent) rows — the expected overlap between independent "
-        + "\(overlap.rowsPerStudent)-row samples of the \(overlap.poolRows)-row pool. "
-        + "The unluckiest pair in a class of \(DatasetDiagnostics.defaultClassSize) shares "
-        + "about \(Int(overlap.worstPairSharedRows.rounded())) rows."
+        "Rows a typical pair shares, of \(overlap.rowsPerStudent). "
+        + "Unluckiest pair of \(DatasetDiagnostics.defaultClassSize): "
+        + "\(Int(overlap.worstPairSharedRows.rounded()))."
     if let stratum = overlap.mostCopyableStratum {
         similarityTitle +=
-            " Most shared category: \"\(stratum.value)\" — every student draws "
-            + "\(stratum.rowsPerStudent) of its \(stratum.poolRows) pool rows "
-            + "(\(estimatePercentText(stratum.sharedFraction)) shared)."
+            " Most shared: \"\(hoverName(stratum.value))\" "
+            + "(\(estimatePercentText(stratum.sharedFraction)))."
     }
 
     let drift = driftChip(for: spec, sourceCSV: sourceCSV, measurable: divergenceMeasurable)
@@ -108,37 +115,47 @@ func datasetEstimateSummary(
 }
 
 /// The drift chip: the worst column's *typical* (median-over-variants)
-/// normalized distance from the pool, as one number.  The column, the
-/// measure and its unit, the unlucky-variant value, and the other measure's
-/// worst column (when both kinds exist) all ride the title.
+/// normalized distance from the pool, as one number.  The title names that
+/// column and its measure and gives the unlucky-variant value; the per-column
+/// table behind it is not something a tooltip can carry, so it is not tried.
 private func driftChip(
     for spec: DatasetSpec, sourceCSV: String, measurable: Bool
 ) -> (display: String, title: String) {
     guard measurable else {
-        return (
-            "drift —",
-            "Distribution drift was not measured — the file is too large to sample quickly."
-        )
+        return ("drift —", "Not measured: the file is too large to sample quickly.")
     }
     let columns = DatasetDiagnostics.divergence(spec: spec, sourceCSV: sourceCSV)
     guard let worst = columns.max(by: { $0.median < $1.median }) else {
-        return ("drift —", "No measurable columns — nothing observed to compare to the pool.")
+        return ("drift —", "No measurable columns to compare against the pool.")
     }
 
-    var title =
-        "How far a student's data drifts from the pool's distribution, measured over "
-        + "\(DatasetDiagnostics.defaultSeedCount) sampled variants; 0 means identical. "
-        + "Worst column: \"\(worst.column)\" — typically \(estimateUnitsText(worst.median)) "
-        + "\(estimateMeasureName(worst.measure)) from the pool, "
-        + "\(estimateUnitsText(worst.worst)) on an unlucky variant."
-    if let other = columns.filter({ $0.measure != worst.measure })
-        .max(by: { $0.median < $1.median })
-    {
-        title +=
-            " Also: \"\(other.column)\" at \(estimateUnitsText(other.median)) "
-            + "\(estimateMeasureName(other.measure))."
-    }
+    let title =
+        "Worst column \"\(hoverName(worst.column))\", "
+        + "in \(estimateMeasureName(worst.measure)). "
+        + "0 is identical; \(estimateUnitsText(worst.worst)) on an unlucky variant."
     return ("drift \(estimateUnitsText(worst.median))", title)
+}
+
+/// A column name or category value, bounded for a hover title.
+///
+/// Both titles interpolate identifiers out of the instructor's own CSV, and
+/// `datasetEstimateTitleWordCap` is a WORD budget, so an unbounded name is a
+/// silent breach waiting for the first course whose stratum is "Type 2
+/// Diabetes" or whose column is "Systolic Blood Pressure" — the test fixture's
+/// one-letter wards cannot see it.  Bounding the name here keeps both titles
+/// within budget by construction rather than by anyone remembering: the base
+/// sentences interpolate only numbers, so with this cap the longest either can
+/// reach is 18 words.  A prefix is the right trim — the reader is matching it
+/// against a column list they already have, so the first words identify it.
+func hoverName(_ raw: String, words wordLimit: Int = 3, characters charLimit: Int = 32) -> String {
+    let parts = raw.split(whereSeparator: \.isWhitespace)
+    var name =
+        parts.count > wordLimit
+        ? parts.prefix(wordLimit).joined(separator: " ") + "…" : raw
+    if name.count > charLimit {
+        name = name.prefix(charLimit).trimmingCharacters(in: .whitespaces) + "…"
+    }
+    return name
 }
 
 /// A fraction as chip-sized percent text: whole percents from 10% up, one
@@ -159,8 +176,11 @@ func estimateUnitsText(_ value: Double) -> String {
 
 private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> String {
     switch measure {
+    // Both are bare noun phrases so a caller can set them in one sentence
+    // frame: one used to lead with "in" and read as a fragment wherever the
+    // other read as a unit.
     case .wasserstein: return "pool standard deviations (Wasserstein-1)"
-    case .totalVariation: return "in total-variation distance (0–1)"
+    case .totalVariation: return "total-variation distance (0–1)"
     }
 }
 

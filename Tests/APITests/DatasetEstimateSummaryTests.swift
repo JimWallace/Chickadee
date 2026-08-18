@@ -4,7 +4,7 @@
 // (DatasetEditHelpers.datasetEstimateSummary).  The underlying statistics
 // have their own suite in CoreTests (DatasetDiagnosticsTests); what is
 // pinned here is the display layer the page JS paints verbatim — one
-// concise number per chip, the how-it-is-measured detail in the title —
+// concise number per chip, a phrase naming what it measures in the title —
 // so a wording regression is caught in Swift rather than in a browser.
 
 import Foundation
@@ -35,23 +35,100 @@ import Testing
 
         // 40 of 200 rows: k/N = 20%, expected shared k²/N = 8.
         #expect(summary.similarityDisplay == "similarity 20%")
-        #expect(summary.similarityTitle.contains("about 8 of their 40 rows"))
-        #expect(summary.similarityTitle.contains("200-row pool"))
-        #expect(summary.similarityTitle.contains("class of 100"))
+        #expect(summary.similarityTitle.contains("of 40"))
+        #expect(summary.similarityTitle.contains("Unluckiest pair of 100"))
         #expect(
-            !summary.similarityTitle.contains("Most shared category"),
+            !summary.similarityTitle.contains("Most shared"),
             "a plain sample has no strata to name")
 
-        // One number; the column, measure and unlucky-variant value ride the
-        // title.
+        // One number; the worst column, its measure and the unlucky-variant
+        // value ride the title.
         #expect(summary.driftDisplay.wholeMatch(of: /drift (\d+\.\d{2}|<0\.01)/) != nil)
-        #expect(summary.driftTitle.contains("Worst column: \""))
-        #expect(summary.driftTitle.contains("sampled variants"))
+        #expect(summary.driftTitle.contains("Worst column \""))
         #expect(summary.driftTitle.contains("on an unlucky variant"))
-        // The fixture has numeric and categorical columns, so both measures
-        // are named across the title.
-        #expect(summary.driftTitle.contains("pool standard deviations"))
-        #expect(summary.driftTitle.contains("total-variation"))
+    }
+
+    /// A pool whose stratum values and column names are the multi-word text a
+    /// real course has ("Type 2 Diabetes", "Systolic Blood Pressure"), which
+    /// is the axis `pool`'s one-letter wards cannot exercise: the budget is
+    /// counted in WORDS, so a title that fits for ward "D" can breach it for a
+    /// three-word category with no code change at all.
+    /// The long-named stratum is the one the summary will actually name, and
+    /// making that true takes more than making it rare: `mostCopyableStratum`
+    /// is the highest take/size ratio, which only favours a small stratum once
+    /// the one-row floor OVER-allocates it — that is, once its proportional
+    /// share falls below one row.  At 30 of 120 that means fewer than four
+    /// rows, so this stratum has two.  A first draft gave it five, the floor
+    /// never engaged, a three-word category was named instead, and the test
+    /// passed against a completely unbounded name.
+    private let wordyPool: String = {
+        var lines = ["patient id,Primary Diagnosis Group,Mean Systolic Blood Pressure Reading mmHg"]
+        let groups = ["Type 2 Diabetes", "Asthma", "Chronic Kidney Disease Stage 3 Dialysis"]
+        for i in 0..<120 {
+            lines.append("\(i),\(groups[i < 70 ? 0 : i < 118 ? 1 : 2]),\(90 + (i * 31) % 60)")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }()
+
+    @Test func aMultiWordStratumAndColumnStayWithinTheBudget() throws {
+        let summary = try #require(
+            datasetEstimateSummary(
+                for: DatasetSpec(
+                    file: "cases.csv", kind: .stratifiedSample, sampleSize: 30,
+                    stratumColumn: "Primary Diagnosis Group"),
+                sourceCSV: wordyPool, divergenceMeasurable: true))
+
+        for (label, title) in [
+            ("similarity", summary.similarityTitle), ("drift", summary.driftTitle),
+        ] {
+            let words = title.split(whereSeparator: \.isWhitespace).count
+            #expect(
+                words <= datasetEstimateTitleWordCap,
+                "the \(label) title is \(words) words on real-world names: \(title)")
+        }
+        // The clause still identifies the category — bounded, not dropped.
+        #expect(summary.similarityTitle.contains("Most shared: \""))
+    }
+
+    @Test func aBoundedHoverNameKeepsItsIdentifyingPrefix() {
+        #expect(hoverName("Asthma") == "Asthma", "a short name is untouched")
+        #expect(hoverName("Type 2 Diabetes") == "Type 2 Diabetes", "three words fit")
+        #expect(hoverName("Chronic Kidney Disease Stage 3 Dialysis") == "Chronic Kidney Disease…")
+        #expect(
+            hoverName(String(repeating: "x", count: 50)).count <= 33,
+            "one very long token is bounded by the character cap, not the word cap")
+    }
+
+    /// The chips' titles are assembled from measured numbers in Swift, so
+    /// `scripts/check-ui-vocabulary.sh` — which reads templates — cannot see
+    /// them.  This holds the same budget on the path the script cannot reach,
+    /// across every branch that produces a title.
+    @Test(arguments: [true, false]) func everyTitleStaysWithinTheHoverBudget(
+        measurable: Bool
+    ) throws {
+        for spec in [
+            DatasetSpec(file: "cases.csv", sampleSize: 40),
+            DatasetSpec(file: "cases.csv", sampleSize: nil),
+            DatasetSpec(
+                file: "cases.csv", kind: .stratifiedSample, sampleSize: 40,
+                stratumColumn: "ward"),
+        ] {
+            let summary = try #require(
+                datasetEstimateSummary(
+                    for: spec, sourceCSV: pool, divergenceMeasurable: measurable))
+            for (label, title) in [
+                ("similarity", summary.similarityTitle), ("drift", summary.driftTitle),
+            ] {
+                let words = title.split(whereSeparator: \.isWhitespace).count
+                #expect(
+                    words <= datasetEstimateTitleWordCap,
+                    """
+                    the \(label) title is \(words) words, over the \
+                    \(datasetEstimateTitleWordCap)-word hover budget — a tooltip holds a \
+                    phrase, and the explanation belongs in docs/datasets.md: \(title)
+                    """)
+            }
+        }
     }
 
     @Test func aStratifiedSampleNamesItsMostSharedCategory() throws {
@@ -63,8 +140,7 @@ import Testing
                 sourceCSV: pool, divergenceMeasurable: true))
         // The one-row floor makes rare ward D the most copyable part: every
         // student draws 2 of its 5 pool rows.
-        #expect(summary.similarityTitle.contains("Most shared category: \"D\""))
-        #expect(summary.similarityTitle.contains("2 of its 5 pool rows (40% shared)"))
+        #expect(summary.similarityTitle.contains("Most shared: \"D\" (40%)"))
     }
 
     @Test func aWholeFileSpecIsTotalSimilarity() throws {

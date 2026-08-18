@@ -883,16 +883,27 @@ the test — needs revisiting.
 parameter estimate wants to live where the parameters are, moving as the
 instructor edits the row count (multi-variant validation shares the preflight
 seeds but answers a different question at a different time). Each dataset row
-shows **two inline chips, one concise number each**: `similarity NN%` (the
-fraction of one student's rows a peer is expected to also hold — a
-student-to-student similarity score) and `drift 0.NN` (the worst column's
-typical normalized distance from the pool). Everything else — the expected
-shared-row count, the unluckiest pair, the most-shared category under
-stratification, which column drifts and in which measure, the unlucky-variant
-value — rides each chip's hover title. This replaced a first-release
-disclosure full of prose sentences, on maintainer feedback: the numbers are
-for glancing at while dragging a row count, and the method belongs behind a
-mouse-over, not in the row. The display strings are built server-side in one
+shows **two chips, one concise number each**: `similarity NN%` (the fraction
+of one student's rows a peer is expected to also hold — a student-to-student
+similarity score) and `drift 0.NN` (the worst column's typical normalized
+distance from the pool). Each chip's `title` is a phrase naming what its
+number measures, within the same word budget the rest of the UI's hover text
+keeps (`datasetEstimateTitleWordCap`); **how the numbers are computed is here,
+in this section, and nowhere in the interface** — the formulas are above, and
+the arithmetic behind each chip is below.
+
+That took two corrections to arrive at. The first release put the estimates
+in a per-row disclosure of prose sentences, which was too heavy for a control
+row. The replacement moved the same prose into hover titles and gave the chips
+a private dotted-underline-and-`cursor: help` treatment, which was worse in a
+way the first version was not: it was a fifth way to reveal detail in a UI
+that had four, and a second kind of chip in a UI whose vocabulary already had
+`.chip`. They are plain chips now, and the sentences are in this file. The
+general rule that came out of it is in
+[ui-design.md](ui-design.md) under "Interaction idioms" and "UI copy", and
+`scripts/check-ui-vocabulary.sh` enforces the mechanical half.
+
+The display strings are built server-side in one
 tested place (`DatasetEditHelpers.datasetEstimateSummary`), and the blocks
 ride the same GET/PUT the controls already use
 (`DatasetsResponse.diagnostics`, computed off the event loop), so a saved
@@ -908,8 +919,17 @@ The drift chip's single number is the max across columns of the *median*
 normalized divergence, whatever that column's measure — a deliberate
 softening of the two-headline rule above for the glanceable layer only: SD
 units and TV still are not commensurable, so the chip never mixes them
-arithmetically (no averaging), and the title always names the column, the
-measure, and the other measure's worst column when both kinds exist.
+arithmetically (no averaging), and the title names the column and its measure
+so the number is never read as a bare quantity. The per-column table, and the
+second measure's worst column when both kinds exist, are not in the interface
+at all — a tooltip cannot carry a table, and the numbers a row needs while an
+instructor drags a slider are the two on the chips.
+
+The similarity chip reads `k²/N` over `k` — the expected overlap between two
+independent `k`-row samples of an `N`-row pool — and its title gives the
+unluckiest pair in a class of `DatasetDiagnostics.defaultClassSize` and, under
+stratification, the most-shared category by name. Those are the two facts an
+instructor acts on; the derivation is the "Overlap" subsection above.
 
 `numericJitter` stays dead (see above), and these diagnostics do not assume
 it.

@@ -1133,6 +1133,35 @@ the `format-lint` CI job) — keep them green:
 - **The nginx maintenance page mirrors the palette by value** —
   `scripts/check-maintenance-palette.sh` fails when a colour there stops
   existing in `styles.css`.
+- **Do not invent a second way to say something the UI already says.** The
+  token guards prove a value is on the palette and the class-resolution guard
+  proves a name has a rule; neither can see a component that duplicates one in
+  the vocabulary under a different name, and until v0.5.137 the *global* sheet
+  had no budget at all — so the cheapest way to add a second spelling was to
+  skip the page block and put it in `styles.css`. That is how a pair of
+  estimate chips shipped as chips in the changelog, the commit message and
+  their own CSS comment, under a name sharing nothing with `.chip`, past a
+  fully green `format-lint`. `scripts/check-ui-vocabulary.sh` now prices it:
+  the count of global classes [docs/ui-design.md](docs/ui-design.md) does not
+  name is a shrink-only ratchet, `cursor` and `text-decoration` values are a
+  closed **affordance registry** (a new one is a rulebook edit, not a CSS
+  line), and hover text written in a template is capped at 20 words.
+- **Chrome is not prose, and a tooltip is not a disclosure.** Labels and chips
+  are two-or-three-word noun phrases; a `title` is one phrase; a note under a
+  control is one sentence; **anything longer goes in `docs/` and the UI links
+  there**. A hover title is invisible on touch, unsearchable, and read
+  inconsistently by screen readers, so it may never hold the only copy of
+  something a reader needs. The rules and the cheapest-first table of
+  interaction idioms — on the page → `<details>` → row popover → modal — are
+  in ui-design.md under "Interaction idioms" and "UI copy". The script only
+  reads templates, so prose assembled in Swift or JS needs its own budget
+  assertion (`datasetEstimateTitleWordCap` is the worked example).
+- **Run the `ui-review` agent on any change touching `Resources/Views/`,
+  `Public/styles.css`, or a page-wiring `Public/*.js`.** It reviews the layer
+  the guards structurally cannot: whether a construct duplicates the
+  vocabulary, whether the idiom is the lightest that fits, and whether the
+  copy is at house length. Green guards are necessary, not sufficient — every
+  style regression so far has been mechanically legal.
 
 Run `scripts/check-styles.sh` locally before pushing UI changes (it runs all
 of the above — same as the CI `format-lint` job). The visual-regression

@@ -154,13 +154,14 @@
             </div>
             #endif
             #elseif(item.assignment.validationStatus == "no-runner"):
-            <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
+            <span class="tier tier-closed" title="No runner could grade this when it was last saved, so validation did not run.">no runner</span>
+            <div class="cell-subrow">Ask an admin for a compatible runner, then re-save.</div>
             #else:
             <span class="tier">—</span>
             #endif
             #if(item.assignment.variantState == "failed"):
             <div class="cell-subrow">
-                <span class="tier tier-closed" title="The reference solution was also graded against synthetic per-student seeds, and failed on some of them — a student holding one of those seeds would fail through no fault of their own.">#(item.assignment.variantSummaryText)</span>
+                <span class="tier tier-closed" title="The solution failed on some per-student variants; those students would fail too.">#(item.assignment.variantSummaryText)</span>
                 #if(item.assignment.failedVariantSubmissionID):
                 <a href="/submissions/#(item.assignment.failedVariantSubmissionID)">View variant</a>
                 #endif
