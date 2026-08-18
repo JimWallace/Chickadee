@@ -1,14 +1,22 @@
 # Handoff — re-evaluating mutation testing
 
-**Status: closed, negative, dormant — with a precise trigger.** Nothing to build
-today. This exists so the question can be re-asked in ten minutes instead of
-re-investigated in a day. Tracking issue: **#1447**. Measurements:
-[mutation-testing-spike.md](mutation-testing-spike.md).
+**Status: stock Muter is unusable; a three-line fork works and has been run
+against real source.** Tracking issue: **#1447**. Root cause and measurements:
+[mutation-testing-spike.md](mutation-testing-spike.md). What a real run costs
+and finds: **[mutation-testing-pilot.md](mutation-testing-pilot.md)**.
 
-**If you read one thing:** the trigger is now upstream issue
+**If you read one thing:** the blocker is upstream issue
 [muter#307](https://github.com/muter-mutation-testing/muter/issues/307), not a
 release note and not a version number. Until a commit lands there, re-running
-the probe cannot change its answer — see "Do not re-run the probe yet" below.
+the probe against stock Muter cannot change its answer — see "Do not re-run the
+probe yet" below.
+
+**What changed since this was written.** The fork was built and pointed at four
+`RunnerCore` files: **69%, 88 killed, 39 survived, zero build errors, 46
+minutes**, surfacing seven specific test gaps. So "dormant" is no longer the
+whole answer — the open question is not *does it work* but *is a scoped monthly
+run worth the standing commitment of carrying a fork*. The pilot document has
+the costs, the findings, and the counter-argument.
 
 ## Why we wanted it
 
@@ -128,9 +136,14 @@ is silent". It is already filed, by someone else, with the same diagnosis:
 | [muter#307](https://github.com/muter-mutation-testing/muter/issues/307) | *"Schemata silently never applied: ApplySchemata re-parses sources, so node-identity-keyed SchemataMutationMapping never matches"* — opened 2026-07-12, **open**. Blames PR #302. Reporter measured zero schemata marker strings in the built test binaries and ~420 falsely-reported regressions, and **offers working patches** that retain the discovery parse trees. Unmerged. |
 | [muter#308](https://github.com/muter-mutation-testing/muter/issues/308) | *"v16 mutation schemata generate corrupt or missing code in four distinct ways"* — opened 2026-07-13, **open**, no fix named. Offset-desynced rewrites producing unparseable mutant branches, a lost original body on do/catch, a corrupted neutral path, and phantom mutants. |
 
-#308 is the reason "just carry the #307 patch ourselves" is not the obvious move.
-#307 is a few lines and would make Muter insert mutants again — measured above;
+#308 is the reason "just carry the #307 patch ourselves" was not the obvious
+move. #307 is a few lines and makes Muter insert mutants again — measured above;
 #308 says that once it does, what it inserts is not reliably valid Swift.
+**The pilot has since tested that fear directly and did not reproduce it:** 127
+mutants across 763 LOC of `RunnerCore`, zero build errors, every mutant
+accounted for in the report. That is evidence rather than a clearance — those
+files contain none of the do/catch shapes #308 names — but the risk is smaller
+than it read on paper. See [mutation-testing-pilot.md](mutation-testing-pilot.md).
 Adopting a patched fork would mean owning both, on a tool whose failure mode is
 a confident wrong number.
 
@@ -176,10 +189,13 @@ Do **not** point it at the whole codebase. The shape:
 - **A report, never a gate.** A surviving mutant is a question for a human;
   failing a build on a mutation score punishes the wrong thing.
 
-Ask before building the weekly job — it is a standing commitment of CI time and
-attention, not a one-off. Given #308, budget a second probe run against a real
-Chickadee file before trusting any number it produces: the probe package is
-three lines of Swift and will not exercise the corruption modes #308 describes.
+Ask before building a recurring job — it is a standing commitment of CI time and
+attention, not a one-off. The "run it against real source before trusting a
+number" caveat that stood here has been **discharged**: that run happened, and
+its costs, findings and counter-argument are in
+[mutation-testing-pilot.md](mutation-testing-pilot.md). The measured
+one-mutant-per-6-LOC ratio is what makes `--files-to-mutate` non-negotiable —
+a whole-tree campaign is ~10,000 mutants.
 
 ## The alternative, already assessed
 
