@@ -19,6 +19,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Every guard must be SEEN to fail. Its own job rather than a step inside
+  # format-lint: each fixture re-runs a whole guard, so the suite costs
+  # minutes, and paying that in wall-clock beside format-lint is free while
+  # paying it inside format-lint is not.
+  guard-self-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Every guard fails on its own defect
+        run: scripts/check-guards.sh
+
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -449,6 +466,7 @@ jobs:
   swift-tests-gate:
     needs:
       - format-lint
+      - guard-self-tests
       - build
       - core-tests
       - api-tests

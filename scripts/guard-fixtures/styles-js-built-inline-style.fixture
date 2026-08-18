@@ -1,0 +1,13 @@
+# The inline-style rule has to hold inside JS-built HTML strings too, which
+# the template scanner cannot see. The idiomatic form here is a single-quoted
+# JS string carrying a double-quoted attribute.
+guard="scripts/check-styles.sh"
+files="Public/app.js"
+description="a style attribute inside a JS-built HTML string"
+expect="inside a JS-built HTML string"
+apply() {
+    cat >> Public/app.js <<'JSEOF'
+
+function ckGuardFixture2() { return '<div style="margin:1px"></div>'; }
+JSEOF
+}

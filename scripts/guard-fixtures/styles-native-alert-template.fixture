@@ -1,0 +1,9 @@
+# Native alert() is at zero: errors surface through the inline .form-error
+# banner (ChickadeeUI.showActionError).
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="a native alert() in a template"
+expect="new native alert() in a template"
+apply() {
+    printf '<a href="#" onclick="alert(1)">guard fixture</a>\n' >> Resources/Views/login.leaf
+}

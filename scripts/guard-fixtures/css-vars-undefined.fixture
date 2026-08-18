@@ -1,0 +1,8 @@
+# A var(--x) with no declaration renders as nothing rather than erroring.
+guard="scripts/check-css-vars.sh"
+files="Public/styles.css"
+description="a var() reference to an undeclared custom property"
+expect="undefined"
+apply() {
+    printf '\n.ck-guard-fixture { color: var(--ck-guard-fixture-never-declared); }\n' >> Public/styles.css
+}

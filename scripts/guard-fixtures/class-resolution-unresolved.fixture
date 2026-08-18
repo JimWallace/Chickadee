@@ -1,0 +1,9 @@
+# A class with no rule is either a typo or dead markup; both render fine and
+# so are invisible to the render tests.
+guard="scripts/check-class-resolution.sh"
+files="Resources/Views/login.leaf"
+description="a class name with no stylesheet rule"
+expect="resolve"
+apply() {
+    printf '<div class="ck-guard-fixture-no-such-rule">x</div>\n' >> Resources/Views/login.leaf
+}

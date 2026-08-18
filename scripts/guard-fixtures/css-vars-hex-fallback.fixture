@@ -1,0 +1,9 @@
+# var(--x, #hex) looks safe and is not: the fallback is off-palette and has
+# no dark-mode value, so it fires exactly when the token is missing.
+guard="scripts/check-css-vars.sh"
+files="Public/styles.css"
+description="a hardcoded colour fallback in a var() reference"
+expect="fallback"
+apply() {
+    printf '\n.ck-guard-fixture { color: var(--gray-600, #333333); }\n' >> Public/styles.css
+}
