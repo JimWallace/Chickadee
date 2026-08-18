@@ -1,35 +1,48 @@
-name: Mutation testing (weekly slice)
+name: Mutation testing (weekly)
 
-# A REPORT, NEVER A GATE. Nothing here blocks a merge, and no score is a target.
+# A REPORT, NEVER A GATE. Nothing here blocks a merge and no score is a target.
 # A surviving mutant is a question for a human: the suite could not tell the
 # difference when that expression changed. Some survivors are unkillable by
-# construction, and chasing a percentage means writing tests for inputs that
+# construction, so chasing a percentage means writing tests for inputs that
 # cannot occur. See docs/mutation-testing-pilot.md.
 #
-# ONE SLICE PER WEEK, not one library. Measured 2026-08-18: mutation density is
-# about one mutant per 6 lines of Swift, and every mutant costs a full test-suite
-# run (~16s). Whole-target runtimes at that rate are RunnerCore ~1h10m, Worker
-# ~4h11m, Core ~6h23m and APIServer ~70h -- so slicing is arithmetic, not
-# tuning. The rotation lives in Tools/mutation/slices.json and the report says
-# which slice ran, so partial coverage is never mistaken for a clean tree.
+# SHARDED, BECAUSE THE ARITHMETIC DEMANDS IT. Measured 2026-08-18: about one
+# mutant per 6 lines of Swift, and every mutant costs one full run of the test
+# command (~16s for `swift test --skip APITests`). The logic tier -- RunnerCore,
+# Core and Worker, ~16k LOC -- is ~2,650 mutants and ~12h serial, which is why it
+# is split ten ways and finishes inside ~90 minutes of wall clock.
+#
+# APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
+# mutants, and its mutants must be graded by APITests, the slowest suite, so it
+# is ~1,712h serial -- roughly 96% of the cost of the whole tree for its least
+# informative mutants (route wiring, Leaf rendering, Fluent models). Triage cost
+# scales with SURVIVORS, not mutants, and a report nobody can read is worse than
+# no report because it looks like coverage.
 #
 # THIS BUILDS A PATCHED MUTER, DELIBERATELY. Stock Muter cannot mutate anything
-# here and fails silently with a confident 0% (muter#307, open upstream); and
-# every Muter RELEASE predates the fix that lets it see Swift Testing failures at
-# all, which matters because this repo has zero XCTest. There is no released
-# build that works for us. scripts/mutation-run.sh carries the reasoning and the
-# patch; the `Mutation-testing probe (macOS)` workflow is how you re-verify the
-# tool itself after changing the pin -- both failure modes are silent, so a
-# plausible-looking report is not evidence the tool ran.
+# here and fails silently at a confident 0% (muter#307, open upstream), and every
+# Muter RELEASE predates the fix that lets it recognise a Swift Testing failure
+# at all, which matters because this repo has zero XCTest. There is no released
+# build that works for us. scripts/mutation-run.sh carries the reasoning; the
+# `Mutation-testing probe (macOS)` workflow re-verifies the tool after a bump,
+# because both upstream failure modes are silent and a plausible-looking report
+# is not evidence the tool ran.
+#
+# AND ITS OUTPUT IS AUDITED, NOT TRUSTED. Muter also reports mutants it never
+# inserted, which always read as "survived" -- measured here, one of four
+# RemoveSideEffects mutants in SuiteExecution.swift was a phantom pointing at a
+# line that an existing test already covers. Tools/mutation/report.py checks
+# every reported survivor against the guards actually present in the mutated copy
+# and quarantines the phantoms, so nobody triages a mutant that does not exist.
 
 on:
   schedule:
-    # Sundays, 06:00 UTC. Off the weekday critical path.
-    - cron: "0 6 * * 0"
+    # Tuesdays, 06:00 UTC.
+    - cron: "0 6 * * 2"
   workflow_dispatch:
     inputs:
-      slice:
-        description: "Slice index to run (default: ISO week number modulo the slice count)"
+      shards:
+        description: "Shard count override (default: shardCount in Tools/mutation/config.json)"
         required: false
         type: string
 
@@ -42,17 +55,21 @@ concurrency:
 
 jobs:
   mutate:
-    name: Mutate one slice
+    name: "Shard ${{ matrix.shard }}"
     runs-on: ubuntu-latest
-    # Largest slice measures ~89 minutes of mutant testing plus a cold build of
-    # the project inside Muter's copy. Generous so a slow slice reports rather
-    # than being killed at a ceiling -- a job cancelled at its limit looks
-    # identical to a wedge from the outside.
+    # Each shard measures ~70 minutes of mutant testing plus a cold build of the
+    # project inside Muter's copy. Generous, so a slow shard reports rather than
+    # being killed at a ceiling -- a job cancelled at its limit looks identical
+    # to a wedge from the outside.
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     container:
-      # Same image the worker-tests job uses, so the interpreters available here
-      # match the ones CI normally grades with. This matters more than it looks:
-      # a missing interpreter makes its tests SKIP rather than fail, and every
+      # The same image worker-tests uses, so the interpreters available here
+      # match what CI normally grades with. This matters more than it looks: a
+      # missing interpreter makes its tests SKIP rather than fail, and every
       # mutant they covered then survives and reads as a hole that is not there.
       image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
       credentials:
@@ -70,70 +87,111 @@ jobs:
           # than silently reusing a Muter that no longer carries the fix.
           key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
 
-      - name: Run the slice
+      - name: Run shard ${{ matrix.shard }}
         run: |
           scripts/mutation-run.sh \
+            --shard ${{ matrix.shard }} \
             --muter-src /tmp/muter-src \
             --out mutation-report \
-            ${{ inputs.slice && format('--slice {0}', inputs.slice) || '' }}
+            ${{ inputs.shards && format('--of {0}', inputs.shards) || '' }}
 
-      - name: Upload the report
+      - name: Upload this shard's report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-report
+          name: mutation-report-${{ matrix.shard }}
           path: mutation-report/
           if-no-files-found: warn
 
   file-issue:
-    name: File the triage issue
+    name: File one triage issue
     needs: mutate
-    if: always() && needs.mutate.result == 'success'
+    # `always()` so a single wedged shard still yields a report for the other
+    # nine, rather than losing an hour of compute to one bad apple.
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
 
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/download-artifact@v4
         with:
-          name: mutation-report
-          path: mutation-report
+          pattern: mutation-report-*
+          path: shards
 
-      - name: Open an issue if anything survived
+      - name: Merge the shards and file the issue
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const report = fs.readFileSync('mutation-report/report.md', 'utf8');
+            const path = require('path');
 
-            // Nothing survived -> nothing to track. Filing an issue per run
-            // regardless would train everyone to ignore the label.
-            if (report.includes('No survivors.')) {
-              core.info('No survivors; not filing an issue.');
-              core.summary.addRaw(report).write();
+            const dirs = fs.existsSync('shards')
+              ? fs.readdirSync('shards').sort((a, b) => {
+                  const na = Number(a.split('-').pop()), nb = Number(b.split('-').pop());
+                  return na - nb;
+                })
+              : [];
+
+            let survivors = 0, phantoms = 0, killed = 0, missing = [];
+            const sections = [];
+
+            for (const d of dirs) {
+              const shard = d.split('-').pop();
+              const file = path.join('shards', d, 'report.md');
+              if (!fs.existsSync(file)) { missing.push(shard); continue; }
+              const body = fs.readFileSync(file, 'utf8');
+              const m = body.match(/\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)%/);
+              if (m) { killed += Number(m[1]); survivors += Number(m[2]); }
+              const p = body.match(/Muter reported (\d+) survivor/);
+              if (p) phantoms += Number(p[1]);
+              sections.push(body);
+            }
+
+            // A shard that produced nothing is reported, never silently dropped:
+            // partial coverage that reads as complete is the failure mode this
+            // whole exercise exists to avoid.
+            const shardCount = dirs.length + missing.length;
+            const header = [
+              `## Mutation sweep — logic tier`,
+              '',
+              `**${killed} killed, ${survivors} survived** across ${dirs.length} shard(s)`
+                + (phantoms ? `, plus ${phantoms} phantom mutant(s) filtered out.` : '.'),
+              '',
+            ];
+            if (missing.length) {
+              header.push(
+                `> ⚠️ **${missing.length} shard(s) produced no report: ${missing.join(', ')}.**`,
+                '> Their files were NOT mutated in this run, so absence of findings there',
+                '> means nothing. Check the job logs.',
+                '',
+              );
+            }
+
+            if (survivors === 0 && missing.length === 0) {
+              core.info('Nothing survived and no shard failed; not filing an issue.');
+              core.summary.addRaw(header.join('\n')).write();
               return;
             }
 
-            const sliceLine = report.split('\n')[0].replace(/\*/g, '');
             const today = new Date().toISOString().slice(0, 10);
-            const title = `Mutation triage: ${sliceLine} (${today})`;
-
-            const body = [
-              report,
+            const body = header.concat(sections).join('\n') + [
               '',
               '<sub>Filed automatically by `.github/workflows/mutation-weekly.yml`.',
-              'Triage by deciding, per survivor, whether a test should exist. Close as',
-              '`wontfix` with the reason when a mutant is unkillable by construction —',
-              'that is a legitimate outcome, not a backlog item.</sub>',
+              'Triage by deciding, per survivor, whether a test should exist — after',
+              'confirming the mutant by hand. Closing one with a reason is a legitimate',
+              'outcome, not a backlog item.</sub>',
             ].join('\n');
 
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body,
+              title: `Mutation sweep: logic tier (${today})`,
+              body: body.length > 60000 ? body.slice(0, 60000) + '\n\n…truncated; see the run artifacts.' : body,
             });
             core.info(`Filed ${issue.data.html_url}`);
-            core.summary.addRaw(report).addRaw(`\n\nFiled ${issue.data.html_url}`).write();
+            core.summary.addRaw(header.join('\n')).addRaw(`\nFiled ${issue.data.html_url}`).write();

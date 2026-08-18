@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Config for the weekly sharded mutation run.",
+    "",
+    "WHAT IS COVERED, AND WHY NOT EVERYTHING. `include` is the logic tier:",
+    "RunnerCore (the grading core, compiled natively AND to wasm), Core (models,",
+    "language dispatch, pattern rendering) and Worker (submission normalization,",
+    "job lifecycle). Together ~16k LOC, ~2,650 mutants, ~12h serial, which shards",
+    "to well under an hour of wall clock.",
+    "",
+    "APIServer is deliberately EXCLUDED and should stay excluded. It is 94k LOC",
+    "-- 15,681 mutants -- and its mutants must be graded by APITests, the slowest",
+    "suite, so it is ~1,712h serial: about 96% of the total cost of the tree. The",
+    "value is also lowest there: it is overwhelmingly Vapor route wiring, Leaf",
+    "rendering and Fluent models, where mutants are dominated by pagination bounds",
+    "and deleted log lines. Triage cost scales with SURVIVORS, not mutants, and a",
+    "report nobody reads is worse than no report because it looks like coverage.",
+    "",
+    "testArgs grades every mutant with CoreTests + WorkerTests and skips APITests.",
+    "That is a deliberate trade: including APITests would multiply per-mutant cost",
+    "by roughly 25x. The cost is that Core code reached ONLY through APITests will",
+    "show false survivors -- which is why the report tells the reader to verify",
+    "before acting, and why nothing here is a gate."
+  ],
+  "include": [
+    "Sources/RunnerCore",
+    "Sources/Core",
+    "Sources/Worker"
+  ],
+  "testArgs": ["test", "--skip", "APITests"],
+  "shardCount": 10
+}
