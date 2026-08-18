@@ -36,6 +36,20 @@ jobs:
       - name: Every guard fails on its own defect
         run: scripts/check-guards.sh
 
+  # The mutation tooling is Python, so this needs python3 and NOTHING else --
+  # no Swift, no container. It rode in format-lint for one commit and failed
+  # with `python3: not found`: that job runs the PLAIN swift image, which is the
+  # toolchain alone. The -ci image is the one carrying python3, and pulling a
+  # ~GB container to run 18 unit tests would be the wrong fix for a job that
+  # never touches Swift.
+  mutation-trend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Mutation trend aggregation self-test
+        run: python3 -m unittest discover -s Tools/mutation -p 'trend_test.py' -v
+
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -86,9 +100,6 @@ jobs:
 
       - name: Check the CI compose fixture covers every required variable
         run: scripts/ci-compose-env.sh --check
-
-      - name: Mutation trend aggregation self-test
-        run: python3 -m unittest discover -s Tools/mutation -p 'trend_test.py' -v
 
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
@@ -494,6 +505,7 @@ jobs:
     needs:
       - format-lint
       - guard-self-tests
+      - mutation-trend-tests
       - build
       - core-tests
       - api-tests
