@@ -43,7 +43,15 @@ name: Mutation-testing probe (macOS)
 # hand and requires the suite to fail. Without that, a green probe would only
 # prove Muter agreed with itself, which is the very failure mode being chased.
 
+# Runs on a PR that touches this file, so the verdict is available BEFORE the
+# probe is merged — `workflow_dispatch` alone can only be triggered from the
+# default branch, which would mean merging an unevaluated tool evaluation. The
+# path filter keeps it off every unrelated PR; it is diagnostic, not a gate, so
+# not running is the correct outcome elsewhere.
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/mutation-probe.yml"
   workflow_dispatch:
     inputs:
       muter_ref:
@@ -69,7 +77,7 @@ jobs:
         run: |
           git clone https://github.com/muter-mutation-testing/muter.git "$RUNNER_TEMP/muter"
           cd "$RUNNER_TEMP/muter"
-          git checkout "${{ inputs.muter_ref }}"
+          git checkout "${{ inputs.muter_ref || '7f1f258' }}"
           git log -1 --format='muter @ %h %ad %s' --date=short
           # --product muter: Muter's own test target does not build standalone.
           swift build -c release --product muter
