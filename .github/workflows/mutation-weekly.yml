@@ -115,7 +115,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      # `write` so the run record can be committed. The sweep's output was
+      # otherwise entirely perishable -- expiring artifacts and an issue body --
+      # and a trend needs a series that outlives the retention window.
+      contents: write
       issues: write
 
     steps:
@@ -125,6 +128,34 @@ jobs:
         with:
           pattern: mutation-report-*
           path: shards
+
+      - name: Record this run for the trend
+        run: |
+          date="$(date -u +%Y-%m-%d)"
+          python3 Tools/mutation/merge-run.py shards "MutationReports/$date.json" "$date" || {
+            echo "::warning::No shard produced outcomes; no run recorded."
+            exit 0
+          }
+          python3 Tools/mutation/trend.py
+
+      - name: Commit the run record
+        # NEVER fatal. This step runs before the triage issue is filed, and a
+        # push refused by branch protection must not cost the run its report --
+        # the issue is the existing behaviour and the record is the addition.
+        # A lost record is one gap in a series; a lost issue is the whole run.
+        continue-on-error: true
+        run: |
+          if [ -z "$(git status --porcelain MutationReports)" ]; then
+            echo "Nothing to record."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MutationReports
+          git commit -m "chore(mutation): record sweep $(date -u +%Y-%m-%d)"
+          # Rebase rather than force: this job races nothing, but main moves.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Merge the shards and file the issue
         uses: actions/github-script@v7
