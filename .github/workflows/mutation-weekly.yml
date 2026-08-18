@@ -8,9 +8,15 @@ name: Mutation testing (weekly)
 #
 # SHARDED, BECAUSE THE ARITHMETIC DEMANDS IT. Measured 2026-08-18: about one
 # mutant per 6 lines of Swift, and every mutant costs one full run of the test
-# command (~16s for `swift test --skip APITests`). The logic tier -- RunnerCore,
-# Core and Worker, ~16k LOC -- is ~2,650 mutants and ~12h serial, which is why it
-# is split ten ways and finishes inside ~90 minutes of wall clock.
+# command (~16s). RunnerCore + Core, ~10.2k LOC, is ~1,700 mutants and ~7.5h
+# serial, which is why it is split eight ways and finishes inside ~an hour.
+#
+# WORKER IS NOT IN THE SWEEP, on evidence. Run 2 aborted on every shard because
+# Muter's BASELINE suite was red -- `Suite WorkerTests failed with 2 issues` --
+# and Muter mutates nothing when the unmutated suite fails. WorkerTests holds the
+# timing-sensitive sandbox/timeout tests and spawns concurrent daemons; running it
+# in one process alongside CoreTests on a 2-core runner is a configuration nothing
+# else exercises. Re-adding it needs that understood, not a longer timeout.
 #
 # APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
 # mutants, and its mutants must be graded by APITests, the slowest suite, so it
@@ -65,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     container:
       # swift-CI, not plain swift. The -ci image is the one carrying python3,
       # lua5.4, octave and r-base; the plain image is the toolchain alone. Run 1
