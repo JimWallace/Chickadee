@@ -155,6 +155,7 @@
             #endif
             #elseif(item.assignment.validationStatus == "no-runner"):
             <span class="tier tier-closed" title="No runner could grade this when it was last saved, so validation did not run.">no runner</span>
+            <div class="cell-subrow">Ask an admin for a compatible runner, then re-save.</div>
             #else:
             <span class="tier">—</span>
             #endif

@@ -23,7 +23,7 @@ struct DatasetsBody: Content {
 
 /// The response of either GET or PUT — the specs as the manifest now holds
 /// them, which is what the Files panel renders its controls from, plus the
-/// per-file estimates its disclosure shows.  Serving the estimates on the
+/// per-file estimates its chips show.  Serving the estimates on the
 /// same response is what makes them live: every parameter edit is a PUT, so
 /// the numbers move with the controls without a second request.
 struct DatasetsResponse: Content {
@@ -96,12 +96,12 @@ func datasetEstimateSummary(
     else { return nil }
 
     var similarityTitle =
-        "Rows a typical pair of students both hold, of \(overlap.rowsPerStudent). "
+        "Rows a typical pair shares, of \(overlap.rowsPerStudent). "
         + "Unluckiest pair of \(DatasetDiagnostics.defaultClassSize): "
         + "\(Int(overlap.worstPairSharedRows.rounded()))."
     if let stratum = overlap.mostCopyableStratum {
         similarityTitle +=
-            " Most shared: \"\(stratum.value)\" "
+            " Most shared: \"\(hoverName(stratum.value))\" "
             + "(\(estimatePercentText(stratum.sharedFraction)))."
     }
 
@@ -130,9 +130,32 @@ private func driftChip(
     }
 
     let title =
-        "Worst column \"\(worst.column)\", in \(estimateMeasureName(worst.measure)). "
+        "Worst column \"\(hoverName(worst.column))\", "
+        + "in \(estimateMeasureName(worst.measure)). "
         + "0 is identical; \(estimateUnitsText(worst.worst)) on an unlucky variant."
     return ("drift \(estimateUnitsText(worst.median))", title)
+}
+
+/// A column name or category value, bounded for a hover title.
+///
+/// Both titles interpolate identifiers out of the instructor's own CSV, and
+/// `datasetEstimateTitleWordCap` is a WORD budget, so an unbounded name is a
+/// silent breach waiting for the first course whose stratum is "Type 2
+/// Diabetes" or whose column is "Systolic Blood Pressure" — the test fixture's
+/// one-letter wards cannot see it.  Bounding the name here keeps both titles
+/// within budget by construction rather than by anyone remembering: the base
+/// sentences interpolate only numbers, so with this cap the longest either can
+/// reach is 18 words.  A prefix is the right trim — the reader is matching it
+/// against a column list they already have, so the first words identify it.
+func hoverName(_ raw: String, words wordLimit: Int = 3, characters charLimit: Int = 32) -> String {
+    let parts = raw.split(whereSeparator: \.isWhitespace)
+    var name =
+        parts.count > wordLimit
+        ? parts.prefix(wordLimit).joined(separator: " ") + "…" : raw
+    if name.count > charLimit {
+        name = name.prefix(charLimit).trimmingCharacters(in: .whitespaces) + "…"
+    }
+    return name
 }
 
 /// A fraction as chip-sized percent text: whole percents from 10% up, one

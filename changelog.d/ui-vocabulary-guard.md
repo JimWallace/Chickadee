@@ -36,6 +36,11 @@
   phrase naming what its number measures, and the method they used to explain
   is in `docs/datasets.md`. Three over-long hover titles elsewhere (the
   no-runner and failed-variant badges, the default time limit) were cut to a
-  sentence. The numbers, and the thirteen components that had reached
-  `styles.css` without ever reaching the catalog, are unchanged and now
-  documented.
+  sentence, and the "no runner" badge — the one validation state whose only
+  remedy lived in a tooltip — gains the same on-page follow-up line its
+  `failed` and `pending` siblings already had. A hover title assembled from an
+  instructor's own column names and category values is now bounded to a
+  fixed number of words, so a course whose stratum is "Type 2 Diabetes"
+  cannot silently breach the budget the same release introduced. The numbers,
+  and the thirteen components that had reached `styles.css` without ever
+  reaching the catalog, are unchanged and now documented.

@@ -48,6 +48,57 @@ import Testing
         #expect(summary.driftTitle.contains("on an unlucky variant"))
     }
 
+    /// A pool whose stratum values and column names are the multi-word text a
+    /// real course has ("Type 2 Diabetes", "Systolic Blood Pressure"), which
+    /// is the axis `pool`'s one-letter wards cannot exercise: the budget is
+    /// counted in WORDS, so a title that fits for ward "D" can breach it for a
+    /// three-word category with no code change at all.
+    /// The long-named stratum is the one the summary will actually name, and
+    /// making that true takes more than making it rare: `mostCopyableStratum`
+    /// is the highest take/size ratio, which only favours a small stratum once
+    /// the one-row floor OVER-allocates it — that is, once its proportional
+    /// share falls below one row.  At 30 of 120 that means fewer than four
+    /// rows, so this stratum has two.  A first draft gave it five, the floor
+    /// never engaged, a three-word category was named instead, and the test
+    /// passed against a completely unbounded name.
+    private let wordyPool: String = {
+        var lines = ["patient id,Primary Diagnosis Group,Mean Systolic Blood Pressure Reading mmHg"]
+        let groups = ["Type 2 Diabetes", "Asthma", "Chronic Kidney Disease Stage 3 Dialysis"]
+        for i in 0..<120 {
+            lines.append("\(i),\(groups[i < 70 ? 0 : i < 118 ? 1 : 2]),\(90 + (i * 31) % 60)")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }()
+
+    @Test func aMultiWordStratumAndColumnStayWithinTheBudget() throws {
+        let summary = try #require(
+            datasetEstimateSummary(
+                for: DatasetSpec(
+                    file: "cases.csv", kind: .stratifiedSample, sampleSize: 30,
+                    stratumColumn: "Primary Diagnosis Group"),
+                sourceCSV: wordyPool, divergenceMeasurable: true))
+
+        for (label, title) in [
+            ("similarity", summary.similarityTitle), ("drift", summary.driftTitle),
+        ] {
+            let words = title.split(whereSeparator: \.isWhitespace).count
+            #expect(
+                words <= datasetEstimateTitleWordCap,
+                "the \(label) title is \(words) words on real-world names: \(title)")
+        }
+        // The clause still identifies the category — bounded, not dropped.
+        #expect(summary.similarityTitle.contains("Most shared: \""))
+    }
+
+    @Test func aBoundedHoverNameKeepsItsIdentifyingPrefix() {
+        #expect(hoverName("Asthma") == "Asthma", "a short name is untouched")
+        #expect(hoverName("Type 2 Diabetes") == "Type 2 Diabetes", "three words fit")
+        #expect(hoverName("Chronic Kidney Disease Stage 3 Dialysis") == "Chronic Kidney Disease…")
+        #expect(
+            hoverName(String(repeating: "x", count: 50)).count <= 33,
+            "one very long token is bounded by the character cap, not the word cap")
+    }
+
     /// The chips' titles are assembled from measured numbers in Swift, so
     /// `scripts/check-ui-vocabulary.sh` — which reads templates — cannot see
     /// them.  This holds the same budget on the path the script cannot reach,

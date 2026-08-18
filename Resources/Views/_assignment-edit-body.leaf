@@ -319,7 +319,7 @@
                 <input class="form-input input-compact suite-default-limit-input"
                        type="number" min="1" max="600" step="1"
                        id="suite-default-time-limit" value="#(timeLimitSeconds)"
-                       title="Seconds a test may run before it times out. Individual tests can override this.">
+                       title="Seconds before a test times out, unless the test sets its own limit.">
                 s
                 <span id="suite-default-limit-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </label>
