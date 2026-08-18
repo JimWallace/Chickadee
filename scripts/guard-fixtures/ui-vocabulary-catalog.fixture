@@ -1,0 +1,10 @@
+# A new component in the GLOBAL sheet was free until v0.5.137: the page-style
+# ratchet prices only a page-local copy. This is the rule that would have
+# caught the estimate chips shipping under a name sharing nothing with .chip.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/styles.css"
+description="a global component the rulebook does not name"
+expect="the rulebook does not name"
+apply() {
+    printf '\n.ck-guard-fixture-uncatalogued { display: inline-flex; }\n' >> Public/styles.css
+}

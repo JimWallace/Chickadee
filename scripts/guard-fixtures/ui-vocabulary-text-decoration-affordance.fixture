@@ -1,0 +1,9 @@
+# The dotted underline that travelled with `cursor: help`. Registered values
+# are none / underline / line-through; anything else is a new idiom.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/styles.css"
+description="an unregistered text-decoration affordance"
+expect="unregistered text-decoration affordance"
+apply() {
+    printf '\n.ck-guard-fixture-underline { text-decoration: underline dotted; }\n' >> Public/styles.css
+}
