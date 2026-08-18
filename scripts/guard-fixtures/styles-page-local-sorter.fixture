@@ -1,0 +1,9 @@
+# Six hand-rolled sorters in three markup dialects is what the shared
+# component replaced; a page-local sorter forks it back.
+guard="scripts/check-styles.sh"
+files="Resources/Views/admin-audit.leaf"
+description="a page-local table sorter"
+expect="re-implements the shared sortable-table idiom"
+apply() {
+    printf '<p>function sortByHeader(a, b) {}</p>\n' >> Resources/Views/admin-audit.leaf
+}

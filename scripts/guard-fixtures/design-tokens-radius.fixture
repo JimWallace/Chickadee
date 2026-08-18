@@ -1,0 +1,8 @@
+# 18 distinct border radii had accumulated before the radius scale.
+guard="scripts/check-design-tokens.sh"
+files="Public/styles.css"
+description="a border-radius literal outside the radius scale"
+expect="border-radius"
+apply() {
+    printf '\n.ck-guard-fixture { border-radius: 0.37rem; }\n' >> Public/styles.css
+}

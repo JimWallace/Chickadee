@@ -1,0 +1,9 @@
+# Destructive confirmation goes through ChickadeeUI.confirmAction (or the
+# data-confirm seam); the native dialog is at zero and stays there.
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="a native confirm() in a template"
+expect="native confirm()"
+apply() {
+    printf '<form onsubmit="return confirm(%s)"></form>\n' "'sure?'" >> Resources/Views/login.leaf
+}

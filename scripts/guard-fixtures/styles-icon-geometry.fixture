@@ -1,0 +1,9 @@
+# Icon geometry lives only in _icons.leaf; every other use references a
+# <symbol>. Sixteen copies of one trash can is what this prevents.
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="inline SVG geometry outside the icon sprite"
+expect="inline SVG geometry outside the icon sprite"
+apply() {
+    printf '<svg><path d="M1 1 L2 2"/></svg>\n' >> Resources/Views/login.leaf
+}

@@ -1,0 +1,9 @@
+# 26 distinct font sizes had accumulated before the type scale. A literal
+# reintroduces a step outside it.
+guard="scripts/check-design-tokens.sh"
+files="Public/styles.css"
+description="a font-size literal outside the type scale"
+expect="font-size"
+apply() {
+    printf '\n.ck-guard-fixture { font-size: 0.83rem; }\n' >> Public/styles.css
+}

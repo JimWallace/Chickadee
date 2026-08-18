@@ -1,0 +1,9 @@
+# JS may toggle a class or set a custom property. A colour written from JS
+# never routes through the palette and has no dark-mode value.
+guard="scripts/check-styles.sh"
+files="Public/app.js"
+description="a colour written via .style from JS"
+expect="colour/typography property written via .style"
+apply() {
+    printf '\nfunction ckGuardFixture(el) { el.style.color = "red"; }\n' >> Public/app.js
+}
