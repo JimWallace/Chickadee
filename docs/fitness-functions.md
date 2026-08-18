@@ -55,10 +55,13 @@ exists to catch. A fitness function nobody has watched fail is a hypothesis.
   between stages, where something asked 'which language is this?' and answered
   Python."*
 - **`RouteAuthorizationMatrixTests`** — walks the *live route table*
-  (`app.routes.all`), substitutes real fixture IDs, and asserts every
-  parameterized `/instructor` and `/courses` route denies a student of the
-  owning course and staff of a different course. Route enumeration is
-  discovered, so a new route the matrix does not know fails loudly.
+  (`app.routes.all`), substitutes real fixture IDs, and crosses every
+  parameterized `/instructor` and `/courses` route with two dimensions: course
+  identity (staff of a *different* course are denied everywhere) and role rank
+  (each route's declared floor, crossed with `CourseRole.allCases`). Both are
+  discovered — a new route the matrix does not know fails loudly, a new route
+  with no declared floor fails until someone declares it, and a new role rung
+  gets its denial row with no edit to the test.
 - **`MCPAuthorizationCoverageTests`** — scans every tool's source and fails the
   build if one skips authorization.
 - **`Tools/visual-regression/run-repaint-probe.sh`** — the seam where the
@@ -82,32 +85,43 @@ triggers a rollback, nobody reviews the thresholds when the system changes, and
 they are not in any list of things that hold the architecture. Compare the
 triggered side, where every rule has a named guard, a baseline, and a doc.
 
-## The gap worth acting on
+## The gap worth acting on — **closed (2026-08)**
 
-**The route table is discovered. The role dimension is hand-listed.**
+The finding was: **the route table is discovered, the role dimension is
+hand-listed.** `RouteAuthorizationMatrixTests` crossed *every* route with
+exactly two personas — a student of the owning course and an instructor of a
+different course — so `.ta` appeared nowhere in it, and the TA boundary rested
+on eight hand-written spot tests in `TARoleRouteTests`. An instructor-only route
+that forgot its `.instructor` floor passed both, because a TA of the owning
+course is neither persona and the spot suite only covered routes someone
+remembered to write. That was the *"enumerated rather than discovered, fails
+open"* shape the language work was built to escape, on the dimension where the
+failure mode is access to another course's student data.
 
-`RouteAuthorizationMatrixTests` crosses *every* route with exactly two
-personas: a student of the owning course, and an instructor of a different
-course. `CourseRole.allCases` is `student < ta < instructor`, and **`.ta`
-appears zero times in that matrix.** The TA boundary — the rule that a TA may
-author content and grade but may *not* manage enrollment, deadlines, archival
-or staff — rests on eight hand-written spot tests in `TARoleRouteTests`.
+What shipped, and the three things worth keeping from doing it:
 
-So a new instructor-only route that forgets its `.instructor` floor passes both:
-the matrix denies students and cross-course staff, and a TA of the owning course
-is neither; the spot suite only covers routes someone remembered to add. That is
-precisely the *"enumerated rather than discovered, fails open"* shape the
-language work was built to escape — on the one dimension where the failure mode
-is cross-course access to student data rather than a mis-rendered test.
+- **The floor is declared, not scanned.** Inferring each route's floor from its
+  handler — grepping for `requireCourseRole(atLeast:)` — was the tempting cheap
+  option and is the one that fails open: a route whose gate is spelled
+  differently, or missing entirely, reads as having no floor and passes. The
+  floor is a judgement about what the route *is*, so it is written down once and
+  the code is held to it. The discovered route table keeps the map honest — a
+  walked route with no entry fails by name.
+- **It found a real defect on its first run.** Course-section create / rename /
+  reorder / delete and assignment-to-section moves enforced nothing beyond the
+  `/instructor` area gate, so any TA could restructure a course — while the MCP
+  twins enforced `.instructor` and their own comments claimed to be "matching
+  the web". Three documented statements of the floor, no enforcement, and every
+  existing test green: exactly the miss a derived matrix exists to catch.
+- **The positive direction needed its own discipline.** "Not denied" is a weak
+  assertion that passes on an unrelated 404, and an allowed request *runs* —
+  measured, `POST /instructor/:assignmentID/delete` succeeds mid-walk and every
+  later `:assignmentID` route 404s, so a naive walk reads its own exhaust. The
+  fix was to re-mint the target resources before each allowed probe and to
+  enumerate the routes that still 404 an authorized caller, rather than
+  tolerating 404 everywhere.
 
-**The fix is small, because both halves already exist**: the matrix already
-discovers routes and already knows how to build enrolled personas. Crossing the
-discovered route table with `CourseRole.allCases` — asserting each route's
-declared floor rather than a fixed pair — turns eight remembered cases into a
-derived matrix, and makes a new role (or a new route) fail loudly instead of
-quietly.
-
-Two smaller ones, recorded rather than argued:
+Two smaller gaps remain, recorded rather than argued:
 
 - **No holistic function covers `MCPMode × scope × tool`.** The pieces are
   guarded individually (`MCPModeScopeContractTests`, `MCPConfigTests`,

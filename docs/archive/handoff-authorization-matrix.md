@@ -1,7 +1,51 @@
 # Handoff — derive the authorization matrix over `CourseRole.allCases`
 
-**Status: not started. This is the whole task.** The finding is in
-[fitness-functions.md](fitness-functions.md); this is how to act on it.
+**Status: DONE (2026-08). Archived — kept for the reasoning, not as a work
+item.** The guard lives in `Tests/APITests/RouteAuthorizationMatrixTests.swift`,
+whose header carries the durable version of everything below. The finding this
+came from is in [../fitness-functions.md](../fitness-functions.md), now marked
+closed.
+
+## Status at merge
+
+- **Option (2) was taken**, as recommended: a declared floor map in the test,
+  kept exhaustive by the discovered route table. Option (3) — declaring the
+  floor at route registration — was not attempted and remains the principled end
+  state; it is worth proposing separately.
+- **Three personas became `CourseRole.allCases`.** Rather than adding a `.ta`
+  persona beside the existing two, the role dimension is derived: a persona per
+  rung, denied where `role < floor` and not denied where `role >= floor`. A
+  fourth rung would get its row with no edit. `CourseRole` gained `CaseIterable`
+  for this.
+- **The positive case needed more than the handoff anticipated.** "Not denied"
+  is not just weak against an unrelated 404 — an allowed request *runs*, and
+  several mutate the resources the rest of the walk addresses
+  (`POST /instructor/:assignmentID/delete` returns 303 mid-walk, after which
+  every later `:assignmentID` route 404s). The allowed direction therefore
+  re-mints its target resources before every probe, and the routes that still
+  404 an authorized caller are enumerated rather than tolerated.
+- **It found a real defect**, which is fixed in the same change: the five
+  course-section handlers enforced nothing beyond the `/instructor` area gate,
+  so a TA could create, rename, reorder and delete a course's sections and move
+  assignments between them. The floor was already documented in three places and
+  already enforced by the MCP twins.
+- **Six of the eight spot tests in `TARoleRouteTests` were deleted.** The two
+  that remain are on vanity-URL routes rooted at the `:courseCode` *parameter*,
+  which the walk (rooted at the constants `instructor` / `courses`) cannot
+  reach, and they assert behaviour — that the extension row is really created
+  and removed — rather than a status code.
+- **Not addressed, and worth their own issue:** the census done for this work
+  found several *non-parameterized* routes with no per-course check at all,
+  which the walk skips because it requires a path parameter — the BrightSpace
+  course-binding tab, `POST /instructor/new/save` and `POST /instructor`
+  (both of which adopt a caller-supplied setup ID into the active course), and
+  `GET /instructor/grades.csv`. Extending the walk to parameterless routes needs
+  a different denial rule, since there is no cross-course resource to address.
+
+---
+
+*The original handoff body follows, unedited; only the status line above it was
+replaced.*
 
 ## The defect
 
