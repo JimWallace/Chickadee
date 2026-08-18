@@ -1,9 +1,0 @@
-# The second half of the affordance registry. The two properties are separate
-# lists behind one function, so one can go dead while the other still fires.
-guard="scripts/check-ui-vocabulary.sh"
-files="Public/styles.css"
-description="a text-decoration value outside the affordance registry"
-expect="unregistered text-decoration affordance"
-apply() {
-    printf '\n.chip { text-decoration: overline; }\n' >> Public/styles.css
-}

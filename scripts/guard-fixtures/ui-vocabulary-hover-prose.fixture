@@ -1,12 +1,11 @@
-# A title attribute is hover-only: no touch device shows it, no search finds it,
-# and screen readers treat it inconsistently. It holds a phrase; sentences belong
-# on the page or in docs/.
+# A title attribute holds a phrase. The estimates shipped with ~50-word
+# paragraphs in theirs, against a codebase median of 7 words.
 guard="scripts/check-ui-vocabulary.sh"
 files="Resources/Views/login.leaf"
-description="a paragraph of hover text where a phrase belongs"
+description="hover text over the word budget"
 expect="hover text over"
 apply() {
-    printf '<p title="%s"></p>\n' \
-        "this tooltip holds twenty four words which is rather more than a phrase and therefore belongs on the page or in the docs instead of here" \
+    printf '<p title="%s">guard fixture</p>\n' \
+        "Two students share about eight of their forty rows, which is the expected overlap between two independent forty-row samples drawn from the same two-hundred-row pool of cases." \
         >> Resources/Views/login.leaf
 }
