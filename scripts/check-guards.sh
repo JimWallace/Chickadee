@@ -124,17 +124,34 @@ for fixture in "${fixtures[@]}"; do
     fi
 
     # Refuse to touch a file the working tree has already modified.
+    #
+    # `git diff --quiet` exits 0 clean, 1 differing, and >1 on an ERROR — and
+    # an error is routine in CI, where the container runs as root against a
+    # workspace owned by another uid and git refuses the repository as
+    # "dubious ownership". Treating every non-zero as "modified" made this
+    # refuse all 18 fixtures on a pristine checkout. When git cannot answer,
+    # proceed: the backup/restore below is what actually protects the file,
+    # and this check only exists to avoid confusing results mid-edit.
     dirty=""
+    git_mute=""
     for f in $files; do
         if [ ! -f "$f" ]; then
             dirty="$f (missing)"
             break
         fi
-        if ! git diff --quiet -- "$f" 2>/dev/null || ! git diff --cached --quiet -- "$f" 2>/dev/null; then
+        git diff --quiet -- "$f" 2>/dev/null; unstaged=$?
+        git diff --cached --quiet -- "$f" 2>/dev/null; staged=$?
+        if [ "$unstaged" -gt 1 ] || [ "$staged" -gt 1 ]; then
+            git_mute="yes"
+        elif [ "$unstaged" -eq 1 ] || [ "$staged" -eq 1 ]; then
             dirty="$f (modified)"
             break
         fi
     done
+    if [ -n "$git_mute" ] && [ -z "${git_mute_warned:-}" ]; then
+        echo "note: git cannot report file status here; relying on backup/restore."
+        git_mute_warned=1
+    fi
     if [ -n "$dirty" ]; then
         echo "✘ $name — refusing to run: $dirty"
         echo "    This fixture edits and restores that file; commit or stash first."
