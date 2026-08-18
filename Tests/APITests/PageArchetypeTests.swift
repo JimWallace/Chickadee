@@ -372,11 +372,19 @@ import Testing
     /// The full-bleed archetype is named for a mechanism in `base.leaf` rather
     /// than for anything visible in the page, so the page alone cannot show
     /// that the mechanism still exists.
+    /// Each half is asked of the reading that can answer it: `fullBleed` is a
+    /// Leaf conditional, which runs even inside an HTML comment, while
+    /// `main-fullbleed` is a class on an element — and a commented-out
+    /// `<main>` is not an element. Asking both of the raw source would let
+    /// commenting the layout out leave this green.
     @Test func theFullBleedMechanismStillExistsInTheBaseLayout() throws {
-        let base = try LeafMarkupScanner.source(of: "base.leaf")
         #expect(
-            base.contains("fullBleed") && base.contains("main-fullbleed"),
+            try LeafMarkupScanner.source(of: "base.leaf").contains("fullBleed"),
             "base.leaf no longer branches on fullBleed — the full-bleed archetype's mechanism is gone"
+        )
+        #expect(
+            try LeafMarkupScanner.markup(of: "base.leaf").contains("main-fullbleed"),
+            "base.leaf no longer gives a full-bleed page the viewport-owning main element"
         )
     }
 

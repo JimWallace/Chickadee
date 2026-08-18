@@ -143,6 +143,19 @@ catalog_components="$(
 # catalog name found inside a three-word new one says more than one shared word
 # does.
 #
+# Two exclusions, both of which are the CORRECT pattern rather than a duplicate,
+# and both of which drowned the real hits when this first ran (37 rows, of which
+# roughly ten were duplicates):
+#
+#   * A BEM modifier (`field-note--muted`) is a variant of its own base, not a
+#     second spelling of it.  Any name carrying `--` is skipped outright.
+#   * A name that EXTENDS a component in order (`standin-panel-title`,
+#     `ext-panel-actions`) is a sub-part of it.  A duplicate reaches for the
+#     component's noun and puts its own word in front — `estimate-chip`, not
+#     `chip-estimate` — so a suggestion matching as an ordered prefix is
+#     dropped and one matching anywhere else is kept.  That asymmetry is also
+#     what stops `form-input--inline` being answered with `inline-form`.
+#
 # This finds the easy half of the problem and cannot find the other half.  A
 # duplicate usually arrives under a name sharing nothing with its twin — that is
 # how a pair of chips shipped as `.dataset-estimate-*` past every guard — so
@@ -156,7 +169,7 @@ near_catalog_names() {
     }
     {
       name = $0
-      if (name == "") next
+      if (name == "" || index(name, "--")) next
       np = split(name, part, "-")
       delete have
       for (x = 1; x <= np; x++) have[part[x]] = 1
@@ -171,6 +184,9 @@ near_catalog_names() {
           ok = 1
           for (y = 1; y <= nd; y++) if (!(dp[y] in have)) { ok = 0; break }
           if (!ok) continue
+          prefix = 1
+          for (y = 1; y <= nd; y++) if (dp[y] != part[y]) { prefix = 0; break }
+          if (prefix) continue
           hits = hits (found++ ? ", " : "") d
         }
       }
@@ -246,7 +262,7 @@ style_sources=("$sheet")
 while IFS= read -r f; do style_sources+=("$f"); done < <(ls Resources/Views/*.leaf 2>/dev/null || true)
 
 check_affordance() {
-  local prop="$1" registry="$2" label="$3"
+  local prop="$1" registry="$2" label="$3" hint="$4"
   local values found
   values="$(cut -d: -f1 <<<"$registry" | tr '\n' ' ')"
   found="$(
@@ -270,18 +286,27 @@ check_affordance() {
     echo
     sed 's/^\([^:]*\):/  \1 — /' <<<"$registry"
     echo
-    echo "       If none of them does, the question is which of the reveal idioms in"
-    echo "       $rulebook (\"Interaction idioms\", ordered cheapest-first) you are really"
-    echo "       reaching for — a new $label value is usually a fifth way to do the"
-    echo "       thing four of them already do. If the UI genuinely needs one, add it to"
-    echo "       the registry in that document and to this script in the same PR, with the"
-    echo "       reasoning in the PR description."
+    printf '%s\n' "$hint"
+    echo
+    echo "       If the UI genuinely needs a new value, add it to the registry in $rulebook"
+    echo "       and to this script in the same PR, with the reasoning in the PR description."
     echo
   fi
 }
 
-check_affordance "cursor" "$CURSOR_REGISTRY" "cursor"
-check_affordance "text-decoration" "$TEXT_DECORATION_REGISTRY" "text-decoration"
+# The closing advice is per property, because the two are not the same question.
+# A new cursor is nearly always a new way to reveal something, so the reveal
+# ladder is the right thing to read first; a new text-decoration is a new meaning
+# for a line through text, and the ladder has nothing to say about it. One
+# paragraph generalised across both read as a non-sequitur under the shorter list.
+check_affordance "cursor" "$CURSOR_REGISTRY" "cursor" \
+  "       A new cursor is nearly always a fifth way to reveal something the four
+       idioms in $rulebook (\"Interaction idioms\", ordered cheapest-first)
+       already reveal. Read that table before adding one."
+check_affordance "text-decoration" "$TEXT_DECORATION_REGISTRY" "text-decoration" \
+  "       An underline means a link; a line through means superseded. A third
+       meaning for a line drawn on text is a convention every reader then has
+       to learn, and it will not be visible as one to the person adding it."
 
 # ── 3. Hover prose budget ────────────────────────────────────────────────────
 #
@@ -320,8 +345,12 @@ if [ -n "$long_titles" ]; then
   echo "       A title attribute is hover-only: no touch device shows it, no search"
   echo "       finds it, and screen readers treat it inconsistently. It can hold a"
   echo "       phrase, and anything a reader must have belongs somewhere they will"
-  echo "       actually get it. Cheapest first ($rulebook, \"Interaction idioms\"):"
+  echo "       actually get it. Cheaper places to put it, roughly in order — the full"
+  echo "       ladder, and the modal that ends it, are in $rulebook:"
   echo
+  # Abridged on purpose (the modal rung is never the answer to "this tooltip is
+  # too long"), so this does not claim to be the table. Keep in sync with the
+  # "Interaction idioms" ladder there, as the affordance registry above does.
   echo "         they should just see it        a .chip for a value, .field-note under a"
   echo "                                        control, .card-meta under a title"
   echo "         they want it occasionally      a details element + .accordion-caret,"

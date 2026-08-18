@@ -6,11 +6,11 @@ Register
 <div class="auth-box">
     <h1>Create an account</h1>
     #if(error == "taken"):
-    <div class="error-box"><p>That username is already taken.</p></div>
+    <div class="error-box" role="alert"><p>That username is already taken.</p></div>
     #elseif(error == "username_short"):
-    <div class="error-box"><p>Username must be at least 3 characters.</p></div>
+    <div class="error-box" role="alert"><p>Username must be at least 3 characters.</p></div>
     #elseif(error == "password_short"):
-    <div class="error-box"><p>Password must be at least 8 characters.</p></div>
+    <div class="error-box" role="alert"><p>Password must be at least 8 characters.</p></div>
     #endif
     <form class="form" method="post" action="/register">
         #csrfFormField()

@@ -61,7 +61,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
     #else:
     <form method="post"
           action="/admin/users/#(targetUserID)/enroll"
-          class="user-enroll-form">
+          class="toolbar user-enroll-form">
         #csrfFormField()
         <select name="courseID" class="form-input user-enroll-select">
             #for(course in availableCourses):
@@ -74,15 +74,8 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 </section>
 
 <style>
-.user-enroll-form {
-    display: flex;
-    gap: .5rem;
-    align-items: center;
-    max-width: 500px;
-}
-.user-enroll-select {
-    flex: 1;
-}
+.user-enroll-form { max-width: 500px; }
+.user-enroll-select { flex: 1; }
 </style>
 #endexport
 #endextend

@@ -24,9 +24,11 @@ What shipped:
   out of (`dataset-estimate-chip` → `chip`), the affordance registry carries
   what each registered value already *means* rather than only its spelling,
   and the hover-prose refusal prints the cheapest-first reveal ladder.
-- **Five fixtures** under `scripts/guard-fixtures/`.  That guard was the
-  newest in the repo and had none, so all three of its rules were unproven —
-  including the two this change rewrote.
+- **A fixture for the redirect itself.**  v0.5.138 gave that guard its first
+  self-test fixtures, one per rule, while this work was in flight.  The
+  suggestion pass is a separate awk pass over two derived sets and can go
+  dead while the refusal it decorates still fires, so
+  `ui-vocabulary-duplicate-component-name` covers it directly.
 
 Two things worth knowing before extending this.
 
@@ -167,7 +169,19 @@ Two smaller things are worth doing before it, if this comes back around:
   catalog component's name.  It cannot find the case the rulebook says is
   typical — a duplicate under a name sharing no word with its twin.  Nothing
   short of a concept index would, and a gallery is one form of that.
-- **The exemplars have no visual baseline of their own.**
-  `Tools/visual-regression/pages.mjs` covers `alerts`, `account` and `login`;
-  the other four exemplars are structurally guarded but not pixel-guarded.
-  Adding them is cheap and independent of the gallery question.
+- **Five of the seven exemplars have no visual baseline.**
+  `Tools/visual-regression/pages.mjs` captures `alerts` and `account`; `login`
+  is in there but it is the Also entry, not the exemplar.  So
+  `instructor-mcp`, `admin-user`, `register`, `assignment-edit` and
+  `workbench` are structurally guarded and not pixel-guarded.  Adding them is
+  cheap and independent of the gallery question.
+- **`account.leaf` explains two enrollment modes in a `title` attribute.**
+  Lines 106 and 108: a `.chip` is not a control, so this is not the idiom
+  table's sanctioned use of `title`, and what it holds is the only
+  explanation a student gets for why that row has no Leave button — invisible
+  on a phone.  Both are inside the 20-word cap, which is precisely the layer
+  the cap cannot see.  Moving the sentence into the cell as `.text-muted`
+  (the pattern the slip-days line two rows up already uses) is a two-line
+  fix, but `student-account` has a committed pixel baseline, so it needs
+  `run-visual.sh --update` on the CI image in the same change.  Do it when
+  next regenerating baselines for another reason.

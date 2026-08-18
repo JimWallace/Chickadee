@@ -7,8 +7,8 @@
   and nothing checked archetype conformance at all, despite the rulebook
   asserting it. Each row now names one exemplar (`alerts`, `instructor-mcp`,
   `admin-user`, `account`, `register`, `assignment-edit`, `workbench`), chosen
-  for fewest page-private class names and least page CSS while still showing the
-  whole shape. `PageArchetypeTests` reads that column out of the table rather
+  per row against its own alternatives and with the reason recorded beside the
+  table. `PageArchetypeTests` reads that column out of the table rather
   than restating it, and re-checks each exemplar against its own row. It guards
   the exemplars and nothing else: no page fails for not being one.
 
@@ -24,9 +24,8 @@
   is extracted from `ListFilterMarkupTests`, which gains HTML-comment stripping
   in the move — prose about markup is no longer read as markup.
 
-### Fixed
-
-- **`scripts/check-ui-vocabulary.sh` is covered by the guard self-test.** It was
-  the newest guard in the repo and the only one with no fixture, so all three of
-  its rules were unproven. Five fixtures now demonstrate each of them failing on
-  its own defect.
+- **The redirect has a fixture of its own.** v0.5.138 gave
+  `check-ui-vocabulary.sh` its first self-test fixtures, one per rule.
+  `ui-vocabulary-duplicate-component-name` adds the one those cannot cover: the
+  suggestion is a separate awk pass over two derived sets, so it can go dead
+  while the refusal it decorates still fires.
