@@ -1,0 +1,12 @@
+# A title attribute is hover-only: no touch device shows it, no search finds it,
+# and screen readers treat it inconsistently. It holds a phrase; sentences belong
+# on the page or in docs/.
+guard="scripts/check-ui-vocabulary.sh"
+files="Resources/Views/login.leaf"
+description="a paragraph of hover text where a phrase belongs"
+expect="hover text over"
+apply() {
+    printf '<p title="%s"></p>\n' \
+        "this tooltip holds twenty four words which is rather more than a phrase and therefore belongs on the page or in the docs instead of here" \
+        >> Resources/Views/login.leaf
+}

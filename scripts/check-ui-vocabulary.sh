@@ -128,16 +128,86 @@ undocumented="$(
 
 catalog_count="$(printf '%s' "$undocumented" | grep -c . || true)"
 
+# The names a refusal can honestly redirect to: documented in the catalog AND
+# carrying a rule in the sheet.  The catalog's backtick scan over-matches by
+# design (rule 1's comment), so an attribute name quoted in prose — `title`,
+# `hidden`, `cursor` — is in doc_names without being a component.  Suggesting
+# one of those is worse than suggesting nothing: it sends an author to a class
+# that does not exist.
+catalog_components="$(
+  comm -12 <(printf '%s\n' "$doc_names" | sort -u) <(printf '%s\n' "$sheet_classes" | sort -u)
+)"
+
+# Undocumented names that CONTAIN a catalog component's name, whole word for
+# whole word — `estimate-chip` against `chip`.  Widest match first: a two-word
+# catalog name found inside a three-word new one says more than one shared word
+# does.
+#
+# This finds the easy half of the problem and cannot find the other half.  A
+# duplicate usually arrives under a name sharing nothing with its twin — that is
+# how a pair of chips shipped as `.dataset-estimate-*` past every guard — so
+# silence here is not evidence, and the message says so rather than implying the
+# check was thorough.
+near_catalog_names() {
+  awk -v cat="$catalog_components" '
+    BEGIN {
+      n = split(cat, a, "\n")
+      for (i = 1; i <= n; i++) if (a[i] != "") { comp[++cn] = a[i]; ctok[cn] = split(a[i], t, "-") }
+    }
+    {
+      name = $0
+      if (name == "") next
+      np = split(name, part, "-")
+      delete have
+      for (x = 1; x <= np; x++) have[part[x]] = 1
+      hits = ""; found = 0
+      for (want = 4; want >= 1 && found < 3; want--) {
+        for (i = 1; i <= cn && found < 3; i++) {
+          if (ctok[i] != want) continue
+          d = comp[i]
+          if (length(d) < 4) continue
+          nd = split(d, dp, "-")
+          if (nd >= np) continue
+          ok = 1
+          for (y = 1; y <= nd; y++) if (!(dp[y] in have)) { ok = 0; break }
+          if (!ok) continue
+          hits = hits (found++ ? ", " : "") d
+        }
+      }
+      if (found) printf "  %-36s looks like  %s\n", name, hits
+    }
+  ' <<<"$1"
+}
+
 if [ "$catalog_count" -gt "$CATALOG_BASELINE" ]; then
   status=1
   echo "ERROR: the global stylesheet grew a component the rulebook does not name."
   echo "       Undocumented classes in $sheet: $catalog_count (baseline $CATALOG_BASELINE)."
   echo
   echo "       A new component in the global sheet is currently free — the page-style"
-  echo "       ratchet only prices a page-local one. This is that price. Either add the"
-  echo "       new name to the component vocabulary in $rulebook (and check, while you"
-  echo "       are there, that it is not a second spelling of something already in the"
-  echo "       catalog), or reuse what is there."
+  echo "       ratchet only prices a page-local one. This is that price, and there are"
+  echo "       two ways to pay it:"
+  echo
+  echo "       (a) It is a second spelling of something the UI already has. Delete it and"
+  echo "           use the existing component. The count falls back on its own."
+  echo "       (b) It is genuinely new. Add a bullet for it to the component vocabulary in"
+  echo "           $rulebook, beside the component it sits closest to. Naming it is"
+  echo "           what pays for it; the count falls back on its own then too."
+  echo
+  # The ratchet stores a count, not a list, so this cannot say WHICH name is
+  # new — only that one is. Hence "find the one you added" rather than a filter.
+  suggestions="$(near_catalog_names "$undocumented")"
+  if [ -n "$suggestions" ]; then
+    echo "       Names here are built out of a catalog component's own name. Find the one"
+    echo "       you just added — it is the cheapest (a) to check. Most of the rest predate"
+    echo "       your change, and a real duplicate looks exactly like them:"
+    printf '%s\n' "$suggestions"
+    echo
+  fi
+  echo "       Not finding yours above is not evidence. A second spelling usually arrives"
+  echo "       under a name sharing no word with its twin, so search the catalog for the"
+  echo "       CONCEPT — 'a short labelled value beside a control', 'a row of action"
+  echo "       buttons' — rather than for the word you happened to choose."
   echo
   echo "       Undocumented names, for the diff:"
   printf '%s\n' "$undocumented" | sed 's/^/  /'
@@ -152,25 +222,39 @@ fi
 
 # ── 2. Affordance registry ───────────────────────────────────────────────────
 #
-# Each entry is an interaction the UI already makes. Extending this list is
-# allowed and sometimes right — but it is a rulebook edit, not a CSS edit, so
-# that the question "does this UI need a fifth way to signal something?" gets
-# asked out loud. Keep in sync with the registry in docs/ui-design.md.
-CURSOR_REGISTRY="pointer not-allowed grab grabbing default col-resize"
-TEXT_DECORATION_REGISTRY="none underline line-through"
+# Each entry is an interaction the UI already makes, written `value:what it
+# already says`. Extending this list is allowed and sometimes right — but it is
+# a rulebook edit, not a CSS edit, so that the question "does this UI need a
+# fifth way to signal something?" gets asked out loud. Keep in sync with the
+# registry in docs/ui-design.md.
+#
+# The meanings are carried here, not just the values, so a refusal can name what
+# the registered values ALREADY say. "Reuse the affordance already in use" is not
+# actionable when the reader does not know which one covers their case; a list of
+# meanings is a redirect, a list of values is only a smaller no.
+CURSOR_REGISTRY="pointer:activates something
+not-allowed:this control is disabled
+grab:this can be dragged to reorder
+grabbing:it is being dragged right now
+col-resize:this edge resizes a pane
+default:deliberately not interactive, despite looking so"
+TEXT_DECORATION_REGISTRY="underline:a link, or a word carrying a definition
+line-through:a superseded value
+none:strip an underline the browser added"
 
 style_sources=("$sheet")
 while IFS= read -r f; do style_sources+=("$f"); done < <(ls Resources/Views/*.leaf 2>/dev/null || true)
 
 check_affordance() {
   local prop="$1" registry="$2" label="$3"
-  local found
+  local values found
+  values="$(cut -d: -f1 <<<"$registry" | tr '\n' ' ')"
   found="$(
     grep -nE "(^|[;{[:space:]])${prop}[[:space:]]*:" "${style_sources[@]}" 2>/dev/null \
       | grep -v '^\s*/\*' \
       | sed -E "s/^([^:]+:[0-9]+):.*${prop}[[:space:]]*:[[:space:]]*([^;}!]*).*/\1|\2/" \
       | sed -E 's/[[:space:]]+$//' \
-      | awk -F'|' -v reg="$registry" '
+      | awk -F'|' -v reg="$values" '
           BEGIN { n = split(reg, a, " "); for (i = 1; i <= n; i++) ok[a[i]] = 1 }
           { v = $2; gsub(/^[ \t]+|[ \t]+$/, "", v); if (!(v in ok) && v != "") print $1 "  " v }
         ' || true
@@ -178,13 +262,20 @@ check_affordance() {
   if [ -n "$found" ]; then
     status=1
     echo "ERROR: unregistered $label affordance."
-    echo "       Registered values: $registry"
     printf '%s\n' "$found" | sed 's/^/  /'
     echo
     echo "       A value outside the registry is a new way of telling a user what an"
-    echo "       element does. If the UI genuinely needs one, add it to the registry in"
-    echo "       $rulebook and to this script in the same PR, with the reasoning in the"
-    echo "       PR description. If it does not, reuse the affordance already in use."
+    echo "       element does. These are the ways this UI already says one, and one of"
+    echo "       them probably covers the case:"
+    echo
+    sed 's/^\([^:]*\):/  \1 — /' <<<"$registry"
+    echo
+    echo "       If none of them does, the question is which of the reveal idioms in"
+    echo "       $rulebook (\"Interaction idioms\", ordered cheapest-first) you are really"
+    echo "       reaching for — a new $label value is usually a fifth way to do the"
+    echo "       thing four of them already do. If the UI genuinely needs one, add it to"
+    echo "       the registry in that document and to this script in the same PR, with the"
+    echo "       reasoning in the PR description."
     echo
   fi
 }
@@ -228,8 +319,18 @@ if [ -n "$long_titles" ]; then
   echo
   echo "       A title attribute is hover-only: no touch device shows it, no search"
   echo "       finds it, and screen readers treat it inconsistently. It can hold a"
-  echo "       phrase. Anything a reader must have belongs in the page — a note under"
-  echo "       the control, a docs link — and anything they must not have can go."
+  echo "       phrase, and anything a reader must have belongs somewhere they will"
+  echo "       actually get it. Cheapest first ($rulebook, \"Interaction idioms\"):"
+  echo
+  echo "         they should just see it        a .chip for a value, .field-note under a"
+  echo "                                        control, .card-meta under a title"
+  echo "         they want it occasionally      a details element + .accordion-caret,"
+  echo "                                        closed by default"
+  echo "         it is about one row            .ext-details/.ext-panel, or .popover-panel"
+  echo "         it is longer than a paragraph  docs/, and a link to it from the page"
+  echo
+  echo "       And some of it can simply go — a tooltip nobody can reach is not load-"
+  echo "       bearing, whatever it says."
   echo
 fi
 

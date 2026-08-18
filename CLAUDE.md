@@ -1119,6 +1119,18 @@ the `format-lint` CI job) — keep them green:
   from the component vocabulary — the page `<style>` total is a shrink-only
   ratchet (`PAGE_STYLE_BASELINE`), so a private re-implementation of a
   shared concept fails CI on growth.
+- **Start a new page by copying its archetype's exemplar.** Every archetype
+  row names one — `alerts` / `instructor-mcp` / `admin-user` / `account` /
+  `register` / `assignment-edit` / `workbench` — and that column is the only
+  additive instruction in the whole UI rulebook: everything else says *not
+  that*. It exists because the skeleton column describes a shape without
+  providing one, so an author imitating whichever page they opened inherited
+  its private habits too. `PageArchetypeTests` reads the exemplar column out
+  of the table (so doc and guard cannot drift) and re-checks each exemplar
+  against its own row; it checks the exemplars and **nothing else**, and no
+  page fails for not being one. Do not answer this with a scaffold
+  generator: a `new-page.sh` is a second source of truth that drifts from
+  the exemplar the moment either moves.
 - **Every assigned class name must resolve to a stylesheet rule**
   (`scripts/check-class-resolution.sh`). Behaviour-only hooks take the `js-`
   prefix (pre-existing ones live in a shrink-only allowlist). Leaf-

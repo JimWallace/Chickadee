@@ -1,0 +1,11 @@
+# The refusal names the catalog components a new name is built out of, so it
+# reads as a redirect rather than a smaller no. That suggestion is a nontrivial
+# awk pass over two derived sets, and it can break without the rule breaking:
+# this asserts the redirect itself, not just the refusal.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/styles.css"
+description="a second spelling of a component the catalog already names"
+expect="looks like"
+apply() {
+    printf '\n.ck-guard-fixture-chip { display: block; }\n' >> Public/styles.css
+}
