@@ -1,0 +1,238 @@
+name: Mutation-testing probe (macOS)
+
+# DIAGNOSTIC harness — NOT a required gate, and NOT yet a mutation run against
+# Chickadee. This puts the TOOL on trial before we point it at the codebase.
+#
+# Why it exists. The recurring defect in this repo is verification that passes
+# while proving nothing — a test asserting against dead wiring, a probe filtering
+# a dead poll, a guard matching its own documentation, and (in #1445) a
+# word-budget test that passed three times while exercising nothing. Mutation
+# testing is the industrial answer to exactly that: mutate the source, and any
+# mutant the suite fails to kill is a hole in the suite.
+#
+# Why a probe first. Muter was measured on Linux (Swift 6.3, SwiftPM) and it
+# FAILS SILENTLY there, which is the worst possible failure for a verification
+# tool. Measured, not inferred:
+#
+#   * It builds and runs once `autoreleasepool` (Darwin-only, one call site in
+#     DiscoverMutationPoints.swift) is shimmed.
+#   * It copies the whole project with no exclusions, so a present `.build` is
+#     copied too and SwiftPM's absolute-path module cache poisons the copy
+#     ("missing required module 'SwiftShims'"). `exclude:` filters mutation
+#     targets, not the copy.
+#   * With `.build` removed it completes — and reports 0%, every mutant
+#     surviving. That is false: applying one of those mutations by hand makes
+#     the suite fail. Its rewriter emitted the scaffolding (`import class
+#     Foundation.ProcessInfo`) into its working copy but inserted NO mutation
+#     switches, so every "mutant" ran the unmutated binary.
+#
+# So the question this answers is narrow and worth money: does Muter actually
+# discriminate on macOS, where it is developed and supported? If yes, a weekly
+# scheduled run against Chickadee is worth building (macOS runners are free for
+# public repositories, which this is). If no, the tool is not adoptable at all
+# and we stop here rather than reading a fabricated score.
+#
+# The probe is a throwaway package with one STRONG test that pins a boundary and
+# one WEAK test that never exercises its second condition. A working mutation
+# tool must kill at least one mutant and let at least one survive. The
+# assertion is deliberately that shape rather than an exact score: which
+# replacement a relational operator gets is Muter's business, but discriminating
+# at all is the property under test.
+#
+# Step 4 establishes GROUND TRUTH without Muter — it applies the mutation by
+# hand and requires the suite to fail. Without that, a green probe would only
+# prove Muter agreed with itself, which is the very failure mode being chased.
+
+on:
+  workflow_dispatch:
+    inputs:
+      muter_ref:
+        description: "Muter commit/tag to build (default: the commit measured on Linux)"
+        default: "7f1f258"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Does Muter discriminate on macOS?
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version || true
+
+      - name: Build Muter from source
+        run: |
+          git clone https://github.com/muter-mutation-testing/muter.git "$RUNNER_TEMP/muter"
+          cd "$RUNNER_TEMP/muter"
+          git checkout "${{ inputs.muter_ref }}"
+          git log -1 --format='muter @ %h %ad %s' --date=short
+          # --product muter: Muter's own test target does not build standalone.
+          swift build -c release --product muter
+          "$RUNNER_TEMP/muter/.build/release/muter" --version
+
+      - name: Write the probe package
+        run: |
+          PROBE="$RUNNER_TEMP/probe"
+          mkdir -p "$PROBE/Sources/Probe" "$PROBE/Tests/ProbeTests"
+
+          cat > "$PROBE/Package.swift" <<'EOF'
+          // swift-tools-version: 6.0
+          import PackageDescription
+
+          let package = Package(
+              name: "Probe",
+              targets: [
+                  .target(name: "Probe"),
+                  .testTarget(name: "ProbeTests", dependencies: ["Probe"]),
+              ]
+          )
+          EOF
+
+          cat > "$PROBE/Sources/Probe/Probe.swift" <<'EOF'
+          public struct Probe {
+              public static func isAdult(age: Int) -> Bool {
+                  age >= 18
+              }
+
+              public static func canVote(age: Int, registered: Bool) -> Bool {
+                  age >= 18 && registered
+              }
+          }
+          EOF
+
+          cat > "$PROBE/Tests/ProbeTests/ProbeTests.swift" <<'EOF'
+          import Testing
+
+          @testable import Probe
+
+          @Suite struct ProbeTests {
+              /// STRONG: pins the boundary, so any relational mutation of
+              /// `>=` must fail this.
+              @Test func adultBoundaryIsPinned() {
+                  #expect(Probe.isAdult(age: 18) == true)
+                  #expect(Probe.isAdult(age: 17) == false)
+              }
+
+              /// WEAK on purpose: only ever passes `registered: true`, so
+              /// flipping `&&` to `||` cannot be observed. This is the
+              /// vacuous-test shape the whole exercise is about.
+              @Test func votingIsChecked() {
+                  #expect(Probe.canVote(age: 40, registered: true) == true)
+              }
+          }
+          EOF
+
+          # Muter's config. `executable` must be an absolute path to a real
+          # swift; Muter derives the build system from its last path component.
+          cat > "$PROBE/muter.conf.yml" <<EOF
+          executable: $(command -v swift)
+          arguments:
+            - test
+          exclude:
+            - .build
+          mutationTestTimeout: 300
+          EOF
+          cat "$PROBE/muter.conf.yml"
+
+      - name: Baseline — the probe suite passes unmutated
+        working-directory: ${{ runner.temp }}/probe
+        run: swift test
+
+      - name: Ground truth — the mutation really is killable, without Muter
+        working-directory: ${{ runner.temp }}/probe
+        run: |
+          # Establishes the oracle independently. If a hand-applied mutation
+          # does NOT fail the suite, the probe itself is broken and Muter's
+          # answer means nothing either way.
+          cp Sources/Probe/Probe.swift /tmp/probe-original.swift
+          sed -i '' 's/age >= 18$/age > 18/' Sources/Probe/Probe.swift
+          grep -n 'age > 18' Sources/Probe/Probe.swift
+
+          if swift test > /tmp/mutated-run.log 2>&1; then
+            echo "::error::Ground truth FAILED: the suite passed with a mutation applied by hand."
+            echo "The probe is not discriminating, so this run cannot judge Muter."
+            tail -30 /tmp/mutated-run.log
+            cp /tmp/probe-original.swift Sources/Probe/Probe.swift
+            exit 1
+          fi
+          echo "Ground truth OK: the hand-applied mutation fails the suite."
+          cp /tmp/probe-original.swift Sources/Probe/Probe.swift
+
+          # Clean the build tree: Muter copies the project wholesale, and a
+          # SwiftPM build cache carries absolute paths that break in the copy.
+          rm -rf .build
+          swift test > /dev/null 2>&1 || { echo "::error::restore failed"; exit 1; }
+          rm -rf .build
+
+      - name: Run Muter
+        id: muter
+        working-directory: ${{ runner.temp }}/probe
+        run: |
+          # Muter's own exit code must not preempt the verdict: a low score is
+          # a RESULT, not a failure, and the next step is the judge. A genuine
+          # crash still surfaces there as zero mutant outcomes.
+          set +e
+          "$RUNNER_TEMP/muter/.build/release/muter" run \
+            --skip-coverage --skip-update-check -f plain \
+            2>&1 | tee "$RUNNER_TEMP/muter-report.txt"
+          echo "muter exit status: ${PIPESTATUS[0]}"
+
+      - name: Verdict — did Muter discriminate?
+        run: |
+          REPORT="$RUNNER_TEMP/muter-report.txt"
+          killed=$(grep -c 'mutant killed' "$REPORT" || true)
+          survived=$(grep -c 'mutant survived' "$REPORT" || true)
+          builderr=$(grep -c 'build error' "$REPORT" || true)
+
+          echo "killed=$killed survived=$survived build_errors=$builderr"
+          {
+            echo "### Muter probe on macOS"
+            echo ""
+            echo "| outcome | count |"
+            echo "|---|---:|"
+            echo "| mutants killed | $killed |"
+            echo "| mutants survived | $survived |"
+            echo "| build errors | $builderr |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$killed" -eq 0 ] && [ "$survived" -eq 0 ]; then
+            echo "::error::Muter produced no mutant outcomes at all — it crashed, or"
+            echo "discovered nothing. This is a tooling failure, not a measurement."
+            echo "**Verdict: Muter produced no result.**" >> "$GITHUB_STEP_SUMMARY"
+            tail -40 "$REPORT"
+            exit 1
+          fi
+
+          if [ "$killed" -eq 0 ]; then
+            echo "::error::Muter killed NOTHING. The strong test pins the boundary and a"
+            echo "hand-applied mutation was proven to fail the suite in the previous step,"
+            echo "so a 0% score here means Muter is not inserting mutants — the same"
+            echo "silent failure measured on Linux. Do NOT adopt it."
+            echo "**Verdict: Muter does NOT work here.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$survived" -eq 0 ]; then
+            echo "::error::Muter reported every mutant killed, including the one the WEAK"
+            echo "test cannot observe. That is not credible; treat the report as suspect."
+            echo "**Verdict: implausible — every mutant killed.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Muter discriminates: it killed the mutant the strong test covers and let"
+          echo "the one the weak test cannot observe survive."
+          echo "**Verdict: Muter works on macOS — a weekly run against Chickadee is worth building.**" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Muter report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muter-probe-report
+          path: ${{ runner.temp }}/muter-report.txt
+          if-no-files-found: warn
