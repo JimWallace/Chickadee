@@ -30,7 +30,23 @@
     "with six such orphaned bindings. The flag is appended after the package's own",
     "settings and cancels them, which is the whole reason mutants can be built at all.",
     "Do not remove it without re-running a shard containing a file whose statements",
-    "bind results -- the failure is total, not partial."
+    "bind results -- the failure is total, not partial.",
+    "",
+    "--skip ZipProcessEnvironmentTests IS REQUIRED, and the reason generalises.",
+    "Muter's PrepareSourceCode writes a preamble into every file it will mutate --",
+    "including `import class Foundation.ProcessInfo` -- BEFORE it runs the baseline",
+    "suite. ZipProcessEnvironmentTests reads Sources/Core/ZipArchiver.swift and",
+    "ZipProcessSerialization.swift and scans them for `Process(` constructions, so",
+    "the preamble trips it: one test, two files, exactly the 2 issues that made run 2",
+    "abort. A red baseline means Muter inserts NOTHING and the whole shard reports",
+    "no outcomes.",
+    "",
+    "The general rule: a test that asserts on the TEXT of a file under mutation",
+    "cannot coexist with mutation, because mutation rewrites that text. Skipping is",
+    "correct rather than a workaround -- such a guard tests file contents, not",
+    "behaviour, so it has no mutants worth killing. If another source-text guard is",
+    "added over Sources/{RunnerCore,Core,Worker}, skip it here too. Guards reading",
+    "Tools/ or Public/ are unaffected: Muter only rewrites what it mutates."
   ],
   "include": [
     "Sources/RunnerCore",
@@ -41,6 +57,8 @@
     "test",
     "--skip",
     "APITests",
+    "--skip",
+    "ZipProcessEnvironmentTests",
     "-Xswiftc",
     "-no-warnings-as-errors"
   ],

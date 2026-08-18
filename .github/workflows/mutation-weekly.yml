@@ -187,8 +187,15 @@ jobs:
               const file = path.join('shards', d, 'report.md');
               if (!fs.existsSync(file)) { missing.push(shard); continue; }
               const body = fs.readFileSync(file, 'utf8');
+              // A report can EXIST and still say nothing was mutated -- run 2
+              // uploaded ten of them, each reading "Muter produced no mutant
+              // outcomes at all" after its baseline suite failed. Parsing that as
+              // zero survivors is how a totally broken sweep reported success.
+              // Absence of outcomes is a failed shard, not an empty one.
+              if (body.includes('no mutant outcomes at all')) { missing.push(shard); continue; }
               const m = body.match(/\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)%/);
-              if (m) { killed += Number(m[1]); survivors += Number(m[2]); }
+              if (!m) { missing.push(shard); continue; }
+              killed += Number(m[1]); survivors += Number(m[2]);
               const p = body.match(/Muter reported (\d+) survivor/);
               if (p) phantoms += Number(p[1]);
               sections.push(body);
