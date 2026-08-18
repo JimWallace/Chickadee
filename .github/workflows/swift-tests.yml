@@ -380,7 +380,13 @@ jobs:
     # wrong, and what this project has repeatedly been burned by assuming. The
     # install was unnecessary; the tests are not.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-CI, not plain swift. The plain image is the toolchain only; the
+      # -ci image is the one that adds python3, lua5.4, octave, r-base and node
+      # (.github/docker/ci-image/Dockerfile), which is what api-tests and
+      # worker-tests use. Getting this wrong does not fail loudly: spawnSync
+      # simply cannot find the interpreter, and the suites report
+      # `exitError: 'exit null'` with an empty stderr.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
