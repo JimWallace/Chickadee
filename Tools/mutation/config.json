@@ -20,13 +20,29 @@
     "That is a deliberate trade: including APITests would multiply per-mutant cost",
     "by roughly 25x. The cost is that Core code reached ONLY through APITests will",
     "show false survivors -- which is why the report tells the reader to verify",
-    "before acting, and why nothing here is a gate."
+    "before acting, and why nothing here is a gate.",
+    "",
+    "-Xswiftc -no-warnings-as-errors IS LOAD-BEARING. This package builds with",
+    ".treatAllWarnings(as: .error), and Muter's RemoveSideEffects operator deletes",
+    "the USE of a binding -- leaving `let x = ...` unused, which is a warning, which",
+    "is an error here. The mutated copy then fails to compile and the ENTIRE shard",
+    "produces zero mutants: measured, shard 0 died on RunnerDaemon+JobProcessing.swift",
+    "with six such orphaned bindings. The flag is appended after the package's own",
+    "settings and cancels them, which is the whole reason mutants can be built at all.",
+    "Do not remove it without re-running a shard containing a file whose statements",
+    "bind results -- the failure is total, not partial."
   ],
   "include": [
     "Sources/RunnerCore",
     "Sources/Core",
     "Sources/Worker"
   ],
-  "testArgs": ["test", "--skip", "APITests"],
+  "testArgs": [
+    "test",
+    "--skip",
+    "APITests",
+    "-Xswiftc",
+    "-no-warnings-as-errors"
+  ],
   "shardCount": 10
 }

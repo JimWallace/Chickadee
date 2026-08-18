@@ -23,9 +23,13 @@ set -euo pipefail
 # load-bearing, which is why the pin is exact and why the `Mutation-testing probe
 # (macOS)` workflow exists to re-verify the tool after any bump.
 #
-# AND ITS OUTPUT IS REPAIRED, NOT TRUSTED. Muter's reported LINE NUMBERS are
-# wrong (the offset-desync mode of muter#308); Tools/mutation/report.py recovers
-# true positions from the mutated copy. See that file for the measurement.
+# AND ITS OUTPUT IS AUDITED, NOT TRUSTED. Muter also reports mutants it never
+# inserted, and they always read as "survived" -- the phantom-mutant mode of
+# muter#308. Measured: one of four RemoveSideEffects mutants in
+# SuiteExecution.swift pointed at a line an existing test already covers, and was
+# never mutated at all. Tools/mutation/report.py checks every reported survivor
+# against the guards actually present in the mutated copy and quarantines the
+# phantoms. See that file for the measurement.
 
 MUTER_REF="7f1f258"
 SHARD=""
@@ -192,7 +196,14 @@ rm -rf muter_logs
 # The mutated copy is a SIBLING of the project directory, and it is what carries
 # the true mutant positions. Report before deleting it.
 mutated_root="$(dirname "$PWD")/$(basename "$PWD")_mutated"
-python3 Tools/mutation/report.py "$raw" "$OUT_DIR" "shard $SHARD of $SHARD_COUNT" "$mutated_root"
-status=$?
-rm -rf "$mutated_root"
+# `set -e` would abort on a non-zero report, so capture the status explicitly.
+if python3 Tools/mutation/report.py "$raw" "$OUT_DIR" "shard $SHARD of $SHARD_COUNT" "$mutated_root"; then
+    status=0
+    rm -rf "$mutated_root"
+else
+    status=$?
+    # KEEP the copy when the run produced nothing. It is the only artefact that
+    # can say why -- a build failure there is invisible from the report alone.
+    echo "==> keeping $mutated_root for diagnosis (run produced no outcomes)"
+fi
 exit "$status"
