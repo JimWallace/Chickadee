@@ -47,14 +47,33 @@ name: Mutation-testing probe (macOS)
 # killed=0 survived=3 — 0%, the same fabricated score measured on Linux, and on
 # a run whose ground-truth step had just proven the mutation killable by hand.
 # The defect is therefore NOT platform-specific. Kept on manual dispatch so the
-# question can be re-asked cheaply against a future Muter release; it ran on a
-# `pull_request` trigger to get the first answer without merging an unevaluated
-# tool evaluation, and that trigger is removed now the answer is in.
+# question can be re-asked cheaply; it ran on a `pull_request` trigger to get the
+# first answer without merging an unevaluated tool evaluation, and that trigger
+# is removed now the answer is in.
+#
+# ROOT CAUSE, isolated the same day — DO NOT DISPATCH THIS AGAINST THE DEFAULT
+# REF. It cannot pass, and not for a reason a re-run can change. Muter 99624ec
+# ("Prevent memory exhaustion on large codebases", PR #302) made discovery
+# return `.sourceCodeParsed([:])`, so ApplySchemata re-parses each file and
+# rewrites a NEW tree — while the schemata are keyed by SwiftSyntax nodes, which
+# hash by identity. No key can match, so no switch is ever inserted. Restoring
+# just that cache locally takes the probe from 0% to 66% (2 killed, 1 survived —
+# the survivor being the mutant the weak test cannot observe), which is what
+# makes this a diagnosis rather than a theory.
+#
+# So the trigger is a specific upstream issue, not a release or a version:
+#   * muter#307 — same diagnosis, open, patches offered but unmerged. When a fix
+#     lands there, dispatch this with `muter_ref` set to that commit. Expect it
+#     to pass.
+#   * muter#308 — four further schemata-generation defects on v16, open, no fix.
+#     Why a green probe would still not be grounds to trust a score against real
+#     Chickadee source: this probe is three lines of Swift.
+# Full write-up: docs/handoff-mutation-testing.md.
 on:
   workflow_dispatch:
     inputs:
       muter_ref:
-        description: "Muter commit/tag to build (default: the commit measured on Linux)"
+        description: "Muter commit/tag to build. The default is the measured-broken baseline and CANNOT pass — set this to a ref that fixes muter#307."
         default: "7f1f258"
 
 permissions:

@@ -57,3 +57,12 @@ Tools/browser-grading-smoke/package-lock.json
 Tools/visual-regression/node_modules/
 visual-bootstrap/
 visual-diffs/
+
+# Muter run config, written per-machine for a mutation-testing run. It pins an
+# absolute path to the local swift binary, so it is never portable and must not
+# be committed. Muter is NOT adopted -- see docs/handoff-mutation-testing.md.
+muter.conf.yml
+
+# Muter run artifacts: per-mutant test logs (one file per mutant, MBs per run)
+# written into the project root by a mutation-testing run.
+muter_logs/
