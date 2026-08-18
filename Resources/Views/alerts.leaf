@@ -109,7 +109,7 @@ Server Health Alerts
                         #if(firing.delivered):
                             delivered
                         #else:
-                            <span class="alerts-delivery-failed">failed</span>
+                            <span class="text-error">failed</span>
                             #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
                         #endif
                     #else:
@@ -128,7 +128,6 @@ Server Health Alerts
 .alerts-env-note { margin-left: .6rem; color: var(--muted); font-size: var(--text-base); }
 .alerts-rule-code { font-size: .8em; color: var(--muted); }
 .alerts-recent-heading { margin-top: 1.5rem; }
-.alerts-delivery-failed { color: var(--red); }
 .alerts-delivery-error { font-size: .75em; color: var(--muted); }
 </style>
 #endexport

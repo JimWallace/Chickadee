@@ -1,6 +1,50 @@
 # Handoff — make the compliant page the easy one to start from
 
-**Status: not started.** This is the additive half of the UI-language work.
+**Status: steps 1, 2 and 4 shipped. Step 3 (the component gallery)
+deliberately not built — the condition for revisiting it is at the bottom.**
+This was the additive half of the UI-language work.
+
+What shipped:
+
+- **An exemplar per archetype**, in the [ui-design.md](ui-design.md) table's
+  new *Copy this* column: `alerts.leaf`, `instructor-mcp.leaf`,
+  `admin-user.leaf`, `account.leaf`, `register.leaf`,
+  `assignment-edit.leaf`, `workbench.leaf`.  Chosen on measured grounds —
+  fewest page-private class names, least page CSS, no page script, and the
+  fullest demonstration of the skeleton — not on which page was listed
+  first.  `instructor-mcp.leaf` shed a vestigial empty `<style>` block to
+  take its row.
+- **`Tests/APITests/PageArchetypeTests.swift`**, which reads the exemplar
+  column out of that table rather than restating it, and re-checks each
+  exemplar against its own row.  The tag-walking it needs was extracted from
+  `ListFilterMarkupTests` into `LeafMarkupScanner` rather than copied, so
+  the two markup-contract guards share one implementation.
+- **Redirects instead of refusals** in `scripts/check-ui-vocabulary.sh`: the
+  catalog error now names the catalog components a rejected name is built
+  out of (`dataset-estimate-chip` → `chip`), the affordance registry carries
+  what each registered value already *means* rather than only its spelling,
+  and the hover-prose refusal prints the cheapest-first reveal ladder.
+- **A fixture for the redirect itself.**  v0.5.138 gave that guard its first
+  self-test fixtures, one per rule, while this work was in flight.  The
+  suggestion pass is a separate awk pass over two derived sets and can go
+  dead while the refusal it decorates still fires, so
+  `ui-vocabulary-duplicate-component-name` covers it directly.
+
+Two things worth knowing before extending this.
+
+**The suite proves it can fail.** Every assertion in it is of the form "this
+list is empty", which an emptied-out rule satisfies perfectly. So the rules
+are pure functions from a page to the ways it breaks them, and
+`theArchetypeRulesTellTheSevenShapesApart` runs all forty-two off-diagonal
+pairs — each archetype's rules against each other archetype's exemplar —
+failing if any pair comes back clean.  Writing that test is what forced the
+full-bleed rules to say something specific: without "a full-bleed page owns
+markup", its rules accepted the eight-line body-partial shim.
+
+**The exemplar is held to more than the archetype.** `submit.leaf` is a
+perfectly good plain student page with no `.page-section` in it; `account.leaf`
+may not lose its sections while it is the reference.  Nothing fails a page for
+not being an exemplar.
 
 ## The question behind it
 
@@ -97,5 +141,47 @@ feel additive, and it needs no new machinery.
 An author asking "how do I start a new instructor page?" gets a one-line answer
 naming a file to copy, and that file cannot silently stop being a good example.
 
+Both halves are now true: the answer is `instructor-mcp.leaf`, and
+`PageArchetypeTests` fails if it stops being a good answer.
+
 Run the `ui-review` agent on whatever you build — it reviews the layer the
 guards structurally cannot, which is the layer this work lives in.
+
+## Why the gallery was not built, and what would change that
+
+Step 3 remains the most appealing and least certain item, and the argument
+against starting there survived doing steps 1, 2 and 4: a gallery is a page to
+maintain, it needs a visual baseline of its own, and nothing yet says authors
+would open it.  Steps 1 and 2 are also the cheaper test of the same
+hypothesis — that discoverability is what is missing — because they cost no new
+page at all.
+
+Build it when there is evidence the *exemplar* is not enough, and the evidence
+is specific: a new page that copied the right exemplar and still reached for a
+component that already existed under another name.  That is the failure a
+gallery prevents and an exemplar cannot, because an exemplar only shows the
+components its own archetype happens to use.  Until such a page exists, the
+gallery would be answering a question nobody has asked.
+
+Two smaller things are worth doing before it, if this comes back around:
+
+- **Widen the redirect.** The catalog suggester finds names *built out of* a
+  catalog component's name.  It cannot find the case the rulebook says is
+  typical — a duplicate under a name sharing no word with its twin.  Nothing
+  short of a concept index would, and a gallery is one form of that.
+- **Five of the seven exemplars have no visual baseline.**
+  `Tools/visual-regression/pages.mjs` captures `alerts` and `account`; `login`
+  is in there but it is the Also entry, not the exemplar.  So
+  `instructor-mcp`, `admin-user`, `register`, `assignment-edit` and
+  `workbench` are structurally guarded and not pixel-guarded.  Adding them is
+  cheap and independent of the gallery question.
+- **`account.leaf` explains two enrollment modes in a `title` attribute.**
+  Lines 106 and 108: a `.chip` is not a control, so this is not the idiom
+  table's sanctioned use of `title`, and what it holds is the only
+  explanation a student gets for why that row has no Leave button — invisible
+  on a phone.  Both are inside the 20-word cap, which is precisely the layer
+  the cap cannot see.  Moving the sentence into the cell as `.text-muted`
+  (the pattern the slip-days line two rows up already uses) is a two-line
+  fix, but `student-account` has a committed pixel baseline, so it needs
+  `run-visual.sh --update` on the CI image in the same change.  Do it when
+  next regenerating baselines for another reason.

@@ -104,17 +104,51 @@ is black in both schemes).
 
 Every page extends `base.leaf` (nav, colour bar, course tabs, `main.main`)
 and then follows ONE of these skeletons.  Don't invent an eighth shape —
-pick the archetype, and reuse its components:
+pick the archetype, and reuse its components.
 
-| Archetype | Skeleton | Examples |
-|-----------|----------|----------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, each opening with an `<h2>` | admin, admin-users, alerts |
-| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | assignments, instructor-students, instructor-mcp |
-| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | admin-course, admin-user, assignment-submissions |
-| **Plain student page** | `<h1>` → content | index, submit, enroll, account |
-| **Auth box** | `.auth-box` centred card | login, register, oauth-consent |
-| **Body-partial shim** | `#extend` of a shared body partial, no markup of its own | assignment-edit, notebook |
-| **Full-bleed app** | `fullBleed` context flag; owns the viewport | workbench |
+**Start a new page by copying its archetype's exemplar.**  The component
+vocabulary and the idiom table below tell you what to *reach for*; this is
+the only rule here that names a **starting artifact**.  It exists because
+the skeleton column describes a shape without providing one: an author who
+reads it and imitates whichever page they happened to open inherits that
+page's private habits along with the archetype.  The example pages in a row
+never agreed with each other, so "which one" was a coin flip.  Now one of
+them is the answer.
+
+| Archetype | Skeleton | Copy this | Also |
+|-----------|----------|-----------|------|
+| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
+| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
+| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
+| **Plain student page** | `<h1>` → content | `account.leaf` | index, submit, enroll |
+| **Auth box** | `.auth-box` centred card | `register.leaf` | login, oauth-consent |
+| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
+| **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
+
+Why each exemplar won its row: `alerts.leaf` carries no page script and the
+least page CSS of any admin page while still showing the whole skeleton;
+`instructor-mcp.leaf` uses no page-private class name at all;
+`admin-user.leaf` is the only page in its row that demonstrates the optional
+`.page-subtitle`; `account.leaf` is the only plain student page that groups
+its content in sections at all; `register.leaf` ties `login` on page CSS and
+private names and wins on having nothing auth-provider-specific to strip out;
+`assignment-edit.leaf` *is* its archetype in eight lines.  `workbench.leaf`
+is the sole full-bleed page and therefore its exemplar by default — it is
+also the least copyable file here, which is the honest reading of an
+archetype with one member.
+
+The pages in the **Also** column are the archetype too; they are just not
+the reference.  `Tests/APITests/PageArchetypeTests.swift` reads this table —
+so the exemplar column and the guard cannot drift apart — and re-checks each
+exemplar against its own row on every run.  It checks the exemplars and
+nothing else: no page fails for not being one.  It does hold them to
+slightly more than the skeleton column asks of the archetype at large —
+`account.leaf` must keep grouping its content in `.page-section` blocks,
+though a one-form page like `submit` is a perfectly good plain student page
+without them.  That asymmetry is the point.  The archetype is the floor; the
+exemplar is the reference, and a reference that has quietly stopped
+demonstrating the full shape is worse than no reference, because it is still
+the file everyone copies.
 
 Anatomy rules that hold across archetypes:
 
@@ -562,9 +596,13 @@ tell you.
   in the PR description.  Reach for it last: the table is ordered
   cheapest-first, and a fifth way to reveal detail makes the other four less
   meaningful.
-- **New page** → pick an archetype, assemble it from the vocabulary, and add
-  it to `Tools/visual-regression/pages.mjs` if it introduces a new shape
-  (commit the CI bootstrap capture as its baseline in the same PR).
+- **New page** → pick an archetype, **copy its exemplar** from the table
+  above, and strip it back to what the page needs.  Then assemble the rest
+  from the vocabulary, and add the page to `Tools/visual-regression/pages.mjs`
+  if it introduces a new shape (commit the CI bootstrap capture as its
+  baseline in the same PR).  Copying beats generating: a `new-page.sh` that
+  stamps out a skeleton would be a second source of truth, drifting from the
+  exemplar the moment either changed.
 - **Shrinking the spacing lattice** → when a step's last usage disappears,
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.
