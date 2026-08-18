@@ -167,7 +167,7 @@ duplicate.
 - **`.form`**, `.form--wide`, `.form-input`, `.form-error`, `.form-flush`,
   `.inline-form` — forms and the inline error banner (never native
   `alert()`).
-- **`.modal-overlay` / `.modal-card`** (+ `--confirm`) — the one blocking
+- **`.modal-overlay`** / **`.modal-card`** (+ `.modal-card--confirm`) — the one blocking
   dialog shape.  A destructive action asks with `data-confirm="…"` in
   markup (app.js handles it) or `await ChickadeeUI.confirmAction(msg)`
   where there is no element to mark; both render the same themed
@@ -215,8 +215,9 @@ duplicate.
   `.input-attention` (amber), `.input-invalid` (red), `.input-computed`
   (muted), `.input-ref-ok` / `.input-ref-broken` (italic green/red `$name`
   refs).  Editors toggle these classes; they never write the colours.
-- **`.modal-overlay`**, `.modal-card`, `.modal-head/-body/-foot`,
-  `.modal-title/-close/-status/-desc` — the one modal shell
+- **`.modal-overlay`**, `.modal-card`, `.modal-card--confirm`, `.modal-head`,
+  `.modal-body`, `.modal-foot`, `.modal-title`, `.modal-close`,
+  `.modal-status`, `.modal-desc` — the one modal shell
   (test-editor-modal.js).  `hidden` does the showing and hiding.
 - **`.editor-stack`**, `.editor-cm-mount`, `.cell-stack`, `.cell-title`,
   `.cell-actions` — editor-built layout: vertical field stacks, the
@@ -232,7 +233,8 @@ duplicate.
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
   glyph — the guard fails on both.
-- **`.diagnostics-cards`** + `.diagnostic-card/-label/-value` — stat tiles.
+- **`.diagnostics-cards`** + `.diagnostic-card`, `.diagnostic-label`,
+  `.diagnostic-value` — stat tiles.
   `.diagnostics-section` wraps a group of them under one heading.
 - **`.chip`**, `.chip-row` — neutral tags.  A chip is the answer for a short
   labelled value beside a control; it carries no status colour, so if the
@@ -246,6 +248,25 @@ duplicate.
 - **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
   forms.  `.popover-panel` is the same shape for a row-anchored panel that
   is not a set/clear form; `app.js` floats both.
+- **`.nav`**, `.nav-brand`, `.nav-brand-logo`, `.nav-link` — the site header
+  in `base.leaf`, on every page.  `.nav-user`, `.nav-username`,
+  `.nav-dropdown`, `.nav-dropdown-toggle`, `.nav-dropdown-caret`,
+  `.nav-dropdown-menu`, `.nav-dropdown-item`, `.nav-dropdown-item-active` —
+  the account menu; `app.js` toggles `.open` on the `.nav-dropdown`, and the
+  caret and menu follow from that one class.  This is the only pop-out menu
+  shape outside `.popover-panel` and the modal shell — a page needing a third
+  is a conversation, not a new rule.
+- **Drag to reorder** — one vocabulary, two surfaces.  The grip is
+  `.section-drag-handle` (course sections, test sections) or
+  `.suite-drag-handle` (suite rows); the row in flight takes
+  `.section-dragging` or `.suite-row-dragging`; the target cue is
+  `.drop-before` / `.drop-after` for "land beside this" and `.drop-adopt` for
+  "become a child of this", with `.suite-root-drop` the empty tail target and
+  `.drop-hover` its lit state.  `.section-dragging` is deliberately shared —
+  `assignments.js` and `suite-table.js` both apply it to a `.section-block`.
+  A third reorder surface reuses these; it does not mint a third grip.
+- **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
+  targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
   `.standin-panel` — the placeholder a panel shows while its content is
   unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
@@ -529,7 +550,18 @@ tell you.
   A scale with exceptions is just the old sprawl with extra steps.
 - **New repeated pattern** (a third page grows the same card/banner/table
   flavour) → hoist it into `styles.css` as a named component and note it in
-  the component vocabulary above.
+  the component vocabulary above.  The note is not optional bookkeeping:
+  `scripts/check-ui-vocabulary.sh` counts the classes in the global sheet
+  this catalog does not name and fails on growth, so the entry is what pays
+  for the component.  Before writing it, search the catalog for the
+  *concept* — a duplicate arrives under a name that shares nothing with its
+  twin, which is why the guard cannot find it for you.
+- **New interaction idiom** (a `cursor`, a `text-decoration`, a way to
+  reveal detail that is not in the table above) → this is a rulebook edit
+  and a change to the affordance registry in that script, with the reasoning
+  in the PR description.  Reach for it last: the table is ordered
+  cheapest-first, and a fifth way to reveal detail makes the other four less
+  meaningful.
 - **New page** → pick an archetype, assemble it from the vocabulary, and add
   it to `Tools/visual-regression/pages.mjs` if it introduces a new shape
   (commit the CI bootstrap capture as its baseline in the same PR).

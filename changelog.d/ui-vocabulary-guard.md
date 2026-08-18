@@ -17,6 +17,14 @@
   row-anchored popover → modal) and a **UI copy** budget, whose rule is that
   anything longer than a phrase belongs in `docs/` with the interface linking
   to it. A `ui-review` agent covers the judgement the guards cannot reach.
+  The catalog debt this exposed was paid down in the same pass: the shorthand
+  the doc used for component families (`.modal-head/-body/-foot`) is spelled
+  out so the names are greppable, and the site navigation and the
+  drag-to-reorder vocabulary — one grip, one in-flight class, one set of drop
+  cues, shared across the two reorder surfaces — are catalogued for the first
+  time. There is no dead CSS to remove: every rule in the global sheet is
+  reached by a template, by page JS, by a Leaf-interpolated class family, or
+  by the vendored CodeMirror bundle.
 
 ### Changed
 
