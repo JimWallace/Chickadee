@@ -362,7 +362,11 @@ jobs:
 
   browser-runner-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 25 rather than 10 because the apt step below now bounds and retries each
+    # attempt (worst case ~21 min). The ceiling is no longer the thing that
+    # catches a slow mirror -- the step is -- so raising it costs no signal and
+    # buys a clear error instead of a `cancelled` that reads like a wedge.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v6
@@ -379,10 +383,39 @@ jobs:
       # without an interpreter, so a missing package here would look like a
       # pass — each asserts its interpreter is present when CI is set.
       # --no-install-recommends keeps Octave from pulling a desktop stack.
+      #
+      # BOUNDED AND RETRIED, because a stalled Ubuntu mirror took this job out
+      # five times on 2026-08-18. Each time it hung ~9m20s inside `apt-get
+      # update` -- reaching azure.archive.ubuntu.com, failing over, then waiting
+      # -- until the job ceiling killed it. The job reports `cancelled`, which
+      # looks identical to a wedged test suite from the outside, and no test body
+      # had run at all.
+      #
+      # A bare retry loop would NOT have fixed that: the failure is a HANG, not a
+      # fast error, so the first attempt would still consume the whole budget.
+      # Hence `timeout` per attempt, plus apt's own timeouts so it abandons a
+      # slow mirror rather than waiting on it. Three bounded attempts fail in
+      # about 21 minutes with a real error message; the healthy path is unchanged
+      # and still finishes in well under two minutes.
       - name: Install Lua and Octave
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lua5.4 octave
+          apt_opts=(-o Acquire::Retries=2
+                    -o Acquire::http::Timeout=20
+                    -o Acquire::https::Timeout=20)
+          for attempt in 1 2 3; do
+            if timeout 120 sudo apt-get "${apt_opts[@]}" update \
+              && timeout 300 sudo apt-get "${apt_opts[@]}" install -y \
+                   --no-install-recommends lua5.4 octave; then
+              echo "apt succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed or timed out; retrying"
+            sudo pkill -f apt-get || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::apt failed three bounded attempts — the Ubuntu mirror is"
+          echo "::error::likely unreachable. This is infrastructure, not the diff."
+          exit 1
 
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
