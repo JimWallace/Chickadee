@@ -1,8 +1,14 @@
 # Mutation testing — spike (2026-08)
 
-**Status: open, gated on one macOS probe run.** Nothing is adopted. Run the
-`Mutation-testing probe (macOS)` workflow (`workflow_dispatch`) and read its
-verdict before spending anything further.
+**Status: CLOSED, negative. Muter is not adoptable.** The macOS probe ran
+(2026-08-18, run 32141581986, `macos-latest`) and reported **killed=0,
+survived=3 — 0%**, the same fabricated score measured on Linux, on a run whose
+ground-truth step had just proven by hand that one of those mutants is
+killable. **The defect is not platform-specific.** The workflow stays on manual
+dispatch so the question can be re-asked cheaply against a future release.
+
+Do not read a Muter score from either platform as a measurement of this test
+suite. The fallback — guard self-tests — is in `scripts/check-guards.sh`.
 
 ## Why we looked
 
@@ -77,9 +83,26 @@ Two design points worth keeping if this is ever rewritten:
   under test. It fails on 0% (inserted nothing), on 100% (implausible — the weak
   test cannot observe its mutant), and on no outcomes at all (crashed).
 
+## The verdict, and why the probe was worth building
+
+Muter reported 0% on macOS with Xcode's own toolchain — the platform it is
+developed and supported on. Every step before the verdict passed, including the
+one that applies the mutation by hand and requires the suite to fail, so the run
+establishes both halves: the mutant is killable, and Muter says it survived.
+
+That is the whole argument for putting the tool on trial first. Pointed straight
+at Chickadee, Muter would have reported a catastrophic mutation score for a
+well-tested suite, every "finding" would have been noise, and the number would
+have looked like a measurement. A weekly job publishing that would have been
+worse than no job at all — the failure mode is a confident wrong answer, which
+is the exact defect class the tool was being bought to catch.
+
+The probe cost one workflow file and one run on a free runner.
+
 ## What happens next, by verdict
 
-- **Muter discriminates** → build the weekly scheduled run. Scope it with
+- ~~**Muter discriminates** → build the weekly scheduled run. Scope it with~~
+  *(did not happen — see above)* Scope it with
   `--files-to-mutate` against the week's changed files rather than the whole
   tree; a full campaign over ~3,000 tests with a cold build per run is not
   affordable even on free minutes. It is a report, never a gate — a surviving

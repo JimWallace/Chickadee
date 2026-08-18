@@ -43,15 +43,14 @@ name: Mutation-testing probe (macOS)
 # hand and requires the suite to fail. Without that, a green probe would only
 # prove Muter agreed with itself, which is the very failure mode being chased.
 
-# Runs on a PR that touches this file, so the verdict is available BEFORE the
-# probe is merged — `workflow_dispatch` alone can only be triggered from the
-# default branch, which would mean merging an unevaluated tool evaluation. The
-# path filter keeps it off every unrelated PR; it is diagnostic, not a gate, so
-# not running is the correct outcome elsewhere.
+# ANSWERED 2026-08-18, negative: run 32141581986 on macos-latest reported
+# killed=0 survived=3 — 0%, the same fabricated score measured on Linux, and on
+# a run whose ground-truth step had just proven the mutation killable by hand.
+# The defect is therefore NOT platform-specific. Kept on manual dispatch so the
+# question can be re-asked cheaply against a future Muter release; it ran on a
+# `pull_request` trigger to get the first answer without merging an unevaluated
+# tool evaluation, and that trigger is removed now the answer is in.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/mutation-probe.yml"
   workflow_dispatch:
     inputs:
       muter_ref:
@@ -195,7 +194,7 @@ jobs:
           REPORT="$RUNNER_TEMP/muter-report.txt"
           killed=$(grep -c 'mutant killed' "$REPORT" || true)
           survived=$(grep -c 'mutant survived' "$REPORT" || true)
-          builderr=$(grep -c 'build error' "$REPORT" || true)
+          builderr=$(grep -c 'build error$' "$REPORT" || true)
 
           echo "killed=$killed survived=$survived build_errors=$builderr"
           {
