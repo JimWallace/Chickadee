@@ -62,3 +62,7 @@ visual-diffs/
 # absolute path to the local swift binary, so it is never portable and must not
 # be committed. Muter is NOT adopted -- see docs/handoff-mutation-testing.md.
 muter.conf.yml
+
+# Muter run artifacts: per-mutant test logs (one file per mutant, MBs per run)
+# written into the project root by a mutation-testing run.
+muter_logs/
