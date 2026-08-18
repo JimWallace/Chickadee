@@ -1,0 +1,11 @@
+# A title attribute holds a phrase. The estimates shipped with ~50-word
+# paragraphs in theirs, against a codebase median of 7 words.
+guard="scripts/check-ui-vocabulary.sh"
+files="Resources/Views/login.leaf"
+description="hover text over the word budget"
+expect="hover text over"
+apply() {
+    printf '<p title="%s">guard fixture</p>\n' \
+        "Two students share about eight of their forty rows, which is the expected overlap between two independent forty-row samples drawn from the same two-hundred-row pool of cases." \
+        >> Resources/Views/login.leaf
+}
