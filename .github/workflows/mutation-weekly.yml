@@ -1,0 +1,139 @@
+name: Mutation testing (weekly slice)
+
+# A REPORT, NEVER A GATE. Nothing here blocks a merge, and no score is a target.
+# A surviving mutant is a question for a human: the suite could not tell the
+# difference when that expression changed. Some survivors are unkillable by
+# construction, and chasing a percentage means writing tests for inputs that
+# cannot occur. See docs/mutation-testing-pilot.md.
+#
+# ONE SLICE PER WEEK, not one library. Measured 2026-08-18: mutation density is
+# about one mutant per 6 lines of Swift, and every mutant costs a full test-suite
+# run (~16s). Whole-target runtimes at that rate are RunnerCore ~1h10m, Worker
+# ~4h11m, Core ~6h23m and APIServer ~70h -- so slicing is arithmetic, not
+# tuning. The rotation lives in Tools/mutation/slices.json and the report says
+# which slice ran, so partial coverage is never mistaken for a clean tree.
+#
+# THIS BUILDS A PATCHED MUTER, DELIBERATELY. Stock Muter cannot mutate anything
+# here and fails silently with a confident 0% (muter#307, open upstream); and
+# every Muter RELEASE predates the fix that lets it see Swift Testing failures at
+# all, which matters because this repo has zero XCTest. There is no released
+# build that works for us. scripts/mutation-run.sh carries the reasoning and the
+# patch; the `Mutation-testing probe (macOS)` workflow is how you re-verify the
+# tool itself after changing the pin -- both failure modes are silent, so a
+# plausible-looking report is not evidence the tool ran.
+
+on:
+  schedule:
+    # Sundays, 06:00 UTC. Off the weekday critical path.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      slice:
+        description: "Slice index to run (default: ISO week number modulo the slice count)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-weekly
+  cancel-in-progress: false
+
+jobs:
+  mutate:
+    name: Mutate one slice
+    runs-on: ubuntu-latest
+    # Largest slice measures ~89 minutes of mutant testing plus a cold build of
+    # the project inside Muter's copy. Generous so a slow slice reports rather
+    # than being killed at a ceiling -- a job cancelled at its limit looks
+    # identical to a wedge from the outside.
+    timeout-minutes: 180
+    container:
+      # Same image the worker-tests job uses, so the interpreters available here
+      # match the ones CI normally grades with. This matters more than it looks:
+      # a missing interpreter makes its tests SKIP rather than fail, and every
+      # mutant they covered then survives and reads as a hole that is not there.
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Cache the patched Muter build
+        uses: actions/cache@v4
+        with:
+          path: /tmp/muter-src
+          # Keyed on the pin AND the patch, so editing either rebuilds rather
+          # than silently reusing a Muter that no longer carries the fix.
+          key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+
+      - name: Run the slice
+        run: |
+          scripts/mutation-run.sh \
+            --muter-src /tmp/muter-src \
+            --out mutation-report \
+            ${{ inputs.slice && format('--slice {0}', inputs.slice) || '' }}
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-report/
+          if-no-files-found: warn
+
+  file-issue:
+    name: File the triage issue
+    needs: mutate
+    if: always() && needs.mutate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-report
+
+      - name: Open an issue if anything survived
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('mutation-report/report.md', 'utf8');
+
+            // Nothing survived -> nothing to track. Filing an issue per run
+            // regardless would train everyone to ignore the label.
+            if (report.includes('No survivors.')) {
+              core.info('No survivors; not filing an issue.');
+              core.summary.addRaw(report).write();
+              return;
+            }
+
+            const sliceLine = report.split('\n')[0].replace(/\*/g, '');
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `Mutation triage: ${sliceLine} (${today})`;
+
+            const body = [
+              report,
+              '',
+              '<sub>Filed automatically by `.github/workflows/mutation-weekly.yml`.',
+              'Triage by deciding, per survivor, whether a test should exist. Close as',
+              '`wontfix` with the reason when a mutant is unkillable by construction —',
+              'that is a legitimate outcome, not a backlog item.</sub>',
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+            });
+            core.info(`Filed ${issue.data.html_url}`);
+            core.summary.addRaw(report).addRaw(`\n\nFiled ${issue.data.html_url}`).write();

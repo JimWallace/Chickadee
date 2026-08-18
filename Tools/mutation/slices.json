@@ -1,0 +1,107 @@
+{
+  "_comment": [
+    "Rotation for the weekly mutation run. ONE slice per week, picked by ISO week",
+    "number modulo the length of `slices`. A slice is a list of files, not a target,",
+    "because whole targets do not fit: measured on 2026-08-18, mutation density is",
+    "about ONE MUTANT PER 6 LINES and each mutant costs one test-suite run (~16s).",
+    "Whole-target runtimes at that rate: RunnerCore ~1h10m, Worker ~4h11m,",
+    "Core ~6h23m, APIServer ~70h. See docs/mutation-testing-pilot.md.",
+    "",
+    "`testArgs` is the command each mutant is graded with. Keep it as narrow as",
+    "possible while still COVERING the sliced files -- a mutant whose covering test",
+    "is not run survives, and reads as a hole that does not exist.",
+    "",
+    "COVERAGE IS DELIBERATELY PARTIAL. The bulk of APIServer (94k LOC of Vapor",
+    "wiring) is not in the rotation and is not intended to be; it is covered by",
+    "APITests and the guard scripts. Slices name what is worth mutating, and the",
+    "workflow logs what it skipped rather than implying the tree is covered."
+  ],
+  "slices": [
+    {
+      "name": "RunnerCore — grading core",
+      "why": "Compiled natively AND to wasm from one source; pinned by Tests/Fixtures/output-contract.json. A survivor here means the two graders can drift unnoticed.",
+      "files": [
+        "Sources/RunnerCore/OutputInterpretation.swift",
+        "Sources/RunnerCore/ScriptClassification.swift",
+        "Sources/RunnerCore/SuiteExecution.swift",
+        "Sources/RunnerCore/JSONLite.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--skip",
+        "APITests"
+      ]
+    },
+    {
+      "name": "RunnerCore — notebook extraction",
+      "why": "extractPython/extractR/extractLua marker handling; a silent extraction change mis-grades every notebook submission.",
+      "files": [
+        "Sources/RunnerCore/NotebookExtraction.swift",
+        "Sources/RunnerCore/TestOutcome.swift",
+        "Sources/RunnerCore/SuiteItem.swift",
+        "Sources/RunnerCore/ScriptOutput.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--skip",
+        "APITests"
+      ]
+    },
+    {
+      "name": "Core — assignment language dispatch",
+      "why": "Every language-specific path dispatches on the declared value; the multi-language arc's defects all descended from getting this wrong.",
+      "files": [
+        "Sources/Core/AssignmentLanguage.swift",
+        "Sources/Core/LanguageDescriptor.swift",
+        "Sources/Core/JSONValue.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--filter",
+        "CoreTests"
+      ]
+    },
+    {
+      "name": "Core — pattern families and notebook checks",
+      "why": "Renders the generated tests students are graded by. A wrong literal or comparison is invisible until a student disputes a mark.",
+      "files": [
+        "Sources/Core/Models/PatternFamily.swift",
+        "Sources/Core/Models/NotebookCheck.swift",
+        "Sources/Core/TestProperties.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--filter",
+        "CoreTests"
+      ]
+    },
+    {
+      "name": "Worker — submission normalization",
+      "why": "Pre-processes uploads before the shell scripts see them; a mistake here changes what every test in the job runs against.",
+      "files": [
+        "Sources/Worker/SubmissionNormalizer.swift",
+        "Sources/Worker/NotebookExtractor.swift",
+        "Sources/Worker/ScriptExecution.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--filter",
+        "WorkerTests"
+      ]
+    },
+    {
+      "name": "Worker — job lifecycle",
+      "why": "Claim, run, report. A survivor can mean a job is silently dropped or double-claimed.",
+      "files": [
+        "Sources/Worker/JobPoller.swift",
+        "Sources/Worker/Reporter.swift",
+        "Sources/Worker/TestSetupCache.swift"
+      ],
+      "testArgs": [
+        "test",
+        "--filter",
+        "WorkerTests"
+      ]
+    }
+  ]
+}
