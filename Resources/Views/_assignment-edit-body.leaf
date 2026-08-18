@@ -211,10 +211,10 @@
                             <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
                             #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
-                            <span class="dataset-estimates js-dataset-estimates"
+                            <span class="chip-row js-dataset-estimates"
                                   #if(!supportFile.isDataset):hidden#endif>
-                                <span class="dataset-estimate js-dataset-similarity"></span>
-                                <span class="dataset-estimate js-dataset-drift"></span>
+                                <span class="chip js-dataset-similarity" hidden></span>
+                                <span class="chip js-dataset-drift" hidden></span>
                             </span>
                         </div>
                     </td>
@@ -319,7 +319,7 @@
                 <input class="form-input input-compact suite-default-limit-input"
                        type="number" min="1" max="600" step="1"
                        id="suite-default-time-limit" value="#(timeLimitSeconds)"
-                       title="Seconds each test may run before it is killed and recorded as a timeout. Individual tests can override this in the test editor.">
+                       title="Seconds a test may run before it times out. Individual tests can override this.">
                 s
                 <span id="suite-default-limit-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </label>

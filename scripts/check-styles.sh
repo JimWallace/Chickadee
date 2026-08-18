@@ -459,6 +459,14 @@ fi
 # ── 5. Class names must resolve ──────────────────────────────────────────────
 scripts/check-class-resolution.sh || status=1
 
+# ── 6. The vocabulary above the token layer ──────────────────────────────────
+# Guard 4 compares selector TEXT and guard 4b prices a page-local copy, so
+# between them a second spelling of an existing component is free as long as
+# it is spelled differently and lives in the global sheet. This prices that,
+# plus the two things nothing else looks at: the affordances that tell a user
+# an element is interactive, and how much prose a tooltip carries.
+scripts/check-ui-vocabulary.sh || status=1
+
 if [ "$status" -eq 0 ]; then
   echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"
 fi

@@ -2072,16 +2072,12 @@ code { font-family: var(--font-mono); font-size: .9em; }
    cannot represent — it steps aside rather than rendering a partial view it
    would then save over. */
 .dataset-note { font-style: italic; color: var(--gray-600); }
-/* Per-row estimate chips: student-to-student similarity and drift from the
-   pool (docs/datasets.md), one concise number each, painted by
-   support-files.js from the datasets GET/PUT.  The how-it-is-measured
-   detail rides each chip's hover title — cursor plus dotted underline as
-   the affordance.  A band with two bad ends rather than a threshold, so
-   never styled as a warning.  Inherits the control row's size and colour;
-   an empty chip (before the first fetch lands) takes no space. */
-.dataset-estimates { display: inline-flex; gap: .5rem; }
-.dataset-estimate { cursor: help; text-decoration: underline dotted; text-underline-offset: .15em; }
-.dataset-estimate:empty { display: none; }
+/* The per-row estimates — student-to-student similarity and drift from the
+   pool (docs/datasets.md) — are plain chips, painted by support-files.js
+   from the datasets GET/PUT.  They carry no styling of their own: a chip is
+   already the vocabulary's neutral tag, and these describe a band with two
+   bad ends rather than a threshold, so there is no status colour to add.
+   Each chip is hidden until its number lands. */
 
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }

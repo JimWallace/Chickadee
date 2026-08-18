@@ -141,6 +141,18 @@ The audit that produced this rule found sixteen page-local names for "a row
 of action buttons" and four pill implementations; the page-style ratchet
 (below) now makes the private copy the expensive option.
 
+For a while it made only the *page-local* copy expensive.  The global sheet
+carried no budget at all, so the cheapest way to add a second spelling of a
+component was to skip the page block and put it in `Public/styles.css` — and
+thirteen components went in without ever reaching this list, followed by a
+pair of estimate chips that were chips in the changelog, in the commit
+message and in their own CSS comment, under a name that shared nothing with
+`.chip`.  Every guard passed.  `scripts/check-ui-vocabulary.sh` now prices
+the global sheet the same way: the count of classes in it that this catalog
+does not name is a shrink-only ratchet, so a new global component costs a
+catalog entry, paid here, where review sees it beside the component it would
+duplicate.
+
 - **Buttons** — one grammar (UI audit S6):
   - a form's primary submit is `btn btn-primary`; secondary actions beside it
     are `btn`;
@@ -221,18 +233,97 @@ of action buttons" and four pill implementations; the page-style ratchet
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
   glyph — the guard fails on both.
 - **`.diagnostics-cards`** + `.diagnostic-card/-label/-value` — stat tiles.
-- **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
+  `.diagnostics-section` wraps a group of them under one heading.
+- **`.chip`**, `.chip-row` — neutral tags.  A chip is the answer for a short
+  labelled value beside a control; it carries no status colour, so if the
+  value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
+  pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
   `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
+  `.empty` — the "nothing here yet" line a list renders in place of rows.
 - **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
-  forms.
+  forms.  `.popover-panel` is the same shape for a row-anchored panel that
+  is not a set/clear form; `app.js` floats both.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
+  `.standin-panel` — the placeholder a panel shows while its content is
+  unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
+- **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
+  inside `.page-titlebar`.  `.section-gap` adds the standard gap between
+  stacked sections.
+- **`.icon`** — every inline SVG, referencing a `<symbol>` in `_icons.leaf`
+  by `<use href="#i-…">`.  Geometry may not appear anywhere else.
+- **`.textarea-mono`**, `.form-stack` (+ `--wide`) — a monospace textarea and
+  the stacked form column that usually holds one.
 
 If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
 copies, and the page-style ratchet fails CI on growth.
+
+## Interaction idioms
+
+The component vocabulary answers "what class do I write".  This answers the
+question before it: **which of the ways this UI already has of doing a thing
+is the right one** — and the default answer is that there are enough.  A
+page that introduces a fifth way to reveal detail has not added a feature;
+it has made the other four less meaningful.
+
+Reaching for detail, cheapest first.  Pick the first one that fits:
+
+| The reader | Idiom |
+|---|---|
+| should just see it | put it on the page — a `.chip` for a value, `.field-note` under a control, `.card-meta` under a title |
+| wants it occasionally | `<details>` + `.accordion-caret`, closed by default |
+| is acting on one row | `.ext-details`/`.ext-panel`, or `.popover-panel` |
+| must decide before anything else happens | `.modal-card` — the only blocking shape, and only for a decision |
+| wants a reminder of what a control is | `title` — a phrase, and never the only copy of something they need |
+
+The affordances that say an element is interactive are a **closed registry**,
+enforced by `scripts/check-ui-vocabulary.sh`:
+
+- `cursor` — `pointer` (activates), `not-allowed` (disabled), `grab` /
+  `grabbing` (drag to reorder), `col-resize` (the workbench splitter),
+  `default` (deliberately not interactive).
+- `text-decoration` — `underline` (a link), `line-through` (superseded),
+  `none`.
+
+Adding a value is allowed and sometimes right, but it is an edit to this
+list and to that script, with the reasoning in the PR — not a line in a rule
+body.  The registry exists because `cursor: help` and a dotted underline
+arrived together as a private convention for "hover me", in a codebase that
+already had four ways to reveal detail and no fifth one it needed.
+
+Two things a hover title is not.  It is **not a disclosure**: no touch
+device shows it, no in-page search finds it, and screen readers treat it
+inconsistently, so anything a reader actually needs must exist somewhere
+else.  And it is **not a docs page**: if the answer runs to sentences, the
+sentences go in `docs/`, and the UI links there.
+
+## UI copy
+
+Chrome is not prose.  A label names a thing; it does not explain it.  The
+[authoring-voice guide](../CLAUDE.md) governs assignment *content* — what
+instructors and students read as course material — and this is its
+counterpart for the interface around it.
+
+- **Labels and chips: a noun phrase.**  Two or three words.  `similarity
+  20%`, not `Students share about 20% of their rows with each other`.
+- **Hover titles: one phrase, 20 words maximum**, enforced by
+  `scripts/check-ui-vocabulary.sh` for titles written in templates and by a
+  word-budget assertion for any assembled server-side (see
+  `datasetEstimateTitleWordCap`).  Name what the number is.  Do not derive
+  it, qualify it, or give its worked example.
+- **Notes under a control: one sentence**, in `.field-note` or
+  `.field-help`, and only when the control's own label cannot carry it.
+- **Everything longer belongs in `docs/`.**  A measurement's method, a
+  band's two bad ends, why a default is what it is — these are real and
+  worth writing down, in a file a reader can link to, search, and correct.
+
+The test for a number the UI shows: an instructor should be able to read it
+at a glance and know whether to act.  If it needs a paragraph before it means
+anything, the paragraph is not the fix — either show a number that speaks for
+itself, or move it out of the control row.
 
 ## Timestamps
 

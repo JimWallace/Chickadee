@@ -4,7 +4,7 @@
 // (DatasetEditHelpers.datasetEstimateSummary).  The underlying statistics
 // have their own suite in CoreTests (DatasetDiagnosticsTests); what is
 // pinned here is the display layer the page JS paints verbatim — one
-// concise number per chip, the how-it-is-measured detail in the title —
+// concise number per chip, a phrase naming what it measures in the title —
 // so a wording regression is caught in Swift rather than in a browser.
 
 import Foundation
@@ -35,23 +35,49 @@ import Testing
 
         // 40 of 200 rows: k/N = 20%, expected shared k²/N = 8.
         #expect(summary.similarityDisplay == "similarity 20%")
-        #expect(summary.similarityTitle.contains("about 8 of their 40 rows"))
-        #expect(summary.similarityTitle.contains("200-row pool"))
-        #expect(summary.similarityTitle.contains("class of 100"))
+        #expect(summary.similarityTitle.contains("of 40"))
+        #expect(summary.similarityTitle.contains("Unluckiest pair of 100"))
         #expect(
-            !summary.similarityTitle.contains("Most shared category"),
+            !summary.similarityTitle.contains("Most shared"),
             "a plain sample has no strata to name")
 
-        // One number; the column, measure and unlucky-variant value ride the
-        // title.
+        // One number; the worst column, its measure and the unlucky-variant
+        // value ride the title.
         #expect(summary.driftDisplay.wholeMatch(of: /drift (\d+\.\d{2}|<0\.01)/) != nil)
-        #expect(summary.driftTitle.contains("Worst column: \""))
-        #expect(summary.driftTitle.contains("sampled variants"))
+        #expect(summary.driftTitle.contains("Worst column \""))
         #expect(summary.driftTitle.contains("on an unlucky variant"))
-        // The fixture has numeric and categorical columns, so both measures
-        // are named across the title.
-        #expect(summary.driftTitle.contains("pool standard deviations"))
-        #expect(summary.driftTitle.contains("total-variation"))
+    }
+
+    /// The chips' titles are assembled from measured numbers in Swift, so
+    /// `scripts/check-ui-vocabulary.sh` — which reads templates — cannot see
+    /// them.  This holds the same budget on the path the script cannot reach,
+    /// across every branch that produces a title.
+    @Test(arguments: [true, false]) func everyTitleStaysWithinTheHoverBudget(
+        measurable: Bool
+    ) throws {
+        for spec in [
+            DatasetSpec(file: "cases.csv", sampleSize: 40),
+            DatasetSpec(file: "cases.csv", sampleSize: nil),
+            DatasetSpec(
+                file: "cases.csv", kind: .stratifiedSample, sampleSize: 40,
+                stratumColumn: "ward"),
+        ] {
+            let summary = try #require(
+                datasetEstimateSummary(
+                    for: spec, sourceCSV: pool, divergenceMeasurable: measurable))
+            for (label, title) in [
+                ("similarity", summary.similarityTitle), ("drift", summary.driftTitle),
+            ] {
+                let words = title.split(whereSeparator: \.isWhitespace).count
+                #expect(
+                    words <= datasetEstimateTitleWordCap,
+                    """
+                    the \(label) title is \(words) words, over the \
+                    \(datasetEstimateTitleWordCap)-word hover budget — a tooltip holds a \
+                    phrase, and the explanation belongs in docs/datasets.md: \(title)
+                    """)
+            }
+        }
     }
 
     @Test func aStratifiedSampleNamesItsMostSharedCategory() throws {
@@ -63,8 +89,7 @@ import Testing
                 sourceCSV: pool, divergenceMeasurable: true))
         // The one-row floor makes rare ward D the most copyable part: every
         // student draws 2 of its 5 pool rows.
-        #expect(summary.similarityTitle.contains("Most shared category: \"D\""))
-        #expect(summary.similarityTitle.contains("2 of its 5 pool rows (40% shared)"))
+        #expect(summary.similarityTitle.contains("Most shared: \"D\" (40%)"))
     }
 
     @Test func aWholeFileSpecIsTotalSimilarity() throws {

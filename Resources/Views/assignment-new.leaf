@@ -211,10 +211,10 @@ Create Assignment
                             <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
                             #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
-                            <span class="dataset-estimates js-dataset-estimates"
+                            <span class="chip-row js-dataset-estimates"
                                   #if(!supportFile.isDataset):hidden#endif>
-                                <span class="dataset-estimate js-dataset-similarity"></span>
-                                <span class="dataset-estimate js-dataset-drift"></span>
+                                <span class="chip js-dataset-similarity" hidden></span>
+                                <span class="chip js-dataset-drift" hidden></span>
                             </span>
                         </div>
                     </td>

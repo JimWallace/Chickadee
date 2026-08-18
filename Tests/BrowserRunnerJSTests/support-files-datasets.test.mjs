@@ -292,18 +292,19 @@ test('a re-render disables the fields for a spec the panel cannot represent', as
 
 // ── The estimate chips ──────────────────────────────────────────────────────
 //
-// The server sends ready-made display strings (the wording is pinned in
-// Swift, in DatasetEstimateSummaryTests); what the JS owes is painting them
-// into the two chips — textContent for the number, title for the hover
-// detail — and hiding the chips when a row has no block.
+// The server sends ready-made display strings (the wording and its word
+// budget are pinned in Swift, in DatasetEstimateSummaryTests); what the JS
+// owes is painting them into the two chips — textContent for the number,
+// title for the phrase — and hiding a chip whose number did not arrive, so
+// an empty chip never renders as a blank tag.
 
 const sampleBlock = (spec) => ({
   file: spec.file,
   similarityDisplay: 'similarity 7.8%',
-  similarityTitle: 'Two students share about 39 of their '
-    + (spec.sampleSize || 6388) + ' rows.',
+  similarityTitle: 'Rows a typical pair of students both hold, of '
+    + (spec.sampleSize || 6388) + '.',
   driftDisplay: 'drift 0.04',
-  driftTitle: 'Worst column: "systolic" - typically 0.04 pool standard deviations.',
+  driftTitle: 'Distance from the pool, worst column "systolic".',
 });
 
 test('the chips paint on init from the GET, number plus hover title', async () => {
@@ -318,11 +319,32 @@ test('the chips paint on init from the GET, number plus hover title', async () =
   assert.equal(row.querySelector('.js-dataset-estimates').hidden, false);
   const similarity = row.querySelector('.js-dataset-similarity');
   assert.equal(similarity.textContent, 'similarity 7.8%');
-  assert.match(similarity.title, /39 of their 500 rows/);
+  assert.equal(similarity.hidden, false);
+  assert.match(similarity.title, /both hold, of 500/);
   const drift = row.querySelector('.js-dataset-drift');
   assert.equal(drift.textContent, 'drift 0.04');
-  assert.match(drift.title, /Worst column: "systolic"/);
+  assert.match(drift.title, /worst column "systolic"/);
   assert.equal(h.puts.length, 0, 'the first paint is a read, not a write');
+});
+
+test('a chip with no number of its own hides rather than rendering blank', async () => {
+  // Overlap is closed-form and always reported; drift is skipped on a file
+  // too large to sample. The row still shows what it knows.
+  const h = load({
+    specs: [{ file: 'cases.csv', kind: 'rowSample', sampleSize: 500 }],
+    diagnostics: (spec) => ({
+      ...sampleBlock(spec), driftDisplay: '', driftTitle: '',
+    }),
+  });
+  const row = h.rows[0];
+  row.querySelector('.js-dataset-toggle').checked = true;
+  await settle();
+
+  assert.equal(row.querySelector('.js-dataset-estimates').hidden, false);
+  assert.equal(row.querySelector('.js-dataset-similarity').hidden, false);
+  const drift = row.querySelector('.js-dataset-drift');
+  assert.equal(drift.hidden, true);
+  assert.equal(drift.title, '', 'a hidden chip carries no stale title');
 });
 
 test('the chips repaint from the PUT response when a parameter changes', async () => {
@@ -337,7 +359,7 @@ test('the chips repaint from the PUT response when a parameter changes', async (
   await settle();
 
   assert.match(
-    row.querySelector('.js-dataset-similarity').title, /of their 900 rows/,
+    row.querySelector('.js-dataset-similarity').title, /both hold, of 900/,
     'the numbers follow the saved edit');
 });
 
