@@ -67,11 +67,14 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     container:
-      # The same image worker-tests uses, so the interpreters available here
-      # match what CI normally grades with. This matters more than it looks: a
-      # missing interpreter makes its tests SKIP rather than fail, and every
-      # mutant they covered then survives and reads as a hole that is not there.
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-CI, not plain swift. The -ci image is the one carrying python3,
+      # lua5.4, octave and r-base; the plain image is the toolchain alone. Run 1
+      # of this workflow died in under a second on all ten shards because it
+      # named the wrong one, and the whole sweep is worthless on an image
+      # missing interpreters anyway: a missing interpreter makes its tests SKIP
+      # rather than fail, so every mutant they covered survives and reads as a
+      # hole that is not there.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -137,6 +140,14 @@ jobs:
                 })
               : [];
 
+            // The EXPECTED shard count, so a run where every shard died cannot be
+            // mistaken for a clean sweep. Run 1 did exactly that: all ten shards
+            // failed, no artifact was uploaded, `dirs` came back empty, and this
+            // job reported success and filed nothing. Absence of findings is only
+            // meaningful against a known denominator.
+            const expected = JSON.parse(
+              fs.readFileSync('Tools/mutation/config.json', 'utf8')).shardCount;
+
             let survivors = 0, phantoms = 0, killed = 0, missing = [];
             const sections = [];
 
@@ -155,11 +166,19 @@ jobs:
             // A shard that produced nothing is reported, never silently dropped:
             // partial coverage that reads as complete is the failure mode this
             // whole exercise exists to avoid.
-            const shardCount = dirs.length + missing.length;
+            for (let i = 0; i < expected; i++) {
+              if (!dirs.some(d => Number(d.split('-').pop()) === i)) missing.push(String(i));
+            }
+            missing = [...new Set(missing)].sort((a, b) => Number(a) - Number(b));
+
+            // sections.length, not dirs.length: an artifact can exist and still
+            // carry no report (the shard died after uploading an empty dir), and
+            // counting those as covered is the same lie in smaller print.
             const header = [
               `## Mutation sweep — logic tier`,
               '',
-              `**${killed} killed, ${survivors} survived** across ${dirs.length} shard(s)`
+              `**${killed} killed, ${survivors} survived** across `
+                + `${sections.length} of ${expected} shard(s)`
                 + (phantoms ? `, plus ${phantoms} phantom mutant(s) filtered out.` : '.'),
               '',
             ];
@@ -170,6 +189,14 @@ jobs:
                 '> means nothing. Check the job logs.',
                 '',
               );
+            }
+
+            if (missing.length === expected) {
+              core.summary.addRaw(header.join('\n')).write();
+              core.setFailed(
+                `Every shard (${expected}) produced no report. This is a tooling `
+                + 'failure, not a clean sweep — nothing was mutated. Check the shard logs.');
+              return;
             }
 
             if (survivors === 0 && missing.length === 0) {
