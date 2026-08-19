@@ -13,3 +13,9 @@
   catch. Opening needs no runner: quick-publish leaves `validationStatus` nil
   and `applyVisibility` admits nil. The axe-core scan covers that markup for
   the first time too, since it shares the fixture.
+  The capture harness also had to pin the submission-history timestamp: it is
+  server-rendered absolute text (not a `js-relative-time` element), so it read
+  as the run's own wall-clock and would have made the new baseline fail on
+  every subsequent run. It is normalized to a constant the same way relative
+  times already were, rather than masked — a mask would have been a blind spot
+  over the cell.

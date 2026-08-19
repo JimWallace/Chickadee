@@ -89,10 +89,20 @@ async function main() {
         // read as a real change. That is exactly what it did: a roster page
         // came back 0.3% different in CI and identical locally, in light only.
         // Replacing the text with a constant makes the box a constant.
+        //
+        // `.submission-history-latest` is the same problem from a different
+        // source: it renders the submission's absolute timestamp, which is
+        // "now" at seed time, so it moves every run. It carries no
+        // js-relative-time class (it is server-rendered, not JS-formatted),
+        // so it needs naming here explicitly. It only became visible when the
+        // fixture started publishing an OPEN assignment — before that the
+        // student dashboard had no rows at all.
         await page.evaluate(() => {
-          document.querySelectorAll(".js-relative-time").forEach((el) => {
-            el.textContent = "0000-00-00 00:00";
-          });
+          document
+            .querySelectorAll(".js-relative-time, .submission-history-latest")
+            .forEach((el) => {
+              el.textContent = "0000-00-00 00:00";
+            });
         });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle
         const file = path.join(outDir, `${p.name}--${scheme}.png`);
