@@ -306,41 +306,251 @@ validation machinery all assume a fixed suite. Keeping grading deterministic and
 putting the collective part entirely in the bonus is what makes the rest of this
 tractable.
 
-## Slice plan (individually mergeable)
+## How this reads in the UI
 
-1. **Resolve the `student` tier.** Implement it or strike it from
-   `TestTierValues` and CLAUDE.md. Small, independent, and unblocks honest
-   authoring of contributed-test suites.
-2. **Refuse `gradingMode: browser` for collaborative assignments** at save time,
-   with the leak as the stated reason.
-3. **Slot extraction in `mergeNotebook`.** K marked contribution slots in the
-   starter notebook, kept by Chickadee-owned cell metadata, everything outside
-   them dropped server-side. Plus `editable`/`deletable` on the scaffold cells
-   for ergonomics. Independent of the aggregate work and useful on its own.
-4. **Per-outcome accumulation at result-ingest.** A table keyed by (setup, item,
-   first-covering submission, user), written where `awardClassBadgesFor100Percent`
-   is called. No goal semantics yet — just the durable union, with the sweep as
-   reconciliation. Independently useful for instructor diagnostics.
-5. **Extend `isSweepEvaluableClassGoal` and the evaluator** to admit a union
-   condition and a breadth condition ANDed, keeping the skip-and-log behaviour
-   for shapes it still cannot evaluate.
-6. **Goal authoring + display**: the new condition shapes in the achievements
-   editor, the MCP surface, and the student progress bar.
-7. **Corpus aggregation run** (coverage only): assembler, aggregation submission
-   kind, results sink, reusing the `ValidationVariant` fan-out shape.
-8. **Per-student contribution cap (B)**, only if a real offering shows breadth
-   (C) is not enough.
+The good news is how little new surface this needs. Three of the four screens
+already exist and take the feature as data; only one view is genuinely new, and
+it assembles entirely from the component vocabulary.
 
-Slices 1–6 deliver the bug-set goal end to end. Coverage needs 7.
+### Instructor: authoring the goal
 
-## Test plan (sketch)
+**No template or JS changes.** The achievements editor
+(`#achievement-editor-template` in `_assignment-edit-body.leaf`) is already the
+composable shape this needs: a scope dropdown, a list of typed conditions
+combined with all/any, a "Class share ≥ (%)" field and a "Bonus points" field,
+both already gated to `classWide`.
 
-- Pure-function tests for the union fold and the breadth predicate, without a
-  database, mirroring how `classGoalProgress` is tested today.
-- Monotonicity: replaying a submission stream in any order yields the same final
-  number, and the number never decreases mid-stream.
-- Freeze behaviour: a union goal that completes after the deadline does not move
-  a frozen snapshot, and the LEARN re-push fires exactly once.
-- Roster scoping: staff test submissions and dropped students contribute
-  nothing, matching the numerator guard already in the sweep (audit A7).
-- A skip-and-log test for a hand-authored goal shape the evaluator cannot read.
+The condition-signal dropdown renders from `achievementSignalOptions`, which
+comes from `AchievementSignalPresentation.all` — `AchievementSignal.allCases`
+through an **exhaustive switch**. Adding a signal is therefore a compile error
+until it is given a label and a unit, and the dropdown then renders itself. A
+new signal costs one enum case and one switch arm; the instructor UI updates for
+free.
+
+What the instructor authors for a bug hunt:
+
+| field | value |
+|---|---|
+| Awarded to | The class together |
+| Earned when | *Items covered by the class* — at least — `12` — in section `Seeded bugs` |
+| Class share ≥ (%) | `60` |
+| Bonus points | `5` |
+
+The item **set** needs no new targeting concept: `AchievementTarget.kind` already
+has `.section`, so "the tests in the *Seeded bugs* section" is expressible today.
+Putting the variant tests in a suite section is something the instructor does in
+the suite editor anyway.
+
+`classFraction` ("Class share") keeps its exact sentence — the share of the class
+that must satisfy the per-student part — and only the per-student part differs by
+goal: for a grade goal it is "cleared the grade threshold", for a union goal it is
+"contributed at least one credited item". Same field, same label, evaluator
+branches.
+
+### Student: the submission page
+
+The "Class goals" block in `submission.leaf` already renders name, reward,
+a `<progress>` bar, and a status line, and it is the right shape unchanged. One
+word in it is wrong for a union goal:
+
+```
+#(goal.studentsMeeting) / #(goal.denominator) students
+```
+
+`ClassGoalView` gains a `progressNoun` (`"students"` / `"bugs found"`), the
+template interpolates it, and the presenter fills it from the goal. **No new
+CSS** — which matters, because `PAGE_STYLE_BASELINE` in `check-styles.sh` is a
+shrink-only ratchet on total page `<style>` lines, so a new page-local rule fails
+CI by design. Reusing `.class-goal*` verbatim is not just tidy, it is the only
+mechanically legal option short of a catalog entry.
+
+Rendered, a union goal reads:
+
+```
+Seeded Bug Hunt                                    +5 pts
+[============================------------]
+60% of the way · 9 / 15 bugs found · 22 / 34 contributed
+```
+
+### Student: the notebook
+
+Nothing to build. The slots are markdown and code cells in the starter notebook —
+**content, not chrome** — so they are authored in the editor like any other
+scaffold. `editable: false` / `deletable: false` on the prompt cells is a
+metadata change to the starter, not a UI feature.
+
+### Instructor: the one genuinely new view
+
+"Which bugs has the class found, and who found each one" has no home today. It
+belongs on the per-assignment instructor page that already carries submission
+analytics (`assignment-submissions.leaf`) rather than a new tab.
+
+It assembles from existing vocabulary with **zero new classes**: a
+`.page-section` holding a `.results-table`, with `.chip-ok` / `.chip-err` for the
+found/not-found state.
+
+| Bug | Status | First found by | When |
+|---|---|---|---|
+| `variant_03` | ✅ found | s.chen | Mar 4, 09:12 |
+| `variant_07` | ✅ found | j.okafor | Mar 4, 14:40 |
+| `variant_11` | — not found | — | — |
+
+This is also the view that makes the aggregate auditable, which is why the
+per-outcome accumulation slice is worth landing before the goal semantics: it is
+independently useful to an instructor watching a lab in progress.
+
+### The UI rules this has to clear
+
+- `scripts/check-styles.sh` (page-style ratchet, class resolution, design
+  tokens, no native `alert()`), and `check-ui-vocabulary.sh` if any global class
+  is added — which the plan above avoids entirely.
+- The `ui-review` agent is **required** on any change touching
+  `Resources/Views/`, `Public/styles.css`, or a page-wiring `Public/*.js`. Green
+  guards are necessary, not sufficient; every style regression so far has been
+  mechanically legal.
+- Copy stays at house length: chips and labels are two-or-three-word noun
+  phrases, a `title` is one phrase, and anything longer goes in `docs/` with the
+  UI linking to it.
+
+## Implementation plan
+
+Nine slices, each individually mergeable and each leaving the tree shippable.
+Slices 0–2 are cleanups that stand on their own merit; 3–7 build the bug-hunt
+assignment end to end; 8 is coverage, which is a bigger step and deliberately
+last. Sizes are relative, not estimates.
+
+### Phase 0 — clear the ground (independent of everything else)
+
+**0. Resolve the `student` tier.** *Small.* `TestTierValues.tiers` advertises a
+tier `TestTier` does not have, so MCP `author_script` rejects it after the schema
+accepted it and `SuiteRowHelpers` coerces it to `.pub`. Either add the case
+(RunnerCore, both runners, the wasm fixture) or strike it from the schema and
+CLAUDE.md. Do this first: a contributed-test suite is exactly the thing that
+would want that tier, and building on an advertised-but-broken value is how the
+next reader gets misled.
+*Proven by:* a parameterized round-trip over every advertised tier value.
+
+**1. Refuse `gradingMode: browser` for contribution assignments.** *Small.*
+`BrowserRunnerRoutes.downloadTestSetup` streams the setup zip to the student, so
+browser grading hands the seeded bugs to the people hunting them. Refuse at save
+time with the leak as the stated reason, in the same place the other save-time
+language and import refusals live.
+*Proven by:* a save-time rejection test, and an assertion that the refusal names
+the reason rather than a generic error.
+
+### Phase 1 — bound the contribution (useful on its own)
+
+**2. Slot markers and slot extraction.** *Medium.* The core of the feature.
+- A Chickadee-owned cell metadata key (`metadata.chickadee_slot`) following the
+  `chickadee_personalized` precedent in `NotebookSubstitution`, which already
+  proves the round-trip and already preserves foreign cell metadata.
+- `mergeNotebook` gains the filter: keep the student's slot-marked cells in
+  document order, cap at the slot count, drop everything else, then re-impose the
+  instructor's cells as it does today. It runs on all four submission paths
+  already, so one change covers the upload form and all three browser routes.
+- The slot count is **derived from the starter notebook**, never stored
+  separately — no manifest field to drift from the notebook it describes. This is
+  the same "derive, do not tabulate" rule `AuthoringLanguageFacts` follows.
+- `editable: false` / `deletable: false` on the scaffold cells.
+
+The one open authoring question: how an instructor *marks* a slot. Typing a
+marker comment that the server converts to metadata on notebook save keeps the
+gesture inside ordinary notebook editing and needs no editor surface; a
+JupyterLite toolbar action would be nicer and costs a runtime patch. Recommend
+the marker comment for v1 and revisit only if instructors ask.
+*Proven by:* extraction tests over a student notebook with cells added, removed,
+reordered and unmarked; plus a test that an offline-edited upload with twenty
+cells still grades exactly the slot contents.
+
+### Phase 2 — accumulate (useful on its own)
+
+**3. Per-item coverage accumulation at result-ingest.** *Medium.* A table keyed
+by (test setup, item, first-covering submission, user, timestamp), written where
+`awardClassBadgesFor100Percent` is already called on the result path, with the
+existing sweep as reconciliation. No goal semantics yet — just the durable,
+attributed union.
+Incremental at ingest rather than folded in the sweep, because the sweep is
+deliberately blob-free (the `#1160` note) and unioning per-outcome data across a
+term every five minutes would undo that.
+*Proven by:* replaying a submission stream in several orders and asserting one
+final state; asserting the number never decreases mid-stream.
+
+**4. The instructor coverage view.** *Small.* The table described above on
+`assignment-submissions.leaf`. Ships on slice 3 alone and makes the aggregate
+auditable before anything grades on it.
+*Proven by:* a render test plus the `ui-review` agent.
+
+### Phase 3 — grade on it
+
+**5. The union signal and the breadth predicate.** *Medium.* A new
+`AchievementSignal` case reading the accumulated coverage against an
+`AchievementTarget` of kind `.section`, plus the breadth half of the evaluator.
+Extend `isSweepEvaluableClassGoal` to admit the new shape while keeping its
+skip-and-log behaviour for everything it still cannot read — that guard is the
+reason a hand-authored manifest cannot silently mis-grade, and it must stay
+closed.
+*Proven by:* pure-function tests for the fold and the predicate with no database,
+mirroring how `classGoalProgress` is tested today; plus a skip-and-log test for a
+shape the evaluator cannot read.
+
+**6. Authoring and display.** *Small.* Falls out of slice 5 almost entirely: the
+signal dropdown renders itself from the exhaustive switch, and the student block
+needs one interpolated noun. What remains is the MCP surface — `get_server_info`
+and the achievement tools — which must describe the new shape without hand-typing
+a list, per the `MCPLanguageProse` rule that cost two fixes to learn.
+*Proven by:* the existing MCP coverage tests, extended to the new signal.
+
+**7. Freeze and push.** *Small.* Confirm the union goal rides the existing
+deadline freeze and the one-shot LEARN re-push (`requeueFrozenClassGoalBonusPushes`)
+rather than needing its own. This is mostly a test slice, and it is the one that
+protects the grade of record.
+*Proven by:* a union goal completing after the deadline does not move a frozen
+snapshot, and the re-push fires exactly once.
+
+### Phase 4 — coverage (the bigger step)
+
+**8. Corpus aggregation run.** *Large.* Assemble every contributed slot into one
+workspace, run it against the reference under the language's coverage tool, and
+record one number. Reuses the `ValidationVariant` shape: a server-initiated
+synthetic submission, fanned to the runner, verdict collected into a side table.
+Needs a corpus assembler, an aggregation submission kind, a results sink, and a
+retention story — a materialized corpus of student-authored tests is a second
+copy of personal information and `deleteCourse` has to reach it.
+
+Everything before this delivers the bug-hunt assignment. Do not start it until a
+real offering has run one.
+
+### What is deliberately not in the plan
+
+- **A per-student contribution cap (option B).** Slot extraction bounds the
+  contribution and breadth bounds the solo hero; a per-item attribution cap adds
+  ranking, and ranking is what breaks determinism. Revisit only if a real
+  offering shows the two cheaper levers are insufficient.
+- **A cell-insertion patch in JupyterLite.** Slot extraction makes extra cells
+  harmless, so the patch buys tidiness against a whack-a-mole surface that each
+  JupyterLab release can extend.
+- **Contributed tests grading other students.** Out of scope for the reasons
+  above — it breaks grade reproducibility.
+
+### Sequencing note
+
+Slices 0–4 are all independently valuable and none of them grades anything, so
+they can land while the semantics in 5–7 are still being argued. That ordering is
+deliberate: it puts the auditable instructor view in front of a human *before*
+any of this moves a mark.
+
+## Cross-cutting checks
+
+Each slice above names what proves it. Three checks span the whole feature and
+belong wherever the last of their inputs lands:
+
+- **Roster scoping.** Staff test submissions and dropped students contribute
+  nothing to a union or a breadth count, matching the numerator guard already in
+  the sweep (audit A7). That guard exists because unscoped numerators granted
+  unearned bonus points all the way to the LMS.
+- **Order independence.** The final state is the same however the submission
+  stream is interleaved, and the class number never decreases mid-stream.
+- **Grade of record.** The bonus reaches all three sites — submission page,
+  BrightSpace push, grades CSV — through `earnedWithClassGoalBonus` rather than
+  any site re-deriving it. The grades CSV once carried its own copy of the cap
+  and that is how it drifted.
