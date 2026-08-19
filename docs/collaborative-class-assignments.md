@@ -454,7 +454,10 @@ found it. Check for the general mechanism before adding the specific one.
 
 ### Phase 1 — bound the contribution (useful on its own)
 
-**2. Slot markers and slot extraction.** *Medium.* The core of the feature.
+**2. Slot markers and slot extraction.** *Medium.* **Done.** The core of the
+feature, and it turned out to fit entirely inside `mergeNotebook`'s existing
+signature — the instructor notebook is already in hand at that call site, so the
+slot count derives there with no call-site changes and no new plumbing.
 - A Chickadee-owned cell metadata key (`metadata.chickadee_slot`) following the
   `chickadee_personalized` precedent in `NotebookSubstitution`, which already
   proves the round-trip and already preserves foreign cell metadata.
@@ -471,7 +474,17 @@ The one open authoring question: how an instructor *marks* a slot. Typing a
 marker comment that the server converts to metadata on notebook save keeps the
 gesture inside ordinary notebook editing and needs no editor surface; a
 JupyterLite toolbar action would be nicer and costs a runtime patch. Recommend
-the marker comment for v1 and revisit only if instructors ask.
+the marker comment for v1 and revisit only if instructors ask. **Still open** —
+the extraction half is built and the authoring gesture is not, so slots are
+currently declared by hand-editing cell metadata.
+
+**One sharp edge, recorded rather than hidden.** A helper the student writes
+OUTSIDE a slot is dropped with everything else, and their test then fails at
+grading against a name that is no longer defined. Keeping unmarked cells would
+reopen the bypass this bound exists to close (fifty tests in one unmarked cell),
+so the documented behaviour is what shipped — but it is the thing most likely to
+confuse a real student, and worth revisiting if an offering shows them tripping
+over it.
 *Proven by:* extraction tests over a student notebook with cells added, removed,
 reordered and unmarked; plus a test that an offline-edited upload with twenty
 cells still grades exactly the slot contents.
