@@ -261,5 +261,84 @@ if ProcessInfo.processInfo.environment["Probe_SwapTernary_10_5_120"] != nil {
         self.assertEqual(summary.get("inertMutants"), [])
 
 
+
+class EquivalentLedgerTests(unittest.TestCase):
+    """Survivors answered with a reason must leave the open queue.
+
+    The point of the ledger is that the survivor list becomes a QUEUE that can
+    reach zero. A percentage cannot: some mutants are unkillable by
+    construction, so chasing 100% means writing tests for inputs that cannot
+    occur. A count of unanswered questions is the honest target, and it only
+    works if answering one removes it.
+    """
+
+    RAW = """\
+Probe.swift:10  ChangeLogicalConnector  mutant survived
+
+Of the 1 mutants introduced into your code, your test suite killed 0.
+Mutation Score of Test Suite: 0%
+Muter took 00:00:01.000
+"""
+
+    MUTATED = '''\
+import class Foundation.ProcessInfo
+if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"] != nil {
+    return a && b
+} else {
+    return a || b
+}
+'''
+
+    def _with_ledger(self, entries):
+        """Point report.py at a temporary ledger and run it."""
+        real = os.path.join(HERE, "equivalent-mutants.json")
+        backup = open(real).read() if os.path.exists(real) else None
+        with open(real, "w") as fh:
+            json.dump({"entries": entries}, fh)
+        try:
+            return run(self.RAW, self.MUTATED)
+        finally:
+            if backup is None:
+                os.unlink(real)
+            else:
+                with open(real, "w") as fh:
+                    fh.write(backup)
+
+    def test_a_ledgered_survivor_leaves_the_open_list(self):
+        _code, report, summary = self._with_ledger([{
+            "file": "Probe.swift",
+            "operator": "ChangeLogicalConnector",
+            "mutated": "return a && b",
+            "reason": "Nothing reaching this site can observe the change, because "
+                      "both operands are always equal for every caller in the tree.",
+        }])
+        self.assertEqual(summary["survived"], 0)
+        self.assertEqual(len(summary["answeredWithReason"]), 1)
+        self.assertIn("Already answered", report)
+
+    def test_a_ledger_entry_for_a_different_mutation_does_not_excuse_this_one(self):
+        """Keyed on the mutation text, so an entry cannot drift onto its neighbour."""
+        _code, _report, summary = self._with_ledger([{
+            "file": "Probe.swift",
+            "operator": "ChangeLogicalConnector",
+            "mutated": "return a || c",
+            "reason": "A real argument about a different mutation entirely, long "
+                      "enough to pass the reason check but keyed elsewhere.",
+        }])
+        self.assertEqual(summary["survived"], 1)
+        self.assertEqual(summary["answeredWithReason"], [])
+
+    def test_an_entry_without_a_real_reason_is_refused(self):
+        """The ledger is not a suppression list, and says so by failing."""
+        code, _report, summary = self._with_ledger([{
+            "file": "Probe.swift",
+            "operator": "ChangeLogicalConnector",
+            "mutated": "return a && b",
+            "reason": "equivalent mutant",
+        }])
+        self.assertNotEqual(code, 0)
+        self.assertIsNone(summary)
+
+
 if __name__ == "__main__":
     unittest.main()

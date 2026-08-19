@@ -14,9 +14,26 @@ name: Mutation testing (changed files)
 # 6 lines means a 60-line diff is ~10 mutants and a couple of minutes, where the
 # whole tree is ~10,000 and never affordable.
 #
-# SCOPE is deliberately the same set the weekly sweep mutates
-# (Tools/mutation/config.json `include`). A PR touching nothing in that set is
-# skipped entirely rather than run empty, and the job says which files it took.
+# SCOPE is the same set the weekly sweep mutates, and there is exactly ONE list
+# of it: `include` in Tools/mutation/config.json, which the "Work out which
+# mutable files this PR touches" step reads at run time. A PR touching nothing in
+# that set exits there with count=0, so every later step is skipped and the job
+# is a no-op that says so.
+#
+# THE TRIGGER IS DELIBERATELY WIDER THAN THE SCOPE, and that is the fix for a
+# defect rather than sloppiness. `paths:` cannot be computed from a file, so a
+# narrow filter here is a SECOND copy of the include list — hand-maintained, and
+# required to agree with the first. It did not: this filter was written as
+# `Sources/RunnerCore/**` in #1456, when that was the whole sweep scope, and #1460
+# widened the sweep to Sources/Core hours later without touching it. For the next
+# eleven days a PR changing only Sources/Core — 8,639 lines, and 58 of the 75
+# survivors in run 32265903112 — was silently never mutation-tested, while this
+# comment claimed parity with config.json.
+#
+# So the filter now names the whole of Sources/ and lets the derived list do the
+# deciding. The cost is a container spin-up on a PR that turns out to touch
+# nothing mutable; the benefit is that widening the sweep can never again leave
+# the per-PR job behind, because there is nothing here to forget to update.
 #
 # It opts out of the drive-to-green reflex on purpose: `continue-on-error` means a
 # broken Muter, a red baseline or a slow shard cannot fail somebody's pull
@@ -26,7 +43,7 @@ name: Mutation testing (changed files)
 on:
   pull_request:
     paths:
-      - "Sources/RunnerCore/**"
+      - "Sources/**"
 
 permissions:
   contents: read
@@ -168,6 +185,24 @@ jobs:
       - name: Report
         if: always() && steps.files.outputs.count != '0'
         run: |
+          # The header goes in the SUMMARY, not just in this file's comments.
+          # `continue-on-error` already stops this job failing a PR, but the
+          # pressure that matters is social: a survivor listed on your own diff
+          # reads as a to-do, and the cheapest way to clear a to-do is an
+          # assertion that runs the line without checking the result. That is
+          # precisely the failure mutation testing exists to detect, so the one
+          # place guaranteed to be read has to say that closing an item with a
+          # reason is a real answer.
+          {
+            echo "> **This is a report, not a gate, and there is no score to chase.**"
+            echo "> A survivor is a question — *could the suite tell the difference?*"
+            echo "> Three answers are legitimate and the third is not failure: write the"
+            echo "> test; decide nothing reaching this code can tell the difference and"
+            echo "> **record why**; or find the mutant already dead. Some are unkillable by"
+            echo "> construction, so a run that 'fixed' every one would be worse than this"
+            echo "> one. See \`docs/mutation-triage.md\`."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ -f mutation-report/report.md ]; then
             cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
           else

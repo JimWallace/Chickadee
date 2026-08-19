@@ -210,6 +210,32 @@ def harvest_schemata(mutated_root: str) -> tuple[dict[tuple[str, str], list[int]
     )
 
 
+
+def load_equivalent_ledger() -> dict[tuple[str, str, str], str]:
+    """Survivors closed with a recorded reason, keyed (file, operator, mutation).
+
+    A malformed ledger is a hard error rather than an empty dict. Failing open
+    here would silently re-open every answered survivor, which looks like a
+    week's worth of regressions and trains the reader to ignore the list.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "equivalent-mutants.json")
+    if not os.path.isfile(path):
+        return {}
+    with open(path) as fh:
+        entries = json.load(fh).get("entries", [])
+    ledger: dict[tuple[str, str, str], str] = {}
+    for e in entries:
+        reason = (e.get("reason") or "").strip()
+        if len(reason) < 40:
+            raise SystemExit(
+                f"equivalent-mutants.json: {e.get('file')} {e.get('operator')} has no real "
+                "reason. An entry must argue why nothing reaching the site can observe the "
+                "change; a label is not an argument, and this file is not a suppression list."
+            )
+        ledger[(e["file"], e["operator"], " ".join(e["mutated"].split()))] = reason
+    return ledger
+
+
 def harvest_true_positions(mutated_root: str) -> dict[tuple[str, str], list[int]]:
     """Positions only -- kept as the narrow entry point for the phantom filter."""
     return harvest_schemata(mutated_root)[0]
@@ -293,6 +319,32 @@ def main() -> int:
         inert_set = set(inert)
         resolved = [r for r in resolved if r not in inert_set]
 
+    # SURVIVORS ALREADY ANSWERED, with a reason instead of a test. See
+    # equivalent-mutants.json: without this the survivor list can never reach
+    # zero, because a genuinely unkillable mutant comes back every week looking
+    # exactly like an untriaged gap. Filtering them is what turns the list into
+    # a QUEUE -- the metric worth having, since no honest suite drives the
+    # percentage to 100.
+    #
+    # Keyed on the mutation text rather than a line number, so an entry cannot
+    # drift onto a different mutant and stops matching the moment the code it
+    # excuses is edited.
+    ledger = load_equivalent_ledger()
+    equivalent = []
+    if ledger:
+        for key in list(mutation_of):
+            path, _line, operator = key
+            muts = mutation_of[key]
+            if not muts:
+                continue
+            if all((path, operator, " ".join(m["mutated"].split())) in ledger for m in muts):
+                equivalent.append(key)
+        if equivalent:
+            eq_set = set(equivalent)
+            resolved = [r for r in resolved if r not in eq_set]
+            for key in equivalent:
+                del mutation_of[key]
+
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "survivors.tsv"), "w") as fh:
         fh.write("file\treported_line\ttrue_line\toperator\tsource\n")
@@ -332,6 +384,13 @@ def main() -> int:
                     "mutations": mutation_of.get((path, line, operator), []),
                 }
                 for path, line, operator in sorted(resolved)
+            ],
+            # Survivors closed with a recorded reason (equivalent-mutants.json).
+            # Carried in the record so the trend can show the queue shrinking
+            # for the right reason rather than the list merely getting shorter.
+            "answeredWithReason": [
+                {"file": path, "line": line, "operator": operator}
+                for path, line, operator in sorted(equivalent)
             ],
             # Mutations Muter emitted UNCHANGED (see the quarantine above).
             # Recorded rather than dropped so the count reconciles and so a
@@ -422,6 +481,22 @@ def main() -> int:
                     out.append(f"    - becomes: `{one}`")
         else:
             out.append("No survivors. Every mutant in this shard was killed.")
+
+        if equivalent:
+            out += [
+                "",
+                "### Already answered — closed with a reason, not a test",
+                "",
+                f"{len(equivalent)} survivor(s) are recorded in",
+                "`Tools/mutation/equivalent-mutants.json` as unkillable by construction,",
+                "each with the argument for why. They are listed here rather than dropped so",
+                "the reasoning stays visible and so re-opening one is a deliberate act. Do",
+                "not write tests for these; if you think an argument is wrong, delete the",
+                "entry and the survivor comes back.",
+                "",
+            ]
+            for path, line, operator in sorted(equivalent):
+                out.append(f"- `{path}` L{line} `{operator}`")
 
         if inert:
             out += [
