@@ -6,11 +6,15 @@ name: Mutation testing (weekly)
 # construction, so chasing a percentage means writing tests for inputs that
 # cannot occur. See docs/mutation-testing-pilot.md.
 #
-# SHARDED, BECAUSE THE ARITHMETIC DEMANDS IT. Measured 2026-08-18: about one
-# mutant per 6 lines of Swift, and every mutant costs one full run of the test
-# command (~16s for `swift test --skip APITests`). The logic tier -- RunnerCore,
-# Core and Worker, ~16k LOC -- is ~2,650 mutants and ~12h serial, which is why it
-# is split ten ways and finishes inside ~90 minutes of wall clock.
+# SCOPE: RUNNERCORE ONLY, and deliberately small. This is the one target proven
+# end to end -- the 2026-08-18 pilot scored 69% on four of its files -- and the
+# code where a survivor matters most, since one grading core is compiled both
+# natively and to wasm. ~1,600 LOC, ~266 mutants, 3 shards of ~30 minutes.
+#
+# Widening aborted run 2 on every shard: Muter runs the suite UNMUTATED first and
+# mutates nothing if that baseline is red, and it was red with `Suite WorkerTests
+# failed with 2 issues` on all ten shards regardless of file set. Widen one target
+# at a time, and only after a run at this scope comes back green.
 #
 # APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
 # mutants, and its mutants must be graded by APITests, the slowest suite, so it
@@ -65,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        shard: [0, 1, 2]
     container:
       # swift-CI, not plain swift. The -ci image is the one carrying python3,
       # lua5.4, octave and r-base; the plain image is the toolchain alone. Run 1
@@ -187,8 +191,15 @@ jobs:
               const file = path.join('shards', d, 'report.md');
               if (!fs.existsSync(file)) { missing.push(shard); continue; }
               const body = fs.readFileSync(file, 'utf8');
+              // A report can EXIST and still say nothing was mutated -- run 2
+              // uploaded ten of them, each reading "Muter produced no mutant
+              // outcomes at all" after its baseline suite failed. Parsing that as
+              // zero survivors is how a totally broken sweep reported success.
+              // Absence of outcomes is a failed shard, not an empty one.
+              if (body.includes('no mutant outcomes at all')) { missing.push(shard); continue; }
               const m = body.match(/\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)%/);
-              if (m) { killed += Number(m[1]); survivors += Number(m[2]); }
+              if (!m) { missing.push(shard); continue; }
+              killed += Number(m[1]); survivors += Number(m[2]);
               const p = body.match(/Muter reported (\d+) survivor/);
               if (p) phantoms += Number(p[1]);
               sections.push(body);

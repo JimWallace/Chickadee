@@ -34,6 +34,7 @@ set -euo pipefail
 MUTER_REF="7f1f258"
 SHARD=""
 SHARD_COUNT=""
+EXPLICIT_FILES=()
 OUT_DIR="mutation-report"
 MUTER_SRC=""
 
@@ -41,8 +42,10 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/mutation-run.sh [options]
 
-  --shard N        Which shard to run, 0-based. Required unless --plan.
+  --shard N        Which shard to run, 0-based. Required unless --plan or --file.
   --of M           Total shards. Default: shardCount in Tools/mutation/config.json.
+  --file PATH      Mutate exactly this file, bypassing sharding. Repeatable. Used
+                   by the per-PR run, which mutates only what a PR changed.
   --muter-ref REF  Muter commit to build. Default 7f1f258, the pinned and measured
                    baseline. Any other ref MUST be re-verified with the
                    mutation-probe workflow first: both upstream failure modes are
@@ -64,6 +67,7 @@ plan_only=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --shard) SHARD="$2"; shift 2 ;;
+        --file) EXPLICIT_FILES+=("$2"); shift 2 ;;
         --of) SHARD_COUNT="$2"; shift 2 ;;
         --muter-ref) MUTER_REF="$2"; shift 2 ;;
         --out) OUT_DIR="$2"; shift 2 ;;
@@ -116,17 +120,28 @@ if [ "$plan_only" -eq 1 ]; then
     exit 0
 fi
 
-[ -n "$SHARD" ] || { echo "--shard is required (or use --plan)" >&2; exit 2; }
-if [ "$SHARD" -ge "$SHARD_COUNT" ] || [ "$SHARD" -lt 0 ]; then
-    echo "shard $SHARD out of range (0..$((SHARD_COUNT - 1)))" >&2
-    exit 2
-fi
 command -v swift >/dev/null || { echo "swift not on PATH" >&2; exit 1; }
 
-mapfile -t shard_files < <(assign "$SHARD")
-[ "${#shard_files[@]}" -gt 0 ] || { echo "shard $SHARD is empty" >&2; exit 1; }
-echo "==> shard $SHARD of $SHARD_COUNT: ${#shard_files[@]} files"
+if [ "${#EXPLICIT_FILES[@]}" -gt 0 ]; then
+    shard_files=("${EXPLICIT_FILES[@]}")
+    label="${#shard_files[@]} changed file(s)"
+    echo "==> mutating an explicit file list: $label"
+else
+    [ -n "$SHARD" ] || { echo "--shard is required (or use --plan / --file)" >&2; exit 2; }
+    if [ "$SHARD" -ge "$SHARD_COUNT" ] || [ "$SHARD" -lt 0 ]; then
+        echo "shard $SHARD out of range (0..$((SHARD_COUNT - 1)))" >&2
+        exit 2
+    fi
+    mapfile -t shard_files < <(assign "$SHARD")
+    [ "${#shard_files[@]}" -gt 0 ] || { echo "shard $SHARD is empty" >&2; exit 1; }
+    label="shard $SHARD of $SHARD_COUNT"
+    echo "==> $label: ${#shard_files[@]} files"
+fi
 printf '    %s\n' "${shard_files[@]}"
+
+for f in "${shard_files[@]}"; do
+    [ -f "$f" ] || { echo "::error::file does not exist: $f" >&2; exit 1; }
+done
 
 # ---------------------------------------------------------------- build muter
 [ -n "$MUTER_SRC" ] || MUTER_SRC="${TMPDIR:-/tmp}/muter-src"
@@ -225,7 +240,7 @@ rm -rf muter_logs
 # the true mutant positions. Report before deleting it.
 mutated_root="$(dirname "$PWD")/$(basename "$PWD")_mutated"
 # `set -e` would abort on a non-zero report, so capture the status explicitly.
-if python3 Tools/mutation/report.py "$raw" "$OUT_DIR" "shard $SHARD of $SHARD_COUNT" "$mutated_root"; then
+if python3 Tools/mutation/report.py "$raw" "$OUT_DIR" "$label" "$mutated_root"; then
     status=0
     rm -rf "$mutated_root"
 else
