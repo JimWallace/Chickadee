@@ -2438,6 +2438,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
+/* The drop zone's upload glyph. A descendant selector rather than a class of
+   its own: it is one rule serving one existing component, and a new global
+   class would owe a component-vocabulary entry for no gain. */
+.drop-zone .icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--muted);
+}
+
 /* Deadline and submission count restated inside the assignment name cell at
    phone width, where .col-hide-phone drops the Due and History columns. Hidden
    at every width that still shows those columns, so the fact never appears

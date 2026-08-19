@@ -31,13 +31,13 @@
 <h2 class="assignment-section-heading">#(group.name)</h2>
 #endif
 <div class="toolbar toolbar--end section-gap">
-    <div class="filter-group">
+    <span class="filter-group">
         <label class="filter-label" for="filter-assignments-#(index)">Filter</label>
-        <input class="filter-input" id="filter-assignments-#(index)" type="search"
+        <input id="filter-assignments-#(index)" class="form-input filter-input" type="search"
                placeholder="Filter by name or status…"
                data-list-filter="assignments-#(index)"
                data-list-filter-empty="No assignments match this filter.">
-    </div>
+    </span>
 </div>
 <table class="results-table assignment-table sortable-table"
        id="assignments-#(index)"
@@ -76,7 +76,7 @@
                         </span>
                         #endif
                     </div>
-                    <div class="card-meta assignment-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0) · #(item.setup.submissionCount) submitted#endif</div>
+                    <div class="card-meta assignment-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0): · #(item.setup.submissionCount) submitted#endif</div>
                 #else:
                 <span class="text-muted">Unpublished</span>
                 #endif

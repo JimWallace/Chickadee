@@ -211,10 +211,27 @@ struct SubmitContext: Encodable {
     /// language table plus this assignment's required files — see
     /// `submissionAcceptAttribute`.
     let acceptAttribute: String
+    /// One sentence under the drop zone naming the language and the extensions
+    /// this assignment takes — see `submissionAcceptHintText`.  The `accept`
+    /// attribute is invisible until the picker opens and says nothing to a
+    /// drag-and-drop, so the same fact has to be readable on the page.
+    let acceptHintText: String
+    /// The rejection banner's text when the server refused the previous upload
+    /// (`?error=filetype`), nil otherwise.  Server-rendered rather than built in
+    /// JS so the refusal survives a direct POST with scripting off.
+    let errorText: String?
     /// The manifest's `requiredFiles`, comma-joined for the "include these
     /// files" hint above the drop zone.  nil when the assignment declares
     /// none (the hint paragraph is omitted).
     let requiredFilesText: String?
+    /// Which attempt this upload will be — prior submissions plus one.  Drives
+    /// the attempt chip; 1 on a first submission.
+    let attemptNumber: Int
+    /// The deadline in force for this student, formatted, and the same instant
+    /// as ISO-8601 so the chip can ride `.js-relative-time` and read "in 2
+    /// days".  Both nil when the assignment has no due date.
+    let deadlineText: String?
+    let deadlineISO: String?
     let currentUser: CurrentUserContext?
 }
 
