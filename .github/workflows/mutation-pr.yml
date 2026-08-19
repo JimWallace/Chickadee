@@ -67,6 +67,18 @@ jobs:
           # Need the base commit to diff against; a shallow clone cannot.
           fetch-depth: 0
 
+      # Measured, not guessed: the workspace is owned by uid 1001 (the host
+      # runner user) while this container job runs as root, and git 2.43 refuses
+      # a repository whose worktree it does not trust. `actions/checkout` does
+      # add a safe.directory entry, but into a TEMPORARY HOST HOME
+      # ("Temporarily overriding HOME=/__w/_temp/..."), which no step inside the
+      # container shares — the step's own diagnosis printed "(no safe.directory
+      # entries)". The refusal is quiet in the worst way: `git diff` falls back
+      # to --no-index and prints "Not a git repository", which the step then read
+      # as "no files changed".
+      - name: Trust the workspace inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Cache the patched Muter build
         uses: actions/cache@v4
         with:

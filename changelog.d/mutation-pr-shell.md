@@ -26,3 +26,14 @@
   own error plus the container user, git version, `ls -ld . .git` and any
   `safe.directory` entries, so the next run identifies the cause rather than
   restating the effect.
+
+- **…and the cause was an untrusted worktree.** With git's own error finally
+  printed, the diagnosis was unambiguous: the workspace is owned by uid 1001 (the
+  host runner user) while the container job runs as root, and no `safe.directory`
+  entry exists inside the container — `actions/checkout` writes one, but into a
+  temporary HOST HOME no container step shares. Git 2.43 therefore refuses the
+  repository. The job now adds `safe.directory` for `$GITHUB_WORKSPACE` before any
+  git command runs. Reproduced locally by chowning a worktree to 1001 and running
+  git as root (`fatal: detected dubious ownership`), and verified that the same
+  `git config --global --add safe.directory` makes `rev-parse
+  --is-inside-work-tree` return true.
