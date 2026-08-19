@@ -1,14 +1,19 @@
 // seed.mjs — fixture seeding over the real HTTP API, shared by capture.mjs
 // (visual regression, #1136) and a11y.mjs (accessibility scan, #1137).
 // Registers an instructor (first user becomes admin), creates an auto-enroll
-// course, uploads a worker-graded test setup, registers + logs in a student,
-// and submits once (stays pending — no runner attached).
+// course, uploads a worker-graded test setup, publishes it into an OPEN
+// assignment (so the student dashboard has rows to draw), registers + logs in
+// a student, and submits once (stays pending — no runner attached).
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
 
 export const INSTRUCTOR = { username: "vis_instructor", password: "vis-instructor-pass-1" };
 export const STUDENT = { username: "vis_student", password: "vis-student-pass-1" };
 export const COURSE = { code: "VIS101", name: "Visual Regression 101" };
+// Fixed wall-clock due date (America/Toronto, per the harness locale). Must
+// never be relative — the Due column is rendered absolute, so a moving date
+// would break the pixel baseline on every run.
+export const ASSIGNMENT = { title: "Lab 1 — Warmup", dueAt: "2030-12-01T23:59" };
 
 function extractCsrf(html) {
   let m = html.match(/name=['"]_csrf['"][^>]*\svalue=['"]([^'"]+)['"]/i);
@@ -104,6 +109,45 @@ export async function seed(baseURL) {
   );
   const setupID = JSON.parse(await setupRes.text()).testSetupID;
   if (!setupID) throw new Error("no testSetupID in upload response");
+
+  // Publish the setup into an assignment and OPEN it, so the student
+  // dashboard captures its populated state rather than the empty one.
+  //
+  // Without this the fixture left the setup unpublished: students cannot see
+  // an unpublished assignment, so `student-dashboard` baselined only
+  // "No assignments available yet." — leaving the populated assignment table
+  // (tier-open/closed/extended chips, achievement badges, the grade override
+  // tag, the submission-history cell, the icon action row) with no pixel
+  // coverage on any page, in either scheme.
+  //
+  // Opening needs no runner: quick-publish creates the assignment with
+  // validationStatus nil, and applyVisibility admits nil as well as "passed".
+  csrf = await csrfFrom(instr, "/instructor");
+  const publishRes = await expectOK(
+    "publish assignment",
+    instr.post("/instructor", {
+      form: { testSetupID: setupID, title: ASSIGNMENT.title, dueAt: ASSIGNMENT.dueAt, _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+  // Publish redirects to the editor: /instructor/<publicID>/edit
+  const pubLoc = publishRes.headers()["location"] || "";
+  const assignmentID = (pubLoc.match(/\/instructor\/([A-Za-z0-9_-]+)\/edit/) || [])[1];
+  if (!assignmentID) throw new Error(`publish did not redirect to the editor (location: "${pubLoc}")`);
+
+  csrf = await csrfFrom(instr, "/instructor");
+  await expectOK(
+    "open assignment",
+    instr.post(`/instructor/${assignmentID}/status`, {
+      form: { status: "open", _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+
   const instructorState = await instr.storageState();
   await instr.dispose();
 
@@ -149,5 +193,5 @@ export async function seed(baseURL) {
   const studentState = await stud.storageState();
   await stud.dispose();
 
-  return { setupID, courseID, instructorState, studentState, resultsPath };
+  return { setupID, assignmentID, courseID, instructorState, studentState, resultsPath };
 }
