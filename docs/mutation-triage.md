@@ -136,6 +136,40 @@ When a test lands, say in its comment what the mutation was and why the gap
 mattered — the tests added from the first pilot do this, and it is what stops a
 later reader deleting them as redundant.
 
+**When the answer is "no test", write it in `Tools/mutation/equivalent-mutants.json`.**
+A reason recorded only in a commit message is invisible to the next sweep, so the
+survivor comes back every week looking exactly like an untriaged gap — and
+whoever picks it up either re-derives the argument or writes a test asserting
+something that cannot vary. An entry there moves it out of the open list into
+report.md's "Already answered" section.
+
+Three things about that file, because it is one careless edit away from being a
+suppression list:
+
+- **It is keyed on the mutation text, not a line number.** Lines move, and a
+  stale line would silently excuse whatever mutant drifted into it. Matching the
+  normalised mutated statement also means an entry self-invalidates when the code
+  is edited: the survivor reappears and the argument gets made again against the
+  code as it now is. That is the desired behaviour, not a nuisance.
+- **`reason` must be an argument.** Say which inputs can reach the site and why
+  none of them distinguishes the two versions. `report.py` refuses an entry
+  shorter than a sentence, but it cannot tell a bad argument from a good one.
+- **Never park a hard-to-kill mutant there.** That is a gap, and a gap in this
+  file is indistinguishable from a lie.
+
+## The number to watch is the queue, not the score
+
+There is no coverage target here, and the mutation percentage is not one either:
+some mutants are unkillable by construction, so a suite that drove it to 100%
+would be asserting things that cannot vary. Muter also reports outcomes that are
+not mutants at all — 134 phantoms and 9 inert no-ops in run 32265903112, against
+383 real ones.
+
+What can honestly reach zero is the count of survivors nobody has answered yet.
+Killed mutants leave the list on their own; phantoms, inert mutations and
+recorded equivalents are filtered into their own sections. What remains is the
+queue, and emptying it is the goal.
+
 ## Where things are
 
 | | |

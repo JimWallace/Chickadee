@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "SURVIVORS CLOSED WITH A REASON RATHER THAN A TEST.",
+    "",
+    "docs/mutation-triage.md gives three legitimate answers to a survivor, and",
+    "the second is 'nothing reaching this code can tell the difference — close",
+    "it, record why'. Until this file existed the recording had nowhere to live",
+    "that the sweep could read, so an equivalent mutant came back every week",
+    "looking exactly like an untriaged gap. Whoever picked it up either",
+    "re-derived the argument or, worse, wrote a test asserting something that",
+    "cannot vary.",
+    "",
+    "With it, the survivor list IS the open queue and can reach zero. That is",
+    "the metric worth having: not a percentage, which no honest suite can drive",
+    "to 100 because some mutants are unkillable by construction, but a count of",
+    "questions nobody has answered yet.",
+    "",
+    "AN ENTRY IS KEYED ON THE MUTATION TEXT, NOT A LINE NUMBER. Lines move, and",
+    "a stale line number would silently excuse whatever mutant drifted into it.",
+    "Matching on the normalised mutated statement also makes an entry",
+    "self-invalidating in the right way: edit the code and the text stops",
+    "matching, so the survivor reappears and the argument has to be made again",
+    "against the code as it now is.",
+    "",
+    "`reason` must be an argument, not a label. It has to say what makes the",
+    "mutant unobservable — which inputs can reach the site and why none of them",
+    "distinguishes the two versions. 'equivalent mutant' is not a reason.",
+    "",
+    "This is NOT a suppression list. Do not add an entry because a mutant is",
+    "hard to kill, or because the test would be awkward. Those are gaps, and a",
+    "gap parked here is indistinguishable from a lie."
+  ],
+  "entries": [
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "operator": "RelationalOperatorReplacement",
+      "mutated": "let start = pos if current != \"-\" { pos += 1 } while let c = current, (c >= \"0\" && c <= \"9\") || c == \".\" || c == \"e\" || c == \"E\" || c == \"+\" || c == \"-\" { pos += 1 } guard let value = JSONParser.parseDoubleLiteral(chars[start..<pos]) else { return nil } return .number(value)",
+      "reason": "parseValue routes here only when the current character is '-' or a digit, and the while loop that follows accepts BOTH. `start` is captured before the `if`, so the sign is consumed either by the `if` or by the loop's first iteration and `pos` lands in the same place either way. The slice handed to parseDoubleLiteral is therefore identical for every input that can reach this function, including a lone '-', a leading digit followed by a non-numeric character, and '--5'. Verified SURVIVED against run 32265903112 after JSONFooterGrammarTests killed the other fourteen candidates in this file."
+    }
+  ]
+}
