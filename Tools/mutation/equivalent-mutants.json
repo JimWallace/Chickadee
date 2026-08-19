@@ -3,7 +3,7 @@
     "SURVIVORS CLOSED WITH A REASON RATHER THAN A TEST.",
     "",
     "docs/mutation-triage.md gives three legitimate answers to a survivor, and",
-    "the second is 'nothing reaching this code can tell the difference — close",
+    "the second is 'nothing reaching this code can tell the difference \u2014 close",
     "it, record why'. Until this file existed the recording had nowhere to live",
     "that the sweep could read, so an equivalent mutant came back every week",
     "looking exactly like an untriaged gap. Whoever picked it up either",
@@ -23,7 +23,7 @@
     "against the code as it now is.",
     "",
     "`reason` must be an argument, not a label. It has to say what makes the",
-    "mutant unobservable — which inputs can reach the site and why none of them",
+    "mutant unobservable \u2014 which inputs can reach the site and why none of them",
     "distinguishes the two versions. 'equivalent mutant' is not a reason.",
     "",
     "This is NOT a suppression list. Do not add an entry because a mutant is",
@@ -36,6 +36,12 @@
       "operator": "RelationalOperatorReplacement",
       "mutated": "let start = pos if current != \"-\" { pos += 1 } while let c = current, (c >= \"0\" && c <= \"9\") || c == \".\" || c == \"e\" || c == \"E\" || c == \"+\" || c == \"-\" { pos += 1 } guard let value = JSONParser.parseDoubleLiteral(chars[start..<pos]) else { return nil } return .number(value)",
       "reason": "parseValue routes here only when the current character is '-' or a digit, and the while loop that follows accepts BOTH. `start` is captured before the `if`, so the sign is consumed either by the `if` or by the loop's first iteration and `pos` lands in the same place either way. The slice handed to parseDoubleLiteral is therefore identical for every input that can reach this function, including a lone '-', a leading digit followed by a non-numeric character, and '--5'. Verified SURVIVED against run 32265903112 after JSONFooterGrammarTests killed the other fourteen candidates in this file."
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "operator": "ChangeLogicalConnector",
+      "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain // `=` or `(`) can't be mistaken for assignment or call syntax below // (e.g. `print(x) # a = b` must not look like an assignment). let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed)) // A line that was nothing but a comment is harmless at module level. if trimmed.isEmpty { return true } for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"] where trimmed.hasPrefix(prefix) { return true } // Bare string literals are module-level docstrings \u2014 safe. if trimmed.hasPrefix(\"\\\"\\\"\\\"\") && trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\") || trimmed.hasPrefix(\"'\") { return true } // Control-flow / side-effecting statements are quarantined. The `token + \"(\"` // branch catches bare calls whose name matches a keyword while avoiding false // matches on names that merely share a prefix (e.g. `format` vs `for`). for token in [ \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\", \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\", \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\", \"async for\", \"async with\", ] { if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\") || trimmed.hasPrefix(token + \"(\") { return false } } // Assignments: module level only when the RHS has no function calls. Keeps // module-level constants while quarantining `p = Patient(...)`-style code. if let rhsStart = findAssignmentRHS(in: trimmed) { let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...])) return !rhsContainsFunctionCall(rhs) } return false // Strip any trailing `#` comment first, so comment text (which may contain // `=` or `(`) can't be mistaken for assignment or call syntax below // (e.g. `print(x) # a = b` must not look like an assignment).",
+      "reason": "The guard is `hasPrefix(\\\"\\\"\\\") || hasPrefix(''') || hasPrefix(\\\") || hasPrefix(')`, and its first two terms are REDUNDANT: a line starting with triple-double-quote necessarily starts with a double quote, and one starting with triple-single-quote necessarily starts with a single quote. The whole chain is therefore equivalent to just the two single-delimiter tests. This mutant replaces the first `||` with `&&`, and no string can start with both triple-double-quote and triple-single-quote, so that conjunct is false for every input -- leaving exactly the same two single-delimiter tests the original reduces to. Identical for all inputs, so no test can distinguish them. The two candidates that ARE observable at this site (the second connector and the one on the continuation line) each drop a single-delimiter term and are killed by NotebookExtractionPredicateTests."
     }
   ]
 }
