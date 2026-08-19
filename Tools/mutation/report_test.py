@@ -216,5 +216,50 @@ class OriginalCaptureTests(unittest.TestCase):
             self.assertEqual(m["original"], 'return a && b ? "}" : "end"')
 
 
+
+class InertMutantTests(unittest.TestCase):
+    """Muter sometimes emits a mutation identical to the original.
+
+    Nine of run 32265903112's 75 survivors were this, every one a SwapTernary
+    whose branches came back unswapped. The schema WAS inserted, so the
+    phantom filter passes it; but there is no change for a test to detect, so
+    it is not a hole. Before the original was recorded alongside the mutation
+    there was no way to tell the two apart, and two of these were left looking
+    like gaps in a file that had just been covered properly.
+    """
+
+    RAW_ONE = """\
+Probe.swift:10  SwapTernary  mutant survived
+
+Of the 1 mutants introduced into your code, your test suite killed 0.
+Mutation Score of Test Suite: 0%
+Muter took 00:00:01.000
+"""
+
+    # The `if` body and the `else` body differ only in spacing.
+    INERT = '''\
+import class Foundation.ProcessInfo
+if ProcessInfo.processInfo.environment["Probe_SwapTernary_10_5_120"] != nil {
+    return flag  ? a :  b
+} else {
+    return flag ? a : b
+}
+'''
+
+    def test_an_unchanged_mutation_is_quarantined_not_reported_as_a_hole(self):
+        _code, report, summary = run(self.RAW_ONE, self.INERT)
+        self.assertEqual(summary["survived"], 0)
+        self.assertEqual(len(summary["survivors"]), 0)
+        self.assertEqual(len(summary["inertMutants"]), 1)
+        self.assertEqual(summary["inertMutants"][0]["operator"], "SwapTernary")
+        self.assertIn("Inert mutants", report)
+
+    def test_a_genuinely_changed_mutation_is_still_a_survivor(self):
+        real = self.INERT.replace("return flag  ? a :  b", "return flag ? b : a")
+        _code, _report, summary = run(self.RAW_ONE, real)
+        self.assertEqual(summary["survived"], 1)
+        self.assertEqual(summary.get("inertMutants"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

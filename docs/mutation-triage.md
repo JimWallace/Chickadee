@@ -106,12 +106,25 @@ against the full suite before writing anything — otherwise you are looking at
 the same artefact a missing interpreter produces, where a test that never ran
 makes its mutants read as gaps.
 
-**Equivalent mutants are common in parsers and defensive code.** `JSONLite`'s
-`skipWhitespace` treats `\n` as skippable, but the footer is by definition the
-last non-empty *line*, so no input reaching that parser contains one. No test can
-kill it. `containsSubstring`'s empty-needle guard has no caller that passes an
-empty needle. Close these with the reason written down; the reason is the
-deliverable.
+**Equivalent mutants are common in parsers and defensive code.**
+`containsSubstring`'s empty-needle guard has no caller that passes an empty
+needle. `JSONLite`'s `parseNumber` is a subtler one: mutating `if current == "-"`
+to `!=` changes nothing, because the `while` loop that follows accepts `-` too
+and `start` is captured before either — so the sign is consumed either by the
+`if` or by the loop, and the slice handed to `parseDoubleLiteral` is identical
+for every input `parseValue` can route there. Close these with the reason
+written down; the reason is the deliverable.
+
+**But make the argument about the mutation Muter actually generates, not the one
+you can imagine.** This section used to claim `skipWhitespace`'s `\n` arm was
+unkillable, because the footer is by definition the last non-empty *line*. The
+reachability half is right and the conclusion was wrong: `ChangeLogicalConnector`
+mutates ONE connector in `" " || "\t" || "\n" || "\r"`, so no candidate isolates
+`\n`. Each disables a *pair* — and the pairs reach tabs (interior ones survive
+`trimHorizontal`) and a lone `\r`, both of which a script can emit. Measured
+against run 32265903112, two of those three candidates survived the suite and
+both are now killed by `JSONFooterGrammarTests`. An equivalence argument has to
+name the recorded mutation and show THAT one cannot be observed.
 
 ## What a finished survivor looks like
 
