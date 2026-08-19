@@ -1,0 +1,155 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "35ab90aefbf2",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
+  },
+  "date": "2026-08-19",
+  "killed": 122,
+  "phantomsFiltered": 64,
+  "shardsExpected": 3,
+  "shardsReported": 3,
+  "survived": 23,
+  "survivors": [
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 31,
+      "operator": "RelationalOperatorReplacement",
+      "source": "var isAtEnd: Bool { pos >= chars.count }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 46,
+      "operator": "ChangeLogicalConnector",
+      "source": "case .some(let c) where c == \"-\" || (c >= \"0\" && c <= \"9\"): return parseNumber()"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 77,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"]\" { pos += 1; return .array(items) }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 131,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + 4 <= chars.count else { return nil }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 157,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"-\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 256,
+      "operator": "SwapTernary",
+      "source": "matchLiteral(\"null\") ? .null : nil"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 261,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + lit.count <= chars.count else { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 262,
+      "operator": "RelationalOperatorReplacement",
+      "source": "for (offset, ch) in lit.enumerated() where chars[pos + offset] != ch { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 459,
+      "operator": "ChangeLogicalConnector",
+      "source": "|| trimmed.hasPrefix(\"'\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 569,
+      "operator": "ChangeLogicalConnector",
+      "source": "let isHWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 575,
+      "operator": "ChangeLogicalConnector",
+      "source": "let isWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" || $0 == \"\\n\" || $0 == \"\\r\" }"
+    },
+    {
+      "file": "Sources/RunnerCore/ScriptClassification.swift",
+      "line": 97,
+      "operator": "ChangeLogicalConnector",
+      "source": ".filter { !$0.isEmpty && !$0.hasPrefix(\"#\") }"
+    },
+    {
+      "file": "Sources/RunnerCore/ScriptClassification.swift",
+      "line": 105,
+      "operator": "ChangeLogicalConnector",
+      "source": "|| line.hasPrefix(\"if __name__ == \")"
+    },
+    {
+      "file": "Sources/RunnerCore/ScriptClassification.swift",
+      "line": 138,
+      "operator": "ChangeLogicalConnector",
+      "source": "$0 == \" \" || $0 == \"\\t\" || $0 == \"\\n\" || $0 == \"\\r\" || $0 == \"\\u{feff}\""
+    },
+    {
+      "file": "Sources/RunnerCore/ScriptClassification.swift",
+      "line": 145,
+      "operator": "ChangeLogicalConnector",
+      "source": "let isHWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" }"
+    },
+    {
+      "file": "Sources/RunnerCore/SuiteExecution.swift",
+      "line": 86,
+      "operator": "RemoveSideEffects",
+      "source": "onEvent(.willRun(script: item.script))"
+    },
+    {
+      "file": "Sources/RunnerCore/SuiteExecution.swift",
+      "line": 90,
+      "operator": "RemoveSideEffects",
+      "source": "onEvent(.didFinish(script: item.script, outcome: outcome, timedOut: output.timedOut))"
+    }
+  ]
+}
