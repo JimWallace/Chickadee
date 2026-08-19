@@ -177,5 +177,44 @@ class RecordedMutationTests(unittest.TestCase):
         self.assertTrue(all(s["mutations"] == [] for s in summary["survivors"]))
 
 
+
+class OriginalCaptureTests(unittest.TestCase):
+    """The schema's trailing `else` must reach the run record.
+
+    Without it a verifier can only apply a mutation by POSITION, and Muter's
+    positions are the ones this file's own report calls known-wrong. The
+    consequence is not a missing verdict but a WRONG one: the mis-applied edit
+    fails to compile, the suite goes red, and red reads as "already covered".
+    """
+
+    def test_the_record_carries_the_original_for_each_mutation(self):
+        code, _report, summary = run(RAW, MUTATED)
+        self.assertEqual(code, 0)
+        muts = summary["survivors"][0]["mutations"]
+        self.assertTrue(muts, "no mutation recorded")
+        self.assertEqual(muts[0]["mutated"], 'return a || b ? "}" : "end"')
+        self.assertEqual(muts[0]["original"], 'return a && b ? "}" : "end"')
+
+    def test_the_original_survives_an_else_if_chain(self):
+        """Two mutants of one statement share one chain; the original is last."""
+        chained = (
+            'import class Foundation.ProcessInfo\n'
+            'if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"]'
+            ' != nil {\n'
+            '    return a || b ? "}" : "end"\n'
+            '} else if ProcessInfo.processInfo.environment'
+            '["Probe_ChangeLogicalConnector_10_9_124"] != nil {\n'
+            '    return a && b ? "}" : "other"\n'
+            '} else {\n'
+            '    return a && b ? "}" : "end"\n'
+            '}\n'
+        )
+        _code, _report, summary = run(RAW, chained)
+        muts = summary["survivors"][0]["mutations"]
+        self.assertEqual(len(muts), 2)
+        for m in muts:
+            self.assertEqual(m["original"], 'return a && b ? "}" : "end"')
+
+
 if __name__ == "__main__":
     unittest.main()

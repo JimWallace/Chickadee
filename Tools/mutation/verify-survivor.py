@@ -48,6 +48,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -82,35 +83,107 @@ def pick(survivors: list[dict], path: str, line: int, operator: str | None) -> l
     ]
 
 
-def apply_mutation(source_path: str, line: int, mutated: str) -> str | None:
-    """Replace the statement at `line` with the mutation. Returns the original.
+def whole_line_is_the_statement(current: str, mutated: str) -> bool:
+    """Whether replacing the whole of `current` with `mutated` is faithful.
 
-    Muter records the mutated STATEMENT, so the replacement is line-oriented and
-    only safe when the target line still looks like what was mutated. Returning
-    None rather than editing on a mismatch is deliberate: a verifier that
-    silently mutates the wrong line reports a verdict about code nobody asked
-    about.
+    Only true when the line holds exactly the statement that was mutated. The
+    counter-examples are the common ones, not exotica: `case .equals: return lhs
+    == value` loses its `case` label, a continuation line like `|| $0.signal ==
+    .gradeJumpPercent` gets the whole expression pasted beside the half already
+    above it, and a mutation whose recorded text opens with `//` comments out
+    whatever followed on the line.
+    """
+    if not mutated.strip() or len(mutated.splitlines()) != 1:
+        return False
+    cur, mut = " ".join(current.split()), " ".join(mutated.split())
+    if mut.startswith("//"):
+        return False
+    # One token differs (the mutated operator) and nothing else moves, so the
+    # token count and the punctuation that frames a statement must both match.
+    return len(cur.split()) == len(mut.split()) and cur.count(":") == mut.count(":")
+
+
+def apply_mutation(source_path: str, line: int, mutated: str, original: str | None) -> str | None:
+    """Apply the mutation to the file, returning the file's previous contents.
+
+    PREFER CONTENT OVER POSITION. When the run record carries the schema's
+    `original` -- the trailing `else` of Muter's chain -- the edit is an exact
+    textual swap and Muter's line number is not consulted at all. That matters
+    because those line numbers are known-wrong: `report.py` says so in the issue
+    body it writes, and measured against run 32255707345 only 15 of 84
+    candidates had the mutated statement actually occupying the reported line.
+
+    Returning None rather than editing is the whole safety property here. A
+    mis-applied mutation does not fail honestly -- it fails to COMPILE, the
+    suite goes red, and the caller reads that as `KILLED`, which the protocol
+    spells "already covered, do not write a test". Silently discarding a real
+    gap is the one outcome mutation testing exists to prevent.
     """
     with open(source_path) as fh:
-        lines = fh.readlines()
+        text = fh.read()
+
+    if original is not None and original.strip():
+        # Exact swap. Ambiguity is refused: two identical statements in one file
+        # mean the record cannot say which one Muter mutated.
+        if text.count(original) != 1:
+            return None
+        with open(source_path, "w") as fh:
+            fh.write(text.replace(original, mutated))
+        return text
+
+    lines = text.splitlines(keepends=True)
     if not 1 <= line <= len(lines):
         return None
-    original = "".join(lines)
     if not mutated.strip():
-        # RemoveSideEffects: the mutation IS the absence of the statement.
+        # RemoveSideEffects: the mutation IS the absence of the statement. Only
+        # safe positionally when the record names the deleted statement's own
+        # line, which without an `original` cannot be confirmed -- so this is
+        # allowed only when the line is a single self-contained statement.
+        if lines[line - 1].strip().endswith(("{", "}")):
+            return None
         del lines[line - 1]
-    else:
+    elif whole_line_is_the_statement(lines[line - 1], mutated):
         indent = re.match(r"\s*", lines[line - 1]).group(0)
-        body = "\n".join(indent + ln.lstrip() if ln.strip() else ln for ln in mutated.splitlines())
-        lines[line - 1] = body + "\n"
+        lines[line - 1] = indent + mutated.strip() + "\n"
+    else:
+        return None
     with open(source_path, "w") as fh:
         fh.writelines(lines)
-    return original
+    return text
 
 
 def run_suite(cmd: list[str]) -> tuple[int, str]:
     proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, timeout=7200)
     return proc.returncode, proc.stdout + proc.stderr
+
+
+def _restore_on_signal(source_path: str, backup: str) -> None:
+    """Put the file back if this process is killed while a mutation is applied.
+
+    A suite run here is minutes long, so Ctrl-C during one is ordinary. Without
+    this the interrupt leaves a mutated source in the working tree, which then
+    looks like an edit the author made -- and the mutations are by construction
+    the kind that still compile and still pass.
+    """
+
+    def handler(signum, _frame):
+        with open(source_path, "w") as fh:
+            fh.write(backup)
+        sys.exit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, handler)
+
+
+def tests_actually_ran(output: str) -> bool:
+    """Whether the suite ran at all, as opposed to failing to build.
+
+    `swift test` exits non-zero for both, and the difference is the difference
+    between "a test caught this" and "this is not valid Swift". Reading the
+    second as the first is how a mis-applied mutation reports `KILLED` and a
+    real gap gets closed as already-covered.
+    """
+    return "Test run with" in output or "Executed" in output
 
 
 def failing_suites(output: str) -> list[str]:
@@ -143,9 +216,18 @@ def verify_one(survivor: dict, cmd: list[str], quiet: bool) -> int:
     for i, mut in enumerate(muts, 1):
         tag = f"{label}" + (f"  [candidate {i} of {len(muts)}]" if len(muts) > 1 else "")
         shown = " ".join(mut["mutated"].split())[:150] or "<statement deleted>"
-        backup = apply_mutation(source_path, line, mut["mutated"])
+        backup = apply_mutation(source_path, line, mut["mutated"], mut.get("original"))
+        if backup is not None:
+            _restore_on_signal(source_path, backup)
         if backup is None:
-            print(f"UNVERIFIABLE  {tag}\n    Line {line} is out of range; the source has moved.")
+            print(f"UNVERIFIABLE  {tag}")
+            if mut.get("original"):
+                print("    The recorded original does not appear exactly once in the file;")
+                print("    the source has moved since the sweep. Re-run the sweep.")
+            else:
+                print("    This record carries no `original`, and the mutated statement is")
+                print(f"    not what line {line} holds, so it cannot be applied faithfully.")
+                print("    Re-run the sweep to record originals; do NOT edit by hand.")
             worst = max(worst, 2)
             continue
         try:
@@ -153,6 +235,13 @@ def verify_one(survivor: dict, cmd: list[str], quiet: bool) -> int:
         finally:
             with open(source_path, "w") as fh:
                 fh.write(backup)
+        if code != 0 and not tests_actually_ran(output):
+            print(f"UNVERIFIABLE  {tag}")
+            print(f"    applied: {shown}")
+            print("    The mutated source did not build, so no test graded it. This is")
+            print("    a bad mutation record or a moved source -- NOT a kill.")
+            worst = max(worst, 2)
+            continue
         if code == 0:
             print(f"SURVIVED      {tag}")
             print(f"    applied: {shown}")
