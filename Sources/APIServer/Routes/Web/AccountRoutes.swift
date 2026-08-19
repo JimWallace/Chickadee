@@ -98,6 +98,8 @@ struct AccountRoutes: RouteCollection {
                 currentUser: req.currentUserContext,
                 username: user.username,
                 preferredName: user.preferredName,
+                monogram: accountMonogram(
+                    preferredName: user.preferredName, username: user.username),
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -180,10 +182,33 @@ struct AccountRoutes: RouteCollection {
 
 // MARK: - View context types
 
+/// Up to two initials, uppercased: "Ada Lovelace" → "AL", "ada" → "A".
+/// Falls back to the username when there is no preferred name, and to "?" when
+/// neither yields a letter, so the circle is never blank.
+func accountMonogram(preferredName: String?, username: String) -> String {
+    let source = (preferredName?.isEmpty == false) ? preferredName! : username
+    let initials =
+        source
+        .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." || $0 == "_" })
+        .compactMap { $0.first(where: { $0.isLetter || $0.isNumber }) }
+        .prefix(2)
+    guard !initials.isEmpty else { return "?" }
+    return String(initials).uppercased()
+}
+
 private struct AccountContext: Encodable {
     let currentUser: CurrentUserContext?
     let username: String
     let preferredName: String?
+    /// One or two letters for the identity circle, from the preferred name when
+    /// there is one and the username otherwise.
+    ///
+    /// A monogram rather than a photo because there is no photo to have:
+    /// nothing in `SSOAuthRoutes` or `OIDCIDTokenClaims` decodes a `picture`
+    /// claim, and adding one would be a new claim, a new column and a privacy
+    /// conversation — not a template change.  The circle takes an `<img>`
+    /// unchanged on the day that happens.
+    let monogram: String
     let studentID: String?
     let email: String?
     let enrolledCourses: [AccountCourseRow]

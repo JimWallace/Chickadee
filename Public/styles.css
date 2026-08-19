@@ -2450,6 +2450,24 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
+/* Identity circle on the account page, carrying initials rather than a photo:
+   no IdP claim in play releases one. Sized and centred so an <img> can replace
+   the text on the day one does, with no rule change. */
+.account-monogram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 0 1rem;
+    border-radius: 50%;
+    background: var(--success-bg);
+    color: var(--success-fg);
+    font-size: var(--text-xl);
+    font-weight: 600;
+    overflow: hidden;
+}
+
 /* The drop zone's upload glyph. A descendant selector rather than a class of
    its own: it is one rule serving one existing component, and a new global
    class would owe a component-vocabulary entry for no gain. */

@@ -9,9 +9,9 @@ My Account
 <p class="form-error" role="alert">That course is not available.</p>
 #endif
 
-<!-- ── User info ──────────────────────────────────────────── -->
 <section class="page-section">
     <h2>Account info</h2>
+    <p class="account-monogram" aria-hidden="true">#(monogram)</p>
     <dl class="detail-grid">
         <dt>Username</dt>
         <dd><strong>#(username)</strong></dd>
@@ -30,47 +30,6 @@ My Account
     </dl>
 </section>
 
-<!-- ── Your data ──────────────────────────────────────────── -->
-<section class="page-section">
-    <h2>Your data</h2>
-    #if(exportNotice == "started"):
-    <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
-    #elseif(exportNotice == "in_progress"):
-    <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
-    #endif
-    #if(exportError == "rate_limited"):
-    <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>
-    #elseif(exportError == "not_ready"):
-    <p class="form-error" role="alert">Your data export is not ready to download yet.</p>
-    #endif
-    <p>Request a copy of the personal information Chickadee holds about you:
-        your profile, course enrollments, submissions (including the files you
-        uploaded), grading results, and account activity records — delivered
-        as a single zip archive. Limit one export per day.</p>
-    #if(exportStatus == "pending"):
-    <p id="export-pending"><span class="chip">In progress</span>
-        Requested #(exportRequestedAtDisplay). Preparing your export can take
-        a few minutes.</p>
-    <script src="/account-export.js?v=#appVersion()"></script>
-    #elseif(exportStatus == "complete"):
-    <p>
-        <a class="btn btn-primary" href="/account/export/download">Download your export</a>
-    </p>
-    <p>Prepared #(exportCompletedAtDisplay). Downloads are available for three
-        days after the export is prepared, then the archive is deleted from
-        the server.</p>
-    #elseif(exportStatus == "failed"):
-    <p class="form-error" role="alert">Your last export attempt failed. Please try again.</p>
-    #endif
-    #if(exportCanRequest):
-    <form method="post" action="/account/export" class="inline-form">
-        #csrfFormField()
-        <button class="btn btn-primary" type="submit">Request data export</button>
-    </form>
-    #endif
-</section>
-
-<!-- ── My Courses ─────────────────────────────────────────── -->
 <section class="page-section">
     <h2>My courses</h2>
     #if(enrolledCourses.isEmpty):
@@ -115,10 +74,11 @@ My Account
     #endif
 </section>
 
-<!-- ── Available Courses ──────────────────────────────────── -->
-#if(!availableCourses.isEmpty):
 <section class="page-section">
     <h2>Available courses</h2>
+    #if(availableCourses.isEmpty):
+    <p class="empty">There are no other courses open to join right now.</p>
+    #else:
     <table class="results-table">
         <thead>
             <tr>
@@ -143,8 +103,47 @@ My Account
         #endfor
         </tbody>
     </table>
+    #endif
 </section>
-#endif
+
+<section class="page-section">
+    <h2>Your data</h2>
+    #if(exportNotice == "started"):
+    <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
+    #elseif(exportNotice == "in_progress"):
+    <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
+    #endif
+    #if(exportError == "rate_limited"):
+    <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>
+    #elseif(exportError == "not_ready"):
+    <p class="form-error" role="alert">Your data export is not ready to download yet.</p>
+    #endif
+    <p>Request a copy of the personal information Chickadee holds about you:
+        your profile, course enrollments, submissions (including the files you
+        uploaded), grading results, and account activity records — delivered
+        as a single zip archive. Limit one export per day.</p>
+    #if(exportStatus == "pending"):
+    <p id="export-pending"><span class="chip">In progress</span>
+        Requested #(exportRequestedAtDisplay). Preparing your export can take
+        a few minutes.</p>
+    <script src="/account-export.js?v=#appVersion()"></script>
+    #elseif(exportStatus == "complete"):
+    <p>
+        <a class="btn btn-primary" href="/account/export/download">Download your export</a>
+    </p>
+    <p>Prepared #(exportCompletedAtDisplay). Downloads are available for three
+        days after the export is prepared, then the archive is deleted from
+        the server.</p>
+    #elseif(exportStatus == "failed"):
+    <p class="form-error" role="alert">Your last export attempt failed. Please try again.</p>
+    #endif
+    #if(exportCanRequest):
+    <form method="post" action="/account/export" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit">Request data export</button>
+    </form>
+    #endif
+</section>
 
 #endexport
 #endextend

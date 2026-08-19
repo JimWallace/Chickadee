@@ -275,6 +275,10 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
+- **`.account-monogram`** — the account page's identity circle, carrying one
+  or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
+  photo because no claim in play releases one; the circle is sized so an
+  `<img>` can replace the text without a rule change if that ever changes.
 - **`.score-figure`** — the submission result page's grade percentage, the one
   figure a student opens that page to read, at `2.4em`.  The only display-size
   type in the product: the `--text-*` scale tops out at 1.4rem for page

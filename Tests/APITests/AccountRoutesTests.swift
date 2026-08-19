@@ -247,3 +247,37 @@ import VaporTesting
         }
     }
 }
+
+/// The account page's identity circle carries initials, not a photo — nothing
+/// in the SSO claim set releases one.  These pin the derivation so the circle
+/// is never blank and never leaks more than initials.
+@Suite struct AccountMonogramTests {
+
+    @Test func twoWordPreferredNameGivesTwoInitials() {
+        #expect(accountMonogram(preferredName: "Ada Lovelace", username: "alovelace") == "AL")
+    }
+
+    @Test func singleWordGivesOneInitial() {
+        #expect(accountMonogram(preferredName: "ada", username: "alovelace") == "A")
+    }
+
+    @Test func hyphenAndDotCountAsWordBreaks() {
+        #expect(accountMonogram(preferredName: "Jean-Luc", username: "jlp") == "JL")
+        #expect(accountMonogram(preferredName: "A. Turing", username: "aturing") == "AT")
+    }
+
+    @Test func fallsBackToTheUsernameWhenThereIsNoPreferredName() {
+        #expect(accountMonogram(preferredName: nil, username: "vis_student") == "VS")
+        #expect(accountMonogram(preferredName: "", username: "chickadee") == "C")
+    }
+
+    @Test func neverBlank() {
+        // A name of only punctuation still has to render something, or the
+        // circle appears as an unexplained empty disc.
+        #expect(accountMonogram(preferredName: "...", username: "...") == "?")
+    }
+
+    @Test func takesAtMostTwoInitials() {
+        #expect(accountMonogram(preferredName: "Anne Marie Von Trapp", username: "amvt") == "AM")
+    }
+}
