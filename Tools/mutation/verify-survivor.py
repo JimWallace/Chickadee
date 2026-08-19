@@ -103,6 +103,60 @@ def whole_line_is_the_statement(current: str, mutated: str) -> bool:
     return len(cur.split()) == len(mut.split()) and cur.count(":") == mut.count(":")
 
 
+def strip_duplicated_trailing_comment(body: str) -> str:
+    """Drop the copy of the leading comment Muter re-emits after the statement.
+
+    MEASURED, not assumed. For a `case` body that opens with a comment, Muter's
+    schema branches come out as [comment][statements][THE SAME COMMENT AGAIN].
+    That trailing copy exists nowhere in the source file, so the recorded text
+    is not a contiguous substring of it and an exact search finds nothing: 14 of
+    run 32265903112's 110 candidates were unverifiable for this and no other
+    reason. Removing it makes all 14 match exactly once.
+
+    Applied to the mutation as well as the original, so the replacement puts
+    back what was there rather than injecting a second comment block.
+
+    The check is deliberately narrow -- the trailing run must be the leading run,
+    line for line -- because a body that genuinely ends in a comment is ordinary
+    and must not be truncated.
+    """
+    lines = body.split("\n")
+    lead = 0
+    while lead < len(lines) and lines[lead].strip().startswith("//"):
+        lead += 1
+    if lead == 0 or lead >= len(lines) - lead:
+        return body
+    if [l.strip() for l in lines[:lead]] != [l.strip() for l in lines[-lead:]]:
+        return body
+    return "\n".join(lines[:-lead]).rstrip()
+
+
+def locate_unique(text: str, needle: str, line: int) -> int | None:
+    """Offset of the one occurrence of `needle` this record means, or None.
+
+    Content alone cannot always identify a mutation site: `let pairs = o.sorted
+    { $0.key < $1.key }` is byte-identical in all four literal renderers of
+    JSONValue.swift. Muter's line is unreliable on its own, but it is a fine
+    DISCRIMINATOR among exact content matches -- so it is used only to choose
+    between them, and only when one of them begins exactly at that line.
+
+    No nearest-match heuristic: picking the closest would mean mutating R's
+    renderer while reporting a verdict about Python's. Measured across the run's
+    three ambiguous candidates, the exact-line rule resolves all three.
+    """
+    first = text.find(needle)
+    if first < 0:
+        return None
+    if text.find(needle, first + 1) < 0:
+        return first
+    offset, matches = first, []
+    while offset >= 0:
+        matches.append(offset)
+        offset = text.find(needle, offset + 1)
+    exact = [m for m in matches if text[:m].count("\n") + 1 == line]
+    return exact[0] if len(exact) == 1 else None
+
+
 def apply_mutation(source_path: str, line: int, mutated: str, original: str | None) -> str | None:
     """Apply the mutation to the file, returning the file's previous contents.
 
@@ -123,12 +177,13 @@ def apply_mutation(source_path: str, line: int, mutated: str, original: str | No
         text = fh.read()
 
     if original is not None and original.strip():
-        # Exact swap. Ambiguity is refused: two identical statements in one file
-        # mean the record cannot say which one Muter mutated.
-        if text.count(original) != 1:
+        want = strip_duplicated_trailing_comment(original)
+        repl = strip_duplicated_trailing_comment(mutated)
+        at = locate_unique(text, want, line)
+        if at is None:
             return None
         with open(source_path, "w") as fh:
-            fh.write(text.replace(original, mutated))
+            fh.write(text[:at] + repl + text[at + len(want):])
         return text
 
     lines = text.splitlines(keepends=True)
