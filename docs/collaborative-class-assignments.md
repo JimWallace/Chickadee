@@ -491,11 +491,26 @@ cells still grades exactly the slot contents.
 
 ### Phase 2 — accumulate (useful on its own)
 
-**3. Per-item coverage accumulation at result-ingest.** *Medium.* A table keyed
-by (test setup, item, first-covering submission, user, timestamp), written where
-`awardClassBadgesFor100Percent` is already called on the result path, with the
-existing sweep as reconciliation. No goal semantics yet — just the durable,
-attributed union.
+**3. Per-item coverage accumulation at result-ingest.** *Medium.* **Done.**
+`APIClassItemCoverage`, one row per (assignment, item) attributed to the
+submission that covered it first, written at both result-ingest paths. No goal
+semantics yet — just the durable, attributed union.
+
+Three properties are enforced rather than intended. **First-finder wins is a
+schema constraint**, not a code convention: the unique index on
+(test_setup_id, item) is what makes the union monotone and idempotent under
+re-tests, replayed reports and concurrent submissions, so the class number can
+never go down. **Coverage is ungated by grade** — it sits outside the
+`grade == 100` gate the class badges use, because a student who covers one item
+and nothing else has still contributed it. **It is roster-scoped**, for the
+reason audit A7 gives: an unscoped numerator once carried unearned bonus points
+to the LMS.
+
+Wired at BOTH ingest paths deliberately. The class records were once awarded
+only in the worker handler, so browser-graded assignments never awarded any
+until audit A2 caught it — a half-wired accumulator is worse than none, because
+its number reads as the whole class when it is only the half graded on one
+substrate.
 Incremental at ingest rather than folded in the sweep, because the sweep is
 deliberately blob-free (the `#1160` note) and unioning per-outcome data across a
 term every five minutes would undo that.
