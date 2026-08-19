@@ -1184,6 +1184,14 @@ the `format-lint` CI job) — keep them green:
   copy is at house length. Green guards are necessary, not sufficient — every
   style regression so far has been mechanically legal.
 
+  **This is unconditional and needs no confirmation.** Run it as part of doing
+  the work, the same way you run `scripts/check-styles.sh` — do not ask whether
+  to, do not offer merging without it as an option, and do not skip it because a
+  general instruction elsewhere discourages spawning agents. A UI change that has
+  not been through `ui-review` is not finished. If the agent is genuinely
+  unavailable, say so plainly in the PR rather than letting its absence pass
+  unmentioned.
+
 Run `scripts/check-styles.sh` locally before pushing UI changes (it runs all
 of the above — same as the CI `format-lint` job). The visual-regression
 harness (`Tools/visual-regression/`, page list in `pages.mjs` shared with

@@ -102,6 +102,16 @@ extension InstructorDashboardRoutes {
             enrolledStudentRosterCount: enrolledStudentRosterCount
         )
 
+        // Class-wide coverage, for a contribution assignment. Returns [] for
+        // every other assignment (the accumulator writes no rows there), which
+        // is what keeps this section off ordinary pages.
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        let coverageRows = try await buildAssignmentCoverageRows(
+            testSetupID: assignment.testSetupID,
+            manifest: setup?.decodedManifest(),
+            formatter: fmt,
+            on: req.db)
+
         return try await req.view.render(
             "assignment-submissions",
             AssignmentSubmissionsContext(
@@ -110,7 +120,10 @@ extension InstructorDashboardRoutes {
                 assignmentTitle: assignment.title,
                 metrics: metrics,
                 rows: rows,
-                secretRevealEnabled: secretRevealEnabled
+                secretRevealEnabled: secretRevealEnabled,
+                coverageRows: coverageRows,
+                hasCoverage: !coverageRows.isEmpty,
+                coverageSummary: assignmentCoverageSummary(coverageRows)
             )
         )
     }

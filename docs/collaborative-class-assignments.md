@@ -506,6 +506,16 @@ and nothing else has still contributed it. **It is roster-scoped**, for the
 reason audit A7 gives: an unscoped numerator once carried unearned bonus points
 to the LMS.
 
+Scoped to CONTRIBUTION assignments, which was a correction rather than the
+original shape. The first version recorded for every assignment, on the
+reasoning that the union is generically useful. One slice later that proved
+wrong in a way only the consumer could reveal: rows exist for every passing test
+on every lab forever, and the instructor view then has no cheap way to tell a
+bug hunt from an ordinary assignment — so it would need a second signal, or it
+would render a coverage section on every instructor page. Gating the write on
+`declaredSlotCount > 0` means the mere EXISTENCE of coverage rows answers that
+question.
+
 Wired at BOTH ingest paths deliberately. The class records were once awarded
 only in the worker handler, so browser-graded assignments never awarded any
 until audit A2 caught it — a half-wired accumulator is worse than none, because

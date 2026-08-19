@@ -69,6 +69,7 @@ import VaporTesting
                     outcome("variant_01", .pass), outcome("variant_02", .fail),
                     outcome("variant_03", .error), outcome("variant_04", .timeout),
                 ],
+                declaredSlotCount: 3,
                 on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
@@ -88,7 +89,7 @@ import VaporTesting
             for index in 1...9 { outcomes.append(outcome("variant_1\(index)", .fail)) }
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: try fx.a.requireID(),
-                submissionID: "lowscore_s1", outcomes: outcomes, on: app.db)
+                submissionID: "lowscore_s1", outcomes: outcomes, declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
             #expect(rows.map(\.item) == ["variant_07"])
@@ -109,10 +110,10 @@ import VaporTesting
 
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: aID, submissionID: "firstwins_a",
-                outcomes: [outcome("variant_03", .pass)], on: app.db)
+                outcomes: [outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db)
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: bID, submissionID: "firstwins_b",
-                outcomes: [outcome("variant_03", .pass)], on: app.db)
+                outcomes: [outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
             #expect(rows.count == 1, "one item covered twice must not produce two rows")
@@ -134,7 +135,7 @@ import VaporTesting
             for _ in 1...3 {
                 try await recordClassItemCoverage(
                     testSetupID: fx.setupID, userID: aID, submissionID: "replay_a",
-                    outcomes: outcomes, on: app.db)
+                    outcomes: outcomes, declaredSlotCount: 3, on: app.db)
             }
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
@@ -157,16 +158,41 @@ import VaporTesting
 
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: bID, submissionID: "order_b",
-                outcomes: [outcome("variant_02", .pass), outcome("variant_03", .pass)], on: app.db)
+                outcomes: [outcome("variant_02", .pass), outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db
+            )
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: aID, submissionID: "order_a",
-                outcomes: [outcome("variant_01", .pass), outcome("variant_02", .pass)], on: app.db)
+                outcomes: [outcome("variant_01", .pass), outcome("variant_02", .pass)], declaredSlotCount: 3, on: app.db
+            )
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
             #expect(rows.map(\.item) == ["variant_01", "variant_02", "variant_03"])
             // variant_02 was covered by B first, even though A submitted it too.
             let variant2 = try #require(rows.first { $0.item == "variant_02" })
             #expect(variant2.userID == bID)
+        }
+    }
+
+    // MARK: - Only contribution assignments accumulate
+
+    /// The gate that keeps this feature's rows out of every ordinary lab. An
+    /// assignment declaring no contribution slots is not a bug hunt, so its
+    /// passing tests are not a class-wide union — and the mere existence of
+    /// coverage rows is what the instructor view uses to tell the two apart,
+    /// so a row written here would put a coverage section on every page.
+    @Test func anAssignmentWithNoSlotsAccumulatesNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "noslots")
+            let aID = try fx.a.requireID()
+            _ = try await arInsertSubmission(
+                id: "noslots_s1", testSetupID: fx.setupID, userID: aID, on: app)
+
+            try await recordClassItemCoverage(
+                testSetupID: fx.setupID, userID: aID, submissionID: "noslots_s1",
+                outcomes: [outcome("variant_01", .pass), outcome("variant_02", .pass)],
+                declaredSlotCount: 0, on: app.db)
+
+            #expect(try await classItemCoverage(testSetupID: fx.setupID, on: app.db).isEmpty)
         }
     }
 
@@ -185,7 +211,7 @@ import VaporTesting
             // Deliberately NOT enrolled as a student in the setup's course.
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: staffID, submissionID: "staff_s1",
-                outcomes: [outcome("variant_01", .pass)], on: app.db)
+                outcomes: [outcome("variant_01", .pass)], declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
             #expect(rows.isEmpty)
@@ -203,10 +229,10 @@ import VaporTesting
 
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: aID, submissionID: "empty_s1",
-                outcomes: [outcome("variant_01", .fail)], on: app.db)
+                outcomes: [outcome("variant_01", .fail)], declaredSlotCount: 3, on: app.db)
             try await recordClassItemCoverage(
                 testSetupID: fx.setupID, userID: aID, submissionID: "empty_s1",
-                outcomes: [], on: app.db)
+                outcomes: [], declaredSlotCount: 3, on: app.db)
 
             #expect(try await classItemCoverage(testSetupID: fx.setupID, on: app.db).isEmpty)
         }
@@ -224,7 +250,7 @@ import VaporTesting
 
             try await recordClassItemCoverage(
                 testSetupID: one.setupID, userID: aID, submissionID: "scope_s1",
-                outcomes: [outcome("variant_01", .pass)], on: app.db)
+                outcomes: [outcome("variant_01", .pass)], declaredSlotCount: 3, on: app.db)
 
             #expect(try await classItemCoverage(testSetupID: one.setupID, on: app.db).count == 1)
             #expect(try await classItemCoverage(testSetupID: two.setupID, on: app.db).isEmpty)

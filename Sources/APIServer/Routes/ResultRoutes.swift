@@ -149,11 +149,21 @@ struct ResultRoutes: RouteCollection {
 
         // Per item, and deliberately not inside the 100% gate below: a student
         // who covers one item and nothing else has still contributed that item.
+        //
+        // Only contribution assignments accumulate a union, so the slot count
+        // comes from the instructor's starter notebook. Read through
+        // `notebookBytesCache` (#1171) rather than unzipping per result: a
+        // deadline spike shares one resolution. A setup with no notebook
+        // resolves to nil, which is 0 slots, which is "not a contribution
+        // assignment" — the right answer for every ordinary assignment.
+        let slotCount = await declaredContributionSlotCount(
+            testSetupID: submission.testSetupID, app: req.application, on: req.db)
         try await recordClassItemCoverage(
             testSetupID: submission.testSetupID,
             userID: userID,
             submissionID: subID,
             outcomes: collection.outcomes,
+            declaredSlotCount: slotCount,
             on: req.db
         )
 

@@ -15,6 +15,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 /// Records every item this submission covered that no earlier submission had.
 ///
@@ -31,13 +32,24 @@ import Foundation
 /// A7): a staff test submission or a dropped student must not inflate a number
 /// that carries bonus points to the LMS. Student-ness is per-course, checked
 /// against the setup's own course.
+///
+/// Scoped to CONTRIBUTION assignments by `declaredSlotCount`, which the caller
+/// resolves from the instructor's starter notebook. Recording for every
+/// assignment was the first shape of this and it was wrong in a way that only
+/// showed up one slice later: a union nobody reads is a row per passing test
+/// per assignment forever, and it leaves the instructor view with no cheap way
+/// to tell a bug hunt from an ordinary lab. Gating here means the mere
+/// EXISTENCE of coverage rows answers that question, so the view needs no
+/// second signal.
 func recordClassItemCoverage(
     testSetupID: String,
     userID: UUID,
     submissionID: String,
     outcomes: [TestOutcome],
+    declaredSlotCount: Int,
     on db: Database
 ) async throws {
+    guard declaredSlotCount > 0 else { return }
     let covered = outcomes.filter { $0.status == .pass }.map(\.testName)
     guard !covered.isEmpty else { return }
 
@@ -75,4 +87,25 @@ func classItemCoverage(
         .filter(\.$testSetupID == testSetupID)
         .sort(\.$item)
         .all()
+}
+
+/// How many contribution slots the assignment behind `testSetupID` declares, or
+/// 0 when it declares none / has no starter notebook.
+///
+/// Shared by both result-ingest paths so the gate cannot be applied on one and
+/// forgotten on the other — the audit-A2 shape. Reads through
+/// `notebookBytesCache` (#1171) rather than unzipping per result, so a deadline
+/// spike of submissions shares one notebook resolution.
+///
+/// Best-effort by construction: any failure to resolve the notebook yields 0,
+/// which means "not a contribution assignment" and skips accumulation. That is
+/// the safe direction — a missed row is recoverable by re-testing, whereas
+/// failing a student's result report to record a diagnostic is not.
+func declaredContributionSlotCount(
+    testSetupID: String, app: Application, on db: Database
+) async -> Int {
+    guard let setup = try? await APITestSetup.find(testSetupID, on: db),
+        let data = try? await app.notebookBytesCache.notebookData(for: NotebookSourceRef(setup))
+    else { return 0 }
+    return NotebookContributionSlots.declaredSlotCount(inInstructorNotebook: data)
 }
