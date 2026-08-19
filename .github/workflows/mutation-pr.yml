@@ -81,8 +81,24 @@ jobs:
           import json
           for p in json.load(open('Tools/mutation/config.json'))['include']: print(p)")
 
-          changed=$(git diff --name-only --diff-filter=d "$base"...HEAD -- "${includes[@]}" \
-                    | grep -E '\.swift$' || true)
+          # git's failure must NOT read as "no files changed". It did: the
+          # pipeline below ended in `|| true` so that grep finding nothing is
+          # not an error, and that swallowed a failing `git diff` too — which
+          # then fell into the empty-result branch and reported a clean run over
+          # a diff it had never looked at. Same silent-coverage-gap this file's
+          # own 6-file cap comment warns about, one step earlier.
+          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::Not inside a git work tree at $(pwd); cannot tell which files this PR changed, so nothing was mutation-tested."
+            exit 1
+          fi
+
+          if ! changed_paths=$(git diff --name-only --diff-filter=d "$base"...HEAD -- "${includes[@]}"); then
+            echo "::error::git diff against base $base failed; cannot tell which files this PR changed, so nothing was mutation-tested."
+            exit 1
+          fi
+
+          # Only grep's "no match" is a legitimate empty result.
+          changed=$(printf '%s\n' "$changed_paths" | grep -E '\.swift$' || true)
 
           if [ -z "$changed" ]; then
             echo "No mutable files changed; nothing to do."
