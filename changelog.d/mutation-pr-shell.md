@@ -18,3 +18,11 @@
   wrong; only grep's no-match stays a legitimate empty result. The job is
   `continue-on-error`, so a loud failure blocks nobody — it just stops a run that
   measured nothing from reading as a clean bill of health.
+
+- **…and the first diagnostic hid its own evidence.** The work-tree check
+  suppressed git's stderr, so it named the symptom ("Not inside a git work tree
+  at /__w/Chickadee/Chickadee") while discarding the message that separates a
+  missing `.git` from a refusal to use one that is present. It now prints git's
+  own error plus the container user, git version, `ls -ld . .git` and any
+  `safe.directory` entries, so the next run identifies the cause rather than
+  restating the effect.

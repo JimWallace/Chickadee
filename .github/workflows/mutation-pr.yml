@@ -87,8 +87,21 @@ jobs:
           # then fell into the empty-result branch and reported a clean run over
           # a diff it had never looked at. Same silent-coverage-gap this file's
           # own 6-file cap comment warns about, one step earlier.
-          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            echo "::error::Not inside a git work tree at $(pwd); cannot tell which files this PR changed, so nothing was mutation-tested."
+          if ! worktree_check=$(git rev-parse --is-inside-work-tree 2>&1); then
+            # Print git's OWN message, and enough context to tell the two
+            # candidate causes apart: a missing .git (the checkout did not land
+            # where this step runs) versus a refusal to use one that is there
+            # (dubious ownership — the container user differs from the owner,
+            # and checkout's `safe.directory` entry went to a HOST HOME this
+            # step does not share). The first version of this guard threw the
+            # message away with `2>&1 >/dev/null`, which named the symptom and
+            # hid the evidence.
+            echo "::error::Not inside a git work tree at $(pwd); nothing was mutation-tested. git said: ${worktree_check}"
+            echo "--- diagnosis ---"
+            echo "whoami: $(id -un 2>/dev/null) ($(id -u 2>/dev/null))"
+            echo "git: $(git --version)"
+            ls -ld . .git 2>&1 || true
+            git config --get-all safe.directory 2>&1 || echo "(no safe.directory entries)"
             exit 1
           fi
 
