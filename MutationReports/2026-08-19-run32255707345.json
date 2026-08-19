@@ -7,11 +7,11 @@
     "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
   },
   "date": "2026-08-19",
-  "killed": 212,
-  "phantomsFiltered": 71,
+  "killed": 289,
+  "phantomsFiltered": 133,
   "shardsExpected": 8,
-  "shardsReported": 7,
-  "survived": 62,
+  "shardsReported": 8,
+  "survived": 94,
   "survivors": [
     {
       "file": "Sources/Core/AchievementEvaluation.swift",
@@ -585,6 +585,231 @@
       "source": ": \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\""
     },
     {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 53,
+      "mutations": [
+        {
+          "column": 55,
+          "mutated": "return b  ? \"false\" :  \"true\"",
+          "offset": 3028
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "case .bool(let b): return b ? \"true\" : \"false\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "mutations": [
+        {
+          "column": 40,
+          "mutated": "// See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.\n            return (i > Int(Int32.max) && i < Int(Int32.min)) ? \"\\(i)L\" : String(i)\n            // See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.",
+          "offset": 3222
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "// See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.\n            return (i < Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)\n            // See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.",
+          "offset": 3205
+        },
+        {
+          "column": 45,
+          "mutated": "// See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.\n            return (i > Int(Int32.max) || i > Int(Int32.min)) ? \"\\(i)L\" : String(i)\n            // See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.",
+          "offset": 3227
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "mutations": [
+        {
+          "column": 84,
+          "mutated": "// See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.\n            return (i > Int(Int32.max) || i < Int(Int32.min))  ? String(i) :  \"\\(i)L\" \n            // See the doc above: `L` only past `int`, because narrowing is a\n            // compile error and widening is not.",
+          "offset": 3266
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.\n            if d.isNaN { return \"Double.NaN\" }\n            if d.isInfinite {\n                return d < 0 ? \"Double.NEGATIVE_INFINITY\" : \"Double.POSITIVE_INFINITY\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.",
+          "offset": 3817
+        },
+        {
+          "column": 56,
+          "mutated": "// The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.\n            if d.isNaN { return \"Double.NaN\" }\n            if d.isInfinite {\n                return d < 0 ? \"Double.NEGATIVE_INFINITY\" : \"Double.POSITIVE_INFINITY\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.",
+          "offset": 3836
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.\n            if d.isNaN { return \"Double.NaN\" }\n            if d.isInfinite {\n                return d < 0 ? \"Double.NEGATIVE_INFINITY\" : \"Double.POSITIVE_INFINITY\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.",
+          "offset": 3817
+        },
+        {
+          "column": 56,
+          "mutated": "// The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.\n            if d.isNaN { return \"Double.NaN\" }\n            if d.isInfinite {\n                return d < 0 ? \"Double.NEGATIVE_INFINITY\" : \"Double.POSITIVE_INFINITY\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.",
+          "offset": 3836
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.\n            if d.isNaN { return \"Double.NaN\" }\n            if d.isInfinite {\n                return d < 0 ? \"Double.NEGATIVE_INFINITY\" : \"Double.POSITIVE_INFINITY\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"\n            // The boxed constants, not `0.0/0.0`: a division by zero in a\n            // constant-folded context is a compile-time error for integers and\n            // merely surprising for doubles, and these spellings say what they\n            // mean. They need no import.",
+          "offset": 3870
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 83,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "$0.key > $1.key",
+          "offset": 4748
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 116,
+      "mutations": [
+        {
+          "column": 16,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed != \"null\" { return \"Object\" }\n    if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6626
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if trimmed == \"null\" { return \"Object\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed == \"true\" && trimmed == \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6681
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 16,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed != \"true\" || trimmed == \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6671
+        },
+        {
+          "column": 37,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed == \"true\" || trimmed != \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6692
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 16,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed != \"true\" || trimmed == \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6671
+        },
+        {
+          "column": 37,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed == \"true\" || trimmed != \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed\n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 6692
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 124,
+      "mutations": [
+        {
+          "column": 81,
+          "mutated": "let trimmed = literal.trimmingCharacters(in: .whitespaces)\n    if trimmed == \"null\" { return \"Object\" }\n    if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }\n    if trimmed.hasPrefix(\"\\\"\") { return \"String\" }\n    if trimmed.hasPrefix(\"Double.\") { return \"double\" }\n    if trimmed.hasPrefix(\"java.util.Arrays.asList\") { return \"java.util.List<Object>\" }\n    if trimmed.hasPrefix(\"new java.util.LinkedHashMap\") { return \"java.util.Map<String, Object>\" }\n    // Numbers. The `L` suffix is the renderer's own marker for \"too wide for\n    // int\", so it decides long-vs-int without re-deriving the bound.\n    let numeric = trimmed.hasPrefix(\"-\")  ? trimmed :  String(trimmed.dropFirst()) \n    if let first = numeric.first, first.isNumber {\n        if numeric.hasSuffix(\"L\") { return \"long\" }\n        if numeric.contains(\".\") || numeric.lowercased().contains(\"e\") { return \"double\" }\n        return \"int\"\n    }\n    return \"Object\"",
+          "offset": 7246
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 159,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "if ch.value < 0x20 && ch.value == 0x7F {\n                out += String(format: \"\\\\%03o\", ch.value)\n            } else {\n                out.unicodeScalars.append(ch)\n            }",
+          "offset": 8790
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch.value < 0x20 || ch.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 159,
+      "mutations": [
+        {
+          "column": 25,
+          "mutated": "if ch.value > 0x20 || ch.value == 0x7F {\n                out += String(format: \"\\\\%03o\", ch.value)\n            } else {\n                out.unicodeScalars.append(ch)\n            }",
+          "offset": 8783
+        },
+        {
+          "column": 44,
+          "mutated": "if ch.value < 0x20 || ch.value != 0x7F {\n                out += String(format: \"\\\\%03o\", ch.value)\n            } else {\n                out.unicodeScalars.append(ch)\n            }",
+          "offset": 8802
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if ch.value < 0x20 || ch.value == 0x7F {"
+    },
+    {
       "file": "Sources/Core/JSONValueRacketLiteral.swift",
       "line": 37,
       "mutations": [
@@ -928,6 +1153,302 @@
       ],
       "operator": "RelationalOperatorReplacement",
       "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 31,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "pos <= chars.count",
+          "offset": 1054
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "var isAtEnd: Bool { pos >= chars.count }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "mutations": [
+        {
+          "column": 41,
+          "mutated": "while let c = current, c == \" \" && c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1226
+        },
+        {
+          "column": 54,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" && c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1239
+        },
+        {
+          "column": 67,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" && c == \"\\r\" { pos += 1 }",
+          "offset": 1252
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "mutations": [
+        {
+          "column": 41,
+          "mutated": "while let c = current, c == \" \" && c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1226
+        },
+        {
+          "column": 54,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" && c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1239
+        },
+        {
+          "column": 67,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" && c == \"\\r\" { pos += 1 }",
+          "offset": 1252
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 46,
+      "mutations": [
+        {
+          "column": 42,
+          "mutated": "skipWhitespace()\n        switch current {\n        case \"{\": return parseObject()\n        case \"[\": return parseArray()\n        case \"\\\"\": return parseString().map(JSONValue.string)\n        case \"t\", \"f\": return parseBool()\n        case \"n\": return parseNull()\n        case .some(let c) where c == \"-\" && (c >= \"0\" && c <= \"9\"): return parseNumber()\n        default: return nil\n        }",
+          "offset": 1641
+        },
+        {
+          "column": 55,
+          "mutated": "skipWhitespace()\n        switch current {\n        case \"{\": return parseObject()\n        case \"[\": return parseArray()\n        case \"\\\"\": return parseString().map(JSONValue.string)\n        case \"t\", \"f\": return parseBool()\n        case \"n\": return parseNull()\n        case .some(let c) where c == \"-\" || (c >= \"0\" || c <= \"9\"): return parseNumber()\n        default: return nil\n        }",
+          "offset": 1654
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "case .some(let c) where c == \"-\" || (c >= \"0\" && c <= \"9\"): return parseNumber()"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 77,
+      "mutations": [
+        {
+          "column": 20,
+          "mutated": "pos += 1  // consume '['\n        var items: [JSONValue] = []\n        skipWhitespace()\n        if current != \"]\" { pos += 1; return .array(items) }\n        while true {\n            guard let value = parseValue() else { return nil }\n            items.append(value)\n            skipWhitespace()\n            switch current {\n            case \",\": pos += 1\n            case \"]\": pos += 1; return .array(items)\n            default: return nil\n            }\n        }",
+          "offset": 2651
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"]\" { pos += 1; return .array(items) }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 131,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "guard pos + 4 >= chars.count else { return nil }\n        var value: UInt32 = 0\n        for _ in 0..<4 {\n            guard let digit = asciiHexValue(chars[pos]) else { return nil }\n            value = value * 16 + digit\n            pos += 1\n        }\n        return Unicode.Scalar(value)",
+          "offset": 4362
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + 4 <= chars.count else { return nil }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 157,
+      "mutations": [
+        {
+          "column": 20,
+          "mutated": "let start = pos\n        if current != \"-\" { pos += 1 }\n        while let c = current, (c >= \"0\" && c <= \"9\") || c == \".\" || c == \"e\" || c == \"E\" || c == \"+\" || c == \"-\" {\n            pos += 1\n        }\n        guard let value = JSONParser.parseDoubleLiteral(chars[start..<pos]) else { return nil }\n        return .number(value)",
+          "offset": 5382
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"-\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 256,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "matchLiteral(\"null\")  ? nil :  .null",
+          "offset": 9211
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "matchLiteral(\"null\") ? .null : nil"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 261,
+      "mutations": [
+        {
+          "column": 31,
+          "mutated": "let lit = Array(literal)\n        guard pos + lit.count >= chars.count else { return false }\n        for (offset, ch) in lit.enumerated() where chars[pos + offset] != ch { return false }\n        pos += lit.count\n        return true",
+          "offset": 9350
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + lit.count <= chars.count else { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 262,
+      "mutations": [
+        {
+          "column": 72,
+          "mutated": "let lit = Array(literal)\n        guard pos + lit.count <= chars.count else { return false }\n        for (offset, ch) in lit.enumerated() where chars[pos + offset] == ch { return false }\n        pos += lit.count\n        return true",
+          "offset": 9458
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "for (offset, ch) in lit.enumerated() where chars[pos + offset] != ch { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") && trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20713
+        },
+        {
+          "column": 64,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") && trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20741
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") && trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20713
+        },
+        {
+          "column": 64,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") && trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20741
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 459,
+      "mutations": [
+        {
+          "column": 9,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        && trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20776
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "|| trimmed.hasPrefix(\"'\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "if ch == \"(\" || (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24166
+        },
+        {
+          "column": 40,
+          "mutated": "if ch == \"(\" && (prev.isLetter && prev.isNumber || prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24184
+        },
+        {
+          "column": 57,
+          "mutated": "if ch == \"(\" && (prev.isLetter || prev.isNumber && prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24201
+        },
+        {
+          "column": 72,
+          "mutated": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" && prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24216
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "if ch == \"(\" || (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24166
+        },
+        {
+          "column": 40,
+          "mutated": "if ch == \"(\" && (prev.isLetter && prev.isNumber || prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24184
+        },
+        {
+          "column": 57,
+          "mutated": "if ch == \"(\" && (prev.isLetter || prev.isNumber && prev == \"_\" || prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24201
+        },
+        {
+          "column": 72,
+          "mutated": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" && prev == \")\") {\n            return true\n        }\n        prev = ch",
+          "offset": 24216
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 569,
+      "mutations": [
+        {
+          "column": 50,
+          "mutated": "$0 == \" \" && $0 == \"\\t\"",
+          "offset": 24784
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "let isHWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 575,
+      "mutations": [
+        {
+          "column": 49,
+          "mutated": "$0 == \" \" && $0 == \"\\t\" || $0 == \"\\n\" || $0 == \"\\r\"",
+          "offset": 25083
+        },
+        {
+          "column": 63,
+          "mutated": "$0 == \" \" || $0 == \"\\t\" && $0 == \"\\n\" || $0 == \"\\r\"",
+          "offset": 25097
+        },
+        {
+          "column": 77,
+          "mutated": "$0 == \" \" || $0 == \"\\t\" || $0 == \"\\n\" && $0 == \"\\r\"",
+          "offset": 25111
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "let isWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" || $0 == \"\\n\" || $0 == \"\\r\" }"
     }
   ]
 }
