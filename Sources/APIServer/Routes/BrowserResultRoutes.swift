@@ -240,6 +240,23 @@ struct BrowserResultRoutes: RouteCollection {
         // (audit A2).  Same rounded-percent gate and student-role guard as
         // `ResultRoutes`; the reconciled collection carries the
         // server-authoritative attempt number.
+        // The class-wide union of covered items. Outside the 100% gate below,
+        // because coverage is per item rather than per student — and wired here
+        // as well as in `ResultRoutes` for the reason the comment above records:
+        // a side effect wired at only one ingest path silently reports half the
+        // class as the whole of it.
+        if reconciled.buildStatus == .passed, let userID {
+            await bestEffort("class_item_coverage") {
+                try await recordClassItemCoverage(
+                    testSetupID: setup.id ?? "",
+                    userID: userID,
+                    submissionID: subID,
+                    outcomes: reconciled.outcomes,
+                    on: req.db
+                )
+            }
+        }
+
         if reconciled.buildStatus == .passed,
             let userID,
             gradePercent(from: reconciled) == 100
