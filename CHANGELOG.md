@@ -9,6 +9,63 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.145] - 2026-08-19
+
+### Fixed
+
+- **The mutation sweep's headline counted phantom mutants as survivors.** The
+  first successful sweep reported "122 killed, 87 survived ... plus 64 phantom
+  mutant(s) filtered out" — but the 87 already contained the 64, so the real
+  figures were 23 survivors and 84%, not 58%. One shard read 37% when its true
+  score was 81%. The per-shard table carried Muter's raw count while the JSON
+  beside it carried the filtered one, and the aggregator scraped the table; it
+  now reads the same `summary.json` the trend does, so the two cannot disagree.
+  `Tools/mutation/report_test.py` pins the published numbers.
+
+- **The sweep's trend record could never be saved.** It pushed to the default
+  branch, which requires a pull request and four status checks — rules a bot
+  committing a generated file cannot satisfy. `continue-on-error` then hid the
+  refusal, so a series that could never accumulate looked exactly like a series
+  with nothing in it yet. Records go to a `mutation-reports` branch, and a
+  failure to persist is announced in the run summary.
+
+### Fixed
+
+- **Two corrections to the mutation pilot's write-up.** The exponent finding was
+  attributed to a mutant Muter does not generate — its operators never rewrite a
+  numeric literal — so that gap was found *near* the report rather than in it;
+  the one exponent mutant testable faithfully was already covered. And the
+  pilot's 69% predates phantom filtering, so it is not comparable to the first
+  full sweep's 84%; the page now says so rather than inviting the comparison.
+
+### Added
+
+- **Tests for the six real gaps the mutation pilot found**, each seen to fail
+  under the mutation it exists to catch: the suite runner's `willRun` /
+  `didFinish` event stream (which drives the runner's `test_execution_start` /
+  `test_execution_end` / `timeout` log events), the classifier's comment-and-blank
+  line filter and its five Python keywords taken one at a time, the leading
+  BOM/whitespace trim, and the JSON footer's exponent — where the existing tests
+  proved the number *parsed* without ever reading its value.
+
+### Fixed
+
+- **The mutation pilot's write-up, which overstated its own findings.** Of the
+  eleven survivors examined, four were already covered by the suite and one is
+  unkillable by construction; only six were real. `Tools/mutation/report.py`
+  exists to catch that class automatically and did not exist when the pilot ran.
+
+### Fixed
+
+- **The mutation sweep derives its shard count from one place.** The number
+  lived in three — `Tools/mutation/config.json`, the workflow's hardcoded
+  `shard: [0, 1, 2]` matrix, and whatever `--of` a dispatch passed — hand-synced,
+  with a silent failure mode: dispatching `shards: 5` left the matrix at three
+  jobs, so two shards' files were never mutated while the aggregator, reading
+  the config, saw 3 of 3 and called it a complete sweep. A `plan` job now emits
+  the matrix and the denominator from a single read.
+
+
 ## [0.5.144] - 2026-08-19
 
 ### Fixed
