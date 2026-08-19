@@ -11,6 +11,37 @@
     #extend("_diagnostic-cards")
 </section>
 
+#if(hasCoverage):
+<section class="page-section">
+    <div class="editor-block-head">
+        <h2>Bug coverage</h2>
+        <span class="chip">#(coverageSummary)</span>
+    </div>
+    <div class="table-scroll">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Status</th>
+                    <th>First found by</th>
+                    <th class="col-hide-phone">When</th>
+                </tr>
+            </thead>
+            <tbody>
+            #for(row in coverageRows):
+                <tr>
+                    <td>#(row.item)</td>
+                    <td>#if(row.found):<span class="chip chip-ok">found</span>#else:<span class="chip chip-err">not found</span>#endif</td>
+                    <td>#if(row.found):#(row.foundBy)#else:—#endif</td>
+                    <td class="col-hide-phone">#if(row.found):#(row.foundAt)#else:—#endif</td>
+                </tr>
+            #endfor
+            </tbody>
+        </table>
+    </div>
+</section>
+#endif
+
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
 #else:

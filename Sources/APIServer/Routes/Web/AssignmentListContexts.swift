@@ -366,6 +366,30 @@ struct AssignmentSubmissionsContext: Encodable {
     /// affordance on this page (spent tag + re-grant action) — when off the
     /// page renders identically to the pre-feature layout.
     let secretRevealEnabled: Bool
+    /// One row per suite item on a CONTRIBUTION assignment: whether the class
+    /// has collectively covered it, and who got there first.  Empty for every
+    /// other assignment, which is what gates the section off the page — the
+    /// accumulator only writes rows for assignments declaring contribution
+    /// slots, so "has rows" IS "is a contribution assignment".
+    let coverageRows: [AssignmentCoverageRow]
+    /// True iff `coverageRows` is non-empty.  The template gates on this rather
+    /// than on `!coverageRows.isEmpty`, which Leaf cannot express — the same
+    /// shape `hasClassGoals` uses on the submission page.
+    let hasCoverage: Bool
+    /// "9 / 15 found", for the section's summary chip.
+    let coverageSummary: String
+}
+
+/// One item of a contribution assignment's class-wide coverage.
+struct AssignmentCoverageRow: Encodable {
+    /// The suite item's runner-stamped name, as it appears in results.
+    let item: String
+    /// True when someone in the class has covered it.
+    let found: Bool
+    /// The first finder's username, or "" when nobody has covered it yet.
+    let foundBy: String
+    /// When it was first covered, preformatted, or "" when uncovered.
+    let foundAt: String
 }
 
 struct AssignmentStudentRow: Encodable {
