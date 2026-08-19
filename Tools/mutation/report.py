@@ -91,6 +91,51 @@ def _skip_to_matching_brace(text: str, open_idx: int) -> int:
     return -1
 
 
+def _trailing_else_body(text: str, after_branch: int) -> str | None:
+    """The `<original>` in the final `else` of a schema chain, or None.
+
+    WHY THE ORIGINAL IS WORTH AS MUCH AS THE MUTATION. A mutation on its own can
+    only be applied by POSITION, and Muter's positions are known-wrong -- this
+    file's own report says so. Measured against run 32255707345: the reported
+    line holds the whole mutated statement for 15 of 84 candidates and something
+    else entirely for the other 69, because Muter records the ENCLOSING
+    statement (often a whole computed-property body) while the line points at
+    one operator inside it. Splicing that onto the reported line deletes a `case`
+    label or comments out the rest of the line, and the compile error that
+    follows reads as a failing suite -- which is to say, as "already covered".
+
+    With the original in hand the replacement is exact and needs no position at
+    all: find this text, put that text there. The chain is walked rather than
+    regex-matched because `else if` branches nest arbitrarily and each carries a
+    mutation of its own.
+    """
+    i, n = after_branch, len(text)
+    while i < n:
+        while i < n and text[i].isspace():
+            i += 1
+        if not text.startswith("else", i):
+            return None
+        i += 4
+        while i < n and text[i].isspace():
+            i += 1
+        if text.startswith("if", i):
+            brace = text.find("{", i)
+            if brace < 0:
+                return None
+            end = _skip_to_matching_brace(text, brace)
+            if end < 0:
+                return None
+            i = end
+            continue
+        if i < n and text[i] == "{":
+            end = _skip_to_matching_brace(text, i)
+            if end < 0:
+                return None
+            return text[i + 1 : end - 1].strip()
+        return None
+    return None
+
+
 def harvest_schemata(mutated_root: str) -> tuple[dict[tuple[str, str], list[int]], dict]:
     """Read the mutated copy: true mutant positions AND the mutation itself.
 
@@ -148,9 +193,17 @@ def harvest_schemata(mutated_root: str) -> tuple[dict[tuple[str, str], list[int]
                 # whose mutation is "nothing" permanently unverifiable, and the
                 # events it deletes are exactly the kind nothing asserts on.
                 body = text[brace + 1 : end - 1].strip()
-                mutations.setdefault((stem, operator, line), []).append(
-                    {"column": int(col), "offset": int(off), "mutated": body}
-                )
+                # The ORIGINAL, from the chain's trailing `else`. This is what
+                # lets a verifier replace by CONTENT rather than by Muter's
+                # known-wrong line number -- see `_trailing_else_body`. It may
+                # legitimately be absent (a malformed or unterminated chain), in
+                # which case the mutation is recorded without one and the
+                # verifier refuses it rather than applying it blind.
+                original = _trailing_else_body(text, end)
+                record = {"column": int(col), "offset": int(off), "mutated": body}
+                if original is not None:
+                    record["original"] = original
+                mutations.setdefault((stem, operator, line), []).append(record)
     return (
         {k: sorted(v) for k, v in positions.items()},
         {k: sorted(v, key=lambda d: d["offset"]) for k, v in mutations.items()},

@@ -32,8 +32,15 @@ Tools/mutation/verify-survivor.py --run-record MutationReports/<date>-run<id>.js
 
 **Before writing anything — expect `SURVIVED`.**
 `KILLED` means the finding is stale (the code moved, or somebody already covered
-it); close it and move on. `UNVERIFIABLE` means no mutation was recorded, so
-confirm by hand or skip — never approximate one.
+it); close it and move on. `UNVERIFIABLE` means the mutation could not be
+applied faithfully — no mutation was recorded, the recorded original no longer
+appears in the file, or the mutated source did not build. Confirm by hand or
+skip; never approximate one.
+
+**A `KILLED` always names the suite that caught it.** If it says only
+`suite failed`, read that as a bug report against the verifier rather than a
+verdict — it is what a mis-applied mutation used to look like, and the reason
+the applier now refuses rather than guesses (below).
 
 **After writing the test — expect `KILLED`, naming your new suite.**
 If your test passes but the mutant still survives, the test is not exercising
@@ -42,6 +49,24 @@ the behaviour it claims to. That is the whole point of the second run.
 The verifier applies the mutation Muter actually inserted, taken from the run
 record, and runs the sweep's own test command from `Tools/mutation/config.json`
 so a verdict here means what a verdict there means.
+
+**It applies the mutation by CONTENT, not by position, and this is load-bearing.**
+Muter reports a file, a line and a column, and those positions are known-wrong —
+`report.py` says so in the issue body it writes. Muter records the *enclosing
+statement* while the line points at one operator inside it, so replacing the
+reported line is only faithful when that line happens to hold the whole
+statement: measured across run 32255707345, 15 of 84 candidates. For the other
+69 the edit deletes a `case` label, pastes a whole expression beside the half
+already above it, or splices in text that opens with `//` and comments out the
+rest of the line. None of that fails honestly — it fails to COMPILE, the suite
+goes red, and red used to read as `KILLED`, which this protocol spells "already
+covered, do not write a test". A real gap closed itself.
+
+So each mutation is recorded together with its `original` (the trailing `else`
+of Muter's schema chain) and the edit is an exact textual swap. Records written
+before that existed carry no `original`; the verifier refuses them rather than
+falling back to position. **If a whole cluster comes back `UNVERIFIABLE` citing
+a missing `original`, the answer is a fresh sweep, never a hand-edit.**
 
 ## Work by file, not by survivor
 
