@@ -105,10 +105,19 @@ for loc, path in files:
     shards[i].append(path)
     load[i] += loc
 if want == "plan":
+    # Constants MEASURED across run 3's three shards, not guessed. The estimate
+    # used to be `mutants * 16s` with no fixed term, which understated an
+    # eight-shard plan by a quarter: the per-mutant cost is lower than the pilot
+    # suggested, and the setup cost it omitted is the larger of the two.
+    FIXED_MIN, PER_MUTANT_S = 29, 9.8
     total = sum(load)
+    est = lambda loc: FIXED_MIN + (loc // 6) * PER_MUTANT_S / 60
     print(f"{len(files)} files, {total} LOC, ~{total // 6} mutants across {count} shards")
+    print(f"  (~{FIXED_MIN} min fixed per shard for the cold build + baseline, "
+          f"then ~{PER_MUTANT_S}s per mutant -- both measured)")
     for i, s in enumerate(shards):
-        print(f"  shard {i}: {len(s):>3} files, {load[i]:>6} LOC, ~{load[i] // 6:>4} mutants, ~{load[i] // 6 * 16 // 60:>3} min")
+        print(f"  shard {i}: {len(s):>3} files, {load[i]:>6} LOC, ~{load[i] // 6:>4} mutants, ~{est(load[i]):>4.0f} min")
+    print(f"  wall clock: ~{max(est(l) for l in load):.0f} min")
 else:
     for p in shards[int(want)]:
         print(p)

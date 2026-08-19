@@ -6,15 +6,27 @@ name: Mutation testing (weekly)
 # construction, so chasing a percentage means writing tests for inputs that
 # cannot occur. See docs/mutation-testing-pilot.md.
 #
-# SCOPE: RUNNERCORE ONLY, and deliberately small. This is the one target proven
-# end to end -- the 2026-08-18 pilot scored 69% on four of its files -- and the
-# code where a survivor matters most, since one grading core is compiled both
-# natively and to wasm. ~1,600 LOC, ~266 mutants, 3 shards of ~30 minutes.
+# SCOPE: RUNNERCORE + CORE. ~10,200 LOC, ~1,700 mutants, 8 shards of ~60 minutes.
+# Widened after run 3 -- the first sweep that ran end to end -- came back green at
+# 84% (122 killed, 23 survivors, 64 phantoms filtered), which is the condition the
+# RunnerCore-only config named for widening.
 #
-# Widening aborted run 2 on every shard: Muter runs the suite UNMUTATED first and
-# mutates nothing if that baseline is red, and it was red with `Suite WorkerTests
-# failed with 2 issues` on all ten shards regardless of file set. Widen one target
-# at a time, and only after a run at this scope comes back green.
+# Eight shards because the cost is FIXED, not marginal: ~29 minutes per shard for
+# a cold build plus the unmutated baseline, then only ~9.8 seconds per mutant.
+# Both measured across run 3. The curve flattens fast -- 84 min over 5 shards, 63
+# over 8, 56 over 10 -- so the eighth shard is roughly where another stops paying.
+#
+# A CORE SURVIVOR IS WEAKER EVIDENCE THAN A RUNNERCORE ONE. The suite skips
+# APITests, which dominates the runtime, and Core is exercised through it: 89% of
+# Core's LOC is reachable from CoreTests or WorkerTests, 5% only from APITests, 6%
+# from no test at all. A survivor in that 5% may be an artefact of the skip rather
+# than a hole -- the missing-interpreter shape again -- so check it against the
+# full suite before writing a test. Tools/mutation/config.json carries the detail.
+#
+# WORKER IS STILL OUT, for the same shape of reason: the baseline fix that made
+# run 3 possible is `--skip WorkerTests/`, which drops the 48 timing-sensitive
+# sandbox and timeout tests, so mutating Sources/Worker would report survivors in
+# exactly the code they cover. That is a separate problem from widening scope.
 #
 # APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
 # mutants, and its mutants must be graded by APITests, the slowest suite, so it
