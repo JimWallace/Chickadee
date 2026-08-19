@@ -64,7 +64,7 @@ Submission #(submissionID)
             <span class="class-goal-reward">#(goal.rewardLabel)</span>
         </div>
         <progress class="class-goal-progress" max="100" value="#(goal.progressPercent)">#(goal.progressPercent)%</progress>
-        <div class="class-goal-status">#if(goal.met):✅ Reached!#else:#(goal.progressPercent)% of the way#endif · #(goal.studentsMeeting) / #(goal.denominator) students#if(goal.locked): · final#endif</div>
+        <div class="class-goal-status">#if(goal.met):✅ Reached!#else:#(goal.progressPercent)% of the way#endif · #(goal.studentsMeeting) / #(goal.denominator) #(goal.studentsLabel)#if(goal.coverageSummary): · #(goal.coverageSummary)#endif#if(goal.locked): · final#endif</div>
         #if(goal.detail):<p class="class-goal-detail">#(goal.detail)</p>#endif
     </div>
     #endfor

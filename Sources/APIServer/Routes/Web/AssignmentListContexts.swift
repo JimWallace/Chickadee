@@ -376,7 +376,7 @@ struct AssignmentSubmissionsContext: Encodable {
     /// than on `!coverageRows.isEmpty`, which Leaf cannot express — the same
     /// shape `hasClassGoals` uses on the submission page.
     let hasCoverage: Bool
-    /// "9 / 15 found", for the section's summary chip.
+    /// "9 / 15 items found", for the section's summary chip.
     let coverageSummary: String
 }
 

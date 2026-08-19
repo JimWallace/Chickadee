@@ -387,6 +387,17 @@ extension WebRoutes {
     }
 }
 
+/// "9 / 15 items found" for a union goal's snapshot, or nil when the snapshot
+/// carries no coverage — either because the goal is grade-counted or because
+/// the sweep has not run since the goal was authored.
+///
+/// Formatted by the same helper the instructor coverage section uses, so the
+/// two views cannot drift into naming one number two ways.
+private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
+    guard let covered = row?.itemsCovered, let required = row?.itemsRequired else { return nil }
+    return coverageFoundSummary(covered: covered, total: required)
+}
+
 /// Loads an assignment's class-goal achievements joined with their latest
 /// `APIAchievementResult` snapshot, for the student-facing "Achievements"
 /// section.  Returns `[]` when the manifest carries no class goals.  Takes the
@@ -420,6 +431,8 @@ func loadClassGoalViews(
             progressPercent: Int((progress * 100).rounded()),
             studentsMeeting: row?.studentsMeeting ?? 0,
             denominator: row?.denominator ?? 0,
+            studentsLabel: goal.isUnionClassGoal ? "students contributing" : "students",
+            coverageSummary: classGoalCoverageSummary(row),
             met: progress >= 1,
             locked: row?.locked ?? false)
     }

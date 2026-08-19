@@ -91,3 +91,12 @@ enum TestTierValues {
     /// The tiers plus the pseudo-tier `support`.
     static var withSupport: [String] { tiers + [supportPseudoTier] }
 }
+
+/// The achievement condition signals a schema enum offers, derived from
+/// `AchievementSignal.allCases` for the same reason `TestTierValues` is derived
+/// from `TestTier.allCases`: a hand-typed enum can offer a value the parser
+/// refuses, or omit one it accepts. See `MCPAchievementSignalProse` for the
+/// prose renderings of the same set.
+enum AchievementSignalValues {
+    static var all: [String] { AchievementSignal.allCases.map(\.rawValue) }
+}

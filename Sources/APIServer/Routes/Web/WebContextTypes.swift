@@ -539,6 +539,21 @@ struct ClassGoalView: Encodable {
     let progressPercent: Int
     let studentsMeeting: Int
     let denominator: Int
+    /// What `studentsMeeting` counts, in the reader's words: "students" on a
+    /// grade goal, "students contributing" on a union goal.
+    ///
+    /// The arithmetic is identical — a count of enrolled students over the
+    /// roster — but the per-student predicate is not, and one noun phrase for
+    /// both invites "12 students have finished" on a bug hunt.
+    let studentsLabel: String
+    /// UNION goals only: "9 / 15 items found", the coverage half of the goal.  nil on
+    /// a grade-counted goal, which unions nothing.
+    ///
+    /// Without it the status line reads "40% of the way · 30 / 30 students",
+    /// which is two true numbers that together look wrong — the bar reports the
+    /// SMALLER of coverage and breadth, so a class that has met breadth needs
+    /// to see the half still holding the goal back.
+    let coverageSummary: String?
     /// True once the class has fully reached the goal.
     let met: Bool
     /// True once the deadline has passed and the snapshot is final.

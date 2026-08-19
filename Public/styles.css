@@ -1916,7 +1916,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .am-condition .form-input { width: auto; }
 .am-cond-signal { min-width: 9rem; }
 .am-cond-value { width: 6rem; }
-.am-cond-testref { min-width: 12rem; }
+.am-cond-ref { min-width: 12rem; }
 .am-cond-unit { color: var(--gray-500); font-size: var(--text-base); }
 .am-cond-remove { line-height: 1; }
 .form-input--inline { display: inline-block; width: auto; margin: 0 .25rem; }
