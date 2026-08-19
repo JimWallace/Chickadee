@@ -9,6 +9,71 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.153] - 2026-08-19
+
+### Changed
+
+- **Class-wide item coverage is recorded only for contribution assignments.**
+  The accumulator shipped recording a row for every passing test on every
+  assignment, on the reasoning that the union is generically useful. It is not:
+  an ordinary lab's passing tests are not a class-wide union, and the rows would
+  accrue forever while leaving the instructor coverage view with no cheap way to
+  tell a bug hunt from a normal assignment — so it would need a second signal, or
+  it would render a coverage section on every instructor page. The write is now
+  gated on the assignment declaring contribution slots, resolved from the starter
+  notebook through `notebookBytesCache` so a deadline spike shares one resolution,
+  and best-effort so a lookup failure skips accumulation rather than failing a
+  student's result report. The existence of coverage rows now means "this is a
+  contribution assignment".
+
+### Added
+
+- **Instructors can see which items the class has collectively covered.** A "Bug
+  coverage" section on the per-assignment submissions page lists every suite item
+  of a contribution assignment with a found / not-found chip, who found it first,
+  and when. The uncovered items are the point: a list of what the class has found
+  is a scoreboard, while one that also shows what is missing is what an
+  instructor acts on mid-lab. It renders only for contribution assignments, and
+  needs no flag to know that — the accumulator writes coverage rows only for
+  assignments declaring contribution slots, so the existence of rows is itself the
+  gate, and an ordinary assignment's page is unchanged. Assembled entirely from
+  the existing component vocabulary, so it adds no CSS.
+
+### Fixed
+
+- **The per-PR mutation job was not watching most of the code it claimed to.**
+  Its `paths:` filter was written as `Sources/RunnerCore/**` when that was the
+  whole sweep scope, and widening the sweep to `Sources/Core` hours later did
+  not update it — so for eleven days a pull request touching only
+  `Sources/Core` (8,639 lines, and 58 of the 75 survivors in the latest run)
+  silently never triggered a mutation run, while the workflow's own comment
+  claimed parity with `config.json`. The trigger now names all of `Sources/**`
+  and lets the run-time step that already reads `include` do the deciding, so
+  there is one list rather than two that must agree. A guard
+  (`workflow_scope_test.py`) fails if the filter is ever narrowed below the
+  configured scope again.
+
+### Added
+
+- **Survivors closed with a reason are now recorded where the sweep can read
+  them.** `Tools/mutation/equivalent-mutants.json` holds mutants that are
+  unkillable by construction, each with the argument for why nothing reaching
+  the site can observe the change. Previously that reasoning lived only in a
+  commit message, so an equivalent mutant returned every week indistinguishable
+  from an untriaged gap. Entries are keyed on the mutation text rather than a
+  line number, so one cannot drift onto a neighbouring mutant and stops
+  matching the moment the code it excuses is edited; `report.py` refuses an
+  entry whose reason is a label rather than an argument. This is what makes the
+  survivor list a queue that can reach zero — the honest target, since no suite
+  can drive the percentage to 100.
+- **The per-PR report says it is a report.** The step summary now opens with
+  the three legitimate answers to a survivor, including that closing one with a
+  recorded reason is a real answer. `continue-on-error` already stops the job
+  failing a PR; the pressure worth heading off is social, since the cheapest
+  way to clear a survivor listed on your own diff is an assertion that runs the
+  line without checking the result.
+
+
 ## [0.5.152] - 2026-08-19
 
 ### Added
