@@ -128,11 +128,59 @@ class ApplyMutationTests(unittest.TestCase):
         self.assertIn("case .equals: return lhs != value", after)
         self.assertIn("case .atLeast: return lhs >= value", after)
 
-    def test_ambiguous_original_is_refused_rather_than_guessed(self):
-        path = self._write(
-            "let a = x == y\nlet b = x == y\n"
-        )
-        self.assertIsNone(verify.apply_mutation(path, 1, "x != y", "x == y"))
+    def test_the_recorded_line_picks_between_identical_statements(self):
+        """Content finds the candidates; the line only chooses among them.
+
+        `let pairs = o.sorted { $0.key < $1.key }` is byte-identical in all four
+        literal renderers of JSONValue.swift, so content alone cannot say which
+        one Muter mutated. Refusing outright cost three real survivors in run
+        32265903112; in all three the recorded line lands exactly on one of the
+        matches, so that is the discriminator -- and only that, never nearest.
+        """
+        path = self._write("let a = x == y\nlet b = x == y\n")
+        self.assertIsNotNone(verify.apply_mutation(path, 2, "x != y", "x == y"))
+        with open(path) as fh:
+            after = fh.read()
+        # The SECOND one, because that is the line the record named.
+        self.assertEqual(after, "let a = x == y\nlet b = x != y\n")
+
+    def test_ambiguity_the_line_cannot_resolve_is_still_refused(self):
+        """No nearest-match fallback: mutating the wrong twin reports a verdict
+        about a function nobody asked about."""
+        path = self._write("let a = x == y\nlet b = x == y\n")
+        self.assertIsNone(verify.apply_mutation(path, 99, "x != y", "x == y"))
+        with open(path) as fh:
+            self.assertEqual(fh.read(), "let a = x == y\nlet b = x == y\n")
+
+    def test_muters_duplicated_trailing_comment_is_stripped_before_matching(self):
+        """Muter re-emits a body's leading comment after the statement.
+
+        The recorded text is then not a contiguous substring of the file, so an
+        exact search finds nothing -- 14 of the run's 110 candidates were
+        unverifiable for this and no other reason.
+        """
+        src = "// why\n// this exists\nlet a = x == y\n"
+        path = self._write(src)
+        recorded_original = "// why\n// this exists\nlet a = x == y\n// why\n// this exists"
+        recorded_mutated = "// why\n// this exists\nlet a = x != y\n// why\n// this exists"
+        self.assertIsNotNone(
+            verify.apply_mutation(path, 1, recorded_mutated, recorded_original))
+        with open(path) as fh:
+            after = fh.read()
+        self.assertIn("let a = x != y", after)
+        # and the comment is not duplicated into the file
+        self.assertEqual(after.count("// why"), 1)
+
+    def test_a_body_that_genuinely_ends_in_a_comment_is_not_truncated(self):
+        src = "// lead\nlet a = x == y\n// a different trailing note\n"
+        path = self._write(src)
+        original = "// lead\nlet a = x == y\n// a different trailing note"
+        mutated = "// lead\nlet a = x != y\n// a different trailing note"
+        self.assertIsNotNone(verify.apply_mutation(path, 1, mutated, original))
+        with open(path) as fh:
+            after = fh.read()
+        self.assertIn("let a = x != y", after)
+        self.assertIn("// a different trailing note", after)
 
     def test_without_an_original_a_mismatched_line_is_refused(self):
         """The regression this file exists for.
