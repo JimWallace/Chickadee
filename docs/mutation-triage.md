@@ -106,6 +106,18 @@ against the full suite before writing anything — otherwise you are looking at
 the same artefact a missing interpreter produces, where a test that never ran
 makes its mutants read as gaps.
 
+**A full-suite kill on a Core survivor is not automatically a close.** The
+question the confirmation answers is "does any test detect this", and a second
+question follows it: is the test that detects it in the right layer.
+`PatternCase`'s length-alignment rule and `NotebookFunctionInfo`'s decoder
+realignment are Core model invariants whose only assertions lived in an
+APIServer renderer suite. The full suite kills their mutants, so they are not
+undetected — but every non-APIServer consumer of those models was relying on a
+test that does not exercise it, and the sweep could not see the rule at all.
+Both got a `Tests/CoreTests` assertion rather than a ledger entry. Reserve the
+ledger for mutants nothing *can* observe; "observed from somewhere else"
+belongs in a test where the invariant lives.
+
 **Equivalent mutants are common in parsers and defensive code.**
 `containsSubstring`'s empty-needle guard has no caller that passes an empty
 needle. `JSONLite`'s `parseNumber` is a subtler one: mutating `if current == "-"`

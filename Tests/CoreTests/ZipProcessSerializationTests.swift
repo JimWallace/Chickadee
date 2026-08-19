@@ -118,4 +118,115 @@ final class ZipProcessSerializationTests {
             #expect(seen == entryCount)
         }
     }
+
+    // MARK: - The process-wide lock
+
+    /// Kills the two `RemoveSideEffects` survivors from the 2026-08-19 sweep
+    /// (run 32265903112): the `zipProcessLock.lock()` inside
+    /// `withZipProcessLock`, and the one that IS `acquireZipProcessLock()`.
+    ///
+    /// Deleting either leaves the API shape intact and every other test in this
+    /// suite green — the concurrency test above passes precisely because the
+    /// children are meant to overlap — while removing the mutual exclusion the
+    /// file exists for. What comes back is the Foundation `Process` spawn race:
+    /// an intermittent `NSPOSIXErrorDomain Code=14` on an unrelated pull
+    /// request, or the SIGSEGV variant that no retry can catch.
+    ///
+    /// The assertion runs in the safe direction. Under the real lock the second
+    /// caller can NEVER enter while the first holds it, whatever the machine is
+    /// doing; a slow scheduler can only make this test pass spuriously, never
+    /// fail spuriously.
+    @Test func aHeldLockKeepsEveryOtherZipSpawnOut() {
+        let entered = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+
+        // NSLock is thread-bound, so both halves use real threads: a Swift
+        // concurrency task may resume on a different thread than it suspended
+        // on, which would unlock from a thread that never locked.
+        acquireZipProcessLock()
+        Thread.detachNewThread {
+            withZipProcessLock { entered.signal() }
+            finished.signal()
+        }
+        let enteredWhileHeld = entered.wait(timeout: .now() + 1.0) == .success
+        releaseZipProcessLock()
+
+        #expect(
+            !enteredWhileHeld,
+            "a second zip spawn entered the serialized window while the lock was held")
+        #expect(
+            finished.wait(timeout: .now() + 10) == .success,
+            "the waiting spawn never ran after the lock was released")
+    }
+
+    // MARK: - The EFAULT retry
+
+    /// A `Process` that never spawns: it throws a chosen error for its first
+    /// `failures` attempts and counts every call.
+    ///
+    /// A real EFAULT cannot be provoked on demand — it is the residue of a race
+    /// — so the retry's *condition* can only be pinned by supplying the error.
+    /// Overriding `run()` also makes the attempt count observable, which is the
+    /// only difference between retrying and not when both paths end up throwing
+    /// the same error.
+    private final class ThrowingProcess: Process {
+        private let error: NSError
+        private let failures: Int
+        private(set) var attempts = 0
+
+        init(throwing error: NSError, times failures: Int) {
+            self.error = error
+            self.failures = failures
+            super.init()
+        }
+
+        override func run() throws {
+            attempts += 1
+            if attempts <= failures { throw error }
+        }
+    }
+
+    private func posixEFAULT() -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(EFAULT))
+    }
+
+    @Test func aTransientEFAULTIsRetriedAndSucceeds() throws {
+        let proc = ThrowingProcess(throwing: posixEFAULT(), times: 1)
+        try runProcessWithEFAULTRetry(proc)
+        #expect(proc.attempts == 2)
+    }
+
+    @Test func aPersistentEFAULTIsRetriedExactlyOnceThenPropagates() {
+        let proc = ThrowingProcess(throwing: posixEFAULT(), times: .max)
+        #expect(throws: (any Error).self) { try runProcessWithEFAULTRetry(proc) }
+        #expect(proc.attempts == 2, "the retry is once, not a loop")
+    }
+
+    /// Kills the `code !=` half of the `RelationalOperatorReplacement` pair and
+    /// the `ChangeLogicalConnector`: both make a non-EFAULT POSIX failure
+    /// retryable.
+    ///
+    /// Retrying the wrong error is not free. `runProcessWithEFAULTRetry` is
+    /// called with a `Process` whose pipes are already wired, so a second
+    /// `run()` after a genuine failure re-spawns against them — and the caller
+    /// waits out a 10 ms sleep per attempt on a path that services notebook
+    /// opens and dashboard page views.
+    @Test func anotherPOSIXFailureIsNotRetried() {
+        let proc = ThrowingProcess(
+            throwing: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)), times: .max)
+        #expect(throws: (any Error).self) { try runProcessWithEFAULTRetry(proc) }
+        #expect(proc.attempts == 1)
+    }
+
+    /// Kills the `domain !=` half and, again, the `ChangeLogicalConnector`.
+    /// Error code 14 means something different in every domain — it is
+    /// `NSFileWriteUnknownError` in `NSCocoaErrorDomain` — so the domain is
+    /// what makes the number mean EFAULT at all.
+    @Test func theSameCodeInAnotherDomainIsNotRetried() {
+        let proc = ThrowingProcess(
+            throwing: NSError(domain: NSCocoaErrorDomain, code: Int(EFAULT)), times: .max)
+        #expect(throws: (any Error).self) { try runProcessWithEFAULTRetry(proc) }
+        #expect(proc.attempts == 1)
+    }
+
 }

@@ -561,4 +561,97 @@ struct NotebookFunctionScannerTests {
         let r = scanNotebookForSectionsAndFunctions(nb, language: .r)
         #expect(r.functions.map(\.info.name) == ["shown"])
     }
+
+    // MARK: - Parameter names the scanner must and must not accept
+
+    /// Kills the `RelationalOperatorReplacement` on the identifier-start rule
+    /// (`first.isLetter || first == "_"` becomes `|| first != "_"`).
+    ///
+    /// The flip is silent in both directions and both directions matter. A
+    /// parameter actually named with a leading underscore stops being reported,
+    /// so the family editor shows a signature one column short and every case
+    /// row silently shifts its arguments left. A parameter starting with a
+    /// digit — which no Python signature can contain, so its presence means the
+    /// line was misparsed — starts being reported instead of rejected.
+    @Test func parameterNamesMayStartWithAnUnderscoreButNotADigit() {
+        let underscored = scanFunctions(notebook(code: "def f(_unused, x):\n    pass\n"))
+        #expect(underscored.count == 1)
+        #expect(underscored[0].paramNames == ["_unused", "x"])
+
+        // A bare `_` is the conventional throwaway and is still a parameter.
+        let bare = scanFunctions(notebook(code: "def g(_, y):\n    pass\n"))
+        #expect(bare.count == 1)
+        #expect(bare[0].paramNames == ["_", "y"])
+
+        // Not an identifier: dropped, not reported.
+        let digitLed = scanFunctions(notebook(code: "def h(1bad, ok):\n    pass\n"))
+        #expect(digitLed.count == 1)
+        #expect(digitLed[0].paramNames == ["ok"])
+    }
+
+    // MARK: - The decode path's length realignment
+
+    /// `init(from:)` keeps a tolerance the memberwise init dropped in 0.5: a
+    /// stored `paramTypes` / `paramHasDefault` whose length disagrees with
+    /// `paramNames` is replaced by a correctly-sized neutral array rather than
+    /// carried through. Every consumer indexes these arrays by parameter
+    /// position, so a short one is an out-of-range crash and a long one silently
+    /// mislabels columns.
+    ///
+    /// The 2026-08-19 sweep reported four survivors here — a relational flip and
+    /// a swapped ternary on each of the two arrays — because nothing asserted the
+    /// rule from either side. Under every one of them a *correct* wire payload is
+    /// the one that gets discarded.
+    @Test func alignedWireArraysSurviveDecoding() throws {
+        let json = Data(
+            """
+            {
+              "name": "bmi",
+              "paramNames": ["mass", "height"],
+              "paramTypes": ["float", null],
+              "paramHasDefault": [false, true],
+              "hasTypeHints": true,
+              "hasDocstring": false,
+              "isShadowed": false
+            }
+            """.utf8)
+        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        #expect(decoded.paramTypes == ["float", nil])
+        #expect(decoded.paramHasDefault == [false, true])
+    }
+
+    @Test func misalignedWireArraysAreReplacedNotCarried() throws {
+        let json = Data(
+            """
+            {
+              "name": "bmi",
+              "paramNames": ["mass", "height"],
+              "paramTypes": ["float"],
+              "paramHasDefault": [true, false, true],
+              "hasTypeHints": true,
+              "hasDocstring": false,
+              "isShadowed": false
+            }
+            """.utf8)
+        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        #expect(decoded.paramTypes == [nil, nil])
+        #expect(decoded.paramHasDefault == [false, false])
+    }
+
+    @Test func absentWireArraysAreSizedFromParamNames() throws {
+        let json = Data(
+            """
+            {
+              "name": "bmi",
+              "paramNames": ["mass", "height"],
+              "hasTypeHints": false,
+              "hasDocstring": false,
+              "isShadowed": false
+            }
+            """.utf8)
+        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        #expect(decoded.paramTypes == [nil, nil])
+        #expect(decoded.paramHasDefault == [false, false])
+    }
+
 }
