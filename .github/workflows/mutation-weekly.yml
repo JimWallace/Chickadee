@@ -58,8 +58,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    # The shard count is ONE number, and it lives in Tools/mutation/config.json.
+    # It used to live in three places -- that file, the `shard:` matrix literal
+    # below, and whatever `--of` this dispatch passed -- hand-synced, with the
+    # quiet failure mode being the one this whole exercise exists to catch:
+    # dispatching `shards: 5` left the matrix at three jobs, so shards 3 and 4
+    # were never run, while the aggregator (reading config.json) saw 3 of 3 and
+    # called it a complete sweep. 40% of the files silently unmutated, reported
+    # as covered. Deriving the matrix here means the number cannot disagree with
+    # itself.
+    name: Plan the shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: plan
+        env:
+          OVERRIDE: ${{ inputs.shards }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          override = (os.environ.get("OVERRIDE") or "").strip()
+          count = int(override) if override else json.load(
+              open("Tools/mutation/config.json"))["shardCount"]
+          if count < 1:
+              raise SystemExit(f"shard count must be >= 1, got {count}")
+          print(f"count={count}")
+          print("shards=" + json.dumps(list(range(count))))
+          PY
+          cat "$GITHUB_OUTPUT"
+
   mutate:
     name: "Shard ${{ matrix.shard }}"
+    needs: plan
     runs-on: ubuntu-latest
     # Each shard measures ~70 minutes of mutant testing plus a cold build of the
     # project inside Muter's copy. Generous, so a slow shard reports rather than
@@ -69,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     container:
       # swift-CI, not plain swift. The -ci image is the one carrying python3,
       # lua5.4, octave and r-base; the plain image is the toolchain alone. Run 1
@@ -98,9 +133,9 @@ jobs:
         run: |
           scripts/mutation-run.sh \
             --shard ${{ matrix.shard }} \
+            --of ${{ needs.plan.outputs.count }} \
             --muter-src /tmp/muter-src \
-            --out mutation-report \
-            ${{ inputs.shards && format('--of {0}', inputs.shards) || '' }}
+            --out mutation-report
 
       - name: Upload this shard's report
         if: always()
@@ -112,7 +147,7 @@ jobs:
 
   file-issue:
     name: File one triage issue
-    needs: mutate
+    needs: [plan, mutate]
     # `always()` so a single wedged shard still yields a report for the other
     # nine, rather than losing an hour of compute to one bad apple.
     if: always()
@@ -180,8 +215,16 @@ jobs:
             // failed, no artifact was uploaded, `dirs` came back empty, and this
             // job reported success and filed nothing. Absence of findings is only
             // meaningful against a known denominator.
-            const expected = JSON.parse(
-              fs.readFileSync('Tools/mutation/config.json', 'utf8')).shardCount;
+            //
+            // It comes from the PLAN job, not from re-reading config.json: a
+            // dispatch may override the count, and a denominator that disagrees
+            // with the matrix is exactly the arithmetic that made a partial sweep
+            // read as a whole one.
+            const expected = Number('${{ needs.plan.outputs.count }}');
+            if (!Number.isInteger(expected) || expected < 1) {
+              core.setFailed(`plan job produced no usable shard count (got '${{ needs.plan.outputs.count }}')`);
+              return;
+            }
 
             let survivors = 0, phantoms = 0, killed = 0, missing = [];
             const sections = [];

@@ -10,6 +10,13 @@
 // field (e.g. the reserved `score`) failed to parse, the whole object would fail
 // to parse, the footer would be ignored, and `shortResult` would fall back to the
 // raw line. So "shortResult == the footer's value" proves the number parsed.
+//
+// It proves ONLY that. A footer whose number parsed to the wrong value is still a
+// footer, so every assertion below on `shortResult` alone holds just as well when
+// the arithmetic is wrong — which is how mutation testing found that flipping the
+// exponent's sign (`exponentSign = -1` → `1`) failed nothing here. The
+// value-asserting tests at the bottom are the half that was missing: they read
+// the parsed number back through `score`, where a wrong value cannot hide.
 
 import Core
 import Testing
@@ -49,5 +56,53 @@ import Testing
         // A bare number parses as JSON but isn't an object, so it's not a footer.
         let result = interpret(stdout: "42")
         #expect(result.shortResult == "42")
+    }
+
+    // MARK: - The parsed VALUE, not just "it parsed"
+    //
+    // `score` is the only route by which a footer's number reaches an
+    // observable output, and it is clamped to 0...1 — so these cases stay
+    // inside that range on purpose, except where the clamp itself is the point.
+
+    @Test(arguments: [
+        ("5e-1", 0.5),
+        ("2.5E-2", 0.025),
+        ("25e-2", 0.25),
+        ("1e-3", 0.001),
+        ("7.5e-1", 0.75),
+        ("1e0", 1.0),
+        ("0e5", 0.0),  // a zero mantissa with a positive exponent is still zero
+    ])
+    func exponentIsAppliedWithTheRightSignAndMagnitude(literal: String, expected: Double) {
+        let result = interpret(stdout: "{\"shortResult\":\"x\",\"score\":\(literal)}")
+        #expect(result.shortResult == "x")  // the footer was recognised…
+        #expect(abs(result.score - expected) < 1e-12)  // …and carries the right number
+    }
+
+    @Test func positiveExponentOvershootsAndIsClampedRatherThanNegated() {
+        // `1.0e+4` is 10000, clamped to 1. Under a flipped exponent sign it
+        // would be 0.0001 — in range, so the clamp cannot mask the difference.
+        #expect(interpret(stdout: "{\"score\":1.0e+4}").score == 1)
+        // …and the explicit `+` must be consumed rather than ending the number:
+        // if it were not, the literal would fail to parse and this would not be
+        // a footer at all.
+        #expect(interpret(stdout: "{\"shortResult\":\"y\",\"score\":1.0e+4}").shortResult == "y")
+    }
+
+    @Test func fractionalDigitsAndExponentCompose() {
+        // fractionDigits and exponent are folded into one power of ten, so a
+        // literal exercising both at once pins that arithmetic rather than
+        // either half alone.
+        #expect(abs(interpret(stdout: "{\"score\":1234.5e-4}").score - 0.12345) < 1e-12)
+        #expect(abs(interpret(stdout: "{\"score\":0.00075e3}").score - 0.75) < 1e-12)
+    }
+
+    @Test func whitespaceAroundAFooterIsToleratedWithTheValueIntact() {
+        // Instructors hand-write these footers, so a generously spaced one is a
+        // plausible input; the parser skips whitespace at each structural point.
+        #expect(interpret(stdout: "{ \"shortResult\" : \"spaced\" , \"score\" : 0.25 }").score == 0.25)
+        #expect(
+            interpret(stdout: "{ \"shortResult\" : \"spaced\" , \"score\" : 0.25 }").shortResult
+                == "spaced")
     }
 }
