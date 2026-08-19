@@ -35,13 +35,22 @@ Muter took 00:01:02.000
 """
 
 # The mutated copy carries a guard for line 10 only. Line 20 is a phantom.
+#
+# The shape is Muter's real one: the mutation in the `if` body, the ORIGINAL in
+# the trailing `else`. The line-10 mutation deliberately contains a brace inside
+# a string literal, because a naive brace count truncates there and would record
+# a mangled mutation -- worse than recording none.
 MUTATED = '''\
 import class Foundation.ProcessInfo
 if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"] != nil {
-    return a || b
+    return a || b ? "}" : "end"
+} else {
+    return a && b ? "}" : "end"
 }
 if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_30_5_300"] != nil {
     return c && d
+} else {
+    return c || d
 }
 '''
 
@@ -125,6 +134,47 @@ class PublishedNumbersTests(unittest.TestCase):
         code, report, _summary = run("Muter took 00:00:01.000\n", MUTATED)
         self.assertEqual(code, 1, "a run that measured nothing must not exit 0")
         self.assertIn("no mutant outcomes at all", report)
+
+
+class RecordedMutationTests(unittest.TestCase):
+    """The mutation itself must reach the record, or a survivor is not actionable.
+
+    An operator name and a line number do not say WHICH sub-expression changed
+    or what it became, and a triage pass that guessed got three of them wrong.
+    """
+
+    def test_the_survivor_carries_the_mutation_muter_actually_inserted(self):
+        _code, _report, summary = run(RAW, MUTATED)
+        surv = [s for s in summary["survivors"] if s["line"] == 10]
+        self.assertEqual(len(surv), 1)
+        muts = surv[0]["mutations"]
+        self.assertEqual(len(muts), 1, "the line-10 schema should be recorded")
+        self.assertEqual(muts[0]["mutated"], 'return a || b ? "}" : "end"')
+
+    def test_a_brace_inside_a_string_does_not_truncate_the_mutation(self):
+        # The regression this guards: counting braces without skipping string
+        # literals sees the `}` inside the quotes as the end of the body and
+        # records `return a || b ? "` -- not Swift, and not the mutation.
+        _code, _report, summary = run(RAW, MUTATED)
+        muts = [s for s in summary["survivors"] if s["line"] == 10][0]["mutations"]
+        self.assertTrue(muts[0]["mutated"].endswith('"end"'))
+
+    def test_the_markdown_shows_the_mutation_next_to_the_survivor(self):
+        _code, report, _summary = run(RAW, MUTATED)
+        self.assertIn("becomes:", report)
+        self.assertIn('return a || b ? "}" : "end"', report)
+
+    def test_a_phantom_gets_no_mutation_because_none_was_inserted(self):
+        _code, _report, summary = run(RAW, MUTATED)
+        self.assertTrue(all(p["line"] != 10 for p in summary["phantoms"]))
+        self.assertEqual([p["line"] for p in summary["phantoms"]], [20])
+
+    def test_without_a_mutated_copy_the_mutation_list_is_empty_not_guessed(self):
+        # No ground truth means no mutation may be invented. An empty list is
+        # what verify-survivor.py reports as UNVERIFIABLE, which is the honest
+        # answer; a plausible-looking guess would be acted on.
+        _code, _report, summary = run(RAW, None)
+        self.assertTrue(all(s["mutations"] == [] for s in summary["survivors"]))
 
 
 if __name__ == "__main__":
