@@ -9,5 +9,7 @@
   re-push) and the one part that does not: every class goal today counts students whose
   own best grade cleared a threshold, and none aggregates over the union of what the class
   collectively covered. Also sizes the per-student contribution cap the feature implies,
-  recommending participation breadth over per-item attribution ranking. Nothing is locked;
+  recommending server-side notebook slot extraction for the shape of a contribution and
+  participation breadth for its spread, over per-item attribution ranking or any rule
+  enforced only inside the editor. Nothing is locked;
   the note exists to be argued with before anything is built.

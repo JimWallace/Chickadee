@@ -138,6 +138,78 @@ gated by *when* (open/close, deadlines, slip days) and never by *how much*.
 
 Three places a cap could live, meaning three different things:
 
+### D. Notebook slots — bound the shape of the contribution, not its volume
+
+The cheapest and most robust lever, and the one to reach for first: give the
+starter notebook exactly K marked contribution slots and have the server keep
+only what is in them.
+
+This inverts the problem. You do not have to *prevent* a student adding cells —
+you have to *ignore* the ones they added, which needs no UI enforcement at all
+and cannot be bypassed by editing the file offline.
+
+The seam already exists and is live on every submission path. `mergeNotebook`
+(`Helpers/NotebookContentHelpers.swift`, called from `SubmissionRoutes` and all
+three `BrowserResultRoutes` paths) already reassembles the submitted notebook
+server-side: it keeps the student's non-test cells, re-imposes **all** of the
+instructor's `# TEST:` cells, and adopts the instructor's kernelspec because —
+in the words of its own comment — an in-browser editor cannot be trusted with
+it. Slot extraction is the same operation with a different filter: keep the
+student's cells that carry a slot marker, cap at K, drop the rest.
+
+Two conventions are available for the marker, and the newer one is better:
+
+- the **`# TEST:` first-line comment** (`isTestCell` / `isHiddenTestCell`) —
+  established, but fragile in exactly the way that matters here: a student
+  pressing return at the top of the cell silently unmarks it;
+- **Chickadee-owned cell metadata** — `NotebookSubstitution` already writes
+  `metadata.chickadee_personalized` to mark cells it owns, explicitly preserves
+  any other cell metadata it finds, and uses the mark to avoid clobbering
+  student edits on re-substitution. That proves Chickadee-namespaced cell
+  metadata survives the full round-trip, and it is invisible to (and untouched
+  by) ordinary editing.
+
+Use the metadata form. A student who deletes the slot marker loses the slot,
+which is the right failure: it is legible, it is their own doing, and the
+starter can be reset.
+
+What to do with a fourth test is then a policy choice with a graceful default —
+keep the first K in document order and drop the rest, or keep all K+ for the
+student's own individual mark and count only K toward the class aggregate (which
+is B, below, arrived at from the other direction).
+
+### The editor UI: a guardrail, never the guarantee
+
+Worth stating plainly, because the notebook feels like the natural place to
+enforce this and it is not:
+
+- **Locking the scaffold cells is easy and worth doing.** nbformat carries
+  `metadata.editable` and `metadata.deletable`, which JupyterLab honours;
+  Chickadee sets neither today. Marking the instructions and the slot headers
+  non-editable and non-deletable stops the ordinary accident — a student
+  overwriting the prompt, or deleting a slot and not knowing how to get it back.
+  This should be verified against the vendored 0.8.x build rather than assumed;
+  the house rule that only a real kernel proves a kernel claim applies here too.
+- **Disallowing new cells is not an nbformat capability.** Cell insertion is a
+  notebook-level command, not a per-cell property, so no metadata suppresses it.
+  Doing it would mean disabling the `notebook:insert-cell-*` commands in the
+  command registry — either via `disabledExtensions` in `jupyter-lite.json`
+  (already used for two plugins, but too blunt here: the insert commands live in
+  the core notebook extension) or via a runtime prototype patch in the idiom of
+  `Public/jl-cell-perf-patch.js`. It is a whack-a-mole surface — toolbar button,
+  keyboard shortcuts, Edit menu, split-cell, paste-cell — and each new JupyterLab
+  version can add another entry point.
+- **Neither is enforcement, and the platform says so by design.** JupyterLite
+  keeps the document in the student's own browser, and CLAUDE.md is explicit that
+  notebook mode deliberately keeps the upload form beside the editor so a student
+  can hand in an `.ipynb` edited offline. A collaborative assignment must be
+  worker-graded (see above), which is exactly the mode where that upload path
+  stays open. Any rule that only holds inside the editor does not hold.
+
+So: lock the scaffold cells for the ergonomics, skip the cell-insertion patch,
+and put the actual bound in the server-side slot extraction, where it holds
+against every submission path at once.
+
 ### A. Intake cap — "submit at most K test cases"
 
 Counting tests inside a student artifact is language-specific and heuristic;
@@ -190,8 +262,11 @@ condition — but that guard exists precisely to reject shapes the sweep cannot
 evaluate, so extending it alongside the evaluator is the intended move, not a
 workaround.
 
-**Recommendation: ship C, keep A-in-a-shell-script for volume, treat B as the
-stronger lever if C proves insufficient in a real offering.**
+**Recommendation: ship D for the shape of a contribution and C for its breadth.**
+D bounds what one student can hand in without any UI enforcement to bypass; C
+stops a solo hero completing the class goal. Keep A-in-a-shell-script for crude
+volume control, and treat B as the stronger lever only if C proves insufficient
+in a real offering.
 
 ## Semantics that must be decided either way
 
@@ -238,21 +313,25 @@ tractable.
    authoring of contributed-test suites.
 2. **Refuse `gradingMode: browser` for collaborative assignments** at save time,
    with the leak as the stated reason.
-3. **Per-outcome accumulation at result-ingest.** A table keyed by (setup, item,
+3. **Slot extraction in `mergeNotebook`.** K marked contribution slots in the
+   starter notebook, kept by Chickadee-owned cell metadata, everything outside
+   them dropped server-side. Plus `editable`/`deletable` on the scaffold cells
+   for ergonomics. Independent of the aggregate work and useful on its own.
+4. **Per-outcome accumulation at result-ingest.** A table keyed by (setup, item,
    first-covering submission, user), written where `awardClassBadgesFor100Percent`
    is called. No goal semantics yet — just the durable union, with the sweep as
    reconciliation. Independently useful for instructor diagnostics.
-4. **Extend `isSweepEvaluableClassGoal` and the evaluator** to admit a union
+5. **Extend `isSweepEvaluableClassGoal` and the evaluator** to admit a union
    condition and a breadth condition ANDed, keeping the skip-and-log behaviour
    for shapes it still cannot evaluate.
-5. **Goal authoring + display**: the new condition shapes in the achievements
+6. **Goal authoring + display**: the new condition shapes in the achievements
    editor, the MCP surface, and the student progress bar.
-6. **Corpus aggregation run** (coverage only): assembler, aggregation submission
+7. **Corpus aggregation run** (coverage only): assembler, aggregation submission
    kind, results sink, reusing the `ValidationVariant` fan-out shape.
-7. **Per-student contribution cap (B)**, only if a real offering shows breadth
+8. **Per-student contribution cap (B)**, only if a real offering shows breadth
    (C) is not enough.
 
-Slices 1–5 deliver the bug-set goal end to end. Coverage needs 6.
+Slices 1–6 deliver the bug-set goal end to end. Coverage needs 7.
 
 ## Test plan (sketch)
 
