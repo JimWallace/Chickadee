@@ -268,6 +268,31 @@ def main() -> int:
         else:
             phantoms.append((path, reported, operator))
 
+    # A SECOND WAY A SURVIVOR CAN BE MEANINGLESS, and one only visible now that
+    # the original is recorded beside the mutation: Muter's `SwapTernary`
+    # sometimes emits the statement UNCHANGED apart from whitespace. Nine of the
+    # 75 survivors in run 32265903112 were this, every one of them a
+    # SwapTernary on a `cond ? a : b` whose branches came back unswapped.
+    #
+    # It is not a phantom -- the schema really was inserted, so the guard-based
+    # filter above passes it -- and it is not an equivalent mutant either, since
+    # the code is not merely behaviourally identical but textually identical.
+    # Nothing can kill it, and before the original was recorded there was no way
+    # to tell it from a real hole: it reads as "the suite could not see this
+    # change" when in truth there was no change to see. Two of them were left
+    # behind by a triage pass that had already covered the file properly.
+    inert = []
+    for key in list(mutation_of):
+        muts = mutation_of[key]
+        if not muts or any("original" not in m for m in muts):
+            continue
+        if all(" ".join(m["mutated"].split()) == " ".join(m["original"].split()) for m in muts):
+            inert.append(key)
+            del mutation_of[key]
+    if inert:
+        inert_set = set(inert)
+        resolved = [r for r in resolved if r not in inert_set]
+
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "survivors.tsv"), "w") as fh:
         fh.write("file\treported_line\ttrue_line\toperator\tsource\n")
@@ -307,6 +332,13 @@ def main() -> int:
                     "mutations": mutation_of.get((path, line, operator), []),
                 }
                 for path, line, operator in sorted(resolved)
+            ],
+            # Mutations Muter emitted UNCHANGED (see the quarantine above).
+            # Recorded rather than dropped so the count reconciles and so a
+            # regression in the operator is visible rather than silent.
+            "inertMutants": [
+                {"file": path, "line": line, "operator": operator}
+                for path, line, operator in sorted(inert)
             ],
             "phantoms": [
                 {"file": path, "line": line, "operator": operator}
@@ -390,6 +422,23 @@ def main() -> int:
                     out.append(f"    - becomes: `{one}`")
         else:
             out.append("No survivors. Every mutant in this shard was killed.")
+
+        if inert:
+            out += [
+                "",
+                "### Inert mutants — no change was made, so nothing could see one",
+                "",
+                f"Muter emitted {len(inert)} mutation(s) **identical to the original**",
+                "apart from whitespace — every one a `SwapTernary` whose branches came",
+                "back unswapped. The schema was inserted, so these are not phantoms; but",
+                "there is no change for a test to detect, so they are not holes either.",
+                "They are listed here rather than dropped so the count reconciles, and so",
+                "the day the operator starts working the list shrinks visibly.",
+                "",
+            ]
+            for path, line, operator in sorted(inert):
+                src = source_line(path, line)
+                out.append(f"- `{path}` L{line} `{operator}`" + (f" — `{src}`" if src else ""))
 
         if phantoms:
             out += [
