@@ -9,6 +9,38 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.144] - 2026-08-19
+
+### Fixed
+
+- **The mutation sweep's baseline suite no longer fails before anything is
+  mutated.** Muter writes a preamble — including `import class
+  Foundation.ProcessInfo` — into every file it will mutate, *before* running the
+  suite unmutated to establish a baseline. `ZipProcessEnvironmentTests` reads
+  `Sources/Core/ZipArchiver.swift` and `ZipProcessSerialization.swift` and scans
+  them for `Process(` constructions, so the preamble tripped it: one test, two
+  files, exactly the two failures that aborted every shard of run 2 after 13–22
+  minutes of work. It is skipped now — a guard asserting on the *text* of a file
+  under mutation cannot coexist with mutation, and has no mutants worth killing
+  anyway.
+- **A sweep where every shard reports "no mutant outcomes" is no longer green.**
+  The shards uploaded reports; the reports said nothing was mutated; the
+  aggregator parsed zero survivors and called it a clean sweep. It now treats a
+  report with no outcome table as a failed shard rather than an empty one.
+
+### Added
+
+- **Mutation testing now also runs per pull request, over just the files that PR
+  changed.** The weekly sweep answers "how strong is the suite over this target";
+  this answers "did the tests arriving with this change actually pin the behaviour
+  it adds" — cheaper to ask and far cheaper to act on, since the author still has
+  the code in mind. At one mutant per 6 lines a 60-line diff is roughly ten
+  mutants and a couple of minutes. It is a report, never a gate: `continue-on-error`
+  means a broken Muter or a red baseline cannot fail somebody's PR, and if it
+  covers only part of a large diff it says so rather than implying the rest was
+  clean.
+
+
 ## [0.5.143] - 2026-08-18
 
 ### Added
