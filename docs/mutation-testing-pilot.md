@@ -6,11 +6,16 @@ scope.** A patched Muter was pointed at four files of `RunnerCore` and scored
 This is the first mutation score ever produced against Chickadee source that is
 a measurement rather than an artifact.
 
-**Read "What it found" with the correction in it.** The survivors were later
-verified one at a time by hand, and roughly half of the ones written up here as
-holes were already covered — Muter reports mutants it never inserted, and those
-always read as survived. Six were real and now have tests; following one of them
-turned up an unrelated product defect (#1457).
+**Read "What it found" with the correction in it, and do not quote the 69%.**
+The survivors were verified one at a time by hand afterwards, and roughly half of
+the ones written up here as holes were already covered — Muter reports mutants it
+never inserted, and those always read as survived. Six were real and now have
+tests; following one of them turned up an unrelated product defect (#1457).
+
+The pilot predates `Tools/mutation/report.py`, so **every number on this page is
+un-filtered**. The first full sweep of the same target, with filtering, scored
+**84%** — 122 killed, 23 survivors, 64 phantoms removed. That is the figure to
+compare against.
 
 Read [handoff-mutation-testing.md](handoff-mutation-testing.md) first for why
 stock Muter cannot do this, and
@@ -125,7 +130,7 @@ means a genuine gap.
 | `ScriptClassification` `if __name__ == ` keyword | hole | **real** |
 | `ScriptClassification` leading-trim set (space, BOM) | hole | **real** |
 | `ScriptClassification` horizontal-whitespace trim | hole | **real** |
-| `JSONLite` exponent sign | hole | **real** |
+| `JSONLite` exponent parsing | hole | **real, but not the mutant claimed** — see below |
 | `OutputInterpretation:106` `longResult` ternary | hole | already killed — 7 of the 14 `output-contract.json` cases assert a non-null `longResult` |
 | `JSONLite` `skipWhitespace()` deletions | hole | already killed |
 | `JSONLite` exponent `+` branch | hole | already killed |
@@ -171,9 +176,17 @@ how a Windows-authored or spreadsheet-exported file arrives, and an untrimmed
 BOM makes `#!` stop being a prefix — so the script falls through to the content
 sniff and classifies `.unknown`.
 
-**The exponent's sign.** `exponentSign = -1` → `1` failed nothing, and the reason
-is worth more than the finding. `JSONFooterNumberParsingTests` already parsed
-`1e3`, `2.5E-2` and `1.0e+4` — but it asserted only that the footer was
+**The exponent's value — and an attribution worth getting right.** The pilot
+listed three survivors in the exponent parser. The one testable faithfully (the
+`+` branch) turned out to be **already killed**. But probing the area with a
+sign flip — `exponentSign = -1` → `1` — failed nothing, and that mutation is
+**not one Muter generates**: its operators are relational, logical-connector,
+side-effect removal and ternary swap, and none of them rewrites a numeric
+literal. So this gap is real and was found *near* the report rather than *in*
+it.
+
+The reason is worth more than the finding. `JSONFooterNumberParsingTests`
+already parsed `1e3`, `2.5E-2` and `1.0e+4` — but it asserted only that the footer was
 *recognised*, which stays true when the arithmetic is wrong. The file's own
 header comment said as much ("proves the number parsed") without anyone reading
 it as a gap. This is the codebase's signature defect — a check that passes while
@@ -181,6 +194,31 @@ proving nothing — inside a test written to pin a parser.
 
 Tests for all six now exist, and each was **seen to fail** under its mutation
 before being committed.
+
+### The first full sweep corroborated the hand verification
+
+The weekly sweep ran end to end for the first time on 2026-08-19, over the same
+`RunnerCore` at commit `321220b` — before these tests landed. It scored **84%**:
+122 killed, 23 real survivors, with **64 phantoms filtered out**, meaning
+`report.py` removed nearly three quarters of Muter's reported survivors.
+
+Its real survivors in the two files examined here are, exactly:
+
+| file | survivors |
+|---|---|
+| `ScriptClassification.swift` | L97, L105, L138, L145 |
+| `SuiteExecution.swift` | L86, L90 |
+
+Those are the six sites verified real by hand, with nothing extra and nothing
+missing. **Two independent methods — Muter's schemata cross-checked against the
+mutated copy, and hand-applying each mutation to the real source — agree
+completely.** That is the best evidence available that the phantom filter is
+sound rather than merely plausible, and it is why the pilot's own numbers (taken
+before the filter existed) should not be quoted.
+
+The sweep's remaining 17 survivors are in `JSONLite` (10) and
+`NotebookExtraction` (7) — the latter deliberately excluded from the pilot for
+size — and are the standing triage list, in issue **#1459**.
 
 ### What following a thread turned up
 
