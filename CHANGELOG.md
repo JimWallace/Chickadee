@@ -9,6 +9,46 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.156] - 2026-08-19
+
+### Added
+
+- **The `.0`-suffix rule every literal renderer shares is now pinned once, in a
+  table.** A finite double must render as something the target language reads
+  back as a float, and each of the seven renderers implements that the same way:
+  `(s.contains(".") || s.contains("e") || …) ? s : s + ".0"`. Every suite tested
+  the first term — `2.0` is the obvious case — and a search for e-notation across
+  all five existing literal suites returned zero hits, so the second term was
+  covered nowhere. The 2026-08-19 sweep found the identical hole in four
+  renderers, which is what copying a working renderer *and its tests* produces.
+  `JSONValueDoubleFormattingTests` covers all seven from one table, so a new
+  language is one line and cannot inherit the gap from a neighbour; it also
+  asserts the property underneath the rule, that every rendered finite double
+  reads back as itself.
+- **`pythonLiteral` has a CoreTests file**, chiefly for its object-key sort. It
+  was the only renderer without one — its assertions live in `APITests`, which
+  the sweep skips — which is why the sweep flagged a sort that had already been
+  pinned for Racket and Java. Key order is not cosmetic: generated filenames
+  embed a `spec_hash` of the rendered bytes, so an unstable order makes a pattern
+  family look edited on every save.
+
+### Fixed
+
+- **Seventeen recorded mutations the verifier could not replay now replay.**
+  Two unrelated causes, each measured against run 32265903112 before being
+  fixed. Muter re-emits a body's leading comment *after* the statement, so the
+  recorded text was `[comment][statement][the same comment again]` — not a
+  contiguous region of any file, which made an exact search fail for 14 of 110
+  candidates; stripping that duplicate makes all 14 match exactly once. And
+  three candidates were refused as ambiguous because their statement is
+  byte-identical across sibling functions (`let pairs = o.sorted { $0.key <
+  $1.key }` appears in all four literal renderers) — Muter's line is unreliable
+  on its own but is a sound *discriminator* among exact content matches, so it
+  now chooses between them, and only when one begins exactly at that line.
+  There is deliberately no nearest-match fallback: picking the closest would
+  mean mutating one renderer while reporting a verdict about another.
+
+
 ## [0.5.155] - 2026-08-19
 
 ### Fixed
