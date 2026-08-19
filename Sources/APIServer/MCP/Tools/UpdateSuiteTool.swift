@@ -67,7 +67,7 @@ struct UpdateSuiteTool: ContentTool {
     static let name = "update_suite"
     static let description =
         "Edit test-suite script metadata for an assignment, by its public ID. For each named "
-        + "script provide any of: tier (public/release/secret/student), points, displayName, "
+        + "script provide any of: tier (\(MCPTierProse.slashAlternatives)), points, displayName, "
         + "dependsOn (prerequisite script names), sectionID (\"\" to ungroup), and timeLimitSeconds "
         + "(a per-test execution time limit override in seconds, 1–600; 0 clears the override so the "
         + "script reverts to the assignment default set by set_time_limit). Does NOT change "

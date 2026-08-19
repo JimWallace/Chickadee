@@ -78,8 +78,17 @@ build fails (e.g. `make` step fails), `buildStatus` is `"failed"` and
 
 **Test outcomes have four states only:** `pass`, `fail`, `error`, `timeout`.
 
-**Four test tiers:** `public` (shown immediately), `release` (hidden until
-deadline), `secret` (never shown), `student` (student-written tests).
+**Three test tiers:** `public` (shown immediately), `release` (hidden until
+deadline), `secret` (never shown). A fourth, `student`, was documented here and
+advertised by the MCP schema for most of the project's life while `TestTier`
+never had it — so `author_script` accepted it into its JSON schema and then
+rejected it at `TestTier(rawValue:)`, and the web suite editor silently coerced
+it to `.pub`. It is gone from the schema, and the tier prose is now DERIVED from
+`TestTier.allCases` (`MCPTierProse`, guarded by `MCPTierCoverageTests`) so
+neither a phantom nor a truncated list can reappear. Student-contributed tests
+do not want a tier: the suite is instructor-authored, and a student's
+contribution is submission content, not a suite entry — see
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
 **Gamification fields are present from day one but nullable.** `memoryUsageBytes`,
 `attemptNumber`, `isFirstPassSuccess` are in the schema now so we never need a
