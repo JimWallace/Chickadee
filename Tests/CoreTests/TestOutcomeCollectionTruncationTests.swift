@@ -112,4 +112,60 @@ import Testing
         #expect(decoded.outcomes.count == 20)
         #expect(decoded.passCount == result.passCount)
     }
+
+    // MARK: - Who shares the budget
+
+    /// `outputCarrierCount` is the divisor the per-carrier cap is computed
+    /// from. It is asserted directly because it cannot be seen from outside:
+    /// the halving loop retries until the encoded form fits, so a wrong
+    /// divisor still produces a collection within budget — it just splits the
+    /// budget unfairly, keeping roughly twice or half as much output as it
+    /// should.
+    ///
+    /// The 2026-08-19 sweep (run 32265903112) found both mutants of the
+    /// `compilerOutput` term surviving on exactly that basis. Neither can
+    /// break the budget guarantee, which is what every existing test here
+    /// checks, and both silently change how much of a student's output
+    /// survives.
+    @Test func nonEmptyCompilerOutputIsOneOfTheCarriers() {
+        let withOutput = makeCollection(
+            outcomeCount: 3, longResultBytes: 100, compilerOutput: "boom")
+        #expect(withOutput.outputCarrierCount == 4)
+
+        let withoutOutput = makeCollection(outcomeCount: 3, longResultBytes: 100)
+        #expect(withoutOutput.outputCarrierCount == 3)
+    }
+
+    /// An empty string is not output. Counting it would reserve a share of the
+    /// budget for a carrier that has nothing to truncate, shrinking everyone
+    /// else's for no gain — and it is the case both mutants get backwards.
+    @Test func emptyCompilerOutputIsNotACarrier() {
+        let empty = makeCollection(outcomeCount: 2, longResultBytes: 100, compilerOutput: "")
+        #expect(empty.outputCarrierCount == 2)
+
+        let nilOutput = makeCollection(outcomeCount: 2, longResultBytes: 100)
+        #expect(nilOutput.outputCarrierCount == 2)
+    }
+
+    /// The same rule on the outcome side, so the count is pinned whole rather
+    /// than only at the term the sweep happened to mutate.
+    @Test func onlyOutcomesWithOutputAreCarriers() {
+        let quiet = makeCollection(outcomeCount: 4, longResultBytes: 0)
+        #expect(quiet.outputCarrierCount == 0, "an empty longResult carries nothing")
+
+        let mixed = makeCollection(outcomeCount: 4, longResultBytes: 0, compilerOutput: "boom")
+        #expect(mixed.outputCarrierCount == 1)
+    }
+
+    /// A collection with nothing to truncate must still divide by something.
+    /// The `max(1, …)` at the call site is what stops that; asserting the raw
+    /// count is zero is what makes the guard's existence visible here.
+    @Test func aCollectionWithNoOutputHasNoCarriersAndStillTruncatesSafely() {
+        let quiet = makeCollection(outcomeCount: 3, longResultBytes: 0)
+        #expect(quiet.outputCarrierCount == 0)
+        let (result, didTruncate) = quiet.truncatingOversizedOutput(budgetBytes: 100)
+        #expect(didTruncate)
+        #expect(result.outcomes.count == 3)
+    }
+
 }

@@ -35,10 +35,17 @@ what Muter actually inserted -- not a reconstruction. A survivor whose record
 carries no mutation cannot be verified mechanically and is reported as such
 rather than approximated.
 
+VERDICTS
+    SURVIVED      nothing detects the change -- a real gap, or an equivalent mutant
+    KILLED        the suite detects it, and the line names which suite
+    INERT         Muter re-emitted the original; there is no change to detect
+    UNVERIFIABLE  the experiment could not be run (see the message)
+
 EXIT CODES
     0  the mutant SURVIVED  (a real gap, or an equivalent mutant)
     1  the mutant was KILLED
-    2  could not verify (no recorded mutation, source drifted, build failure)
+    2  could not verify (no recorded mutation, source drifted, build failure,
+       or the recorded mutation is INERT)
 """
 
 from __future__ import annotations
@@ -251,6 +258,23 @@ def failing_suites(output: str) -> list[str]:
     )
 
 
+def is_inert(mut: dict) -> bool:
+    """True when Muter's "mutation" is the original statement re-emitted.
+
+    `Tools/mutation/report.py` quarantines these out of a run's survivor list
+    (nine of the 75 in run 32265903112 were this), but a record produced before
+    that filter existed still carries them, and `--file/--line` reads the record
+    directly. Without this check the verifier applies an unchanged file, runs the
+    whole suite for two minutes, and reports SURVIVED -- which reads as "nothing
+    detects this change" when there was no change to detect. That is precisely
+    the answer that gets a test written for nothing.
+    """
+    original = mut.get("original")
+    if original is None:
+        return False
+    return " ".join(mut["mutated"].split()) == " ".join(original.split())
+
+
 def verify_one(survivor: dict, cmd: list[str], quiet: bool) -> int:
     path = survivor["file"]
     line = survivor["line"]
@@ -271,6 +295,16 @@ def verify_one(survivor: dict, cmd: list[str], quiet: bool) -> int:
     for i, mut in enumerate(muts, 1):
         tag = f"{label}" + (f"  [candidate {i} of {len(muts)}]" if len(muts) > 1 else "")
         shown = " ".join(mut["mutated"].split())[:150] or "<statement deleted>"
+        if is_inert(mut):
+            print(f"INERT         {tag}")
+            print("    Muter's mutated text is the original, modulo whitespace, so there")
+            print("    is no change for a test to detect. `SwapTernary` does this: it")
+            print("    re-emits `cond ? a : b` with the branches unswapped. Not a gap and")
+            print("    not an equivalent mutant either -- there is nothing here at all.")
+            print("    report.py quarantines these; a record written before it did still")
+            print("    carries them, which is why this check is here too.")
+            worst = max(worst, 2)
+            continue
         backup = apply_mutation(source_path, line, mut["mutated"], mut.get("original"))
         if backup is not None:
             _restore_on_signal(source_path, backup)

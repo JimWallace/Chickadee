@@ -145,7 +145,7 @@ final class ZipProcessSerializationTests {
         // on, which would unlock from a thread that never locked.
         acquireZipProcessLock()
         Thread.detachNewThread {
-            withZipProcessLock { entered.signal() }
+            withZipProcessLock { _ = entered.signal() }
             finished.signal()
         }
         let enteredWhileHeld = entered.wait(timeout: .now() + 1.0) == .success
@@ -169,7 +169,10 @@ final class ZipProcessSerializationTests {
     /// Overriding `run()` also makes the attempt count observable, which is the
     /// only difference between retrying and not when both paths end up throwing
     /// the same error.
-    private final class ThrowingProcess: Process {
+    /// `@unchecked Sendable` because `Process` already claims it and Swift
+    /// requires a subclass to restate the claim. Nothing here is shared across
+    /// threads: each instance is created, run, and read inside one test body.
+    private final class ThrowingProcess: Process, @unchecked Sendable {
         private let error: NSError
         private let failures: Int
         private(set) var attempts = 0
