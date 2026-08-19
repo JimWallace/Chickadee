@@ -388,8 +388,13 @@ struct AssignmentCoverageRow: Encodable {
     let found: Bool
     /// The first finder's username, or "" when nobody has covered it yet.
     let foundBy: String
-    /// When it was first covered, preformatted, or "" when uncovered.
+    /// When it was first covered, preformatted, or "" when uncovered.  Serves
+    /// as the no-JS fallback inside the relative-time cell.
     let foundAt: String
+    /// The same instant as an ISO-8601 stamp for `js-relative-time`.  "When a
+    /// bug was first found" is human-activity recency, which the Timestamps
+    /// rule renders relative — as both other "When" columns on the site do.
+    let foundAtISO: String
 }
 
 struct AssignmentStudentRow: Encodable {
