@@ -143,12 +143,27 @@ jobs:
             echo "::warning::Mutating only the first 6 of $total changed files; the rest were NOT covered by this run."
           fi
 
+      # A WARNING, NOT AN ERROR. `mutation-run.sh` exits non-zero when the run
+      # yields no mutant outcomes, because for the weekly sweep that reliably
+      # means the tooling broke. On a PR it does not: a diff can legitimately
+      # contain nothing mutable — an enum with no logic, a version constant —
+      # and Muter says so ("wasn't able to discover any code it could mutation
+      # test") and exits 255. Failing the check there tells an author their
+      # change is broken when it is only unmutable.
+      #
+      # The honesty is not lost by downgrading it: `report.py` writes "Do not
+      # read a score from this run" into the step summary either way, so a run
+      # that measured nothing still SAYS it measured nothing. What changes is
+      # only whether that shows up as somebody's red check. The weekly sweep
+      # keeps the strict exit — this is scoped to the per-PR job on purpose.
       - name: Mutate them
         if: steps.files.outputs.count != '0'
         run: |
           args=()
           while read -r f; do [ -n "$f" ] && args+=(--file "$f"); done < /tmp/mutate-files.txt
-          scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"
+          if ! scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"; then
+            echo "::warning::Mutation produced no measurable outcome for this diff — either it contains nothing mutable, or the tooling failed. Read the step summary; do not read a score from this run. This is a report, not a gate."
+          fi
 
       - name: Report
         if: always() && steps.files.outputs.count != '0'

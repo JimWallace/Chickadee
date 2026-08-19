@@ -37,3 +37,13 @@
   git as root (`fatal: detected dubious ownership`), and verified that the same
   `git config --global --add safe.directory` makes `rev-parse
   --is-inside-work-tree` return true.
+
+- **…and a diff with nothing mutable is no longer a red check.** With the
+  pipeline repaired, Muter ran and correctly reported that this PR's two changed
+  files — an enum with no logic and a version constant — contain nothing it can
+  mutate, exiting 255. `mutation-run.sh` treats no-outcomes as a tooling failure,
+  which is right for the weekly sweep and wrong on a PR, where it told the author
+  their change was broken when it was only unmutable. The per-PR job now
+  downgrades that to a `::warning::`. Nothing is hidden: `report.py` still writes
+  "Do not read a score from this run" into the step summary, so a run that
+  measured nothing still says so. The weekly sweep keeps the strict exit.
