@@ -39,13 +39,21 @@ plus `points` weighting and the partial-credit `score` footer.
 
 Two platform constraints bind here:
 
-- **The assignment must be worker-graded.** `BrowserRunnerRoutes.downloadTestSetup`
-  streams the whole setup zip to the student's browser (minus grader-only
-  files), so under browser grading the seeded bugs ship to the people hunting
-  them. Worker grading is safe: `GET /api/v1/testsetups/:id/download` is
-  course-scoped instructor-only (`Sources/APIServer/Routes/TestSetupRoutes.swift`).
-  A collaborative assignment should refuse `gradingMode: browser` at save time
-  rather than leak quietly.
+- **The seeded bugs are `graderOnly` support files, and that already forces
+  worker grading.** `BrowserRunnerRoutes.downloadTestSetup` streams the whole
+  setup zip into the student's kernel filesystem, so under browser grading the
+  variants would ship to the people hunting them. Chickadee already has the
+  mechanism and the refusal for exactly this: a manifest's `graderOnlyFiles`
+  names files withheld from every student-facing path, and
+  `gradingMode: browser` combined with a non-empty `graderOnlyFiles` is refused
+  at all three authoring doors — the zip upload
+  (`TestSetupRoutes.swift`), MCP `set_grading_mode`, and MCP `author_script` —
+  with the streaming filter and `manifestWithGraderOnlyFilesStripped` as
+  backstops for setups predating the rule. So an instructor marks the variant
+  implementations `graderOnly` and browser grading becomes unavailable by
+  construction. Nothing to build; the constraint is an authoring instruction.
+  Worker grading is safe on the other side too: `GET /api/v1/testsetups/:id/download`
+  is course-scoped instructor-only.
 - **The `student` tier does not exist.** `TestTier`
   (`Sources/RunnerCore/TestTier.swift`) has three cases — `pub`, `release`,
   `secret`. `TestTierValues.tiers` (`MCP/Tools/MCPSchema.swift`) still
@@ -421,22 +429,28 @@ last. Sizes are relative, not estimates.
 
 ### Phase 0 — clear the ground (independent of everything else)
 
-**0. Resolve the `student` tier.** *Small.* `TestTierValues.tiers` advertises a
-tier `TestTier` does not have, so MCP `author_script` rejects it after the schema
-accepted it and `SuiteRowHelpers` coerces it to `.pub`. Either add the case
-(RunnerCore, both runners, the wasm fixture) or strike it from the schema and
-CLAUDE.md. Do this first: a contributed-test suite is exactly the thing that
-would want that tier, and building on an advertised-but-broken value is how the
-next reader gets misled.
-*Proven by:* a parameterized round-trip over every advertised tier value.
+**0. Resolve the `student` tier.** *Small.* **Done.** Struck rather than
+implemented: the suite is instructor-authored and a student's contribution is
+submission content, not a suite entry, so the feature that would have wanted the
+tier does not. The prose is now derived from `TestTier.allCases` (`MCPTierProse`)
+rather than typed in thirteen places, guarded by `MCPTierCoverageTests` against
+both a phantom value and a truncated list.
+*Proven by:* reintroducing each defect and watching the guard fail. Four of the
+thirteen sites were ones the initial search missed — the guard found them.
 
-**1. Refuse `gradingMode: browser` for contribution assignments.** *Small.*
-`BrowserRunnerRoutes.downloadTestSetup` streams the setup zip to the student, so
-browser grading hands the seeded bugs to the people hunting them. Refuse at save
-time with the leak as the stated reason, in the same place the other save-time
-language and import refusals live.
-*Proven by:* a save-time rejection test, and an assertion that the refusal names
-the reason rather than a generic error.
+**1. ~~Refuse `gradingMode: browser` for contribution assignments.~~ Already
+built — struck.** This slice proposed a special case for a mechanism that
+already exists in general form. `graderOnlyFiles` + `gradingMode: browser` is
+refused at all three authoring doors, filtered at the download, and blanked out
+of the served manifest; the refusal is covered by
+`uploadRejectsGraderOnlyFilesWithBrowserGrading`,
+`BrowserManifestGraderOnlyStripTests`, and the two MCP tool suites. Marking the
+variant implementations `graderOnly` is therefore an authoring instruction, not
+a code change.
+
+The lesson is worth keeping: the plan reached for a new narrow guard where a
+general one was already in place, and only reading the download path closely
+found it. Check for the general mechanism before adding the specific one.
 
 ### Phase 1 — bound the contribution (useful on its own)
 
