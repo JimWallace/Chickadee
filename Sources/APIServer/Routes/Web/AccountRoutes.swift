@@ -186,7 +186,10 @@ struct AccountRoutes: RouteCollection {
 /// Falls back to the username when there is no preferred name, and to "?" when
 /// neither yields a letter, so the circle is never blank.
 func accountMonogram(preferredName: String?, username: String) -> String {
-    let source = (preferredName?.isEmpty == false) ? preferredName! : username
+    let source: String = {
+        if let preferredName, !preferredName.isEmpty { return preferredName }
+        return username
+    }()
     let initials =
         source
         .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." || $0 == "_" })
