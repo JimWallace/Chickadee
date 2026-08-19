@@ -247,11 +247,14 @@ struct BrowserResultRoutes: RouteCollection {
         // class as the whole of it.
         if reconciled.buildStatus == .passed, let userID {
             await bestEffort("class_item_coverage") {
+                let slotCount = await declaredContributionSlotCount(
+                    testSetupID: setup.id ?? "", app: req.application, on: req.db)
                 try await recordClassItemCoverage(
                     testSetupID: setup.id ?? "",
                     userID: userID,
                     submissionID: subID,
                     outcomes: reconciled.outcomes,
+                    declaredSlotCount: slotCount,
                     on: req.db
                 )
             }

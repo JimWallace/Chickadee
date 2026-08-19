@@ -23,6 +23,7 @@
 // re-substitution. Metadata also survives the one edit a first-line comment
 // convention cannot — a student pressing return at the top of the cell.
 
+import Core
 import Foundation
 
 enum NotebookContributionSlots {
@@ -46,6 +47,18 @@ enum NotebookContributionSlots {
         // A number or bool is a legitimate way to write a slot label by hand;
         // only an explicitly empty string means "not a slot".
         return true
+    }
+
+    /// How many contribution slots an instructor notebook's raw bytes declare.
+    ///
+    /// The bytes overload exists for callers that hold a notebook rather than
+    /// its parsed cells — the result-ingest path, which asks whether an
+    /// assignment is a contribution assignment at all. Returns 0 for anything
+    /// that does not parse as a notebook, which is the same answer as "declares
+    /// no slots" and the answer that keeps an ordinary assignment unaffected.
+    static func declaredSlotCount(inInstructorNotebook data: Data) -> Int {
+        guard let cells = NotebookCellSources.cells(from: data) else { return 0 }
+        return declaredSlotCount(inInstructorCells: cells)
     }
 
     /// How many contribution slots an instructor notebook declares.
