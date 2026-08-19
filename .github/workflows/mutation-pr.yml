@@ -42,6 +42,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
+    defaults:
+      run:
+        # bash, explicitly. Inside a `container:` job the resolved default shell
+        # is `sh`, and two steps here are bash: `mapfile` + process substitution
+        # when reading the include globs, and array building (`args+=(...)`) when
+        # assembling the --file list. Under dash the first of those dies at parse
+        # time with "Syntax error: redirection unexpected", which is what
+        # happened the first time this workflow ever ran (PR #1464 — the first
+        # to touch Sources/RunnerCore since it was added).
+        shell: bash
     container:
       # swift-CI, not plain swift: the -ci image carries python3, lua5.4, octave
       # and r-base. The plain one is the toolchain alone, and the failure is
