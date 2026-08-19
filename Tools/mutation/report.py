@@ -41,11 +41,87 @@ SCORE = re.compile(r"Mutation Score of Test Suite:\s*(\d+)%")
 TOOK = re.compile(r"Muter took\s+(\S+)")
 
 
-def harvest_true_positions(mutated_root: str) -> dict[tuple[str, str], list[int]]:
-    """Map (file stem, operator) -> sorted true line numbers, from the copy."""
-    found: dict[tuple[str, str], set[int]] = {}
+def _skip_to_matching_brace(text: str, open_idx: int) -> int:
+    """Index just past the `}` matching the `{` at `open_idx`, or -1.
+
+    Brace counting has to ignore braces inside string literals, interpolations
+    and comments, or a mutation containing `"{"` truncates the extraction. When
+    anything looks wrong the answer is -1 and the caller records NOTHING: a
+    guessed mutation is worse than an absent one, for the same reason a phantom
+    is worse than a missing survivor -- somebody acts on it.
+    """
+    depth, i, n = 0, open_idx, len(text)
+    while i < n:
+        c = text[i]
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c == '"':
+            # Raw strings (#"..."#) and multiline ("""...""") both start with a
+            # quote; walk the literal with escape handling and bail out if it is
+            # unterminated rather than guessing where it ends.
+            if text.startswith('"""', i):
+                j = text.find('"""', i + 3)
+                if j < 0:
+                    return -1
+                i = j + 3
+                continue
+            i += 1
+            while i < n and text[i] != '"':
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                i += 1
+            if i >= n:
+                return -1
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def harvest_schemata(mutated_root: str) -> tuple[dict[tuple[str, str], list[int]], dict]:
+    """Read the mutated copy: true mutant positions AND the mutation itself.
+
+    Muter rewrites each mutable statement into a switch whose branches carry the
+    mutations and whose final `else` carries the original:
+
+        if ProcessInfo.processInfo.environment["<id>"] != nil {
+            <mutated>
+        } else if ProcessInfo.processInfo.environment["<id2>"] != nil {
+            <mutated 2>
+        } else {
+            <original>
+        }
+
+    Capturing `<mutated>` is what makes a survivor ACTIONABLE. Muter's own plain
+    output gives a file, a line and an operator name -- and that is not enough to
+    reproduce the mutant. `return (i > Int(Int32.max) || i < Int(Int32.min)) ? …`
+    carries two comparisons, so "RelationalOperatorReplacement at line 57" names
+    two possible mutations and says nothing about what either was replaced with.
+    Anyone triaging it has to guess, and guessing wrong is not hypothetical: a
+    triage pass that mutated whole `||` chains where Muter mutates one connector
+    called three real gaps covered.
+
+    A reported row cannot always be tied to ONE schema -- two mutants of the same
+    operator can share a line -- so every candidate for a (stem, operator, line)
+    is returned. Being handed two exact mutations beats being handed none.
+    """
+    positions: dict[tuple[str, str], set[int]] = {}
+    mutations: dict[tuple[str, str, int], list[dict]] = {}
     if not mutated_root or not os.path.isdir(mutated_root):
-        return {}
+        return {}, {}
     for root, _dirs, files in os.walk(mutated_root):
         if "/.build" in root:
             continue
@@ -56,9 +132,34 @@ def harvest_true_positions(mutated_root: str) -> dict[tuple[str, str], list[int]
                 text = open(os.path.join(root, name), errors="ignore").read()
             except OSError:
                 continue
-            for stem, operator, line, _col, _off in SCHEMA_ID.findall(text):
-                found.setdefault((stem, operator), set()).add(int(line))
-    return {k: sorted(v) for k, v in found.items()}
+            for m in SCHEMA_ID.finditer(text):
+                stem, operator, line, col, off = m.groups()
+                line = int(line)
+                positions.setdefault((stem, operator), set()).add(line)
+                brace = text.find("{", m.end())
+                if brace < 0:
+                    continue
+                end = _skip_to_matching_brace(text, brace)
+                if end < 0:
+                    continue
+                # An EMPTY body is not a failed extraction -- it is what
+                # RemoveSideEffects looks like, since that operator deletes the
+                # statement outright. Skipping it would leave the one operator
+                # whose mutation is "nothing" permanently unverifiable, and the
+                # events it deletes are exactly the kind nothing asserts on.
+                body = text[brace + 1 : end - 1].strip()
+                mutations.setdefault((stem, operator, line), []).append(
+                    {"column": int(col), "offset": int(off), "mutated": body}
+                )
+    return (
+        {k: sorted(v) for k, v in positions.items()},
+        {k: sorted(v, key=lambda d: d["offset"]) for k, v in mutations.items()},
+    )
+
+
+def harvest_true_positions(mutated_root: str) -> dict[tuple[str, str], list[int]]:
+    """Positions only -- kept as the narrow entry point for the phantom filter."""
+    return harvest_schemata(mutated_root)[0]
 
 
 def repo_path(base: str, cache: dict[str, str]) -> str:
@@ -91,13 +192,14 @@ def main() -> int:
     survived = [r for r in rows if r[3] == "survived"]
     killed = [r for r in rows if r[3] == "killed"]
 
-    truth = harvest_true_positions(mutated_root)
+    truth, schemata = harvest_schemata(mutated_root)
     cache: dict[str, str] = {}
 
     # A reported survivor is only real if a schema was actually inserted for it.
     # Compare against the guards harvested from the mutated copy; anything with
     # no guard was never mutated, so its "survival" means nothing.
     resolved, phantoms = [], []
+    mutation_of: dict[tuple[str, int, str], list[dict]] = {}
     for base, reported, operator, _ in survived:
         stem = base[:-6] if base.endswith(".swift") else base
         candidates = truth.get((stem, operator), [])
@@ -107,6 +209,9 @@ def main() -> int:
             resolved.append((path, reported, operator))
         elif reported in candidates:
             resolved.append((path, reported, operator))
+            mutation_of[(path, reported, operator)] = schemata.get(
+                (stem, operator, reported), []
+            )
         else:
             phantoms.append((path, reported, operator))
 
@@ -139,6 +244,14 @@ def main() -> int:
                     "line": line,
                     "operator": operator,
                     "source": source_line(path, line),
+                    # The mutation itself, lifted from the schemata in the
+                    # mutated copy. Without it a survivor is not reproducible:
+                    # an operator name plus a line number does not say WHICH
+                    # sub-expression changed or what it became. A list because
+                    # two mutants of one operator can share a line; empty when
+                    # the copy was unavailable or the extraction was unsure,
+                    # never a guess.
+                    "mutations": mutation_of.get((path, line, operator), []),
                 }
                 for path, line, operator in sorted(resolved)
             ],
@@ -215,6 +328,13 @@ def main() -> int:
                     current = path
                 src = source_line(path, line)
                 out.append(f"- L{line} `{operator}`" + (f" — `{src}`" if src else ""))
+                # The mutation, so the reader can reproduce it without guessing
+                # which sub-expression Muter touched.
+                for mut in mutation_of.get((path, line, operator), []):
+                    one = " ".join(mut["mutated"].split())
+                    if len(one) > 160:
+                        one = one[:157] + "..."
+                    out.append(f"    - becomes: `{one}`")
         else:
             out.append("No survivors. Every mutant in this shard was killed.")
 

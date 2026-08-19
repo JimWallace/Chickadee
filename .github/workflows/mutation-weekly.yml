@@ -392,10 +392,16 @@ jobs:
             const today = new Date().toISOString().slice(0, 10);
             const body = header.concat(sections).join('\n') + [
               '',
-              '<sub>Filed automatically by `.github/workflows/mutation-weekly.yml`.',
-              'Triage by deciding, per survivor, whether a test should exist — after',
-              'confirming the mutant by hand. Closing one with a reason is a legitimate',
-              'outcome, not a backlog item.</sub>',
+              '---',
+              '',
+              '**Triage protocol: [`docs/mutation-triage.md`](../blob/main/docs/mutation-triage.md).**',
+              'A survivor is a question, not a defect. Verify before writing anything —',
+              '`Tools/mutation/verify-survivor.py` replays the exact mutation Muter',
+              'inserted and reports whether it still survives — and again afterwards, so',
+              'the new test is seen to fail. Closing one as "correctly, no test" with the',
+              'reason recorded is a complete outcome, not a backlog item.',
+              '',
+              '<sub>Filed automatically by `.github/workflows/mutation-weekly.yml`.</sub>',
             ].join('\n');
 
             const issue = await github.rest.issues.create({
