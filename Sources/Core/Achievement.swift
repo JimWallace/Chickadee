@@ -245,6 +245,17 @@ public enum AchievementSignal: String, Codable, CaseIterable, Sendable {
     case gradeJumpPercent
     /// Whether the condition's target test passed.
     case testPass
+    /// How many DISTINCT items the class has collectively covered — the union
+    /// a collaborative assignment grades on, not a per-submission signal.
+    ///
+    /// The odd one out in this enum, deliberately. Every other signal reads one
+    /// submission; this one reads the accumulated coverage of the whole class,
+    /// so it is only meaningful on a `classWide` goal and the sweep is the only
+    /// thing that can evaluate it. The condition's `target` scopes which items
+    /// count: a `.section` target counts only that suite section's items (a bug
+    /// hunt's variants, not the "your test is well-formed" gate beside them),
+    /// and no target counts every item in the suite.
+    case itemsCovered
 }
 
 /// How a condition compares its signal against `value`.

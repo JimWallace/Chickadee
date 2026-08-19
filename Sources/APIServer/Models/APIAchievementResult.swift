@@ -42,6 +42,22 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
     @Field(key: "progress")
     var progress: Double
 
+    /// UNION goals only: how many distinct suite items the class had covered
+    /// when this snapshot was written, within the goal's item scope.  nil for a
+    /// grade-counted goal, which unions nothing.
+    ///
+    /// Stored rather than recomputed because the snapshot freezes at the
+    /// deadline and its progress rides into the LEARN push: a frozen row must
+    /// be able to say what coverage it froze at.
+    @OptionalField(key: "items_covered")
+    var itemsCovered: Int?
+
+    /// UNION goals only: how many distinct items the goal asked for — the
+    /// condition's authored value, captured alongside the count so the frozen
+    /// row is readable without re-decoding the manifest it was graded against.
+    @OptionalField(key: "items_required")
+    var itemsRequired: Int?
+
     /// True once the assignment deadline has passed; a locked snapshot is frozen
     /// (the sweep stops recomputing it).
     @Field(key: "locked")
@@ -59,7 +75,9 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
         denominator: Int,
         progress: Double,
         locked: Bool,
-        evaluatedAt: Date
+        evaluatedAt: Date,
+        itemsCovered: Int? = nil,
+        itemsRequired: Int? = nil
     ) {
         self.testSetupID = testSetupID
         self.achievementID = achievementID
@@ -68,5 +86,7 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
         self.progress = progress
         self.locked = locked
         self.evaluatedAt = evaluatedAt
+        self.itemsCovered = itemsCovered
+        self.itemsRequired = itemsRequired
     }
 }

@@ -386,6 +386,38 @@ covered too, since instructor validation is enqueued as a `kind == .validation`
 submission and always runs on the **native worker**. See
 `docs/runner-capability-profiles.md`.
 
+**A class goal counts one of two things, and the sweep will evaluate no third.**
+`Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
+students' best whole-assignment grade cleared a threshold, over the enrolled
+roster. A collaborative assignment needs the other one — the **union** of what
+the class produced, "the class has found 12 of the 15 seeded bugs" — so
+`AchievementSignal.itemsCovered` counts DISTINCT items in the
+`class_item_coverage` table, optionally scoped to one suite section (a bug
+hunt's variants, not the well-formedness gate beside them).
+
+`isSweepEvaluableClassGoal` admits **exactly three shapes**: no conditions, a
+single `grade atLeast`, or a single `itemsCovered atLeast`. Everything else is
+refused at save time and skipped-with-a-log by the sweep. That guard is the
+reason a hand-authored manifest cannot silently mis-grade a bonus (audit A4), so
+admitting the union shape meant admitting exactly it — the arity did not move.
+
+A union goal is graded on the SMALLER of two halves: coverage (the item count)
+and **breadth** (at least `classFraction` of the roster contributed at least one
+covered item). Breadth is why there is no per-student contribution cap: one
+student finding everything reaches full coverage and then fails on breadth. The
+alternative — crediting each student only their K rarest items — bounds the solo
+hero too, and breaks determinism doing it, because a later submission can change
+which of an earlier student's items counted.
+
+The two halves scope differently, and the asymmetry is deliberate. **Coverage
+counts every row**, including one found by a student who has since dropped: the
+item was covered, and the number must never retreat because it freezes into a
+LEARN push. **Breadth counts only currently-enrolled students**, because it is a
+fraction of the CURRENT roster — audit A7's shape. `achievement_results` stores
+`items_covered` / `items_required` rather than recomputing them, so a frozen row
+can say what coverage produced the bonus in every student's grade of record. See
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
+
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
 (plus the non-human `mcp` service-account role) — the legacy global
@@ -1555,7 +1587,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
-- `docs/collaborative-class-assignments.md` — design note (nothing locked) for assignments where students contribute individual artifacts that accumulate into a class-wide result: which of the three mechanisms already exist (individual grading against seeded-buggy variants; the `.classWide` achievement + frozen bonus + LEARN re-push) and which is missing (a goal computed over the **union** of what the class produced, rather than a count of students clearing a grade threshold); why a bug-set union is a query over stored outcomes while coverage needs a corpus aggregation run; and the three places a per-student contribution cap could live, with participation breadth recommended over per-item attribution ranking on determinism grounds
+- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now largely shipped, so it opens with a **Status** table separating built behaviour from the two things deliberately not built: coverage % (which needs a corpus aggregation run, unlike a bug-set union, which is a query over stored outcomes) and a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/browser-freeze-investigation.md` — the Aug 2026 post-boot editor freeze (`page_unresponsive` beacons): telemetry signature, the measured root cause (two upstream listeners each forcing a reflow per IOPub output message — `updatePromptOverlayIcon` and the `:scroll-output` plugin), the runtime prototype mitigation (`Public/jl-cell-perf-patch.js`, which also carries the auto-collapse rule) and why it is not a vendored-bundle edit, and the reusable freeze tracer (`Tools/editor-smoke-test/freeze-trace-check.mjs`)
 - `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (started 2026-07, extended through 2026-08-09; start here before chasing a red check on an unrelated PR). Five families; the two newest are open. Family 5 is the one that most often gets misread as your diff: `api-tests` reporting `cancelled` at its 20-minute ceiling, which looks identical to a wedge but is starvation — the tell is whether tests were still *completing* at the tail of the log, and whether `api-tests-postgres` (same target, same commit) passed

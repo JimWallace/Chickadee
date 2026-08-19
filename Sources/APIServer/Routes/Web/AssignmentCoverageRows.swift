@@ -63,7 +63,18 @@ func buildAssignmentCoverageRows(
     }
 }
 
-/// "9 / 15 found" — the section's summary chip.
+/// "9 / 15 items found" — the one wording for this number.
+///
+/// Shared with the student submission page rather than written twice: the same
+/// number under two nouns is how an instructor and a student end up describing
+/// different things to each other. "item" is the noun throughout, because the
+/// mechanism counts suite items — an instructor may seed bugs, but nothing here
+/// requires it.
+func coverageFoundSummary(covered: Int, total: Int) -> String {
+    "\(covered) / \(total) items found"
+}
+
+/// The section's summary chip.
 func assignmentCoverageSummary(_ rows: [AssignmentCoverageRow]) -> String {
-    "\(rows.filter(\.found).count) / \(rows.count) found"
+    coverageFoundSummary(covered: rows.filter(\.found).count, total: rows.count)
 }

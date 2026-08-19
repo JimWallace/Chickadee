@@ -70,6 +70,15 @@ extension AchievementCondition {
                 if runnerScriptStem(ref) == outcome.testName { return true }
                 return signals.testNameAliases[outcome.testName]?.contains(ref) ?? false
             }
+        case .itemsCovered:
+            // Not a per-submission signal: it reads the class's accumulated
+            // coverage, which no single submission's signals can answer.  The
+            // convention for an unknown signal applies — unmet, because it
+            // cannot be proven satisfied here.  The class-goal sweep is the
+            // only evaluator that can read it (`classUnionGoalProgress`), and
+            // `isSweepEvaluableClassGoal` is what keeps it out of every other
+            // shape.
+            return false
         }
     }
 
@@ -137,19 +146,69 @@ extension Achievement {
         conditions.first { $0.signal == .grade }.map { $0.value / 100 }
     }
 
+    /// A class goal graded on the UNION of what the class produced rather than
+    /// on a count of students clearing a grade threshold — the collaborative
+    /// "the class has found 12 of the seeded bugs" shape.
+    ///
+    /// The two kinds of class goal are mutually exclusive by construction: the
+    /// sweep admits exactly one condition, so a goal is either grade-counted or
+    /// union-counted and never both.
+    public var isUnionClassGoal: Bool {
+        isClassGoal && conditions.contains { $0.signal == .itemsCovered }
+    }
+
+    /// How many distinct items a union class goal requires the class to cover,
+    /// and which suite items count toward it.  nil when this is not a union
+    /// goal.
+    ///
+    /// A nil `scope` means "every item in the suite"; a `.section` scope counts
+    /// only that suite section's items, which is how a bug hunt's variants are
+    /// separated from the "your test is well-formed" gate test beside them.
+    public var coveredItemsRequirement: (count: Int, scope: AchievementTarget?)? {
+        guard isUnionClassGoal,
+            let condition = conditions.first(where: { $0.signal == .itemsCovered })
+        else { return nil }
+        return (max(0, Int(condition.value)), condition.target)
+    }
+
     /// Whether the class-goal sweep can evaluate this achievement's conditions
-    /// as authored.  The sweep counts students by their best whole-assignment
-    /// grade, so it supports exactly: no conditions (grade must be 100%), or a
-    /// single `grade` condition with the `atLeast` comparator.  Anything richer
-    /// (other signals, `atMost`/`equals`, multiple conditions) would be
-    /// silently mis-evaluated — authoring rejects those shapes for classWide
-    /// scope, and the sweep skips (and logs) any that reach it from a
-    /// hand-authored manifest.
+    /// as authored.  It supports exactly three shapes:
+    ///
+    /// - no conditions — every student must reach 100%;
+    /// - a single `grade atLeast` condition — counted over students' best
+    ///   whole-assignment grades;
+    /// - a single `itemsCovered atLeast` condition — counted over the class's
+    ///   accumulated coverage union, with `classFraction` reinterpreted as the
+    ///   share of the roster that must have contributed a credited item.
+    ///
+    /// Anything richer (other signals, `atMost`/`equals`, multiple conditions)
+    /// would be silently mis-evaluated — authoring rejects those shapes for
+    /// classWide scope, and the sweep skips (and logs) any that reach it from a
+    /// hand-authored manifest.  Keeping this closed is the reason a
+    /// hand-authored manifest cannot quietly mis-grade a bonus (audit A4), so
+    /// admitting the union shape means admitting exactly it, not relaxing the
+    /// arity.
     public var isSweepEvaluableClassGoal: Bool {
         guard isClassGoal else { return false }
         if conditions.isEmpty { return true }
         guard conditions.count == 1, let condition = conditions.first else { return false }
-        return condition.signal == .grade && condition.comparator == .atLeast
+        guard condition.comparator == .atLeast else { return false }
+        switch condition.signal {
+        case .grade:
+            return true
+        case .itemsCovered:
+            // A `.section` scope must name the section; `.suiteItem`,
+            // `.testPass` and `.assignmentGrade` scope nothing a union can be
+            // taken over.
+            switch condition.target?.kind {
+            case .none, .some(.section):
+                return condition.target == nil || condition.target?.ref?.isEmpty == false
+            case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
+                return false
+            }
+        case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass:
+            return false
+        }
     }
 }
 
@@ -175,5 +234,31 @@ extension TestProperties {
     /// of `testNameAliases()` values.  Used by author-time validation.
     public var allTestRefNames: Set<String> {
         testNameAliases().values.reduce(into: Set<String>()) { $0.formUnion($1) }
+    }
+
+    /// The runner-stamped item names a union class goal counts, given the
+    /// condition's optional scope.
+    ///
+    /// nil scope = every suite item.  A `.section` scope = only that section's
+    /// items, which is what separates a bug hunt's seeded variants from the
+    /// well-formedness gate test sitting beside them in the same suite.
+    ///
+    /// Names are `runnerOutcomeTestName` — the same form
+    /// `recordClassItemCoverage` stores — so the caller can intersect the
+    /// coverage rows against this set directly.
+    public func coveredItemNames(inScopeOf scope: AchievementTarget?) -> Set<String> {
+        let entries: [TestSuiteEntry]
+        switch scope?.kind {
+        case .some(.section):
+            guard let ref = scope?.ref else { return [] }
+            entries = testSuites.filter { $0.sectionID == ref }
+        case .none:
+            entries = testSuites
+        case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
+            // Not a set of items; `isSweepEvaluableClassGoal` refuses these
+            // shapes, so reaching here means a manifest the sweep skips.
+            return []
+        }
+        return Set(entries.map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) })
     }
 }

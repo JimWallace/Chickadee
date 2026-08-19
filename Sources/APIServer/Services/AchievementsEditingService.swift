@@ -21,17 +21,25 @@ import Foundation
 /// One condition row in the editor: a signal compared against a value, with an
 /// optional test filename for `testPass`.
 struct ConditionRow: Codable, Sendable {
-    var signal: String  // grade | attempts | executionTimeMs | gradeJumpPercent | testPass
+    /// Raw `AchievementSignal` value.
+    var signal: String
     var comparator: String  // atLeast | atMost | equals
     var value: Double?
     /// `testPass`: the test filename that must pass.
     var testRef: String?
+    /// `itemsCovered`: the suite section whose items the union is taken over.
+    /// Empty or absent = every item in the suite.
+    var sectionRef: String?
 
-    init(signal: String, comparator: String, value: Double? = nil, testRef: String? = nil) {
+    init(
+        signal: String, comparator: String, value: Double? = nil,
+        testRef: String? = nil, sectionRef: String? = nil
+    ) {
         self.signal = signal
         self.comparator = comparator
         self.value = value
         self.testRef = testRef
+        self.sectionRef = sectionRef
     }
 }
 
@@ -118,17 +126,19 @@ enum AchievementsEditing {
                 conditions: conditions, match: match,
                 reward: AchievementReward(type: .points, label: name, points: points),
                 classFraction: classPercent / 100)
-            // The class-goal sweep counts students by their best
-            // whole-assignment grade, so only the shapes it can evaluate are
-            // authorable: no conditions (= everyone must reach 100%) or a
-            // single "grade at least X" condition.  Richer goals used to save
-            // fine and then be silently mis-evaluated as grade-only (audit A4).
+            // Only the shapes the sweep can evaluate are authorable: no
+            // conditions (= everyone must reach 100%), a single "grade at least
+            // X" condition counted over students' best whole-assignment grades,
+            // or a single "items covered at least N" condition counted over the
+            // class's coverage union.  Richer goals used to save fine and then
+            // be silently mis-evaluated as grade-only (audit A4).
             guard goal.isSweepEvaluableClassGoal else {
                 throw WebAssignmentError.invalidParameter(
                     name: "conditions",
-                    reason: "A class goal currently supports at most one condition, and it must be "
-                        + "'grade at least X%'. Attempts/time/test conditions and atMost/equals "
-                        + "comparators aren't evaluated for class goals yet.")
+                    reason: "A class goal supports at most one condition, and it must be "
+                        + "'grade at least X%' or 'items covered by the class at least N'. "
+                        + "Attempts/time/test conditions and atMost/equals comparators aren't "
+                        + "evaluated for class goals.")
             }
             return goal
         case .record:
@@ -162,6 +172,19 @@ enum AchievementsEditing {
             return AchievementCondition(
                 signal: .testPass, comparator: .atLeast, value: 1,
                 target: AchievementTarget(kind: .testPass, ref: ref))
+        }
+        if signal == .itemsCovered {
+            let ref = (input.sectionRef ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let count = input.value ?? 0
+            guard count >= 0 else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "value", reason: "Value must not be negative.")
+            }
+            return AchievementCondition(
+                signal: .itemsCovered, comparator: comparator, value: count,
+                // No section named = the whole suite, so the target stays nil
+                // rather than becoming a `.section` pointing at nothing.
+                target: ref.isEmpty ? nil : AchievementTarget(kind: .section, ref: ref))
         }
         let value = input.value ?? 0
         if signal == .grade || signal == .gradeJumpPercent {
@@ -201,7 +224,8 @@ enum AchievementsEditing {
             signal: c.signal.rawValue,
             comparator: c.comparator.rawValue,
             value: c.value,
-            testRef: c.signal == .testPass ? c.target?.ref : nil)
+            testRef: c.signal == .testPass ? c.target?.ref : nil,
+            sectionRef: c.signal == .itemsCovered ? c.target?.ref : nil)
     }
 
     // MARK: - Manifest read/write
@@ -231,17 +255,55 @@ enum AchievementsEditing {
     static func apply(
         rows: [AchievementRow], setup: APITestSetup, on db: Database
     ) async throws -> [AchievementRow] {
-        let achievements = try rows.map { try achievement(from: $0) }
-        try validate(achievements, againstManifest: setup.manifest)
+        let resolved = try rows.map { try achievement(from: $0) }
+            .map { resolvingSectionRefs($0, againstManifest: setup.manifest) }
+        try validate(resolved, againstManifest: setup.manifest)
         try await mutateManifest(setup: setup, on: db) { dict in
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
+            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(resolved))
             // Saving the table means the instructor curated the full list — the
             // manifest is now authoritative (built-in defaults no longer merge in).
             dict["builtInAchievementsSeeded"] = true
         }
         return Self.rows(fromManifest: setup.manifest)
+    }
+
+    /// Rewrites an `itemsCovered` condition's section ref from a section NAME
+    /// to its id, leaving an id (or an unresolvable string) alone for `validate`
+    /// to accept or reject.
+    ///
+    /// A section id is an opaque UUID that no page displays. The web editor
+    /// offers a picker, so it always sends an id — but an MCP agent writes the
+    /// row as JSON, and what it can read out of `get_suite` is the name. Asking
+    /// it for a value it has no way to obtain is how a ref goes unset.
+    ///
+    /// Names are not unique, so a duplicate name resolves to the first section
+    /// carrying it — the same first-match rule `testPass` refs get, and the
+    /// author can disambiguate by pasting the id.
+    static func resolvingSectionRefs(
+        _ achievement: Achievement, againstManifest manifest: String
+    ) -> Achievement {
+        guard
+            let props = try? JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8)),
+            achievement.conditions.contains(where: { $0.signal == .itemsCovered })
+        else { return achievement }
+        let ids = Set(props.sections.map(\.id))
+        let conditions = achievement.conditions.map { condition -> AchievementCondition in
+            guard condition.signal == .itemsCovered, let ref = condition.target?.ref,
+                !ids.contains(ref),
+                let match = props.sections.first(where: { $0.name == ref })
+            else { return condition }
+            return AchievementCondition(
+                signal: condition.signal, comparator: condition.comparator,
+                value: condition.value,
+                target: AchievementTarget(kind: .section, ref: match.id))
+        }
+        return Achievement(
+            id: achievement.id, name: achievement.name, detail: achievement.detail,
+            scope: achievement.scope, conditions: conditions, match: achievement.match,
+            reward: achievement.reward, classFraction: achievement.classFraction,
+            recordDimension: achievement.recordDimension, sectionID: achievement.sectionID)
     }
 
     /// Cross-row validation the per-row converter can't do: ids must be unique
@@ -265,15 +327,34 @@ enum AchievementsEditing {
                 TestProperties.self, from: Data(manifest.utf8))
         else { return }
         let validRefs = props.allTestRefNames
+        let sectionIDs = Set(props.sections.map(\.id))
         for achievement in achievements {
-            for condition in achievement.conditions where condition.signal == .testPass {
-                guard let ref = condition.target?.ref, validRefs.contains(ref) else {
-                    let ref = condition.target?.ref ?? ""
-                    throw WebAssignmentError.invalidParameter(
-                        name: "testRef",
-                        reason: "'\(ref)' doesn't match any test in this suite. "
-                            + "Use the test's script filename (e.g. secrettest_x.py) "
-                            + "or its display name.")
+            for condition in achievement.conditions {
+                switch condition.signal {
+                case .testPass:
+                    guard let ref = condition.target?.ref, validRefs.contains(ref) else {
+                        let ref = condition.target?.ref ?? ""
+                        throw WebAssignmentError.invalidParameter(
+                            name: "testRef",
+                            reason: "'\(ref)' doesn't match any test in this suite. "
+                                + "Use the test's script filename (e.g. secrettest_x.py) "
+                                + "or its display name.")
+                    }
+                case .itemsCovered:
+                    // A section ref that resolves to nothing scopes the union to
+                    // an EMPTY item set, so the goal would sit at 0% forever
+                    // with no error anywhere — the same silent-never-fires shape
+                    // audit A1/A17 closed for `testPass` refs.
+                    guard let ref = condition.target?.ref else { continue }
+                    guard sectionIDs.contains(ref) else {
+                        throw WebAssignmentError.invalidParameter(
+                            name: "sectionRef",
+                            reason: "'\(ref)' doesn't match any suite section in this assignment. "
+                                + "Use a section's name (as shown in the suite editor) or its id, "
+                                + "or leave it empty to count every test in the suite.")
+                    }
+                case .grade, .attempts, .executionTimeMs, .gradeJumpPercent:
+                    continue
                 }
             }
         }

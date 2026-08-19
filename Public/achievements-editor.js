@@ -22,10 +22,25 @@
         firstToSubmit: 'first to submit', firstToSolve: 'first to 100%',
         fastest: 'fastest run', shortest: 'fewest attempts'
     };
-    // signal value -> { label, unit, isTest }; populated from the condition
-    // template's <option>s so AchievementSignalPresentation stays the single
-    // source of truth.
+    // signal value -> every fact about the signal, read off the condition
+    // template's <option> data attributes so AchievementSignalPresentation stays
+    // the single source of truth.  Nothing per-signal is written here: a JS-side
+    // table is exactly the drift the data attributes exist to prevent.
     var SIGNAL_META = {};
+
+    // id -> name for the suite sections currently on the page.  Read live from
+    // the suite editor's own DOM rather than a server-rendered copy, so a
+    // section added or renamed without a page reload is named correctly here.
+    function sectionNames() {
+        var out = {};
+        Array.prototype.slice.call(
+            document.querySelectorAll('#suite-sections .section-block')).forEach(function (b) {
+                var id = b.getAttribute('data-section-id') || '';
+                var label = b.querySelector('.section-view strong');
+                if (id) { out[id] = label ? label.textContent.trim() : id; }
+            });
+        return out;
+    }
 
     var csrf = ChickadeeUI.getCsrfToken;
     var esc = ChickadeeUI.escapeHtml;
@@ -33,11 +48,16 @@
 
     // One condition rendered as a human phrase for the table's Earned-when cell.
     function condPhrase(c) {
-        var meta = SIGNAL_META[c.signal] || { label: c.signal, unit: '', isTest: false };
-        if (meta.isTest) { return '“' + esc(c.testRef) + '” passes'; }
+        var meta = SIGNAL_META[c.signal] || { label: c.signal, unit: '', refField: '' };
+        var ref = meta.refField ? n(c[meta.refField]) : '';
+        if (meta.refReplacesValue) { return '“' + esc(ref) + '” passes'; }
         var unit = meta.unit ? (meta.unit === '%' ? '%' : ' ' + meta.unit) : '';
-        return esc(meta.label) + ' ' + (CMP_LABEL[c.comparator] || c.comparator)
+        var phrase = esc(meta.label) + ' ' + (CMP_LABEL[c.comparator] || c.comparator)
             + ' ' + n(c.value) + unit;
+        // A section ref is stored as an opaque id; show the name the author
+        // gave it, never the id.
+        if (ref) { phrase += ' in “' + esc(sectionNames()[ref] || ref) + '”'; }
+        return phrase;
     }
 
     function conditionsText(row) {
@@ -73,7 +93,11 @@
             .forEach(function (o) {
                 SIGNAL_META[o.value] = {
                     label: o.text, unit: o.getAttribute('data-unit') || '',
-                    isTest: o.getAttribute('data-is-test') === 'true'
+                    refControl: o.getAttribute('data-ref-control') || '',
+                    refField: o.getAttribute('data-ref-field') || '',
+                    refLabel: o.getAttribute('data-ref-label') || '',
+                    refPlaceholder: o.getAttribute('data-ref-placeholder') || '',
+                    refReplacesValue: o.getAttribute('data-ref-replaces-value') === 'true'
                 };
             });
 
@@ -159,20 +183,51 @@
             var cmp = rowEl.querySelector('.js-am-cond-comparator');
             var val = rowEl.querySelector('.am-cond-value');
             var unit = rowEl.querySelector('.am-cond-unit');
-            var ref = rowEl.querySelector('.am-cond-testref');
+            var textRef = rowEl.querySelector('input.am-cond-ref');
+            var sectionRef = rowEl.querySelector('select.am-cond-ref');
+            // "" is the whole suite, which is what a union goal counts when no
+            // section is named.
+            var names = sectionNames();
+            sectionRef.innerHTML = '';
+            Object.keys(names).forEach(function (id) {
+                var o = document.createElement('option');
+                o.value = id;
+                o.textContent = names[id];
+                sectionRef.appendChild(o);
+            });
+            var every = document.createElement('option');
+            every.value = '';
+            every.textContent = 'All sections';
+            sectionRef.insertBefore(every, sectionRef.firstChild);
+
             if (cond) {
                 sig.value = cond.signal || 'grade';
                 cmp.value = cond.comparator || 'atLeast';
                 val.value = n(cond.value);
-                ref.value = n(cond.testRef);
+                textRef.value = n(cond.testRef);
+                sectionRef.value = n(cond.sectionRef);
+            }
+            // A signal either compares a value, names a reference, or does both
+            // (items-covered counts AND scopes).  refReplacesValue is what
+            // distinguishes the third case from the second; refControl picks
+            // which input the reference uses.
+            function refControl(meta) {
+                if (meta.refControl === 'text') { return textRef; }
+                if (meta.refControl === 'sections') { return sectionRef; }
+                return null;
             }
             function sync() {
-                var meta = SIGNAL_META[sig.value] || { unit: '', isTest: false };
-                var isTest = meta.isTest;
-                cmp.style.display = isTest ? 'none' : '';
-                val.style.display = isTest ? 'none' : '';
-                unit.style.display = isTest ? 'none' : '';
-                ref.style.display = isTest ? '' : 'none';
+                var meta = SIGNAL_META[sig.value] || {};
+                var active = refControl(meta);
+                var hasValue = !meta.refReplacesValue;
+                cmp.style.display = hasValue ? '' : 'none';
+                val.style.display = hasValue ? '' : 'none';
+                unit.style.display = hasValue ? '' : 'none';
+                [textRef, sectionRef].forEach(function (el) {
+                    el.style.display = el === active ? '' : 'none';
+                });
+                textRef.placeholder = meta.refPlaceholder || '';
+                if (active) { active.setAttribute('aria-label', meta.refLabel || 'Reference'); }
                 unit.textContent = meta.unit || '';
             }
             sig.addEventListener('change', sync);
@@ -251,17 +306,21 @@
                         conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
                             var signal = rowEl.querySelector('.am-cond-signal').value;
                             var meta = SIGNAL_META[signal] || {};
-                            if (meta.isTest) {
-                                return {
-                                    signal: signal, comparator: 'atLeast', value: 1,
-                                    testRef: (rowEl.querySelector('.am-cond-testref').value || '').trim()
+                            var source = meta.refControl === 'sections'
+                                ? rowEl.querySelector('select.am-cond-ref')
+                                : rowEl.querySelector('input.am-cond-ref');
+                            var refText = (source.value || '').trim();
+                            var out = meta.refReplacesValue
+                                ? { signal: signal, comparator: 'atLeast', value: 1 }
+                                : {
+                                    signal: signal,
+                                    comparator: rowEl.querySelector('.js-am-cond-comparator').value,
+                                    value: Number(rowEl.querySelector('.am-cond-value').value || 0)
                                 };
-                            }
-                            return {
-                                signal: signal,
-                                comparator: rowEl.querySelector('.js-am-cond-comparator').value,
-                                value: Number(rowEl.querySelector('.am-cond-value').value || 0)
-                            };
+                            // The server names the field, so a third ref kind
+                            // lands in the right one with no edit here.
+                            if (meta.refField) { out[meta.refField] = refText; }
+                            return out;
                         });
                     if (scope === 'classWide') {
                         next.classPercent = Number(el('am-classPercent').value || 0);

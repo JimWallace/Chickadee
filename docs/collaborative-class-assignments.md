@@ -6,9 +6,36 @@ into a class-wide result — "the class collectively reaches 85% coverage", "the
 class collectively finds 12 of the 15 seeded bugs" — with marks flowing both
 from the individual contribution and from the collective outcome.
 
-Nothing here is locked. This records what the platform already does, what it
-does not, and which of the open choices the existing machinery pushes toward.
-It is written to be argued with before any of it is built.
+This was written as a design note, to be argued with before any of it was built.
+Slices 0-7 of the plan at the bottom have since shipped, so most of it now
+describes behaviour rather than intent — see **Status** below for which is
+which. The reasoning is kept as written, because the arguments are what the
+choices rest on.
+
+## Status
+
+| slice | what | state |
+|---|---|---|
+| 0 | Strike the phantom `student` tier (`MCPTierProse` + coverage guard) | shipped |
+| 1 | Refuse browser grading for grader-only files | struck — `graderOnlyFiles` already refuses at all three authoring doors |
+| 2 | Contribution slots (`chickadee_slot` cell metadata, bounded in `mergeNotebook`) | shipped |
+| 3 | Per-item class coverage accumulation (`class_item_coverage`), gated to contribution assignments | shipped |
+| 4 | The instructor coverage view ("Bug coverage" on the submissions page) | shipped |
+| 5 | The `itemsCovered` union signal and the breadth predicate | shipped |
+| 6 | Authoring and display (editor, student status line, MCP surface) | shipped |
+| 7 | Freeze and LEARN re-push | shipped — rides the existing paths; the snapshot now stores the coverage it froze at |
+| 8 | Corpus aggregation run for coverage % | **deliberately not started** — see Phase 4 |
+
+Two things a reader should not go looking for. **There is still no per-student
+contribution cap by attribution ranking** (option B): slots bound the shape of a
+contribution and breadth bounds the solo hero, and ranking is what would break
+determinism. And **coverage % is not implemented** — the union is a set of
+covered items, not a coverage number; a real offering should run a bug hunt
+before the corpus machinery is built.
+
+One thing left to the instructor's hand for now: **a slot is declared by
+`chickadee_slot` cell metadata**, which is hand-edited in the notebook JSON.
+There is no authoring affordance for it yet.
 
 ## Summary
 

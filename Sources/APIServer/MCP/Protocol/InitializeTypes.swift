@@ -219,8 +219,8 @@ enum MCPServerInstructions {
         both the solution and the expression load.
         - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
-        competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
-        executionTimeMs, gradeJumpPercent, testPass) combined with `match` (all/any), and the scope's \
+        competitive `record`), a list of conditions over the graded signals \
+        (\(MCPAchievementSignalProse.commaList)) combined with `match` (all/any), and the scope's \
         reward (classPercent + points for a goal, recordDimension for a record). Read them with \
         get_achievements, replace the whole list with update_achievements. They are server-evaluated \
         and DISPLAY-ONLY — they never change what the suite grades, so editing them does not re-validate, \

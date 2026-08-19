@@ -26,8 +26,8 @@ struct GetAchievementsTool: ContentTool {
     static let description =
         "Get an assignment's achievements (the instructor-authored awards shown to students) by public "
         + "ID. Each row has a scope (individual badge / classWide collaborative goal / single-holder "
-        + "record), a list of conditions over a submission's graded signals (grade, attempts, "
-        + "executionTimeMs, gradeJumpPercent, testPass) combined with `match` (all/any), and the "
+        + "record), a list of conditions over a submission's graded signals ("
+        + MCPAchievementSignalProse.commaList + ") combined with `match` (all/any), and the "
         + "scope's reward parameters (classPercent + points for a class goal, recordDimension for a "
         + "record). Until the instructor first curates the list, the built-in defaults are returned as "
         + "editable rows. Read-only — use it to inspect achievements before editing with "
@@ -106,13 +106,8 @@ let achievementRowSchema: JSONValue = .object([
                 "properties": .object([
                     "signal": .object([
                         "type": .string("string"),
-                        "enum": .array([
-                            .string("grade"), .string("attempts"), .string("executionTimeMs"),
-                            .string("gradeJumpPercent"), .string("testPass"),
-                        ]),
-                        "description": .string(
-                            "grade/gradeJumpPercent are percents (0–100); attempts is a count; "
-                                + "executionTimeMs is milliseconds; testPass checks a named test."),
+                        "enum": .array(AchievementSignalValues.all.map(JSONValue.string)),
+                        "description": .string(MCPAchievementSignalProse.unitsClause + "."),
                     ]),
                     "comparator": .object([
                         "type": .string("string"),
@@ -129,6 +124,14 @@ let achievementRowSchema: JSONValue = .object([
                         "description": .string(
                             "For a testPass condition: the test that must pass, by script filename "
                                 + "(e.g. secrettest_x.py) or display name. Validated against the suite on save."),
+                    ]),
+                    "sectionRef": .object([
+                        "type": .string("string"),
+                        "description": .string(
+                            "For an itemsCovered condition: the suite section whose items the class "
+                                + "union is counted over, by section name or id (a name is resolved "
+                                + "to its id on save). Omit to count every test in the suite. "
+                                + "Validated against the suite on save."),
                     ]),
                 ]),
                 "required": .array([.string("signal"), .string("comparator")]),

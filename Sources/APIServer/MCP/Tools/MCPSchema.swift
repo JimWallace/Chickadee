@@ -82,6 +82,15 @@ enum MCPSchema {
 /// parser then rejected. Deriving it means the schema cannot offer a tier the
 /// server will refuse. See `MCPTierProse` for the prose renderings of the same
 /// set.
+/// The achievement condition signals a schema enum offers, derived from
+/// `AchievementSignal.allCases` for the same reason `TestTierValues` is derived
+/// from `TestTier.allCases`: a hand-typed enum can offer a value the parser
+/// refuses, or omit one it accepts. See `MCPAchievementSignalProse` for the
+/// prose renderings of the same set.
+enum AchievementSignalValues {
+    static var all: [String] { AchievementSignal.allCases.map(\.rawValue) }
+}
+
 enum TestTierValues {
     /// The graded, student-visible tiers.
     static var tiers: [String] { TestTier.allCases.map(\.rawValue) }

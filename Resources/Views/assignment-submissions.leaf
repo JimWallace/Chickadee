@@ -14,13 +14,13 @@
 #if(hasCoverage):
 <section class="page-section">
     <div class="page-titlebar">
-        <h2>Bug coverage</h2>
+        <h2>Class coverage</h2>
         <span class="chip">#(coverageSummary)</span>
     </div>
     <table class="results-table">
         <thead>
             <tr>
-                <th>Bug</th>
+                <th>Item</th>
                 <th>Status</th>
                 <th>First found by</th>
                 <th class="time col-hide-phone">When</th>
