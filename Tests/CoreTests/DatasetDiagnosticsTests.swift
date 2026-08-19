@@ -331,4 +331,78 @@ import Testing
             DatasetDiagnostics.overlap(spec: spec, sourceCSV: pool)
                 == DatasetDiagnostics.overlap(spec: spec, sourceCSV: pool))
     }
+
+    // MARK: - 10. The worst-pair estimate
+
+    /// The worst-pair number is the only one on `DatasetOverlap` an instructor
+    /// acts on — "the unluckiest pair in your class is expected to share this
+    /// many rows" — and until the 2026-08-19 sweep (run 32265903112) nothing
+    /// asserted it was any different from the mean. The existing assertion is
+    /// `worstPairSharedRows >= expectedSharedRows`, which equality satisfies,
+    /// so five separate mutants collapsed the estimate onto the mean and
+    /// survived: the variance guard's `poolRows > 1`, the pair count's
+    /// `classSize > 1` (both as a relational flip and as a swapped ternary),
+    /// and each half of `pairs >= 2, variance > 0`.
+    ///
+    /// Every one of them reports "the worst pair shares the average amount",
+    /// which is the answer that makes a spec look safe.
+    @Test func theWorstPairIsStrictlyWorseThanAverageForARealSample() throws {
+        let overlap = try #require(DatasetDiagnostics.overlap(spec: plainSpec(40), sourceCSV: pool))
+        #expect(
+            overlap.worstPairSharedRows > overlap.expectedSharedRows,
+            "an extreme-value estimate that equals the mean is not an estimate")
+        #expect(overlap.worstPairSharedRows <= Double(overlap.rowsPerStudent))
+    }
+
+    /// The estimate's value, re-derived from the documented formula rather
+    /// than copied from the implementation: `mean + sigma * sqrt(2 * ln pairs)`
+    /// over a class's `C(C-1)/2` pairs, with the hypergeometric variance
+    /// `k * (k/n) * (1 - k/n) * (n - k)/(n - 1)`.
+    ///
+    /// Pinning the number and not just the inequality is what separates "the
+    /// spread is used at all" from "the spread is used correctly" — a mutant
+    /// that drops the pair count to a constant, or halves the variance, still
+    /// clears the inequality above.
+    @Test func theWorstPairMatchesTheDocumentedClosedForm() throws {
+        let n = 200.0
+        let k = 40.0
+        let mean = k * k / n
+        let variance = k * (k / n) * (1 - k / n) * ((n - k) / (n - 1))
+        let pairs =
+            Double(DatasetDiagnostics.defaultClassSize)
+            * Double(DatasetDiagnostics.defaultClassSize - 1) / 2
+        let derived = mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot()
+
+        let overlap = try #require(DatasetDiagnostics.overlap(spec: plainSpec(40), sourceCSV: pool))
+        #expect(abs(overlap.expectedSharedRows - mean) < 1e-9)
+        #expect(abs(overlap.worstPairSharedRows - derived) < 1e-9)
+    }
+
+    /// The two degenerate inputs the guards exist for, stated as behaviour so
+    /// they cannot be mistaken for the collapse above.
+    ///
+    /// A class of one has no pairs, and a whole-file sample has no variance —
+    /// in both the honest answer IS the mean, and the estimate must not invent
+    /// a spread. That is why the strict inequality above is asserted on a
+    /// reducing sample at the default class size and nowhere else.
+    @Test func theEstimateFallsBackToTheMeanWhenThereIsNothingToEstimate() throws {
+        let soloClass = try #require(
+            DatasetDiagnostics.overlap(spec: plainSpec(40), sourceCSV: pool, classSize: 1))
+        #expect(soloClass.worstPairSharedRows == soloClass.expectedSharedRows)
+
+        let wholeFile = try #require(DatasetDiagnostics.overlap(spec: plainSpec(nil), sourceCSV: pool))
+        #expect(wholeFile.worstPairSharedRows == wholeFile.expectedSharedRows)
+    }
+
+    /// Stratification sums a variance per stratum, so the same collapse is
+    /// reachable by a second route — and the rare-stratum floor means a
+    /// stratified spec is exactly where an instructor most needs the worst
+    /// pair to be honest.
+    @Test func theStratifiedEstimateAlsoCarriesASpread() throws {
+        let overlap = try #require(
+            DatasetDiagnostics.overlap(spec: stratifiedSpec(40), sourceCSV: pool))
+        #expect(overlap.worstPairSharedRows > overlap.expectedSharedRows)
+        #expect(overlap.worstPairSharedRows <= Double(overlap.rowsPerStudent))
+    }
+
 }

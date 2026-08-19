@@ -215,5 +215,60 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(verify.failing_suites(output), ["AchievementTests"])
 
 
+class InertMutationTests(unittest.TestCase):
+    """Muter's `SwapTernary` sometimes re-emits the original statement.
+
+    Nine of the 75 survivors in run 32265903112 were this, and two of them
+    reached a triage pass that had already covered the file properly.
+    `report.py` quarantines them out of a run's survivor list, but the verifier
+    reads the record directly (`--file/--line`), so a record produced before that
+    filter -- or a hand-picked candidate out of one -- still reaches it. Without
+    this check the verifier applies an unchanged file, runs the suite for two
+    minutes, and reports SURVIVED: "nothing detects this change", about a change
+    that was never made.
+    """
+
+    def test_a_reemitted_original_is_inert(self):
+        # DatasetResolver.swift:30, verbatim from run 32265903112: the only
+        # difference is one extra space around the `:`.
+        self.assertTrue(
+            verify.is_inert(
+                {
+                    "original": '        let directory = sourceDirectory.hasSuffix("/") ? sourceDirectory : sourceDirectory + "/"',
+                    "mutated": '        let directory = sourceDirectory.hasSuffix("/")  ? sourceDirectory :  sourceDirectory + "/"',
+                }
+            )
+        )
+
+    def test_a_reflowed_multiline_original_is_inert(self):
+        # ZipArchiver.swift:80, same run: the branches are unswapped and the
+        # statement is merely folded onto one line.
+        self.assertTrue(
+            verify.is_inert(
+                {
+                    "original": '        destStandardized.path.hasSuffix("/")\n        ? destStandardized.path\n        : destStandardized.path + "/"',
+                    "mutated": '        destStandardized.path.hasSuffix("/") ? destStandardized.path :  destStandardized.path + "/"',
+                }
+            )
+        )
+
+    def test_a_genuinely_swapped_ternary_is_not_inert(self):
+        # PatternFamily.swift:209, same run and same operator -- the branches
+        # really are exchanged, and this one is killable.
+        self.assertFalse(
+            verify.is_inert(
+                {
+                    "original": "        self.argsProvided = argsProvided.count == args.count ? argsProvided : []",
+                    "mutated": "        self.argsProvided = argsProvided.count == args.count  ? [] :  argsProvided ",
+                }
+            )
+        )
+
+    def test_a_record_with_no_original_is_not_called_inert(self):
+        # Pre-#1462 records carry no `original`. "Cannot tell" must not become
+        # "nothing to see": those are UNVERIFIABLE, decided elsewhere.
+        self.assertFalse(verify.is_inert({"mutated": "return true"}))
+
+
 if __name__ == "__main__":
     unittest.main()
