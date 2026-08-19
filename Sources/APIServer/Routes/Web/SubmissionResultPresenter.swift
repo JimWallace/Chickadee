@@ -431,6 +431,7 @@ func loadClassGoalViews(
             progressPercent: Int((progress * 100).rounded()),
             studentsMeeting: row?.studentsMeeting ?? 0,
             denominator: row?.denominator ?? 0,
+            studentsLabel: goal.isUnionClassGoal ? "students contributing" : "students",
             coverageSummary: classGoalCoverageSummary(row),
             met: progress >= 1,
             locked: row?.locked ?? false)

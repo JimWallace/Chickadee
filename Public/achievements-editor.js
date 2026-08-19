@@ -31,6 +31,20 @@
     // id -> name for the suite sections currently on the page.  Read live from
     // the suite editor's own DOM rather than a server-rendered copy, so a
     // section added or renamed without a page reload is named correctly here.
+    // The two inputs a reference can use, keyed by the server-named control.
+    // Hoisted so `sync` and the save serializer read one mapping: a third
+    // control kind that edited only one of them would serialize from the wrong
+    // element, silently.
+    function refInputs(rowEl) {
+        return {
+            text: rowEl.querySelector('input.am-cond-ref'),
+            sections: rowEl.querySelector('select.am-cond-ref')
+        };
+    }
+    function refInput(rowEl, meta) {
+        return refInputs(rowEl)[meta && meta.refControl] || null;
+    }
+
     function sectionNames() {
         var out = {};
         Array.prototype.slice.call(
@@ -93,6 +107,7 @@
             .forEach(function (o) {
                 SIGNAL_META[o.value] = {
                     label: o.text, unit: o.getAttribute('data-unit') || '',
+                    scopes: (o.getAttribute('data-scope') || '').split(/\s+/),
                     refControl: o.getAttribute('data-ref-control') || '',
                     refField: o.getAttribute('data-ref-field') || '',
                     refLabel: o.getAttribute('data-ref-label') || '',
@@ -183,42 +198,72 @@
             var cmp = rowEl.querySelector('.js-am-cond-comparator');
             var val = rowEl.querySelector('.am-cond-value');
             var unit = rowEl.querySelector('.am-cond-unit');
-            var textRef = rowEl.querySelector('input.am-cond-ref');
-            var sectionRef = rowEl.querySelector('select.am-cond-ref');
-            // "" is the whole suite, which is what a union goal counts when no
-            // section is named.
+            var inputs = refInputs(rowEl);
+            var textRef = inputs.text;
+            var sectionRef = inputs.sections;
+            // "" counts every test in the suite — including tests in no section
+            // — so the option says "Whole suite" rather than "All sections".
             var names = sectionNames();
+            var stored = cond ? n(cond.sectionRef) : '';
             sectionRef.innerHTML = '';
+            var every = document.createElement('option');
+            every.value = '';
+            every.textContent = 'Whole suite';
+            sectionRef.appendChild(every);
             Object.keys(names).forEach(function (id) {
                 var o = document.createElement('option');
                 o.value = id;
                 o.textContent = names[id];
                 sectionRef.appendChild(o);
             });
-            var every = document.createElement('option');
-            every.value = '';
-            every.textContent = 'All sections';
-            sectionRef.insertBefore(every, sectionRef.firstChild);
+            // A ref left behind by a deleted section matches no option. Without
+            // a home it would render blank and then serialize as "", silently
+            // widening the rule from one section to the whole suite — so give
+            // it a disabled option of its own and let the save refuse it by
+            // name.
+            if (stored && !names[stored]) {
+                var missing = document.createElement('option');
+                missing.value = stored;
+                missing.disabled = true;
+                missing.textContent = 'Deleted section';
+                sectionRef.appendChild(missing);
+            }
 
             if (cond) {
                 sig.value = cond.signal || 'grade';
                 cmp.value = cond.comparator || 'atLeast';
                 val.value = n(cond.value);
                 textRef.value = n(cond.testRef);
-                sectionRef.value = n(cond.sectionRef);
+                sectionRef.value = stored;
             }
             // A signal either compares a value, names a reference, or does both
             // (items-covered counts AND scopes).  refReplacesValue is what
             // distinguishes the third case from the second; refControl picks
             // which input the reference uses.
-            function refControl(meta) {
-                if (meta.refControl === 'text') { return textRef; }
-                if (meta.refControl === 'sections') { return sectionRef; }
-                return null;
+            // Signals that read the whole class are meaningless per student, so
+            // the dropdown offers them only under the scope that can evaluate
+            // them. Hidden AND disabled: `hidden` on an option is honoured
+            // unevenly, and a disabled option cannot be chosen either way.
+            function syncScope(scope) {
+                var options = Array.prototype.slice.call(sig.options);
+                options.forEach(function (o) {
+                    var meta = SIGNAL_META[o.value] || {};
+                    var allowed = !meta.scopes || meta.scopes.indexOf(scope) >= 0;
+                    o.hidden = !allowed;
+                    o.disabled = !allowed;
+                });
+                var current = SIGNAL_META[sig.value];
+                if (current && current.scopes && current.scopes.indexOf(scope) < 0) {
+                    var first = options.filter(function (o) { return !o.disabled; })[0];
+                    if (first) { sig.value = first.value; }
+                }
+                sync();
             }
+            rowEl.syncScope = syncScope;
+
             function sync() {
                 var meta = SIGNAL_META[sig.value] || {};
-                var active = refControl(meta);
+                var active = refInput(rowEl, meta);
                 var hasValue = !meta.refReplacesValue;
                 cmp.style.display = hasValue ? '' : 'none';
                 val.style.display = hasValue ? '' : 'none';
@@ -269,6 +314,12 @@
                     var scopes = (f.getAttribute('data-scope') || '').split(/\s+/);
                     f.style.display = scopes.indexOf(scope) >= 0 ? '' : 'none';
                 });
+                // Each condition row filters its own signal dropdown to the
+                // signals this scope can evaluate.
+                Array.prototype.slice.call(
+                    conditionsBox.querySelectorAll('.am-condition')).forEach(function (rowEl) {
+                        if (rowEl.syncScope) { rowEl.syncScope(scope); }
+                    });
             }
 
             el('am-name').value = n(row.name);
@@ -284,6 +335,7 @@
             scopeSel.addEventListener('change', showScopeFields);
             el('am-add-condition').addEventListener('click', function () {
                 addConditionRow(conditionsBox, null);
+                showScopeFields();
             });
 
             saveBtn.addEventListener('click', function () {
@@ -306,10 +358,8 @@
                         conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
                             var signal = rowEl.querySelector('.am-cond-signal').value;
                             var meta = SIGNAL_META[signal] || {};
-                            var source = meta.refControl === 'sections'
-                                ? rowEl.querySelector('select.am-cond-ref')
-                                : rowEl.querySelector('input.am-cond-ref');
-                            var refText = (source.value || '').trim();
+                            var source = refInput(rowEl, meta);
+                            var refText = source ? (source.value || '').trim() : '';
                             var out = meta.refReplacesValue
                                 ? { signal: signal, comparator: 'atLeast', value: 1 }
                                 : {

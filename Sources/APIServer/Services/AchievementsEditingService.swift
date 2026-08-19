@@ -105,6 +105,17 @@ enum AchievementsEditing {
         let match = ConditionMatch(rawValue: input.match ?? "all") ?? .all
         let conditions = try (input.conditions ?? []).map(condition(from:))
 
+        // A signal that reads the whole class cannot be evaluated per student,
+        // so an individual badge or a record carrying one would save cleanly and
+        // never fire for anyone. Refuse it here: the editor hides the option
+        // off-scope, but MCP writes the row as JSON and has no dropdown.
+        if scope != .classWide, let offending = conditions.first(where: { $0.signal.readsTheWholeClass }) {
+            throw WebAssignmentError.invalidParameter(
+                name: "signal",
+                reason: "'\(offending.signal.rawValue)' reads the whole class, so it can only be "
+                    + "used on an achievement awarded to the class together.")
+        }
+
         switch scope {
         case .individual:
             return Achievement(
@@ -136,7 +147,7 @@ enum AchievementsEditing {
                 throw WebAssignmentError.invalidParameter(
                     name: "conditions",
                     reason: "A class goal supports at most one condition, and it must be "
-                        + "'grade at least X%' or 'items covered by the class at least N'. "
+                        + "'grade at least X%' or 'items covered at least N'. "
                         + "Attempts/time/test conditions and atMost/equals comparators aren't "
                         + "evaluated for class goals.")
             }
@@ -349,9 +360,11 @@ enum AchievementsEditing {
                     guard sectionIDs.contains(ref) else {
                         throw WebAssignmentError.invalidParameter(
                             name: "sectionRef",
-                            reason: "'\(ref)' doesn't match any suite section in this assignment. "
-                                + "Use a section's name (as shown in the suite editor) or its id, "
-                                + "or leave it empty to count every test in the suite.")
+                            reason: "'\(achievement.name)' points at suite section '\(ref)', which "
+                                + "this assignment does not have — a deleted section leaves a rule "
+                                + "behind. "
+                                + "Point it at a section that exists, or clear it to count every "
+                                + "test in the suite.")
                     }
                 case .grade, .attempts, .executionTimeMs, .gradeJumpPercent:
                     continue

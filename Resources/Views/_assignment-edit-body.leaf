@@ -448,15 +448,15 @@
     <!-- One condition row, cloned into #am-conditions per condition. -->
     <template id="achievement-condition-template">
         <div class="am-condition">
-            <select class="form-input am-cond-signal" aria-label="Signal">
+            <select class="form-input am-cond-signal" aria-label="Measure">
                 #for(opt in achievementSignalOptions):
-                <option value="#(opt.value)" data-unit="#(opt.unit)"
+                <option value="#(opt.value)" data-unit="#(opt.unit)" data-scope="#(opt.scopes)"
                         data-ref-control="#(opt.refControl)" data-ref-field="#(opt.refField)"
                         data-ref-label="#(opt.refLabel)" data-ref-placeholder="#(opt.refPlaceholder)"
                         data-ref-replaces-value="#(opt.refReplacesValue)">#(opt.label)</option>
                 #endfor
             </select>
-            <select class="form-input js-am-cond-comparator" aria-label="Comparator">
+            <select class="form-input js-am-cond-comparator" aria-label="Comparison">
                 <option value="atLeast">at least</option>
                 <option value="atMost">at most</option>
                 <option value="equals">exactly</option>

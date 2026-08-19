@@ -539,6 +539,13 @@ struct ClassGoalView: Encodable {
     let progressPercent: Int
     let studentsMeeting: Int
     let denominator: Int
+    /// What `studentsMeeting` counts, in the reader's words: "students" on a
+    /// grade goal, "students contributing" on a union goal.
+    ///
+    /// The arithmetic is identical — a count of enrolled students over the
+    /// roster — but the per-student predicate is not, and one noun phrase for
+    /// both invites "12 students have finished" on a bug hunt.
+    let studentsLabel: String
     /// UNION goals only: "9 / 15 items found", the coverage half of the goal.  nil on
     /// a grade-counted goal, which unions nothing.
     ///

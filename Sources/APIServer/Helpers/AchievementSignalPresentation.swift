@@ -87,6 +87,10 @@ struct AchievementSignalOption: Encodable {
     let detail: String
     /// Unit suffix shown next to the value input ("%", "ms", "pts", or "").
     let unit: String
+    /// Space-separated `AchievementScope` values this signal may be used under
+    /// — the same shape (and the same idiom) as the editor's `data-scope`
+    /// attributes, so the dropdown can hide an option the save would refuse.
+    let scopes: String
     /// Which input this signal's reference needs, if any: "" | "text" | "sections".
     let refControl: String
     /// The `ConditionRow` field the reference serializes to.
@@ -135,6 +139,7 @@ enum AchievementSignalPresentation {
     ) -> AchievementSignalOption {
         AchievementSignalOption(
             value: signal.rawValue, label: label, detail: detail, unit: unit,
+            scopes: signal.allowedScopes.map(\.rawValue).joined(separator: " "),
             refControl: ref.control, refField: ref.refField, refLabel: ref.label,
             refPlaceholder: ref.placeholder, refReplacesValue: refReplacesValue)
     }

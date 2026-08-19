@@ -20,7 +20,7 @@ choices rest on.
 | 1 | Refuse browser grading for grader-only files | struck — `graderOnlyFiles` already refuses at all three authoring doors |
 | 2 | Contribution slots (`chickadee_slot` cell metadata, bounded in `mergeNotebook`) | shipped |
 | 3 | Per-item class coverage accumulation (`class_item_coverage`), gated to contribution assignments | shipped |
-| 4 | The instructor coverage view ("Bug coverage" on the submissions page) | shipped |
+| 4 | The instructor coverage view ("Class coverage" on the submissions page) | shipped |
 | 5 | The `itemsCovered` union signal and the breadth predicate | shipped |
 | 6 | Authoring and display (editor, student status line, MCP surface) | shipped |
 | 7 | Freeze and LEARN re-push | shipped — rides the existing paths; the snapshot now stores the coverage it froze at |
@@ -424,7 +424,7 @@ It assembles from existing vocabulary with **zero new classes**: a
 `.page-section` holding a `.results-table`, with `.chip-ok` / `.chip-err` for the
 found/not-found state.
 
-| Bug | Status | First found by | When |
+| Item | Status | First found by | When |
 |---|---|---|---|
 | `variant_03` | ✅ found | s.chen | Mar 4, 09:12 |
 | `variant_07` | ✅ found | j.okafor | Mar 4, 14:40 |

@@ -155,6 +155,39 @@ import VaporTesting
         #expect(resolved.coveredItemsRequirement?.scope?.ref == "bugs")
     }
 
+    /// The silent-never-fires shape this signal newly makes reachable: an
+    /// `itemsCovered` condition on a per-student badge cannot be evaluated per
+    /// submission, so it would save cleanly and never fire for anyone. The
+    /// editor hides the option off-scope; MCP writes JSON and has no dropdown,
+    /// so the refusal is here.
+    @Test func saveRefusesAClassReadingSignalOutsideAClassGoal() {
+        for scope in ["individual", "record"] {
+            let row = AchievementRow(
+                name: "Bug Hunter", scope: scope, match: "all",
+                conditions: [
+                    ConditionRow(signal: "itemsCovered", comparator: "atLeast", value: 3)
+                ],
+                recordDimension: "firstToSolve")
+            #expect(throws: WebAssignmentError.self) {
+                try AchievementsEditing.achievement(from: row)
+            }
+        }
+    }
+
+    /// The editor derives which signals it may offer from the same fact, so the
+    /// dropdown and the refusal cannot disagree.
+    @Test func onlyClassWideOffersAClassReadingSignal() throws {
+        for option in AchievementSignalPresentation.all {
+            let signal = try #require(AchievementSignal(rawValue: option.value))
+            #expect(
+                option.scopes == signal.allowedScopes.map(\.rawValue).joined(separator: " "),
+                "\(option.value) offers scopes the save would refuse")
+        }
+        let covered = try #require(
+            AchievementSignalPresentation.all.first { $0.value == AchievementSignal.itemsCovered.rawValue })
+        #expect(covered.scopes == AchievementScope.classWide.rawValue)
+    }
+
     /// Admitting the union shape must not relax the arity that makes the
     /// authoring guard worth having (audit A4).
     @Test func saveStillRefusesAClassGoalTheSweepCannotEvaluate() {
