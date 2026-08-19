@@ -1,0 +1,587 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "6907a7c4da2d",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
+  },
+  "date": "2026-08-19",
+  "killed": 288,
+  "phantomsFiltered": 131,
+  "shardsExpected": 8,
+  "shardsReported": 8,
+  "survived": 95,
+  "survivors": [
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 80,
+      "operator": "RelationalOperatorReplacement",
+      "source": "case .equals: return lhs == value"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 103,
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .classWide && reward.type == .points"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 117,
+      "operator": "RelationalOperatorReplacement",
+      "source": "$0.signal == .attempts || $0.signal == .executionTimeMs"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 117,
+      "operator": "RelationalOperatorReplacement",
+      "source": "$0.signal == .attempts || $0.signal == .executionTimeMs"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 118,
+      "operator": "ChangeLogicalConnector",
+      "source": "|| $0.signal == .gradeJumpPercent"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 118,
+      "operator": "RelationalOperatorReplacement",
+      "source": "|| $0.signal == .gradeJumpPercent"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 124,
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 124,
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "operator": "RelationalOperatorReplacement",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "operator": "RelationalOperatorReplacement",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 151,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard conditions.count == 1, let condition = conditions.first else { return false }"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "operator": "ChangeLogicalConnector",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "operator": "RelationalOperatorReplacement",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "operator": "RelationalOperatorReplacement",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AssignmentLanguage.swift",
+      "line": 663,
+      "operator": "SwapTernary",
+      "source": ": \"(define ck-inputs\\n  (hash\\n\" + entries.joined(separator: \"\\n\") + \"))\""
+    },
+    {
+      "file": "Sources/Core/CourseRole.swift",
+      "line": 45,
+      "operator": "RelationalOperatorReplacement",
+      "source": "lhs.rank < rhs.rank"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 190,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard poolRows > 1 else { return 0 }"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 205,
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 205,
+      "operator": "SwapTernary",
+      "source": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 206,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pairs >= 2, variance > 0 else { return mean }"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 206,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pairs >= 2, variance > 0 else { return mean }"
+    },
+    {
+      "file": "Sources/Core/DatasetResolver.swift",
+      "line": 30,
+      "operator": "SwapTernary",
+      "source": "let directory = sourceDirectory.hasSuffix(\"/\") ? sourceDirectory : sourceDirectory + \"/\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 71,
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 101,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 101,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 192,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 192,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 222,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 222,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 65,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 65,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 79,
+      "operator": "SwapTernary",
+      "source": ": \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 53,
+      "operator": "SwapTernary",
+      "source": "case .bool(let b): return b ? \"true\" : \"false\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "operator": "RelationalOperatorReplacement",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "operator": "RelationalOperatorReplacement",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 57,
+      "operator": "SwapTernary",
+      "source": "return (i > Int(Int32.max) || i < Int(Int32.min)) ? \"\\(i)L\" : String(i)"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 68,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 83,
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 116,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if trimmed == \"null\" { return \"Object\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 117,
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 117,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if trimmed == \"true\" || trimmed == \"false\" { return \"boolean\" }"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 124,
+      "operator": "SwapTernary",
+      "source": "let numeric = trimmed.hasPrefix(\"-\") ? String(trimmed.dropFirst()) : trimmed"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 159,
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch.value < 0x20 || ch.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 159,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if ch.value < 0x20 || ch.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/JSONValueJavaLiteral.swift",
+      "line": 159,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if ch.value < 0x20 || ch.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 37,
+      "operator": "SwapTernary",
+      "source": "return b ? \"#t\" : \"#f\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 59,
+      "operator": "SwapTernary",
+      "source": "return a.isEmpty ? \"(list)\" : \"(list \" + a.map(\\.racketLiteral).joined(separator: \" \") + \")\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 65,
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 89,
+      "operator": "ChangeLogicalConnector",
+      "source": "if scalar.value < 0x20 || scalar.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 209,
+      "operator": "RelationalOperatorReplacement",
+      "source": "self.argsProvided = argsProvided.count == args.count ? argsProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 209,
+      "operator": "SwapTernary",
+      "source": "self.argsProvided = argsProvided.count == args.count ? argsProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 226,
+      "operator": "RelationalOperatorReplacement",
+      "source": "argsProvided = decodedProvided.count == args.count ? decodedProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 226,
+      "operator": "SwapTernary",
+      "source": "argsProvided = decodedProvided.count == args.count ? decodedProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/TestOutcomeCollectionTruncation.swift",
+      "line": 45,
+      "operator": "RelationalOperatorReplacement",
+      "source": "+ ((compilerOutput?.isEmpty == false) ? 1 : 0))"
+    },
+    {
+      "file": "Sources/Core/Models/TestOutcomeCollectionTruncation.swift",
+      "line": 45,
+      "operator": "SwapTernary",
+      "source": "+ ((compilerOutput?.isEmpty == false) ? 1 : 0))"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 80,
+      "operator": "RelationalOperatorReplacement",
+      "source": "decodedParamTypes.count == paramNames.count"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 82,
+      "operator": "SwapTernary",
+      "source": ": Array(repeating: nil, count: paramNames.count)"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 85,
+      "operator": "RelationalOperatorReplacement",
+      "source": "decodedParamHasDefault.count == paramNames.count"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 87,
+      "operator": "SwapTernary",
+      "source": ": Array(repeating: false, count: paramNames.count)"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 429,
+      "operator": "RelationalOperatorReplacement",
+      "source": "first.isLetter || first == \"_\","
+    },
+    {
+      "file": "Sources/Core/WorkerHMACSigning.swift",
+      "line": 147,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard left.count == right.count else { return false }"
+    },
+    {
+      "file": "Sources/Core/WorkerHMACSigning.swift",
+      "line": 150,
+      "operator": "RelationalOperatorReplacement",
+      "source": "return result == 0"
+    },
+    {
+      "file": "Sources/Core/ZipArchiver.swift",
+      "line": 80,
+      "operator": "SwapTernary",
+      "source": ": destStandardized.path + \"/\""
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 71,
+      "operator": "RemoveSideEffects",
+      "source": "zipProcessLock.lock()"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "operator": "ChangeLogicalConnector",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "operator": "RelationalOperatorReplacement",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "operator": "RelationalOperatorReplacement",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 31,
+      "operator": "RelationalOperatorReplacement",
+      "source": "var isAtEnd: Bool { pos >= chars.count }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 46,
+      "operator": "ChangeLogicalConnector",
+      "source": "case .some(let c) where c == \"-\" || (c >= \"0\" && c <= \"9\"): return parseNumber()"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 77,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"]\" { pos += 1; return .array(items) }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 131,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + 4 <= chars.count else { return nil }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 157,
+      "operator": "RelationalOperatorReplacement",
+      "source": "if current == \"-\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 256,
+      "operator": "SwapTernary",
+      "source": "matchLiteral(\"null\") ? .null : nil"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 261,
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pos + lit.count <= chars.count else { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 262,
+      "operator": "RelationalOperatorReplacement",
+      "source": "for (offset, ch) in lit.enumerated() where chars[pos + offset] != ch { return false }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 459,
+      "operator": "ChangeLogicalConnector",
+      "source": "|| trimmed.hasPrefix(\"'\")"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 552,
+      "operator": "ChangeLogicalConnector",
+      "source": "if ch == \"(\" && (prev.isLetter || prev.isNumber || prev == \"_\" || prev == \")\") {"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 569,
+      "operator": "ChangeLogicalConnector",
+      "source": "let isHWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" }"
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 575,
+      "operator": "ChangeLogicalConnector",
+      "source": "let isWS: (Character) -> Bool = { $0 == \" \" || $0 == \"\\t\" || $0 == \"\\n\" || $0 == \"\\r\" }"
+    }
+  ]
+}
