@@ -1,0 +1,933 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "6907a7c4da2d",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
+  },
+  "date": "2026-08-19",
+  "killed": 212,
+  "phantomsFiltered": 71,
+  "shardsExpected": 8,
+  "shardsReported": 7,
+  "survived": 62,
+  "survivors": [
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 80,
+      "mutations": [
+        {
+          "column": 34,
+          "mutated": "return lhs != value",
+          "offset": 3939
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "case .equals: return lhs == value"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 103,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "scope == .classWide || reward.type == .points",
+          "offset": 4767
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .classWide && reward.type == .points"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "$0.signal != .attempts || $0.signal == .executionTimeMs\n                || $0.signal == .gradeJumpPercent",
+          "offset": 5347
+        },
+        {
+          "column": 49,
+          "mutated": "$0.signal == .attempts || $0.signal != .executionTimeMs\n                || $0.signal == .gradeJumpPercent",
+          "offset": 5373
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "$0.signal == .attempts || $0.signal == .executionTimeMs"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "$0.signal != .attempts || $0.signal == .executionTimeMs\n                || $0.signal == .gradeJumpPercent",
+          "offset": 5347
+        },
+        {
+          "column": 49,
+          "mutated": "$0.signal == .attempts || $0.signal != .executionTimeMs\n                || $0.signal == .gradeJumpPercent",
+          "offset": 5373
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "$0.signal == .attempts || $0.signal == .executionTimeMs"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 118,
+      "mutations": [
+        {
+          "column": 17,
+          "mutated": "$0.signal == .attempts || $0.signal == .executionTimeMs\n                && $0.signal == .gradeJumpPercent",
+          "offset": 5409
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "|| $0.signal == .gradeJumpPercent"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 118,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "$0.signal == .attempts || $0.signal == .executionTimeMs\n                || $0.signal != .gradeJumpPercent",
+          "offset": 5422
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "|| $0.signal == .gradeJumpPercent"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 124,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "scope == .individual || reward.type == .badge && usesDynamicSignal",
+          "offset": 5615
+        },
+        {
+          "column": 55,
+          "mutated": "scope == .individual && reward.type == .badge || usesDynamicSignal",
+          "offset": 5640
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 124,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "scope == .individual || reward.type == .badge && usesDynamicSignal",
+          "offset": 5615
+        },
+        {
+          "column": 55,
+          "mutated": "scope == .individual && reward.type == .badge || usesDynamicSignal",
+          "offset": 5640
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "scope == .individual || reward.type == .badge && !usesDynamicSignal",
+          "offset": 5881
+        },
+        {
+          "column": 55,
+          "mutated": "scope == .individual && reward.type == .badge || !usesDynamicSignal",
+          "offset": 5906
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "scope == .individual || reward.type == .badge && !usesDynamicSignal",
+          "offset": 5881
+        },
+        {
+          "column": 55,
+          "mutated": "scope == .individual && reward.type == .badge || !usesDynamicSignal",
+          "offset": 5906
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "scope != .individual && reward.type == .badge && !usesDynamicSignal",
+          "offset": 5866
+        },
+        {
+          "column": 45,
+          "mutated": "scope == .individual && reward.type != .badge && !usesDynamicSignal",
+          "offset": 5896
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 130,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "scope != .individual && reward.type == .badge && !usesDynamicSignal",
+          "offset": 5866
+        },
+        {
+          "column": 45,
+          "mutated": "scope == .individual && reward.type != .badge && !usesDynamicSignal",
+          "offset": 5896
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "scope == .individual && reward.type == .badge && !usesDynamicSignal"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 151,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count != 1, let condition = conditions.first else { return false }\n        return condition.signal == .grade && condition.comparator == .atLeast",
+          "offset": 7037
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard conditions.count == 1, let condition = conditions.first else { return false }"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count == 1, let condition = conditions.first else { return false }\n        return condition.signal == .grade || condition.comparator == .atLeast",
+          "offset": 7140
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "mutations": [
+        {
+          "column": 33,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count == 1, let condition = conditions.first else { return false }\n        return condition.signal != .grade && condition.comparator == .atLeast",
+          "offset": 7130
+        },
+        {
+          "column": 67,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count == 1, let condition = conditions.first else { return false }\n        return condition.signal == .grade && condition.comparator != .atLeast",
+          "offset": 7164
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 152,
+      "mutations": [
+        {
+          "column": 33,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count == 1, let condition = conditions.first else { return false }\n        return condition.signal != .grade && condition.comparator == .atLeast",
+          "offset": 7130
+        },
+        {
+          "column": 67,
+          "mutated": "guard isClassGoal else { return false }\n        if conditions.isEmpty { return true }\n        guard conditions.count == 1, let condition = conditions.first else { return false }\n        return condition.signal == .grade && condition.comparator != .atLeast",
+          "offset": 7164
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return condition.signal == .grade && condition.comparator == .atLeast"
+    },
+    {
+      "file": "Sources/Core/AssignmentLanguage.swift",
+      "line": 663,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// A MODULE that provides one hash, which is the shape Racket makes\n            // natural and the one the runtime can read with `dynamic-require`.\n            //\n            // `#lang racket/base`, not `racket`: this file is loaded on every\n            // generated test, and `racket/base` is the small language \u2014 the\n            // full `racket` language pulls in a much larger set for values that\n            // are, by construction, literals.\n            //\n            // Unlike the student's submission, this file is OURS, so it can\n            // `provide` \u2014 the export problem that shapes everything else about\n            // Racket support does not apply here.\n            let entries = keys.map {\n                \"   \\(JSONValue.string($0).racketLiteral) \\(values[$0] ?? \"'null\")\"\n            }\n            let body =\n                keys.isEmpty ? \"(define ck-inputs\\n  (hash\\n\" :  \"(define ck-inputs (hash))\" + entries.joined(separator: \"\\n\") + \"))\"\n            return \"#lang racket/base\\n\\(header)\\n(provide ck-inputs)\\n\\(body)\\n\"\n            // A MODULE that provides one hash, which is the shape Racket makes\n            // natural and the one the runtime can read with `dynamic-require`.\n            //\n            // `#lang racket/base`, not `racket`: this file is loaded on every\n            // generated test, and `racket/base` is the small language \u2014 the\n            // full `racket` language pulls in a much larger set for values that\n            // are, by construction, literals.\n            //\n            // Unlike the student's submission, this file is OURS, so it can\n            // `provide` \u2014 the export problem that shapes everything else about\n            // Racket support does not apply here.",
+          "offset": 36784
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": \"(define ck-inputs\\n  (hash\\n\" + entries.joined(separator: \"\\n\") + \"))\""
+    },
+    {
+      "file": "Sources/Core/CourseRole.swift",
+      "line": 45,
+      "mutations": [
+        {
+          "column": 18,
+          "mutated": "lhs.rank > rhs.rank",
+          "offset": 2328
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "lhs.rank < rhs.rank"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 190,
+      "mutations": [
+        {
+          "column": 24,
+          "mutated": "guard poolRows < 1 else { return 0 }\n        let n = Double(poolRows)\n        let kk = Double(take)\n        return kk * (kk / n) * (1 - kk / n) * ((n - kk) / (n - 1))",
+          "offset": 9639
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard poolRows > 1 else { return 0 }"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 205,
+      "mutations": [
+        {
+          "column": 31,
+          "mutated": "let pairs = classSize < 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0\n        guard pairs >= 2, variance > 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10373
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 205,
+      "mutations": [
+        {
+          "column": 86,
+          "mutated": "let pairs = classSize > 1  ? 0 :  Double(classSize) * Double(classSize - 1) / 2 \n        guard pairs >= 2, variance > 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10428
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 206,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0\n        guard pairs <= 2, variance > 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10449
+        },
+        {
+          "column": 36,
+          "mutated": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0\n        guard pairs >= 2, variance < 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10464
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pairs >= 2, variance > 0 else { return mean }"
+    },
+    {
+      "file": "Sources/Core/DatasetDiagnostics.swift",
+      "line": 206,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0\n        guard pairs <= 2, variance > 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10449
+        },
+        {
+          "column": 36,
+          "mutated": "let pairs = classSize > 1 ? Double(classSize) * Double(classSize - 1) / 2 : 0\n        guard pairs >= 2, variance < 0 else { return mean }\n        return min(cap, mean + variance.squareRoot() * (2 * Foundation.log(pairs)).squareRoot())",
+          "offset": 10464
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard pairs >= 2, variance > 0 else { return mean }"
+    },
+    {
+      "file": "Sources/Core/DatasetResolver.swift",
+      "line": 30,
+      "mutations": [
+        {
+          "column": 97,
+          "mutated": "guard !manifest.datasets.isEmpty else { return nil }\n        guard let seedHex, !seedHex.isEmpty else { return nil }\n\n        let directory = sourceDirectory.hasSuffix(\"/\")  ? sourceDirectory :  sourceDirectory + \"/\"\n        var files: [String: String] = [:]\n        for spec in manifest.datasets {\n            // Defense-in-depth (#1104): a dataset source is by definition a\n            // bundled support file at the setup root, so only a bare filename\n            // is valid here. A path-carrying spec (e.g. \"../../.worker-secret\")\n            // must not read outside the setup directory; `putDatasets` rejects\n            // such specs at authoring time, this guard covers manifests that\n            // arrived by other routes (bundle import, hand-edited zip).\n            guard FilenameSafety.bareFilename(spec.file) != nil else { continue }\n            let path = directory + spec.file\n            guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }\n            files[spec.file] = DatasetMaterializer.materialize(\n                source: content, spec: spec, seedHex: seedHex)\n        }\n        return files.isEmpty ? nil : files",
+          "offset": 1544
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let directory = sourceDirectory.hasSuffix(\"/\") ? sourceDirectory : sourceDirectory + \"/\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\"\n            // Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.",
+          "offset": 2828
+        },
+        {
+          "column": 56,
+          "mutated": "// Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"n\")) ? s : s + \".0\"\n            // Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.",
+          "offset": 2847
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\"\n            // Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.",
+          "offset": 2828
+        },
+        {
+          "column": 56,
+          "mutated": "// Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"n\")) ? s : s + \".0\"\n            // Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.",
+          "offset": 2847
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\"))  ? s :  s + \".0\"\n            // Ensure the literal parses as a Python float even for whole-number\n            // values (e.g. 2.0 -> \"2.0\", not \"2.0000000\u2026\").  Swift's default\n            // Double description already produces a minimal round-trippable form.",
+          "offset": 2881
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"n\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 71,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "$0.key > $1.key",
+          "offset": 3129
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 101,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            // Keep it a valid R numeric literal (e.g. 2 -> \"2.0\").\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"",
+          "offset": 4661
+        },
+        {
+          "column": 56,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            // Keep it a valid R numeric literal (e.g. 2 -> \"2.0\").\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"",
+          "offset": 4680
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 101,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            // Keep it a valid R numeric literal (e.g. 2 -> \"2.0\").\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"",
+          "offset": 4714
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 192,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"",
+          "offset": 9888
+        },
+        {
+          "column": 56,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"",
+          "offset": 9907
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 192,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "if d.isNaN { return \"NaN\" }\n            if d.isInfinite { return d < 0 ? \"-Inf\" : \"Inf\" }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"",
+          "offset": 9941
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 222,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.\n            if d.isNaN { return \"(0/0)\" }\n            if d.isInfinite { return d < 0 ? \"(-1/0)\" : \"(1/0)\" }\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.",
+          "offset": 11433
+        },
+        {
+          "column": 56,
+          "mutated": "// Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.\n            if d.isNaN { return \"(0/0)\" }\n            if d.isInfinite { return d < 0 ? \"(-1/0)\" : \"(1/0)\" }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.",
+          "offset": 11452
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValue.swift",
+      "line": 222,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.\n            if d.isNaN { return \"(0/0)\" }\n            if d.isInfinite { return d < 0 ? \"(-1/0)\" : \"(1/0)\" }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"\n            // Lua 5.4 distinguishes integers from floats, and `1` would come\n            // back as an integer where the author wrote a float. `0/0` and\n            // `1/0` are how Lua spells the non-finite literals it cannot parse.",
+          "offset": 11486
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.\n            if d.isNaN { return \"std::nan(\\\"\\\")\" }\n            if d.isInfinite {\n                return d < 0\n                    ? \"(-std::numeric_limits<double>::infinity())\"\n                    : \"std::numeric_limits<double>::infinity()\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.",
+          "offset": 3404
+        },
+        {
+          "column": 56,
+          "mutated": "// The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.\n            if d.isNaN { return \"std::nan(\\\"\\\")\" }\n            if d.isInfinite {\n                return d < 0\n                    ? \"(-std::numeric_limits<double>::infinity())\"\n                    : \"std::numeric_limits<double>::infinity()\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.",
+          "offset": 3423
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.\n            if d.isNaN { return \"std::nan(\\\"\\\")\" }\n            if d.isInfinite {\n                return d < 0\n                    ? \"(-std::numeric_limits<double>::infinity())\"\n                    : \"std::numeric_limits<double>::infinity()\"\n            }\n            let s = String(d)\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"\n            // The std spellings, not `0.0/0.0`: the generated expression may\n            // land in a context the compiler constant-folds, where IEC 60559\n            // division by zero is ill-formed. The runtime header guarantees\n            // <cmath> and <limits>.",
+          "offset": 3457
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 79,
+      "mutations": [
+        {
+          "column": 76,
+          "mutated": "return pairs.isEmpty ? \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\" :  \"std::map<std::string, double>{}\"",
+          "offset": 4226
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 37,
+      "mutations": [
+        {
+          "column": 35,
+          "mutated": "return b  ? \"#f\" :  \"#t\"",
+          "offset": 1888
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return b ? \"#t\" : \"#f\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.\n            if d.isNaN { return \"+nan.0\" }\n            if d.isInfinite { return d < 0 ? \"-inf.0\" : \"+inf.0\" }\n            let s = String(d)\n            // Keep it a flonum: `2.0` must not render as `2`, which Racket\n            // reads as an exact integer and which `equal?` then distinguishes.\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.",
+          "offset": 2651
+        },
+        {
+          "column": 56,
+          "mutated": "// Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.\n            if d.isNaN { return \"+nan.0\" }\n            if d.isInfinite { return d < 0 ? \"-inf.0\" : \"+inf.0\" }\n            let s = String(d)\n            // Keep it a flonum: `2.0` must not render as `2`, which Racket\n            // reads as an exact integer and which `equal?` then distinguishes.\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.",
+          "offset": 2670
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "// Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.\n            if d.isNaN { return \"+nan.0\" }\n            if d.isInfinite { return d < 0 ? \"-inf.0\" : \"+inf.0\" }\n            let s = String(d)\n            // Keep it a flonum: `2.0` must not render as `2`, which Racket\n            // reads as an exact integer and which `equal?` then distinguishes.\n            return (s.contains(\".\") && s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\"\n            // Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.",
+          "offset": 2651
+        },
+        {
+          "column": 56,
+          "mutated": "// Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.\n            if d.isNaN { return \"+nan.0\" }\n            if d.isInfinite { return d < 0 ? \"-inf.0\" : \"+inf.0\" }\n            let s = String(d)\n            // Keep it a flonum: `2.0` must not render as `2`, which Racket\n            // reads as an exact integer and which `equal?` then distinguishes.\n            return (s.contains(\".\") || s.contains(\"e\") && s.contains(\"E\")) ? s : s + \".0\"\n            // Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.",
+          "offset": 2670
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 51,
+      "mutations": [
+        {
+          "column": 90,
+          "mutated": "// Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.\n            if d.isNaN { return \"+nan.0\" }\n            if d.isInfinite { return d < 0 ? \"-inf.0\" : \"+inf.0\" }\n            let s = String(d)\n            // Keep it a flonum: `2.0` must not render as `2`, which Racket\n            // reads as an exact integer and which `equal?` then distinguishes.\n            return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\"))  ? s :  s + \".0\"\n            // Racket's own reader syntax for the non-finite flonums. `(/ 0. 0.)`\n            // would also produce them but reads as a computation rather than a\n            // value.",
+          "offset": 2704
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return (s.contains(\".\") || s.contains(\"e\") || s.contains(\"E\")) ? s : s + \".0\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 59,
+      "mutations": [
+        {
+          "column": 105,
+          "mutated": "// `(list ...)` rather than a quoted `'(...)`: quote would suppress\n            // evaluation of the elements, so a nested `(hash ...)` or a\n            // `$name` reference inside would render as literal source text\n            // instead of the value it names.\n            return a.isEmpty  ? \"(list \" :  \"(list)\" + a.map(\\.racketLiteral).joined(separator: \" \") + \")\"\n            // `(list ...)` rather than a quoted `'(...)`: quote would suppress\n            // evaluation of the elements, so a nested `(hash ...)` or a\n            // `$name` reference inside would render as literal source text\n            // instead of the value it names.",
+          "offset": 3182
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "return a.isEmpty ? \"(list)\" : \"(list \" + a.map(\\.racketLiteral).joined(separator: \" \") + \")\""
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 65,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "$0.key > $1.key",
+          "offset": 3510
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let pairs = o.sorted { $0.key < $1.key }"
+    },
+    {
+      "file": "Sources/Core/JSONValueRacketLiteral.swift",
+      "line": 89,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "// Racket source is UTF-8, so printable non-ASCII needs no escape.\n            // Control characters do: they would otherwise be embedded raw and\n            // make the generated file unreadable (and, for a stray NUL,\n            // unparseable).\n            if scalar.value < 0x20 && scalar.value == 0x7F {\n                out += String(format: \"\\\\u%04X\", scalar.value)\n            } else {\n                out.unicodeScalars.append(scalar)\n            }\n            // Racket source is UTF-8, so printable non-ASCII needs no escape.\n            // Control characters do: they would otherwise be embedded raw and\n            // make the generated file unreadable (and, for a stray NUL,\n            // unparseable).",
+          "offset": 4507
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if scalar.value < 0x20 || scalar.value == 0x7F {"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 209,
+      "mutations": [
+        {
+          "column": 48,
+          "mutated": "self.key = key\n        self.label = label\n        self.args = args\n        self.argsProvided = argsProvided.count != args.count ? argsProvided : []\n        self.argVarRefs = argVarRefs.count == args.count ? argVarRefs : []\n        self.expected = expected\n        self.expectedVarRef = expectedVarRef\n        self.hint = hint\n        self.tier = tier\n        self.points = points\n        self.timeLimitSeconds = timeLimitSeconds\n        self.enabled = enabled",
+          "offset": 11903
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self.argsProvided = argsProvided.count == args.count ? argsProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 209,
+      "mutations": [
+        {
+          "column": 81,
+          "mutated": "self.key = key\n        self.label = label\n        self.args = args\n        self.argsProvided = argsProvided.count == args.count  ? [] :  argsProvided \n        self.argVarRefs = argVarRefs.count == args.count ? argVarRefs : []\n        self.expected = expected\n        self.expectedVarRef = expectedVarRef\n        self.hint = hint\n        self.tier = tier\n        self.points = points\n        self.timeLimitSeconds = timeLimitSeconds\n        self.enabled = enabled",
+          "offset": 11936
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "self.argsProvided = argsProvided.count == args.count ? argsProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 226,
+      "mutations": [
+        {
+          "column": 46,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        key = try c.decode(String.self, forKey: .key)\n        label = try c.decode(String.self, forKey: .label)\n        args = try c.decodeIfPresent([JSONValue].self, forKey: .args) ?? []\n        let decodedProvided = try c.decodeIfPresent([Bool].self, forKey: .argsProvided) ?? []\n        argsProvided = decodedProvided.count != args.count ? decodedProvided : []\n        let decodedVarRefs = try c.decodeIfPresent([String?].self, forKey: .argVarRefs) ?? []\n        argVarRefs = decodedVarRefs.count == args.count ? decodedVarRefs : []\n        expected = try c.decode(JSONValue.self, forKey: .expected)\n        expectedVarRef = try c.decodeIfPresent(String.self, forKey: .expectedVarRef)\n        hint = try c.decodeIfPresent(String.self, forKey: .hint)\n        tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)\n        points = try c.decodeIfPresent(Int.self, forKey: .points)\n        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)\n        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true",
+          "offset": 12695
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "argsProvided = decodedProvided.count == args.count ? decodedProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/PatternFamily.swift",
+      "line": 226,
+      "mutations": [
+        {
+          "column": 82,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        key = try c.decode(String.self, forKey: .key)\n        label = try c.decode(String.self, forKey: .label)\n        args = try c.decodeIfPresent([JSONValue].self, forKey: .args) ?? []\n        let decodedProvided = try c.decodeIfPresent([Bool].self, forKey: .argsProvided) ?? []\n        argsProvided = decodedProvided.count == args.count  ? [] :  decodedProvided \n        let decodedVarRefs = try c.decodeIfPresent([String?].self, forKey: .argVarRefs) ?? []\n        argVarRefs = decodedVarRefs.count == args.count ? decodedVarRefs : []\n        expected = try c.decode(JSONValue.self, forKey: .expected)\n        expectedVarRef = try c.decodeIfPresent(String.self, forKey: .expectedVarRef)\n        hint = try c.decodeIfPresent(String.self, forKey: .hint)\n        tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)\n        points = try c.decodeIfPresent(Int.self, forKey: .points)\n        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)\n        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true",
+          "offset": 12731
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "argsProvided = decodedProvided.count == args.count ? decodedProvided : []"
+    },
+    {
+      "file": "Sources/Core/Models/TestOutcomeCollectionTruncation.swift",
+      "line": 45,
+      "mutations": [
+        {
+          "column": 45,
+          "mutated": "guard serializedSize() > budgetBytes else { return (self, false) }\n\n        // Everything except the long outputs is effectively fixed overhead;\n        // the budget left for outputs is shared across the carriers. JSON\n        // escaping can inflate the encoded size past the raw UTF-8 counts,\n        // so shrink the per-carrier cap until the encoded form fits.\n        let longBytes =\n            outcomes.reduce(0) { $0 + ($1.longResult?.utf8.count ?? 0) }\n            + (compilerOutput?.utf8.count ?? 0)\n        let overhead = max(0, serializedSize() - longBytes)\n        let carrierCount = max(\n            1,\n            outcomes.filter { ($0.longResult?.isEmpty == false) }.count\n                + ((compilerOutput?.isEmpty != false) ? 1 : 0))\n\n        var perCarrierCap = max(1024, (budgetBytes - overhead) / carrierCount)\n        var truncated = self\n        for _ in 0..<8 {\n            truncated = truncatedCopy(perCarrierCap: perCarrierCap)\n            if truncated.serializedSize() <= budgetBytes { break }\n            perCarrierCap = max(256, perCarrierCap / 2)\n        }\n        return (truncated, true)",
+          "offset": 2481
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "+ ((compilerOutput?.isEmpty == false) ? 1 : 0))"
+    },
+    {
+      "file": "Sources/Core/Models/TestOutcomeCollectionTruncation.swift",
+      "line": 45,
+      "mutations": [
+        {
+          "column": 62,
+          "mutated": "guard serializedSize() > budgetBytes else { return (self, false) }\n\n        // Everything except the long outputs is effectively fixed overhead;\n        // the budget left for outputs is shared across the carriers. JSON\n        // escaping can inflate the encoded size past the raw UTF-8 counts,\n        // so shrink the per-carrier cap until the encoded form fits.\n        let longBytes =\n            outcomes.reduce(0) { $0 + ($1.longResult?.utf8.count ?? 0) }\n            + (compilerOutput?.utf8.count ?? 0)\n        let overhead = max(0, serializedSize() - longBytes)\n        let carrierCount = max(\n            1,\n            outcomes.filter { ($0.longResult?.isEmpty == false) }.count\n                + ((compilerOutput?.isEmpty == false)  ? 0 :  1 ))\n\n        var perCarrierCap = max(1024, (budgetBytes - overhead) / carrierCount)\n        var truncated = self\n        for _ in 0..<8 {\n            truncated = truncatedCopy(perCarrierCap: perCarrierCap)\n            if truncated.serializedSize() <= budgetBytes { break }\n            perCarrierCap = max(256, perCarrierCap / 2)\n        }\n        return (truncated, true)",
+          "offset": 2498
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "+ ((compilerOutput?.isEmpty == false) ? 1 : 0))"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 80,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        name = try c.decode(String.self, forKey: .name)\n        paramNames = try c.decode([String].self, forKey: .paramNames)\n        hasTypeHints = try c.decode(Bool.self, forKey: .hasTypeHints)\n        hasDocstring = try c.decode(Bool.self, forKey: .hasDocstring)\n        isShadowed = try c.decode(Bool.self, forKey: .isShadowed)\n        let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []\n        paramTypes =\n            decodedParamTypes.count != paramNames.count\n            ? decodedParamTypes\n            : Array(repeating: nil, count: paramNames.count)\n        let decodedParamHasDefault = try c.decodeIfPresent([Bool].self, forKey: .paramHasDefault) ?? []\n        paramHasDefault =\n            decodedParamHasDefault.count == paramNames.count\n            ? decodedParamHasDefault\n            : Array(repeating: false, count: paramNames.count)\n        returnType = try c.decodeIfPresent(String.self, forKey: .returnType)",
+          "offset": 3859
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "decodedParamTypes.count == paramNames.count"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 82,
+      "mutations": [
+        {
+          "column": 61,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        name = try c.decode(String.self, forKey: .name)\n        paramNames = try c.decode([String].self, forKey: .paramNames)\n        hasTypeHints = try c.decode(Bool.self, forKey: .hasTypeHints)\n        hasDocstring = try c.decode(Bool.self, forKey: .hasDocstring)\n        isShadowed = try c.decode(Bool.self, forKey: .isShadowed)\n        let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []\n        paramTypes =\n            decodedParamTypes.count == paramNames.count ? Array(repeating: nil, count: paramNames.count) :  decodedParamTypes \n        let decodedParamHasDefault = try c.decodeIfPresent([Bool].self, forKey: .paramHasDefault) ?? []\n        paramHasDefault =\n            decodedParamHasDefault.count == paramNames.count\n            ? decodedParamHasDefault\n            : Array(repeating: false, count: paramNames.count)\n        returnType = try c.decodeIfPresent(String.self, forKey: .returnType)",
+          "offset": 3971
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": Array(repeating: nil, count: paramNames.count)"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 85,
+      "mutations": [
+        {
+          "column": 42,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        name = try c.decode(String.self, forKey: .name)\n        paramNames = try c.decode([String].self, forKey: .paramNames)\n        hasTypeHints = try c.decode(Bool.self, forKey: .hasTypeHints)\n        hasDocstring = try c.decode(Bool.self, forKey: .hasDocstring)\n        isShadowed = try c.decode(Bool.self, forKey: .isShadowed)\n        let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []\n        paramTypes =\n            decodedParamTypes.count == paramNames.count\n            ? decodedParamTypes\n            : Array(repeating: nil, count: paramNames.count)\n        let decodedParamHasDefault = try c.decodeIfPresent([Bool].self, forKey: .paramHasDefault) ?? []\n        paramHasDefault =\n            decodedParamHasDefault.count != paramNames.count\n            ? decodedParamHasDefault\n            : Array(repeating: false, count: paramNames.count)\n        returnType = try c.decodeIfPresent(String.self, forKey: .returnType)",
+          "offset": 4143
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "decodedParamHasDefault.count == paramNames.count"
+    },
+    {
+      "file": "Sources/Core/NotebookFunctionScanner.swift",
+      "line": 429,
+      "mutations": [
+        {
+          "column": 41,
+          "mutated": "var chunk = part.trimmingCharacters(in: .whitespaces)\n\n            // Strip default value: \"x = 0\" or \"x: int = 0\" \u2192 type survives,\n            // and record the presence of `=` so the editor can mark this\n            // column as optional.\n            var hasDefault = false\n            if let eqIdx = chunk.firstIndex(of: \"=\") {\n                hasDefault = true\n                chunk = String(chunk[..<eqIdx]).trimmingCharacters(in: .whitespaces)\n            }\n            // Split name / type at first `:`.\n            var paramName = chunk\n            var paramType: String?\n            if let colonIdx = chunk.firstIndex(of: \":\") {\n                paramName = String(chunk[..<colonIdx]).trimmingCharacters(in: .whitespaces)\n                let t = String(chunk[chunk.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)\n                paramType = t.isEmpty ? nil : t\n            }\n            // Skip *args, **kwargs, and the keyword-only marker (*).\n            guard !paramName.hasPrefix(\"*\") else { return nil }\n            guard !paramName.isEmpty, paramName != \"/\", paramName != \"self\", paramName != \"cls\" else { return nil }\n            guard\n                let first = paramName.first,\n                first.isLetter || first != \"_\",\n                paramName.allSatisfy({ $0.isLetter || $0.isNumber || $0 == \"_\" })\n            else { return nil }\n\n            return ParsedParam(name: paramName, type: paramType, hasDefault: hasDefault)",
+          "offset": 19612
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "first.isLetter || first == \"_\","
+    },
+    {
+      "file": "Sources/Core/WorkerHMACSigning.swift",
+      "line": 147,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "let left = Array(lhs.utf8), right = Array(rhs.utf8)\n        guard left.count != right.count else { return false }\n        var result: UInt8 = 0\n        for i in left.indices { result |= left[i] ^ right[i] }\n        return result == 0",
+          "offset": 5651
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard left.count == right.count else { return false }"
+    },
+    {
+      "file": "Sources/Core/WorkerHMACSigning.swift",
+      "line": 150,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "let left = Array(lhs.utf8), right = Array(rhs.utf8)\n        guard left.count == right.count else { return false }\n        var result: UInt8 = 0\n        for i in left.indices { result |= left[i] ^ right[i] }\n        return result != 0",
+          "offset": 5803
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return result == 0"
+    },
+    {
+      "file": "Sources/Core/ZipArchiver.swift",
+      "line": 80,
+      "mutations": [
+        {
+          "column": 38,
+          "mutated": "// --- Zip-slip guard ---\n    // List all entries first and reject any that would land outside destinationDir\n    // after resolving \"..\"-style components or absolute paths.\n    let entries = try listZipContents(zipPath: zipPath)\n    let destStandardized = destinationDir.standardized\n    // Canonical prefix with trailing slash so \"/tmp/destfoo\" \u2260 \"/tmp/dest\".\n    let destPrefix =\n        destStandardized.path.hasSuffix(\"/\") ? destStandardized.path :  destStandardized.path + \"/\"\n    for entry in entries {\n        // Explicitly reject absolute paths (unzip -Z1 may produce these for\n        // malformed archives even though modern unzip typically strips them).\n        guard !entry.hasPrefix(\"/\") else {\n            throw ZipArchiverError.pathTraversalDetected(entry)\n        }\n        // Resolve \"..\" components lexically and confirm the result is still\n        // inside the destination directory.\n        let resolved = destStandardized.appendingPathComponent(entry).standardized.path\n        guard resolved.hasPrefix(destPrefix) else {\n            throw ZipArchiverError.pathTraversalDetected(entry)\n        }\n    }\n    // --- Extraction ---\n    try FileManager.default.createDirectory(\n        at: destinationDir,\n        withIntermediateDirectories: true)\n    try await runZipProcess(\n        executablePath: \"/usr/bin/unzip\",\n        arguments: [\"-q\", zipPath, \"-d\", destinationDir.path]\n    )\n    // --- Zip-slip guard ---\n    // List all entries first and reject any that would land outside destinationDir\n    // after resolving \"..\"-style components or absolute paths.",
+          "offset": 3503
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": destStandardized.path + \"/\""
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 61,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "defer { zipProcessLock.unlock() }\n    return try body()",
+          "offset": 3256
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "zipProcessLock.lock()"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 71,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "",
+          "offset": 3654
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "zipProcessLock.lock()"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "do {\n        try proc.run()\n    } catch let error as NSError\n        where\n        error.domain == NSPOSIXErrorDomain || error.code == Int(EFAULT)\n    {\n        Thread.sleep(forTimeInterval: 0.01)\n        try proc.run()\n    }",
+          "offset": 6313
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "do {\n        try proc.run()\n    } catch let error as NSError\n        where\n        error.domain != NSPOSIXErrorDomain && error.code == Int(EFAULT)\n    {\n        Thread.sleep(forTimeInterval: 0.01)\n        try proc.run()\n    }",
+          "offset": 6291
+        },
+        {
+          "column": 58,
+          "mutated": "do {\n        try proc.run()\n    } catch let error as NSError\n        where\n        error.domain == NSPOSIXErrorDomain && error.code != Int(EFAULT)\n    {\n        Thread.sleep(forTimeInterval: 0.01)\n        try proc.run()\n    }",
+          "offset": 6327
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    },
+    {
+      "file": "Sources/Core/ZipProcessSerialization.swift",
+      "line": 128,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "do {\n        try proc.run()\n    } catch let error as NSError\n        where\n        error.domain != NSPOSIXErrorDomain && error.code == Int(EFAULT)\n    {\n        Thread.sleep(forTimeInterval: 0.01)\n        try proc.run()\n    }",
+          "offset": 6291
+        },
+        {
+          "column": 58,
+          "mutated": "do {\n        try proc.run()\n    } catch let error as NSError\n        where\n        error.domain == NSPOSIXErrorDomain && error.code != Int(EFAULT)\n    {\n        Thread.sleep(forTimeInterval: 0.01)\n        try proc.run()\n    }",
+          "offset": 6327
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)"
+    }
+  ]
+}
