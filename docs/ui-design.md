@@ -276,6 +276,13 @@ duplicate.
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
+- **`.assignment-phone-meta`** — the student dashboard's phone-width
+  restatement of the Due and History columns, which `.col-hide-phone` drops
+  below 640px.  Sits inside the name cell, takes `.card-meta` typography, and
+  is `display: none` at every width that still shows those columns, so the
+  fact never appears twice.  Not general-purpose: a table that hides columns
+  on phones and wants them restated should reuse this pattern by name rather
+  than minting a second one.
   `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
   `.empty` — the "nothing here yet" line a list renders in place of rows.

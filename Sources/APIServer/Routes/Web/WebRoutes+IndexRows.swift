@@ -49,7 +49,7 @@ struct DashboardSlipDayData {
     /// remainder) reads as an implementation detail, not a debt.
     var summaryLine: String? {
         policy.enabled
-            ? "Slip days: \(max(balance, 0)) of \(totalBudget) remaining."
+            ? "\(max(balance, 0)) of \(totalBudget) slip days"
             : nil
     }
 }
@@ -67,6 +67,58 @@ struct IndexRowContext {
     let activeCourseCode: String?
     let hasNotebookBySetupID: [String: Bool]
     let slipDay: DashboardSlipDayData
+}
+
+/// The dashboard row's status badge and staff-only marker, resolved per viewer.
+///
+/// Preview is staff-only: staff see it functioning as "open" with a subtle
+/// staff-only marker, while to a student it is indistinguishable from
+/// "closed" — so this cannot be read off `visibility` alone.
+func dashboardRowStatus(
+    assignment: APIAssignment?, isActiveCourseStaff: Bool
+) -> (status: String, staffOnly: Bool) {
+    guard let assignment else { return ("unpublished", false) }
+    switch assignment.visibility {
+    case .open: return ("open", false)
+    case .closed: return ("closed", false)
+    case .preview:
+        return (isActiveCourseStaff ? "open" : "closed", isActiveCourseStaff)
+    }
+}
+
+/// The four gates the dashboard's Actions cell renders, derived once per row.
+///
+/// They live here, rather than as conditions spelled out in `index.leaf`,
+/// because the cell also has to know whether it is offering *anything* — and
+/// two copies of the same conditions eventually disagree, rendering a dash
+/// beside live buttons or buttons beside a dash.
+struct DashboardRowActionGates {
+    let edit: Bool
+    let upload: Bool
+    let resetNotebook: Bool
+    let slipDay: Bool
+
+    /// True when the row offers at least one action.
+    var any: Bool { edit || upload || resetNotebook || slipDay }
+}
+
+func dashboardRowActionGates(
+    props: TestProperties?,
+    canEdit: Bool,
+    isOpenForThisUser: Bool,
+    hasNotebook: Bool,
+    slipDayAvailable: Bool
+) -> DashboardRowActionGates {
+    let gradingMode = props?.effectiveGradingMode.rawValue ?? GradingMode.worker.rawValue
+    let submissionMode =
+        props?.effectiveSubmissionMode.rawValue ?? SubmissionMode.notebook.rawValue
+    let editable = submissionMode != "uploadOnly"
+    return DashboardRowActionGates(
+        edit: canEdit && editable && (gradingMode == "browser" || hasNotebook),
+        upload: isOpenForThisUser && gradingMode != "browser",
+        resetNotebook: isOpenForThisUser && hasNotebook && editable,
+        slipDay: slipDayAvailable
+    )
 }
 
 extension WebRoutes {
@@ -314,27 +366,8 @@ extension WebRoutes {
             guard let assignment, let startsAt = assignment.startsAt else { return false }
             return Date() < startsAt
         }()
-        // Preview is staff-only: staff see it functioning as "open" with a
-        // subtle staff-only marker, while to students it is indistinguishable
-        // from "closed". So the displayed status is resolved per viewer.
-        let status: String
-        let staffOnly: Bool
-        if let assignment {
-            switch assignment.visibility {
-            case .open:
-                status = "open"
-                staffOnly = false
-            case .closed:
-                status = "closed"
-                staffOnly = false
-            case .preview:
-                status = context.isActiveCourseStaff ? "open" : "closed"
-                staffOnly = context.isActiveCourseStaff
-            }
-        } else {
-            status = "unpublished"
-            staffOnly = false
-        }
+        let (status, staffOnly) = dashboardRowStatus(
+            assignment: assignment, isActiveCourseStaff: context.isActiveCourseStaff)
         // True when the setup has a flat notebook file on disk, or the zip
         // contains at least one .ipynb entry (resolved above via the cache).
         let hasNotebook = context.hasNotebookBySetupID[setupID] ?? false
@@ -387,6 +420,9 @@ extension WebRoutes {
             assignment: assignment, extensionDueAt: extensionDueAt,
             setupID: setupID, context: context)
         let badgeSplit = AchievementBadge.dashboardSplit(context.gradeData.latestBadgesBySetupID[setupID] ?? [])
+        let gates = dashboardRowActionGates(
+            props: props, canEdit: canEdit, isOpenForThisUser: isOpenForThisUser,
+            hasNotebook: hasNotebook, slipDayAvailable: slipDayLabel != nil)
         return TestSetupRow(
             id: setupID,
             title: assignment?.title,
@@ -396,6 +432,7 @@ extension WebRoutes {
             suiteCount: props?.testSuites.count ?? 0,
             createdAt: setup.createdAt.map { context.fmt.string(from: $0) } ?? "—",
             dueAt: assignment?.dueAt.map { context.fmt.string(from: $0) },
+            dueAtISO: assignment?.dueAt.map(iso8601String),
             opensAtText: notYetOpen ? assignment?.startsAt.map { context.fmt.string(from: $0) } : nil,
             status: displayStatus,
             staffOnly: staffOnly,
@@ -425,7 +462,12 @@ extension WebRoutes {
             extraBadgesTooltip: badgeSplit.extraTooltip,
             hasActiveExtension: hasActiveExtension,
             effectiveDueAtText: effectiveDueAt.map { context.fmt.string(from: $0) },
-            slipDayAvailable: slipDayLabel != nil,
+            effectiveDueAtISO: effectiveDueAt.map(iso8601String),
+            showEditAction: gates.edit,
+            showUploadAction: gates.upload,
+            showResetNotebookAction: gates.resetNotebook,
+            hasAnyAction: gates.any,
+            slipDayAvailable: gates.slipDay,
             slipDayURL: "/testsetups/\(setupID)/slip-day",
             slipDayActionLabel: slipDayLabel ?? ""
         )
