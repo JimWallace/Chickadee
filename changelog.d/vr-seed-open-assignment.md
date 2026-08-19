@@ -19,3 +19,9 @@
   every subsequent run. It is normalized to a constant the same way relative
   times already were, rather than masked — a mask would have been a blind spot
   over the cell.
+  Two further baselines were stale and had passed anyway: the submit page's
+  heading is the assignment title, so publishing changed it from the raw setup
+  ID, and the diff landed at 1,118 px against an 1,152 px budget — under the
+  floor by 34 px. Refreshed, because a page sitting at 97% of its tolerance
+  would have failed on the next unrelated edit and read as that edit's fault.
+
