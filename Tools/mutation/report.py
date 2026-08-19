@@ -126,11 +126,11 @@ def main() -> int:
             "shard": shard_nums[0] if shard_nums else None,
             "shardCount": shard_nums[1] if len(shard_nums) > 1 else None,
             "killed": len(killed),
-            # `survived` is the PHANTOM-FILTERED count -- the real holes. It is
-            # deliberately NOT the number in report.md's table, which carries
-            # Muter's raw count so it reconciles with Muter's own summary. Both
-            # are emitted under distinct names because a trend built on the raw
-            # count would read phantoms as regressions.
+            # `survived` is the PHANTOM-FILTERED count -- the real holes, and
+            # the same number report.md's table shows. `reportedSurvived` keeps
+            # Muter's raw count so the two can be reconciled, but nothing should
+            # SUM it: a trend built on the raw count reads phantoms as
+            # regressions, and a headline built on it reads them as holes.
             "survived": len(resolved),
             "reportedSurvived": len(survived),
             "survivors": [
@@ -161,14 +161,33 @@ def main() -> int:
             "Do not read a score from this run.",
         ]
     else:
+        # The table carries the PHANTOM-FILTERED numbers, and the score is
+        # recomputed from them rather than taken from Muter's summary.
+        #
+        # It used to print Muter's raw count "so it reconciles with Muter's own
+        # summary", and the 2026-08-19 sweep showed what that costs: shard 0
+        # read "50 survived, 37%" when 43 of those mutants were never inserted
+        # and its real score was 81%. A human triaging that shard would have
+        # concluded NotebookExtraction was barely tested. Reconciliation is
+        # worth one line of prose; it is not worth the headline number.
+        denominator = len(killed) + len(resolved)
+        net_score = f"{round(100 * len(killed) / denominator)}%" if denominator else "n/a"
+        muter_score = SCORE.search(text).group(1) + "%" if SCORE.search(text) else "n/a"
         out += [
             "| killed | survived | score | runtime |",
             "|---:|---:|---:|---|",
-            f"| {len(killed)} | {len(survived)} | "
-            f"{SCORE.search(text).group(1) + '%' if SCORE.search(text) else 'n/a'} | "
+            f"| {len(killed)} | {len(resolved)} | {net_score} | "
             f"{TOOK.search(text).group(1) if TOOK.search(text) else 'n/a'} |",
             "",
         ]
+        if phantoms:
+            out += [
+                f"> Muter's own summary claims {len(survived)} survivors and {muter_score}. "
+                f"{len(phantoms)} of them were never inserted into the mutated copy "
+                "(listed below), so the table above is the measurement and that one "
+                "is not.",
+                "",
+            ]
         if not truth:
             out += [
                 "> **Positions are Muter's own and are known to be wrong.** The mutated",

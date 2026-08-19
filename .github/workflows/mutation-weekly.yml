@@ -169,32 +169,93 @@ jobs:
           path: shards
 
       - name: Record this run for the trend
+        id: record
         run: |
+          # Pull the existing series in first, so trend.py sees every prior run
+          # rather than just this one. The records live on their own branch --
+          # see the commit step for why they cannot live on main.
+          if git fetch --quiet origin mutation-reports 2>/dev/null; then
+            git checkout --quiet FETCH_HEAD -- MutationReports 2>/dev/null || true
+            echo "Restored $(ls MutationReports/*.json 2>/dev/null | wc -l) prior record(s)."
+          else
+            echo "No mutation-reports branch yet; this is the first run recorded."
+          fi
           date="$(date -u +%Y-%m-%d)"
-          python3 Tools/mutation/merge-run.py shards "MutationReports/$date.json" "$date" || {
+          if ! python3 Tools/mutation/merge-run.py shards "MutationReports/$date.json" "$date"; then
             echo "::warning::No shard produced outcomes; no run recorded."
-            exit 0
-          }
-          python3 Tools/mutation/trend.py
-
-      - name: Commit the run record
-        # NEVER fatal. This step runs before the triage issue is filed, and a
-        # push refused by branch protection must not cost the run its report --
-        # the issue is the existing behaviour and the record is the addition.
-        # A lost record is one gap in a series; a lost issue is the whole run.
-        continue-on-error: true
-        run: |
-          if [ -z "$(git status --porcelain MutationReports)" ]; then
-            echo "Nothing to record."
+            echo "recorded=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add MutationReports
-          git commit -m "chore(mutation): record sweep $(date -u +%Y-%m-%d)"
-          # Rebase rather than force: this job races nothing, but main moves.
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "recorded=true" >> "$GITHUB_OUTPUT"
+          python3 Tools/mutation/trend.py | tee /tmp/trend.txt
+
+      - name: Commit the run record
+        id: commit
+        # NEVER fatal: a lost record is one gap in a series, a lost issue is the
+        # whole run, and the issue is filed by a later step.
+        #
+        # It targets `mutation-reports`, NOT the default branch. Run 3 tried main
+        # and was refused -- "Changes must be made through a pull request", plus
+        # four required status checks -- which is not a misconfiguration to fix
+        # but the repository's rules working correctly. A bot committing a
+        # generated artifact to main cannot satisfy them and never will, so the
+        # series gets its own unprotected branch. `continue-on-error` then hid
+        # the refusal completely, which is how a trend that can never accumulate
+        # would have looked exactly like a trend with nothing in it yet.
+        #
+        # A SIDE CLONE rather than a branch switch in the workspace: the records
+        # branch holds only MutationReports/, so checking it out over a tree full
+        # of tracked sources means deleting them and putting them back, and every
+        # cheaper-looking variant of that (orphan branch, stash, sparse checkout)
+        # has an edge case that ends with a half-written working tree.
+        continue-on-error: true
+        if: steps.record.outputs.recorded == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          date="$(date -u +%Y-%m-%d)"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          work=/tmp/mutation-reports
+          rm -rf "$work"
+
+          if ! git clone --quiet --depth 1 --branch mutation-reports "$remote" "$work" 2>/dev/null; then
+            echo "Creating the mutation-reports branch."
+            mkdir -p "$work"
+            git -C "$work" init --quiet
+            git -C "$work" remote add origin "$remote"
+            git -C "$work" checkout --quiet -b mutation-reports
+          fi
+
+          mkdir -p "$work/MutationReports"
+          cp "MutationReports/$date.json" "$work/MutationReports/"
+          git -C "$work" config user.name "github-actions[bot]"
+          git -C "$work" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$work" add MutationReports
+          if git -C "$work" diff --cached --quiet; then
+            echo "This run is already recorded; nothing to push."
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C "$work" commit -qm "chore(mutation): record sweep $date"
+          git -C "$work" push --quiet origin HEAD:mutation-reports
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Say so if the series was not persisted
+        # The point of the record is a SERIES. If it did not land, the next run
+        # has nothing to compare against, and silence is what let that go unseen
+        # for a whole run. This never fails the job -- the report still stands --
+        # but it is impossible to miss in the run summary.
+        if: steps.record.outputs.recorded == 'true' && steps.commit.outputs.pushed != 'true'
+        run: |
+          echo "::warning::The run record was NOT pushed to the mutation-reports branch."
+          {
+            echo "### ⚠️ Trend record not persisted"
+            echo ""
+            echo "This run measured fine, but its record did not reach the"
+            echo '`mutation-reports` branch, so it will be missing from the trend and'
+            echo "the next run has one less point to compare against."
+            echo "The merged record is still in this run's artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Merge the shards and file the issue
         uses: actions/github-script@v7
@@ -232,7 +293,8 @@ jobs:
             for (const d of dirs) {
               const shard = d.split('-').pop();
               const file = path.join('shards', d, 'report.md');
-              if (!fs.existsSync(file)) { missing.push(shard); continue; }
+              const summaryFile = path.join('shards', d, 'summary.json');
+              if (!fs.existsSync(file) || !fs.existsSync(summaryFile)) { missing.push(shard); continue; }
               const body = fs.readFileSync(file, 'utf8');
               // A report can EXIST and still say nothing was mutated -- run 2
               // uploaded ten of them, each reading "Muter produced no mutant
@@ -240,11 +302,23 @@ jobs:
               // zero survivors is how a totally broken sweep reported success.
               // Absence of outcomes is a failed shard, not an empty one.
               if (body.includes('no mutant outcomes at all')) { missing.push(shard); continue; }
-              const m = body.match(/\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)%/);
-              if (!m) { missing.push(shard); continue; }
-              killed += Number(m[1]); survivors += Number(m[2]);
-              const p = body.match(/Muter reported (\d+) survivor/);
-              if (p) phantoms += Number(p[1]);
+
+              // COUNTS COME FROM summary.json, NOT from scraping the markdown.
+              // Run 3 shipped two readers of one shard's output that disagreed:
+              // merge-run.py read this file and recorded the right answer (122
+              // killed, 23 survived, 84.1%), while this job scraped the report's
+              // table -- which then carried Muter's raw survivor count -- and
+              // headlined "87 survived ... plus 64 phantoms filtered out". The 87
+              // already CONTAINED the 64. The machine record was honest and the
+              // sentence a human reads was not, which is the whole failure this
+              // job exists to prevent. One source of truth, shared with the trend.
+              let summary;
+              try { summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8')); }
+              catch { missing.push(shard); continue; }
+              if ((summary.killed || 0) + (summary.survived || 0) === 0) { missing.push(shard); continue; }
+              killed += summary.killed || 0;
+              survivors += summary.survived || 0;
+              phantoms += (summary.phantoms || []).length;
               sections.push(body);
             }
 
@@ -262,9 +336,13 @@ jobs:
             const header = [
               `## Mutation sweep — logic tier`,
               '',
-              `**${killed} killed, ${survivors} survived** across `
-                + `${sections.length} of ${expected} shard(s)`
-                + (phantoms ? `, plus ${phantoms} phantom mutant(s) filtered out.` : '.'),
+              `**${killed} killed, ${survivors} survived** — `
+                + `${killed + survivors ? Math.round(100 * killed / (killed + survivors)) : 0}% `
+                + `across ${sections.length} of ${expected} shard(s)`
+                // "excluded", never "plus": the phantoms are NOT additional
+                // survivors sitting beside these, they are already out of the
+                // count above. The earlier wording read as 87 + 64.
+                + (phantoms ? `, with ${phantoms} phantom mutant(s) excluded.` : '.'),
               '',
             ];
             if (missing.length) {
