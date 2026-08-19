@@ -32,7 +32,7 @@ My Account
 
 <section class="page-section">
     <h2>My courses</h2>
-    #if(enrolledCourses.isEmpty):
+    #if(!hasEnrolledCourses):
     <p class="empty">You are not enrolled in any courses.
         <a href="/enroll">Browse available courses</a>
     </p>
@@ -76,7 +76,7 @@ My Account
 
 <section class="page-section">
     <h2>Available courses</h2>
-    #if(availableCourses.isEmpty):
+    #if(!hasAvailableCourses):
     <p class="empty">There are no other courses open to join right now.</p>
     #else:
     <table class="results-table">

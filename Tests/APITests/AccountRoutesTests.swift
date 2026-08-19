@@ -62,6 +62,36 @@ import VaporTesting
         }
     }
 
+    // MARK: - Empty states actually render
+
+    /// Regression: both sections used `#if(rows.isEmpty)` in Leaf, which never
+    /// fires. LeafKit has no property resolution for `.isEmpty` on an array —
+    /// the path resolves to nil, so the test is always false and its negation
+    /// always true. The page therefore rendered "Available courses" as a
+    /// heading over a table with column headers and no rows, promising courses
+    /// and listing none. Emptiness is decided in Swift now; this pins it.
+    @Test func emptyCourseListsRenderTheirEmptyStateNotAHeaderOnlyTable() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "acct_empty_states", password: "pw",
+                role: "student", on: app)
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("You are not enrolled in any courses"))
+                    #expect(html.contains("There are no other courses open to join right now"))
+                    // A table would carry the column header; the empty state
+                    // must replace it, not sit beside it.
+                    #expect(!html.contains("<th>Code</th>"))
+                })
+        }
+    }
+
     // MARK: - Invalid / missing course
 
     @Test func leaveCourse_invalidCourseID_returns400() async throws {

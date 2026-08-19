@@ -104,6 +104,8 @@ struct AccountRoutes: RouteCollection {
                 email: user.email,
                 enrolledCourses: enrolledRows,
                 availableCourses: availableRows,
+                hasEnrolledCourses: !enrolledRows.isEmpty,
+                hasAvailableCourses: !availableRows.isEmpty,
                 error: req.query[String.self, at: "error"],
                 exportStatus: export?.statusValue?.rawValue ?? "none",
                 exportRequestedAtDisplay: export.map { dateFormatter.string(from: $0.requestedAt) },
@@ -216,6 +218,17 @@ private struct AccountContext: Encodable {
     let email: String?
     let enrolledCourses: [AccountCourseRow]
     let availableCourses: [AccountCourseRow]
+    /// Emptiness, decided in Swift because Leaf cannot decide it.
+    ///
+    /// LeafKit has no property resolution for `.isEmpty` on an array: the path
+    /// resolves to nil, so `#if(rows.isEmpty)` is ALWAYS false and
+    /// `#if(!rows.isEmpty)` is ALWAYS true. Both spellings therefore render the
+    /// table, which is why this page showed an "Available courses" heading over
+    /// a header-only table with nothing in it. (The type-level coercion is a
+    /// second trap in the same area: `#if(array)` converts via `.bool(isEmpty)`,
+    /// so a bare array test is true when the array is EMPTY.)
+    let hasEnrolledCourses: Bool
+    let hasAvailableCourses: Bool
     let error: String?
     /// Personal-data export state (#557): "none" | "pending" | "complete" |
     /// "failed", plus display timestamps and whether the request button shows.
