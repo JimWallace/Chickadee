@@ -1274,7 +1274,19 @@ code { font-family: var(--font-mono); font-size: .9em; }
     justify-content: space-between;
     gap: .75rem;
     flex-wrap: wrap;
+    /* The band sits behind .diagnostic-card, whose own background is
+       var(--surface); without a muted ground behind them the tiles would be
+       invisible against the page. That is the only reason it has one. */
+    background: var(--surface-muted);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
 }
+
+/* The grade is the largest thing on the page — the one figure a student opens
+   this page to read. `em` rather than a --text-* step: the type scale tops out
+   at 1.4rem for page headings, and this is display type, which the scale
+   deliberately does not carry. */
+.score-figure { font-size: 2.4em; }
 
 /* Secondary "Autograded: …%" line shown under an overridden grade. */
 .score-autograded { font-size: var(--text-base); color: var(--gray-600); }

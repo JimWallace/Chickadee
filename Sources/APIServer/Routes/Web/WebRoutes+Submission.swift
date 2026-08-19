@@ -429,7 +429,10 @@ extension WebRoutes {
             secretOutcomes: processed.secretOutcomes,
             manifestEntries: manifestDisplay.entries,
             manifestSections: manifestDisplay.sections,
-            allowedTiers: itemized
+            allowedTiers: itemized,
+            // Same weighting test the visible rows use, so a masked row prices
+            // its points exactly as a named one would.
+            weighted: displayCollection.map { $0.totalPoints != $0.totalTests } ?? false
         )
 
         let currentAttempt = submission.attemptNumber ?? 1

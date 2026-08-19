@@ -349,6 +349,19 @@ struct SectionedOutcomes: Encodable {
     /// students — surfacing the per-section count lets a student see *where*
     /// hidden tests are failing without revealing which.
     let secretSummary: TierSummary?
+    /// The same secret outcomes as MASKED rows — "hidden test 1…N", each
+    /// carrying its real mark and its points but no name, message, output,
+    /// hint or blocker.
+    ///
+    /// The complaint the summary line left unanswered was never that names are
+    /// hidden; it is that a student could not tell how many points moved or how
+    /// many things broke. These rows answer that without revealing which test
+    /// is which. Empty when the viewer sees secret tests itemized normally (an
+    /// instructor, or a student who spent the reveal token).
+    let secretRows: [OutcomeRow]
+    /// "4 hidden tests · 4 of 8 points" — the stake, stated in the block
+    /// header. nil when there are no secret tests in this section.
+    let secretStake: String?
 }
 
 /// Input data used to compute per-submission achievement badges.
@@ -525,6 +538,12 @@ struct SubmissionContext: Encodable {
     /// header — behaviour identical to the pre-sections page.
     let sectionedOutcomes: [SectionedOutcomes]
     let passCount: Int
+    /// The other three states, for the count tiles in the score band.  These
+    /// are the four states `TestOutcomeStatus` has; "skipped" is derived from a
+    /// short-result pattern rather than being a status, so it is not a tile.
+    let failCount: Int
+    let errorCount: Int
+    let timeoutCount: Int
     let totalTests: Int
     let gradePercent: Int
     /// True when an instructor has overridden this student's grade for the

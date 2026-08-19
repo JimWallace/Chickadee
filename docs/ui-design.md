@@ -275,6 +275,11 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
+- **`.score-figure`** — the submission result page's grade percentage, the one
+  figure a student opens that page to read, at `2.4em`.  The only display-size
+  type in the product: the `--text-*` scale tops out at 1.4rem for page
+  headings and deliberately does not carry display sizes, so this is `em`
+  against its container rather than a new scale step.  One per page.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
 - **`.assignment-phone-meta`** — the student dashboard's phone-width
   restatement of the Due and History columns, which `.col-hide-phone` drops
