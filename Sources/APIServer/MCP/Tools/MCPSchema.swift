@@ -35,9 +35,8 @@ enum MCPSchema {
         "description": .string("The course code, e.g. \"CS136\"."),
     ])
 
-    /// A test-tier enum property.  The four student-visible tiers by default;
-    /// tools that also accept support files pass
-    /// `TestTierValues.withSupport`.
+    /// A test-tier enum property.  The student-visible tiers by default; tools
+    /// that also accept support files pass `TestTierValues.withSupport`.
     static func tierEnum(
         _ values: [String] = TestTierValues.tiers, description: String? = nil
     ) -> JSONValue {
@@ -75,10 +74,20 @@ enum MCPSchema {
     }
 }
 
-/// The tier strings the schema enums advertise, defined once.
+/// The tier strings the schema enums advertise, DERIVED from `TestTier` rather
+/// than listed.
+///
+/// It was listed, and it listed a fourth tier — `student` — that `TestTier` has
+/// never had, so every tool advertising this enum accepted a value its own
+/// parser then rejected. Deriving it means the schema cannot offer a tier the
+/// server will refuse. See `MCPTierProse` for the prose renderings of the same
+/// set.
 enum TestTierValues {
-    /// The four graded/student-visible tiers.
-    static let tiers = ["public", "release", "secret", "student"]
-    /// The tiers plus the pseudo-tier `support` (bundled, never run).
-    static let withSupport = tiers + ["support"]
+    /// The graded, student-visible tiers.
+    static var tiers: [String] { TestTier.allCases.map(\.rawValue) }
+    /// A bundled file that is never run. Not a `TestTier` case, so it is the one
+    /// value here that cannot be derived.
+    static let supportPseudoTier = "support"
+    /// The tiers plus the pseudo-tier `support`.
+    static var withSupport: [String] { tiers + [supportPseudoTier] }
 }

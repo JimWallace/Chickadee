@@ -140,7 +140,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         + "function_exists / variable_exists / ast_structure), and that kind's config fields — e.g. "
         + "data_frame_shape needs variable + expectedRows + expectedCols; figure_count needs minFigures; "
         + "cell_contains needs containsText; ast_structure needs requiredConstructs. Optional tier "
-        + "(public/release/secret/student, default public), points, dependsOn, sectionID, a \"💡 "
+        + "(\(MCPTierProse.slashAlternatives), default public), points, dependsOn, sectionID, a \"💡 "
         + "Hint\" shown on failure, and a per-test timeLimitSeconds (1–600s, overriding the assignment "
         + "default; 0 inherits it). Saving renders the check's script, validates it synchronously "
         + "(rejecting missing/!malformed kind fields), closes the assignment if it was open (reported as "
@@ -350,7 +350,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         guard let raw else { return .pub }
         guard let tier = TestTier(rawValue: raw) else {
             throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: public, release, secret, student.")
+                tool: name, detail: "tier must be one of: \(MCPTierProse.oneOfList).")
         }
         return tier
     }

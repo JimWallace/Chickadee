@@ -102,7 +102,7 @@ struct GetValidationResultTool: ContentTool {
         + "shortResult/longResult so you can see WHICH test failed and WHY, then fix the suite or solution. "
         + "Validation runs only — it resolves the instructor's own reference-solution run from the "
         + "assignment and never accepts or returns a student submission, identity, or grade. All tiers "
-        + "(public/release/secret/student) are included so secret-tier failures are visible. A pending or "
+        + "(\(MCPTierProse.slashAlternatives)) are included so secret-tier failures are visible. A pending or "
         + "missing run returns the current validationStatus with empty outcomes. Also reports runnerID "
         + "and runnerVersion — which runner produced the result and the build it was running — so a "
         + "failure caused by a runner lagging behind the suite's requirements is distinguishable from "

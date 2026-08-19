@@ -42,6 +42,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
+    defaults:
+      run:
+        # bash, explicitly. Inside a `container:` job the resolved default shell
+        # is `sh`, and two steps here are bash: `mapfile` + process substitution
+        # when reading the include globs, and array building (`args+=(...)`) when
+        # assembling the --file list. Under dash the first of those dies at parse
+        # time with "Syntax error: redirection unexpected", which is what
+        # happened the first time this workflow ever ran (PR #1464 — the first
+        # to touch Sources/RunnerCore since it was added).
+        shell: bash
     container:
       # swift-CI, not plain swift: the -ci image carries python3, lua5.4, octave
       # and r-base. The plain one is the toolchain alone, and the failure is
@@ -57,6 +67,18 @@ jobs:
           # Need the base commit to diff against; a shallow clone cannot.
           fetch-depth: 0
 
+      # Measured, not guessed: the workspace is owned by uid 1001 (the host
+      # runner user) while this container job runs as root, and git 2.43 refuses
+      # a repository whose worktree it does not trust. `actions/checkout` does
+      # add a safe.directory entry, but into a TEMPORARY HOST HOME
+      # ("Temporarily overriding HOME=/__w/_temp/..."), which no step inside the
+      # container shares — the step's own diagnosis printed "(no safe.directory
+      # entries)". The refusal is quiet in the worst way: `git diff` falls back
+      # to --no-index and prints "Not a git repository", which the step then read
+      # as "no files changed".
+      - name: Trust the workspace inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Cache the patched Muter build
         uses: actions/cache@v4
         with:
@@ -71,8 +93,37 @@ jobs:
           import json
           for p in json.load(open('Tools/mutation/config.json'))['include']: print(p)")
 
-          changed=$(git diff --name-only --diff-filter=d "$base"...HEAD -- "${includes[@]}" \
-                    | grep -E '\.swift$' || true)
+          # git's failure must NOT read as "no files changed". It did: the
+          # pipeline below ended in `|| true` so that grep finding nothing is
+          # not an error, and that swallowed a failing `git diff` too — which
+          # then fell into the empty-result branch and reported a clean run over
+          # a diff it had never looked at. Same silent-coverage-gap this file's
+          # own 6-file cap comment warns about, one step earlier.
+          if ! worktree_check=$(git rev-parse --is-inside-work-tree 2>&1); then
+            # Print git's OWN message, and enough context to tell the two
+            # candidate causes apart: a missing .git (the checkout did not land
+            # where this step runs) versus a refusal to use one that is there
+            # (dubious ownership — the container user differs from the owner,
+            # and checkout's `safe.directory` entry went to a HOST HOME this
+            # step does not share). The first version of this guard threw the
+            # message away with `2>&1 >/dev/null`, which named the symptom and
+            # hid the evidence.
+            echo "::error::Not inside a git work tree at $(pwd); nothing was mutation-tested. git said: ${worktree_check}"
+            echo "--- diagnosis ---"
+            echo "whoami: $(id -un 2>/dev/null) ($(id -u 2>/dev/null))"
+            echo "git: $(git --version)"
+            ls -ld . .git 2>&1 || true
+            git config --get-all safe.directory 2>&1 || echo "(no safe.directory entries)"
+            exit 1
+          fi
+
+          if ! changed_paths=$(git diff --name-only --diff-filter=d "$base"...HEAD -- "${includes[@]}"); then
+            echo "::error::git diff against base $base failed; cannot tell which files this PR changed, so nothing was mutation-tested."
+            exit 1
+          fi
+
+          # Only grep's "no match" is a legitimate empty result.
+          changed=$(printf '%s\n' "$changed_paths" | grep -E '\.swift$' || true)
 
           if [ -z "$changed" ]; then
             echo "No mutable files changed; nothing to do."
@@ -92,12 +143,27 @@ jobs:
             echo "::warning::Mutating only the first 6 of $total changed files; the rest were NOT covered by this run."
           fi
 
+      # A WARNING, NOT AN ERROR. `mutation-run.sh` exits non-zero when the run
+      # yields no mutant outcomes, because for the weekly sweep that reliably
+      # means the tooling broke. On a PR it does not: a diff can legitimately
+      # contain nothing mutable — an enum with no logic, a version constant —
+      # and Muter says so ("wasn't able to discover any code it could mutation
+      # test") and exits 255. Failing the check there tells an author their
+      # change is broken when it is only unmutable.
+      #
+      # The honesty is not lost by downgrading it: `report.py` writes "Do not
+      # read a score from this run" into the step summary either way, so a run
+      # that measured nothing still SAYS it measured nothing. What changes is
+      # only whether that shows up as somebody's red check. The weekly sweep
+      # keeps the strict exit — this is scoped to the per-PR job on purpose.
       - name: Mutate them
         if: steps.files.outputs.count != '0'
         run: |
           args=()
           while read -r f; do [ -n "$f" ] && args+=(--file "$f"); done < /tmp/mutate-files.txt
-          scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"
+          if ! scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"; then
+            echo "::warning::Mutation produced no measurable outcome for this diff — either it contains nothing mutable, or the tooling failed. Read the step summary; do not read a score from this run. This is a report, not a gate."
+          fi
 
       - name: Report
         if: always() && steps.files.outputs.count != '0'

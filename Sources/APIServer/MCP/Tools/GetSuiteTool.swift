@@ -47,7 +47,7 @@ struct GetSuiteTool: ContentTool {
             /// spec and are NOT editable via `author_script` / `update_suite` —
             /// edit the family or check instead. Order follows the manifest.
             let generatedFilenames: [String]?
-            /// "public", "release", "secret", or "student".
+            /// One of `TestTier`'s raw values — see `MCPTierProse`.
             let tier: String
             let points: Int
             let displayName: String?
@@ -94,7 +94,7 @@ struct GetSuiteTool: ContentTool {
     static let description =
         "Get an assignment's full test-suite definition by public ID: the ordered test items "
         + "(hand-written scripts, generated pattern families, notebook checks) with their tier "
-        + "(public/release/secret/student), points, display name, dependencies, and section, plus "
+        + "(\(MCPTierProse.slashAlternatives)), points, display name, dependencies, and section, plus "
         + "the section list. Each item also carries its source of truth: hand-written scripts "
         + "include their raw body (`content`) and `hint`; pattern families include the full spec "
         + "(`family`) with every case's args and expected value; notebook checks include their "
