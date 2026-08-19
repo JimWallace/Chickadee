@@ -86,8 +86,12 @@ def load_runs(directory: str) -> list[dict]:
         except (OSError, json.JSONDecodeError) as exc:
             raise SystemExit(f"{path}: unreadable run report ({exc})")
         run.setdefault("date", os.path.splitext(name)[0])
+        run["_file"] = name
         runs.append(run)
-    runs.sort(key=lambda r: r.get("date", ""))
+    # (date, filename): a record is keyed by date AND run id, because a manual
+    # dispatch beside the Tuesday schedule puts two sweeps on one day. Sorting
+    # on the date alone would order those two unstably between invocations.
+    runs.sort(key=lambda r: (r.get("date", ""), r.get("_file", "")))
     return runs
 
 

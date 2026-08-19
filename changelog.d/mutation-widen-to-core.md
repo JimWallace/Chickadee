@@ -9,3 +9,11 @@
   per-mutant figure that omitted setup entirely. Core survivors carry a caveat
   RunnerCore's do not: 5% of Core is reachable only from the skipped `APITests`,
   and a survivor there may be an artefact rather than a hole.
+
+### Fixed
+
+- **A second mutation sweep on the same day silently overwrote the first.** The
+  run record was keyed by date alone, so a manual dispatch beside the Tuesday
+  schedule — the normal way the sweep gets run on demand — replaced that week's
+  record rather than adding to it. Records now carry the run id, and `trend.py`
+  orders same-day runs deterministically.

@@ -193,7 +193,15 @@ jobs:
             echo "No mutation-reports branch yet; this is the first run recorded."
           fi
           date="$(date -u +%Y-%m-%d)"
-          if ! python3 Tools/mutation/merge-run.py shards "MutationReports/$date.json" "$date"; then
+          # The filename carries the RUN ID as well as the date. Keying on the
+          # date alone means a second sweep on the same day silently overwrites
+          # the first -- which is not hypothetical: a manual dispatch beside the
+          # Tuesday schedule is the normal way this job gets run. trend.py orders
+          # by the `date` FIELD inside each record, not by filename, so a suffix
+          # costs the series nothing.
+          record="MutationReports/${date}-run${GITHUB_RUN_ID}.json"
+          echo "file=$record" >> "$GITHUB_OUTPUT"
+          if ! python3 Tools/mutation/merge-run.py shards "$record" "$date"; then
             echo "::warning::No shard produced outcomes; no run recorded."
             echo "recorded=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -226,6 +234,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           date="$(date -u +%Y-%m-%d)"
+          record="${{ steps.record.outputs.file }}"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           work=/tmp/mutation-reports
           rm -rf "$work"
@@ -239,7 +248,7 @@ jobs:
           fi
 
           mkdir -p "$work/MutationReports"
-          cp "MutationReports/$date.json" "$work/MutationReports/"
+          cp "$record" "$work/MutationReports/"
           git -C "$work" config user.name "github-actions[bot]"
           git -C "$work" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C "$work" add MutationReports
