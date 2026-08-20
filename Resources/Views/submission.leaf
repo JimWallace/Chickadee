@@ -185,9 +185,7 @@ Submission #(submissionID)
     <div class="tier-summary-row tier-summary-secret">
         <span class="tier">secret</span>
         <span class="tier-summary-counts">#(sec.secretStake)</span>
-        #if(sec.secretSummary):
-        <span class="tier-summary-note">#(sec.secretSummary.passCount) passed, #(sec.secretSummary.failCount) failed</span>
-        #endif
+        <span class="tier-summary-note">names and output are visible only to your instructor</span>
         #if(secretRevealAvailable):
         <form class="secret-reveal-action" method="post" action="/testsetups/#(testSetupID)/reveal-secret"
               data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
@@ -218,9 +216,6 @@ Submission #(submissionID)
         #endfor
         </tbody>
     </table>
-    <p class="section-note">Hidden tests are named and explained only after you
-        spend this assignment's one reveal token. Their marks and points are
-        always shown.</p>
     #endif
 </section>
 #endfor

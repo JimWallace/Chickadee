@@ -38,12 +38,16 @@ import Vapor
 /// Renders secret-tier outcomes as MASKED rows: numbered, marked and priced,
 /// but unnamed and unexplained.
 ///
-/// The short result IS shown, per the approved design: a student needs to know
-/// how many cases moved, and "2 of 4 cases passed" says that without naming the
-/// test. Note the exposure this accepts — a short result is whatever the
-/// instructor's script printed on its last line, so a suite that prints
-/// expected/actual values there will surface them here. Names, output, hints
-/// and blockers stay hidden regardless.
+/// The short result is shown as a CASE COUNT and nothing else: a student needs
+/// to know how many cases moved, and "2 of 4 cases passed" says that without
+/// naming the test.
+///
+/// It is normalized through an allowlist rather than passed through, because a
+/// short result is whatever the instructor's script printed on its last line —
+/// a suite that prints "expected 42, got 7" there would otherwise leak the
+/// expectation of a test whose whole point is being hidden. Anything that is
+/// not recognisably a case count degrades to "passed" / "did not pass", which
+/// the mark already says.
 ///
 /// Still withheld: `longResult` (the full output), `hint` (it describes the
 /// test), `blockerName` (it names another test), and the delta arrows — the
@@ -70,7 +74,7 @@ func maskedSecretRows(_ outcomes: [TestOutcome], weighted: Bool) -> [OutcomeRow]
             testName: "hidden test \(index + 1)",
             tier: TestTier.secret.rawValue,
             status: outcome.status.rawValue,
-            shortResult: outcome.shortResult,
+            shortResult: maskedShortResult(outcome.shortResult, status: outcome.status),
             longResult: nil,
             markLabel: markLabel,
             markClass: markClass,
@@ -82,6 +86,28 @@ func maskedSecretRows(_ outcomes: [TestOutcome], weighted: Bool) -> [OutcomeRow]
             hint: nil
         )
     }
+}
+
+/// A hidden test's short result reduced to a case count.
+///
+/// An ALLOWLIST, deliberately: the safe set is enumerated and everything else
+/// degrades, so a short result nobody anticipated cannot leak by default. The
+/// opposite shape — blocking known-bad patterns — fails open on the first
+/// wording no one thought of.
+func maskedShortResult(_ raw: String, status: TestStatus) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let caseCountShapes = [
+        "^all cases passed$",
+        "^no cases passed$",
+        "^[0-9]+ */ *[0-9]+ cases? passed$",
+        "^[0-9]+ of [0-9]+ cases? passed$",
+        "^[0-9]+ cases? (passed|failed)$",
+    ]
+    for shape in caseCountShapes
+    where trimmed.range(of: shape, options: [.regularExpression, .caseInsensitive]) != nil {
+        return trimmed
+    }
+    return status == .pass ? "passed" : "did not pass"
 }
 
 /// "4 hidden tests · 4 of 8 points" — what the hidden block is worth, so the

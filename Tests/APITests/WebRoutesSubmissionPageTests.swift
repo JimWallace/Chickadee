@@ -690,10 +690,7 @@ import VaporTesting
                     #expect(html.contains("2 hidden tests"), "the stake should be stated")
                     #expect(html.contains("hidden test 1"), "each hidden test gets a masked row")
                     #expect(html.contains("hidden test 2"), "each hidden test gets a masked row")
-                    // The explanation moved into the block's footnote when the
-                    // reveal control moved into its header.
-                    #expect(html.contains("named and explained only after you"))
-                    #expect(html.contains("marks and points are\n        always shown"))
+                    #expect(html.contains("visible only to your instructor"))
                     #expect(html.contains("secret_alpha") == false, "Secret test names must never be shown")
                     #expect(html.contains("secret_beta") == false, "Secret test names must never be shown")
                 })
@@ -964,5 +961,37 @@ import VaporTesting
                 })
 
         }
+    }
+}
+
+/// A hidden test's short result is normalized through an allowlist before it
+/// reaches the page. A short result is whatever the instructor's script printed
+/// last, so passing it through would leak the expectation of a test whose whole
+/// point is being hidden.
+@Suite struct MaskedShortResultTests {
+
+    @Test func caseCountsPassThrough() {
+        #expect(maskedShortResult("all cases passed", status: .pass) == "all cases passed")
+        #expect(maskedShortResult("2 of 4 cases passed", status: .fail) == "2 of 4 cases passed")
+        #expect(maskedShortResult("3/4 cases passed", status: .fail) == "3/4 cases passed")
+        #expect(maskedShortResult("1 case failed", status: .fail) == "1 case failed")
+    }
+
+    @Test func anythingElseDegradesToTheMark() {
+        // The leak this exists to stop: an expectation printed on the last line.
+        #expect(maskedShortResult("expected 42, got 7", status: .fail) == "did not pass")
+        #expect(
+            maskedShortResult("AssertionError: classify(18.5) == 'normal'", status: .fail)
+                == "did not pass")
+        #expect(maskedShortResult("ok", status: .pass) == "passed")
+        #expect(maskedShortResult("", status: .pass) == "passed")
+    }
+
+    @Test func aCaseCountWithTrailingCommentaryIsNotACaseCount() {
+        // Anchored on both ends, so a prefix that looks safe cannot smuggle a
+        // suffix through.
+        #expect(
+            maskedShortResult("2 of 4 cases passed — expected 42, got 7", status: .fail)
+                == "did not pass")
     }
 }
