@@ -2520,6 +2520,29 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
+/* The account page's identity header: circle, name, username. One class for
+   the row; the name and username inside it are element selectors rather than
+   two more global classes, since they are one rule serving one component and
+   would owe component-vocabulary entries for no gain. */
+.account-identity {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: 0 0 1rem;
+}
+
+.account-identity .account-monogram { margin: 0; }
+
+.account-identity > div {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.account-identity strong { font-size: var(--text-lg); }
+
+.account-identity .text-muted { font-size: var(--text-sm); }
+
 /* Identity circle on the account page, carrying initials rather than a photo:
    no IdP claim in play releases one. Sized and centred so an <img> can replace
    the text on the day one does, with no rule change. */

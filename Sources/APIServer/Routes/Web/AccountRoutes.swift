@@ -52,15 +52,16 @@ struct AccountRoutes: RouteCollection {
             enrollments
             .compactMap { e -> AccountCourseRow? in
                 guard let id = e.course.id else { return nil }
-                // "N of M remaining" only where it means something: the
+                // "N of M slip days left" only where it means something: the
                 // course has slip days on and this enrollment is a student
-                // (staff never hold a balance).
+                // (staff never hold a balance). The phrase carries its own
+                // noun so the row needs no "Slip days:" label beside it.
                 let policy = e.course.slipDayPolicy
                 let slipDaysText: String?
                 if policy.enabled, e.role == .student {
                     let total = policy.daysPerStudent + (e.slipDaysAdjustment ?? 0)
                     let used = spendCountByCourseID[id] ?? 0
-                    slipDaysText = "\(max(total - used, 0)) of \(total) remaining"
+                    slipDaysText = "\(max(total - used, 0)) of \(total) slip days left"
                 } else {
                     slipDaysText = nil
                 }
@@ -92,14 +93,20 @@ struct AccountRoutes: RouteCollection {
             .first()
         let dateFormatter = waterlooDateTimeFormatter()
 
+        let identityName = accountIdentityName(
+            displayName: user.displayName,
+            preferredName: user.preferredName,
+            username: user.username)
         return try await req.view.render(
             "account",
             AccountContext(
                 currentUser: req.currentUserContext,
                 username: user.username,
                 preferredName: user.preferredName,
-                monogram: accountMonogram(
-                    preferredName: user.preferredName, username: user.username),
+                identityName: identityName,
+                identitySecondary: accountIdentitySecondary(
+                    identityName: identityName, username: user.username),
+                monogram: accountMonogram(name: identityName),
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -187,11 +194,31 @@ struct AccountRoutes: RouteCollection {
 /// Up to two initials, uppercased: "Ada Lovelace" → "AL", "ada" → "A".
 /// Falls back to the username when there is no preferred name, and to "?" when
 /// neither yields a letter, so the circle is never blank.
-func accountMonogram(preferredName: String?, username: String) -> String {
-    let source: String = {
-        if let preferredName, !preferredName.isEmpty { return preferredName }
-        return username
-    }()
+/// The name shown beside the identity circle: the full name the IdP released
+/// when there is one, else the preferred name, else the username.
+///
+/// One resolution, used for both the heading and the monogram, so the circle
+/// and the name beside it can never disagree — initials of "Avery Sandoval"
+/// over the words "Avery" would read as a rendering fault.
+func accountIdentityName(displayName: String?, preferredName: String?, username: String) -> String {
+    for candidate in [displayName, preferredName] {
+        if let candidate, !candidate.trimmingCharacters(in: .whitespaces).isEmpty {
+            return candidate
+        }
+    }
+    return username
+}
+
+/// The muted line under the identity name, or nil when it would merely repeat
+/// it. A local account with no name on file resolves its heading to the
+/// username, and printing the username twice reads as a bug rather than as
+/// identity.
+func accountIdentitySecondary(identityName: String, username: String) -> String? {
+    identityName == username ? nil : username
+}
+
+func accountMonogram(name: String) -> String {
+    let source = name
     let initials =
         source
         .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." || $0 == "_" })
@@ -205,6 +232,12 @@ private struct AccountContext: Encodable {
     let currentUser: CurrentUserContext?
     let username: String
     let preferredName: String?
+    /// The heading beside the circle, and the string the monogram is taken
+    /// from. See `accountIdentityName`.
+    let identityName: String
+    /// The username under the heading, nil when the heading already IS the
+    /// username. See `accountIdentitySecondary`.
+    let identitySecondary: String?
     /// One or two letters for the identity circle, from the preferred name when
     /// there is one and the username otherwise.
     ///

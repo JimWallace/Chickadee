@@ -11,7 +11,15 @@ My Account
 
 <section class="page-section">
     <h2>Account info</h2>
-    <p class="account-monogram" aria-hidden="true">#(monogram)</p>
+    <div class="account-identity">
+        <p class="account-monogram" aria-hidden="true">#(monogram)</p>
+        <div>
+            <strong>#(identityName)</strong>
+            #if(identitySecondary):
+            <span class="text-muted">#(identitySecondary)</span>
+            #endif
+        </div>
+    </div>
     <dl class="detail-grid">
         <dt>Username</dt>
         <dd><strong>#(username)</strong></dd>
@@ -51,7 +59,7 @@ My Account
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)
                     #if(course.slipDaysText):
-                    <div class="text-muted">Slip days: #(course.slipDaysText)</div>
+                    <div class="text-muted">#(course.slipDaysText)</div>
                     #endif
                 </td>
                 <td>
@@ -118,10 +126,6 @@ My Account
     #elseif(exportError == "not_ready"):
     <p class="form-error" role="alert">Your data export is not ready to download yet.</p>
     #endif
-    <p>Request a copy of the personal information Chickadee holds about you:
-        your profile, course enrollments, submissions (including the files you
-        uploaded), grading results, and account activity records — delivered
-        as a single zip archive. Limit one export per day.</p>
     #if(exportStatus == "pending"):
     <p id="export-pending"><span class="chip">In progress</span>
         Requested #(exportRequestedAtDisplay). Preparing your export can take
@@ -137,6 +141,10 @@ My Account
     #elseif(exportStatus == "failed"):
     <p class="form-error" role="alert">Your last export attempt failed. Please try again.</p>
     #endif
+    <p>Request a copy of the personal information Chickadee holds about you:
+        your profile, course enrollments, submissions (including the files you
+        uploaded), grading results, and account activity records — delivered
+        as a single zip archive. Limit one export per day.</p>
     #if(exportCanRequest):
     <form method="post" action="/account/export" class="inline-form">
         #csrfFormField()
