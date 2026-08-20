@@ -65,7 +65,7 @@
                 #if(item.setup.title):
                     <div class="assignment-title-cell">
                         <strong>#(item.setup.title)</strong>
-                        #if(!item.setup.badges.isEmpty):
+                        #if(count(item.setup.badges) > 0):
                         <span class="achievement-badges achievement-badges-compact">
                             #for(badge in item.setup.badges):
                             <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>

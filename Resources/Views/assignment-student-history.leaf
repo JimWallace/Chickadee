@@ -9,7 +9,7 @@
 </div>
 <p class="titlebar-subtitle">Student ID: <strong>#(studentID)</strong></p>
 
-#if(rows.isEmpty):
+#if(count(rows) == 0):
 <p class="empty">No submissions yet.</p>
 #else:
 <table class="results-table">

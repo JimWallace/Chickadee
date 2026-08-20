@@ -40,7 +40,7 @@
 </section>
 #endif
 
-#if(rows.isEmpty):
+#if(count(rows) == 0):
 <p class="empty">No student users found.</p>
 #else:
 <div class="toolbar toolbar--end section-gap">

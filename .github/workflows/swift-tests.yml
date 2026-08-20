@@ -94,6 +94,9 @@ jobs:
       - name: Block defaulted language parameters
         run: scripts/no-language-defaults.sh
 
+      - name: Block Swift property access in Leaf templates
+        run: scripts/check-leaf-semantics.sh
+
       - name: Check generated JS constants match their Swift declarations
         run: scripts/generate-js-constants.sh --check
 

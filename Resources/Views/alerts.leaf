@@ -78,7 +78,7 @@ Server Health Alerts
     </table></div>
 
     <h2 class="alerts-recent-heading">Recent firings</h2>
-    #if(recentFirings.isEmpty):
+    #if(count(recentFirings) == 0):
     <p class="empty">No alerts have fired since startup.</p>
     #else:
     <div class="table-scroll"><table class="results-table">

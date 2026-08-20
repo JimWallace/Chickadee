@@ -44,7 +44,7 @@ Connected agents
                 </td>
             </tr>
         #endfor
-        #if(rows.isEmpty):
+        #if(count(rows) == 0):
             <tr><td colspan="#if(isAdmin):7#else:6#endif" class="text-muted">No connected agents.</td></tr>
         #endif
         </tbody>

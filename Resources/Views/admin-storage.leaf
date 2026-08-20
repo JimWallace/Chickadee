@@ -23,7 +23,7 @@ Storage
         <h2>By Assignment</h2>
         <span class="storage-meta">Largest first</span>
     </div>
-    #if(storage.assignments.isEmpty):
+    #if(count(storage.assignments) == 0):
     <p class="text-muted">No assignments yet.</p>
     #else:
     <div class="table-scroll"><table class="results-table sortable-table">

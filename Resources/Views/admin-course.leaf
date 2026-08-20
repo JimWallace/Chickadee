@@ -114,7 +114,7 @@
 <!-- ── Assignments ─────────────────────────────────── -->
 <section class="page-section">
     <h2>Assignments (#(assignmentCount))</h2>
-    #if(assignments.isEmpty):
+    #if(count(assignments) == 0):
     <p class="empty">No assignments for this course.</p>
     #else:
     <table class="results-table">
@@ -185,7 +185,7 @@
         </div>
         #endif
     </div>
-    #if(enrolledUsers.isEmpty):
+    #if(count(enrolledUsers) == 0):
     <p class="empty">No students enrolled yet.</p>
     #else:
     <table class="results-table">
