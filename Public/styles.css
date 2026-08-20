@@ -579,7 +579,7 @@ textarea.form-input {
     border-collapse: collapse;
     font-size: var(--text-base);
     background: var(--surface);
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
 }
@@ -687,8 +687,10 @@ textarea.form-input {
 }
 .sort-header:hover::after,
 .sort-header:focus-visible::after { visibility: visible; }
-th.sort-asc .sort-header::after { content: "↑"; visibility: visible; }
-th.sort-desc .sort-header::after { content: "↓"; visibility: visible; }
+th.sort-asc .sort-header::after,
+th.sort-desc .sort-header::after { visibility: visible; color: var(--gray-900); }
+th.sort-asc .sort-header::after { content: "↑"; }
+th.sort-desc .sort-header::after { content: "↓"; }
 
 .results-table .time {
     text-align: right;
@@ -2598,3 +2600,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .assignment-phone-meta { display: none; }
 
 @media (max-width: 640px) { .assignment-phone-meta { display: block; } }
+
+/* Phone: the cell gutter drops one spacing step. Four columns at the desktop
+   .9rem gutter push the dashboard table past a 390px viewport (measured 394px
+   in a 386px frame — the Actions column clips). Vertical padding is left
+   alone: row height is what makes a row tappable. */
+@media (max-width: 640px) {
+    .results-table th { padding-left: .5rem; padding-right: .5rem; }
+    .results-table td { padding-left: .5rem; padding-right: .5rem; }
+}

@@ -172,5 +172,7 @@
 </table>
 #endfor
 #endif
+<script src="/list-filter.js?v=#appVersion()"></script>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend
