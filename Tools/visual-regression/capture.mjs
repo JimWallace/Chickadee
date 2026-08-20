@@ -43,11 +43,14 @@ const MASKS = [
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
-  const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
+  const { setupID, instructorState, studentState, resultsPath, gradedResultsPath } =
+    await seed(baseURL);
   console.log(`Seeded setup ${setupID}; results page: ${resultsPath || "(none)"}`);
 
   // Page list is shared with the a11y scan — see pages.mjs.
-  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
+  const PAGES = pageList({
+    setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+  });
 
   const browser = await chromium.launch();
   let failures = 0;
@@ -97,11 +100,29 @@ async function main() {
         // so it needs naming here explicitly. It only became visible when the
         // fixture started publishing an OPEN assignment — before that the
         // student dashboard had no rows at all.
+        //
+        // The submission download link is a third instance of the same problem
+        // from a third source: the stored artifact for a browser-graded
+        // submission is named from the generated submission id, so the button
+        // reads "Download sub_b92d0d05.ipynb" — a fresh UUID every run. It
+        // carries no class of its own, so it is matched by its href.
         await page.evaluate(() => {
           document
             .querySelectorAll(".js-relative-time, .submission-history-latest")
             .forEach((el) => {
               el.textContent = "0000-00-00 00:00";
+            });
+          // Only the GENERATED name is replaced. An uploaded artifact keeps
+          // the student's own filename ("solution.py"), which is already
+          // deterministic — rewriting it too would restage the pending page's
+          // baseline for no gain, and that diff lands at 98% of the tolerance
+          // budget, i.e. it would pass while being wrong.
+          document
+            .querySelectorAll('a[href^="/api/v1/submissions/"][href$="/download"]')
+            .forEach((el) => {
+              if (/sub_[0-9a-f]{6,}/i.test(el.textContent || "")) {
+                el.textContent = "Download submission";
+              }
             });
         });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle

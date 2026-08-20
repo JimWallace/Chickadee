@@ -15,7 +15,7 @@ other check; a baseline diff catches that class on the introducing PR.
 
 One representative per page-anatomy family (see "Page archetypes" in
 `docs/ui-design.md`): `login`, `student-dashboard`, `student-submit`,
-`submission-pending`, `student-account`, `error-404`,
+`submission-pending`, `submission-graded`, `student-account`, `error-404`,
 `instructor-assignments`, `instructor-students`, `instructor-slip-days`,
 `admin-dashboard`, `admin-users`, `admin-alerts`, `admin-course-new` — each
 as `--light` and `--dark`. Page names are the baseline filenames; the list
@@ -28,6 +28,31 @@ passes with a loud warning and the capture is uploaded in the
 `visual-baselines-bootstrap` artifact — commit it to `baselines/` in the
 same PR to flip the page to enforcing. Baselines are CI-canonical, so this
 artifact round-trip is the normal way to add a page.
+
+## The graded result page
+
+`submission-graded` is the only page whose fixture state the seed has to
+manufacture. The harness attaches no runner on purpose — that is what keeps
+`submission-pending` deterministically pending — so a worker-graded submission
+never produces outcomes. The seed instead posts a fixed `TestOutcomeCollection`
+to `POST /api/v1/submissions/browser-result`, the same session-authed endpoint
+the in-browser grader uses, which needs no runner and no HMAC secret.
+
+Every value in that collection is a constant. It reaches a pixel baseline, so
+nothing in it may derive from the clock, the run or the machine — including its
+`timestamp`, which is pinned rather than `new Date()`.
+
+One value is not the seed's to pin: the stored artifact for a browser-graded
+submission is named from the generated submission id, so the download button
+reads `Download sub_<uuid>.ipynb`. `capture.mjs` rewrites that text, matching
+the link by href and replacing it only when it carries a generated id — an
+uploaded artifact keeps the student's own filename, which is already
+deterministic, and rewriting it too would restage the pending page's baseline
+for nothing.
+
+The fixture suite is weighted and spans three tiers on purpose: points labels
+render only on a weighted assignment, and the masked hidden-test block only
+when secret tests exist. A single unweighted public test draws neither.
 
 ## Running locally
 

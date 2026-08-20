@@ -32,10 +32,13 @@ const repoRoot = path.resolve(toolDir, "..", "..");
 
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
-  const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
+  const { setupID, instructorState, studentState, resultsPath, gradedResultsPath } =
+    await seed(baseURL);
 
   // Page list is shared with the visual capture — see pages.mjs.
-  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
+  const PAGES = pageList({
+    setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+  });
 
   const browser = await chromium.launch();
   const hard = [];   // critical + serious
