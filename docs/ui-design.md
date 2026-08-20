@@ -266,7 +266,20 @@ duplicate.
   `data-sort-initial="<key>:desc"` declares the load-time sort and
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
-  glyph — the guard fails on both.
+  glyph — the guard fails on both.  The glyph marks the ACTIVE column only:
+  `.sort-header::after` carries it at `visibility: hidden` so the box holds
+  its width, hover and `:focus-visible` reveal it, and `th.sort-asc` /
+  `th.sort-desc` show the direction permanently.  A resting glyph on every
+  header drew one arrow per sortable column and said nothing about which
+  column the rows were ordered by.
+  **`.row-last-visible`** closes the list: the table's own border ends it, so
+  the final row draws no separator.  `:last-child` alone is wrong on any
+  filtered table — it is the DOM's last row, while `list-filter.js` hides rows
+  with the `hidden` attribute — and the stale separator then collapsed with
+  the table's bottom border and won it, rendering that edge a shade lighter.
+  `list-filter.js` owns the class (it is the only thing that knows which rows
+  are hidden) and `sortable-table.js` asks it to re-mark after reordering.
+  A page never writes it.
 - **`.diagnostics-cards`** + `.diagnostic-card`, `.diagnostic-label`,
   `.diagnostic-value` — stat tiles.
   `.diagnostics-section` wraps a group of them under one heading.

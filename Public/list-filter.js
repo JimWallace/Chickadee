@@ -74,6 +74,9 @@
     var WHITESPACE = /\s+/;
     var DEFAULT_EMPTY_MESSAGE = 'Nothing matches this filter.';
 
+    // Styled in Public/styles.css (.results-table tr.row-last-visible td).
+    var LAST_VISIBLE_ROW_CLASS = 'row-last-visible';
+
     // <tr> → folded text, one string per searchable cell.
     var rowCache = new WeakMap();
     // table → searchable column indices ([] = no declared data columns).
@@ -192,6 +195,32 @@
         }
     }
 
+    /// Mark the last row a reader can actually SEE, so the stylesheet can drop
+    /// its separator.
+    ///
+    /// CSS cannot express "last visible row": `:last-child` is the DOM's last
+    /// row, and filtering hides rows with the `hidden` attribute rather than
+    /// removing them. The stale separator then collapsed with the table's own
+    /// bottom border and won it (cell beats table in CSS conflict resolution),
+    /// so a filtered table's bottom edge rendered one shade lighter.
+    ///
+    /// This is the whole of the JS side: a class toggle, no geometry and no
+    /// style property, so the stylesheet keeps every decision about how the
+    /// edge looks.
+    function markLastVisibleRow(table) {
+        var tbody = table ? table.querySelector('tbody') : null;
+        if (!tbody) return;
+        var rows = tbody.querySelectorAll('tr');
+        var last = null;
+        for (var i = rows.length - 1; i >= 0; i -= 1) {
+            if (!rows[i].hidden) { last = rows[i]; break; }
+        }
+        var marked = tbody.querySelector('tr.' + LAST_VISIBLE_ROW_CLASS);
+        if (marked === last) return;
+        if (marked) marked.classList.remove(LAST_VISIBLE_ROW_CLASS);
+        if (last) last.classList.add(LAST_VISIBLE_ROW_CLASS);
+    }
+
     /// Re-run the filter over the table's current rows. Pages that repaint from
     /// a poll call this afterwards (table-poll.js does, in a fixed order after
     /// the relative times and the sort).
@@ -223,6 +252,7 @@
         }
 
         passCache.set(input, { query: query, count: rows.length, first: rows[0] || null });
+        markLastVisibleRow(table);
         report(input, table, shown, rows.length, filtering);
     }
 
@@ -261,6 +291,7 @@
         fold: fold,
         cellText: cellText,
         matchesTerms: matchesTerms,
+        markLastVisibleRow: markLastVisibleRow,
         searchableColumns: searchableColumns
     };
 

@@ -32,6 +32,24 @@ function makeElement(tag) {
     textContent: '',
     hidden: false,
     attrs: {},
+    // Real enough for the one thing list-filter.js does with it: mark and
+    // unmark the last visible row. `className` stays the backing store so a
+    // selector check can read it.
+    classList: {
+      add(name) {
+        const set = new Set(this.owner.className.split(/\s+/).filter(Boolean));
+        set.add(name);
+        this.owner.className = [...set].join(' ');
+      },
+      remove(name) {
+        const set = new Set(this.owner.className.split(/\s+/).filter(Boolean));
+        set.delete(name);
+        this.owner.className = [...set].join(' ');
+      },
+      contains(name) {
+        return this.owner.className.split(/\s+/).filter(Boolean).includes(name);
+      },
+    },
     children: [],
     parentNode: null,
     nextSibling: null,
@@ -49,8 +67,14 @@ function makeElement(tag) {
   };
 }
 
+function newElement(tag) {
+  const el = makeElement(tag);
+  el.classList.owner = el;
+  return el;
+}
+
 function makeCell(text, { select = null, iso = null } = {}) {
-  const cell = makeElement('td');
+  const cell = newElement('td');
   cell.textContent = text;
   if (iso) cell.setAttribute('data-iso', iso);
   cell.querySelector = (sel) => (sel === 'select' ? select : null);
@@ -82,7 +106,7 @@ function makeRow({ name, username, role, pending = false }) {
     makeCell('2 hours ago', { iso: '2026-08-14T20:00:00Z' }),
     makeCell(actionsText),
   ];
-  const row = makeElement('tr');
+  const row = newElement('tr');
   row.cells = cells;
   row.textContent = cells.map((c) => c.textContent).join(' ');
   return row;
@@ -91,19 +115,24 @@ function makeRow({ name, username, role, pending = false }) {
 const SORTABLE_HEADERS = ['name', 'username', 'role', 'last-seen', null];
 
 function loadModule({ rows, tableID = 'the-table', headerKeys = SORTABLE_HEADERS, input }) {
-  const tbody = makeElement('tbody');
+  const tbody = newElement('tbody');
   tbody.querySelectorAll = () => rows;
+  tbody.querySelector = (sel) => {
+    const match = /^tr\.(.+)$/.exec(sel);
+    if (!match) return null;
+    return rows.find((row) => row.classList.contains(match[1])) || null;
+  };
 
   const headers = headerKeys.map((key) => {
-    const th = makeElement('th');
+    const th = newElement('th');
     if (key !== null) th.setAttribute('data-sort-key', key);
     return th;
   });
 
-  const table = makeElement('table');
+  const table = newElement('table');
   table.querySelector = (sel) => (sel === 'tbody' ? tbody : null);
   table.querySelectorAll = (sel) => (sel === 'thead th' ? headers : []);
-  const tableHost = makeElement('div');
+  const tableHost = newElement('div');
   tableHost.appendChild(table);
 
   const documentStub = {
@@ -111,7 +140,7 @@ function loadModule({ rows, tableID = 'the-table', headerKeys = SORTABLE_HEADERS
     getElementById: (id) => (id === tableID ? table : null),
     querySelectorAll: () => [],
     addEventListener: () => {},
-    createElement: (tag) => makeElement(tag),
+    createElement: (tag) => newElement(tag),
   };
   const sandbox = { document: documentStub, module: { exports: {} }, WeakMap };
   sandbox.self = sandbox;
@@ -121,11 +150,11 @@ function loadModule({ rows, tableID = 'the-table', headerKeys = SORTABLE_HEADERS
 }
 
 function makeInput(value, { tableID = 'the-table', emptyMessage = null } = {}) {
-  const input = makeElement('input');
+  const input = newElement('input');
   input.value = value;
   input.setAttribute('data-list-filter', tableID);
   if (emptyMessage) input.setAttribute('data-list-filter-empty', emptyMessage);
-  makeElement('span').appendChild(input);
+  newElement('span').appendChild(input);
   return input;
 }
 
@@ -234,7 +263,7 @@ test('empty and whitespace-only queries unhide every row', () => {
 });
 
 test('a cell-less row falls back to whole-row textContent', () => {
-  const row = makeElement('tr');
+  const row = newElement('tr');
   row.cells = [];
   row.textContent = 'Standalone message row';
   const { ListFilter } = loadModule({ rows: [row] });
@@ -315,7 +344,7 @@ test('the status region announces the count only while filtering', () => {
 // insufficient — so one control had two strengths depending on the page.
 test('a GET-form filter (no target table) still gets full suppression', () => {
   const { ListFilter } = loadModule({ rows: [] });
-  const input = makeElement('input');
+  const input = newElement('input');
 
   ListFilter.enhance(input);
   assert.equal(input.getAttribute('autocomplete'), 'off');
@@ -423,4 +452,63 @@ test('hidden is written only when it changes', () => {
 
   ListFilter.apply(setQuery(input, 'zzzz'));  // still hidden (narrowing)
   assert.equal(writes, 1, 'a row that stays hidden is not written again');
+});
+
+// ── The last VISIBLE row carries the separator-suppressing class ────────────
+//
+// CSS cannot express "last visible row": `:last-child` is the DOM's last row,
+// and filtering hides rows with the `hidden` attribute rather than removing
+// them. The stale separator then collapsed with the table's own bottom border
+// and won it — cell beats table in CSS conflict resolution — so a filtered
+// table's bottom edge rendered a shade lighter than an unfiltered one.
+
+const LAST_VISIBLE = 'row-last-visible';
+
+function marked(rows) {
+  return rows.filter((row) => row.classList.contains(LAST_VISIBLE)).map((row) => row.cells[0].textContent);
+}
+
+test('unfiltered: the mark sits on the final row', () => {
+  const rows = [
+    makeRow({ name: 'Ada', username: 'ada', role: 'student' }),
+    makeRow({ name: 'Brendan', username: 'bren', role: 'ta' }),
+    makeRow({ name: 'Cai', username: 'cai', role: 'student' }),
+  ];
+  const { ListFilter } = loadModule({ rows });
+  ListFilter.apply(makeInput(''));
+  assert.deepEqual(marked(rows), ['Cai']);
+});
+
+test('filtering moves the mark to the last row still on screen', () => {
+  const rows = [
+    makeRow({ name: 'Ada', username: 'ada', role: 'student' }),
+    makeRow({ name: 'Brendan', username: 'bren', role: 'ta' }),
+    makeRow({ name: 'Cai', username: 'cai', role: 'student' }),
+  ];
+  const { ListFilter } = loadModule({ rows });
+  ListFilter.apply(makeInput('ada'));
+  // Only Ada survives, so Ada — not the hidden final row — closes the table.
+  assert.deepEqual(marked(rows), ['Ada']);
+  assert.equal(rows[2].hidden, true);
+});
+
+test('the mark is exclusive and follows a widening filter back', () => {
+  const rows = [
+    makeRow({ name: 'Ada', username: 'ada', role: 'student' }),
+    makeRow({ name: 'Brendan', username: 'bren', role: 'ta' }),
+    makeRow({ name: 'Cai', username: 'cai', role: 'student' }),
+  ];
+  const { ListFilter } = loadModule({ rows });
+  const input = makeInput('ada');
+  ListFilter.apply(input);
+  input.value = '';
+  ListFilter.apply(input);
+  assert.deepEqual(marked(rows), ['Cai']);
+});
+
+test('a filter matching nothing leaves no row marked', () => {
+  const rows = [makeRow({ name: 'Ada', username: 'ada', role: 'student' })];
+  const { ListFilter } = loadModule({ rows });
+  ListFilter.apply(makeInput('zzzznomatch'));
+  assert.deepEqual(marked(rows), []);
 });
