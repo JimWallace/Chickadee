@@ -200,7 +200,7 @@ import VaporTesting
 
             // The balance shows on /account too.
             let (_, accountHTML) = try await pageHTML(app: app, path: "/account", cookie: cookie)
-            #expect(accountHTML.contains("Slip days: 1 of 2 remaining"))
+            #expect(accountHTML.contains("1 of 2 slip days left"))
         }
     }
 

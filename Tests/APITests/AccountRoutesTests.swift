@@ -92,6 +92,63 @@ import VaporTesting
         }
     }
 
+    /// The fully-populated identity header — the state the design shows, and
+    /// the one the pixel baseline CANNOT draw: display name, student ID and
+    /// email arrive from SSO claims, and no HTTP route sets them, so the
+    /// visual-regression fixture (which speaks only HTTP) renders a bare local
+    /// account. This asserts the populated rendering end to end instead.
+    @Test func populatedIdentityRendersNameUsernameAndEveryDetailRow() async throws {
+        try await withApp(app) { _ in
+            let hash = try testPasswordHash("pw")
+            let user = APIUser(
+                username: "a4student", passwordHash: hash, role: "user",
+                email: "a4student@uwaterloo.ca", preferredName: "Avery",
+                studentID: "20824417", displayName: "Avery Sandoval")
+            try await user.save(on: app.db)
+            let cookie = try await loginUser(
+                username: "a4student", password: "pw", role: "user", on: app)
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Heading is the display name; the username sits under it.
+                    #expect(html.contains("<strong>Avery Sandoval</strong>"))
+                    #expect(html.contains(#"<span class="text-muted">a4student</span>"#))
+                    // The monogram follows the same resolved name.
+                    #expect(html.contains(">AS</p>"))
+                    // All four detail rows.
+                    #expect(html.contains("Preferred name"))
+                    #expect(html.contains("Avery"))
+                    #expect(html.contains("Student ID"))
+                    #expect(html.contains("20824417"))
+                    #expect(html.contains("a4student@uwaterloo.ca"))
+                })
+        }
+    }
+
+    /// A local account with nothing on file must not print its username twice.
+    @Test func bareAccountShowsTheUsernameOnceWithNoSecondaryLine() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "bare_account", password: "pw", role: "user", on: app)
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("<strong>bare_account</strong>"))
+                    #expect(!html.contains(#"<span class="text-muted">bare_account</span>"#))
+                })
+        }
+    }
+
     // MARK: - Invalid / missing course
 
     @Test func leaveCourse_invalidCourseID_returns400() async throws {
@@ -284,30 +341,74 @@ import VaporTesting
 @Suite struct AccountMonogramTests {
 
     @Test func twoWordPreferredNameGivesTwoInitials() {
-        #expect(accountMonogram(preferredName: "Ada Lovelace", username: "alovelace") == "AL")
+        #expect(accountMonogram(name: "Ada Lovelace") == "AL")
     }
 
     @Test func singleWordGivesOneInitial() {
-        #expect(accountMonogram(preferredName: "ada", username: "alovelace") == "A")
+        #expect(accountMonogram(name: "ada") == "A")
     }
 
     @Test func hyphenAndDotCountAsWordBreaks() {
-        #expect(accountMonogram(preferredName: "Jean-Luc", username: "jlp") == "JL")
-        #expect(accountMonogram(preferredName: "A. Turing", username: "aturing") == "AT")
+        #expect(accountMonogram(name: "Jean-Luc") == "JL")
+        #expect(accountMonogram(name: "A. Turing") == "AT")
     }
 
-    @Test func fallsBackToTheUsernameWhenThereIsNoPreferredName() {
-        #expect(accountMonogram(preferredName: nil, username: "vis_student") == "VS")
-        #expect(accountMonogram(preferredName: "", username: "chickadee") == "C")
+    @Test func derivesInitialsFromAUsernameToo() {
+        #expect(accountMonogram(name: "vis_student") == "VS")
+        #expect(accountMonogram(name: "chickadee") == "C")
     }
 
     @Test func neverBlank() {
         // A name of only punctuation still has to render something, or the
         // circle appears as an unexplained empty disc.
-        #expect(accountMonogram(preferredName: "...", username: "...") == "?")
+        #expect(accountMonogram(name: "...") == "?")
     }
 
     @Test func takesAtMostTwoInitials() {
-        #expect(accountMonogram(preferredName: "Anne Marie Von Trapp", username: "amvt") == "AM")
+        #expect(accountMonogram(name: "Anne Marie Von Trapp") == "AM")
+    }
+}
+
+/// The identity header resolves ONE name and both the heading and the monogram
+/// use it, so the circle can never show initials the name beside it does not
+/// have. The username line under it is dropped when it would merely repeat the
+/// heading — a local account with nothing on file would otherwise print its
+/// username twice, which reads as a rendering fault rather than as identity.
+@Suite struct AccountIdentityNameTests {
+
+    @Test func prefersTheDisplayNameWhenTheIdPReleasedOne() {
+        #expect(
+            accountIdentityName(
+                displayName: "Avery Sandoval", preferredName: "Avery", username: "a4student")
+                == "Avery Sandoval")
+    }
+
+    @Test func fallsBackToPreferredNameThenUsername() {
+        #expect(
+            accountIdentityName(displayName: nil, preferredName: "Avery", username: "a4student")
+                == "Avery")
+        #expect(
+            accountIdentityName(displayName: nil, preferredName: nil, username: "a4student")
+                == "a4student")
+    }
+
+    @Test func treatsBlankAndWhitespaceNamesAsAbsent() {
+        #expect(
+            accountIdentityName(displayName: "", preferredName: "   ", username: "a4student")
+                == "a4student")
+    }
+
+    @Test func theMonogramFollowsTheResolvedName() {
+        let name = accountIdentityName(
+            displayName: "Avery Sandoval", preferredName: "Avery", username: "a4student")
+        #expect(accountMonogram(name: name) == "AS")
+    }
+
+    @Test func secondaryLineIsDroppedWhenItWouldRepeatTheHeading() {
+        #expect(
+            accountIdentitySecondary(identityName: "a4student", username: "a4student") == nil)
+        #expect(
+            accountIdentitySecondary(identityName: "Avery Sandoval", username: "a4student")
+                == "a4student")
     }
 }
