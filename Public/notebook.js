@@ -2241,11 +2241,18 @@
         // the pass fraction rather than a percentage: the browser knows what it
         // ran, but the authoritative grade is the server's, and inventing one
         // here would let the two disagree.
+        //
+        // KEEP THE WORD "passed" BESIDE THE FIGURE. Tools/editor-smoke-test/
+        // notebook-page-check.mjs proves end-to-end grading by matching
+        // /\d+\s*\/\s*\d+\s*passed/ against this element's innerText, and the
+        // tile labels below do not satisfy it — a count sits between the
+        // fraction and the word. Dropping it fails the webkit and chromium
+        // e2e with "no grading result rendered", 240s after the fact.
         const summaryEl = document.createElement('div');
         summaryEl.className = 'submission-score-row';
         summaryEl.innerHTML = `
             <p class="score score-header">
-                <span class="grade-pill score-figure">${pass} / ${total}</span>
+                <span class="grade-pill score-figure">${pass} / ${total}</span> passed
             </p>
             <div class="diagnostics-cards">
                 <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">passed</div></div>
