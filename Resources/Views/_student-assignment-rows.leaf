@@ -20,7 +20,7 @@
             <td>
                 <div class="assignment-title-cell">
                     <strong>#(row.title)</strong>
-                    #if(!row.badges.isEmpty):
+                    #if(count(row.badges) > 0):
                     <span class="achievement-badges achievement-badges-compact">
                         #for(badge in row.badges):
                         <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>

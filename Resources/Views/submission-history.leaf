@@ -4,7 +4,7 @@ Submission History
 #endexport
 #export("content"):
 <h1>#(assignmentTitle)</h1>
-#if(rows.isEmpty):
+#if(count(rows) == 0):
 <p class="empty">No submissions yet for this assignment.</p>
 #else:
 <table class="results-table">

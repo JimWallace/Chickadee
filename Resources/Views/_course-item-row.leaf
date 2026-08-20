@@ -70,7 +70,7 @@
                         </label>
                         <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
                     </form>
-                    #if(!item.content.attachments.isEmpty):
+                    #if(count(item.content.attachments) > 0):
                     <div class="content-item-attachment-list">
                         #for(att in item.content.attachments):
                         <div class="content-item-attachment">

@@ -52,7 +52,7 @@ Submission #(submissionID)
         #if(deltaHeaderText):
         <p class="score-delta"><span class="delta-summary">#(deltaHeaderText)</span></p>
         #endif
-        #if(!badges.isEmpty):
+        #if(count(badges) > 0):
         <div class="achievement-badges achievement-badges-full">
             #for(badge in badges):
             <span class="achievement-badge" title="#(badge.tooltip)">#(badge.label)</span>
@@ -119,7 +119,7 @@ Submission #(submissionID)
     #if(sec.sectionName):
     <h3 class="submission-section-heading">#(sec.sectionName)</h3>
     #endif
-    #if(!sec.outcomes.isEmpty):
+    #if(count(sec.outcomes) > 0):
     <table class="results-table">
         <thead>
             <tr>

@@ -1497,6 +1497,39 @@ shim); and archived finished-era docs under `docs/archive/`.
 
   (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
+
+  **Leaf resolves no Swift properties, and says nothing when it fails to
+  (v0.5.165).** The comment finding above has a twin, found the same way and
+  costing more. `Dictionary+LeafData.swift` walks a keypath by requiring every
+  intermediate to be a **dictionary**, so `rows.isEmpty` — where `rows` is an
+  array — resolves to **nil**, not to an error. Nil then flows two ways and
+  both read as success: `LeafSerializer`'s conditional guard is
+  `(evaluated.bool ?? false) || (!evaluated.isNil && …)`, so `#if(rows.isEmpty)`
+  **never fires**; `ParameterResolver`'s `.not` is `rhs.bool ?? !rhs.isNil`, so
+  `#if(!rows.isEmpty)` **always fires**.
+
+  Thirty-three sites across 22 templates shipped this way: 22 empty states that
+  never appeared (a "No submissions yet" replaced by a header-only table
+  promising rows and listing none — on the student dashboard, enrollment, five
+  admin pages) and 11 blocks that always did (an "Auto-detected:" note with
+  nothing after it, a Section picker on a course with no sections, empty badge
+  containers). **Render tests cannot see any of it** — the template resolves
+  fine, it just resolves wrong — which is why it survived every guard the repo
+  has and was found only by reading LeafKit's source.
+
+  Use the built-in `count` **tag**, which handles arrays and dictionaries
+  properly: `#if(count(rows) == 0)` and `#if(count(rows) > 0)`. Not the
+  `isEmpty` tag — `#isEmpty(rows)` stringifies its parameter and throws on an
+  array. `count()` throws on a missing or non-collection key, so confirm the
+  receiver is a non-optional array on the context struct; that trade is
+  deliberate, since loud-while-rendering beats silent-forever.
+
+  The idiom is legitimate in exactly one shape: when the receiver is a struct
+  that **declares** the property, the key is a real dictionary member
+  (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
+  indistinguishable to a reader from the broken form, so
+  `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
+  everything else, with a `check-guards.sh` fixture proving it still fails.
 - **Consolidating on xeus (#1271) — R done, Python open.** Browser grading is
   now two substrates: R runs the vendored xeus-r kernel (shipped here), Python
   still runs Pyodide. Moving Python across would restore one authoring/grading

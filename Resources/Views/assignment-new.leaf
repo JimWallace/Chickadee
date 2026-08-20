@@ -33,7 +33,7 @@ Create Assignment
                     Due
                     <input class="form-input input-compact" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
-                #if(!sections.isEmpty):
+                #if(count(sections) > 0):
                 <label class="field-inline">
                     Section
                     <select class="form-input input-compact" name="sectionID" id="sectionID">
@@ -229,11 +229,11 @@ Create Assignment
     </div>
 
     <!-- ── Runner Requirements ────────────────────────────────────────── -->
-    #if(!detectedLanguages.isEmpty):
+    #if(count(detectedLanguages) > 0):
     <p class="card-meta detected-note">
         <strong>Auto-detected:</strong>
         Languages: #(detectedLanguagesCSV)
-        #if(!detectedCapabilities.isEmpty):
+        #if(count(detectedCapabilities) > 0):
         · Capabilities: #(detectedCapabilitiesCSV)
         #endif
     </p>

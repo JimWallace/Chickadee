@@ -12,7 +12,7 @@ Runner #(runner.workerID)
                 ·
                 <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
             </p>
-            #if(!tags.isEmpty):
+            #if(count(tags) > 0):
             <div class="chip-row runner-tags">
                 #for(tag in tags):
                 <span class="chip">#(tag)</span>
@@ -45,7 +45,7 @@ Runner #(runner.workerID)
 
 <section class="page-section">
     <h2>Recent Jobs</h2>
-    #if(recentJobs.isEmpty):
+    #if(count(recentJobs) == 0):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
     <div class="table-scroll"><table class="results-table sortable-table">
@@ -83,7 +83,7 @@ Runner #(runner.workerID)
 
 <section class="page-section">
     <h2>Recent Snapshots</h2>
-    #if(snapshots.isEmpty):
+    #if(count(snapshots) == 0):
     <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
     #else:
     <div class="table-scroll"><table class="results-table sortable-table">

@@ -19,7 +19,7 @@
 
 #if(hasSections):
 #for(section in sections):
-#if(!section.rows.isEmpty):
+#if(count(section.rows) > 0):
 <h2 class="section-group-heading">#(section.name)</h2>
 #extend("_student-assignment-rows", section)
 #endif

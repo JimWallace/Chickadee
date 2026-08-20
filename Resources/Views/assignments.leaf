@@ -171,7 +171,7 @@
             </tr>
         </thead>
         <tbody data-section-id="#(section.sectionID)">
-        #if(section.items.isEmpty):
+        #if(count(section.items) == 0):
         <tr class="section-empty-row">
             <td colspan="6" class="section-empty-cell">
                 Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
@@ -248,7 +248,7 @@
         </details>
     </div>
 
-    #if(!ungroupedItems.isEmpty):
+    #if(count(ungroupedItems) > 0):
     <table class="results-table">
         <thead>
             <tr>

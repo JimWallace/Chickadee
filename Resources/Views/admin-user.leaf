@@ -14,7 +14,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 
 <section class="page-section">
     <h2>Enrolled courses</h2>
-    #if(enrolledCourses.isEmpty):
+    #if(count(enrolledCourses) == 0):
     <p class="empty">Not enrolled in any courses.</p>
     #else:
     <table class="results-table">
@@ -50,9 +50,9 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 
 <section class="page-section">
     <h2>Add to course</h2>
-    #if(availableCourses.isEmpty):
+    #if(count(availableCourses) == 0):
     <p class="empty">
-        #if(enrolledCourses.isEmpty):
+        #if(count(enrolledCourses) == 0):
         No active courses are available.
         #else:
         Enrolled in all active courses.
