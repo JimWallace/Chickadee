@@ -333,6 +333,11 @@ struct OutcomeRow: Encodable {
     let deltaRegressed: Bool  // was pass last attempt, is non-pass now
     let pointsLabel: String?  // e.g. "2 pts" when assignment is weighted; nil otherwise
     let hint: String?  // instructor "💡 Hint" callout, present only on failing tests
+    /// True on the FIRST non-passing row that has output, so its panel renders
+    /// open while the rest stay closed.  A reader lands on the first thing to
+    /// fix without five stack traces unrolling at once, and Leaf cannot decide
+    /// "first" on its own — it has no state across a loop.
+    var isFirstFailureOutput: Bool = false
 }
 
 /// One section block on the student submission page.  `sectionName == nil`
@@ -544,6 +549,9 @@ struct SubmissionContext: Encodable {
     let failCount: Int
     let errorCount: Int
     let timeoutCount: Int
+    /// Rows skipped because a prerequisite failed.  Derived per row rather than
+    /// being a `TestOutcomeStatus`, so it is counted from the rendered rows.
+    let skippedCount: Int
     let totalTests: Int
     let gradePercent: Int
     /// True when an instructor has overridden this student's grade for the

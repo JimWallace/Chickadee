@@ -36,18 +36,18 @@ Submission #(submissionID)
         <div class="score-summary">
             <p class="card-meta">Grade</p>
             #if(gradeIsOverridden):
-            <p class="score score-header"><span class="grade-pill grade-override-active score-figure">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
+            <p class="score score-header"><span class="score-figure grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
             <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
             #else:
-            <p class="score score-header"><span class="grade-pill score-figure">#(gradePercent)%</span></p>
+            <p class="score score-header"><span class="score-figure">#(gradePercent)%</span></p>
             <p class="score score-autograded">#if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
             #endif
         </div>
         <div class="diagnostics-cards">
-            <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">passed</div></div>
-            <div class="diagnostic-card"><div class="diagnostic-value">#(failCount)</div><div class="diagnostic-label">failed</div></div>
-            <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">errors</div></div>
-            <div class="diagnostic-card"><div class="diagnostic-value">#(timeoutCount)</div><div class="diagnostic-label">timed out</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">Passed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">#(failCount)</div><div class="diagnostic-label">Failed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">Errors</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(skippedCount)</div><div class="diagnostic-label">Skipped</div></div>
         </div>
         #if(deltaHeaderText):
         <p class="score-delta"><span class="delta-summary">#(deltaHeaderText)</span></p>
@@ -114,17 +114,6 @@ Submission #(submissionID)
     🔓 <strong>Secret tests revealed</strong> — you used your reveal token for this assignment, so hidden-test details are shown on all of your submissions.
 </div>
 #endif
-#if(secretRevealAvailable):
-<div class="notice-box">
-    <p class="section-note">You have <strong>one reveal token</strong> for this assignment. Spending it permanently shows the secret (hidden) test results — names, output, and hints — on all of your past and future submissions here.</p>
-    <form method="post" action="/testsetups/#(testSetupID)/reveal-secret"
-          data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
-        #csrfFormField()
-        <input type="hidden" name="submissionID" value="#(submissionID)">
-        <button class="btn action-btn" type="submit">Reveal secret tests</button>
-    </form>
-</div>
-#endif
 #for(sec in sectionedOutcomes):
 <section class="submission-section-block">
     #if(sec.sectionName):
@@ -136,7 +125,7 @@ Submission #(submissionID)
             <tr>
                 <th>Test</th>
                 <th>Tier</th>
-                #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">Δ</th>#endif
+                #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">vs last</th>#endif
                 <th>Mark</th>
             </tr>
         </thead>
@@ -174,15 +163,19 @@ Submission #(submissionID)
                     #if(outcome.pointsLabel):<span class="points-label">#(outcome.pointsLabel)</span>#endif
                 </td>
             </tr>
+            <!-- No output panel on a skipped row: it never ran, and the panel
+                 would only repeat the skip reason already shown above. -->
+            #if(!outcome.isSkipped):
             #if(outcome.status != "pass" && outcome.longResult):
             <tr class="test-output-row">
                 <td colspan="#if(hasDelta):4#else:3#endif">
-                    <details class="test-output-details">
+                    <details class="test-output-details"#if(outcome.isFirstFailureOutput): open#endif>
                         <summary>Output</summary>
                         <pre class="test-output-pre test-output-pre-wide">#(outcome.longResult)</pre>
                     </details>
                 </td>
             </tr>
+            #endif
             #endif
         #endfor
         </tbody>
@@ -192,7 +185,17 @@ Submission #(submissionID)
     <div class="tier-summary-row tier-summary-secret">
         <span class="tier">secret</span>
         <span class="tier-summary-counts">#(sec.secretStake)</span>
-        <span class="tier-summary-note">— names and output stay hidden</span>
+        #if(sec.secretSummary):
+        <span class="tier-summary-note">#(sec.secretSummary.passCount) passed, #(sec.secretSummary.failCount) failed</span>
+        #endif
+        #if(secretRevealAvailable):
+        <form class="secret-reveal-action" method="post" action="/testsetups/#(testSetupID)/reveal-secret"
+              data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
+            #csrfFormField()
+            <input type="hidden" name="submissionID" value="#(submissionID)">
+            <button class="btn action-btn" type="submit">Reveal these tests</button>
+        </form>
+        #endif
     </div>
     <table class="results-table">
         <thead>
@@ -200,13 +203,13 @@ Submission #(submissionID)
                  its number is positional within one render and would not
                  correlate across attempts. An empty header is also an axe
                  violation (empty-table-header). -->
-            <tr><th>Test</th><th>Tier</th><th>Mark</th></tr>
+            <tr><th>Test</th><th>Result</th><th>Mark</th></tr>
         </thead>
         <tbody>
         #for(row in sec.secretRows):
             <tr class="status-#(row.status)">
                 <td><div class="test-cell-main"><code>#(row.testName)</code></div></td>
-                <td><span class="tier">#(row.tier)</span></td>
+                <td>#(row.shortResult)</td>
                 <td>
                     <span class="result-mark result-mark-#(row.markClass)">#(row.markLabel)</span>
                     #if(row.pointsLabel):<span class="points-label">#(row.pointsLabel)</span>#endif
@@ -215,6 +218,9 @@ Submission #(submissionID)
         #endfor
         </tbody>
     </table>
+    <p class="section-note">Hidden tests are named and explained only after you
+        spend this assignment's one reveal token. Their marks and points are
+        always shown.</p>
     #endif
 </section>
 #endfor

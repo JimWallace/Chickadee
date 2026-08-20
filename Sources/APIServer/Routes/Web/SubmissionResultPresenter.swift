@@ -38,11 +38,17 @@ import Vapor
 /// Renders secret-tier outcomes as MASKED rows: numbered, marked and priced,
 /// but unnamed and unexplained.
 ///
-/// Deliberately withheld beyond the name: `shortResult` and `longResult` (they
-/// carry expected/actual values), `hint` (it describes the test), `blockerName`
-/// (it names another test), and the delta arrows — the number is positional
-/// within one render, so an arrow against it would not correlate across
-/// attempts and would mislead rather than inform.
+/// The short result IS shown, per the approved design: a student needs to know
+/// how many cases moved, and "2 of 4 cases passed" says that without naming the
+/// test. Note the exposure this accepts — a short result is whatever the
+/// instructor's script printed on its last line, so a suite that prints
+/// expected/actual values there will surface them here. Names, output, hints
+/// and blockers stay hidden regardless.
+///
+/// Still withheld: `longResult` (the full output), `hint` (it describes the
+/// test), `blockerName` (it names another test), and the delta arrows — the
+/// number is positional within one render, so an arrow against it would not
+/// correlate across attempts and would mislead rather than inform.
 func maskedSecretRows(_ outcomes: [TestOutcome], weighted: Bool) -> [OutcomeRow] {
     outcomes.enumerated().map { index, outcome in
         let (markLabel, markClass): (String, String) =
@@ -64,7 +70,7 @@ func maskedSecretRows(_ outcomes: [TestOutcome], weighted: Bool) -> [OutcomeRow]
             testName: "hidden test \(index + 1)",
             tier: TestTier.secret.rawValue,
             status: outcome.status.rawValue,
-            shortResult: "",
+            shortResult: outcome.shortResult,
             longResult: nil,
             markLabel: markLabel,
             markClass: markClass,
@@ -237,6 +243,15 @@ extension WebRoutes {
                 displayNameMap: manifestDisplay.displayNameMap,
                 hintByFilename: manifestDisplay.hintByFilename
             )
+        }
+        // Counted from the rendered rows: "skipped" is a short-result pattern
+        // rather than a status, so the collection cannot report it.
+        processed.skippedCount = processed.outcomes.filter(\.isSkipped).count
+        // Open the first failure's output and leave the rest closed.
+        if let first = processed.outcomes.firstIndex(where: {
+            $0.status != "pass" && !$0.isSkipped && $0.longResult != nil
+        }) {
+            processed.outcomes[first].isFirstFailureOutput = true
         }
         return processed
     }
@@ -437,6 +452,7 @@ extension WebRoutes {
             failCount: processed.failCount,
             errorCount: processed.errorCount,
             timeoutCount: processed.timeoutCount,
+            skippedCount: processed.skippedCount,
             totalTests: processed.totalTests,
             gradePercent: processed.gradePercent,
             gradeIsOverridden: overrideGradePercent != nil,
@@ -528,6 +544,11 @@ struct ProcessedCollection {
     var failCount: Int
     var errorCount: Int
     var timeoutCount: Int
+    /// Rows whose short result matches the dependency-skip pattern.  Unlike the
+    /// other three this is not a `TestOutcomeStatus` — it is derived per row —
+    /// so it is counted from the rendered rows rather than read off the
+    /// collection.
+    var skippedCount: Int
     var totalTests: Int
     var totalPoints: Int
     var earnedPoints: String
@@ -554,6 +575,7 @@ struct ProcessedCollection {
         failCount: 0,
         errorCount: 0,
         timeoutCount: 0,
+        skippedCount: 0,
         totalTests: 0,
         totalPoints: 0,
         earnedPoints: "0",

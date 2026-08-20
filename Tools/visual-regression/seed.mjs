@@ -56,7 +56,7 @@ async function buildSetupZip() {
   zip.file("assignment.ipynb", NOTEBOOK_JSON);
   for (const name of [
     "test_public.py", "test_edges.py", "releasetest_shape.py",
-    "secrettest_alpha.py", "secrettest_beta.py",
+    "test_blocked.py", "secrettest_alpha.py", "secrettest_beta.py",
   ]) {
     zip.file(name, 'print("test ok")\n');
   }
@@ -74,7 +74,11 @@ const MANIFEST = JSON.stringify({
   // none of it.
   testSuites: [
     { tier: "public", script: "test_public.py", points: 2 },
-    { tier: "public", script: "test_edges.py", points: 2 },
+    {
+      tier: "public", script: "test_edges.py", points: 2,
+      hint: "Check what your function returns for negative input.",
+    },
+    { tier: "public", script: "test_blocked.py", points: 2 },
     { tier: "release", script: "releasetest_shape.py", points: 2 },
     { tier: "secret", script: "secrettest_alpha.py", points: 1 },
     { tier: "secret", script: "secrettest_beta.py", points: 1 },
@@ -137,9 +141,23 @@ const GRADED_OUTCOMES = [
     score: 0.5,
     longResult: "AssertionError: first_digit(-42) == 4, got -4",
   }),
-  gradedOutcome("releasetest_shape.py", "release", "pass", { shortResult: "ok" }),
-  gradedOutcome("secrettest_alpha.py", "secret", "pass", { points: 1 }),
-  gradedOutcome("secrettest_beta.py", "secret", "fail", { points: 1 }),
+  // A dependency skip, so the skipped tile and the blocked-by annotation are
+  // both drawn. PUBLIC on purpose: a release row's output is redacted until the
+  // deadline, which suppresses the annotation. The short result must match the
+  // runner's own skip wording or the presenter will not read it as a skip.
+  gradedOutcome("test_blocked.py", "public", "fail", {
+    shortResult: "Skipped: prerequisite 'test_edges.py' did not pass",
+  }),
+  gradedOutcome("releasetest_shape.py", "release", "error", {
+    shortResult: "error",
+    longResult: "NameError: name 'classify' is not defined",
+  }),
+  gradedOutcome("secrettest_alpha.py", "secret", "pass", {
+    points: 1, shortResult: "all cases passed",
+  }),
+  gradedOutcome("secrettest_beta.py", "secret", "fail", {
+    points: 1, shortResult: "2 of 4 cases passed",
+  }),
 ];
 
 export async function seed(baseURL) {
@@ -219,6 +237,20 @@ export async function seed(baseURL) {
       maxRedirects: 0,
     }),
     [302, 303]
+  );
+
+  // Reveal tokens on, so the hidden-test block draws its reveal control. The
+  // whole block is conditional on this, and an assignment without it captures a
+  // materially different page.
+  csrf = await csrfFrom(instr, "/instructor");
+  await expectOK(
+    "enable secret reveal",
+    instr.post(`/instructor/${assignmentID}/secret-reveal`, {
+      form: { enabled: "on", _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [200, 302, 303]
   );
 
   const instructorState = await instr.storageState();

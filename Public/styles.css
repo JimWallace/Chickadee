@@ -755,6 +755,7 @@ details pre {
     border-radius: var(--radius-full);
     border: 1px solid transparent;
     white-space: nowrap;
+    text-transform: lowercase;
 }
 
 .result-mark-pass {
@@ -764,9 +765,9 @@ details pre {
 }
 
 .result-mark-fail {
-    color: var(--closed-fg);
+    color: var(--danger-fg);
     background: var(--danger-bg);
-    border-color: var(--closed-fg);
+    border-color: var(--danger-border);
 }
 
 .result-mark-error {
@@ -1318,7 +1319,44 @@ code { font-family: var(--font-mono); font-size: .9em; }
    this page to read. `em` rather than a --text-* step: the type scale tops out
    at 1.4rem for page headings, and this is display type, which the scale
    deliberately does not carry. */
-.score-figure { font-size: 2.4em; }
+.score-figure {
+    font-size: 2.4em;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+/* The band's own label, sized down and tracked out so the figure below it
+   reads as the answer and this reads as its caption. */
+.score-summary .card-meta {
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+/* Label above value in this band, the reverse of the dashboard tiles it shares
+   a component with: here the four labels are read first, as a row of headings,
+   and the numbers answer them. Done with column-reverse rather than reordered
+   markup so the shared component keeps one DOM shape. */
+.submission-score-row .diagnostic-card {
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    gap: .25rem;
+    min-height: 0;
+}
+
+.submission-score-row .diagnostic-value {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+}
+
+/* The one count that is not neutral information. */
+.diagnostic-value-alert { color: var(--red); }
+
+/* The reveal control sits at the end of the hidden-test header rather than in
+   a notice of its own: it acts on the block it labels. */
+/* Not .inline-form: that rule sets `margin: 0` and is declared later in this
+   sheet, so at equal specificity it silently reset the auto margin that pushes
+   this to the end of the row. A flex item needs no inline display anyway. */
+.secret-reveal-action { margin-left: auto; }
 
 /* Secondary "Autograded: …%" line shown under an overridden grade. */
 .score-autograded { font-size: var(--text-base); color: var(--gray-600); }

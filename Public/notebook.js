@@ -2227,10 +2227,10 @@
         if (!resultsEl) return;
         const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
+        const skipped = outcomes.filter(o => SKIP_RE.test(o.shortResult || '')).length;
         const pass    = outcomes.filter(o => o.status === 'pass').length;
-        const fail    = outcomes.filter(o => o.status === 'fail').length;
+        const fail    = outcomes.filter(o => o.status === 'fail' && !SKIP_RE.test(o.shortResult || '')).length;
         const error   = outcomes.filter(o => o.status === 'error').length;
-        const timeout = outcomes.filter(o => o.status === 'timeout').length;
         const total   = outcomes.length;
 
         // Score band, structurally identical to submission.leaf's: the headline
@@ -2257,10 +2257,10 @@
                 </p>
             </div>
             <div class="diagnostics-cards">
-                <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">passed</div></div>
-                <div class="diagnostic-card"><div class="diagnostic-value">${fail}</div><div class="diagnostic-label">failed</div></div>
-                <div class="diagnostic-card"><div class="diagnostic-value">${error}</div><div class="diagnostic-label">errors</div></div>
-                <div class="diagnostic-card"><div class="diagnostic-value">${timeout}</div><div class="diagnostic-label">timed out</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">Passed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">${fail}</div><div class="diagnostic-label">Failed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${error}</div><div class="diagnostic-label">Errors</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${skipped}</div><div class="diagnostic-label">Skipped</div></div>
             </div>`;
 
         resultsEl.innerHTML = '';
