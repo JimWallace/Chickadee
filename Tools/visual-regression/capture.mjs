@@ -43,11 +43,14 @@ const MASKS = [
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
-  const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
+  const { setupID, instructorState, studentState, resultsPath, gradedResultsPath } =
+    await seed(baseURL);
   console.log(`Seeded setup ${setupID}; results page: ${resultsPath || "(none)"}`);
 
   // Page list is shared with the a11y scan — see pages.mjs.
-  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
+  const PAGES = pageList({
+    setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+  });
 
   const browser = await chromium.launch();
   let failures = 0;

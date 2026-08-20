@@ -1271,7 +1271,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .submission-score-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: .75rem;
     flex-wrap: wrap;
     /* The band sits behind .diagnostic-card, whose own background is
@@ -1280,6 +1279,21 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: var(--surface-muted);
     border-radius: var(--radius-lg);
     padding: 1rem 1.25rem;
+}
+
+/* The count tiles are an auto-fit grid, so inside a flex row they receive only
+   their content width and collapse to a single column — which is what the band
+   did until the graded results page finally had a pixel baseline to show it.
+   Giving them the remaining width restores the row. No `margin: auto` here:
+   an auto margin absorbs the row's free space BEFORE flex-grow can use it, so
+   the grid keeps its flex-basis and the tiles wrap 3+1 instead of filling. */
+.submission-score-row .diagnostics-cards {
+    flex: 1 1 20rem;
+    /* The shared 140px column minimum is sized for a full-width dashboard grid;
+       beside a grade figure it leaves room for three, so the fourth wrapped to
+       its own row. These four tiles are one reading, not a grid, so the minimum
+       is narrowed here to keep them on one line. */
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
 }
 
 /* The grade is the largest thing on the page — the one figure a student opens

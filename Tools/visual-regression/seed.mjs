@@ -42,20 +42,24 @@ async function expectOK(label, resPromise, okStatuses) {
   return res;
 }
 
+const NOTEBOOK_JSON = JSON.stringify({
+  nbformat: 4,
+  nbformat_minor: 5,
+  metadata: { kernelspec: { name: "python", display_name: "Python" } },
+  cells: [
+    { cell_type: "code", source: ["x = 1\n"], metadata: {}, outputs: [], execution_count: null },
+  ],
+});
+
 async function buildSetupZip() {
   const zip = new JSZip();
-  zip.file(
-    "assignment.ipynb",
-    JSON.stringify({
-      nbformat: 4,
-      nbformat_minor: 5,
-      metadata: { kernelspec: { name: "python", display_name: "Python" } },
-      cells: [
-        { cell_type: "code", source: ["x = 1\n"], metadata: {}, outputs: [], execution_count: null },
-      ],
-    })
-  );
-  zip.file("test_public.py", 'print("public test ok")\n');
+  zip.file("assignment.ipynb", NOTEBOOK_JSON);
+  for (const name of [
+    "test_public.py", "test_edges.py", "releasetest_shape.py",
+    "secrettest_alpha.py", "secrettest_beta.py",
+  ]) {
+    zip.file(name, 'print("test ok")\n');
+  }
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
@@ -64,10 +68,58 @@ async function buildSetupZip() {
 const MANIFEST = JSON.stringify({
   schemaVersion: 1,
   requiredFiles: [],
-  testSuites: [{ tier: "public", script: "test_public.py" }],
+  // Weighted and multi-tier on purpose: the graded results page renders points
+  // labels only when the assignment is weighted, and the masked hidden-test
+  // block only when secret tests exist. A single unweighted public test draws
+  // none of it.
+  testSuites: [
+    { tier: "public", script: "test_public.py", points: 2 },
+    { tier: "public", script: "test_edges.py", points: 2 },
+    { tier: "release", script: "releasetest_shape.py", points: 2 },
+    { tier: "secret", script: "secrettest_alpha.py", points: 1 },
+    { tier: "secret", script: "secrettest_beta.py", points: 1 },
+  ],
   timeLimitSeconds: 10,
   makefile: null,
 });
+
+// The graded fixture result. Fixed values throughout — every number and string
+// here lands in a pixel baseline, so nothing may derive from the clock, the
+// run, or the machine.
+//
+// Shape mirrors `buildCollection` in Public/browser-runner.js: the browser
+// grader posts exactly this to /api/v1/submissions/browser-result, which is a
+// real production path and needs no runner and no HMAC secret. That is the
+// whole reason the graded page can be captured at all — the fixture attaches
+// no runner, so a worker-graded submission stays pending forever.
+function gradedOutcome(name, tier, status, opts = {}) {
+  return {
+    testName: name,
+    testClass: null,
+    tier,
+    status,
+    shortResult: opts.shortResult ?? (status === "pass" ? "ok" : "1 case failed"),
+    longResult: opts.longResult ?? null,
+    score: opts.score ?? (status === "pass" ? 1 : 0),
+    points: opts.points ?? 2,
+    executionTimeMs: opts.executionTimeMs ?? 12,
+    memoryUsageBytes: null,
+    attemptNumber: 1,
+    isFirstPassSuccess: false,
+  };
+}
+
+const GRADED_OUTCOMES = [
+  gradedOutcome("test_public.py", "public", "pass", { shortResult: "4/4 cases passed" }),
+  gradedOutcome("test_edges.py", "public", "fail", {
+    shortResult: "2/4 cases passed",
+    score: 0.5,
+    longResult: "AssertionError: first_digit(-42) == 4, got -4",
+  }),
+  gradedOutcome("releasetest_shape.py", "release", "pass", { shortResult: "ok" }),
+  gradedOutcome("secrettest_alpha.py", "secret", "pass", { points: 1 }),
+  gradedOutcome("secrettest_beta.py", "secret", "fail", { points: 1 }),
+];
 
 export async function seed(baseURL) {
   const instr = await pwRequest.newContext({ baseURL });
@@ -190,8 +242,52 @@ export async function seed(baseURL) {
   const m = subLoc.match(/\/(submissions|results)\/[A-Za-z0-9_-]+/);
   if (m) resultsPath = m[0];
   if (!resultsPath) throw new Error(`submit did not redirect to a submission page (location: "${subLoc}")`);
+  // A SECOND submission, graded, so the results page has a captured state that
+  // is not the pending spinner. The first one stays pending on purpose — that
+  // is what `submission-pending` baselines.
+  const collection = {
+    submissionID: "",
+    testSetupID: setupID,
+    attemptNumber: 1,
+    buildStatus: "passed",
+    compilerOutput: null,
+    outcomes: GRADED_OUTCOMES,
+    totalTests: GRADED_OUTCOMES.length,
+    passCount: GRADED_OUTCOMES.filter((o) => o.status === "pass").length,
+    failCount: GRADED_OUTCOMES.filter((o) => o.status === "fail").length,
+    errorCount: 0,
+    timeoutCount: 0,
+    executionTimeMs: GRADED_OUTCOMES.reduce((sum, o) => sum + o.executionTimeMs, 0),
+    runnerVersion: "browser-wasm-runner/1.0",
+    // Fixed, not `new Date()`: this reaches a pixel baseline.
+    timestamp: "2026-01-15T12:00:00Z",
+  };
+  csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
+  const gradedRes = await expectOK(
+    "graded browser submission",
+    stud.post("/api/v1/submissions/browser-result", {
+      multipart: {
+        collection: JSON.stringify(collection),
+        testSetupID: setupID,
+        notebook: {
+          name: "assignment.ipynb",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from(NOTEBOOK_JSON),
+        },
+      },
+      headers: { "x-csrf-token": csrf },
+    }),
+    [200, 201]
+  );
+  const gradedID = JSON.parse(await gradedRes.text()).submissionID;
+  if (!gradedID) throw new Error("no submissionID in browser-result response");
+  const gradedResultsPath = `/submissions/${gradedID}`;
+
   const studentState = await stud.storageState();
   await stud.dispose();
 
-  return { setupID, assignmentID, courseID, instructorState, studentState, resultsPath };
+  return {
+    setupID, assignmentID, courseID, instructorState, studentState, resultsPath,
+    gradedResultsPath,
+  };
 }
