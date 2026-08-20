@@ -33,22 +33,25 @@ Submission #(submissionID)
     #if(buildFailed):
     #else:
     <div class="submission-score-row">
-        #if(gradeIsOverridden):
-        <p class="score score-header"><span class="grade-pill grade-override-active score-figure">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
-        <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
-        #else:
-        <p class="score score-header"><span class="grade-pill score-figure">#(gradePercent)%</span></p>
-        <p class="score score-autograded">#if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
-        #endif
-        #if(deltaHeaderText):
-        <p class="score score-autograded"><span class="delta-summary">#(deltaHeaderText)</span></p>
-        #endif
+        <div class="score-summary">
+            <p class="card-meta">Grade</p>
+            #if(gradeIsOverridden):
+            <p class="score score-header"><span class="grade-pill grade-override-active score-figure">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
+            <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
+            #else:
+            <p class="score score-header"><span class="grade-pill score-figure">#(gradePercent)%</span></p>
+            <p class="score score-autograded">#if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
+            #endif
+        </div>
         <div class="diagnostics-cards">
             <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">passed</div></div>
             <div class="diagnostic-card"><div class="diagnostic-value">#(failCount)</div><div class="diagnostic-label">failed</div></div>
             <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">errors</div></div>
             <div class="diagnostic-card"><div class="diagnostic-value">#(timeoutCount)</div><div class="diagnostic-label">timed out</div></div>
         </div>
+        #if(deltaHeaderText):
+        <p class="score-delta"><span class="delta-summary">#(deltaHeaderText)</span></p>
+        #endif
         #if(!badges.isEmpty):
         <div class="achievement-badges achievement-badges-full">
             #for(badge in badges):
@@ -193,14 +196,17 @@ Submission #(submissionID)
     </div>
     <table class="results-table">
         <thead>
-            <tr><th>Test</th><th>Tier</th>#if(hasDelta):<th class="delta-col"></th>#endif<th>Mark</th></tr>
+            <!-- No delta column here: a masked row carries no arrows, because
+                 its number is positional within one render and would not
+                 correlate across attempts. An empty header is also an axe
+                 violation (empty-table-header). -->
+            <tr><th>Test</th><th>Tier</th><th>Mark</th></tr>
         </thead>
         <tbody>
         #for(row in sec.secretRows):
             <tr class="status-#(row.status)">
                 <td><div class="test-cell-main"><code>#(row.testName)</code></div></td>
                 <td><span class="tier">#(row.tier)</span></td>
-                #if(hasDelta):<td class="delta-cell"></td>#endif
                 <td>
                     <span class="result-mark result-mark-#(row.markClass)">#(row.markLabel)</span>
                     #if(row.pointsLabel):<span class="points-label">#(row.pointsLabel)</span>#endif

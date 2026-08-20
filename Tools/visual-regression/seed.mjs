@@ -109,6 +109,27 @@ function gradedOutcome(name, tier, status, opts = {}) {
   };
 }
 
+/// Wraps outcomes in the collection envelope `buildCollection` produces in
+/// Public/browser-runner.js. Fixed values only — these reach a pixel baseline.
+function gradedCollection(setupID, outcomes) {
+  return {
+    submissionID: "",
+    testSetupID: setupID,
+    attemptNumber: 1,
+    buildStatus: "passed",
+    compilerOutput: null,
+    outcomes,
+    totalTests: outcomes.length,
+    passCount: outcomes.filter((o) => o.status === "pass").length,
+    failCount: outcomes.filter((o) => o.status === "fail").length,
+    errorCount: 0,
+    timeoutCount: 0,
+    executionTimeMs: outcomes.reduce((sum, o) => sum + o.executionTimeMs, 0),
+    runnerVersion: "browser-wasm-runner/1.0",
+    timestamp: "2026-01-15T12:00:00Z",
+  };
+}
+
 const GRADED_OUTCOMES = [
   gradedOutcome("test_public.py", "public", "pass", { shortResult: "4/4 cases passed" }),
   gradedOutcome("test_edges.py", "public", "fail", {
@@ -245,23 +266,38 @@ export async function seed(baseURL) {
   // A SECOND submission, graded, so the results page has a captured state that
   // is not the pending spinner. The first one stays pending on purpose — that
   // is what `submission-pending` baselines.
-  const collection = {
-    submissionID: "",
-    testSetupID: setupID,
-    attemptNumber: 1,
-    buildStatus: "passed",
-    compilerOutput: null,
-    outcomes: GRADED_OUTCOMES,
-    totalTests: GRADED_OUTCOMES.length,
-    passCount: GRADED_OUTCOMES.filter((o) => o.status === "pass").length,
-    failCount: GRADED_OUTCOMES.filter((o) => o.status === "fail").length,
-    errorCount: 0,
-    timeoutCount: 0,
-    executionTimeMs: GRADED_OUTCOMES.reduce((sum, o) => sum + o.executionTimeMs, 0),
-    runnerVersion: "browser-wasm-runner/1.0",
-    // Fixed, not `new Date()`: this reaches a pixel baseline.
-    timestamp: "2026-01-15T12:00:00Z",
-  };
+  const collection = gradedCollection(setupID, GRADED_OUTCOMES);
+  // Graded TWICE. The second attempt is what the baseline captures, because a
+  // delta line ("fixed 2 tests since attempt N") only renders when a prior
+  // graded attempt exists — and that line is a fourth item in the score band,
+  // which is exactly the case that laid the band out wrong in production while
+  // a first-attempt baseline looked fine.
+  csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
+  await expectOK(
+    "first graded browser submission",
+    stud.post("/api/v1/submissions/browser-result", {
+      multipart: {
+        collection: JSON.stringify({
+          ...gradedCollection(
+            setupID,
+            // A worse prior attempt, so the second one reports fixes.
+            GRADED_OUTCOMES.map((o) =>
+              o.tier === "public" ? { ...o, status: "fail", score: 0 } : o
+            )
+          ),
+        }),
+        testSetupID: setupID,
+        notebook: {
+          name: "assignment.ipynb",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from(NOTEBOOK_JSON),
+        },
+      },
+      headers: { "x-csrf-token": csrf },
+    }),
+    [200, 201]
+  );
+
   csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
   const gradedRes = await expectOK(
     "graded browser submission",

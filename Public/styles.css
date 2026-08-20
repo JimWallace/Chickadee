@@ -1287,13 +1287,31 @@ code { font-family: var(--font-mono); font-size: .9em; }
    Giving them the remaining width restores the row. No `margin: auto` here:
    an auto margin absorbs the row's free space BEFORE flex-grow can use it, so
    the grid keeps its flex-basis and the tiles wrap 3+1 instead of filling. */
+/* The band is TWO groups plus a full-width footnote, not one flat row of
+   items. Flattening them is what let the grade, the points, the delta line and
+   the four tiles all compete for a single line: with no delta they fit, and
+   with one — every attempt after the first — the tiles wrapped 3+1 and left a
+   gap beside the grade. The delta is a whole-band remark, so it gets its own
+   line rather than a seat at the same table. */
+.score-summary {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
 .submission-score-row .diagnostics-cards {
     flex: 1 1 20rem;
-    /* The shared 140px column minimum is sized for a full-width dashboard grid;
-       beside a grade figure it leaves room for three, so the fourth wrapped to
-       its own row. These four tiles are one reading, not a grid, so the minimum
-       is narrowed here to keep them on one line. */
-    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    /* Always four across: these are one reading, not a responsive grid. Below
+       the flex-basis the whole block wraps under the grade rather than
+       splitting 3+1. */
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.score-delta {
+    flex: 1 0 100%;
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--text-secondary);
 }
 
 /* The grade is the largest thing on the page — the one figure a student opens
