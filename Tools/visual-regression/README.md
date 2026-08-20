@@ -42,6 +42,14 @@ Every value in that collection is a constant. It reaches a pixel baseline, so
 nothing in it may derive from the clock, the run or the machine — including its
 `timestamp`, which is pinned rather than `new Date()`.
 
+One value is not the seed's to pin: the stored artifact for a browser-graded
+submission is named from the generated submission id, so the download button
+reads `Download sub_<uuid>.ipynb`. `capture.mjs` rewrites that text, matching
+the link by href and replacing it only when it carries a generated id — an
+uploaded artifact keeps the student's own filename, which is already
+deterministic, and rewriting it too would restage the pending page's baseline
+for nothing.
+
 The fixture suite is weighted and spans three tiers on purpose: points labels
 render only on a weighted assignment, and the masked hidden-test block only
 when secret tests exist. A single unweighted public test draws neither.
