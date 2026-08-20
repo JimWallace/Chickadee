@@ -70,6 +70,71 @@ import Testing
         )
     }
 
+    /// The result count belongs to the script, not to the page.
+    ///
+    /// `list-filter.js` mints `.filter-status` into the `.filter-group` and
+    /// uses it as the `role="status"` live region — it is how a screen-reader
+    /// user learns the filter did anything, and it is empty while the box is.
+    /// A page that hand-writes its own count gets two: one live region the
+    /// script owns and one stale string it does not update. The design brief
+    /// draws label + input only, so this pins that the markup stays that way.
+    @Test func noPageDeclaresItsOwnFilterResultCount() throws {
+        for file in try LeafMarkupScanner.templateNames() {
+            let html = try LeafMarkupScanner.markup(of: file)
+            guard html.contains("filter-input") else { continue }
+            #expect(
+                !html.contains("filter-status"),
+                "\(file): the result count is minted by list-filter.js — a page never declares .filter-status"
+            )
+        }
+    }
+
+    /// Every filter box is one width, and that width is a root token.
+    ///
+    /// `--filter-width` is declared once in `:root` and consumed by
+    /// `.filter-input`. It is not a per-page dial: five boxes once came in
+    /// three sizes, which is the whole reason the token exists.
+    @Test func noFilterInputCarriesItsOwnWidth() throws {
+        for input in try Self.filterInputs() {
+            #expect(
+                !input.tag.contains("width"),
+                "\(input.file): filter width comes from --filter-width, never from the tag"
+            )
+        }
+    }
+
+    /// A page that DECLARES the behaviour must LOAD the script that provides it.
+    ///
+    /// Every assertion in this suite reads markup, so all of them passed on the
+    /// student dashboard while its filter did nothing at all: `index.leaf`
+    /// declared `data-list-filter`, four `data-sort-key` columns,
+    /// `data-sort-initial="due:asc"` and a tiebreak, and loaded neither
+    /// `list-filter.js` nor `sortable-table.js` (base.leaf loads neither, and
+    /// every other page includes them itself). The filter box accepted typing
+    /// and filtered nothing, no result count was ever announced, the headers
+    /// were inert buttons, and assignments rendered in server order rather than
+    /// by due date — while the stylesheet drew a sort affordance on all four
+    /// columns, advertising a promise the page could not keep.
+    ///
+    /// This is the failure `check-guards.sh` names in its own header: a test
+    /// matching a wiring string after the wiring went dead. Markup alone cannot
+    /// see it, so pair the declaration with the script.
+    @Test func everyPageDeclaringTableBehaviourLoadsItsScript() throws {
+        let contracts = [
+            (declaration: "data-list-filter=", script: "list-filter.js"),
+            (declaration: "sortable-table\"", script: "sortable-table.js"),
+        ]
+        for file in try LeafMarkupScanner.templateNames() {
+            let source = try LeafMarkupScanner.source(of: file)
+            for contract in contracts where source.contains(contract.declaration) {
+                #expect(
+                    source.contains(contract.script),
+                    "\(file): declares \(contract.declaration) but never loads \(contract.script) — the behaviour is dead"
+                )
+            }
+        }
+    }
+
     @Test func everyFilterInputSitsInAFilterGroup() throws {
         for input in try Self.filterInputs() {
             let enclosing = input.enclosingTag ?? "<nothing>"

@@ -256,6 +256,16 @@ duplicate.
 - **`.editor-stack`**, `.editor-cm-mount`, `.cell-stack`, `.cell-title`,
   `.cell-actions` — editor-built layout: vertical field stacks, the
   CodeMirror host, and table-cell title/meta and action clusters.
+- **`.results-table`** is a CARD: `background: var(--surface)`, a
+  `var(--border)` hairline, `var(--radius-lg)` corners and `overflow: hidden`,
+  which is what clips those corners while the table stays
+  `border-collapse: collapse`.  The separate box model is NOT required for the
+  card look and must not be reached for — `collapse` is what keeps one hairline
+  where two bordered elements meet, and switching it doubles every one of them.
+  There is deliberately no `--card` variant: a second flavour of the site's
+  most-reused component is where the sprawl this rulebook exists to prevent
+  starts.  A bordered wrapper around a table drops its own border, since the
+  table owns that edge.
 - **`.results-table`** (+ `.table-scroll`), **`.sortable-table`** — the one
   column sort (`Public/sortable-table.js`).  Markup:
   `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
@@ -266,7 +276,25 @@ duplicate.
   `data-sort-initial="<key>:desc"` declares the load-time sort and
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
-  glyph — the guard fails on both.
+  glyph — the guard fails on both.  The glyph marks the ACTIVE column only:
+  `.sort-header::after` carries it at `visibility: hidden` so the box holds
+  its width, hover and `:focus-visible` reveal it, and `th.sort-asc` /
+  `th.sort-desc` show the direction permanently.  A resting glyph on every
+  header drew one arrow per sortable column and said nothing about which
+  column the rows were ordered by.
+  A column that declares `data-sort-key` also becomes **searchable** by
+  `.filter-input`, which matches its DISPLAYED text while the sorter reads its
+  machine value — you sort Due by its ISO and filter it by "in 2 days".  Adding
+  a sort key therefore widens the filter as a side effect; omitting one
+  (Actions, History) is how a column stays out of both.
+  **`.row-last-visible`** closes the list: the table's own border ends it, so
+  the final row draws no separator.  `:last-child` alone is wrong on any
+  filtered table — it is the DOM's last row, while `list-filter.js` hides rows
+  with the `hidden` attribute — and the stale separator then collapsed with
+  the table's bottom border and won it, rendering that edge a shade lighter.
+  `list-filter.js` owns the class (it is the only thing that knows which rows
+  are hidden) and `sortable-table.js` asks it to re-mark after reordering.
+  A page never writes it.
 - **`.diagnostics-cards`** + `.diagnostic-card`, `.diagnostic-label`,
   `.diagnostic-value` — stat tiles.
   `.diagnostics-section` wraps a group of them under one heading.
@@ -335,6 +363,16 @@ duplicate.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
+  **Two empty states, and they never borrow each other's words.** An empty
+  COLLECTION (term start, a course with no assignments) replaces the table: an
+  `.empty` line, one `.section-note` of context, one route out.  A filter that
+  matched NOTHING leaves the rows in place — hidden, not absent — so the table
+  stays and the message appears inside it, worded by `data-list-filter-empty`
+  and naming the row type ("No assignments match this filter."), never a
+  generic "No results."  The rule: a filter's empty message never claims the
+  collection is empty, and an empty collection never mentions a filter.  A
+  server-side GET filter is the one place a page decides between the two
+  itself, because there the non-matching rows really are absent.
   `.standin-panel` — the placeholder a panel shows while its content is
   unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle

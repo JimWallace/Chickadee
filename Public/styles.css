@@ -579,7 +579,7 @@ textarea.form-input {
     border-collapse: collapse;
     font-size: var(--text-base);
     background: var(--surface);
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
 }
@@ -601,7 +601,16 @@ textarea.form-input {
     vertical-align: top;
 }
 
-.results-table tr:last-child td { border-bottom: none; }
+/* The table's own border closes the list, so the final row draws no
+   separator of its own. `:last-child` is the DOM's last row, which is not the
+   last one a reader can SEE once list-filter.js hides rows with the `hidden`
+   attribute: the last visible row kept a separator that then collapsed with
+   the table's bottom border, and per CSS conflict resolution the cell wins —
+   so a filtered table's bottom edge quietly rendered a shade lighter
+   (--gray-100 in place of --gray-200). `.row-last-visible` is maintained by
+   list-filter.js, which is the only thing that knows which row that is. */
+.results-table tr:last-child td,
+.results-table tr.row-last-visible td { border-bottom: none; }
 
 /* Section grouping for results tables — one block (optional heading + table)
    per test-suite section.  Shared by the server-rendered submission view
@@ -661,11 +670,25 @@ textarea.form-input {
     outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
+/* The indicator marks the ACTIVE column only. A sortable table carries a
+   sort button on every header, so a resting glyph on each one drew six
+   identical arrows and none of them said which column the rows were actually
+   ordered by. Hover and keyboard focus reveal it on the column under the
+   pointer; the sorted column shows its direction permanently.
+
+   `visibility`, not `content`, does the hiding: the box keeps its width at
+   rest, so revealing the glyph cannot widen a column and reflow the table
+   under the pointer that is hovering it. */
 .sort-header::after {
     content: "↕";
     font-size: .8em;
     color: var(--gray-500);
+    visibility: hidden;
 }
+.sort-header:hover::after,
+.sort-header:focus-visible::after { visibility: visible; }
+th.sort-asc .sort-header::after,
+th.sort-desc .sort-header::after { visibility: visible; color: var(--gray-900); }
 th.sort-asc .sort-header::after { content: "↑"; }
 th.sort-desc .sort-header::after { content: "↓"; }
 
@@ -2577,3 +2600,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .assignment-phone-meta { display: none; }
 
 @media (max-width: 640px) { .assignment-phone-meta { display: block; } }
+
+/* Phone: the cell gutter drops one spacing step. Four columns at the desktop
+   .9rem gutter push the dashboard table past a 390px viewport (measured 394px
+   in a 386px frame — the Actions column clips). Vertical padding is left
+   alone: row height is what makes a row tappable. */
+@media (max-width: 640px) {
+    .results-table th { padding-left: .5rem; padding-right: .5rem; }
+    .results-table td { padding-left: .5rem; padding-right: .5rem; }
+}
