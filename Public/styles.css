@@ -651,6 +651,8 @@ textarea.form-input {
     background: transparent;
     color: inherit;
     font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
     cursor: pointer;
     white-space: nowrap;
     text-align: inherit;
@@ -916,24 +918,31 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .auth-box {
     max-width: min(420px, 100%);
     margin: 3rem auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
 }
 
 /* Chickadee mascot above the login heading. The PNG is transparent, so it sits
-   cleanly on the page background in both light and dark mode. */
+   cleanly on the card surface in both light and dark mode. Sized as a mark
+   rather than as art: the sign-in controls are the job of this page, and the
+   logo should not compete with them for the first screenful. */
 .auth-logo {
     display: block;
-    width: 200px;
-    height: 200px;
+    width: 72px;
+    height: 72px;
     max-width: 80%;
-    margin: 0 auto 1rem;
+    margin: 0 auto .5rem;
 }
 
-.auth-box h1 { margin-bottom: 1.5rem; }
+.auth-box h1 { margin-bottom: 1.25rem; text-align: center; }
 
 .auth-alt {
     margin-top: 1rem;
     font-size: var(--text-base);
     color: var(--gray-600);
+    text-align: center;
 }
 
 /* ── Nav username + logout button ────────────────────── */
@@ -1265,7 +1274,19 @@ code { font-family: var(--font-mono); font-size: .9em; }
     justify-content: space-between;
     gap: .75rem;
     flex-wrap: wrap;
+    /* The band sits behind .diagnostic-card, whose own background is
+       var(--surface); without a muted ground behind them the tiles would be
+       invisible against the page. That is the only reason it has one. */
+    background: var(--surface-muted);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
 }
+
+/* The grade is the largest thing on the page — the one figure a student opens
+   this page to read. `em` rather than a --text-* step: the type scale tops out
+   at 1.4rem for page headings, and this is display type, which the scale
+   deliberately does not carry. */
+.score-figure { font-size: 2.4em; }
 
 /* Secondary "Autograded: …%" line shown under an overridden grade. */
 .score-autograded { font-size: var(--text-base); color: var(--gray-600); }
@@ -2428,3 +2449,38 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
        its desktop floor would clip off a phone viewport. */
     .publish-form { min-width: 0; }
 }
+
+/* Identity circle on the account page, carrying initials rather than a photo:
+   no IdP claim in play releases one. Sized and centred so an <img> can replace
+   the text on the day one does, with no rule change. */
+.account-monogram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 0 1rem;
+    border-radius: 50%;
+    background: var(--success-bg);
+    color: var(--success-fg);
+    font-size: var(--text-xl);
+    font-weight: 600;
+    overflow: hidden;
+}
+
+/* The drop zone's upload glyph. A descendant selector rather than a class of
+   its own: it is one rule serving one existing component, and a new global
+   class would owe a component-vocabulary entry for no gain. */
+.drop-zone .icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--muted);
+}
+
+/* Deadline and submission count restated inside the assignment name cell at
+   phone width, where .col-hide-phone drops the Due and History columns. Hidden
+   at every width that still shows those columns, so the fact never appears
+   twice. Pairs with .card-meta for its typography. */
+.assignment-phone-meta { display: none; }
+
+@media (max-width: 640px) { .assignment-phone-meta { display: block; } }

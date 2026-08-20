@@ -62,6 +62,36 @@ import VaporTesting
         }
     }
 
+    // MARK: - Empty states actually render
+
+    /// Regression: both sections used `#if(rows.isEmpty)` in Leaf, which never
+    /// fires. LeafKit has no property resolution for `.isEmpty` on an array —
+    /// the path resolves to nil, so the test is always false and its negation
+    /// always true. The page therefore rendered "Available courses" as a
+    /// heading over a table with column headers and no rows, promising courses
+    /// and listing none. Emptiness is decided in Swift now; this pins it.
+    @Test func emptyCourseListsRenderTheirEmptyStateNotAHeaderOnlyTable() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "acct_empty_states", password: "pw",
+                role: "student", on: app)
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("You are not enrolled in any courses"))
+                    #expect(html.contains("There are no other courses open to join right now"))
+                    // A table would carry the column header; the empty state
+                    // must replace it, not sit beside it.
+                    #expect(!html.contains("<th>Code</th>"))
+                })
+        }
+    }
+
     // MARK: - Invalid / missing course
 
     @Test func leaveCourse_invalidCourseID_returns400() async throws {
@@ -245,5 +275,39 @@ import VaporTesting
             #expect(subStillExists != nil, "Submission must not be deleted when leaving a course")
 
         }
+    }
+}
+
+/// The account page's identity circle carries initials, not a photo — nothing
+/// in the SSO claim set releases one.  These pin the derivation so the circle
+/// is never blank and never leaks more than initials.
+@Suite struct AccountMonogramTests {
+
+    @Test func twoWordPreferredNameGivesTwoInitials() {
+        #expect(accountMonogram(preferredName: "Ada Lovelace", username: "alovelace") == "AL")
+    }
+
+    @Test func singleWordGivesOneInitial() {
+        #expect(accountMonogram(preferredName: "ada", username: "alovelace") == "A")
+    }
+
+    @Test func hyphenAndDotCountAsWordBreaks() {
+        #expect(accountMonogram(preferredName: "Jean-Luc", username: "jlp") == "JL")
+        #expect(accountMonogram(preferredName: "A. Turing", username: "aturing") == "AT")
+    }
+
+    @Test func fallsBackToTheUsernameWhenThereIsNoPreferredName() {
+        #expect(accountMonogram(preferredName: nil, username: "vis_student") == "VS")
+        #expect(accountMonogram(preferredName: "", username: "chickadee") == "C")
+    }
+
+    @Test func neverBlank() {
+        // A name of only punctuation still has to render something, or the
+        // circle appears as an unexplained empty disc.
+        #expect(accountMonogram(preferredName: "...", username: "...") == "?")
+    }
+
+    @Test func takesAtMostTwoInitials() {
+        #expect(accountMonogram(preferredName: "Anne Marie Von Trapp", username: "amvt") == "AM")
     }
 }

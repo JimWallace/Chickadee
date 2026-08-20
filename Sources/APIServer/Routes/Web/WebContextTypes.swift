@@ -17,6 +17,10 @@ struct TestSetupRow: Encodable {
     let suiteCount: Int
     let createdAt: String
     let dueAt: String?  // formatted due date, nil if no assignment or no due date
+    /// The same deadline as an ISO-8601 instant, for the Due column's
+    /// `.js-relative-time[data-iso]` countdown and its `data-sort-value`.
+    /// The formatted string beside it stays the no-JS fallback.
+    let dueAtISO: String?
     /// Formatted automatic open date, set only while the start date is still
     /// in the future. Drives the "Opens …" hint in the Due column; nil once
     /// the assignment has opened or when no open date is set.
@@ -64,9 +68,24 @@ struct TestSetupRow: Encodable {
     /// `dueAt` or the extension's `extendedDueAt`, whichever is later).
     /// nil when there's no deadline and no extension.
     let effectiveDueAtText: String?
+    /// `effectiveDueAtText` as an ISO-8601 instant — same job as `dueAtISO`.
+    let effectiveDueAtISO: String?
     /// True when the slip-day action is offered on this row (#1228): the
     /// deadline passed inside the claim window, the viewer is a student with
     /// balance, and no staff extension stands in the way.
+    /// The three per-row action gates.  These live here rather than as
+    /// conditions spelled out in Leaf because the Actions cell also needs to
+    /// know whether it is offering *anything* (`hasAnyAction`), and two copies
+    /// of the same four conditions would eventually disagree — rendering a
+    /// dash beside live buttons, or buttons beside a dash.
+    let showEditAction: Bool
+    let showUploadAction: Bool
+    let showResetNotebookAction: Bool
+    /// The OR of the three gates above plus `slipDayAvailable`.  Stored rather
+    /// than computed because `Encodable` synthesis only encodes stored
+    /// properties, so a computed one would never reach Leaf; the builder
+    /// derives it from the gates rather than respelling their conditions.
+    let hasAnyAction: Bool
     let slipDayAvailable: Bool
     let slipDayURL: String
     /// Tooltip/aria text for the calendar action, naming the exact deadline
@@ -192,10 +211,27 @@ struct SubmitContext: Encodable {
     /// language table plus this assignment's required files — see
     /// `submissionAcceptAttribute`.
     let acceptAttribute: String
+    /// One sentence under the drop zone naming the language and the extensions
+    /// this assignment takes — see `submissionAcceptHintText`.  The `accept`
+    /// attribute is invisible until the picker opens and says nothing to a
+    /// drag-and-drop, so the same fact has to be readable on the page.
+    let acceptHintText: String
+    /// The rejection banner's text when the server refused the previous upload
+    /// (`?error=filetype`), nil otherwise.  Server-rendered rather than built in
+    /// JS so the refusal survives a direct POST with scripting off.
+    let errorText: String?
     /// The manifest's `requiredFiles`, comma-joined for the "include these
     /// files" hint above the drop zone.  nil when the assignment declares
     /// none (the hint paragraph is omitted).
     let requiredFilesText: String?
+    /// Which attempt this upload will be — prior submissions plus one.  Drives
+    /// the attempt chip; 1 on a first submission.
+    let attemptNumber: Int
+    /// The deadline in force for this student, formatted, and the same instant
+    /// as ISO-8601 so the chip can ride `.js-relative-time` and read "in 2
+    /// days".  Both nil when the assignment has no due date.
+    let deadlineText: String?
+    let deadlineISO: String?
     let currentUser: CurrentUserContext?
 }
 
@@ -313,6 +349,19 @@ struct SectionedOutcomes: Encodable {
     /// students — surfacing the per-section count lets a student see *where*
     /// hidden tests are failing without revealing which.
     let secretSummary: TierSummary?
+    /// The same secret outcomes as MASKED rows — "hidden test 1…N", each
+    /// carrying its real mark and its points but no name, message, output,
+    /// hint or blocker.
+    ///
+    /// The complaint the summary line left unanswered was never that names are
+    /// hidden; it is that a student could not tell how many points moved or how
+    /// many things broke. These rows answer that without revealing which test
+    /// is which. Empty when the viewer sees secret tests itemized normally (an
+    /// instructor, or a student who spent the reveal token).
+    let secretRows: [OutcomeRow]
+    /// "4 hidden tests · 4 of 8 points" — the stake, stated in the block
+    /// header. nil when there are no secret tests in this section.
+    let secretStake: String?
 }
 
 /// Input data used to compute per-submission achievement badges.
@@ -489,6 +538,12 @@ struct SubmissionContext: Encodable {
     /// header — behaviour identical to the pre-sections page.
     let sectionedOutcomes: [SectionedOutcomes]
     let passCount: Int
+    /// The other three states, for the count tiles in the score band.  These
+    /// are the four states `TestOutcomeStatus` has; "skipped" is derived from a
+    /// short-result pattern rather than being a status, so it is not a tile.
+    let failCount: Int
+    let errorCount: Int
+    let timeoutCount: Int
     let totalTests: Int
     let gradePercent: Int
     /// True when an instructor has overridden this student's grade for the

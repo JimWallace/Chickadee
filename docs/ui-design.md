@@ -275,7 +275,23 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
+- **`.account-monogram`** — the account page's identity circle, carrying one
+  or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
+  photo because no claim in play releases one; the circle is sized so an
+  `<img>` can replace the text without a rule change if that ever changes.
+- **`.score-figure`** — the submission result page's grade percentage, the one
+  figure a student opens that page to read, at `2.4em`.  The only display-size
+  type in the product: the `--text-*` scale tops out at 1.4rem for page
+  headings and deliberately does not carry display sizes, so this is `em`
+  against its container rather than a new scale step.  One per page.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
+- **`.assignment-phone-meta`** — the student dashboard's phone-width
+  restatement of the Due and History columns, which `.col-hide-phone` drops
+  below 640px.  Sits inside the name cell, takes `.card-meta` typography, and
+  is `display: none` at every width that still shows those columns, so the
+  fact never appears twice.  Not general-purpose: a table that hides columns
+  on phones and wants them restated should reuse this pattern by name rather
+  than minting a second one.
   `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
   `.empty` — the "nothing here yet" line a list renders in place of rows.

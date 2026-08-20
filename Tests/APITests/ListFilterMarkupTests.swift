@@ -62,6 +62,7 @@ import Testing
                 "admin-audit.leaf",
                 "admin-users.leaf",
                 "assignment-submissions.leaf",
+                "index.leaf",
                 "instructor-activity.leaf",
                 "instructor-students.leaf",
             ],
@@ -107,7 +108,10 @@ import Testing
     /// A live filter names its table; a GET-form filter names none and posts to
     /// the server. Nothing else is a valid filter.
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
-        let liveFilters = ["admin-users.leaf", "assignment-submissions.leaf", "instructor-students.leaf"]
+        let liveFilters = [
+            "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
+            "instructor-students.leaf",
+        ]
         for input in try Self.filterInputs() {
             let isLive = input.tag.contains("data-list-filter=")
             #expect(

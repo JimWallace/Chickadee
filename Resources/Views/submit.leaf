@@ -4,16 +4,30 @@ Submit Code
 #endexport
 #export("content"):
 <h1>Submit to #(assignmentTitle)</h1>
+<div class="chip-row">
+    <span class="chip">Attempt #(attemptNumber)</span>
+    #if(deadlineText):
+    <span class="chip js-relative-time" data-iso="#(deadlineISO)">#(deadlineText)</span>
+    #endif
+</div>
 #if(requiredFilesText):
 <p class="fine-print">This assignment expects the following files: <code>#(requiredFilesText)</code>. Upload a single file, or a .zip that contains all of them.</p>
 #endif
 <form class="form form--wide" id="submit-form" method="post"
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
     #csrfFormField()
+    #if(errorText):
+    <div class="form-error" id="submit-error">#(errorText)</div>
+    #else:
+    <div class="form-error" id="submit-error" hidden></div>
+    #endif
     <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-controls="file-input" aria-describedby="drop-zone-help">
+        <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
         <p id="drop-zone-help">Drag your file here, or press Enter/Space to choose</p>
-        <input type="file" name="files" id="file-input" accept="#(acceptAttribute)" required>
+        <input type="file" name="files" id="file-input" accept="#(acceptAttribute)"
+               data-accept-hint="#(acceptHintText)" required>
     </div>
+    <p class="field-note">#(acceptHintText)</p>
     <p class="drop-filename" id="drop-filename"></p>
     <div>
         <button class="btn btn-primary" type="submit">Submit</button>

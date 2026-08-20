@@ -46,9 +46,52 @@ import VaporTesting
             TestProperties.self, from: Data(Self.uploadManifest.utf8))
         // `.cpp` and `.h` come from requiredFiles — extensions no
         // AssignmentLanguage claims, which is the upload-mode C++ case.
+        // `.ipynb` is absent: this assignment is upload-only, which is exactly
+        // the case with no notebook workflow to submit from.
         #expect(
             submissionAcceptAttribute(manifest: manifest)
-                == ".cpp,.h,.hpp,.ipynb,.java,.lua,.m,.py,.r,.rkt,.zip")
+                == ".cpp,.h,.hpp,.java,.lua,.m,.py,.r,.rkt,.zip")
+    }
+
+    @Test func acceptAttributeNarrowsToTheDeclaredLanguage() throws {
+        // The point of the narrowing: a Racket assignment used to offer .py,
+        // .r, .lua and .m beside .rkt, and the page never said which language
+        // it wanted. Now it offers its own extensions, the archive, and the
+        // notebook.
+        let json = """
+            {"schemaVersion":1,"language":"racket","requiredFiles":[],"testSuites":[]}
+            """
+        let manifest = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
+        let accept = submissionAcceptAttribute(manifest: manifest)
+        #expect(accept.contains(".rkt"))
+        #expect(!accept.contains(".py"))
+        #expect(!accept.contains(".lua"))
+        #expect(accept.contains(".zip"))
+    }
+
+    @Test func acceptHintTextNamesTheLanguage() throws {
+        let json = """
+            {"schemaVersion":1,"language":"python","requiredFiles":[],"testSuites":[]}
+            """
+        let manifest = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
+        let hint = submissionAcceptHintText(manifest: manifest)
+        #expect(hint.hasPrefix("Python assignment — accepts "))
+        #expect(hint.hasSuffix("."))
+    }
+
+    @Test func filenameGateAcceptsTheLanguageAndRefusesOthers() throws {
+        let json = """
+            {"schemaVersion":1,"language":"racket","requiredFiles":[],"testSuites":[]}
+            """
+        let manifest = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
+        #expect(submissionFilenameIsAccepted("lab1.rkt", manifest: manifest))
+        #expect(submissionFilenameIsAccepted("lab1.zip", manifest: manifest))
+        #expect(submissionFilenameIsAccepted("LAB1.RKT", manifest: manifest))
+        #expect(!submissionFilenameIsAccepted("lab1.py", manifest: manifest))
+        // An extensionless upload is left to the existing content sniffing
+        // rather than refused, so a legitimate upload never dies on a missing
+        // Content-Disposition filename.
+        #expect(submissionFilenameIsAccepted("Makefile", manifest: manifest))
     }
 
     @Test func acceptAttributeSkipsExtensionlessRequiredFiles() throws {
@@ -170,7 +213,12 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("main.cpp, util.h"))
-                    #expect(html.contains(#"accept=".cpp,.h,.hpp,.ipynb,.java,.lua,.m,.py,.r,.rkt,.zip""#))
+                    // Upload-only, so no `.ipynb`.
+                    #expect(html.contains(#"accept=".cpp,.h,.hpp,.java,.lua,.m,.py,.r,.rkt,.zip""#))
+                    // The same list, said in words under the drop zone: the
+                    // attribute is invisible until the picker opens and says
+                    // nothing at all to a drag-and-drop.
+                    #expect(html.contains("Accepts .cpp, .h,"))
                 })
         }
     }

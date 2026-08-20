@@ -2233,14 +2233,33 @@
         const timeout = outcomes.filter(o => o.status === 'timeout').length;
         const total   = outcomes.length;
 
-        // Summary line below the status bar
-        const summaryEl = document.createElement('p');
-        summaryEl.className = 'score';
-        const parts = [`${pass} / ${total} passed`];
-        if (fail)    parts.push(`${fail} failed`);
-        if (error)   parts.push(`${error} error${error > 1 ? 's' : ''}`);
-        if (timeout) parts.push(`${timeout} timed out`);
-        summaryEl.textContent = parts.join(' · ');
+        // Score band, structurally identical to submission.leaf's: the headline
+        // figure at display size with the four outcome states as tiles beneath.
+        //
+        // CSS reaches both renderings for free; MARKUP does not, which is why
+        // this is built here as well and not only in the template. The figure is
+        // the pass fraction rather than a percentage: the browser knows what it
+        // ran, but the authoritative grade is the server's, and inventing one
+        // here would let the two disagree.
+        //
+        // KEEP THE WORD "passed" BESIDE THE FIGURE. Tools/editor-smoke-test/
+        // notebook-page-check.mjs proves end-to-end grading by matching
+        // /\d+\s*\/\s*\d+\s*passed/ against this element's innerText, and the
+        // tile labels below do not satisfy it — a count sits between the
+        // fraction and the word. Dropping it fails the webkit and chromium
+        // e2e with "no grading result rendered", 240s after the fact.
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'submission-score-row';
+        summaryEl.innerHTML = `
+            <p class="score score-header">
+                <span class="grade-pill score-figure">${pass} / ${total}</span> passed
+            </p>
+            <div class="diagnostics-cards">
+                <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">passed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${fail}</div><div class="diagnostic-label">failed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${error}</div><div class="diagnostic-label">errors</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value">${timeout}</div><div class="diagnostic-label">timed out</div></div>
+            </div>`;
 
         resultsEl.innerHTML = '';
         resultsEl.appendChild(summaryEl);
@@ -2346,7 +2365,8 @@
                 outputHtml = `<span class="skip-reason">${escHtml(shortResult)}</span>`;
             } else {
                 const longHtml = longResult
-                    ? `<details><summary>Show output ▸</summary><pre>${escHtml(longResult)}</pre></details>`
+                    ? `<details class="test-output-details"><summary>Output</summary>`
+                      + `<pre class="test-output-pre">${escHtml(longResult)}</pre></details>`
                     : '';
                 outputHtml = escHtml(shortResult) + longHtml;
             }

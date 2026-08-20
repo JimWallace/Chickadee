@@ -9,11 +9,17 @@
 <h1>Assignments</h1>
 #endif
 #if(slipDaySummary):
-<p class="text-muted">#(slipDaySummary)</p>
+<div class="chip-row">
+    <span class="chip">#(slipDaySummary)</span>
+</div>
 #endif
 #if(!hasAny):
 #if(currentUser.activeCourse):
-<p class="empty">No assignments available yet.</p>
+<div class="notice-box">
+    <p class="empty">No assignments available yet.</p>
+    <p class="section-note">Labs open one at a time as the term goes on.</p>
+    <p><a href="/account">Check your course memberships</a></p>
+</div>
 #else:
 <p class="empty">You are not enrolled in any courses.
     <a href="/account">Go to My Account</a> to see your course memberships.
@@ -24,7 +30,18 @@
 #if(group.name):
 <h2 class="assignment-section-heading">#(group.name)</h2>
 #endif
-<table class="results-table assignment-table">
+<div class="toolbar toolbar--end section-gap">
+    <span class="filter-group">
+        <label class="filter-label" for="filter-assignments-#(index)">Filter</label>
+        <input id="filter-assignments-#(index)" class="form-input filter-input" type="search"
+               placeholder="Filter by name or status…"
+               data-list-filter="assignments-#(index)"
+               data-list-filter-empty="No assignments match this filter.">
+    </span>
+</div>
+<table class="results-table assignment-table sortable-table"
+       id="assignments-#(index)"
+       data-sort-initial="due:asc" data-sort-tiebreak="name">
     #extend("_assignment-table-head")
     <tbody>
     #for(item in group.items):
@@ -59,6 +76,7 @@
                         </span>
                         #endif
                     </div>
+                    <div class="card-meta assignment-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0): · #(item.setup.submissionCount) submitted#endif</div>
                 #else:
                 <span class="text-muted">Unpublished</span>
                 #endif
@@ -76,13 +94,15 @@
                     #endif">#(item.setup.status)</span>
                 #endif
             </td>
-            <td class="due-col col-hide-phone">
+            <td class="due-col col-hide-phone" data-sort-value="#(item.setup.dueAtISO)">
                 #if(item.setup.opensAtText):
                     <span title="This assignment opens automatically at this time.">Opens #(item.setup.opensAtText)</span>
                 #elseif(item.setup.hasActiveExtension):
-                    <span title="Personal deadline extension granted by your instructor.">#(item.setup.effectiveDueAtText)<br><span class="due-extension-note">(extension)</span></span>
+                    <span class="js-relative-time" data-iso="#(item.setup.effectiveDueAtISO)">#(item.setup.effectiveDueAtText)</span>
+                    <div class="card-meta">#(item.setup.effectiveDueAtText) <span class="due-extension-note">(extension)</span></div>
                 #elseif(item.setup.dueAt):
-                    #(item.setup.dueAt)
+                    <span class="js-relative-time" data-iso="#(item.setup.dueAtISO)">#(item.setup.dueAt)</span>
+                    <div class="card-meta">#(item.setup.dueAt)</div>
                 #else:
                     —
                 #endif
@@ -113,17 +133,20 @@
             </td>
             <td>
                 <div class="assignment-actions-cell">
-                    #if(item.setup.canEdit && item.setup.submissionMode != "uploadOnly" && (item.setup.gradingMode == "browser" || item.setup.hasNotebook)):
+                    #if(!item.setup.hasAnyAction):
+                    <span class="empty">—</span>
+                    #endif
+                    #if(item.setup.showEditAction):
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.notebookURL)" title="Edit" aria-label="Edit">
                         <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.isOpen && item.setup.gradingMode != "browser"):
+                    #if(item.setup.showUploadAction):
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.submitURL)" title="Upload" aria-label="Upload">
                         <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.isOpen && item.setup.hasNotebook && item.setup.submissionMode != "uploadOnly"):
+                    #if(item.setup.showResetNotebookAction):
                     <form method="post" action="/testsetups/#(item.setup.id)/reset-notebook" data-confirm="Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected." class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"

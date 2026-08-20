@@ -8,6 +8,46 @@ const dropZone   = document.getElementById('drop-zone');
 const fileInput  = document.getElementById('file-input');
 const fileNameEl = document.getElementById('drop-filename');
 
+// Accepted extensions come from the input's own `accept` attribute, so the
+// client and the server narrow by the same list without a second copy of it
+// here. The rejection is a COURTESY — createSubmission enforces it — so this
+// resolves every ambiguity toward accepting and letting the server decide.
+function submissionAcceptedExtensions() {
+    const raw = (fileInput && fileInput.getAttribute('accept')) || '';
+    return raw.split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.startsWith('.'));
+}
+
+function submissionFileIsAccepted(name) {
+    const allowed = submissionAcceptedExtensions();
+    if (!allowed.length) return true;
+    const lower = String(name || '').toLowerCase();
+    return allowed.some((ext) => lower.endsWith(ext));
+}
+
+function showSubmitRejection(name) {
+    const banner = document.getElementById('submit-error');
+    const hint = (fileInput && fileInput.getAttribute('data-accept-hint')) || '';
+    if (banner) {
+        // textContent, so the filename needs no escaping — escaping INTO it
+        // would render the entities literally.
+        banner.textContent = hint
+            ? name + ' is not an accepted file type. ' + hint
+            : name + ' is not an accepted file type.';
+        banner.hidden = false;
+    }
+    // Reuses the sheet's existing red-border state rather than minting a
+    // drop-zone-specific one.
+    if (dropZone) dropZone.classList.add('input-invalid');
+}
+
+function clearSubmitRejection() {
+    const banner = document.getElementById('submit-error');
+    if (banner) banner.hidden = true;
+    if (dropZone) dropZone.classList.remove('input-invalid');
+}
+
 if (dropZone && fileInput) {
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('keydown', (e) => {
@@ -30,16 +70,30 @@ if (dropZone && fileInput) {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (file) {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            fileInput.files = dt.files;
-            fileNameEl.textContent = file.name;
+        if (!file) return;
+        // A rejected drop does not fill the field: the student should not be
+        // able to press Submit on a file that will be refused.
+        if (!submissionFileIsAccepted(file.name)) {
+            showSubmitRejection(file.name);
+            return;
         }
+        clearSubmitRejection();
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileNameEl.textContent = file.name;
     });
 
     fileInput.addEventListener('change', () => {
-        fileNameEl.textContent = fileInput.files[0]?.name ?? '';
+        const picked = fileInput.files[0];
+        if (picked && !submissionFileIsAccepted(picked.name)) {
+            showSubmitRejection(picked.name);
+            fileInput.value = '';
+            fileNameEl.textContent = '';
+            return;
+        }
+        clearSubmitRejection();
+        fileNameEl.textContent = picked?.name ?? '';
     });
 }
 

@@ -13,9 +13,6 @@ Submission #(submissionID)
 .class-goal-progress { width: 100%; height: 0.6rem; }
 .class-goal-status { font-size: var(--text-base); margin-top: 0.15rem; }
 .class-goal-detail { font-size: var(--text-base); margin: 0.15rem 0 0; }
-.reveal-token-banner { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); font-size: var(--text-base); }
-.reveal-token-offer { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); }
-.reveal-token-text { margin: 0 0 .5rem; font-size: var(--text-base); }
 </style>
 <div id="submission-root"
      data-submission-id="#(submissionID)"
@@ -37,11 +34,21 @@ Submission #(submissionID)
     #else:
     <div class="submission-score-row">
         #if(gradeIsOverridden):
-        <p class="score score-header">Grade: <span class="grade-pill grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
-        <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        <p class="score score-header"><span class="grade-pill grade-override-active score-figure">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
+        <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
         #else:
-        <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        <p class="score score-header"><span class="grade-pill score-figure">#(gradePercent)%</span></p>
+        <p class="score score-autograded">#if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
         #endif
+        #if(deltaHeaderText):
+        <p class="score score-autograded"><span class="delta-summary">#(deltaHeaderText)</span></p>
+        #endif
+        <div class="diagnostics-cards">
+            <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">passed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(failCount)</div><div class="diagnostic-label">failed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">errors</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(timeoutCount)</div><div class="diagnostic-label">timed out</div></div>
+        </div>
         #if(!badges.isEmpty):
         <div class="achievement-badges achievement-badges-full">
             #for(badge in badges):
@@ -100,13 +107,13 @@ Submission #(submissionID)
 
 #else:
 #if(secretRevealActive):
-<div class="reveal-token-banner">
+<div class="notice-box">
     🔓 <strong>Secret tests revealed</strong> — you used your reveal token for this assignment, so hidden-test details are shown on all of your submissions.
 </div>
 #endif
 #if(secretRevealAvailable):
-<div class="reveal-token-offer">
-    <p class="reveal-token-text">You have <strong>one reveal token</strong> for this assignment. Spending it permanently shows the secret (hidden) test results — names, output, and hints — on all of your past and future submissions here.</p>
+<div class="notice-box">
+    <p class="section-note">You have <strong>one reveal token</strong> for this assignment. Spending it permanently shows the secret (hidden) test results — names, output, and hints — on all of your past and future submissions here.</p>
     <form method="post" action="/testsetups/#(testSetupID)/reveal-secret"
           data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
         #csrfFormField()
@@ -167,10 +174,10 @@ Submission #(submissionID)
             #if(outcome.status != "pass" && outcome.longResult):
             <tr class="test-output-row">
                 <td colspan="#if(hasDelta):4#else:3#endif">
-                    <div class="test-output-panel">
-                        <div class="test-output-heading">Output</div>
+                    <details class="test-output-details">
+                        <summary>Output</summary>
                         <pre class="test-output-pre test-output-pre-wide">#(outcome.longResult)</pre>
-                    </div>
+                    </details>
                 </td>
             </tr>
             #endif
@@ -178,12 +185,30 @@ Submission #(submissionID)
         </tbody>
     </table>
     #endif
-    #if(sec.secretSummary):
+    #if(sec.secretStake):
     <div class="tier-summary-row tier-summary-secret">
         <span class="tier">secret</span>
-        <span class="tier-summary-counts">#(sec.secretSummary.passCount) passed, #(sec.secretSummary.failCount) failed#if(sec.secretSummary.errorCount): , #(sec.secretSummary.errorCount) error(s)#endif</span>
-        <span class="tier-summary-note">— hidden tests in this section; they count toward your grade, but individual tests aren't shown</span>
+        <span class="tier-summary-counts">#(sec.secretStake)</span>
+        <span class="tier-summary-note">— names and output stay hidden</span>
     </div>
+    <table class="results-table">
+        <thead>
+            <tr><th>Test</th><th>Tier</th>#if(hasDelta):<th class="delta-col"></th>#endif<th>Mark</th></tr>
+        </thead>
+        <tbody>
+        #for(row in sec.secretRows):
+            <tr class="status-#(row.status)">
+                <td><div class="test-cell-main"><code>#(row.testName)</code></div></td>
+                <td><span class="tier">#(row.tier)</span></td>
+                #if(hasDelta):<td class="delta-cell"></td>#endif
+                <td>
+                    <span class="result-mark result-mark-#(row.markClass)">#(row.markLabel)</span>
+                    #if(row.pointsLabel):<span class="points-label">#(row.pointsLabel)</span>#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
     #endif
 </section>
 #endfor
