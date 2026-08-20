@@ -2251,9 +2251,11 @@
         const summaryEl = document.createElement('div');
         summaryEl.className = 'submission-score-row';
         summaryEl.innerHTML = `
-            <p class="score score-header">
-                <span class="grade-pill score-figure">${pass} / ${total}</span> passed
-            </p>
+            <div class="score-summary">
+                <p class="score score-header">
+                    <span class="grade-pill score-figure">${pass} / ${total}</span> passed
+                </p>
+            </div>
             <div class="diagnostics-cards">
                 <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">passed</div></div>
                 <div class="diagnostic-card"><div class="diagnostic-value">${fail}</div><div class="diagnostic-label">failed</div></div>

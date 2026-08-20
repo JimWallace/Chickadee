@@ -279,6 +279,12 @@ duplicate.
   or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
   photo because no claim in play releases one; the circle is sized so an
   `<img>` can replace the text without a rule change if that ever changes.
+- **`.score-summary`**, **`.score-delta`** — the submission result band's two
+  parts: the stacked grade block (label, figure, points) and the whole-band
+  delta remark, which takes its own full-width line beneath the count tiles.
+  Both exist because the band is two groups plus a footnote rather than one row
+  of peers — flattened into a single flex row, the tiles wrapped 3+1 on every
+  attempt after the first, where a delta line joins the row.
 - **`.score-figure`** — the submission result page's grade percentage, the one
   figure a student opens that page to read, at `2.4em`.  The only display-size
   type in the product: the `--text-*` scale tops out at 1.4rem for page
