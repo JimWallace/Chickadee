@@ -12,3 +12,8 @@
   fixture proving it still catches its own defect, and
   `LeafEmptyStateRenderTests` asserts the empty copy appears rather than merely
   that the page returns 200.
+- **The new course page shows its assignment count again.** `assignmentCount`
+  was a computed property, and Swift's synthesized `Encodable` encodes stored
+  properties only — so it never reached the Leaf context and the heading read
+  "Assignments ()" above a working "Enrolled students (0)". It renders through
+  `count()` now.

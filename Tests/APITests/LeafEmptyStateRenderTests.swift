@@ -81,6 +81,31 @@ import VaporTesting
         }
     }
 
+    /// A COMPUTED property is the same nil, reached a different way. Swift's
+    /// synthesized `Encodable` conformance encodes stored properties only, so
+    /// `var assignmentCount: Int { assignments.count }` never reached the Leaf
+    /// context and `#(assignmentCount)` rendered as the empty string — the new
+    /// course page read "Assignments ()" directly above a working
+    /// "Enrolled students (0)". It renders through `count()` now.
+    @Test func assignmentHeadingCountRendersRatherThanVanishing() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "leaf_empty_course_count", password: "pw",
+                role: "admin", on: app)
+            try await app.asyncTest(
+                .GET, "/admin/courses/new",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Assignments (0)"))
+                    #expect(!html.contains("Assignments ()"))
+                })
+        }
+    }
+
     /// The negated form is the other half of the defect, and it fails the
     /// opposite way: the block renders unconditionally. On a user enrolled in
     /// nothing, the admin user page must show the empty state rather than an

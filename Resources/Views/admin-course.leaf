@@ -113,7 +113,7 @@
 
 <!-- ── Assignments ─────────────────────────────────── -->
 <section class="page-section">
-    <h2>Assignments (#(assignmentCount))</h2>
+    <h2>Assignments (#count(assignments))</h2>
     #if(count(assignments) == 0):
     <p class="empty">No assignments for this course.</p>
     #else:
