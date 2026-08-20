@@ -9,6 +9,81 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.160] - 2026-08-20
+
+### Changed
+
+- **Login is a card, and the student dashboard sorts, filters and survives a
+  phone.** The auth panel gains a surface, border and padding; the mascot drops
+  from 200px to 72px so it stops competing with the sign-in controls for the
+  first screenful. The assignment table's Name / Status / Due / Grade headers
+  become sortable, each section gains a filter box, and the Due column renders a
+  relative countdown (with the absolute date beneath it and as the no-JS
+  fallback) per the house timestamp rule. At phone width, where `.col-hide-phone`
+  drops the Due and History columns, the name cell restates both through the new
+  `.assignment-phone-meta`. The slip-day line becomes a chip phrase rather than a
+  sentence, the empty state explains itself, and a row with nothing to do renders
+  a dash instead of an empty cell.
+
+### Changed
+
+- **The account page leads with identity and courses, and its "Available
+  courses" section always says something.** Order is now Account info → My
+  courses → Available courses → Your data, with an identity circle carrying
+  initials (there is no SSO photo — no claim in play releases one). The
+  available-courses section previously carried a guard that reads as "hide when
+  empty" but rendered a header-only table with no rows; it now renders either
+  rows with a Join action or a line saying there is nothing to join. The
+  data-export prose is unchanged and stays on the page — it is compliance text,
+  not chrome.
+- **Fixed: empty-list states on the account page never rendered.** LeafKit has
+  no property resolution for `.isEmpty` on an array — the path resolves to nil,
+  so `#if(rows.isEmpty)` is always false and `#if(!rows.isEmpty)` always true.
+  Emptiness is decided in Swift now. The same idiom appears in 23 other
+  templates and wants its own pass.
+
+### Fixed
+
+- **The browser-graded results view matches the server-rendered one again.**
+  `docs/ui-design.md` records the result-row classes as shared between
+  `submission.leaf` and the browser runner's inline results, which means CSS
+  changes reach both for free and markup changes do not. The score band and its
+  outcome tiles are now built in `notebook.js` too, and its output disclosure
+  carries the shared `.test-output-details` / `.test-output-pre` classes it had
+  been missing, so the stylesheet's rules reach it.
+
+### Changed
+
+- **Hidden tests are itemized without being revealed.** A student used to see
+  one aggregate line per section ("1 passed, 1 failed") for the secret tier, and
+  could not tell how many points had moved or how many things had broken. Each
+  hidden test now gets its own masked row — "hidden test 1…N" carrying its real
+  mark and its points — under a header stating the stake ("4 hidden tests · 4 of
+  8 points"). Names, messages, output, hints and blocker names stay hidden until
+  the reveal token is spent, and the delta arrows are withheld too: the number is
+  positional within one render, so an arrow against it would not correlate across
+  attempts. No new data — `secretOutcomes` already existed.
+- **The result page leads with the grade.** The percentage is the largest thing
+  on the page, with the pass/fail/error/timeout counts as tiles beneath it, and
+  non-passing output collapsed into `<details>` (so five failures stop being a
+  wall of stderr) rather than standing permanently open.
+
+### Changed
+
+- **The submit page states which file types it takes, and enforces them.** The
+  `accept` list used to union every `AssignmentLanguage`'s extensions on the
+  reasoning that a browser treats it as a hint so "breadth costs nothing" — true
+  of the picker, false of the student: a Racket assignment offered `.py`, `.r`,
+  `.lua` and `.m` beside `.rkt`, the page never said which language it wanted,
+  and a wrong type was stored and handed to the runner, where it failed as what
+  looked like a broken test script. The list is now the assignment's own
+  language plus `.zip` (and `.ipynb` unless the assignment is upload-only), said
+  in one sentence under the drop zone, refused client-side as a courtesy and
+  server-side as the gate. An assignment that declares no language keeps the
+  full union, where guessing would be worse than breadth. The page also shows
+  the attempt number and the deadline in force for that student.
+
+
 ## [0.5.159] - 2026-08-19
 
 ### Added
