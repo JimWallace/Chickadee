@@ -690,7 +690,10 @@ import VaporTesting
                     #expect(html.contains("2 hidden tests"), "the stake should be stated")
                     #expect(html.contains("hidden test 1"), "each hidden test gets a masked row")
                     #expect(html.contains("hidden test 2"), "each hidden test gets a masked row")
-                    #expect(html.contains("names and output stay hidden"))
+                    // The explanation moved into the block's footnote when the
+                    // reveal control moved into its header.
+                    #expect(html.contains("named and explained only after you"))
+                    #expect(html.contains("marks and points are\n        always shown"))
                     #expect(html.contains("secret_alpha") == false, "Secret test names must never be shown")
                     #expect(html.contains("secret_beta") == false, "Secret test names must never be shown")
                 })

@@ -279,6 +279,12 @@ duplicate.
   or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
   photo because no claim in play releases one; the circle is sized so an
   `<img>` can replace the text without a rule change if that ever changes.
+- **`.diagnostic-value-alert`** — the one count in a tile row that is not
+  neutral information (the submission band's failed count), in `--red`.  A
+  modifier on `.diagnostic-value`, not a second tile component.
+- **`.secret-reveal-action`** — the reveal-token form where it belongs: at the
+  end of the hidden-test block's header, acting on the block it labels, rather
+  than as a notice of its own elsewhere on the page.
 - **`.score-summary`**, **`.score-delta`** — the submission result band's two
   parts: the stacked grade block (label, figure, points) and the whole-band
   delta remark, which takes its own full-width line beneath the count tiles.
