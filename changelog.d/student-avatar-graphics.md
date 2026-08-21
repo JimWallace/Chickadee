@@ -1,8 +1,8 @@
 ### Added
 
 - **Chickadee avatar artwork.** `Resources/Views/_avatar-sprite.leaf` draws the
-  generated student avatar — cap, cheeks, bib, tail, belly, six folded-wing
-  patterns, beak and eyes — with an `--avatar-*` palette in `Public/styles.css`
+  generated student avatar — a symmetrical, front-facing bird: cap, cheeks,
+  bib, belly, six folded-wing patterns drawn once and mirrored, beak and eyes — with an `--avatar-*` palette in `Public/styles.css`
   (8 cap families × 4 cheeks × 6 flanks × 8 backdrops × 6 wings = 9,216 birds).
   `Tools/avatar-preview/preview.mjs` renders a contact sheet from the sprite and
   the stylesheet. Art only: nothing renders an avatar yet.

@@ -337,6 +337,21 @@ geometry slots.
 glares on a dark page; the bird itself must be the same bird in both schemes, so
 its own colours do not change between them.
 
+**The bird is symmetrical: two wings, no tail.** The first cut was a
+three-quarter bird with one folded wing and a tail wedge at the lower left,
+following the mascot. It did not survive being looked at — at avatar sizes the
+tail reads as a dart or a fin stuck to the side of a circle, and the single wing
+makes the whole thing look like it is turning away. Reflecting the wing about
+the body's vertical axis fixes both: the bird faces the viewer, the pale belly
+sits between two wings, and the silhouette is a clean circle. This is also why
+every avatar set worth copying is front-facing and symmetrical — asymmetry needs
+more pixels than an avatar has to read as deliberate rather than as damage.
+
+The reflection is a transform, not a second set of coordinates. An arc cannot be
+mirrored by negating its x values alone; its sweep flag has to invert too, and
+getting that wrong produces a curve that is subtly wrong in a way nobody will
+look for. One drawing, mirrored by the renderer.
+
 ---
 
 ## What it costs
