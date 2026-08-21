@@ -46,31 +46,70 @@ family rather than as clip art.
 
 ---
 
+## Reference class: identicon variety, Reddit wardrobe
+
+The obvious comparables sit at opposite ends, and it is worth being explicit
+about which end each half of this plan is at.
+
+**GitHub identicons** are pure algorithm: a symmetric pixel grid, one hue, zero
+art assets, zero customization. They cost nothing to build and nothing to
+maintain, they are inoffensive because abstract shapes cannot compose into
+anything, and nobody has ever felt anything about one. **Reddit's avatars** are
+the other thing entirely: a layered character with a wardrobe, unlocks, and a
+picker. That is where the fun is, and it is also where all the cost is — the art
+library, the picker UI, and the judgement calls about what belongs in a wardrobe.
+
+The lesson to take from the identicon end is not "be abstract". It is this:
+**colour is free variation; art is expensive variation.** An identicon gets all
+of its variety from colour and arrangement over one trivial shape vocabulary. A
+chickadee can do the same — one silhouette, four or five painted regions, and
+the palette does the work.
+
+So the staging is: **day one is colour-driven, and the wardrobe is the second
+act.** The first cut needs about six SVG shapes, not nine slots of costume, and
+it still yields thousands of visibly distinct birds. Accessories, expressions
+and tufts arrive later as the thing there is to earn — which is exactly what
+they should be, since a cosmetic nobody had to unlock is just more art.
+
 ## Decisions
 
 ### 1. An avatar is a spec, not an image
 
 `AvatarSpec` in `Core/` — `Codable`, `Sendable`, no Vapor — is a small struct of
-enum slots:
+enum slots. They split by what they cost, which is also the order they should
+ship in.
 
-| Slot | Options (first pass) | Notes |
+**Colour slots — free variation, day one.** Each is a token choice over art that
+already exists once:
+
+| Slot | Options | Notes |
 |---|---|---|
-| `cap` | 8 | cap + bib colour family; the strongest identity signal |
+| `cap` | 8 | cap + bib family; the strongest identity signal at any size |
 | `cheek` | 4 | white through cream |
 | `flank` | 6 | belly and side tint |
-| `wing` | 6 | plain, barred, tipped, speckled, edged, two-tone |
+| `backdrop` | 8 | flat tint behind the bird |
+| `wing` | 6 | the one cheap geometry slot — plain, barred, tipped, speckled, edged, two-tone |
+
+≈9,200 combinations from roughly six drawn shapes.
+
+**Geometry slots — art cost, second act.** Each is a new drawn part per option:
+
+| Slot | Options | Notes |
+|---|---|---|
 | `eye` | 5 | round, bright, sleepy, wide, wink |
 | `beak` | 3 | short, stout, fine |
 | `tuft` | 5 | smooth, tufted, cowlick, side-sweep, ruffled |
 | `accessory` | 12 | including none — scarf, glasses, headphones, leaf, small hat |
-| `backdrop` | 8 | flat tint or one simple shape |
 
-≈8.3M combinations. The exact tables are a design exercise, not a commitment;
-what matters is that the **stored artifact is the choice vector**, never
-rendered bytes. Everything downstream follows from that: customization is
-mutating a slot, an unlock is widening a slot's option set, rendering is a pure
-function of the spec, and there is no image cache to invalidate, no storage
-bucket, and nothing to regenerate when the art changes.
+Together ≈8.3M, but the number is not the point and 9,200 is already more than a
+course can exhaust. The exact tables are a design exercise, not a commitment.
+
+What matters is that the **stored artifact is the choice vector**, never rendered
+bytes. Everything downstream follows: customization is mutating a slot, an unlock
+is widening a slot's option set, rendering is a pure function of the spec, and
+there is no image cache to invalidate, no storage bucket, and nothing to
+regenerate when the art changes. Adding the geometry slots later is adding
+fields with a default, not a migration of anybody's avatar.
 
 ### 2. The spec is stored, and drawn randomly on first use — not derived from identity
 
@@ -107,8 +146,9 @@ contact with the leaderboard, for a reason worth writing down: **uniqueness has
 to hold at the granularity a viewer can actually distinguish, at the scope where
 they see them side by side.** At 24px in a table row, beak shape and tuft are
 invisible; what separates two rows is cap colour, flank tint, wing pattern,
-accessory and backdrop — about 28k combinations. A 300-student course draws
-from that with roughly an 80% chance of a visible pair. Enforcing per-course
+accessory and backdrop — about 28k combinations — and on the
+colour-only first cut, 2,304. A 300-student course draws from either with a
+near-certain visible pair. Enforcing per-course
 distinctness would then make an avatar depend on the roster, so it would change
 when somebody drops. That is a bad trade for a cosmetic.
 
@@ -178,13 +218,20 @@ a rendering choice over the same spec, not a second spec.
 
 ### 5. Customization and unlocks
 
-Each option carries an unlock rule: `starter`, `achievement(id)`, or `staff`.
-The initial draw uses starter options only; achievements widen the pool. Saving a
+Each option carries an unlock rule: `starter` or `achievement(id)`. The initial
+draw uses starter options only; achievements widen the pool. Saving a
 customization validates the chosen slots against the student's unlocked set at
 one chokepoint — the same shape as `evaluateCourseWrite`, one function that
 every door goes through.
 
-Two consequences to accept up front:
+There is deliberately **no staff cosmetic**. A TA-only colourway is an
+impersonation surface the moment a student's random draw lands near it, and role
+already has a place in the UI — a chip beside a name, which says the thing
+unambiguously and is searchable. (Impersonation between students is not a risk
+worth engineering against: the handle is unique per course and cannot be chosen,
+so a copied outfit still sits under a different name.)
+
+Three consequences to accept up front:
 
 - **Unlocks are account-global, not per-course.** A scarf earned in CS 135 is
   worn in CS 136. Per-course cosmetics would need per-course avatars, which
@@ -193,11 +240,47 @@ Two consequences to accept up front:
 - **New options should arrive as unlockables, not as starters.** Adding a
   starter option is harmless once specs are materialized (decision 2), but a
   new unlockable is the version that gives someone something to earn.
+- **Cosmetics must not rank.** On a leaderboard, an unlocked accessory is a
+  public marker of what a student has earned — which means a bare avatar beside
+  a decorated one publicly marks a student as having earned less. Keep the
+  wardrobe *lateral*: a scarf is different from no scarf, not better than it,
+  and there is no bronze/silver/gold tiering that turns the avatar into a second
+  scoreboard inside the first. This is the one place where the gamification
+  pressure and the pedagogy point in opposite directions, and the pedagogy wins.
 
 The picker itself is one page section: the avatar at full size, one control per
 slot, locked options shown locked rather than hidden — a student cannot chase a
 badge they cannot see, which is the same note the achievements audit already
 makes about unearned achievements.
+
+### 6. Inoffensive by construction, not by moderation
+
+There is no upload, no drawing surface, and no free text anywhere in an avatar,
+so nothing a student can do produces something we did not ship. That reduces the
+whole question to which options go in the tables — a review done once, at
+authoring time, by a human. The rules that fall out:
+
+- **No option that reads as a human skin tone.** The base is a bird, and body
+  colours should be either bird-plausible or frankly artificial (teal, plum,
+  rust). Generators built on human figures spend their lives managing this; a
+  chickadee simply does not have the problem unless we introduce it.
+- **No flags, uniforms, religious garments, or political signifiers.** Whimsy
+  only. This is most of why Reddit's wardrobe is fantasy — it is not
+  squeamishness, it is that a wardrobe with real-world referents needs a
+  moderation policy and a wardrobe without one does not.
+- **No text or glyphs in any layer**, which is the usual vector.
+- **Review the overlaps, not the product.** 8.3M combinations cannot be
+  eyeballed, but the slots that physically overlay each other — accessory × cap,
+  accessory × backdrop — are a table of a few hundred, and that is where an
+  unfortunate resemblance would come from. Review that table; the rest is
+  independent.
+- **The handle word lists get the same pass, and need it more.** Adjective-noun
+  generators reliably produce unfortunate pairs, accidental real-world
+  references, and words that collide with real names. Both lists want a
+  deliberate review, and the pairing needs a blocklist rather than trust.
+
+The point of listing these is that they are cheap when the tables are being
+written and expensive afterwards, once students are wearing the results.
 
 ---
 
@@ -247,15 +330,19 @@ Each slice is independently mergeable and independently useful.
   enrollment row with UNIQUE(course, handle), first-use materialization with the
   `ensureSeed` race shape. Backfill is lazy by construction — nobody needs an
   avatar until a page renders one.
-- **S2 — the account page.** The sprite, the `--avatar-*` tokens with dark
-  mirrors, `_avatar.leaf`, and the monogram replaced. Owes a component-vocabulary
-  entry in `docs/ui-design.md` (the vocabulary guard prices a new global class),
-  a visual-regression baseline, and a run of the `ui-review` agent, which is
-  unconditional for anything touching `Resources/Views/` or `styles.css`.
+- **S2 — the account page, colour slots only.** About six SVG shapes, the
+  `--avatar-*` tokens with dark mirrors, `_avatar.leaf`, and the monogram
+  replaced. No accessories, no expressions: ~9,200 birds out of one drawing.
+  Owes a component-vocabulary entry in `docs/ui-design.md` (the vocabulary guard
+  prices a new global class), a visual-regression baseline, and a run of the
+  `ui-review` agent, which is unconditional for anything touching
+  `Resources/Views/` or `styles.css`.
 - **S3 — student-facing copy and compliance.** "In CS 135 you appear as Quiet
   Cedar", the export fields, the deletion path.
-- **S4 — customization.** The unlock model, the validation chokepoint, the
-  picker. Independent of leaderboards.
+- **S4 — the wardrobe.** The geometry slots (eye, beak, tuft, accessory), the
+  unlock model, the validation chokepoint, the picker. This is where the art
+  cost lives and where the fun lives; it is independent of leaderboards and can
+  land in pieces, one slot at a time.
 - **S5 — leaderboards consume it.** The avatar is the identity primitive the
   leaderboard is built on, so it should land first and leaderboards should have
   no identity code of their own.
@@ -306,6 +393,11 @@ other.
 4. **Where else avatars appear.** The account page and leaderboards are settled.
    Submission history is plausible; the instructor student tables are not — staff
    see real names there and an avatar beside a name is decoration with a cost.
-5. **Who draws the parts.** The art is the one genuinely manual task in the plan.
-   Nine slots of stroked, flat-fill SVG at the icon set's weight, or a looser
-   plush style closer to the mascot PNG?
+5. **Drawing style.** The art is the one genuinely manual task, and S2 needs only
+   about six shapes of it. Flat fills with no stroke, closer to the plush mascot,
+   or stroked at the icon set's 24px weight? Flat fill is the better bet: it
+   recolours cleanly, it reads at 24px where a stroke closes up, and it does not
+   have to sit beside the Feather icons in the same visual role.
+6. **How much bird.** A head-and-shoulders bust fills a 24px circle better than a
+   full body and needs fewer parts, but the mascot's charm is that it is a
+   sphere. Worth drawing both once before committing the sprite.
