@@ -1,10 +1,12 @@
 # Student avatars — design note
 
-**Status: art drawn, nothing wired.** The chickadee parts, the palette and a
-preview harness exist (decision 7 below). Nothing in `Sources/` implements any
-of the model: there is no `AvatarSpec`, no column, no page that renders a bird,
-and the account page still shows the initials monogram described in
-`accountMonogram` / `.account-monogram`.
+**Status: art and model exist; nothing is persisted or displayed.** The
+chickadee parts and palette are drawn (decision 7), and `AvatarSpec` plus the
+draw and the markup builder are in `Core/` with drift guards (decision 8). What
+does not exist: any storage — no column, no migration, no first-use
+materialization — no handle, and no page that renders a bird. The account page
+still shows the initials monogram described in `accountMonogram` /
+`.account-monogram`. **Nothing maps an account to an avatar yet.**
 
 ---
 
@@ -352,6 +354,47 @@ mirrored by negating its x values alone; its sweep flag has to invert too, and
 getting that wrong produces a curve that is subtly wrong in a way nobody will
 look for. One drawing, mirrored by the renderer.
 
+### 8. Seed to bird, bird to markup — two functions, and the one that is missing on purpose
+
+`Core/AvatarSpec.swift` and `Core/AvatarMarkup.swift` are the model half:
+
+```swift
+let spec = AvatarSpec.drawn()                    // first use, system RNG
+let spec = AvatarSpec.drawn(fromSeed: 12345)     // reproducible: tests, previews
+let html = AvatarMarkup.inlineSVG(for: spec)     // an <svg> for a page
+```
+
+Three things about that shape are decisions rather than convenience.
+
+**There is deliberately no `svg(forSeed:)`.** It is the obvious convenience and
+it is exactly the hazard decision 2 exists to prevent: a render path that takes
+a seed re-derives on every render, and the day a slot gains an option every
+student's bird changes. Drawing is a one-time act whose result is stored, so the
+API makes the two steps separate and gives the seeded draw a name that reads
+like a fixture rather than a renderer.
+
+**`inlineSVG` returns an SVG element, not a standalone image.** It is five
+`<use>` elements referencing the sprite plus a `style` assigning palette tokens,
+so it needs the sprite partial on the page and the stylesheet in force. That is
+what makes 200 rows cheap — the shapes are downloaded once and the per-student
+part is one short attribute — and it is what keeps dark mode working, since the
+backdrop resolves through a token.
+
+A **standalone** SVG (an `<img>` src, a download, an email, an export) is a
+different function and is not written. It cannot reference the sprite or the
+stylesheet, so it needs the path data and the hex values inline — and the only
+version worth having reads both out of the files that already own them rather
+than re-holding them in Swift. That is a server-side concern: load
+`_avatar-sprite.leaf` and the `--avatar-*` block at boot, inline the five
+symbols the spec names and a `<style>` carrying its seven colours. Perfectly
+doable, roughly a slice of its own, and it must not become a second copy of the
+art.
+
+**The markup builder holds no geometry and no colour.** It names symbol ids and
+token names, nothing else, and two tests assert those names against the files
+that own them — in both directions, so neither a slot without art nor art
+without a slot can ship. Both were confirmed to fail on their own defect.
+
 ---
 
 ## What it costs
@@ -392,10 +435,10 @@ look for. One drawing, mirrored by the renderer.
 
 Each slice is independently mergeable and independently useful.
 
-- **S0 — the model.** `AvatarSpec`, the option tables, the draw, the handle
-  generator and its word lists. All in `Core/`, all pure, all tested. A golden
-  fixture pinning spec → layer list, so the renderer cannot drift from what a
-  stored spec means. No UI, no schema.
+- **S0 — the model.** **Done for the avatar half**: `AvatarSpec`, the five slot
+  enums, the seeded draw, `AvatarMarkup`, and the two drift guards against the
+  sprite and the palette. Still open: the handle generator and its curated word
+  lists, which are S0's other half and the part with the most judgement in it.
 - **S1 — persistence.** `avatar_spec` on the user row, `handle` on the
   enrollment row with UNIQUE(course, handle), first-use materialization with the
   `ensureSeed` race shape. Backfill is lazy by construction — nobody needs an
