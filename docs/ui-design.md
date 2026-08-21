@@ -312,6 +312,20 @@ duplicate.
   or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
   photo because no claim in play releases one; the circle is sized so an
   `<img>` can replace the text without a rule change if that ever changes.
+- **`.avatar`** (+ `.avatar-sm`) and the `.av-*` fill classes — the generated
+  student chickadee.  One `<svg class="avatar">` wraps five `<use>` elements
+  naming symbols in `_avatar-sprite.leaf`; the parts carry `.av-cap`,
+  `.av-cheek`, `.av-flank`, `.av-wing`, `.av-wing-mark`, `.av-beak`, `.av-eye`,
+  `.av-glint`, `.av-backdrop`, each resolving to `fill: var(--av-*)`, and the
+  wrapper assigns those custom properties from the `--avatar-*` palette.  That
+  assignment is the sanctioned inline form; a `fill` attribute in the sprite
+  would be a colour outside the palette and would not follow dark mode.
+  `.avatar` carries a complete default palette so the sprite renders correctly
+  when a caller sets nothing.  Two sizes only: 3rem, and `.avatar-sm` at 1.5rem
+  for dense tables, where the beak and wing marks stop being separable — which
+  is why a leaderboard names a student by their handle and uses the bird for
+  recognition rather than identification.  See
+  [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
   modifier on `.diagnostic-value`, not a second tile component.
@@ -378,8 +392,9 @@ duplicate.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
-- **`.icon`** — every inline SVG, referencing a `<symbol>` in `_icons.leaf`
-  by `<use href="#i-…">`.  Geometry may not appear anywhere else.
+- **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
+  `_icons.leaf` by `<use href="#i-…">`.  Geometry may appear in exactly two
+  files: that sprite, and `_avatar-sprite.leaf` for the avatar parts.
 - **`.textarea-mono`**, `.form-stack` (+ `--wide`) — a monospace textarea and
   the stacked form column that usually holds one.
 

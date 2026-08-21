@@ -1,8 +1,10 @@
 # Student avatars — design note
 
-**Status: not built.** This is a plan, not a description of behaviour. Nothing
-in `Sources/` implements any of it yet. The account page still renders the
-initials monogram described in `accountMonogram` / `.account-monogram`.
+**Status: art drawn, nothing wired.** The chickadee parts, the palette and a
+preview harness exist (decision 7 below). Nothing in `Sources/` implements any
+of the model: there is no `AvatarSpec`, no column, no page that renders a bird,
+and the account page still shows the initials monogram described in
+`accountMonogram` / `.account-monogram`.
 
 ---
 
@@ -211,10 +213,14 @@ Swift builds the layer list and the custom-property string; `_avatar.leaf` takes
 it as a sub-context (the bare-second-parameter `extend` form, not the labelled
 `with:` form, which does not lex) and loops. Leaf makes no decisions.
 
-**Two sizes, different layer counts.** The account page gets the full stack; a
-dense table gets a `micro` variant of four layers — body, cap, wing, accessory —
-because 200 rows × 8 layers is 1,600 DOM nodes for a decoration. The variant is
-a rendering choice over the same spec, not a second spec.
+**Two sizes.** The account page gets 3rem; a dense table gets `.avatar-sm` at
+1.5rem. Drawing the bird settled what this is for, and it is not DOM weight:
+the parts that never vary geometrically are baked into one `av-plumage` symbol,
+so a whole bird is **five** `use` elements rather than one per feature, and 200
+rows cost 1,000 nodes. The real reason for the small variant is legibility —
+beak, bib and wing marks stop being separable somewhere under 24px — which is
+the same fact that makes the handle, not the picture, the thing a leaderboard
+identifies a student by.
 
 ### 5. Customization and unlocks
 
@@ -282,6 +288,55 @@ authoring time, by a human. The rules that fall out:
 The point of listing these is that they are cheap when the tables are being
 written and expensive afterwards, once students are wearing the results.
 
+### 7. What drawing it actually taught
+
+The art for the colour slots exists (`Resources/Views/_avatar-sprite.leaf`,
+the `--avatar-*` palette in `Public/styles.css`, and
+`Tools/avatar-preview/preview.mjs`, which renders a contact sheet from those two
+files rather than from a copy of them). Nothing is wired: no `AvatarSpec`, no
+column, no page renders one. What follows is what the drawing changed, since
+four of the five findings were only visible by rendering the thing and looking
+at it.
+
+**A clipPath referenced from a symbol inside a `display:none` sprite silently
+does not apply in Chromium.** The shape renders **unclipped** — a cap drawn as a
+rectangle and trimmed to the head becomes a rectangle across the whole viewBox.
+This cost two full iterations before it was diagnosed, and it is the single most
+important thing in this section, because the failure is invisible to every kind
+of test this repo has: the template resolves, the page renders, the CSS is
+valid, and the picture is wrong. The icon sprite never hit it because stroked
+glyphs reference nothing. **The sprite therefore uses no clip-path, mask,
+filter or gradient at all**; every shape is a closed path that already follows
+the body circle, which is more portable than depending on a browser quirk
+resolving the way we like.
+
+**The wing's outer edge has to BE the body arc.** As an inset ellipse it reads
+as a dark blob floating on the belly; as a path whose outer boundary is the
+silhouette, it reads as a folded wing. This is also what makes it clip-free:
+the arc is in the path.
+
+**The beak must be the lightest of a cap family's three tones.** Nature says a
+chickadee's beak is dark, and a dark beak on a dark bib disappears completely in
+flat vector — the whole centre of the face becomes one mass. Each cap family is
+therefore a triple (cap, wing, beak) rather than one colour, with the beak a
+clear step lighter than the wing.
+
+**Horizontal bands read as a surgical mask.** Building the face as "cap on top,
+belly at the bottom, cheek is whatever is left between them" produces a white
+band spanning the silhouette edge to edge, and the eye reads it as a mask, not a
+bird. The fix is topological: the cap wraps **down the sides** of the head and
+the cheeks are two discrete patches punched into it, so no white ever reaches
+the outline. That is also what the real bird looks like.
+
+**The colour slots yield 9,216 birds** — 8 cap families × 4 cheeks × 6 flanks ×
+8 backdrops × 6 wing patterns — against the ~9,200 this note estimated before
+any of it was drawn. Six wing patterns ship, so the second act owes only the
+geometry slots.
+
+**Only the backdrops have dark-mode mirrors.** A pale disc behind the bird
+glares on a dark page; the bird itself must be the same bird in both schemes, so
+its own colours do not change between them.
+
 ---
 
 ## What it costs
@@ -330,11 +385,12 @@ Each slice is independently mergeable and independently useful.
   enrollment row with UNIQUE(course, handle), first-use materialization with the
   `ensureSeed` race shape. Backfill is lazy by construction — nobody needs an
   avatar until a page renders one.
-- **S2 — the account page, colour slots only.** About six SVG shapes, the
-  `--avatar-*` tokens with dark mirrors, `_avatar.leaf`, and the monogram
-  replaced. No accessories, no expressions: ~9,200 birds out of one drawing.
-  Owes a component-vocabulary entry in `docs/ui-design.md` (the vocabulary guard
-  prices a new global class), a visual-regression baseline, and a run of the
+- **S2 — the account page, colour slots only.** The drawing half is **done**:
+  eleven symbols, the `--avatar-*` tokens with dark mirrors, the
+  component-vocabulary entry, and the contact-sheet tool. 9,216 birds. What
+  remains is the wiring — `_avatar.leaf` taking a sub-context, the presenter
+  that turns a spec into a layer list plus a custom-property string, and the
+  monogram replaced — plus a visual-regression baseline and a run of the
   `ui-review` agent, which is unconditional for anything touching
   `Resources/Views/` or `styles.css`.
 - **S3 — student-facing copy and compliance.** "In CS 135 you appear as Quiet

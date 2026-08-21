@@ -1,0 +1,89 @@
+<!-- Avatar sprite: every drawn part of the generated student chickadee, once.
+
+     The second sprite in the codebase, and deliberately not part of the icon
+     one: icons are stroked 24x24 Feather glyphs inlined on every page, while
+     these are flat-filled 64x64 plumage parts wanted only by the pages that
+     show an avatar. Include this partial from those pages; a call site is ONE
+     svg carrying class "avatar" wrapping five use elements, each with an href
+     that is a same-page fragment naming one of the symbol ids below. Copy a
+     live call site rather than working from this description.
+
+     Layer order back to front: backdrop, plumage, wing, beak, eyes. Five
+     elements for the whole bird, not one per varying feature - the parts that
+     never vary geometrically (cap, cheeks, bib, tail, belly) are baked into
+     one plumage symbol, and a slot is split out only when it actually varies.
+
+     THREE RULES THIS FILE MUST KEEP.
+
+     1. No clip-path, mask, filter or gradient. A clipPath referenced from a
+        symbol inside a display:none sprite silently does not apply in Chromium
+        - the shape renders UNCLIPPED, so a cap drawn as a rectangle and
+        trimmed to the head becomes a rectangle across the whole viewBox. It
+        looks like a rendering fault and it is invisible to any test that only
+        asserts the page renders. Every shape here is instead a closed path
+        that already follows the body arc, which is also why the wing is a
+        path rather than an ellipse: its outer edge IS the body circle.
+
+     2. Colour comes from a class, never an attribute. Each part carries one
+        of the av-* classes, which resolve to fill: var(--av-*) in styles.css;
+        the per-avatar element sets those custom properties to palette tokens.
+        A literal fill here would be a raw colour outside the palette and would
+        not follow dark mode.
+
+     3. The body is a circle of radius 22 centred at (32, 35) in a 64x64
+        viewBox. Every boundary is computed against it, so changing the body
+        means recomputing the cap, wing and belly edges rather than nudging
+        them by eye. Tools/avatar-preview renders a contact sheet.
+
+     Described rather than quoted, like the icon sprite: a fragment reference
+     written in prose is indistinguishable from a real one to any scanner
+     reading this file. -->
+<svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <symbol id="av-backdrop" viewBox="0 0 64 64">
+            <circle class="av-backdrop" cx="32" cy="32" r="32"/>
+        </symbol>
+        <symbol id="av-plumage" viewBox="0 0 64 64">
+            <circle class="av-flank" cx="32" cy="35" r="22"/>
+            <path class="av-cap" d="M19,47 C14,51 10,54 7,55 C8,51 10,46 14,42 Z"/>
+            <path class="av-cap" d="M10.09,33 A22,22 0 0 1 53.91,33 C46,30 40,27.5 32,27.5 C24,27.5 18,30 10.09,33 Z"/>
+            <ellipse class="av-cheek" cx="23.8" cy="32" rx="7.2" ry="5.8"/>
+            <ellipse class="av-cheek" cx="40.2" cy="32" rx="7.2" ry="5.8"/>
+            <path class="av-cap" d="M29,29.5 C27.6,32.5 26.4,35 26.4,37 C26.4,39.2 29.4,40 32,40 C34.6,40 37.6,39.2 37.6,37 C37.6,35 36.4,32.5 35,29.5 Z"/>
+        </symbol>
+        <symbol id="av-wing-plain" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+        </symbol>
+        <symbol id="av-wing-barred" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+            <rect class="av-wing-mark" x="46.6" y="35.2" width="6.18" height="1.6" rx="0.8" transform="rotate(-8 45.4 36)"/><rect class="av-wing-mark" x="46.49" y="40.2" width="5.59" height="1.6" rx="0.8" transform="rotate(-8 45.4 41)"/><rect class="av-wing-mark" x="46.19" y="45.2" width="4.07" height="1.6" rx="0.8" transform="rotate(-8 45.4 46)"/>
+        </symbol>
+        <symbol id="av-wing-tipped" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+            <rect class="av-wing-mark" x="46.07" y="43.2" width="5.34" height="1.6" rx="0.8" transform="rotate(-8 45.4 44)"/><rect class="av-wing-mark" x="45.83" y="47.2" width="3.48" height="1.6" rx="0.8" transform="rotate(-8 45.4 48)"/>
+        </symbol>
+        <symbol id="av-wing-speckled" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+            <circle class="av-wing-mark" cx="49.38" cy="37" r="1.15"/><circle class="av-wing-mark" cx="51.73" cy="37" r="1.15"/><circle class="av-wing-mark" cx="49.15" cy="41.5" r="1.15"/><circle class="av-wing-mark" cx="51.06" cy="41.5" r="1.15"/><circle class="av-wing-mark" cx="48.66" cy="46" r="1.15"/><circle class="av-wing-mark" cx="49.59" cy="46" r="1.15"/>
+        </symbol>
+        <symbol id="av-wing-edged" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+            <path class="av-wing-mark" d="M53.79,32 A22,22 0 0 1 51.05,46 L48.1,46 A19.5,19.5 0 0 0 51.27,32 Z"/>
+        </symbol>
+        <symbol id="av-wing-twotone" viewBox="0 0 64 64">
+            <path class="av-wing" d="M53.79,32 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,34.5 C48,31.4 50.79,31 53.79,32 Z"/>
+            <path class="av-wing-mark" d="M52.86,42 A22,22 0 0 1 48.09,50 C45.5,48 44.1,45.6 43.9,43.4 C47,42.1 50,41.7 52.86,42 Z"/>
+        </symbol>
+        <symbol id="av-beak" viewBox="0 0 64 64">
+            <path class="av-beak" d="M28.8,29 H35.2 L32,33.6 Z"/>
+        </symbol>
+        <symbol id="av-eyes" viewBox="0 0 64 64">
+            <circle class="av-cheek" cx="24.2" cy="25.5" r="5.4"/>
+            <circle class="av-cheek" cx="39.8" cy="25.5" r="5.4"/>
+            <circle class="av-eye" cx="24.2" cy="25.5" r="4.4"/>
+            <circle class="av-eye" cx="39.8" cy="25.5" r="4.4"/>
+            <circle class="av-glint" cx="25.6" cy="24.1" r="1.2"/>
+            <circle class="av-glint" cx="41.2" cy="24.1" r="1.2"/>
+        </symbol>
+    </defs>
+</svg>
