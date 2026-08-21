@@ -397,17 +397,45 @@ without a slot can ship. Both were confirmed to fail on their own defect.
 
 ---
 
-## What it costs
+## What it costs — and what is stored
 
-- **Compute:** a draw is a few random bytes; a render is a table lookup and
-  string building. Nothing measurable.
-- **Storage:** one JSON column per user (~100 bytes), one text column per
-  enrollment.
-- **Bytes on the wire:** one sprite, inlined once per avatar-bearing page.
-  Measure it when the art exists; if it is heavy, the micro variant can carry a
-  reduced sprite.
-- **DOM:** the reason the micro variant exists. Worth a number on a real
-  leaderboard page before the full variant is used anywhere dense.
+**Nothing stores a picture.** Three layers, and only the middle one is
+persisted:
+
+| | Lives where | Size | Per |
+|---|---|---|---|
+| Geometry | the sprite, inlined in the page | 6.0 KB, **2.4 KB gzipped** | page |
+| Spec | a JSON column | ~60 bytes (five short strings) | student |
+| Markup | built at render | 459 bytes | rendering |
+
+Measured: building one avatar's markup costs **5.6 µs** and a draw costs 2.2 µs
+(debug build — release is faster). A 200-row leaderboard is about 1.1 ms of
+string interpolation, no I/O, and no image encoding anywhere. The 200 markup
+strings are near-identical, so they gzip from 90 KB to **0.6 KB**.
+
+**Why not store rendered SVG.** It would be a cache, and caches go stale. This
+note's own history is the argument: the bird was redrawn once already — the
+asymmetric tail came out — and because no bytes were stored, that cost nothing
+and invalidated nothing. Stored images would also bake literal colours, which
+kills the dark-mode backdrop, and would turn a customization click into a
+re-render plus a write. On the wire it is worse too: a standalone SVG is ~2–3 KB
+*per row* against one shared 2.4 KB sprite.
+
+**Why not generate images.** There is no image pipeline at all — no PNG
+encoding, no cache directory, no invalidation, no storage bucket. The browser
+draws from the sprite, which is what browsers are for.
+
+So: **store the choice, because it is random and must not change; do not store
+the picture, because it is cheap and must stay free to change.**
+
+The one honest caveat is that the sprite is inlined rather than fetched, so it
+is not separately cacheable and costs its 2.4 KB on every avatar-bearing page
+load. That follows the icon sprite deliberately: an external sprite is one more
+fetch that can fail, and its failure mode is an avatar rendering as an empty
+box. At this size the trade is not close.
+
+**DOM** is the remaining number to take on a real page: five elements per bird,
+so 1,000 for 200 rows.
 
 ---
 
