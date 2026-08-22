@@ -107,9 +107,13 @@ func updateManifestAddingScript(
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
         datasets: props.datasets,
-        // Preserve the recorded language: rebuilding the manifest to add or
-        // remove one script must never silently drop it back to "unrecorded".
+        // Preserve the recorded language AND the declared flag: rebuilding the
+        // manifest to add or remove one script must never silently drop the
+        // language back to "unrecorded", nor un-declare an assignment — least
+        // of all one whose declaration is "none", where `language` alone
+        // carries no evidence.
         language: props.language,
+        languageDeclared: props.languageDeclared == true,
         // Likewise preserve the minimum-runner-version gate across the rebuild.
         minimumRunnerVersion: props.minimumRunnerVersion
     )
@@ -163,52 +167,14 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
         datasets: props.datasets,
-        // Preserve the recorded language: rebuilding the manifest to add or
-        // remove one script must never silently drop it back to "unrecorded".
+        // Preserve the recorded language AND the declared flag: rebuilding the
+        // manifest to add or remove one script must never silently drop the
+        // language back to "unrecorded", nor un-declare an assignment — least
+        // of all one whose declaration is "none", where `language` alone
+        // carries no evidence.
         language: props.language,
+        languageDeclared: props.languageDeclared == true,
         // Likewise preserve the minimum-runner-version gate across the rebuild.
-        minimumRunnerVersion: props.minimumRunnerVersion
-    )
-}
-
-/// Returns manifest JSON identical to `manifestJSON` except for its recorded
-/// `language`, rebuilt through the canonical `makeWorkerManifestJSON` writer so
-/// every other field is preserved. Returns nil if the manifest can't be decoded.
-func updateManifestLanguage(manifestJSON: String, language: AssignmentLanguage?) -> String? {
-    guard let props = decodeManifest(fromJSON: manifestJSON) else { return nil }
-    let entries = props.testSuites.enumerated().map { idx, e in
-        ConfiguredSuiteEntry(
-            script: e.script,
-            tier: e.tier.rawValue,
-            order: idx + 1,
-            dependsOn: e.dependsOn,
-            points: e.points,
-            displayName: e.name,
-            generatedBy: e.generatedBy,
-            generatedByCheck: e.generatedByCheck,
-            sectionID: e.sectionID,
-            hint: e.hint,
-            timeLimitSeconds: e.timeLimitSeconds
-        )
-    }
-    return try? makeWorkerManifestJSON(
-        testSuites: entries,
-        includeMakefile: props.makefile != nil,
-        gradingMode: props.gradingMode.rawValue,
-        submissionMode: props.submissionMode.rawValue,
-        requiredFiles: props.requiredFiles,
-        timeLimitSeconds: props.timeLimitSeconds,
-        starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies,
-        notebookChecks: props.notebookChecks,
-        sections: props.sections,
-        globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions,
-        achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
-        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets,
-        language: language,
         minimumRunnerVersion: props.minimumRunnerVersion
     )
 }

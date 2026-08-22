@@ -1,30 +1,22 @@
-// APIServer/Auth/AuthProvider.swift
+// APIServer/Auth/LocalAuthProvider.swift
 //
-// Pluggable credential-verification strategy.
+// Username/password credential verification against the local user table —
+// the whole of AUTH_MODE=local, and the local half of AUTH_MODE=dual.  The
+// SSO path is not username/password-shaped and never comes through here; it
+// lives in SSOAuthRoutes.
 //
-// AUTH_MODE=local  → LocalAuthProvider (BCrypt, default)
-// AUTH_MODE=sso    → future OIDC provider
-// AUTH_MODE=dual   → both; local is tried first
-//
-// Callers use req.application.authProvider.authenticate(…) instead of
-// talking to the database directly. This keeps auth logic out of route
-// handlers and makes testing without a real SSO server straightforward.
+// A plain stateless struct, not a strategy protocol: there is exactly one
+// way to verify a local password, and the protocol seam that used to wrap
+// this went unused by the SSO flow and the tests alike (#449).
 
 import Fluent
 import Vapor
 
-// MARK: - Protocol
-
-/// Returns the matching `APIUser` on success, or `nil` for invalid credentials.
-/// Implementations must be safe to call from concurrent request handlers.
-protocol AuthProvider: Sendable {
-    func authenticate(username: String, password: String, on req: Request) async throws -> APIUser?
-}
-
-// MARK: - LocalAuthProvider
-
 /// BCrypt-backed credential verification against the local user table.
-struct LocalAuthProvider: AuthProvider {
+///
+/// Returns the matching `APIUser` on success, or `nil` for invalid
+/// credentials.  Safe to call from concurrent request handlers.
+struct LocalAuthProvider {
     func authenticate(username: String, password: String, on req: Request) async throws -> APIUser? {
         let user = try await APIUser.query(on: req.db)
             .filter(\.$username == username)
@@ -61,17 +53,3 @@ private actor TimingEqualizerHashCache {
 }
 
 private let timingEqualizerHashCache = TimingEqualizerHashCache()
-
-// MARK: - Application storage
-
-private struct AuthProviderKey: StorageKey {
-    typealias Value = any AuthProvider
-}
-
-extension Application {
-    /// The active auth provider. Defaults to `LocalAuthProvider` if not explicitly set.
-    var authProvider: any AuthProvider {
-        get { storage[AuthProviderKey.self] ?? LocalAuthProvider() }
-        set { storage[AuthProviderKey.self] = newValue }
-    }
-}

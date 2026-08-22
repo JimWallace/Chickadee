@@ -117,7 +117,7 @@ struct AuthRoutes: RouteCollection {
         }
 
         guard
-            let user = try await req.application.authProvider.authenticate(
+            let user = try await LocalAuthProvider().authenticate(
                 username: body.username,
                 password: body.password,
                 on: req

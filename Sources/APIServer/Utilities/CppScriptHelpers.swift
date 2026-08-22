@@ -42,12 +42,6 @@ func isValidCppIdentifier(_ name: String) -> Bool {
     return !cppReservedWords.contains(name)
 }
 
-/// `name` if it is usable as a C++ identifier; nil otherwise. Callers refuse
-/// at save time with a message naming the field — never silently rewrite.
-func cppIdentifier(_ name: String) -> String? {
-    isValidCppIdentifier(name) ? name : nil
-}
-
 /// A `//` comment line with newlines stripped, so authored text (labels,
 /// hints) cannot break out of comment position in generated source.
 func cppComment(_ text: String) -> String {

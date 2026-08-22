@@ -61,5 +61,4 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     )
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[DataExportManagerKey.self] = DataExportManager()
-    app.authProvider = LocalAuthProvider()
 }

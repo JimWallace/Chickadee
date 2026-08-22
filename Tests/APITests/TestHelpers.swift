@@ -687,7 +687,7 @@ private extension Data {
 /// from the stored hash, so logins against these fixtures are fast too.
 ///
 /// This only changes *test fixture* hashes. It does NOT touch the app's
-/// configured password hasher, so `AuthProvider`'s timing-equalizer (the
+/// configured password hasher, so `LocalAuthProvider`'s timing-equalizer (the
 /// account-enumeration defense exercised by
 /// `loginWithUnknownUserStillRunsBcryptVerify`) still runs at the production
 /// cost.
