@@ -130,9 +130,9 @@ import VaporTesting
         }
     }
 
-    /// A student sees their own per-course pseudonym, and the page says plainly
-    /// what it is — a stable pseudonym is not anonymity, and copy that implied
-    /// otherwise would be the feature's worst failure.
+    /// A student sees the handle reserved for them in each course, named as a
+    /// noun phrase rather than a sentence — the shape the slip-day line beside
+    /// it already uses, where the phrase carries its own noun.
     @Test func accountPageShowsThePerCourseHandleAndItsLimits() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "AVATARC")
@@ -160,8 +160,7 @@ import VaporTesting
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     let html = res.body.string
-                    #expect(html.contains("You appear as \(handle) on class pages"))
-                    #expect(html.contains("not anonymity from anyone you tell"))
+                    #expect(html.contains("Class handle: \(handle)"))
                 })
         }
     }

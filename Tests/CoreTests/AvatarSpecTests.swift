@@ -151,17 +151,25 @@ import Testing
     }
 
     /// Every `--av-*` the partial assigns is one the presentation supplies, and
-    /// every one the presentation supplies is assigned.  A property assigned
-    /// but never supplied renders black; one supplied but never assigned is a
-    /// slot the student chose that nothing shows.
-    @Test func partialAssignsEveryPresentationProperty() throws {
+    /// every one the presentation supplies is assigned — in BOTH branches.
+    ///
+    /// The decorative and labelled branches carry byte-identical style
+    /// attributes and differ only in how the bird is announced, so an edit that
+    /// touches one renders a partially black bird through the other. Counting
+    /// distinct names could not see that: it has to be an occurrence count, or
+    /// the guard passes on exactly the drift it exists to catch.
+    @Test func partialAssignsEveryPresentationPropertyInBothBranches() throws {
         let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let assigned = Set(
-            [
-                "--av-cap", "--av-wing", "--av-beak", "--av-cheek", "--av-wing-mark",
-                "--av-flank", "--av-backdrop",
-            ].filter { partial.contains("\($0): var(") })
-        #expect(assigned.count == 7, "partial assigns only \(assigned.sorted())")
+        let properties = [
+            "--av-cap", "--av-wing", "--av-beak", "--av-cheek", "--av-wing-mark",
+            "--av-flank", "--av-backdrop",
+        ]
+        let branches = partial.components(separatedBy: "#else:")
+        #expect(branches.count == 2, "the partial no longer has two announce branches")
+        for property in properties {
+            let occurrences = partial.components(separatedBy: "\(property): var(").count - 1
+            #expect(occurrences == 2, "\(property) is assigned \(occurrences)x, expected once per branch")
+        }
         // Flat field names, not `avatar.capToken`: the sub-context form makes
         // the presentation this partial's root. Qualifying them resolves to
         // empty, silently — a bird with no colours that still returns 200.

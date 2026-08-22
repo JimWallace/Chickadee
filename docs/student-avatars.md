@@ -1,12 +1,16 @@
 # Student avatars — design note
 
-**Status: art and model exist; nothing is persisted or displayed.** The
-chickadee parts and palette are drawn (decision 7), and `AvatarSpec` plus the
-draw and the markup builder are in `Core/` with drift guards (decision 8). What
-does not exist: any storage — no column, no migration, no first-use
-materialization — no handle, and no page that renders a bird. The account page
-still shows the initials monogram described in `accountMonogram` /
-`.account-monogram`. **Nothing maps an account to an avatar yet.**
+**Status: shipped for the account page.** Every student has a chickadee and a
+per-course handle, drawn on first view and stored; the account page renders the
+bird in place of the initials monogram, which is gone.
+
+**Nothing displays either one to anybody else yet.** There is no leaderboard and
+no class-facing page — `account.leaf` is the only template that renders a bird
+or names a handle, and it shows a student only their own. The handle is
+therefore **reserved, not in use**, and student-facing copy must say so: a
+sentence about how a pseudonym behaves in front of classmates is a claim about a
+surface that does not exist, and a student can act on it. Also not built: the
+customization wardrobe (unlock model, picker) and the geometry slots it needs.
 
 ---
 

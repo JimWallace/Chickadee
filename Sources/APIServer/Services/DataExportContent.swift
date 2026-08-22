@@ -49,8 +49,9 @@ struct DataExportEnrollment: Codable, Sendable {
     let role: String
     let enrolledAt: Date?
     let learnSection: String?
-    /// The pseudonym this student appears under in this course's class-facing
-    /// pages. nil before one has been materialized.
+    /// The per-course handle reserved for this student. Nothing displays it to
+    /// anyone else yet; it is stored so it is stable when something does. nil
+    /// before one has been materialized, and never set for a staff enrollment.
     let avatarHandle: String?
 }
 
@@ -514,8 +515,7 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
           behind your generated avatar. Passwords are stored only as one-way
           hashes and are never included.
         - `enrollments.json` — the courses you are enrolled in, your role in
-          each, when you enrolled, and the pseudonym you appear under on that
-          course's class-facing pages.
+          each, when you enrolled, and the per-course handle reserved for you.
         - `submissions.json` — an index of every submission you have made:
           course, assignment, attempt number, timestamps, and where in this
           archive to find the uploaded file and its grading results.

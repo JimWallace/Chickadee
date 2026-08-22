@@ -2658,7 +2658,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-eye { fill: var(--av-eye); }
 .av-glint { fill: var(--av-glint); }
 
-
 /* The drop zone's upload glyph. A descendant selector rather than a class of
    its own: it is one rule serving one existing component, and a new global
    class would owe a component-vocabulary entry for no gain. */

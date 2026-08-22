@@ -309,18 +309,21 @@ duplicate.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
 - **`.avatar`** (+ `.avatar-sm`) and the `.av-*` fill classes — the generated
-  student chickadee.  One `<svg class="avatar">` wraps five `<use>` elements
-  naming symbols in `_avatar-sprite.leaf`; the parts carry `.av-cap`,
+  student chickadee.  One `<svg>` carrying the size class wraps five `<use>`
+  elements naming symbols in `_avatar-sprite.leaf`; the parts carry `.av-cap`,
   `.av-cheek`, `.av-flank`, `.av-wing`, `.av-wing-mark`, `.av-beak`, `.av-eye`,
   `.av-glint`, `.av-backdrop`, each resolving to `fill: var(--av-*)`, and the
   wrapper assigns those custom properties from the `--avatar-*` palette.  That
   assignment is the sanctioned inline form; a `fill` attribute in the sprite
   would be a colour outside the palette and would not follow dark mode.
-  `.avatar` carries a complete default palette so the sprite renders correctly
-  when a caller sets nothing.  Two sizes only: 3rem, and `.avatar-sm` at 1.5rem
-  for dense tables, where the beak and wing marks stop being separable — which
-  is why a leaderboard names a student by their handle and uses the bird for
-  recognition rather than identification.  See
+  **A page that renders `_avatar` must also include `_avatar-sprite`, once per
+  page** — forget it and the page still returns 200 and shows an empty circle,
+  which no guard can catch.  `.avatar` carries a complete default palette so the
+  sprite renders correctly when a caller sets nothing.  Two sizes only: 3rem,
+  and `.avatar-sm` at 1.5rem — **reserved and currently unused**, for the dense
+  tables a leaderboard would bring, where the beak and wing marks stop being
+  separable.  That size limit is why a leaderboard names a student by their
+  handle and uses the bird for recognition rather than identification.  See
   [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A

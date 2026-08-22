@@ -5,6 +5,8 @@ My Account
 #export("content"):
 <h1>My Account</h1>
 
+#extend("_avatar-sprite")
+
 #if(error == "invalid"):
 <p class="form-error" role="alert">That course is not available.</p>
 #endif
@@ -12,7 +14,6 @@ My Account
 <section class="page-section">
     <h2>Account info</h2>
     <div class="account-identity">
-        #extend("_avatar-sprite")
         #extend("_avatar", avatar)
         <div>
             <strong>#(identityName)</strong>
@@ -21,9 +22,6 @@ My Account
             #endif
         </div>
     </div>
-    <p class="section-note">Your chickadee and your per-course name stand in
-        for your name on class-facing pages, and they are stable — so they are
-        not anonymity from anyone you tell.</p>
     <dl class="detail-grid">
         <dt>Username</dt>
         <dd><strong>#(username)</strong></dd>
@@ -63,7 +61,7 @@ My Account
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)
                     #if(course.handle):
-                    <div class="text-muted">You appear as #(course.handle) on class pages</div>
+                    <div class="text-muted">Class handle: #(course.handle)</div>
                     #endif
                     #if(course.slipDaysText):
                     <div class="text-muted">#(course.slipDaysText)</div>

@@ -48,12 +48,15 @@ struct AccountRoutes: RouteCollection {
             spendCountByCourseID[spend.courseID, default: 0] += 1
         }
 
-        // Per-course handles, materialized on first view. A student sees their
-        // own pseudonym here and nowhere else yet, which is the point: they can
-        // recognise themselves in a class listing without learning anybody
-        // else's. `ensureHandle` is a no-op read once the row carries one.
+        // Per-course handles, materialized on first view — for STUDENT
+        // enrollments only, the same gate the slip-day line below applies and
+        // for the same kind of reason: a pseudonym is for a student who will
+        // appear pseudonymously, and staff teaching a course appear under their
+        // own name. Gating here also keeps staff from consuming handles out of
+        // a course's finite space. `ensureHandle` is a no-op read once the row
+        // carries one.
         var handlesByCourseID: [UUID: String] = [:]
-        for enrollment in enrollments {
+        for enrollment in enrollments where enrollment.role == .student {
             guard let courseID = enrollment.course.id else { continue }
             handlesByCourseID[courseID] = try await AvatarStore.ensureHandle(
                 for: enrollment, on: req.db)
@@ -232,8 +235,7 @@ private struct AccountContext: Encodable {
     let currentUser: CurrentUserContext?
     let username: String
     let preferredName: String?
-    /// The heading beside the circle, and the string the monogram is taken
-    /// from. See `accountIdentityName`.
+    /// The heading beside the avatar. See `accountIdentityName`.
     let identityName: String
     /// The username under the heading, nil when the heading already IS the
     /// username. See `accountIdentitySecondary`.
