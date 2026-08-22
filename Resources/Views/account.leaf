@@ -5,6 +5,8 @@ My Account
 #export("content"):
 <h1>My Account</h1>
 
+#extend("_avatar-sprite")
+
 #if(error == "invalid"):
 <p class="form-error" role="alert">That course is not available.</p>
 #endif
@@ -12,7 +14,7 @@ My Account
 <section class="page-section">
     <h2>Account info</h2>
     <div class="account-identity">
-        <p class="account-monogram" aria-hidden="true">#(monogram)</p>
+        #extend("_avatar", avatar)
         <div>
             <strong>#(identityName)</strong>
             #if(identitySecondary):
@@ -58,6 +60,9 @@ My Account
             <tr>
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)
+                    #if(course.handle):
+                    <div class="text-muted" data-avatar-handle>Class handle: #(course.handle)</div>
+                    #endif
                     #if(course.slipDaysText):
                     <div class="text-muted">#(course.slipDaysText)</div>
                     #endif

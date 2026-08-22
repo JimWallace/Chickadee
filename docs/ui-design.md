@@ -303,15 +303,27 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
-- **`.account-identity`** — the account page's identity header: the monogram
-  circle, the resolved name beside it, and the username under that.  The name
+- **`.account-identity`** — the account page's identity header: the student's
+  `.avatar`, the resolved name beside it, and the username under that.  The name
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.account-monogram`** — the account page's identity circle, carrying one
-  or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
-  photo because no claim in play releases one; the circle is sized so an
-  `<img>` can replace the text without a rule change if that ever changes.
+- **`.avatar`** and the `.av-*` fill classes — the generated student chickadee.
+  One `<svg>` carrying the size class wraps five `<use>` elements naming symbols
+  in `_avatar-sprite.leaf`: backdrop, plumage, wing, expression, accessory.
+  **A page that renders `_avatar` must also include `_avatar-sprite`, once per
+  page** — forget it and the page still returns 200 and shows an empty circle,
+  which no guard can catch.  Only four colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
+  which is the sanctioned form); the fixed parts of the bird — `.av-body`,
+  `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
+  `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  read the palette directly, because a body or a beak that varied would stop
+  the birds being one species.  **One size, 3rem.**  The bird earns its detail
+  at 48px and up; below that it is a smudge, and a small context wants a
+  monogram chip rather than a shrunken bird — which is also why a leaderboard
+  would name a student by their handle and use the bird for recognition.  See
+  [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
   modifier on `.diagnostic-value`, not a second tile component.
@@ -378,8 +390,9 @@ duplicate.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
-- **`.icon`** — every inline SVG, referencing a `<symbol>` in `_icons.leaf`
-  by `<use href="#i-…">`.  Geometry may not appear anywhere else.
+- **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
+  `_icons.leaf` by `<use href="#i-…">`.  Geometry may appear in exactly two
+  files: that sprite, and `_avatar-sprite.leaf` for the avatar parts.
 - **`.textarea-mono`**, `.form-stack` (+ `--wide`) — a monospace textarea and
   the stacked form column that usually holds one.
 

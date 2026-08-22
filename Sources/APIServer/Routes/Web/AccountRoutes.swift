@@ -48,6 +48,20 @@ struct AccountRoutes: RouteCollection {
             spendCountByCourseID[spend.courseID, default: 0] += 1
         }
 
+        // Per-course handles, materialized on first view — for STUDENT
+        // enrollments only, the same gate the slip-day line below applies and
+        // for the same kind of reason: a pseudonym is for a student who will
+        // appear pseudonymously, and staff teaching a course appear under their
+        // own name. Gating here also keeps staff from consuming handles out of
+        // a course's finite space. `ensureHandle` is a no-op read once the row
+        // carries one.
+        var handlesByCourseID: [UUID: String] = [:]
+        for enrollment in enrollments where enrollment.role == .student {
+            guard let courseID = enrollment.course.id else { continue }
+            handlesByCourseID[courseID] = try await AvatarStore.ensureHandle(
+                for: enrollment, on: req.db)
+        }
+
         let enrolledRows =
             enrollments
             .compactMap { e -> AccountCourseRow? in
@@ -70,7 +84,8 @@ struct AccountRoutes: RouteCollection {
                     code: e.course.code,
                     name: e.course.name,
                     enrollmentMode: e.course.enrollmentMode.rawValue,
-                    slipDaysText: slipDaysText
+                    slipDaysText: slipDaysText,
+                    handle: handlesByCourseID[id]
                 )
             }
             .sorted { $0.code < $1.code }
@@ -84,7 +99,7 @@ struct AccountRoutes: RouteCollection {
                 return AccountCourseRow(
                     id: id.uuidString, code: c.code, name: c.name,
                     enrollmentMode: c.enrollmentMode.rawValue,
-                    slipDaysText: nil)
+                    slipDaysText: nil, handle: nil)
             }
 
         // Personal-data export state (#557) for the "Your data" section.
@@ -106,7 +121,10 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                monogram: accountMonogram(name: identityName),
+                avatar: AvatarPresentation(
+                    for: try await AvatarStore.ensureSpec(for: user, on: req.db),
+                    size: .standard,
+                    accessibility: .decorative),
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -191,15 +209,11 @@ struct AccountRoutes: RouteCollection {
 
 // MARK: - View context types
 
-/// Up to two initials, uppercased: "Ada Lovelace" → "AL", "ada" → "A".
-/// Falls back to the username when there is no preferred name, and to "?" when
-/// neither yields a letter, so the circle is never blank.
 /// The name shown beside the identity circle: the full name the IdP released
 /// when there is one, else the preferred name, else the username.
 ///
-/// One resolution, used for both the heading and the monogram, so the circle
-/// and the name beside it can never disagree — initials of "Avery Sandoval"
-/// over the words "Avery" would read as a rendering fault.
+/// One resolution, used for the heading and for the identity row, so the two
+/// can never disagree.
 func accountIdentityName(displayName: String?, preferredName: String?, username: String) -> String {
     for candidate in [displayName, preferredName] {
         if let candidate, !candidate.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -217,36 +231,20 @@ func accountIdentitySecondary(identityName: String, username: String) -> String?
     identityName == username ? nil : username
 }
 
-func accountMonogram(name: String) -> String {
-    let source = name
-    let initials =
-        source
-        .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." || $0 == "_" })
-        .compactMap { $0.first(where: { $0.isLetter || $0.isNumber }) }
-        .prefix(2)
-    guard !initials.isEmpty else { return "?" }
-    return String(initials).uppercased()
-}
-
 private struct AccountContext: Encodable {
     let currentUser: CurrentUserContext?
     let username: String
     let preferredName: String?
-    /// The heading beside the circle, and the string the monogram is taken
-    /// from. See `accountIdentityName`.
+    /// The heading beside the avatar. See `accountIdentityName`.
     let identityName: String
     /// The username under the heading, nil when the heading already IS the
     /// username. See `accountIdentitySecondary`.
     let identitySecondary: String?
-    /// One or two letters for the identity circle, from the preferred name when
-    /// there is one and the username otherwise.
-    ///
-    /// A monogram rather than a photo because there is no photo to have:
-    /// nothing in `SSOAuthRoutes` or `OIDCIDTokenClaims` decodes a `picture`
-    /// claim, and adding one would be a new claim, a new column and a privacy
-    /// conversation — not a template change.  The circle takes an `<img>`
-    /// unchanged on the day that happens.
-    let monogram: String
+    /// The student's generated chickadee, replacing the initials monogram this
+    /// page carried until v0.5.  Materialized on first render by
+    /// `AvatarStore.ensureSpec`, and decorative: the name beside it carries the
+    /// identity, so announcing the bird too would only repeat it.
+    let avatar: AvatarPresentation
     let studentID: String?
     let email: String?
     let enrolledCourses: [AccountCourseRow]
@@ -281,4 +279,8 @@ private struct AccountCourseRow: Encodable {
     /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
     /// a course with the policy on; nil hides the line (#1228).
     let slipDaysText: String?
+    /// This student's pseudonym in this course, "Quiet Cedar". nil hides the
+    /// line — a course whose word lists are exhausted, which is a real state
+    /// rather than an error: the avatar still shows.
+    let handle: String?
 }
