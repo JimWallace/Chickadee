@@ -83,13 +83,23 @@ public enum WedgeWatchdog {
     }()
 
     /// How many `track` scopes are currently in flight. The watchdog is armed
-    /// exactly when this is non-zero. Exposed so a target can assert its own
-    /// arming seam is still wired — the guard is worth having because losing
-    /// the arming is silent: everything keeps passing, and the next wedge is
-    /// again a 20-minute job kill with no evidence.
+    /// exactly when this is non-zero. Process-global by design (the monitor
+    /// compares it against zero), which means a two-point delta of it is racy
+    /// under parallel tests — an arming assertion should read
+    /// `isInsideTrackedScope` instead, and use this only as a same-instant
+    /// floor (`>= 1` from inside a scope).
     public static var activeTrackedScopes: Int {
         state.withLock { $0.activeHelpers }
     }
+
+    /// True while the current task is inside a `track` scope. Task-local, so
+    /// unlike `activeTrackedScopes` it is untouched by other tests' scopes
+    /// starting or finishing concurrently — the race that made a
+    /// before/inside counter delta flake on a loaded postgres lane
+    /// (2026-08-22, run 32542491009: the two reads sat 66 s apart, plenty for
+    /// every other in-flight scope to drain). This is the arming-seam
+    /// assertion surface; the counter above is the monitor's.
+    @TaskLocal public static var isInsideTrackedScope = false
 
     /// Seconds since the last reported activity. This is what the monitor
     /// thread compares against `stallLimitSeconds`.
@@ -127,7 +137,9 @@ public enum WedgeWatchdog {
                 current.lastActivity = Date()
             }
         }
-        return try await body()
+        return try await $isInsideTrackedScope.withValue(true) {
+            try await body()
+        }
     }
 
     private static func startMonitorIfNeeded(_ current: inout State) {

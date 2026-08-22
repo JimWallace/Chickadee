@@ -485,6 +485,11 @@ regression in the change under test and is not one.
    noisy-neighbour-vs-saturation question the *next* time this happens rather
    than requiring another lucky log tail.
 2. **Re-tune the ceiling — but do not expect it to have saved this run.**
+   **DONE** — `api-tests` carries `timeout-minutes: 25` in
+   `swift-tests.yml`, equal to the postgres lane (verified 2026-08-22; the
+   change itself predates the current history graft and was never marked
+   here). The caveats below stand as written: headroom for the ordinary
+   tail, not a rescue for a 5× starvation event.
    The sqlite lane is capped at 20 min against postgres' 25 despite carrying
    the wider spread, and equalising them is defensible on the baseline alone:
    the ordinary tail is 441 s, and 20 min leaves ~1107 s of test budget after
@@ -498,6 +503,30 @@ regression in the change under test and is not one.
    than instead of it.
 3. **Finish the CLOEXEC sweep** on the three helpers above, closing the
    mechanism that turns a transient overload into a permanent one.
+
+**The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
+drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
+sole failure in a 3,045-test `api-tests-postgres` run (run 32542491009,
+branch `claude/student-avatar-generation-t2suku`; the sqlite lane passed the
+same commit, and the diff — avatar art — cannot reach it). The assertion
+compared two reads of the process-global `activeTrackedScopes` counter,
+before `withApp` and inside it: under parallel tests that delta is racy,
+because every concurrent test's scope moves the same counter. On this run
+the lane was heavily contended (postgres checkpoints of 60+ s in the service
+log; the test body took 66.5 s), so the window between the reads was wide
+enough for every other in-flight scope to drain — one net −1 by others plus
+our own +1 reads as "no increase", and `(scopesInside → 1) > (scopesBefore
+→ 1)` failed.
+
+The fix replaces the delta with a `@TaskLocal` — `WedgeWatchdog.track` now
+sets `isInsideTrackedScope` for its body, and the test asserts it from
+inside `withApp`. Task-locals follow the task tree, so another suite's scope
+can neither satisfy the assertion (no false pass through, say,
+`withPatternFamilyFixture`'s self-arming) nor disturb it (no false fail from
+scopes draining concurrently) — strictly stronger than the counter delta and
+race-free. The global counter keeps its job as the monitor's arming signal;
+the test still pins a same-instant floor (`activeTrackedScopes >= 1` from
+inside the scope, which concurrent activity can only raise).
 
 ---
 
