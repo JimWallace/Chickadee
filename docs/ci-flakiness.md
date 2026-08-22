@@ -1,4 +1,4 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-08-09)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-08-22)
 
 Handoff document for the flakiness work. Families 1–3 are the original
 2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
@@ -248,6 +248,48 @@ the same PR stays useful for the next intermittent, which will not be this one.
 continue from the probe's `grading breadcrumbs:` per-phase timings on an
 iteration whose trail stops before `suite_done`.
 
+**Status revision (2026-08-22, covers Families 2 AND 3): the ambient rate
+collapsed with the Pyodide→xeus migration, and the archived trail is now
+historical.** Both families' root-cause work was scoped against the Pyodide
+editor, and every live mechanism it identified was pyodide-kernel-driver
+code: the premature idle (`kernelInfoRequest` answering without awaiting
+`this.ready`), the ~13–17 s WebKit `initialize()` tail behind it, and the
+chdir/DriveFS hang before either. None of that code ships since the 0.5
+series moved the editor (and later both graders) onto xeus — so a NEW hang
+cannot be that bug, and `docs/archive/exec-hang-investigation.md` is the old
+era's record, not a trail to continue.
+
+Measured, both halves:
+
+- **CI.** The scheduled hard-zero `editor-smoke` runs on `main` — the legs
+  with no webkit tolerance — are 30/30 green, 2026-07-24 → 2026-08-22.
+  `grading-hang-probe` shows no ambient failure in the same window (its one
+  red, 2026-08-10, was the result-POST 500 closed above). The #1178 weekly
+  tallies report at most one tolerated-flake warning per week across the
+  last four.
+- **Production** (`get_browser_diagnostics`, 720 h window read 2026-08-22,
+  which straddles the migration near its midpoint at comparable boot volume
+  per half): `exec_hang` 35 → 1 (~4.1 % → **~0.14 %** of boots — the July
+  reading of ~4 % held to the end of the old era), `boot_stalled` 32 → 2,
+  `kernel_unknown` 44 → 8, `recover_failed` 1 → 0, and the recent half's
+  submit funnel lossless (62/62 `grading_start` → `result_posted`).
+  Confound stated plainly: the era boundary coincides with the term winding
+  down, so lighter and calmer usage shares credit with the substrate — but
+  the mechanisms above are gone from the shipped code regardless of the
+  weighting.
+
+What this changes and what it does not. The webkit gate tolerances stay:
+the residual is small but not zero, and tightening buys a roughly weekly
+blocked merge for no new information. The next lever for the residue is not
+the archive but the probe's five-way classification (`deadlock` /
+`bootStall` / `dialogSteal` / `lostDispatch` / `webkitWasmCrash`) plus
+issue #1049's enriched beacons — that boot-failure class also fell an order
+of magnitude across the boundary and keeps its old-Safari hypothesis for
+what remains. The #1245 per-boot rejection was re-measured the same day
+(~1.0 → ~0.29 per boot across the boundary; the ratio can no longer
+attribute the residual, so the issue's stack-frame instrumentation is the
+only path left — details on the issue).
+
 ## Family 3 — webkit editor smoke, post-idle execute (`smoke (webkit)`) — CONTAINED, same root cause as Family 2
 
 **Symptom.** The editor-smoke selftest's post-idle probe fails:
@@ -259,6 +301,11 @@ iteration whose trail stops before `suite_done`.
 notebook-page e2e) get exactly one retry, logged with a `::warning` so the
 flake rate stays visible in annotations. Chromium legs stay strict — a
 chromium failure is treated as real, first time.
+
+**Status revision (2026-08-22):** see the block at the end of Family 2 —
+the shared root-cause work is overtaken by the Pyodide→xeus migration, the
+scheduled hard-zero legs have run a month green, and the retry tolerance
+stays for the small non-zero residue.
 
 ---
 
@@ -550,10 +597,15 @@ inside the scope, which concurrent activity can only raise).
 
 ## Remaining attack order
 
-1. **Exec-hang root cause** (Families 2+3 share it) — continue from
-   `docs/archive/exec-hang-investigation.md` with the probe breadcrumbs. The
-   dispatch/scheduled hard-zero runs of `grading-hang-probe.yml` are the
-   fix's acceptance test.
+1. **Exec-hang root cause** (Families 2+3 shared it) — **overtaken by the
+   substrate change (2026-08-22): see the status revision at the end of
+   Family 2.** The archived trail targeted pyodide-kernel-driver code that
+   no longer ships; a new hang starts from the probe's five-way
+   classification, and the dispatch/scheduled hard-zero runs of
+   `grading-hang-probe.yml` remain the acceptance test for any fix. The
+   findings below are the old era's record, kept because the probe
+   forensics they produced (the classifications, the dialog capture, the
+   delay experiment's method) survive the substrate they measured.
 
    *2026-07-02 evening findings (probe forensics upgraded in the same
    change as this note):*
