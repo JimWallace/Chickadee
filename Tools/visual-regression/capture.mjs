@@ -37,6 +37,14 @@ const MASKS = [
   ".admin-version-banner", // vX.Y.Z on the admin page
   ".worker-secret-input",  // auto-generated diceware secret — new every boot
   "canvas",                // sparkline charts draw async
+  // A student's chickadee is DRAWN AT RANDOM and stored, so a fresh fixture
+  // run produces a different bird every time — the same category as the
+  // diceware secret above. A pixel baseline of it could never be stable, and
+  // would not be meaningful if it were: what matters is that the layers stack,
+  // the palette resolves and no interpolation leaks, which AccountRoutesTests
+  // and AvatarSpecTests assert against the markup instead. Its box is a fixed
+  // 3rem, so unlike the text below it needs no width freezing.
+  ".avatar",
 ];
 
 
@@ -112,6 +120,14 @@ async function main() {
             .forEach((el) => {
               el.textContent = "0000-00-00 00:00";
             });
+          // The per-course handle is two words drawn at random, so its LENGTH
+          // moves between runs. Freezing the text rather than masking the line
+          // keeps its label and typography under test and only gives up the
+          // two words themselves — a mask here would be sized by the text and
+          // so would move anyway, which is the trap the comment above records.
+          document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
+            el.textContent = "Class handle: Aaaaaaa Bbbbbb";
+          });
           // Only the GENERATED name is replaced. An uploaded artifact keeps
           // the student's own filename ("solution.py"), which is already
           // deterministic — rewriting it too would restage the pending page's

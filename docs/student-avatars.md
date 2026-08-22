@@ -487,6 +487,17 @@ as a bird turning away, and the maintainer had already chosen the mirrored pair
 for that reason. It stays a pair. The count is unaffected either way, since it
 is the same six patterns.
 
+**A random draw cannot have a pixel baseline.** The account page is one of the
+visual harness's archetype exemplars, and a fresh fixture run draws a different
+bird and a different handle every time — so the baseline could never settle. The
+bird is masked (its box is a fixed 3rem, so the mask is stable) and the handle's
+text is frozen to a constant rather than masked, which keeps its label and
+typography under test and gives up only the two random words. Masking the handle
+instead would have failed for a subtle reason capture.mjs already records: a mask
+box is sized by the text it covers, so a variable-length name moves the box.
+What the pixel test gives up here, `AccountRoutesTests` and `AvatarSpecTests`
+assert against the markup instead.
+
 **One consequence still owed:** the design's size floor — "the bird earns its
 detail at 48px and up; below that the monogram chip takes over". `.avatar-sm`
 was removed for that reason, since a 24px bird is a smudge. Nothing renders one

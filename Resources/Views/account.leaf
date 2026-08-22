@@ -61,7 +61,7 @@ My Account
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)
                     #if(course.handle):
-                    <div class="text-muted">Class handle: #(course.handle)</div>
+                    <div class="text-muted" data-avatar-handle>Class handle: #(course.handle)</div>
                     #endif
                     #if(course.slipDaysText):
                     <div class="text-muted">#(course.slipDaysText)</div>
