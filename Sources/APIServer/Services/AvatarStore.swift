@@ -33,11 +33,15 @@ enum AvatarStore {
             // The avatar is cosmetic: a student seeing their bird is never
             // worth failing their account page over, so fall back to the
             // freshly drawn one and let the next load persist it.
-            if let winner = try await APIUser.find(user.id, on: db)?.avatarSpecJSON,
-                let spec = decode(winner)
-            {
-                return spec
-            }
+            //
+            // `try?`, not `try`, and that distinction is the whole point. On
+            // Postgres a failed write inside a transaction poisons it, so the
+            // recovering read throws too — and a `try` here would turn a lost
+            // race on a cosmetic column into a 500 on the account page, which
+            // is precisely what the comment above says must never happen. The
+            // drawn spec is a perfectly good answer; the next load persists it.
+            let winner = (try? await APIUser.find(user.id, on: db)).flatMap { $0?.avatarSpecJSON }
+            if let winner, let spec = decode(winner) { return spec }
         }
         return spec
     }
@@ -71,7 +75,12 @@ enum AvatarStore {
             // the same remainder. Re-read the winner rather than looping: if
             // the row now has a handle it is ours to show, and if it does not
             // the next page load tries again.
-            let winner = try await APICourseEnrollment.find(enrollment.id, on: db)?.avatarHandle
+            //
+            // `try?` for the same reason as `ensureSpec`: on Postgres the
+            // failed save has already aborted the transaction, so this read
+            // throws as well, and a handle is never worth failing the page for.
+            let winner = (try? await APICourseEnrollment.find(enrollment.id, on: db))
+                .flatMap { $0?.avatarHandle }
             enrollment.avatarHandle = winner
             return winner
         }
