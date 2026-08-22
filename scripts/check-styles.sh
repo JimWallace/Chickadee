@@ -366,7 +366,7 @@ fi
 # 9,216 of them. They are a closed set — one per slot in AvatarSpec, plus the
 # wing-mark that reuses the cheek — and the Swift side names the tokens
 # (Core/AvatarMarkup.swift), so a page cannot invent an eighth.
-PER_DATUM_INLINE_PROPS="--bar-h --av-cap --av-wing --av-beak --av-cheek --av-wing-mark --av-flank --av-backdrop"
+PER_DATUM_INLINE_PROPS="--bar-h --av-cap --av-wing --av-accent --av-backdrop"
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue

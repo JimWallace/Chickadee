@@ -59,19 +59,18 @@ public struct AvatarPresentation: Encodable, Sendable, Equatable {
     /// in `var(…)`.
     public let capToken: String
     public let wingToken: String
-    public let beakToken: String
-    /// Serves both the cheeks and the marks on a patterned wing, so a pattern
-    /// reads against any cap family without a slot of its own.
-    public let cheekToken: String
-    public let flankToken: String
+    /// The colour an accessory is drawn in — part of the accessory axis, which
+    /// is why the design writes it "8 + 5 accents".
+    public let accentToken: String
     public let backdropToken: String
-    /// The fragment reference for this spec's wing symbol, e.g.
+    /// Fragment references for the three symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
     /// marker immediately before an interpolation is exactly the Leaf lexing
-    /// shape that has cost this codebase before; a bare unknown marker in text
-    /// is inert, but one adjacent to a tag opening is not worth testing.
+    /// shape that has cost this codebase before.
     public let wingSymbolRef: String
+    public let expressionSymbolRef: String
+    public let accessorySymbolRef: String
     /// "avatar" or "avatar avatar-sm".
     public let sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
@@ -84,11 +83,11 @@ public struct AvatarPresentation: Encodable, Sendable, Equatable {
     public init(for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility) {
         self.capToken = "--avatar-\(spec.cap.rawValue)-cap"
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
-        self.beakToken = "--avatar-\(spec.cap.rawValue)-beak"
-        self.cheekToken = "--avatar-cheek-\(spec.cheek.rawValue)"
-        self.flankToken = "--avatar-flank-\(spec.flank.rawValue)"
+        self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
+        self.expressionSymbolRef = "#av-expression-\(spec.expression.rawValue)"
+        self.accessorySymbolRef = "#av-accessory-\(spec.accessory.rawValue)"
         self.sizeClass = size.cssClass
         switch accessibility {
         case .decorative:
@@ -104,18 +103,25 @@ public struct AvatarPresentation: Encodable, Sendable, Equatable {
     /// is declared in the stylesheet, and that the stylesheet declares no
     /// avatar token no presentation can name.
     public var tokens: [String] {
-        [capToken, wingToken, beakToken, cheekToken, flankToken, backdropToken]
+        [capToken, wingToken, accentToken, backdropToken]
+    }
+
+    /// Every symbol this presentation names, in the order the partial stacks
+    /// them — with the two that never vary.
+    public var layerRefs: [String] {
+        ["#av-backdrop", "#av-plumage", wingSymbolRef, expressionSymbolRef, accessorySymbolRef]
     }
 }
 
 public enum AvatarMarkup {
     /// The symbol ids stacked to draw `spec`, back to front.
     ///
-    /// Five, not one per feature: the parts that never vary geometrically are
-    /// baked into one plumage symbol. A slot is split out only when it varies.
-    /// The partial hard-codes this order; this is what the drift test checks it
-    /// against.
+    /// Five, not one per feature: body, cap, cheek, beak and bib never vary, so
+    /// they are baked into one plumage symbol. A slot is split out only when it
+    /// varies.
     public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
-        ["av-backdrop", "av-plumage", "av-wing-\(spec.wing.rawValue)", "av-beak", "av-eyes"]
+        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+            .layerRefs
+            .map { String($0.dropFirst()) }
     }
 }

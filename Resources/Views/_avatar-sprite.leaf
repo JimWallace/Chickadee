@@ -3,22 +3,22 @@
      The second sprite in the codebase, and deliberately not part of the icon
      one: icons are stroked 24x24 Feather glyphs inlined on every page, while
      these are flat-filled 64x64 plumage parts wanted only by the pages that
-     show an avatar. Include this partial from those pages; a call site is ONE
-     svg carrying class "avatar" wrapping five use elements, each with an href
-     that is a same-page fragment naming one of the symbol ids below. Copy a
-     live call site rather than working from this description.
+     show an avatar. Include this partial from those pages, ONCE per page; a
+     call site is one svg carrying class "avatar" wrapping five use elements,
+     each with an href that is a same-page fragment naming a symbol below. Copy
+     a live call site rather than working from this description.
 
-     Layer order back to front: backdrop, plumage, wings, beak, eyes. Five
-     elements for the whole bird, not one per varying feature - the parts that
-     never vary geometrically (cap, cheeks, bib, belly) are baked into one
-     plumage symbol, and a slot is split out only when it actually varies.
+     FIVE AXES VARY, and nothing else: cap family, wing pattern, expression,
+     accessory, backdrop. Body, cheek, beak and bib are fixed - they are what
+     keeps every bird a chickadee even when the cap goes plum. Layer order back
+     to front: backdrop, plumage, wings, expression, accessory.
 
-     The bird is SYMMETRICAL and front-facing: two wings, no tail. Each wing
-     symbol draws the right wing and then the same content again inside a
-     mirroring group, so both wings come from one drawing. The mirror is a
-     transform rather than a second set of coordinates because an arc cannot be
-     reflected by negating its x values alone - its sweep flag has to invert
-     too, and getting that wrong yields a subtly, silently wrong curve.
+     The bird is symmetrical and front-facing: each wing symbol draws one wing
+     and then the same content again inside a mirroring group, so both wings
+     come from one drawing. The mirror is a transform rather than a second set
+     of coordinates because an arc cannot be reflected by negating its x values
+     alone - its sweep flag has to invert too, and getting that wrong yields a
+     subtly, silently wrong curve.
 
      THREE RULES THIS FILE MUST KEEP.
 
@@ -32,15 +32,16 @@
         rather than an ellipse: its outer edge IS the body circle. A transform
         is fine - unlike a url() reference, it resolves no ids.
 
-     2. Colour comes from a class, never an attribute. Each part carries one
-        of the av-* classes, which resolve to fill: var(--av-*) in styles.css;
-        the per-avatar element sets those custom properties to palette tokens.
-        A literal fill here would be a raw colour outside the palette and would
-        not follow dark mode.
+     2. Colour comes from a class, never an attribute. Each part carries one of
+        the av-* classes, which resolve to fill: var(...) in styles.css. The
+        four varying ones read per-avatar custom properties; the fixed ones
+        read the palette directly. A literal fill here would be a raw colour
+        outside the palette and would not follow dark mode.
 
-     3. The body is a circle of radius 22 centred at (32, 35) in a 64x64
-        viewBox. Every boundary is computed against it, so changing the body
-        means recomputing the cap, wing and belly edges rather than nudging
+     3. The body is a circle of radius 21 centred at (32, 34) in a 64x64
+        viewBox, and the two eye discs are radius 7.6 at y 29.5, 7.8 either
+        side of centre. Every boundary is computed against those, so changing
+        one means recomputing the cap, wing and lid edges rather than nudging
         them by eye. Tools/avatar-preview renders a contact sheet.
 
      Described rather than quoted, like the icon sprite: a fragment reference
@@ -52,46 +53,150 @@
             <circle class="av-backdrop" cx="32" cy="32" r="32"/>
         </symbol>
         <symbol id="av-plumage" viewBox="0 0 64 64">
-            <circle class="av-flank" cx="32" cy="35" r="22"/>
-            <path class="av-cap" d="M10.09,33 A22,22 0 0 1 53.91,33 C46,30 40,27.5 32,27.5 C24,27.5 18,30 10.09,33 Z"/>
-            <ellipse class="av-cheek" cx="23.8" cy="32" rx="7.2" ry="5.8"/>
-            <ellipse class="av-cheek" cx="40.2" cy="32" rx="7.2" ry="5.8"/>
-            <path class="av-cap" d="M29,29.5 C27.6,32.5 26.4,35 26.4,37 C26.4,39.2 29.4,40 32,40 C34.6,40 37.6,39.2 37.6,37 C37.6,35 36.4,32.5 35,29.5 Z"/>
+            <circle class="av-body" cx="32" cy="34" r="21"/>
+            <path class="av-cap" d="M11.01,33.5 A21,21 0 0 1 52.99,33.5 C45,32 41,25.5 37.5,25 C34,24.5 33.5,26.9 32,26.9 C30.5,26.9 30,24.5 26.5,25 C23,25.5 19,32 11.01,33.5 Z"/>
+            <path class="av-bib" d="M28.2,37.2 C25.4,41 25.6,47.4 32,48.2 C38.4,47.4 38.6,41 35.8,37.2 Z"/>
+            <circle class="av-eyewhite" cx="24.2" cy="29.5" r="7.6"/>
+            <circle class="av-eyewhite" cx="39.8" cy="29.5" r="7.6"/>
+            <path class="av-beak" d="M28.6,34.8 H35.4 L32,40.4 Z"/>
         </symbol>
         <symbol id="av-wing-plain" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            </g>
         </symbol>
         <symbol id="av-wing-barred" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><rect class="av-wing-mark" x="46.58" y="37.2" width="6.04" height="1.6" rx="0.8" transform="rotate(-8 45.4 38)"/><rect class="av-wing-mark" x="46.39" y="42.2" width="5.11" height="1.6" rx="0.8" transform="rotate(-8 45.4 43)"/><rect class="av-wing-mark" x="46.01" y="47.2" width="3.13" height="1.6" rx="0.8" transform="rotate(-8 45.4 48)"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><rect class="av-wing-mark" x="46.58" y="37.2" width="6.04" height="1.6" rx="0.8" transform="rotate(-8 45.4 38)"/><rect class="av-wing-mark" x="46.39" y="42.2" width="5.11" height="1.6" rx="0.8" transform="rotate(-8 45.4 43)"/><rect class="av-wing-mark" x="46.01" y="47.2" width="3.13" height="1.6" rx="0.8" transform="rotate(-8 45.4 48)"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <rect class="av-wing-mark" x="47.5" y="35.75" width="4.26" height="1.5" rx="0.75" transform="rotate(-8 46.4 36.5)"/>
+            <rect class="av-wing-mark" x="46.35" y="39.75" width="4.47" height="1.5" rx="0.75" transform="rotate(-8 45.2 40.5)"/>
+            <rect class="av-wing-mark" x="46.05" y="43.75" width="3.29" height="1.5" rx="0.75" transform="rotate(-8 45.2 44.5)"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <rect class="av-wing-mark" x="47.5" y="35.75" width="4.26" height="1.5" rx="0.75" transform="rotate(-8 46.4 36.5)"/>
+            <rect class="av-wing-mark" x="46.35" y="39.75" width="4.47" height="1.5" rx="0.75" transform="rotate(-8 45.2 40.5)"/>
+            <rect class="av-wing-mark" x="46.05" y="43.75" width="3.29" height="1.5" rx="0.75" transform="rotate(-8 45.2 44.5)"/>
+            </g>
         </symbol>
         <symbol id="av-wing-tipped" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><rect class="av-wing-mark" x="45.97" y="45.2" width="4.52" height="1.6" rx="0.8" transform="rotate(-8 45.4 46)"/><rect class="av-wing-mark" x="45.67" y="49.2" width="2.15" height="1.6" rx="0.8" transform="rotate(-8 45.4 50)"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><rect class="av-wing-mark" x="45.97" y="45.2" width="4.52" height="1.6" rx="0.8" transform="rotate(-8 45.4 46)"/><rect class="av-wing-mark" x="45.67" y="49.2" width="2.15" height="1.6" rx="0.8" transform="rotate(-8 45.4 50)"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <rect class="av-wing-mark" x="46.04" y="41.75" width="4.32" height="1.5" rx="0.75" transform="rotate(-8 45.2 42.5)"/>
+            <rect class="av-wing-mark" x="45.76" y="45.25" width="2.9" height="1.5" rx="0.75" transform="rotate(-8 45.2 46)"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <rect class="av-wing-mark" x="46.04" y="41.75" width="4.32" height="1.5" rx="0.75" transform="rotate(-8 45.2 42.5)"/>
+            <rect class="av-wing-mark" x="45.76" y="45.25" width="2.9" height="1.5" rx="0.75" transform="rotate(-8 45.2 46)"/>
+            </g>
         </symbol>
         <symbol id="av-wing-speckled" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><circle class="av-wing-mark" cx="49.31" cy="39" r="1.15"/><circle class="av-wing-mark" cx="51.52" cy="39" r="1.15"/><circle class="av-wing-mark" cx="48.97" cy="43.5" r="1.15"/><circle class="av-wing-mark" cx="50.52" cy="43.5" r="1.15"/><circle class="av-wing-mark" cx="48.34" cy="48" r="1.15"/><circle class="av-wing-mark" cx="48.61" cy="48" r="1.15"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><circle class="av-wing-mark" cx="49.31" cy="39" r="1.15"/><circle class="av-wing-mark" cx="51.52" cy="39" r="1.15"/><circle class="av-wing-mark" cx="48.97" cy="43.5" r="1.15"/><circle class="av-wing-mark" cx="50.52" cy="43.5" r="1.15"/><circle class="av-wing-mark" cx="48.34" cy="48" r="1.15"/><circle class="av-wing-mark" cx="48.61" cy="48" r="1.15"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <circle class="av-wing-mark" cx="48.1" cy="37" r="1.05"/>
+            <circle class="av-wing-mark" cx="50.49" cy="37" r="1.05"/>
+            <circle class="av-wing-mark" cx="47.85" cy="41" r="1.05"/>
+            <circle class="av-wing-mark" cx="49.75" cy="41" r="1.05"/>
+            <circle class="av-wing-mark" cx="47.99" cy="44.5" r="1.05"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <circle class="av-wing-mark" cx="48.1" cy="37" r="1.05"/>
+            <circle class="av-wing-mark" cx="50.49" cy="37" r="1.05"/>
+            <circle class="av-wing-mark" cx="47.85" cy="41" r="1.05"/>
+            <circle class="av-wing-mark" cx="49.75" cy="41" r="1.05"/>
+            <circle class="av-wing-mark" cx="47.99" cy="44.5" r="1.05"/>
+            </g>
         </symbol>
         <symbol id="av-wing-edged" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><path class="av-wing-mark" d="M53.79,32 A22,22 0 0 1 51.05,46 L48.1,46 A19.5,19.5 0 0 0 51.27,32 Z"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><path class="av-wing-mark" d="M53.79,32 A22,22 0 0 1 51.05,46 L48.1,46 A19.5,19.5 0 0 0 51.27,32 Z"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <path class="av-wing-mark" d="M52.99,33.5 A21,21 0 0 1 50.47,44 L47.92,44 A18.8,18.8 0 0 0 50.79,33.5 Z"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <path class="av-wing-mark" d="M52.99,33.5 A21,21 0 0 1 50.47,44 L47.92,44 A18.8,18.8 0 0 0 50.79,33.5 Z"/>
+            </g>
         </symbol>
         <symbol id="av-wing-twotone" viewBox="0 0 64 64">
-            <path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><path class="av-wing-mark" d="M52.86,42 A22,22 0 0 1 48.09,50 C45.5,48 44.1,45.6 43.9,43.4 C47,42.1 50,41.7 52.86,42 Z"/>
-            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M53.98,34 A22,22 0 0 1 48.09,50 C44.09,47 43.5,43 45,36.5 C48,33.4 50.98,33 53.98,34 Z"/><path class="av-wing-mark" d="M52.86,42 A22,22 0 0 1 48.09,50 C45.5,48 44.1,45.6 43.9,43.4 C47,42.1 50,41.7 52.86,42 Z"/></g>
+            <path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <path class="av-wing-mark" d="M51.8,41 A21,21 0 0 1 48.09,47.5 C44.59,45 45.2,41.5 46.4,43.2 C49,40.5 49.2,40.1 51.8,41 Z"/>
+            <g transform="translate(64 0) scale(-1 1)"><path class="av-wing" d="M52.99,33.5 A21,21 0 0 1 48.09,47.5 C44.59,45 43.6,41.5 44.8,35.7 C47.4,33 50.39,32.6 52.99,33.5 Z"/>
+            <path class="av-wing-mark" d="M51.8,41 A21,21 0 0 1 48.09,47.5 C44.59,45 45.2,41.5 46.4,43.2 C49,40.5 49.2,40.1 51.8,41 Z"/>
+            </g>
         </symbol>
-        <symbol id="av-beak" viewBox="0 0 64 64">
-            <path class="av-beak" d="M28.8,29 H35.2 L32,33.6 Z"/>
+        <symbol id="av-expression-bright" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="4.3"/>
+            <circle class="av-glint" cx="26.01" cy="27.57" r="1.29"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="4.3"/>
+            <circle class="av-glint" cx="41.61" cy="27.57" r="1.29"/>
         </symbol>
-        <symbol id="av-eyes" viewBox="0 0 64 64">
-            <circle class="av-cheek" cx="24.2" cy="25.5" r="5.4"/>
-            <circle class="av-cheek" cx="39.8" cy="25.5" r="5.4"/>
-            <circle class="av-eye" cx="24.2" cy="25.5" r="4.4"/>
-            <circle class="av-eye" cx="39.8" cy="25.5" r="4.4"/>
-            <circle class="av-glint" cx="25.6" cy="24.1" r="1.2"/>
-            <circle class="av-glint" cx="41.2" cy="24.1" r="1.2"/>
+        <symbol id="av-expression-sleepy" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="3.2"/>
+            <circle class="av-glint" cx="25.54" cy="28.06" r="0.96"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="3.2"/>
+            <circle class="av-glint" cx="41.14" cy="28.06" r="0.96"/>
+            <path class="av-cap" d="M16.61,29.8 A7.6,7.6 0 0 1 31.79,29.8 Z"/>
+            <path class="av-cap" d="M32.21,29.8 A7.6,7.6 0 0 1 47.39,29.8 Z"/>
+        </symbol>
+        <symbol id="av-expression-wink" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="4.3"/>
+            <circle class="av-glint" cx="25.7" cy="27.9" r="1.05"/>
+            <path class="av-lash" d="M36.2,29.5 Q39.8,32.7 43.4,29.5" fill="none" stroke-width="1.7" stroke-linecap="round"/>
+        </symbol>
+        <symbol id="av-expression-curious" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="3.3"/>
+            <circle class="av-glint" cx="25.59" cy="28.02" r="0.99"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="3.3"/>
+            <circle class="av-glint" cx="41.19" cy="28.02" r="0.99"/>
+            <path class="av-cap" d="M35.6,17.7 Q39.8,15.3 44,17.7 L44,19.3 Q39.8,16.9 35.6,19.3 Z"/>
+        </symbol>
+        <symbol id="av-expression-keen" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="3.1"/>
+            <circle class="av-glint" cx="25.5" cy="28.11" r="0.93"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="3.1"/>
+            <circle class="av-glint" cx="41.1" cy="28.11" r="0.93"/>
+            <path class="av-cap" d="M17,27.07 A7.6,7.6 0 0 1 31.4,27.07 Z"/>
+            <path class="av-cap" d="M32.6,27.07 A7.6,7.6 0 0 1 47,27.07 Z"/>
+            <path class="av-cap" d="M17.9,33.76 A7.6,7.6 0 0 0 30.5,33.76 Z"/>
+            <path class="av-cap" d="M33.5,33.76 A7.6,7.6 0 0 0 46.1,33.76 Z"/>
+        </symbol>
+        <symbol id="av-expression-startled" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="2.1"/>
+            <circle class="av-glint" cx="25.08" cy="28.55" r="0.8"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="2.1"/>
+            <circle class="av-glint" cx="40.68" cy="28.55" r="0.8"/>
+        </symbol>
+        <symbol id="av-accessory-none" viewBox="0 0 64 64">
+            <g/>
+        </symbol>
+        <symbol id="av-accessory-scarf" viewBox="0 0 64 64">
+            <path class="av-accent" d="M20.5,44.5 C25,48.6 39,48.6 43.5,44.5 C43.9,46.9 43.6,48.6 43,49.9 C38,53.4 26,53.4 21,49.9 C20.4,48.6 20.1,46.9 20.5,44.5 Z"/>
+            <path class="av-accent" d="M40.2,50.6 C42.6,51.6 44.2,53.6 45,56.4 C43.2,57.2 41.4,57.4 39.6,57 C39.2,54.6 39.4,52.4 40.2,50.6 Z"/>
+        </symbol>
+        <symbol id="av-accessory-headphones" viewBox="0 0 64 64">
+            <path class="av-gear" d="M9.4,34 A22.6,22.6 0 0 1 54.6,34 L51.8,34 A19.8,19.8 0 0 0 12.2,34 Z"/>
+            <rect class="av-gear" x="7.2" y="31.4" width="6.4" height="10.4" rx="3.2"/>
+            <rect class="av-gear" x="50.4" y="31.4" width="6.4" height="10.4" rx="3.2"/>
+        </symbol>
+        <symbol id="av-accessory-beanie" viewBox="0 0 64 64">
+            <path class="av-accent" d="M16.4,20.6 A15.6,15.6 0 0 1 47.6,20.6 Z"/>
+            <rect class="av-accent" x="15.2" y="19.4" width="33.6" height="3.4" rx="1.7"/>
+            <circle class="av-accent" cx="32" cy="4.2" r="2.7"/>
+        </symbol>
+        <symbol id="av-accessory-glasses" viewBox="0 0 64 64">
+            <circle class="av-gear-line" cx="24.2" cy="29.5" r="8.5" fill="none" stroke-width="1.6"/>
+            <circle class="av-gear-line" cx="39.8" cy="29.5" r="8.5" fill="none" stroke-width="1.6"/>
+            <path class="av-gear-line" d="M30.9,28.9 Q32,27.3 33.1,28.9" fill="none" stroke-width="1.6"/>
+        </symbol>
+        <symbol id="av-accessory-gradcap" viewBox="0 0 64 64">
+            <path class="av-gear" d="M32,10.4 L52,17.4 L32,24.4 L12,17.4 Z"/>
+            <path class="av-gear" d="M22,20.9 L22,27.4 C25.6,29.6 38.4,29.6 42,27.4 L42,20.9 L32,24.4 Z"/>
+            <path class="av-gear" d="M51,17.8 L51,26.4" fill="none" stroke-width="1.5"/>
+            <circle class="av-accent" cx="51" cy="27.6" r="2.1"/>
+        </symbol>
+        <symbol id="av-accessory-bowtie" viewBox="0 0 64 64">
+            <path class="av-accent" d="M31,48.6 L23.4,45.4 C22.6,47.8 22.6,51.4 23.4,53.8 L31,50.6 Z"/>
+            <path class="av-accent" d="M33,48.6 L40.6,45.4 C41.4,47.8 41.4,51.4 40.6,53.8 L33,50.6 Z"/>
+            <rect class="av-accent" x="30.4" y="47.6" width="3.2" height="4" rx="1.2"/>
+        </symbol>
+        <symbol id="av-accessory-bloom" viewBox="0 0 64 64">
+            <g transform="translate(46.4 16.6)"><ellipse class="av-accent" cx="0" cy="-3.9" rx="2.4" ry="3.7" transform="rotate(0)"/>
+            <ellipse class="av-accent" cx="0" cy="-3.9" rx="2.4" ry="3.7" transform="rotate(72)"/>
+            <ellipse class="av-accent" cx="0" cy="-3.9" rx="2.4" ry="3.7" transform="rotate(144)"/>
+            <ellipse class="av-accent" cx="0" cy="-3.9" rx="2.4" ry="3.7" transform="rotate(216)"/>
+            <ellipse class="av-accent" cx="0" cy="-3.9" rx="2.4" ry="3.7" transform="rotate(288)"/>
+            <circle class="av-bloom-eye" cx="0" cy="0" r="2.2"/>
+            </g>
         </symbol>
     </defs>
 </svg>

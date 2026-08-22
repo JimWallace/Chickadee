@@ -308,22 +308,21 @@ duplicate.
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.avatar`** (+ `.avatar-sm`) and the `.av-*` fill classes — the generated
-  student chickadee.  One `<svg>` carrying the size class wraps five `<use>`
-  elements naming symbols in `_avatar-sprite.leaf`; the parts carry `.av-cap`,
-  `.av-cheek`, `.av-flank`, `.av-wing`, `.av-wing-mark`, `.av-beak`, `.av-eye`,
-  `.av-glint`, `.av-backdrop`, each resolving to `fill: var(--av-*)`, and the
-  wrapper assigns those custom properties from the `--avatar-*` palette.  That
-  assignment is the sanctioned inline form; a `fill` attribute in the sprite
-  would be a colour outside the palette and would not follow dark mode.
+- **`.avatar`** and the `.av-*` fill classes — the generated student chickadee.
+  One `<svg>` carrying the size class wraps five `<use>` elements naming symbols
+  in `_avatar-sprite.leaf`: backdrop, plumage, wing, expression, accessory.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  `.avatar` carries a complete default palette so the
-  sprite renders correctly when a caller sets nothing.  Two sizes only: 3rem,
-  and `.avatar-sm` at 1.5rem — **reserved and currently unused**, for the dense
-  tables a leaderboard would bring, where the beak and wing marks stop being
-  separable.  That size limit is why a leaderboard names a student by their
-  handle and uses the bird for recognition rather than identification.  See
+  which no guard can catch.  Only four colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
+  which is the sanctioned form); the fixed parts of the bird — `.av-body`,
+  `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
+  `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  read the palette directly, because a body or a beak that varied would stop
+  the birds being one species.  **One size, 3rem.**  The bird earns its detail
+  at 48px and up; below that it is a smudge, and a small context wants a
+  monogram chip rather than a shrunken bird — which is also why a leaderboard
+  would name a student by their handle and use the bird for recognition.  See
   [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A

@@ -115,13 +115,15 @@ import VaporTesting
                     let html = res.body.string
                     #expect(html.contains("<symbol id=\"av-plumage\""), "sprite missing")
                     #expect(html.contains("class=\"avatar\""))
-                    for layer in ["#av-backdrop", "#av-plumage", "#av-beak", "#av-eyes"] {
+                    for layer in ["#av-backdrop", "#av-plumage"] {
                         #expect(html.contains("<use href=\"\(layer)\"/>"), "no \(layer) layer")
                     }
-                    // The wing is the interpolated one: a wing symbol must
-                    // appear and the interpolation must not survive as text.
-                    #expect(html.contains("<use href=\"#av-wing-"), "wing not interpolated")
-                    #expect(!html.contains("wingSymbolRef"), "interpolation survived as text")
+                    // The three varying layers are interpolated: each must
+                    // appear resolved, and no interpolation may survive as text.
+                    for family in ["#av-wing-", "#av-expression-", "#av-accessory-"] {
+                        #expect(html.contains("<use href=\"\(family)"), "\(family) not interpolated")
+                    }
+                    #expect(!html.contains("SymbolRef"), "interpolation survived as text")
                     #expect(!html.contains("href=\"\""), "a layer reference resolved to empty")
                     #expect(html.contains("--av-cap: var(--avatar-"))
                     // The monogram this replaced is gone, not merely hidden.

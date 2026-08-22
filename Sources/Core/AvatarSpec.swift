@@ -5,20 +5,32 @@
 // artifact — the short version is that re-deriving from a seed on every render
 // means appending one option to one slot reshuffles every existing avatar.
 
-/// The cap, bib and (via its family) the wing and beak.  The strongest identity
-/// signal at any size, which is why it is the widest slot.
+/// The cap and, via its family, the wing beside it.  The loudest axis, which is
+/// why it carries the least detail.
+///
+/// Body, cheek, beak and bib are NOT axes: they are fixed, and they are what
+/// keeps every bird a chickadee even when the cap goes plum.
 public enum AvatarCap: String, CaseIterable, Codable, Sendable {
     case slate, plum, forest, indigo, rust, teal, umber, ink
 }
 
-/// The two cheek patches, and the marks on a patterned wing.
-public enum AvatarCheek: String, CaseIterable, Codable, Sendable {
-    case snow, cream, ivory, mint
+/// How the bird looks out of the page — the axis that reads first and from
+/// furthest away.
+public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
+    case bright, sleepy, wink, curious, keen, startled
 }
 
-/// The belly the bird sits on.
-public enum AvatarFlank: String, CaseIterable, Codable, Sendable {
-    case sand, wheat, moss, mist, blush, stone
+/// Where the personality actually lives.  `none` is a real option, not an
+/// absence: most birds wear nothing.
+public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
+    case none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom
+}
+
+/// The colour an accessory is drawn in.  Part of the accessory axis rather
+/// than an axis of its own — the design counts it that way ("8 + 5 accents"),
+/// and the arithmetic only reaches 92,160 birds if it multiplies.
+public enum AvatarAccent: String, CaseIterable, Codable, Sendable {
+    case ember, orchid, lagoon, honey, moss
 }
 
 /// The disc behind the bird.  The one slot with a dark-mode mirror.
@@ -47,29 +59,35 @@ public enum AvatarWing: String, CaseIterable, Codable, Sendable {
 /// why uniqueness is carried by a per-course handle instead.
 public struct AvatarSpec: Codable, Sendable, Hashable {
     public var cap: AvatarCap
-    public var cheek: AvatarCheek
-    public var flank: AvatarFlank
-    public var backdrop: AvatarBackdrop
     public var wing: AvatarWing
+    public var expression: AvatarExpression
+    public var accessory: AvatarAccessory
+    /// The accessory's colour. Drawn even when `accessory` is `.none`, so
+    /// putting one on later does not need a second draw.
+    public var accent: AvatarAccent
+    public var backdrop: AvatarBackdrop
 
     public init(
         cap: AvatarCap,
-        cheek: AvatarCheek,
-        flank: AvatarFlank,
-        backdrop: AvatarBackdrop,
-        wing: AvatarWing
+        wing: AvatarWing,
+        expression: AvatarExpression,
+        accessory: AvatarAccessory,
+        accent: AvatarAccent,
+        backdrop: AvatarBackdrop
     ) {
         self.cap = cap
-        self.cheek = cheek
-        self.flank = flank
-        self.backdrop = backdrop
         self.wing = wing
+        self.expression = expression
+        self.accessory = accessory
+        self.accent = accent
+        self.backdrop = backdrop
     }
 
-    /// Every distinct bird the colour slots can produce.
+    /// Every distinct bird the five axes can produce.
     public static var combinationCount: Int {
-        AvatarCap.allCases.count * AvatarCheek.allCases.count * AvatarFlank.allCases.count
-            * AvatarBackdrop.allCases.count * AvatarWing.allCases.count
+        AvatarCap.allCases.count * AvatarWing.allCases.count * AvatarExpression.allCases.count
+            * AvatarAccessory.allCases.count * AvatarAccent.allCases.count
+            * AvatarBackdrop.allCases.count
     }
 }
 
@@ -104,13 +122,20 @@ extension AvatarSpec {
     ///   render path could reach for: re-deriving per render is what makes
     ///   appending an option reshuffle everybody, and a convenience for it
     ///   would be an invitation.
+    ///
+    ///   Nor is the seed ever an identifier.  A spec derived from a username
+    ///   is reproducible by anyone who knows the username, which would let any
+    ///   classmate compute a target's bird offline — private-looking and not
+    ///   private.  The stored value is drawn from the system RNG and has no
+    ///   connection to who the student is.
     public static func drawn<G: RandomNumberGenerator>(using generator: inout G) -> AvatarSpec {
         AvatarSpec(
             cap: pick(using: &generator),
-            cheek: pick(using: &generator),
-            flank: pick(using: &generator),
-            backdrop: pick(using: &generator),
-            wing: pick(using: &generator)
+            wing: pick(using: &generator),
+            expression: pick(using: &generator),
+            accessory: pick(using: &generator),
+            accent: pick(using: &generator),
+            backdrop: pick(using: &generator)
         )
     }
 

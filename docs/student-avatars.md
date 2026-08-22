@@ -87,30 +87,22 @@ they should be, since a cosmetic nobody had to unlock is just more art.
 enum slots. They split by what they cost, which is also the order they should
 ship in.
 
-**Colour slots — free variation, day one.** Each is a token choice over art that
-already exists once:
-
-| Slot | Options | Notes |
+| Axis | Options | Notes |
 |---|---|---|
-| `cap` | 8 | cap + bib family; the strongest identity signal at any size |
-| `cheek` | 4 | white through cream |
-| `flank` | 6 | belly and side tint |
-| `backdrop` | 8 | flat tint behind the bird |
-| `wing` | 6 | the one cheap geometry slot — plain, barred, tipped, speckled, edged, two-tone |
+| `cap` | 8 | ink, slate, teal, forest, indigo, plum, rust, umber — the loudest axis, so it carries the least detail; it also picks the wing colour |
+| `wing` | 6 | plain, barred, tipped, speckled, edged, twotone — symmetrical, both flanks from one drawing |
+| `expression` | 6 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away |
+| `accessory` | 8 × 5 accents | none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom |
+| `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts |
 
-≈9,200 combinations from roughly six drawn shapes.
+**8 × 6 × 6 × 8 × 5 × 8 = 92,160 distinct birds.** The accent multiplies: it is
+part of the accessory axis, which is why the design writes it "8 + 5 accents"
+and why 8 × 6 × 6 × 8 × 8 — 18,432 — is the wrong arithmetic.
 
-**Geometry slots — art cost, second act.** Each is a new drawn part per option:
-
-| Slot | Options | Notes |
-|---|---|---|
-| `eye` | 5 | round, bright, sleepy, wide, wink |
-| `beak` | 3 | short, stout, fine |
-| `tuft` | 5 | smooth, tufted, cowlick, side-sweep, ruffled |
-| `accessory` | 12 | including none — scarf, glasses, headphones, leaf, small hat |
-
-Together ≈8.3M, but the number is not the point and 9,200 is already more than a
-course can exhaust. The exact tables are a design exercise, not a commitment.
+**Body, cheek, beak and bib are NOT axes.** They are fixed, and they are what
+keeps every bird a chickadee even when the cap goes plum. Cheek and flank were
+axes in the first cut and stopped being them in the design pass: variation that
+reaches the species read buys difference at the cost of family.
 
 What matters is that the **stored artifact is the choice vector**, never rendered
 bytes. Everything downstream follows: customization is mutating a slot, an unlock
@@ -334,10 +326,11 @@ bird. The fix is topological: the cap wraps **down the sides** of the head and
 the cheeks are two discrete patches punched into it, so no white ever reaches
 the outline. That is also what the real bird looks like.
 
-**The colour slots yield 9,216 birds** — 8 cap families × 4 cheeks × 6 flanks ×
-8 backdrops × 6 wing patterns — against the ~9,200 this note estimated before
-any of it was drawn. Six wing patterns ship, so the second act owes only the
-geometry slots.
+**The first cut yielded 9,216 birds** from colour alone — 8 caps × 4 cheeks × 6
+flanks × 8 backdrops × 6 wings. The design pass replaced cheek and flank with
+expression and accessory and took it to 92,160, which is the better trade: a
+varying cheek changes what species the bird is, while an expression changes who
+it is.
 
 **Only the backdrops have dark-mode mirrors.** A pale disc behind the bird
 glares on a dark page; the bird itself must be the same bird in both schemes, so
@@ -391,7 +384,7 @@ a second copy of the palette.
 Those seven `--av-*` properties are on the inline-custom-property allowlist in
 `check-styles.sh`, alongside `--bar-h`, and for the same stated reason: each
 carries a value that varies per **datum** — the student being rendered — which
-no stylesheet can hold and no modifier class could enumerate 9,216 of.
+no stylesheet can hold and no modifier class could enumerate 92,160 of.
 
 **A standalone SVG** (an `<img>` src, a download, an email) is a different
 function and is not written. It cannot reference the sprite or the stylesheet, so
@@ -471,6 +464,34 @@ so 1,000 for 200 rows.
   first slice, and the audit's "opt-in" note suggests a per-student opt-out is
   worth pricing too.
 
+### 9. What the design pass changed, and the two calls it did not get
+
+A design pass arrived after the first cut shipped. Most of it is now the
+feature: cheek and flank stopped being axes, expression and accessory became
+them, the palette moved to the design's values, and the count went from 9,216 to
+92,160. Two points were decided against the design, both deliberately.
+
+**The seed is not an identity.** The design specified "real usernames hashed →
+five indices; the same ID always returns the same bird". That is the failure
+decision 2 exists to prevent: a bird derived from a username is reproducible by
+anyone who knows the username, so a classmate can compute a target's avatar
+offline and de-anonymise a leaderboard in one step. It looks private and is not.
+The stored value is drawn from the system RNG and has no connection to who the
+student is — which is also what makes a re-roll possible later, since there is
+no identity to re-derive from. The visual result is identical; only the
+derivation differs.
+
+**The wings stay symmetrical.** The design specified "a single folded wing on
+one flank, never a symmetric pair". At avatar sizes the asymmetric version reads
+as a bird turning away, and the maintainer had already chosen the mirrored pair
+for that reason. It stays a pair. The count is unaffected either way, since it
+is the same six patterns.
+
+**One consequence still owed:** the design's size floor — "the bird earns its
+detail at 48px and up; below that the monogram chip takes over". `.avatar-sm`
+was removed for that reason, since a 24px bird is a smudge. Nothing renders one
+that small today, so the chip belongs to the slice that first needs it.
+
 ---
 
 ## Changing the art
@@ -520,7 +541,7 @@ Each slice is independently mergeable and independently useful.
   backfill: nobody needs an avatar until a page renders one.
 - **S2 — the account page, colour slots only.** The drawing half is **done**:
   eleven symbols, the `--avatar-*` tokens with dark mirrors, the
-  component-vocabulary entry, and the contact-sheet tool. 9,216 birds. What
+  component-vocabulary entry, and the contact-sheet tool. 92,160 birds. What
   the wiring is done too: `_avatar.leaf` takes an `AvatarPresentation`
   sub-context and the monogram is gone — the helper, the CSS, its
   component-vocabulary entry and its tests with it. Still owed: a

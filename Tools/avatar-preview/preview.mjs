@@ -25,36 +25,45 @@ const tokens = (prefix, suffix = '') =>
     .map(m => m[1]))]
 
 const caps = tokens('', '-cap')
-const cheeks = tokens('cheek-')
-const flanks = tokens('flank-')
+const accents = tokens('accent-')
 const backs = tokens('back-')
-const wings = [...sprite.matchAll(/id="av-wing-([a-z]+)"/g)].map(m => m[1])
+const sym = (family) =>
+  [...sprite.matchAll(new RegExp(`id="av-${family}-([a-z]+)"`, 'g'))].map(m => m[1])
+const wings = sym('wing')
+const expressions = sym('expression')
+const accessories = sym('accessory')
 
-const style = (cap, cheek, flank, back) =>
+const style = (cap, accent, back) =>
   `--av-cap:var(--avatar-${cap}-cap);--av-wing:var(--avatar-${cap}-wing);` +
-  `--av-beak:var(--avatar-${cap}-beak);--av-cheek:var(--avatar-cheek-${cheek});` +
-  `--av-wing-mark:var(--avatar-cheek-${cheek});--av-flank:var(--avatar-flank-${flank});` +
-  `--av-backdrop:var(--avatar-back-${back})`
+  `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back})`
 
-const bird = (size, wing, cap, cheek, flank, back, cls = '') =>
-  `<svg class="avatar ${cls}" style="${style(cap, cheek, flank, back)};width:${size}px;height:${size}px"
+const bird = (size, { cap, wing, expression, accessory, accent, back }) =>
+  `<svg class="avatar" style="${style(cap, accent, back)};width:${size}px;height:${size}px"
         viewBox="0 0 64 64" role="img" aria-label="chickadee avatar">
      <use href="#av-backdrop"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
-     <use href="#av-beak"/><use href="#av-eyes"/></svg>`
+     <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></svg>`
 
 const label = (t, inner) => `<figure><div>${inner}</div><figcaption>${t}</figcaption></figure>`
 const at = (list, i) => list[i % list.length]
+const base = { cap: 'teal', wing: 'barred', expression: 'bright', accessory: 'none',
+               accent: 'ember', back: 'aqua' }
 
 const sections = [
-  ['Cap families (wing pattern varies)', caps.map((c, i) =>
-    label(c, bird(96, at(wings, i), c, at(cheeks, i), at(flanks, i), at(backs, i))))],
-  ['Wing patterns (one cap family)', wings.map(w =>
-    label(w, bird(96, w, 'slate', 'snow', 'sand', 'sky')))],
-  ['Cheeks', cheeks.map(k => label(k, bird(72, 'plain', 'ink', k, 'stone', 'pebble')))],
-  ['Flanks', flanks.map(k => label(k, bird(72, 'plain', 'umber', 'cream', k, 'straw')))],
-  ['Backdrops', backs.map(k => label(k, bird(72, 'edged', 'teal', 'snow', 'mist', k)))],
-  ['At size', [96, 64, 48, 40, 32, 24, 20, 16].map((s, i) =>
-    label(`${s}px`, bird(s, at(wings, i), at(caps, i), 'snow', 'sand', 'sky')))],
+  ['Cap — the loudest axis, so it carries the least detail', caps.map((cap, i) =>
+    label(cap, bird(88, { ...base, cap, wing: at(wings, i) })))],
+  ['Wing pattern — symmetrical, both flanks from one drawing', wings.map(wing =>
+    label(wing, bird(88, { ...base, wing })))],
+  ['Expression — reads first and from furthest away', expressions.map(expression =>
+    label(expression, bird(88, { ...base, expression, wing: 'plain' })))],
+  ['Accessory — where the personality lives', accessories.map((accessory, i) =>
+    label(accessory, bird(88, { ...base, accessory, accent: at(accents, i), cap: 'slate',
+                                back: 'straw' })))],
+  ['Accent — the accessory\'s colour', accents.map(accent =>
+    label(accent, bird(88, { ...base, accessory: 'scarf', accent, back: 'straw' })))],
+  ['Backdrop — all near the same lightness so no bird shouts', backs.map(back =>
+    label(back, bird(88, { ...base, cap: 'ink', back })))],
+  ['At size — the bird earns its detail at 48px and up', [96, 64, 48, 40, 32, 24].map((s, i) =>
+    label(`${s}px`, bird(s, { ...base, cap: at(caps, i), accessory: 'scarf', back: 'rose' })))],
 ]
 
 process.stdout.write(`<!doctype html><meta charset="utf-8">
@@ -68,8 +77,10 @@ process.stdout.write(`<!doctype html><meta charset="utf-8">
  figcaption{margin-top:4px;color:var(--muted);font-size:11px}
 </style>
 ${sprite}
-<h1 style="font-size:16px">Chickadee avatars — ${caps.length} caps &times; ${cheeks.length} cheeks
-&times; ${flanks.length} flanks &times; ${backs.length} backdrops &times; ${wings.length} wings
-= ${caps.length * cheeks.length * flanks.length * backs.length * wings.length} birds</h1>
+<h1 style="font-size:16px">Chickadee avatars — ${caps.length} caps &times; ${wings.length} wings
+&times; ${expressions.length} expressions &times; ${accessories.length} accessories in
+${accents.length} accents &times; ${backs.length} backdrops =
+${(caps.length * wings.length * expressions.length * accessories.length * accents.length * backs.length).toLocaleString()}
+distinct birds</h1>
 ${sections.map(([t, cells]) => `<h2>${t}</h2><div class="sheet">${cells.join('')}</div>`).join('')}
 `)

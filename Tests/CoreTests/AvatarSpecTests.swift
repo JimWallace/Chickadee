@@ -25,28 +25,34 @@ import Testing
     /// simply never see that bird — so it is asserted rather than eyeballed.
     @Test func everyOptionOfEverySlotIsDrawable() {
         var caps: Set<AvatarCap> = []
-        var cheeks: Set<AvatarCheek> = []
-        var flanks: Set<AvatarFlank> = []
-        var backdrops: Set<AvatarBackdrop> = []
         var wings: Set<AvatarWing> = []
+        var expressions: Set<AvatarExpression> = []
+        var accessories: Set<AvatarAccessory> = []
+        var accents: Set<AvatarAccent> = []
+        var backdrops: Set<AvatarBackdrop> = []
         for seed in 0..<4_000 as Range<UInt64> {
             let spec = AvatarSpec.drawn(fromSeed: seed)
             caps.insert(spec.cap)
-            cheeks.insert(spec.cheek)
-            flanks.insert(spec.flank)
-            backdrops.insert(spec.backdrop)
             wings.insert(spec.wing)
+            expressions.insert(spec.expression)
+            accessories.insert(spec.accessory)
+            accents.insert(spec.accent)
+            backdrops.insert(spec.backdrop)
         }
         #expect(caps.count == AvatarCap.allCases.count)
-        #expect(cheeks.count == AvatarCheek.allCases.count)
-        #expect(flanks.count == AvatarFlank.allCases.count)
-        #expect(backdrops.count == AvatarBackdrop.allCases.count)
         #expect(wings.count == AvatarWing.allCases.count)
+        #expect(expressions.count == AvatarExpression.allCases.count)
+        #expect(accessories.count == AvatarAccessory.allCases.count)
+        #expect(accents.count == AvatarAccent.allCases.count)
+        #expect(backdrops.count == AvatarBackdrop.allCases.count)
     }
 
     @Test func combinationCountMatchesTheSlots() {
-        #expect(AvatarSpec.combinationCount == 8 * 4 * 6 * 8 * 6)
-        #expect(AvatarSpec.combinationCount == 9_216)
+        // The five axes the design specifies: 8 caps, 6 wings, 6 expressions,
+        // 8 accessories in 5 accents, 8 backdrops. The accent multiplies —
+        // 8*6*6*8*8 is 18,432, and the design's own header says 92,160.
+        #expect(AvatarSpec.combinationCount == 8 * 6 * 6 * 8 * 5 * 8)
+        #expect(AvatarSpec.combinationCount == 92_160)
     }
 
     @Test func specRoundTripsThroughJSON() throws {
@@ -61,23 +67,28 @@ import Testing
     // MARK: - Presentation
 
     @Test func aBirdIsFiveLayersInOrder() {
-        let spec = AvatarSpec(cap: .plum, cheek: .snow, flank: .sand, backdrop: .sky, wing: .barred)
+        let spec = AvatarSpec(
+            cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
+            backdrop: .sky)
         #expect(
             AvatarMarkup.layerSymbolIDs(for: spec) == [
-                "av-backdrop", "av-plumage", "av-wing-barred", "av-beak", "av-eyes",
+                "av-backdrop", "av-plumage", "av-wing-barred", "av-expression-wink",
+                "av-accessory-scarf",
             ])
     }
 
     @Test func presentationNamesTheSpecsTokens() {
-        let spec = AvatarSpec(cap: .teal, cheek: .mint, flank: .moss, backdrop: .sage, wing: .edged)
+        let spec = AvatarSpec(
+            cap: .teal, wing: .edged, expression: .keen, accessory: .glasses, accent: .lagoon,
+            backdrop: .sage)
         let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
         #expect(p.capToken == "--avatar-teal-cap")
         #expect(p.wingToken == "--avatar-teal-wing")
-        #expect(p.beakToken == "--avatar-teal-beak")
-        #expect(p.cheekToken == "--avatar-cheek-mint")
-        #expect(p.flankToken == "--avatar-flank-moss")
         #expect(p.backdropToken == "--avatar-back-sage")
+        #expect(p.accentToken == "--avatar-accent-lagoon")
         #expect(p.wingSymbolRef == "#av-wing-edged")
+        #expect(p.expressionSymbolRef == "#av-expression-keen")
+        #expect(p.accessorySymbolRef == "#av-accessory-glasses")
         #expect(p.sizeClass == "avatar")
         // No literal colour ever reaches a template.
         #expect(!p.tokens.contains { $0.contains("#") })
@@ -90,10 +101,9 @@ import Testing
         #expect(plain.label.isEmpty)
 
         let named = AvatarPresentation(
-            for: spec, size: .small, accessibility: .labelled("Quiet Cedar"))
+            for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"))
         #expect(named.isLabelled)
         #expect(named.label == "Quiet Cedar")
-        #expect(named.sizeClass == "avatar avatar-sm")
     }
 
     // MARK: - Drift against the files that own the art
@@ -119,13 +129,25 @@ import Testing
         for wing in AvatarWing.allCases {
             #expect(declared.contains("av-wing-\(wing.rawValue)"), "sprite has no art for \(wing)")
         }
+        for family in ["expression", "accessory"] {
+            let cases: [String] =
+                family == "expression"
+                ? AvatarExpression.allCases.map(\.rawValue)
+                : AvatarAccessory.allCases.map(\.rawValue)
+            let inSprite = Set(
+                declared.filter { $0.hasPrefix("av-\(family)-") }
+                    .map { String($0.dropFirst("av-\(family)-".count)) })
+            #expect(
+                inSprite == Set(cases),
+                "sprite \(family)s \(inSprite.sorted()) do not match the enum")
+        }
         let spriteWings = Set(
-            declared.filter { $0.hasPrefix("av-wing-") }.map { String($0.dropFirst("av-wing-".count)) })
+            declared.filter { $0.hasPrefix("av-wing-") }
+                .map { String($0.dropFirst("av-wing-".count)) })
         #expect(
             spriteWings == Set(AvatarWing.allCases.map(\.rawValue)),
             "sprite wings \(spriteWings.sorted()) do not match AvatarWing")
-
-        for symbol in ["av-backdrop", "av-plumage", "av-beak", "av-eyes"] {
+        for symbol in ["av-backdrop", "av-plumage"] {
             #expect(declared.contains(symbol), "sprite is missing \(symbol)")
         }
     }
@@ -139,14 +161,20 @@ import Testing
     @Test func partialStacksTheModelsLayers() throws {
         let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
         let refs = Self.attributeValues(in: partial, attribute: "href")
-        let spec = AvatarSpec(cap: .ink, cheek: .snow, flank: .sand, backdrop: .sky, wing: .plain)
+        let spec = AvatarSpec(
+            cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
+            backdrop: .sky)
         let presentation = AvatarPresentation(
             for: spec, size: .standard, accessibility: .decorative)
-        let expected = AvatarMarkup.layerSymbolIDs(for: spec)
-            .enumerated()
-            .map { index, id in index == 2 ? "#(wingSymbolRef)" : "#" + id }
+        // The three varying layers are interpolated; the two fixed ones are
+        // literal fragments.
+        let expected = [
+            "#av-backdrop", "#av-plumage", "#(wingSymbolRef)", "#(expressionSymbolRef)",
+            "#(accessorySymbolRef)",
+        ]
         #expect(refs == expected, "partial layers \(refs) do not match the model's")
         // And the interpolated one really is the wing, marker included.
+        #expect(presentation.layerRefs.count == 5)
         #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[2])
     }
 
@@ -160,10 +188,7 @@ import Testing
     /// the guard passes on exactly the drift it exists to catch.
     @Test func partialAssignsEveryPresentationPropertyInBothBranches() throws {
         let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let properties = [
-            "--av-cap", "--av-wing", "--av-beak", "--av-cheek", "--av-wing-mark",
-            "--av-flank", "--av-backdrop",
-        ]
+        let properties = ["--av-cap", "--av-wing", "--av-accent", "--av-backdrop"]
         let branches = partial.components(separatedBy: "#else:")
         #expect(branches.count == 2, "the partial no longer has two announce branches")
         for property in properties {
@@ -173,7 +198,7 @@ import Testing
         // Flat field names, not `avatar.capToken`: the sub-context form makes
         // the presentation this partial's root. Qualifying them resolves to
         // empty, silently — a bird with no colours that still returns 200.
-        for field in ["capToken", "wingToken", "beakToken", "cheekToken", "flankToken", "backdropToken"] {
+        for field in ["capToken", "wingToken", "accentToken", "backdropToken"] {
             #expect(partial.contains("#(\(field))"), "partial never reads \(field)")
             #expect(!partial.contains("avatar.\(field)"), "\(field) is qualified; it will resolve empty")
         }
@@ -189,18 +214,19 @@ import Testing
         // Built from what a presentation can actually NAME, over every spec the
         // slots can produce — not from a hand-written list, which would be a
         // third spelling of the palette and the thing most likely to drift.
-        var expected: Set<String> = ["--avatar-eye", "--avatar-glint"]
+        var expected: Set<String> = [
+            "--avatar-body", "--avatar-bib", "--avatar-beak", "--avatar-eyewhite",
+            "--avatar-eye", "--avatar-glint", "--avatar-gear",
+        ]
         for cap in AvatarCap.allCases {
-            for cheek in AvatarCheek.allCases {
-                for flank in AvatarFlank.allCases {
-                    for backdrop in AvatarBackdrop.allCases {
-                        let spec = AvatarSpec(
-                            cap: cap, cheek: cheek, flank: flank, backdrop: backdrop, wing: .plain)
-                        expected.formUnion(
-                            AvatarPresentation(
-                                for: spec, size: .standard, accessibility: .decorative
-                            ).tokens)
-                    }
+            for accent in AvatarAccent.allCases {
+                for backdrop in AvatarBackdrop.allCases {
+                    let spec = AvatarSpec(
+                        cap: cap, wing: .plain, expression: .bright, accessory: .none,
+                        accent: accent, backdrop: backdrop)
+                    expected.formUnion(
+                        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+                            .tokens)
                 }
             }
         }

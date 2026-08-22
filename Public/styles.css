@@ -97,45 +97,45 @@
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
 
     /* ── Avatar palette (generated student chickadees) ────
-       Eight cap families, each a triple: the cap/bib/tail colour, the folded
-       wing beside it, and the beak.  The beak is deliberately the lightest of
-       the three — a beak drawn in the cap colour sits on the bib and vanishes,
-       which is the one legibility trap in the whole bird.
-       Cheeks, flanks and backdrops are independent slots.  Only the BACKDROPS
-       have dark-mode mirrors: the bird itself must look like the same bird in
-       both schemes, so its own colours never change. */
-    --avatar-slate-cap: #2F3338;  --avatar-slate-wing: #4A5158;  --avatar-slate-beak: #9AA2AB;
-    --avatar-plum-cap: #4E2F46;   --avatar-plum-wing: #7A5570;   --avatar-plum-beak: #B98FAC;
-    --avatar-forest-cap: #20463C; --avatar-forest-wing: #356356; --avatar-forest-beak: #8FB3A6;
-    --avatar-indigo-cap: #2E3563; --avatar-indigo-wing: #47508A; --avatar-indigo-beak: #99A0CE;
-    --avatar-rust-cap: #6E3520;   --avatar-rust-wing: #A45A33;   --avatar-rust-beak: #D8A97F;
-    --avatar-teal-cap: #16414B;   --avatar-teal-wing: #24707F;   --avatar-teal-beak: #7FB4BE;
-    --avatar-umber-cap: #4A3826;  --avatar-umber-wing: #7A6142;  --avatar-umber-beak: #C0A47C;
-    --avatar-ink-cap: #24262E;    --avatar-ink-wing: #3E4250;    --avatar-ink-beak: #8E93A3;
+       Five axes vary: cap family, wing pattern, expression, accessory,
+       backdrop.  Everything else is FIXED — body, cheek, beak, bib, eye — and
+       that is deliberate: they are what keeps every bird a chickadee even when
+       the cap goes plum.  Only the BACKDROPS have dark-mode mirrors; the bird
+       itself must be the same bird in both schemes.
+       An accessory is drawn in one of five accents, picked by cap family, so
+       an accent is never a sixth axis. */
+    --avatar-ink-cap: #2B2F3A;      --avatar-ink-wing: #454B5E;
+    --avatar-slate-cap: #3A4550;    --avatar-slate-wing: #556372;
+    --avatar-teal-cap: #1D5560;     --avatar-teal-wing: #2F7F8C;
+    --avatar-forest-cap: #2B4A35;   --avatar-forest-wing: #436B4E;
+    --avatar-indigo-cap: #3A3F6B;   --avatar-indigo-wing: #565D95;
+    --avatar-plum-cap: #5A3550;     --avatar-plum-wing: #7D5071;
+    --avatar-rust-cap: #7A3F24;     --avatar-rust-wing: #A55F38;
+    --avatar-umber-cap: #5A4630;    --avatar-umber-wing: #836B4A;
 
-    --avatar-cheek-snow: #FDFDFB;
-    --avatar-cheek-cream: #FFF8EC;
-    --avatar-cheek-ivory: #F7F1E4;
-    --avatar-cheek-mint: #F1F8F3;
+    --avatar-accent-ember: #C2523F;
+    --avatar-accent-orchid: #7A4A86;
+    --avatar-accent-lagoon: #2F7F8C;
+    --avatar-accent-honey: #D79A2B;
+    --avatar-accent-moss: #4A6B3A;
 
-    --avatar-flank-sand: #E7D8C3;
-    --avatar-flank-wheat: #F0E2C4;
-    --avatar-flank-moss: #DBE4CA;
-    --avatar-flank-mist: #CFD6EA;
-    --avatar-flank-blush: #F2DED0;
-    --avatar-flank-stone: #DCDCD6;
+    --avatar-back-sky: #DBE9EE;
+    --avatar-back-aqua: #D9ECE8;
+    --avatar-back-sage: #DFEADD;
+    --avatar-back-straw: #F2E9D2;
+    --avatar-back-peach: #F7E3D6;
+    --avatar-back-rose: #F4DFE2;
+    --avatar-back-lilac: #E6E2F0;
+    --avatar-back-pebble: #E6E6E2;
 
-    --avatar-back-sky: #DCE7EC;
-    --avatar-back-rose: #EFE0E8;
-    --avatar-back-sage: #D9E8DD;
-    --avatar-back-lilac: #E6E2F2;
-    --avatar-back-peach: #F6E3D4;
-    --avatar-back-aqua: #D7EAEE;
-    --avatar-back-straw: #F1E7CC;
-    --avatar-back-pebble: #E4E4E0;
-
-    --avatar-eye: #241F1C;
+    /* Fixed, every bird: the chickadee under the variation. */
+    --avatar-body: #F6EFE2;
+    --avatar-bib: #3C4250;
+    --avatar-beak: #E2A33C;
+    --avatar-eyewhite: #FFFFFF;
+    --avatar-eye: #22242C;
     --avatar-glint: #FFFFFF;
+    --avatar-gear: #33363F;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -182,12 +182,12 @@
         /* Avatar backdrops only — see the palette note above.  A pale disc
            behind the bird glares on a dark page; the bird does not. */
         --avatar-back-sky: #2A3A42;
-        --avatar-back-rose: #3B2C35;
-        --avatar-back-sage: #26362C;
-        --avatar-back-lilac: #2E2B3D;
-        --avatar-back-peach: #3E2F25;
         --avatar-back-aqua: #23383D;
+        --avatar-back-sage: #26362C;
         --avatar-back-straw: #3A3529;
+        --avatar-back-peach: #3E2F25;
+        --avatar-back-rose: #3B2C35;
+        --avatar-back-lilac: #2E2B3D;
         --avatar-back-pebble: #32332F;
         /* --border inherits dark-mode --gray-200 automatically */
     }
@@ -2616,15 +2616,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .account-identity .text-muted { font-size: var(--text-sm); }
 
-/* The generated student chickadee.  One svg carrying this class wraps the
-   five use elements that stack into a bird (see _avatar-sprite.leaf); the
-   spec picks the colours by assigning palette tokens to the --av-* custom
+/* The generated student chickadee.  One svg carrying the size class wraps the
+   five use elements that stack into a bird (see _avatar-sprite.leaf); the spec
+   picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
-   The defaults below are a complete bird on their own, so the sprite renders
-   correctly anywhere a caller sets nothing — a preview sheet, a page that
-   forgets one slot — instead of falling back to black, which is what an
-   unresolved fill would do. */
+   Only four properties are per-student: the fixed parts of the bird read their
+   colours straight from the palette, because a body or a beak that varied
+   would stop the birds being one species. */
 .avatar {
     display: block;
     flex: none;
@@ -2634,29 +2633,25 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     overflow: hidden;
     --av-cap: var(--avatar-slate-cap);
     --av-wing: var(--avatar-slate-wing);
-    --av-beak: var(--avatar-slate-beak);
-    --av-cheek: var(--avatar-cheek-snow);
-    --av-wing-mark: var(--avatar-cheek-snow);
-    --av-flank: var(--avatar-flank-sand);
+    --av-accent: var(--avatar-accent-ember);
     --av-backdrop: var(--avatar-back-sky);
-    --av-eye: var(--avatar-eye);
-    --av-glint: var(--avatar-glint);
 }
-
-/* The dense-table size.  Beak, bib and wing marks stop being separable around
-   here, which is why a leaderboard identifies a student by their handle and
-   uses the bird only for recognition. */
-.avatar-sm { width: 1.5rem; height: 1.5rem; }
 
 .av-backdrop { fill: var(--av-backdrop); }
 .av-cap { fill: var(--av-cap); }
-.av-cheek { fill: var(--av-cheek); }
-.av-flank { fill: var(--av-flank); }
 .av-wing { fill: var(--av-wing); }
-.av-wing-mark { fill: var(--av-wing-mark); }
-.av-beak { fill: var(--av-beak); }
-.av-eye { fill: var(--av-eye); }
-.av-glint { fill: var(--av-glint); }
+.av-accent { fill: var(--av-accent); }
+.av-body { fill: var(--avatar-body); }
+.av-bib { fill: var(--avatar-bib); }
+.av-beak { fill: var(--avatar-beak); }
+.av-eyewhite { fill: var(--avatar-eyewhite); }
+.av-pupil { fill: var(--avatar-eye); }
+.av-glint { fill: var(--avatar-glint); }
+.av-wing-mark { fill: var(--avatar-body); }
+.av-lash { fill: none; stroke: var(--avatar-eye); }
+.av-gear { fill: var(--avatar-gear); }
+.av-gear-line { fill: none; stroke: var(--avatar-gear); }
+.av-bloom-eye { fill: var(--avatar-beak); }
 
 /* The drop zone's upload glyph. A descendant selector rather than a class of
    its own: it is one rule serving one existing component, and a new global
