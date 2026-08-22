@@ -1,0 +1,35 @@
+<!-- One generated student chickadee.
+
+     Rendered from an AvatarPresentation passed as a SUB-CONTEXT
+     (Core/AvatarMarkup.swift). The sub-context form makes the passed object
+     this partial's root, so its fields are addressed flat here - qualifying
+     them with the caller's field name yields empty strings, silently, and a
+     bird with no colours and no wing still renders and still returns 200.
+     which carries palette TOKEN NAMES rather than colours and the wing symbol
+     rather than any geometry. The five use elements below are the whole bird,
+     back to front; their symbols live in the avatar sprite partial, which the
+     page must also include - once per page, not once per bird.
+
+     The style attribute is a list of custom-property assignments and nothing
+     else, which is what keeps it inside the inline-style allowlist. Note the
+     cheek token appears twice on purpose: the marks on a patterned wing take
+     the cheek colour so a pattern reads against any cap family.
+
+     A page shows a bird beside a handle or a name most of the time, in which
+     case it is decorative and the text beside it carries the identity. Where
+     the bird stands alone it must announce whose it is, which is what the
+     labelled branch is for. The caller decides, because only the caller can
+     see what is next to it. -->
+#if(isLabelled):
+<svg class="#(sizeClass)" viewBox="0 0 64 64" role="img" aria-label="#(label)"
+     style="--av-cap: var(#(capToken)); --av-wing: var(#(wingToken)); --av-beak: var(#(beakToken)); --av-cheek: var(#(cheekToken)); --av-wing-mark: var(#(cheekToken)); --av-flank: var(#(flankToken)); --av-backdrop: var(#(backdropToken))">
+#else:
+<svg class="#(sizeClass)" viewBox="0 0 64 64" aria-hidden="true"
+     style="--av-cap: var(#(capToken)); --av-wing: var(#(wingToken)); --av-beak: var(#(beakToken)); --av-cheek: var(#(cheekToken)); --av-wing-mark: var(#(cheekToken)); --av-flank: var(#(flankToken)); --av-backdrop: var(#(backdropToken))">
+#endif
+    <use href="#av-backdrop"/>
+    <use href="#av-plumage"/>
+    <use href="#(wingSymbolRef)"/>
+    <use href="#av-beak"/>
+    <use href="#av-eyes"/>
+</svg>

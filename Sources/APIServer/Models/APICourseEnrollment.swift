@@ -45,6 +45,17 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "role")
     var roleRaw: String?
 
+    /// This student's pseudonym in this course — "Quiet Cedar".
+    ///
+    /// Per (user, course) rather than per user: it is what makes uniqueness
+    /// enforceable at enrollment time, and it keeps a student unlinkable across
+    /// two courses' leaderboards. Unique within a course by
+    /// `idx_enrollments_course_handle`, which excludes NULL so rows can be
+    /// created before a handle is assigned. Materialized lazily by
+    /// `AvatarStore.ensureHandle`.
+    @OptionalField(key: "avatar_handle")
+    var avatarHandle: String?
+
     /// LEARN grade-sync readiness for this (student, course): whether the
     /// roster-readiness sweep has confirmed we can deliver this student's grade
     /// to the course's LEARN classlist. Stored as `LearnSyncReadiness.rawValue`;

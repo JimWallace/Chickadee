@@ -303,15 +303,11 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
-- **`.account-identity`** — the account page's identity header: the monogram
-  circle, the resolved name beside it, and the username under that.  The name
+- **`.account-identity`** — the account page's identity header: the student's
+  `.avatar`, the resolved name beside it, and the username under that.  The name
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.account-monogram`** — the account page's identity circle, carrying one
-  or two initials on `--success-bg`/`--success-fg`.  Initials rather than a
-  photo because no claim in play releases one; the circle is sized so an
-  `<img>` can replace the text without a rule change if that ever changes.
 - **`.avatar`** (+ `.avatar-sm`) and the `.av-*` fill classes — the generated
   student chickadee.  One `<svg class="avatar">` wraps five `<use>` elements
   naming symbols in `_avatar-sprite.leaf`; the parts carry `.av-cap`,

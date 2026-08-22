@@ -471,4 +471,8 @@ func registerMigrations(on app: Application) {
     // `test_setups` has already run (the #1077 boot-order hazard, inverted —
     // here the model query is the late one rather than the column).
     app.migrations.add(BackfillDeclaredLanguage())
+
+    // Generated student avatars: the spec column, the per-course handle, and
+    // the partial unique index that makes lazy materialization safe.
+    app.migrations.add(AddAvatarIdentity())
 }

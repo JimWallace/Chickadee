@@ -58,7 +58,7 @@ import Testing
         #expect(json.contains(spec.cap.rawValue))
     }
 
-    // MARK: - Markup
+    // MARK: - Presentation
 
     @Test func aBirdIsFiveLayersInOrder() {
         let spec = AvatarSpec(cap: .plum, cheek: .snow, flank: .sand, backdrop: .sky, wing: .barred)
@@ -68,40 +68,32 @@ import Testing
             ])
     }
 
-    @Test func customPropertiesNameTheSpecsTokens() {
+    @Test func presentationNamesTheSpecsTokens() {
         let spec = AvatarSpec(cap: .teal, cheek: .mint, flank: .moss, backdrop: .sage, wing: .edged)
-        let css = AvatarMarkup.customProperties(for: spec)
-        #expect(css.contains("--av-cap: var(--avatar-teal-cap)"))
-        #expect(css.contains("--av-wing: var(--avatar-teal-wing)"))
-        #expect(css.contains("--av-beak: var(--avatar-teal-beak)"))
-        #expect(css.contains("--av-cheek: var(--avatar-cheek-mint)"))
-        #expect(css.contains("--av-flank: var(--avatar-flank-moss)"))
-        #expect(css.contains("--av-backdrop: var(--avatar-back-sage)"))
-        // Wing marks take the cheek colour, so a patterned wing reads against
-        // any cap family without a slot of its own.
-        #expect(css.contains("--av-wing-mark: var(--avatar-cheek-mint)"))
-        // No literal colour ever reaches the markup.
-        #expect(!css.contains("#"))
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        #expect(p.capToken == "--avatar-teal-cap")
+        #expect(p.wingToken == "--avatar-teal-wing")
+        #expect(p.beakToken == "--avatar-teal-beak")
+        #expect(p.cheekToken == "--avatar-cheek-mint")
+        #expect(p.flankToken == "--avatar-flank-moss")
+        #expect(p.backdropToken == "--avatar-back-sage")
+        #expect(p.wingSymbolRef == "#av-wing-edged")
+        #expect(p.sizeClass == "avatar")
+        // No literal colour ever reaches a template.
+        #expect(!p.tokens.contains { $0.contains("#") })
     }
 
-    @Test func inlineSVGIsDecorativeByDefaultAndLabelledOnRequest() {
+    @Test func presentationIsDecorativeOrLabelledButNeverBoth() {
         let spec = AvatarSpec.drawn(fromSeed: 3)
-        let plain = AvatarMarkup.inlineSVG(for: spec)
-        #expect(plain.contains(#"class="avatar""#))
-        #expect(plain.contains(#"aria-hidden="true""#))
-        #expect(!plain.contains("aria-label"))
+        let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        #expect(plain.isLabelled == false)
+        #expect(plain.label.isEmpty)
 
-        let labelled = AvatarMarkup.inlineSVG(
+        let named = AvatarPresentation(
             for: spec, size: .small, accessibility: .labelled("Quiet Cedar"))
-        #expect(labelled.contains(#"class="avatar avatar-sm""#))
-        #expect(labelled.contains(#"role="img""#))
-        #expect(labelled.contains(#"aria-label="Quiet Cedar""#))
-    }
-
-    @Test func aLabelIsEscaped() {
-        let markup = AvatarMarkup.inlineSVG(
-            for: AvatarSpec.drawn(fromSeed: 1), accessibility: .labelled(#"a"<b>&"#))
-        #expect(markup.contains("&quot;&lt;b&gt;&amp;"))
+        #expect(named.isLabelled)
+        #expect(named.label == "Quiet Cedar")
+        #expect(named.sizeClass == "avatar avatar-sm")
     }
 
     // MARK: - Drift against the files that own the art
@@ -138,6 +130,47 @@ import Testing
         }
     }
 
+    /// The partial draws the layers the model says it draws, in order.
+    ///
+    /// The five `use` elements are hard-coded in `_avatar.leaf` — a template
+    /// cannot loop them, since four are literal fragments and one is an
+    /// interpolation — so this is what stops the template and
+    /// `layerSymbolIDs` drifting apart.
+    @Test func partialStacksTheModelsLayers() throws {
+        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
+        let refs = Self.attributeValues(in: partial, attribute: "href")
+        let spec = AvatarSpec(cap: .ink, cheek: .snow, flank: .sand, backdrop: .sky, wing: .plain)
+        let presentation = AvatarPresentation(
+            for: spec, size: .standard, accessibility: .decorative)
+        let expected = AvatarMarkup.layerSymbolIDs(for: spec)
+            .enumerated()
+            .map { index, id in index == 2 ? "#(wingSymbolRef)" : "#" + id }
+        #expect(refs == expected, "partial layers \(refs) do not match the model's")
+        // And the interpolated one really is the wing, marker included.
+        #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[2])
+    }
+
+    /// Every `--av-*` the partial assigns is one the presentation supplies, and
+    /// every one the presentation supplies is assigned.  A property assigned
+    /// but never supplied renders black; one supplied but never assigned is a
+    /// slot the student chose that nothing shows.
+    @Test func partialAssignsEveryPresentationProperty() throws {
+        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
+        let assigned = Set(
+            [
+                "--av-cap", "--av-wing", "--av-beak", "--av-cheek", "--av-wing-mark",
+                "--av-flank", "--av-backdrop",
+            ].filter { partial.contains("\($0): var(") })
+        #expect(assigned.count == 7, "partial assigns only \(assigned.sorted())")
+        // Flat field names, not `avatar.capToken`: the sub-context form makes
+        // the presentation this partial's root. Qualifying them resolves to
+        // empty, silently — a bird with no colours that still returns 200.
+        for field in ["capToken", "wingToken", "beakToken", "cheekToken", "flankToken", "backdropToken"] {
+            #expect(partial.contains("#(\(field))"), "partial never reads \(field)")
+            #expect(!partial.contains("avatar.\(field)"), "\(field) is qualified; it will resolve empty")
+        }
+    }
+
     /// The palette the renderer names and the palette the stylesheet declares
     /// are the same set.  A token named but not declared renders black; a token
     /// declared but not named is dead paint nobody can pick.
@@ -145,17 +178,24 @@ import Testing
         let css = try Self.contents(of: "Public/styles.css")
         let declared = Self.declaredAvatarTokens(in: css)
 
+        // Built from what a presentation can actually NAME, over every spec the
+        // slots can produce — not from a hand-written list, which would be a
+        // third spelling of the palette and the thing most likely to drift.
         var expected: Set<String> = ["--avatar-eye", "--avatar-glint"]
         for cap in AvatarCap.allCases {
-            expected.formUnion([
-                "--avatar-\(cap.rawValue)-cap",
-                "--avatar-\(cap.rawValue)-wing",
-                "--avatar-\(cap.rawValue)-beak",
-            ])
+            for cheek in AvatarCheek.allCases {
+                for flank in AvatarFlank.allCases {
+                    for backdrop in AvatarBackdrop.allCases {
+                        let spec = AvatarSpec(
+                            cap: cap, cheek: cheek, flank: flank, backdrop: backdrop, wing: .plain)
+                        expected.formUnion(
+                            AvatarPresentation(
+                                for: spec, size: .standard, accessibility: .decorative
+                            ).tokens)
+                    }
+                }
+            }
         }
-        expected.formUnion(AvatarCheek.allCases.map { "--avatar-cheek-\($0.rawValue)" })
-        expected.formUnion(AvatarFlank.allCases.map { "--avatar-flank-\($0.rawValue)" })
-        expected.formUnion(AvatarBackdrop.allCases.map { "--avatar-back-\($0.rawValue)" })
 
         let unmet = expected.subtracting(declared).sorted()
         let unreachable = declared.subtracting(expected).sorted()

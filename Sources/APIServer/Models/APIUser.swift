@@ -91,6 +91,16 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_user_id")
     var brightspaceUserID: String?
 
+    /// The student's generated chickadee, as `AvatarSpec` JSON.
+    ///
+    /// Nullable because it is materialized the first time an avatar is needed,
+    /// not at signup: nobody who never opens their account page pays a write.
+    /// Read it through `AvatarStore.ensureSpec`, which decodes it, draws one on
+    /// first use, and stores the result — the spec is the record, not a seed to
+    /// re-derive from (docs/student-avatars.md, decision 2).
+    @OptionalField(key: "avatar_spec")
+    var avatarSpecJSON: String?
+
     /// `UserRole` raw value; column stays a string.
     @Field(key: "role")
     var role: String

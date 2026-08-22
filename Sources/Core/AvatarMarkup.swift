@@ -1,11 +1,22 @@
 // Core/AvatarMarkup.swift
 //
-// Turning an AvatarSpec into markup.  Holds NO geometry and NO colour: the
-// paths live once in Resources/Views/_avatar-sprite.leaf and the hex values
-// live once in Public/styles.css, and this file names them.  That is the whole
-// design — a second copy of either in Swift would be a second source of truth
-// that drifts silently, since a wrong path still renders and a wrong hex is
-// still a colour.
+// What a Leaf template needs in order to draw an AvatarSpec.
+//
+// Holds NO geometry, NO colour and NO markup: the paths live once in
+// Resources/Views/_avatar-sprite.leaf, the hex values live once in
+// Public/styles.css, and the element is assembled once in
+// Resources/Views/_avatar.leaf.  This file only names things.
+//
+// It emits TOKEN NAMES rather than a finished style attribute for a specific
+// reason.  check-styles.sh permits an inline style only when every declaration
+// is a custom-property assignment, and it reads the template statically — so a
+// template writing style="#(someBlob)" fails, correctly, since the guard cannot
+// see what the blob contains.  Handing the partial the token names lets it
+// write real `--av-*:` declarations that the guard can check, without either
+// side holding a second copy of the palette.  The alternative — building the
+// whole element here and rendering it raw — would need an unsafe-HTML escape
+// hatch this codebase does not use anywhere, and would hide the style
+// attribute from the guard entirely.
 
 /// Which of the two sizes in the stylesheet a rendering wants.
 public enum AvatarSize: String, CaseIterable, Sendable {
@@ -16,7 +27,7 @@ public enum AvatarSize: String, CaseIterable, Sendable {
     /// and uses the bird for recognition rather than identification.
     case small
 
-    var cssClass: String {
+    public var cssClass: String {
         switch self {
         case .standard: "avatar"
         case .small: "avatar avatar-sm"
@@ -27,7 +38,7 @@ public enum AvatarSize: String, CaseIterable, Sendable {
 /// How a rendering is announced.
 ///
 /// Not a default, because the right answer depends entirely on what is beside
-/// the bird and getting it wrong is an accessibility defect in one of two
+/// the bird, and getting it wrong is an accessibility defect in one of two
 /// directions: a decorative image with a label is noise, and an identifying
 /// image without one is an unlabelled row.
 public enum AvatarAccessibility: Sendable, Equatable {
@@ -37,72 +48,74 @@ public enum AvatarAccessibility: Sendable, Equatable {
     case labelled(String)
 }
 
-public enum AvatarMarkup {
+/// Everything `_avatar.leaf` needs, and nothing it does not.
+///
+/// `Encodable` so it can be a Leaf sub-context; every field is a plain string
+/// or bool because Leaf resolves no Swift properties (see the LeafKit note in
+/// CLAUDE.md — `isEmpty` on an array silently resolves to nil, and a bare
+/// optional in a conditional is worse).
+public struct AvatarPresentation: Encodable, Sendable, Equatable {
+    /// Palette token names, e.g. "--avatar-slate-cap". The partial wraps each
+    /// in `var(…)`.
+    public let capToken: String
+    public let wingToken: String
+    public let beakToken: String
+    /// Serves both the cheeks and the marks on a patterned wing, so a pattern
+    /// reads against any cap family without a slot of its own.
+    public let cheekToken: String
+    public let flankToken: String
+    public let backdropToken: String
+    /// The fragment reference for this spec's wing symbol, e.g.
+    /// "#av-wing-barred" — WITH the leading marker, so the template never has
+    /// to write one next to an interpolation. A template writing a literal
+    /// marker immediately before an interpolation is exactly the Leaf lexing
+    /// shape that has cost this codebase before; a bare unknown marker in text
+    /// is inert, but one adjacent to a tag opening is not worth testing.
+    public let wingSymbolRef: String
+    /// "avatar" or "avatar avatar-sm".
+    public let sizeClass: String
+    /// Whether to announce the bird. An explicit Bool rather than testing the
+    /// optional label in the template: Leaf's truthiness rules make a bare
+    /// optional in a conditional unreliable.
+    public let isLabelled: Bool
+    /// The handle to announce; empty when decorative.
+    public let label: String
 
+    public init(for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility) {
+        self.capToken = "--avatar-\(spec.cap.rawValue)-cap"
+        self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
+        self.beakToken = "--avatar-\(spec.cap.rawValue)-beak"
+        self.cheekToken = "--avatar-cheek-\(spec.cheek.rawValue)"
+        self.flankToken = "--avatar-flank-\(spec.flank.rawValue)"
+        self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
+        self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
+        self.sizeClass = size.cssClass
+        switch accessibility {
+        case .decorative:
+            self.isLabelled = false
+            self.label = ""
+        case .labelled(let name):
+            self.isLabelled = true
+            self.label = name
+        }
+    }
+
+    /// Every palette token this presentation names. The drift test asserts each
+    /// is declared in the stylesheet, and that the stylesheet declares no
+    /// avatar token no presentation can name.
+    public var tokens: [String] {
+        [capToken, wingToken, beakToken, cheekToken, flankToken, backdropToken]
+    }
+}
+
+public enum AvatarMarkup {
     /// The symbol ids stacked to draw `spec`, back to front.
     ///
     /// Five, not one per feature: the parts that never vary geometrically are
-    /// baked into one plumage symbol.  A slot is split out only when it varies.
+    /// baked into one plumage symbol. A slot is split out only when it varies.
+    /// The partial hard-codes this order; this is what the drift test checks it
+    /// against.
     public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
         ["av-backdrop", "av-plumage", "av-wing-\(spec.wing.rawValue)", "av-beak", "av-eyes"]
-    }
-
-    /// The palette tokens `spec` selects, as `--av-*` custom-property
-    /// assignments for the wrapping element.
-    ///
-    /// Assigning custom properties inline is the sanctioned form (a colour
-    /// property or a literal is not), and it is what lets one sprite serve
-    /// every bird: the shapes are shared, the assignment is per student.
-    public static func customProperties(for spec: AvatarSpec) -> String {
-        [
-            "--av-cap: var(--avatar-\(spec.cap.rawValue)-cap)",
-            "--av-wing: var(--avatar-\(spec.cap.rawValue)-wing)",
-            "--av-beak: var(--avatar-\(spec.cap.rawValue)-beak)",
-            "--av-cheek: var(--avatar-cheek-\(spec.cheek.rawValue))",
-            "--av-wing-mark: var(--avatar-cheek-\(spec.cheek.rawValue))",
-            "--av-flank: var(--avatar-flank-\(spec.flank.rawValue))",
-            "--av-backdrop: var(--avatar-back-\(spec.backdrop.rawValue))",
-        ].joined(separator: "; ")
-    }
-
-    /// One bird as an SVG element.
-    ///
-    /// - Important: this references the sprite by fragment, so the page must
-    ///   also include the `_avatar-sprite.leaf` partial.  It is an SVG element
-    ///   on a page, NOT a standalone image: it cannot be an `<img>` src, saved,
-    ///   or emailed.  A standalone renderer is possible and is deliberately not
-    ///   here — it would need the path data and the hex palette, and the only
-    ///   version of it worth having reads both from the files that already own
-    ///   them rather than re-holding them in Swift.
-    public static func inlineSVG(
-        for spec: AvatarSpec,
-        size: AvatarSize = .standard,
-        accessibility: AvatarAccessibility = .decorative
-    ) -> String {
-        let uses = layerSymbolIDs(for: spec)
-            // Doubled pound delimiter: inside #"…"# the sequence `"#` in
-            // `href="#` would terminate the literal at the fragment marker.
-            .map { ##"<use href="#\##($0)"/>"## }
-            .joined()
-        let described: String =
-            switch accessibility {
-            case .decorative: #"aria-hidden="true""#
-            case .labelled(let name): #"role="img" aria-label="\#(escaped(name))""#
-            }
-        return #"""
-            <svg class="\#(size.cssClass)" style="\#(customProperties(for: spec))" \#
-            viewBox="0 0 64 64" \#(described)>\#(uses)</svg>
-            """#
-    }
-
-    /// Minimal attribute-value escaping for a handle placed in `aria-label`.
-    /// Handles are generated from curated word lists, so this guards a shape
-    /// the type allows rather than one the generator produces.
-    private static func escaped(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
     }
 }

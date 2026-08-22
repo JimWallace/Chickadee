@@ -92,6 +92,80 @@ import VaporTesting
         }
     }
 
+    // MARK: - The avatar renders
+
+    /// The bird reaches the page, from the sprite through the partial.
+    ///
+    /// Worth an end-to-end assertion rather than trusting the unit tests: a
+    /// Leaf partial that fails to resolve, or an interpolation that lexes
+    /// differently than it reads, produces a page that still returns 200. The
+    /// specific things checked are the ones that would be silently wrong — the
+    /// sprite present, the five layers stacked, the wing fragment actually
+    /// interpolated (not emitted literally), and the palette assigned as
+    /// custom properties rather than colours.
+    @Test func accountPageRendersTheStudentsChickadee() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "acct_avatar", password: "pw", role: "student", on: app)
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("<symbol id=\"av-plumage\""), "sprite missing")
+                    #expect(html.contains("class=\"avatar\""))
+                    for layer in ["#av-backdrop", "#av-plumage", "#av-beak", "#av-eyes"] {
+                        #expect(html.contains("<use href=\"\(layer)\"/>"), "no \(layer) layer")
+                    }
+                    // The wing is the interpolated one: a wing symbol must
+                    // appear and the interpolation must not survive as text.
+                    #expect(html.contains("<use href=\"#av-wing-"), "wing not interpolated")
+                    #expect(!html.contains("wingSymbolRef"), "interpolation survived as text")
+                    #expect(!html.contains("href=\"\""), "a layer reference resolved to empty")
+                    #expect(html.contains("--av-cap: var(--avatar-"))
+                    // The monogram this replaced is gone, not merely hidden.
+                    #expect(!html.contains("account-monogram"))
+                })
+        }
+    }
+
+    /// A student sees their own per-course pseudonym, and the page says plainly
+    /// what it is — a stable pseudonym is not anonymity, and copy that implied
+    /// otherwise would be the feature's worst failure.
+    @Test func accountPageShowsThePerCourseHandleAndItsLimits() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "AVATARC")
+            let cookie = try await loginUser(
+                username: "acct_handle", password: "pw", role: "student", on: app)
+            let user = try #require(
+                try await APIUser.query(on: app.db)
+                    .filter(\.$username == "acct_handle").first())
+            try await enroll(user: user, in: course)
+
+            // First load materializes the handle.
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.status == .ok) })
+
+            let handle = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == user.requireID()).first()?.avatarHandle)
+            #expect(AvatarHandle.isWellFormed(handle))
+
+            // Second load shows it, and says what it does not promise.
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    let html = res.body.string
+                    #expect(html.contains("You appear as \(handle) on class pages"))
+                    #expect(html.contains("not anonymity from anyone you tell"))
+                })
+        }
+    }
+
     /// The fully-populated identity header — the state the design shows, and
     /// the one the pixel baseline CANNOT draw: display name, student ID and
     /// email arrive from SSO claims, and no HTTP route sets them, so the
@@ -118,8 +192,6 @@ import VaporTesting
                     // Heading is the display name; the username sits under it.
                     #expect(html.contains("<strong>Avery Sandoval</strong>"))
                     #expect(html.contains(#"<span class="text-muted">a4student</span>"#))
-                    // The monogram follows the same resolved name.
-                    #expect(html.contains(">AS</p>"))
                     // All four detail rows.
                     #expect(html.contains("Preferred name"))
                     #expect(html.contains("Avery"))
@@ -335,43 +407,8 @@ import VaporTesting
     }
 }
 
-/// The account page's identity circle carries initials, not a photo — nothing
-/// in the SSO claim set releases one.  These pin the derivation so the circle
-/// is never blank and never leaks more than initials.
-@Suite struct AccountMonogramTests {
-
-    @Test func twoWordPreferredNameGivesTwoInitials() {
-        #expect(accountMonogram(name: "Ada Lovelace") == "AL")
-    }
-
-    @Test func singleWordGivesOneInitial() {
-        #expect(accountMonogram(name: "ada") == "A")
-    }
-
-    @Test func hyphenAndDotCountAsWordBreaks() {
-        #expect(accountMonogram(name: "Jean-Luc") == "JL")
-        #expect(accountMonogram(name: "A. Turing") == "AT")
-    }
-
-    @Test func derivesInitialsFromAUsernameToo() {
-        #expect(accountMonogram(name: "vis_student") == "VS")
-        #expect(accountMonogram(name: "chickadee") == "C")
-    }
-
-    @Test func neverBlank() {
-        // A name of only punctuation still has to render something, or the
-        // circle appears as an unexplained empty disc.
-        #expect(accountMonogram(name: "...") == "?")
-    }
-
-    @Test func takesAtMostTwoInitials() {
-        #expect(accountMonogram(name: "Anne Marie Von Trapp") == "AM")
-    }
-}
-
-/// The identity header resolves ONE name and both the heading and the monogram
-/// use it, so the circle can never show initials the name beside it does not
-/// have. The username line under it is dropped when it would merely repeat the
+/// The identity header resolves ONE name, used for the heading and the row, so
+/// the two can never disagree. The username line under it is dropped when it would merely repeat the
 /// heading — a local account with nothing on file would otherwise print its
 /// username twice, which reads as a rendering fault rather than as identity.
 @Suite struct AccountIdentityNameTests {
@@ -396,12 +433,6 @@ import VaporTesting
         #expect(
             accountIdentityName(displayName: "", preferredName: "   ", username: "a4student")
                 == "a4student")
-    }
-
-    @Test func theMonogramFollowsTheResolvedName() {
-        let name = accountIdentityName(
-            displayName: "Avery Sandoval", preferredName: "Avery", username: "a4student")
-        #expect(accountMonogram(name: name) == "AS")
     }
 
     @Test func secondaryLineIsDroppedWhenItWouldRepeatTheHeading() {

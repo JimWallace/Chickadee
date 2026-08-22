@@ -354,46 +354,56 @@ mirrored by negating its x values alone; its sweep flag has to invert too, and
 getting that wrong produces a curve that is subtly wrong in a way nobody will
 look for. One drawing, mirrored by the renderer.
 
-### 8. Seed to bird, bird to markup — two functions, and the one that is missing on purpose
+### 8. Seed to bird, bird to page
 
-`Core/AvatarSpec.swift` and `Core/AvatarMarkup.swift` are the model half:
+`Core/AvatarSpec.swift`, `Core/AvatarHandle.swift` and `Core/AvatarMarkup.swift`
+are the model; `AvatarStore` materializes; `_avatar.leaf` renders.
 
 ```swift
 let spec = AvatarSpec.drawn()                    // first use, system RNG
 let spec = AvatarSpec.drawn(fromSeed: 12345)     // reproducible: tests, previews
-let html = AvatarMarkup.inlineSVG(for: spec)     // an <svg> for a page
+let handle = AvatarHandle.make(excluding: taken) // unused in this course
+AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
 ```
-
-Three things about that shape are decisions rather than convenience.
 
 **There is deliberately no `svg(forSeed:)`.** It is the obvious convenience and
 it is exactly the hazard decision 2 exists to prevent: a render path that takes
 a seed re-derives on every render, and the day a slot gains an option every
 student's bird changes. Drawing is a one-time act whose result is stored, so the
-API makes the two steps separate and gives the seeded draw a name that reads
-like a fixture rather than a renderer.
+API keeps the two steps apart and gives the seeded draw a name that reads like a
+fixture rather than a renderer.
 
-**`inlineSVG` returns an SVG element, not a standalone image.** It is five
-`<use>` elements referencing the sprite plus a `style` assigning palette tokens,
-so it needs the sprite partial on the page and the stylesheet in force. That is
-what makes 200 rows cheap — the shapes are downloaded once and the per-student
-part is one short attribute — and it is what keeps dark mode working, since the
-backdrop resolves through a token.
+**Swift emits token NAMES; the partial writes the markup.** An earlier cut had
+Swift build the whole `<svg>` string. It cannot work here, for a reason worth
+recording: `check-styles.sh` permits an inline style only when every declaration
+is a custom-property assignment, and it reads templates statically, so a template
+writing `style="#(someBlob)"` fails — correctly, since the guard cannot see
+inside the blob. The alternative, rendering Swift-built markup raw, needs an
+unsafe-HTML escape hatch this codebase uses nowhere and would hide the style
+attribute from the guard entirely. Handing the partial the token names lets it
+write real `--av-*:` declarations the guard can check, with neither side holding
+a second copy of the palette.
 
-A **standalone** SVG (an `<img>` src, a download, an email, an export) is a
-different function and is not written. It cannot reference the sprite or the
-stylesheet, so it needs the path data and the hex values inline — and the only
-version worth having reads both out of the files that already own them rather
-than re-holding them in Swift. That is a server-side concern: load
-`_avatar-sprite.leaf` and the `--avatar-*` block at boot, inline the five
-symbols the spec names and a `<style>` carrying its seven colours. Perfectly
-doable, roughly a slice of its own, and it must not become a second copy of the
-art.
+Those seven `--av-*` properties are on the inline-custom-property allowlist in
+`check-styles.sh`, alongside `--bar-h`, and for the same stated reason: each
+carries a value that varies per **datum** — the student being rendered — which
+no stylesheet can hold and no modifier class could enumerate 9,216 of.
 
-**The markup builder holds no geometry and no colour.** It names symbol ids and
-token names, nothing else, and two tests assert those names against the files
-that own them — in both directions, so neither a slot without art nor art
-without a slot can ship. Both were confirmed to fail on their own defect.
+**A standalone SVG** (an `<img>` src, a download, an email) is a different
+function and is not written. It cannot reference the sprite or the stylesheet, so
+it needs the path data and the hex values inline — and the only version worth
+having reads both out of the files that already own them rather than re-holding
+them in Swift.
+
+**The Leaf trap this hit, which is the sub-context twin of the `isEmpty` one.**
+`extend("_avatar", presentation)` makes the presentation the partial's **root**,
+so its fields are addressed flat — `#(capToken)`, not `#(avatar.capToken)`. The
+qualified form does not error: it resolves to the empty string, silently, and the
+page renders a bird with no colours, no wing, and a 200. That is the same failure
+shape as `#if(rows.isEmpty)` never firing, and the same lesson — a Leaf path that
+cannot resolve is indistinguishable from one that resolves to nothing.
+`AvatarSpecTests` now asserts the partial reads every field flat AND that none is
+qualified, and the account-page test asserts no layer reference renders empty.
 
 ---
 
@@ -459,28 +469,65 @@ so 1,000 for 200 rows.
 
 ---
 
+## Changing the art
+
+The art is expected to move. What that costs, and what it cannot break:
+
+1. **Edit `Resources/Views/_avatar-sprite.leaf`.** It is the only file with
+   geometry. The body is a circle of radius 22 at (32, 35) in a 64×64 viewBox
+   and every boundary is computed against it, so a change to the body means
+   recomputing the cap, wing and belly edges rather than nudging them by eye.
+2. **Look at it**: `node Tools/avatar-preview/preview.mjs > /tmp/avatars.html`
+   renders a contact sheet — every cap family, every wing pattern, every cheek,
+   flank and backdrop, and the size ladder down to 16px — from the sprite and
+   the stylesheet rather than from a copy of either. Open it, or screenshot it
+   headless. **Do not ship art you have not looked at**: four of the five
+   findings in decision 7 were invisible in the source and obvious in a render.
+3. **Keep the three sprite rules** in that file's header comment: no
+   clip-path/mask/filter/gradient, colour from a class never an attribute, and
+   boundaries computed against the body circle.
+4. **What the guards will catch**: a symbol renamed away from an `AvatarWing`
+   case, a palette token added or removed, a layer added or reordered without
+   `layerSymbolIDs`, a `--av-*` property assigned in the partial that the
+   presentation does not supply. What they will NOT catch is whether it looks
+   right — hence step 2.
+
+**Stored specs survive a redraw.** A spec names slots, not shapes, so
+redrawing shared geometry changes what everyone's bird looks like without
+shuffling whose is whose. The one change that is NOT free is reordering or
+removing options within a slot: `AvatarCap.slate` must keep meaning slate. Add
+to the end of a list; never renumber.
+
+---
+
 ## Slice plan
 
 Each slice is independently mergeable and independently useful.
 
-- **S0 — the model.** **Done for the avatar half**: `AvatarSpec`, the five slot
-  enums, the seeded draw, `AvatarMarkup`, and the two drift guards against the
-  sprite and the palette. Still open: the handle generator and its curated word
-  lists, which are S0's other half and the part with the most judgement in it.
-- **S1 — persistence.** `avatar_spec` on the user row, `handle` on the
-  enrollment row with UNIQUE(course, handle), first-use materialization with the
-  `ensureSeed` race shape. Backfill is lazy by construction — nobody needs an
-  avatar until a page renders one.
+- **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
+  `AvatarPresentation`, the drift guards against the sprite and the palette, and
+  `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
+  handles, drawn without replacement within a course.
+- **S1 — persistence. Done.** `users.avatar_spec` and
+  `course_enrollments.avatar_handle` (`AddAvatarIdentity`), with a **partial**
+  unique index on (course, handle) excluding NULL — without the exclusion the
+  second enrollment created collides with the first on NULL. `AvatarStore`
+  materializes both on first view, with the `ensureSeed` race shape. No
+  backfill: nobody needs an avatar until a page renders one.
 - **S2 — the account page, colour slots only.** The drawing half is **done**:
   eleven symbols, the `--avatar-*` tokens with dark mirrors, the
   component-vocabulary entry, and the contact-sheet tool. 9,216 birds. What
-  remains is the wiring — `_avatar.leaf` taking a sub-context, the presenter
-  that turns a spec into a layer list plus a custom-property string, and the
-  monogram replaced — plus a visual-regression baseline and a run of the
-  `ui-review` agent, which is unconditional for anything touching
-  `Resources/Views/` or `styles.css`.
-- **S3 — student-facing copy and compliance.** "In CS 135 you appear as Quiet
-  Cedar", the export fields, the deletion path.
+  the wiring is done too: `_avatar.leaf` takes an `AvatarPresentation`
+  sub-context and the monogram is gone — the helper, the CSS, its
+  component-vocabulary entry and its tests with it. Still owed: a
+  visual-regression baseline, and a run of the `ui-review` agent, which is
+  unconditional for anything touching `Resources/Views/` or `styles.css` and
+  was unavailable in the environment this was built in.
+- **S3 — student-facing copy and compliance. Done.** The account page names the
+  handle per course and says plainly that a stable pseudonym is not anonymity.
+  `profile.json` carries the spec and `enrollments.json` the handle, both
+  described in the export's own README. The deletion path needed no work: both
+  columns sit on rows that already cascade.
 - **S4 — the wardrobe.** The geometry slots (eye, beak, tuft, accessory), the
   unlock model, the validation chokepoint, the picker. This is where the art
   cost lives and where the fun lives; it is independent of leaderboards and can

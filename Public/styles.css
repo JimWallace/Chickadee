@@ -2594,18 +2594,17 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
-/* The account page's identity header: circle, name, username. One class for
-   the row; the name and username inside it are element selectors rather than
-   two more global classes, since they are one rule serving one component and
-   would owe component-vocabulary entries for no gain. */
+/* The account page's identity header: the student's chickadee, their name,
+   their username. One class for the row; the name and username inside it are
+   element selectors rather than two more global classes, since they are one
+   rule serving one component and would owe component-vocabulary entries for
+   no gain. */
 .account-identity {
     display: flex;
     align-items: center;
     gap: .75rem;
     margin: 0 0 1rem;
 }
-
-.account-identity .account-monogram { margin: 0; }
 
 .account-identity > div {
     display: flex;
@@ -2659,23 +2658,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-eye { fill: var(--av-eye); }
 .av-glint { fill: var(--av-glint); }
 
-/* Identity circle on the account page, carrying initials rather than a photo:
-   no IdP claim in play releases one. Sized and centred so an <img> can replace
-   the text on the day one does, with no rule change. */
-.account-monogram {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 3rem;
-    height: 3rem;
-    margin: 0 0 1rem;
-    border-radius: 50%;
-    background: var(--success-bg);
-    color: var(--success-fg);
-    font-size: var(--text-xl);
-    font-weight: 600;
-    overflow: hidden;
-}
 
 /* The drop zone's upload glyph. A descendant selector rather than a class of
    its own: it is one rule serving one existing component, and a new global
