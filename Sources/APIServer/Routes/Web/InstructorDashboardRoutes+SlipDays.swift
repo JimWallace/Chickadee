@@ -73,6 +73,7 @@ extension InstructorDashboardRoutes {
             enabled: policy.enabled,
             daysPerStudent: policy.daysPerStudent,
             extensionHours: policy.extensionHours,
+            releaseRevealHold: policy.releaseRevealHold,
             canEditSettings: canEditSettings,
             canManageLedger: canManageLedger,
             settingsReadOnlyNote: settingsReadOnlyNote,
@@ -104,11 +105,15 @@ extension InstructorDashboardRoutes {
             let enabled: String?
             let daysPerStudent: Int?
             let extensionHours: Int?
+            /// "on" when ticked; absent otherwise — the release-output
+            /// reveal hold (`SlipDayPolicy.releaseRevealHold`).
+            let releaseRevealHold: String?
         }
         let form = try req.content.decode(SettingsForm.self)
         let enabled = form.enabled != nil
         let days = form.daysPerStudent ?? SlipDayPolicy.defaultDaysPerStudent
         let hours = form.extensionHours ?? SlipDayPolicy.defaultExtensionHours
+        let releaseRevealHold = form.releaseRevealHold != nil
         guard (0...Self.slipDayMaxPerStudent).contains(days),
             (1...Self.slipDayMaxExtensionHours).contains(hours)
         else {
@@ -118,6 +123,7 @@ extension InstructorDashboardRoutes {
         course.slipDaysEnabled = enabled
         course.slipDaysPerStudent = days
         course.slipDayExtensionHours = hours
+        course.slipDayReleaseRevealHold = releaseRevealHold
         try await course.save(on: req.db)
 
         await AuditLogger.record(
@@ -130,6 +136,7 @@ extension InstructorDashboardRoutes {
                 "enabled": String(enabled),
                 "days_per_student": String(days),
                 "extension_hours": String(hours),
+                "release_reveal_hold": String(releaseRevealHold),
             ],
             on: req)
         return req.redirect(to: "/instructor/slip-days?saved=settings")
@@ -389,6 +396,9 @@ struct InstructorSlipDaysContext: Encodable {
     let enabled: Bool
     let daysPerStudent: Int
     let extensionHours: Int
+    /// Whether release output waits out the claim window
+    /// (`SlipDayPolicy.releaseRevealHold`) — the third settings checkbox.
+    let releaseRevealHold: Bool
     /// Per-course instructor (or admin), non-archived — gates the policy form.
     let canEditSettings: Bool
     /// Non-archived — gates the ±1 and Refund buttons (TA floor is already

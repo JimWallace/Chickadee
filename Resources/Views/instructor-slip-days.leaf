@@ -43,6 +43,14 @@ Slip days
             <span class="field-note field-note--muted">Each day extends the deadline by this many hours,
                 counted from the original deadline. A claim must be made within this window.</span>
         </label>
+        <label class="form-label">
+            <span class="slip-day-settings-check">
+                <input type="checkbox" name="releaseRevealHold" #if(releaseRevealHold):checked#endif #if(!canEditSettings):disabled#endif>
+                Hold release-tier output until slip-day claims lapse
+            </span>
+            <span class="field-note field-note--muted">Off shows release-tier output at each student&rsquo;s deadline,
+                even while they could still claim a slip day and act on it.</span>
+        </label>
         #if(canEditSettings):
         <div>
             <button class="btn btn-primary" type="submit">Save settings</button>

@@ -98,7 +98,8 @@ import VaporTesting
         dueAt: Date?,
         isOpen: Bool = false,
         solutionVisibility: SolutionVisibility = .afterDue,
-        slipDaysEnabled: Bool = false
+        slipDaysEnabled: Bool = false,
+        releaseRevealHold: Bool = true
     ) async throws -> (student: APIUser, assignment: APIAssignment) {
         _ = try await wrLoginAsStudent(on: app)
         let student = try await wrStudentUser(on: app)
@@ -107,6 +108,7 @@ import VaporTesting
         course.slipDaysEnabled = slipDaysEnabled
         course.slipDaysPerStudent = 2
         course.slipDayExtensionHours = 24
+        course.slipDayReleaseRevealHold = releaseRevealHold
         try await course.save(on: app.db)
         try await wrInsertSetup(id: setupID, on: app)
         let assignment = try await wrInsertAssignment(
@@ -249,6 +251,35 @@ import VaporTesting
             let deadline = try await releaseVisibilityDeadline(
                 for: assignment, user: student, on: app.db)
             #expect(deadline == due)
+        }
+    }
+
+    @Test func releaseDeadlineHonoursTheCourseOptOut() async throws {
+        // A course that switched the reveal hold off gets the pre-hold
+        // timing back: release output at the effective deadline, even inside
+        // a still-claimable window — the instructor's stated choice.
+        try await withWebRoutesApp { app in
+            let due = Date(timeIntervalSinceNow: -3600)
+            let (student, assignment) = try await seedGateFixture(
+                app: app, setupID: "setup_sv12", dueAt: due,
+                slipDaysEnabled: true, releaseRevealHold: false)
+            let deadline = try await releaseVisibilityDeadline(
+                for: assignment, user: student, on: app.db)
+            #expect(deadline == due)
+        }
+    }
+
+    @Test func solutionGateIgnoresTheReleaseOptOut() async throws {
+        // The opt-out relaxes release output only. The answer key must never
+        // be readable while a slip-day claim is still on the table, whatever
+        // the course chose for release timing.
+        try await withWebRoutesApp { app in
+            let (student, assignment) = try await seedGateFixture(
+                app: app, setupID: "setup_sv13", dueAt: Date(timeIntervalSinceNow: -3600),
+                slipDaysEnabled: true, releaseRevealHold: false)
+            #expect(
+                try await solutionVisibleToStudent(
+                    assignment: assignment, user: student, on: app.db) == false)
         }
     }
 }

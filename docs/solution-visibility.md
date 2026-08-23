@@ -86,6 +86,19 @@ but not the claim still on the table — across the web submission view, the
 results API, and the personal data export, which all flow through the one
 resolver.
 
+The release half of the hold is a **course choice**: the slip-day settings
+form carries "Hold release-test output until slip-day claims lapse"
+(`SlipDayPolicy.releaseRevealHold`, default on; nullable
+`slip_day_release_reveal_hold` on `courses`, carried in the course bundle).
+Opting out restores the pre-hold timing — release output at each student's
+effective deadline — for instructors who prefer prompt results and accept
+the read-then-claim leak knowingly. The **solution reveal never honours the
+opt-out**: opting out of the release hold is opting back into behaviour every
+course ran on before the hold existed, while a solution revealed inside a
+claimable window is a new hole the feature must not be able to open. An
+instructor who does not want solutions revealed at all simply leaves the
+per-assignment policy off.
+
 ## Enforcement chokepoints
 
 - `GET /testsetups/:id/notebook?file=solution` and

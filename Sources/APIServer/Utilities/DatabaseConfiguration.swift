@@ -479,4 +479,8 @@ func registerMigrations(on app: Application) {
     // Per-assignment solution-reveal policy (`SolutionVisibility`). Nullable
     // column on `assignments`; nil = hidden, the pre-existing behaviour.
     app.migrations.add(AddAssignmentSolutionVisibility())
+
+    // Course-level opt-out for the release-output slip-day reveal hold.
+    // Nullable column on `courses`; nil = hold on, the safe default.
+    app.migrations.add(AddCourseSlipDayRevealHold())
 }

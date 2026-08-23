@@ -255,12 +255,23 @@ func postDeadlineRevealDeadline(
 /// only view their own submission, so the viewer is the submission owner and
 /// their extension is the right one to honour; instructors see every tier
 /// regardless, so the value is unused for them.
+///
+/// The claim-window hold is a course choice: instructors may opt out on the
+/// slip-day settings (`SlipDayPolicy.releaseRevealHold`), restoring the
+/// pre-hold timing — release output at each student's effective deadline,
+/// with the read-then-claim leak accepted knowingly.  The solution reveal
+/// (`solutionVisibleToStudent`) deliberately does NOT honour the opt-out.
 func releaseVisibilityDeadline(
     for assignment: APIAssignment?,
     user: APIUser,
     on db: Database
 ) async throws -> Date? {
     guard let assignment else { return nil }
+    if let course = try await APICourse.find(assignment.courseID, on: db),
+        !course.slipDayPolicy.releaseRevealHold
+    {
+        return try await effectiveDueAt(for: assignment, user: user, on: db)
+    }
     return try await postDeadlineRevealDeadline(for: assignment, user: user, on: db)
 }
 

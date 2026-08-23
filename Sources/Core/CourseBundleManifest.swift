@@ -90,13 +90,18 @@ public struct BundledCourse: Codable, Sendable {
     public let slipDaysEnabled: Bool?
     public let slipDaysPerStudent: Int?
     public let slipDayExtensionHours: Int?
+    /// Whether release output waits out the claim window
+    /// (`SlipDayPolicy.releaseRevealHold`). Absent in bundles exported
+    /// before this field existed (decodes as nil → hold on).
+    public let slipDayReleaseRevealHold: Bool?
 
     public init(
         code: String, name: String,
         enrollmentMode: CourseEnrollmentMode? = nil,
         slipDaysEnabled: Bool? = nil,
         slipDaysPerStudent: Int? = nil,
-        slipDayExtensionHours: Int? = nil
+        slipDayExtensionHours: Int? = nil,
+        slipDayReleaseRevealHold: Bool? = nil
     ) {
         self.code = code
         self.name = name
@@ -104,6 +109,7 @@ public struct BundledCourse: Codable, Sendable {
         self.slipDaysEnabled = slipDaysEnabled
         self.slipDaysPerStudent = slipDaysPerStudent
         self.slipDayExtensionHours = slipDayExtensionHours
+        self.slipDayReleaseRevealHold = slipDayReleaseRevealHold
     }
 }
 
@@ -119,7 +125,8 @@ public func bundledCourseSlipDayPolicy(_ course: BundledCourse) -> SlipDayPolicy
     SlipDayPolicy.resolve(
         enabled: course.slipDaysEnabled,
         daysPerStudent: course.slipDaysPerStudent,
-        extensionHours: course.slipDayExtensionHours
+        extensionHours: course.slipDayExtensionHours,
+        releaseRevealHold: course.slipDayReleaseRevealHold
     )
 }
 

@@ -21,4 +21,7 @@
   exactly when they could still claim a slip day and act on it.
   `releaseVisibilityDeadline` now waits for the end of any slip-day claim
   window the student could still use, on the web view, the results API, and
-  the data export alike.
+  the data export alike. Instructors who prefer prompt results may opt out
+  per course on the slip-day settings ("Hold release-test output until
+  slip-day claims lapse", default on); the solution reveal never honours the
+  opt-out.

@@ -93,6 +93,11 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "slip_day_extension_hours")
     var slipDayExtensionHours: Int?
 
+    /// Whether release output waits out the slip-day claim window (nil =
+    /// yes, the default). See `SlipDayPolicy.releaseRevealHold`.
+    @OptionalField(key: "slip_day_release_reveal_hold")
+    var slipDayReleaseRevealHold: Bool?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -126,7 +131,8 @@ extension APICourse {
         SlipDayPolicy.resolve(
             enabled: slipDaysEnabled,
             daysPerStudent: slipDaysPerStudent,
-            extensionHours: slipDayExtensionHours
+            extensionHours: slipDayExtensionHours,
+            releaseRevealHold: slipDayReleaseRevealHold
         )
     }
 }

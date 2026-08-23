@@ -427,10 +427,12 @@ it. `postDeadlineRevealDeadline` (AssignmentDeadlineService) is the one
 resolver for that moment — the later of the effective deadline and
 `slipDayClaimWindowCeiling`, the end of any claim window still reachable —
 and both reveal surfaces flow through it: release-tier output
-(`releaseVisibilityDeadline`) and the per-assignment **solution reveal**
+(`releaseVisibilityDeadline` — whose hold a course may switch off on the
+slip-day settings, `SlipDayPolicy.releaseRevealHold`, restoring the pre-hold
+timing knowingly) and the per-assignment **solution reveal**
 (`SolutionVisibility.afterDue`, off by default), which lets students open the
 reference solution — personalized with their own inputs — once their reveal
-moment passes. An assignment with no due date reveals immediately (posted
+moment passes and never honours that opt-out. An assignment with no due date reveals immediately (posted
 lecture material); enabling the policy is refused with no solution on file;
 a manual deadline override suppresses it. See
 [docs/solution-visibility.md](docs/solution-visibility.md).
