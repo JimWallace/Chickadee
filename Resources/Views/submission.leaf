@@ -102,7 +102,7 @@ Submission #(submissionID)
 
 #if(solutionURL):
 <div class="notice-box">
-    <strong>Solution available</strong> &mdash; the reference solution for this assignment is now visible. <a href="#(solutionURL)">View the solution</a>.
+    <strong>Solution available</strong> &mdash; <a href="#(solutionURL)">view the reference solution</a> for this assignment.
 </div>
 #endif
 

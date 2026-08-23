@@ -68,7 +68,7 @@
         <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <div class="notebook-actions">
             #if(isStudentSolutionView):
-            <span class="nb-closed-notice">Reference solution</span>
+            <span class="nb-closed-notice">Reference solution#if(isReadOnly): &mdash; view only.#endif</span>
             #elseif(isTemplateView):
             <span class="nb-closed-notice">Editing the template &mdash; placeholders stand as written.</span>
             #elseif(showSubmit):

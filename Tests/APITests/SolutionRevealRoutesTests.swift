@@ -202,13 +202,14 @@ import VaporTesting
                 app: app, setupID: "setup_rv8", dueAgo: 3600)
             let (status, html) = try await getStatusAndBody(app: app, path: "/", cookie: cookie)
             #expect(status == .ok)
-            #expect(html.contains("View the solution"))
+            #expect(html.contains("title=\"Solution\""))
             #expect(html.contains("/testsetups/setup_rv8/notebook?file=solution"))
 
             assignment.solutionVisibility = .hidden
             try await assignment.save(on: app.db)
             let (_, hiddenHTML) = try await getStatusAndBody(app: app, path: "/", cookie: cookie)
-            #expect(!hiddenHTML.contains("View the solution"))
+            #expect(!hiddenHTML.contains("title=\"Solution\""))
+            #expect(!hiddenHTML.contains("/testsetups/setup_rv8/notebook?file=solution"))
         }
     }
 }

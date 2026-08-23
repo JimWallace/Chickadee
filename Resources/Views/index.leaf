@@ -165,8 +165,8 @@
                     #endif
                     #if(item.setup.solutionAvailable):
                     <a class="btn action-btn action-btn-icon" href="#(item.setup.solutionURL)"
-                       title="View the solution" aria-label="View the solution">
-                        <svg class="icon" aria-hidden="true"><use href="#i-book"/></svg>
+                       title="Solution" aria-label="Solution">
+                        <svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>
                     </a>
                     #endif
                 </div>
