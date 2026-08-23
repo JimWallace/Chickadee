@@ -37,17 +37,28 @@ const MASKS = [
   ".admin-version-banner", // vX.Y.Z on the admin page
   ".worker-secret-input",  // auto-generated diceware secret — new every boot
   "canvas",                // sparkline charts draw async
+  // A student's chickadee is DRAWN AT RANDOM and stored, so a fresh fixture
+  // run produces a different bird every time — the same category as the
+  // diceware secret above. A pixel baseline of it could never be stable, and
+  // would not be meaningful if it were: what matters is that the layers stack,
+  // the palette resolves and no interpolation leaks, which AccountRoutesTests
+  // and AvatarSpecTests assert against the markup instead. Its box is a fixed
+  // 3rem, so unlike the text below it needs no width freezing.
+  ".avatar",
 ];
 
 
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
-  const { setupID, instructorState, studentState, resultsPath } = await seed(baseURL);
+  const { setupID, instructorState, studentState, resultsPath, gradedResultsPath } =
+    await seed(baseURL);
   console.log(`Seeded setup ${setupID}; results page: ${resultsPath || "(none)"}`);
 
   // Page list is shared with the a11y scan — see pages.mjs.
-  const PAGES = pageList({ setupID, instructorState, studentState, resultsPath });
+  const PAGES = pageList({
+    setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+  });
 
   const browser = await chromium.launch();
   let failures = 0;
@@ -89,10 +100,46 @@ async function main() {
         // read as a real change. That is exactly what it did: a roster page
         // came back 0.3% different in CI and identical locally, in light only.
         // Replacing the text with a constant makes the box a constant.
+        //
+        // `.submission-history-latest` is the same problem from a different
+        // source: it renders the submission's absolute timestamp, which is
+        // "now" at seed time, so it moves every run. It carries no
+        // js-relative-time class (it is server-rendered, not JS-formatted),
+        // so it needs naming here explicitly. It only became visible when the
+        // fixture started publishing an OPEN assignment — before that the
+        // student dashboard had no rows at all.
+        //
+        // The submission download link is a third instance of the same problem
+        // from a third source: the stored artifact for a browser-graded
+        // submission is named from the generated submission id, so the button
+        // reads "Download sub_b92d0d05.ipynb" — a fresh UUID every run. It
+        // carries no class of its own, so it is matched by its href.
         await page.evaluate(() => {
-          document.querySelectorAll(".js-relative-time").forEach((el) => {
-            el.textContent = "0000-00-00 00:00";
+          document
+            .querySelectorAll(".js-relative-time, .submission-history-latest")
+            .forEach((el) => {
+              el.textContent = "0000-00-00 00:00";
+            });
+          // The per-course handle is two words drawn at random, so its LENGTH
+          // moves between runs. Freezing the text rather than masking the line
+          // keeps its label and typography under test and only gives up the
+          // two words themselves — a mask here would be sized by the text and
+          // so would move anyway, which is the trap the comment above records.
+          document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
+            el.textContent = "Class handle: Aaaaaaa Bbbbbb";
           });
+          // Only the GENERATED name is replaced. An uploaded artifact keeps
+          // the student's own filename ("solution.py"), which is already
+          // deterministic — rewriting it too would restage the pending page's
+          // baseline for no gain, and that diff lands at 98% of the tolerance
+          // budget, i.e. it would pass while being wrong.
+          document
+            .querySelectorAll('a[href^="/api/v1/submissions/"][href$="/download"]')
+            .forEach((el) => {
+              if (/sub_[0-9a-f]{6,}/i.test(el.textContent || "")) {
+                el.textContent = "Download submission";
+              }
+            });
         });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle
         const file = path.join(outDir, `${p.name}--${scheme}.png`);

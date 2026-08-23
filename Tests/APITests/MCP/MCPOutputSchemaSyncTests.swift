@@ -70,7 +70,7 @@ import Testing
                     datasets: [
                         SetDatasetTool.DatasetEntry(
                             file: "cases.csv", sampleSize: 100,
-                            kind: "rowSample", stratumColumn: nil)
+                            kind: "rowSample", stratumColumn: nil, transforms: [])
                     ])
             ),
             (
@@ -126,7 +126,7 @@ import Testing
                     publicID: "abc123", title: "T", slug: "t", isOpen: true,
                     visibility: "open", dueAt: "2026-01-01T00:00:00Z",
                     startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
-                    secretRevealEnabled: false)
+                    secretRevealEnabled: false, solutionVisibility: "hidden")
             ),
         ]
 

@@ -67,7 +67,9 @@
     <div class="notebook-toolbar">
         <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <div class="notebook-actions">
-            #if(isTemplateView):
+            #if(isStudentSolutionView):
+            <span class="nb-closed-notice">Reference solution#if(isReadOnly): &mdash; view only.#endif</span>
+            #elseif(isTemplateView):
             <span class="nb-closed-notice">Editing the template &mdash; placeholders stand as written.</span>
             #elseif(showSubmit):
             <button class="btn btn-primary" type="button" id="nb-submit">Submit</button>
@@ -97,6 +99,9 @@
                     title="Write what is in this editor back to the assignment for every student">
                 #if(fileKind == "solution"):Save solution#else:Save to assignment#endif
             </button>
+            #endif
+            #if(solutionViewURL):
+            <a class="btn" href="#(solutionViewURL)">View solution</a>
             #endif
             #if(downloadURL):
             #if(!embedded):

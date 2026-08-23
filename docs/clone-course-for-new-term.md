@@ -137,7 +137,8 @@ risk reduction (it's the engine for everything else and currently untested).
 
 1. **Scope toggles.** Default to "clone everything except people, submissions, and
    results." Add per-tier opt-outs (e.g. drop `student`-tier tests) only if real
-   users ask. (Issue Q1.)
+   users ask. (Issue Q1.)  Note `student` is not a tier — see CLAUDE.md; the
+   real tiers are `public` / `release` / `secret`.
 2. **Term-aware code suggestion.** Infer the next term from the source code where a
    recognizable token exists (`...W26` -> `...F26` -> `...S26`/`...W27`); otherwise fall back
    to the current `-COPY` scheme. Keep it a *suggestion* the instructor can

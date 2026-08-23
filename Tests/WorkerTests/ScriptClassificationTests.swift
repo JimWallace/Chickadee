@@ -69,4 +69,105 @@ import Testing
         #expect(classifyScriptInterpreter(name: "weird", source: "just some text") == .unknown)
         #expect(classifyScriptInterpreter(name: "weird", source: "") == .unknown)
     }
+
+    /// A Python file behind a license header, which the five-line content
+    /// window only sees because comment and blank lines are filtered out first.
+    ///
+    /// Found by mutation testing: `!$0.isEmpty && !$0.hasPrefix("#")` survived
+    /// becoming `||`, which keeps every line (an empty line satisfies the
+    /// second test, a comment line the first) and so fills the whole window
+    /// with the header. Every existing content-sniff case put its Python
+    /// keyword within the first line or two, where the difference does not
+    /// show. A license header is the ordinary shape of the input that does.
+    @Test func pythonContentSniffLooksPastACommentHeader() {
+        let licensed = """
+            # Copyright (c) 2026 Example University
+            #
+            # Licensed under the Apache License, Version 2.0 (the "License");
+            # you may not use this file except in compliance with the License.
+            # You may obtain a copy of the License at
+            #
+            #     http://www.apache.org/licenses/LICENSE-2.0
+
+            import os
+
+            print(os.getcwd())
+            """
+        #expect(classifyScriptInterpreter(name: "grade", source: licensed) == .python)
+
+        // The same rule from the other side: blank lines are not content either.
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\n\n\n\n\n\ndef f():\n    pass")
+                == .python)
+    }
+
+    /// Every keyword in the content-sniff list must suffice ON ITS OWN.
+    ///
+    /// The check is a five-way `||`, and mutation testing killed exactly one
+    /// connector at a time: turning the last one into `&&` — dropping
+    /// `if __name__ == ` as an independent signal — failed nothing, because
+    /// every existing case happened to also contain `import` or `def`. A
+    /// per-keyword table is the shape that cannot rot that way: adding a
+    /// keyword to the classifier without adding it here leaves an obvious hole.
+    @Test(arguments: [
+        "import os",
+        "from math import sqrt",
+        "def main():",
+        "class Grader:",
+        "if __name__ == \"__main__\":",
+    ])
+    func eachPythonKeywordAloneIdentifiesPython(line: String) {
+        #expect(classifyScriptInterpreter(name: "grade", source: line) == .python)
+    }
+
+    /// The leading run trimmed before the shebang is read is exactly these five
+    /// characters, and each is load-bearing on its own.
+    ///
+    /// The BOM is the one that matters in practice: a file authored on Windows
+    /// or exported from a spreadsheet tool arrives with `U+FEFF` first, and an
+    /// untrimmed BOM makes `#!` stop being a prefix — so the script silently
+    /// falls through to the content sniff and classifies as `.unknown`. Nothing
+    /// fed this classifier a BOM before.
+    @Test(arguments: [" ", "\t", "\n", "\r", "\u{feff}"])
+    func leadingRunIsTrimmedBeforeTheShebangIsRead(lead: String) {
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\(lead)#!/usr/bin/env python3\nx = 1")
+                == .python)
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\(lead)#!/bin/sh\necho hi") == .sh)
+    }
+
+    /// A BOM in front of a shebang, spelled out as the whole realistic input
+    /// rather than one character: BOM, then CRLF line endings.
+    ///
+    /// Note what is NOT asserted here. A BOM followed by a BLANK CRLF line and
+    /// then the shebang classifies as `.unknown`, because Swift treats `"\r\n"`
+    /// as a single `Character` that equals neither `"\r"` nor `"\n"`, so the
+    /// leading-run trim stops at it. That is a real gap in CRLF handling rather
+    /// than a property worth pinning — tracked separately; pinning it here would
+    /// enshrine it.
+    @Test func bomBeforeAShebangDoesNotDefeatDetection() {
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\u{feff}#!/usr/bin/env python3\nx = 1")
+                == .python)
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\u{feff}#!/usr/bin/env lua\nprint(1)")
+                == .lua)
+        // CRLF *after* the shebang is fine: the trim never reaches it.
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\u{feff}#!/usr/bin/env python3\r\nx = 1")
+                == .python)
+    }
+
+    /// The content sniff compares each line with horizontal whitespace trimmed,
+    /// so indentation defeats neither the keyword match nor the comment filter.
+    @Test func contentSniffTrimsIndentationBeforeMatching() {
+        #expect(classifyScriptInterpreter(name: "grade", source: "    import os") == .python)
+        #expect(
+            classifyScriptInterpreter(name: "grade", source: "\tdef f():\n\t    pass") == .python)
+        // An indented comment is still a comment, so it does not consume a slot
+        // in the five-line window.
+        let indentedHeader = "    # one\n    # two\n    # three\n    # four\n    # five\nimport os"
+        #expect(classifyScriptInterpreter(name: "grade", source: indentedHeader) == .python)
+    }
 }

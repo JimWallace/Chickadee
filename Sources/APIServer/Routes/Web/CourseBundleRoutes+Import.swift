@@ -222,6 +222,7 @@ extension CourseBundleRoutes {
             newCourse.slipDaysEnabled = slipDayPolicy.enabled
             newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
             newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
+            newCourse.slipDayReleaseRevealHold = slipDayPolicy.releaseRevealHold
             try await newCourse.save(on: db)
             guard let newCourseID = newCourse.id else {
                 throw AppError.internalFailure(reason: "Created course missing id after save")

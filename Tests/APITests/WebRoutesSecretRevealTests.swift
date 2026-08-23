@@ -100,7 +100,7 @@ import VaporTesting
             #expect(html.contains("/testsetups/setup_sr1/reveal-secret"))
             #expect(html.contains("one reveal token"))
             // Secret stays aggregated pre-spend.
-            #expect(html.contains("hidden tests in this section"))
+            #expect(html.contains("hidden test 1"), "masked itemization pre-spend")
             #expect(!html.contains("SecretTraceback"))
         }
     }
@@ -160,7 +160,7 @@ import VaporTesting
             #expect(html.contains("Secret tests revealed"), "active banner shows post-spend")
             #expect(html.contains("secrettest.sh"), "secret row is itemized")
             #expect(html.contains("SecretTraceback"), "secret output shows like public output")
-            #expect(!html.contains("hidden tests in this section"), "aggregate summary is gone")
+            #expect(!html.contains("hidden test 1"), "masking is gone once the token is spent")
             #expect(!html.contains("reveal-secret"), "offer no longer renders once spent")
         }
     }
@@ -228,7 +228,7 @@ import VaporTesting
             try await assignment.save(on: app.db)
 
             let html = try await submissionPageHTML(app: app, subID: "sub_sr9", cookie: cookie)
-            #expect(html.contains("hidden tests in this section"), "aggregate summary returns")
+            #expect(html.contains("hidden test 1"), "masked itemization returns")
             #expect(!html.contains("SecretTraceback"), "secret output is hidden again")
             #expect(!html.contains("reveal-secret"), "no offer while the toggle is off")
         }

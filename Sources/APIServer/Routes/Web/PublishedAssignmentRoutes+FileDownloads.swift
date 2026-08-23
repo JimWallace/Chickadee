@@ -55,44 +55,59 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
+        return try await solutionFileDownloadResponse(req: req, assignment: assignment, setup: setup)
+    }
+}
 
-        // Look for a solution.* entry inside the test setup zip.
-        // Cached entry list + off-thread extraction (#1158): both helpers
-        // spawn serialized unzip subprocesses.
-        let zipPath = setup.zipPath
-        let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
-            .first(where: { $0.hasPrefix("solution.") })
-        if let entryName = solutionZipEntry,
-            let data = try await runBlocking(on: req, { extractZipEntry(zipPath: zipPath, entryName: entryName) })
-        {
-            return buildFileResponse(data: data, filename: entryName)
-        }
+/// Streams the reference solution with its original filename, resolving the
+/// bytes from the same three sources the edit page counts: a `solution.*`
+/// entry in the setup zip, then the linked validation submission, then the
+/// newest validation submission for the setup.  Shared by the staff files
+/// route above and the student-facing reveal download
+/// (`GET /testsetups/:id/solution/download`), so both audiences receive
+/// exactly the same file — for upload-only languages a source file
+/// (e.g. `solution.cpp`), not a notebook.  Callers gate access; this only
+/// resolves and streams.
+func solutionFileDownloadResponse(
+    req: Request, assignment: APIAssignment?, setup: APITestSetup
+) async throws -> Response {
+    // Look for a solution.* entry inside the test setup zip.
+    // Cached entry list + off-thread extraction (#1158): both helpers
+    // spawn serialized unzip subprocesses.
+    let zipPath = setup.zipPath
+    let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
+        .first(where: { $0.hasPrefix("solution.") })
+    if let entryName = solutionZipEntry,
+        let data = try await runBlocking(on: req, { extractZipEntry(zipPath: zipPath, entryName: entryName) })
+    {
+        return buildFileResponse(data: data, filename: entryName)
+    }
 
-        // Fall back to the most recent validation submission, preserving
-        // the instructor's original filename (e.g. bmi.py, dna.py).
-        if let validationID = assignment.validationSubmissionID,
-            let validationSubmission = try await APISubmission.find(validationID, on: req.db),
-            let response = try await streamedFileResponse(
-                req: req, path: validationSubmission.zipPath,
-                filename: validationSubmission.filename ?? "solution.ipynb")
-        {
-            return response
-        }
+    // Fall back to the most recent validation submission, preserving
+    // the instructor's original filename (e.g. bmi.py, dna.py).
+    if let validationID = assignment?.validationSubmissionID,
+        let validationSubmission = try await APISubmission.find(validationID, on: req.db),
+        let response = try await streamedFileResponse(
+            req: req, path: validationSubmission.zipPath,
+            filename: validationSubmission.filename ?? "solution.ipynb")
+    {
+        return response
+    }
 
-        if let fallbackSubmission = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == assignment.testSetupID)
+    if let setupID = assignment?.testSetupID ?? setup.id,
+        let fallbackSubmission = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
             .filter(\.$kind == APISubmission.Kind.validation)
             .sort(\.$submittedAt, .descending)
             .first(),
-            let response = try await streamedFileResponse(
-                req: req, path: fallbackSubmission.zipPath,
-                filename: fallbackSubmission.filename ?? "solution.ipynb")
-        {
-            return response
-        }
-
-        throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")
+        let response = try await streamedFileResponse(
+            req: req, path: fallbackSubmission.zipPath,
+            filename: fallbackSubmission.filename ?? "solution.ipynb")
+    {
+        return response
     }
+
+    throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")
 }
 
 /// Streams a file-backed download with the shared content-type/disposition

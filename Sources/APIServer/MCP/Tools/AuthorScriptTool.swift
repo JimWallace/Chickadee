@@ -7,7 +7,7 @@
 // omit (update_suite edits metadata only; update_pattern_family edits generated
 // cases).  It mirrors the web "New Script" / per-script edit endpoints:
 //
-//   - A *test* tier (public/release/secret/student) upserts the file AND its
+//   - A *test* tier (see `MCPTierProse`) upserts the file AND its
 //     suite (manifest) entry through the same `applySuiteEdit` path the suite
 //     editor uses, so tier/points/displayName/dependsOn/section all persist and
 //     validation re-runs.
@@ -36,7 +36,7 @@ struct AuthorScriptTool: ContentTool {
         /// fixture).  SSRF-guarded (https only, no private/metadata addresses,
         /// no redirects, size-capped); see `SupportFileURLFetcher`.
         let sourceUrl: String?
-        /// public/release/secret/student, or "support" for a non-graded helper
+        /// A `TestTier` raw value, or "support" for a non-graded helper
         /// file.  When omitted, an existing file keeps its current kind/tier and
         /// a brand-new file defaults to a public test.
         let tier: String?
@@ -92,7 +92,7 @@ struct AuthorScriptTool: ContentTool {
         + "content (the full body inline) OR sourceUrl (an https URL the server fetches — for a "
         + "data/support file too large to inline faithfully, e.g. a CSV fixture; the fetch is "
         + "SSRF-guarded: https only, no private/loopback/metadata addresses, no redirects, size-capped, "
-        + "and the body must be UTF-8 text). tier is public/release/secret/student for a graded test, or "
+        + "and the body must be UTF-8 text). tier is \(MCPTierProse.slashAlternatives) for a graded test, or "
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
         + "is not itself graded; omit tier to keep an existing file's kind (new files default to a "
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
@@ -223,7 +223,7 @@ struct AuthorScriptTool: ContentTool {
         if raw == "support" { return .support }
         guard let tier = TestTier(rawValue: raw) else {
             throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: public, release, secret, student, support.")
+                tool: name, detail: "tier must be one of: \(MCPTierProse.oneOfListWithSupport).")
         }
         return .test(tier)
     }

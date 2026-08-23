@@ -78,8 +78,17 @@ build fails (e.g. `make` step fails), `buildStatus` is `"failed"` and
 
 **Test outcomes have four states only:** `pass`, `fail`, `error`, `timeout`.
 
-**Four test tiers:** `public` (shown immediately), `release` (hidden until
-deadline), `secret` (never shown), `student` (student-written tests).
+**Three test tiers:** `public` (shown immediately), `release` (hidden until
+deadline), `secret` (never shown). A fourth, `student`, was documented here and
+advertised by the MCP schema for most of the project's life while `TestTier`
+never had it — so `author_script` accepted it into its JSON schema and then
+rejected it at `TestTier(rawValue:)`, and the web suite editor silently coerced
+it to `.pub`. It is gone from the schema, and the tier prose is now DERIVED from
+`TestTier.allCases` (`MCPTierProse`, guarded by `MCPTierCoverageTests`) so
+neither a phantom nor a truncated list can reappear. Student-contributed tests
+do not want a tier: the suite is instructor-authored, and a student's
+contribution is submission content, not a suite entry — see
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
 **Gamification fields are present from day one but nullable.** `memoryUsageBytes`,
 `attemptNumber`, `isFirstPassSuccess` are in the schema now so we never need a
@@ -376,6 +385,57 @@ the wrong tool for "this is a new language". Browser-graded assignments are
 covered too, since instructor validation is enqueued as a `kind == .validation`
 submission and always runs on the **native worker**. See
 `docs/runner-capability-profiles.md`.
+
+**A class goal counts one of two things, and the sweep will evaluate no third.**
+`Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
+students' best whole-assignment grade cleared a threshold, over the enrolled
+roster. A collaborative assignment needs the other one — the **union** of what
+the class produced, "the class has found 12 of the 15 seeded bugs" — so
+`AchievementSignal.itemsCovered` counts DISTINCT items in the
+`class_item_coverage` table, optionally scoped to one suite section (a bug
+hunt's variants, not the well-formedness gate beside them).
+
+`isSweepEvaluableClassGoal` admits **exactly three shapes**: no conditions, a
+single `grade atLeast`, or a single `itemsCovered atLeast`. Everything else is
+refused at save time and skipped-with-a-log by the sweep. That guard is the
+reason a hand-authored manifest cannot silently mis-grade a bonus (audit A4), so
+admitting the union shape meant admitting exactly it — the arity did not move.
+
+A union goal is graded on the SMALLER of two halves: coverage (the item count)
+and **breadth** (at least `classFraction` of the roster contributed at least one
+covered item). Breadth is why there is no per-student contribution cap: one
+student finding everything reaches full coverage and then fails on breadth. The
+alternative — crediting each student only their K rarest items — bounds the solo
+hero too, and breaks determinism doing it, because a later submission can change
+which of an earlier student's items counted.
+
+The two halves scope differently, and the asymmetry is deliberate. **Coverage
+counts every row**, including one found by a student who has since dropped: the
+item was covered, and the number must never retreat because it freezes into a
+LEARN push. **Breadth counts only currently-enrolled students**, because it is a
+fraction of the CURRENT roster — audit A7's shape. `achievement_results` stores
+`items_covered` / `items_required` rather than recomputing them, so a frozen row
+can say what coverage produced the bonus in every student's grade of record. See
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
+
+**Post-deadline reveals wait for the slip-day claim window, not just the
+deadline.** Slip days are claimed *after* the due date (first-claim window
+`dueAt + extensionHours`), so "this student's effective deadline has passed"
+does not mean they are done buying time — gating a reveal on it alone lets a
+student read the revealed material at due+1min, claim a slip day, and act on
+it. `postDeadlineRevealDeadline` (AssignmentDeadlineService) is the one
+resolver for that moment — the later of the effective deadline and
+`slipDayClaimWindowCeiling`, the end of any claim window still reachable —
+and both reveal surfaces flow through it: release-tier output
+(`releaseVisibilityDeadline` — whose hold a course may switch off on the
+slip-day settings, `SlipDayPolicy.releaseRevealHold`, restoring the pre-hold
+timing knowingly) and the per-assignment **solution reveal**
+(`SolutionVisibility.afterDue`, off by default), which lets students open the
+reference solution — personalized with their own inputs — once their reveal
+moment passes and never honours that opt-out. An assignment with no due date reveals immediately (posted
+lecture material); enabling the policy is refused with no solution on file;
+a manual deadline override suppresses it. See
+[docs/solution-visibility.md](docs/solution-visibility.md).
 
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
@@ -1119,6 +1179,18 @@ the `format-lint` CI job) — keep them green:
   from the component vocabulary — the page `<style>` total is a shrink-only
   ratchet (`PAGE_STYLE_BASELINE`), so a private re-implementation of a
   shared concept fails CI on growth.
+- **Start a new page by copying its archetype's exemplar.** Every archetype
+  row names one — `alerts` / `instructor-mcp` / `admin-user` / `account` /
+  `register` / `assignment-edit` / `workbench`. The component vocabulary and
+  the idiom table say what to *reach for*; this is the only rule naming a
+  **starting artifact**, and it exists because the skeleton column describes
+  a shape without providing one, so an author imitating whichever page they
+  opened inherited its private habits too. `PageArchetypeTests` reads the
+  exemplar column out of the table (so doc and guard cannot drift) and
+  re-checks each exemplar against its own row — the exemplars and **nothing
+  else**; no page fails for not being one. Do not answer this with a
+  scaffold generator: a `new-page.sh` is a second source of truth that
+  drifts from the exemplar the moment either moves.
 - **Every assigned class name must resolve to a stylesheet rule**
   (`scripts/check-class-resolution.sh`). Behaviour-only hooks take the `js-`
   prefix (pre-existing ones live in a shrink-only allowlist). Leaf-
@@ -1133,6 +1205,43 @@ the `format-lint` CI job) — keep them green:
 - **The nginx maintenance page mirrors the palette by value** —
   `scripts/check-maintenance-palette.sh` fails when a colour there stops
   existing in `styles.css`.
+- **Do not invent a second way to say something the UI already says.** The
+  token guards prove a value is on the palette and the class-resolution guard
+  proves a name has a rule; neither can see a component that duplicates one in
+  the vocabulary under a different name, and until v0.5.137 the *global* sheet
+  had no budget at all — so the cheapest way to add a second spelling was to
+  skip the page block and put it in `styles.css`. That is how a pair of
+  estimate chips shipped as chips in the changelog, the commit message and
+  their own CSS comment, under a name sharing nothing with `.chip`, past a
+  fully green `format-lint`. `scripts/check-ui-vocabulary.sh` now prices it:
+  the count of global classes [docs/ui-design.md](docs/ui-design.md) does not
+  name is a shrink-only ratchet, `cursor` and `text-decoration` values are a
+  closed **affordance registry** (a new one is a rulebook edit, not a CSS
+  line), and hover text written in a template is capped at 20 words.
+- **Chrome is not prose, and a tooltip is not a disclosure.** Labels and chips
+  are two-or-three-word noun phrases; a `title` is one phrase; a note under a
+  control is one sentence; **anything longer goes in `docs/` and the UI links
+  there**. A hover title is invisible on touch, unsearchable, and read
+  inconsistently by screen readers, so it may never hold the only copy of
+  something a reader needs. The rules and the cheapest-first table of
+  interaction idioms — on the page → `<details>` → row popover → modal — are
+  in ui-design.md under "Interaction idioms" and "UI copy". The script only
+  reads templates, so prose assembled in Swift or JS needs its own budget
+  assertion (`datasetEstimateTitleWordCap` is the worked example).
+- **Run the `ui-review` agent on any change touching `Resources/Views/`,
+  `Public/styles.css`, or a page-wiring `Public/*.js`.** It reviews the layer
+  the guards structurally cannot: whether a construct duplicates the
+  vocabulary, whether the idiom is the lightest that fits, and whether the
+  copy is at house length. Green guards are necessary, not sufficient — every
+  style regression so far has been mechanically legal.
+
+  **This is unconditional and needs no confirmation.** Run it as part of doing
+  the work, the same way you run `scripts/check-styles.sh` — do not ask whether
+  to, do not offer merging without it as an option, and do not skip it because a
+  general instruction elsewhere discourages spawning agents. A UI change that has
+  not been through `ui-review` is not finished. If the agent is genuinely
+  unavailable, say so plainly in the PR rather than letting its absence pass
+  unmentioned.
 
 Run `scripts/check-styles.sh` locally before pushing UI changes (it runs all
 of the above — same as the CI `format-lint` job). The visual-regression
@@ -1407,6 +1516,39 @@ shim); and archived finished-era docs under `docs/archive/`.
 
   (Render tests catch all of this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
+
+  **Leaf resolves no Swift properties, and says nothing when it fails to
+  (v0.5.165).** The comment finding above has a twin, found the same way and
+  costing more. `Dictionary+LeafData.swift` walks a keypath by requiring every
+  intermediate to be a **dictionary**, so `rows.isEmpty` — where `rows` is an
+  array — resolves to **nil**, not to an error. Nil then flows two ways and
+  both read as success: `LeafSerializer`'s conditional guard is
+  `(evaluated.bool ?? false) || (!evaluated.isNil && …)`, so `#if(rows.isEmpty)`
+  **never fires**; `ParameterResolver`'s `.not` is `rhs.bool ?? !rhs.isNil`, so
+  `#if(!rows.isEmpty)` **always fires**.
+
+  Thirty-three sites across 22 templates shipped this way: 22 empty states that
+  never appeared (a "No submissions yet" replaced by a header-only table
+  promising rows and listing none — on the student dashboard, enrollment, five
+  admin pages) and 11 blocks that always did (an "Auto-detected:" note with
+  nothing after it, a Section picker on a course with no sections, empty badge
+  containers). **Render tests cannot see any of it** — the template resolves
+  fine, it just resolves wrong — which is why it survived every guard the repo
+  has and was found only by reading LeafKit's source.
+
+  Use the built-in `count` **tag**, which handles arrays and dictionaries
+  properly: `#if(count(rows) == 0)` and `#if(count(rows) > 0)`. Not the
+  `isEmpty` tag — `#isEmpty(rows)` stringifies its parameter and throws on an
+  array. `count()` throws on a missing or non-collection key, so confirm the
+  receiver is a non-optional array on the context struct; that trade is
+  deliberate, since loud-while-rendering beats silent-forever.
+
+  The idiom is legitimate in exactly one shape: when the receiver is a struct
+  that **declares** the property, the key is a real dictionary member
+  (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
+  indistinguishable to a reader from the broken form, so
+  `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
+  everything else, with a `check-guards.sh` fixture proving it still fails.
 - **Consolidating on xeus (#1271) — R done, Python open.** Browser grading is
   now two substrates: R runs the vendored xeus-r kernel (shipped here), Python
   still runs Pyodide. Moving Python across would restore one authoring/grading
@@ -1494,10 +1636,13 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
 - `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
+- `docs/solution-visibility.md` — post-deadline solution reveal: the per-assignment `SolutionVisibility` policy, the per-student reveal gate and its slip-day claim-window ceiling (shared with release-output gating), the enforcement chokepoints, and the accepted residual leak
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
+- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now largely shipped, so it opens with a **Status** table separating built behaviour from the two things deliberately not built: coverage % (which needs a corpus aggregation run, unlike a bug-set union, which is a query over stored outcomes) and a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
+- `docs/student-avatars.md` — generated chickadee avatars, shipped for the account page (art, `Core/` model, storage, per-course handles; leaderboards and the customization wardrobe are not built) replacing the account-page initials monogram, and the pseudonymous identity primitive a leaderboard would be built on: why the spec is stored rather than derived from a username (a hash of an identifier is reproducible by any classmate, which looks private without being private) and rather than re-derived from a stored seed (appending one option reshuffles everyone), why uniqueness is carried by a per-course handle rather than by the picture (uniqueness must hold at the granularity a viewer can distinguish, at the scope where they see them together — and enforcing it per course would make an avatar change when somebody drops), and how the existing UI guards decide the rendering mechanism (sprite symbols plus custom-property recolouring, since raw path data in a template already fails S4)
 - `docs/browser-freeze-investigation.md` — the Aug 2026 post-boot editor freeze (`page_unresponsive` beacons): telemetry signature, the measured root cause (two upstream listeners each forcing a reflow per IOPub output message — `updatePromptOverlayIcon` and the `:scroll-output` plugin), the runtime prototype mitigation (`Public/jl-cell-perf-patch.js`, which also carries the auto-collapse rule) and why it is not a vendored-bundle edit, and the reusable freeze tracer (`Tools/editor-smoke-test/freeze-trace-check.mjs`)
 - `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (started 2026-07, extended through 2026-08-09; start here before chasing a red check on an unrelated PR). Five families; the two newest are open. Family 5 is the one that most often gets misread as your diff: `api-tests` reporting `cancelled` at its 20-minute ceiling, which looks identical to a wedge but is starvation — the tell is whether tests were still *completing* at the tail of the log, and whether `api-tests-postgres` (same target, same commit) passed
 - `docs/archive/` — finished-era investigations, superseded plans, and point-in-time audits (kept for the record; nothing in there describes current behaviour)

@@ -89,6 +89,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
+        r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -166,6 +167,8 @@ struct InstructorDashboardRoutes: RouteCollection {
             allSetups: allSetups,
             assignmentBySetup: assignmentBySetup,
             uniqueSubmittersBySetup: uniqueSubmittersBySetup,
+            variantSummariesBySetup: try await loadValidationVariantSummaries(
+                req: req, allSetupIDs: allSetupIDs),
             activeCourse: courseState.active,
             fmt: fmt
         )
@@ -508,6 +511,12 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ submissionIDs)
                 .delete()
+            // Variant rows must go before their submissions: the FK is
+            // `.setNull`, so deleting the submissions first would leave the
+            // batch as unlinked rows for a setup that no longer exists.
+            try await ValidationVariant.query(on: req.db)
+                .filter(\.$testSetupID == setupID)
+                .delete()
             try await APISubmission.query(on: req.db)
                 .filter(\.$id ~~ submissionIDs)
                 .delete()
@@ -673,6 +682,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             assignmentLanguageOptions: AssignmentLanguageOption.options(
                 recorded: currentManifestLanguage(setup.manifest)),
             secretRevealEnabled: assignment.secretRevealEnabled == true,
+            solutionVisibilityAfterDue: assignment.solutionVisibility == .afterDue,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error,

@@ -318,6 +318,34 @@ extension InstructorDashboardRoutes {
         return submitterSets.mapValues { $0.count }
     }
 
+    // MARK: - Validation-variant summaries
+
+    /// Aggregates each setup's current validation-variant batch (multi-variant
+    /// validation) for the listing: one query for the whole page, grouped in
+    /// memory — the batches are `validationVariantCount` rows per setup.
+    func loadValidationVariantSummaries(
+        req: Request, allSetupIDs: [String]
+    ) async throws -> [String: ValidationVariantSummary] {
+        guard !allSetupIDs.isEmpty else { return [:] }
+        let variants = try await ValidationVariant.query(on: req.db)
+            .filter(\.$testSetupID ~~ allSetupIDs)
+            .sort(\.$variantIndex)
+            .all()
+        var bySetup: [String: [ValidationVariant]] = [:]
+        for variant in variants {
+            bySetup[variant.testSetupID, default: []].append(variant)
+        }
+        return bySetup.mapValues { batch in
+            ValidationVariantSummary(
+                total: batch.count,
+                failed: batch.count { $0.status == ValidationVariant.Status.failed },
+                pending: batch.count { $0.status == ValidationVariant.Status.pending },
+                firstFailedSubmissionID: batch.first {
+                    $0.status == ValidationVariant.Status.failed && $0.submissionID != nil
+                }?.submissionID)
+        }
+    }
+
     // MARK: - Row construction
 
     /// Builds an `AssignmentRow` for each setup, joining the matching
@@ -327,6 +355,7 @@ extension InstructorDashboardRoutes {
         allSetups: [APITestSetup],
         assignmentBySetup: [String: APIAssignment],
         uniqueSubmittersBySetup: [String: Int],
+        variantSummariesBySetup: [String: ValidationVariantSummary],
         activeCourse: CourseContext?,
         fmt: DateFormatter
     ) -> [AssignmentRow] {
@@ -358,6 +387,8 @@ extension InstructorDashboardRoutes {
                 return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
             }()
 
+            let variants = variantSummariesBySetup[setupID]
+
             return AssignmentRow(
                 setupID: setupID,
                 assignmentID: assignment?.publicID,
@@ -368,6 +399,9 @@ extension InstructorDashboardRoutes {
                 sortOrder: assignment?.sortOrder,
                 validationStatus: validationStatus,
                 validationSubmissionID: validationSubmissionID,
+                variantState: variants?.state ?? "none",
+                variantSummaryText: variants?.summaryText ?? "",
+                failedVariantSubmissionID: variants?.firstFailedSubmissionID,
                 suiteCount: suiteCount,
                 createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil,

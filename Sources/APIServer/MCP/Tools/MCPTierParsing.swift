@@ -14,7 +14,7 @@ func parseOptionalTier(_ raw: String?, tool: String, field: String = "tier") thr
     guard let raw else { return nil }
     guard let tier = TestTier(rawValue: raw) else {
         throw MCPToolError.invalidArguments(
-            tool: tool, detail: "\(field) must be one of: public, release, secret, student.")
+            tool: tool, detail: "\(field) must be one of: \(MCPTierProse.oneOfList).")
     }
     return tier
 }

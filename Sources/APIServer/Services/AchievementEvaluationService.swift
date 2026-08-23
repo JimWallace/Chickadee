@@ -36,6 +36,45 @@ func classGoalProgress(studentsMeeting: Int, denominator: Int, classFraction: Do
     return min(1, reached / target)
 }
 
+/// Fraction of a UNION class goal reached, `0...1` — the collaborative
+/// "the class has found 12 of the seeded bugs" shape.
+///
+/// A union goal has two independent halves and is only met when both are:
+///
+/// - COVERAGE — the class has collectively covered `itemsRequired` distinct
+///   items, taken over the union rather than any one student's submission;
+/// - BREADTH — at least `classFraction` of the roster contributed at least one
+///   credited item.
+///
+/// Progress is the SMALLER of the two, so the bar reports the half that is
+/// actually holding the goal back and cannot read as nearly-done because one
+/// half is complete.  Breadth reuses `classGoalProgress` unchanged: it is the
+/// same arithmetic over the same roster denominator, and only the per-student
+/// predicate differs (contributed a credited item, rather than cleared a grade).
+///
+/// The breadth half is the anti-solo-hero condition.  One student finding
+/// everything reaches full coverage and then fails the goal on breadth, which
+/// is why this feature needs no per-item attribution cap — ranking who gets
+/// credit for which item is what would break the sweep's determinism.
+///
+/// `itemsRequired == 0` is coverage-trivial (nothing is asked for), leaving
+/// breadth as the whole goal.  Pure — unit-tested without a database.
+func classUnionGoalProgress(
+    itemsCovered: Int,
+    itemsRequired: Int,
+    studentsContributing: Int,
+    denominator: Int,
+    classFraction: Double
+) -> Double {
+    let coverage =
+        itemsRequired > 0 ? min(1, Double(itemsCovered) / Double(itemsRequired)) : 1
+    let breadth = classGoalProgress(
+        studentsMeeting: studentsContributing,
+        denominator: denominator,
+        classFraction: classFraction)
+    return min(coverage, breadth)
+}
+
 /// Evaluates every assignment's `classGoal` achievements and upserts one
 /// `APIAchievementResult` snapshot per (setup, achievement).  A snapshot whose
 /// assignment deadline has passed is locked and then frozen — later sweeps skip
@@ -63,17 +102,18 @@ func evaluateClassGoalAchievements(
     // enrollment denominator is ONE scoped map for the whole sweep instead
     // of a per-assignment roster query (#1160 — many assignments share a
     // course, and this loop runs on a timer forever).
-    let goalCarrying = assignments.compactMap { assignment -> (APIAssignment, APITestSetup, [Achievement])? in
+    let goalCarrying = assignments.compactMap { assignment -> GoalCarryingAssignment? in
         guard let setup = setupByID[assignment.testSetupID],
             let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
         else { return nil }
         let goals = props.achievements.filter { $0.isClassGoal }
         guard !goals.isEmpty else { return nil }
-        return (assignment, setup, goals)
+        return GoalCarryingAssignment(
+            assignment: assignment, setup: setup, properties: props, goals: goals)
     }
     guard !goalCarrying.isEmpty else { return 0 }
 
-    let goalCourseIDs = Array(Set(goalCarrying.map { $0.0.courseID }))
+    let goalCourseIDs = Array(Set(goalCarrying.map(\.assignment.courseID)))
     let countsByCourse = try await enrolledStudentCountsByCourse(courseIDs: goalCourseIDs, on: db)
     // Numerator guard (audit A7): only currently-enrolled per-course students
     // count toward `studentsMeeting` — staff test submissions and students who
@@ -81,8 +121,10 @@ func evaluateClassGoalAchievements(
     // which could grant unearned bonus points all the way to the CSV/LMS.
     let studentIDsByCourse = try await studentUserIDsByCourse(courseIDs: goalCourseIDs, on: db)
 
-    for (assignment, setup, goals) in goalCarrying {
-        guard let setupID = setup.id else { continue }
+    for entry in goalCarrying {
+        let assignment = entry.assignment
+        let goals = entry.goals
+        guard let setupID = entry.setup.id else { continue }
 
         let existing = try await APIAchievementResult.query(on: db)
             .filter(\.$testSetupID == setupID)
@@ -99,12 +141,22 @@ func evaluateClassGoalAchievements(
         let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
             .filter { enrolledStudents.contains($0.key) }
 
+        // Only a union goal reads the coverage table, and most assignments
+        // carry none — so this stays off the sweep's hot path for every
+        // ordinary class goal.
+        let coverage =
+            goals.contains(where: \.isUnionClassGoal)
+            ? try await classItemCoverage(testSetupID: setupID, on: db) : []
+
         let outcome = try await writeClassGoalSnapshots(
             goals: goals,
             rowByAchievement: rowByAchievement,
             evaluation: ClassGoalEvaluation(
                 setupID: setupID,
+                properties: entry.properties,
                 bestByStudent: bestByStudent,
+                coverage: coverage,
+                enrolledStudents: enrolledStudents,
                 denominator: denominator,
                 locked: locked,
                 now: now),
@@ -134,6 +186,18 @@ func evaluateClassGoalAchievements(
 
 // MARK: - Snapshot writing
 
+/// One assignment the sweep has work for: its setup, its decoded manifest (a
+/// union goal scopes its item set by suite section), and the class goals in it.
+///
+/// A named struct rather than a tuple because it carries four things, and the
+/// call site reads `entry.properties` rather than `$0.2`.
+private struct GoalCarryingAssignment {
+    let assignment: APIAssignment
+    let setup: APITestSetup
+    let properties: TestProperties
+    let goals: [Achievement]
+}
+
 /// What one setup's snapshot write produced: how many rows were written, and
 /// whether a **points-rewarded** goal crossed from live to frozen in this pass.
 private struct ClassGoalWriteOutcome {
@@ -146,10 +210,75 @@ private struct ClassGoalWriteOutcome {
 /// size, whether the deadline has passed, and the sweep's clock.
 private struct ClassGoalEvaluation {
     let setupID: String
+    /// The decoded manifest — a union goal scopes its item set by suite section.
+    let properties: TestProperties
     let bestByStudent: [UUID: Double]
+    /// Every accumulated coverage row for this setup; empty unless a union goal
+    /// is present.
+    let coverage: [APIClassItemCoverage]
+    /// Currently-enrolled students, the roster every *student count* is scoped
+    /// to (audit A7).
+    let enrolledStudents: Set<UUID>
     let denominator: Int
     let locked: Bool
     let now: Date
+}
+
+/// The two numbers one goal's snapshot carries: the student count its progress
+/// bar reports, and the progress fraction itself.
+private struct ClassGoalMetric {
+    let studentsMeeting: Int
+    let progress: Double
+    /// Union goals only: the coverage half of the snapshot.  nil on a
+    /// grade-counted goal, which unions nothing.
+    var itemsCovered: Int?
+    var itemsRequired: Int?
+}
+
+/// Computes one goal's metric, branching on which of the two evaluable class
+/// goal shapes it is.
+///
+/// `studentsMeeting` keeps its exact meaning in both branches — a count of
+/// currently-enrolled students, over the roster denominator — so the stored
+/// field names stay true and the student-facing "N / M students" sentence needs
+/// no per-shape arithmetic.  What differs is the per-student predicate: cleared
+/// the grade threshold, versus contributed at least one credited item.
+private func classGoalMetric(
+    goal: Achievement, evaluation: ClassGoalEvaluation
+) -> ClassGoalMetric {
+    guard let requirement = goal.coveredItemsRequirement else {
+        let threshold = goal.gradeThresholdFraction ?? 1
+        let meeting = evaluation.bestByStudent.values.filter { $0 >= threshold }.count
+        return ClassGoalMetric(
+            studentsMeeting: meeting,
+            progress: classGoalProgress(
+                studentsMeeting: meeting,
+                denominator: evaluation.denominator,
+                classFraction: goal.classFraction ?? 1))
+    }
+
+    let names = evaluation.properties.coveredItemNames(inScopeOf: requirement.scope)
+    let scoped = evaluation.coverage.filter { names.contains($0.item) }
+    // COVERAGE counts every row: an item a since-dropped student found is still
+    // an item the class collectively covered, and dropping it would make the
+    // number retreat — which it must never do, because it drives a progress bar
+    // that freezes into a grade push.  Staff submissions never reach the table
+    // at all (`recordClassItemCoverage` refuses a non-student at write time).
+    //
+    // BREADTH counts only currently-enrolled students, because it is a fraction
+    // of the CURRENT roster and letting a dropped student count toward it is
+    // exactly the shape audit A7 closed on the grade path.
+    let contributing = Set(scoped.map(\.userID)).intersection(evaluation.enrolledStudents)
+    return ClassGoalMetric(
+        studentsMeeting: contributing.count,
+        progress: classUnionGoalProgress(
+            itemsCovered: scoped.count,
+            itemsRequired: requirement.count,
+            studentsContributing: contributing.count,
+            denominator: evaluation.denominator,
+            classFraction: goal.classFraction ?? 1),
+        itemsCovered: scoped.count,
+        itemsRequired: requirement.count)
 }
 
 /// Upserts one snapshot per evaluable goal on a setup and reports whether a
@@ -184,18 +313,16 @@ private func writeClassGoalSnapshots(
             logger.warning(
                 """
                 Class goal '\(goal.id)' on setup \(setupID) has conditions the sweep \
-                cannot evaluate (only a single 'grade atLeast' condition is supported); skipping.
+                cannot evaluate (a single 'grade atLeast' or 'itemsCovered atLeast' \
+                condition is supported); skipping.
                 """
             )
             continue
         }
 
-        let threshold = goal.gradeThresholdFraction ?? 1
-        let studentsMeeting = evaluation.bestByStudent.values.filter { $0 >= threshold }.count
-        let progress = classGoalProgress(
-            studentsMeeting: studentsMeeting,
-            denominator: denominator,
-            classFraction: goal.classFraction ?? 1)
+        let metric = classGoalMetric(goal: goal, evaluation: evaluation)
+        let studentsMeeting = metric.studentsMeeting
+        let progress = metric.progress
 
         if let row = rowByAchievement[goal.id] {
             row.studentsMeeting = studentsMeeting
@@ -203,6 +330,8 @@ private func writeClassGoalSnapshots(
             row.progress = progress
             row.locked = locked
             row.evaluatedAt = now
+            row.itemsCovered = metric.itemsCovered
+            row.itemsRequired = metric.itemsRequired
             try await row.save(on: db)
         } else {
             try await APIAchievementResult(
@@ -212,7 +341,9 @@ private func writeClassGoalSnapshots(
                 denominator: denominator,
                 progress: progress,
                 locked: locked,
-                evaluatedAt: now
+                evaluatedAt: now,
+                itemsCovered: metric.itemsCovered,
+                itemsRequired: metric.itemsRequired
             ).save(on: db)
         }
         outcome.written += 1

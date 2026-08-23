@@ -1,0 +1,9 @@
+# The template ratchet alone was leaky: externalizing page JS moves code out
+# of the template glob, so the same rule has to hold for Public/*.js.
+guard="scripts/check-styles.sh"
+files="Public/app.js"
+description="a native alert() in first-party JS"
+expect="new native alert() in first-party JS"
+apply() {
+    printf '\nfunction ckGuardFixture() { alert("x"); }\n' >> Public/app.js
+}

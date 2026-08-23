@@ -104,33 +104,82 @@ struct ResultRoutes: RouteCollection {
                         "Validation \(status) for assignment '\(assignment.title)' (submission \(collection.submissionID))"
                     )
                 }
-            }
 
-            // Award class-wide badges when a student submission earns 100%.
-            if submission.kind == APISubmission.Kind.student,
-                collection.buildStatus == .passed,
-                let userID = submission.userID,
-                let subID = submission.id
-            {
-                let grade = gradePercent(from: collection) ?? 0
-                if grade == 100 {
-                    let disabled =
-                        (try? await APITestSetup.find(submission.testSetupID, on: req.db))
-                        .map { BuiltInAchievements.disabled(in: $0) } ?? []
-                    try await awardClassBadgesFor100Percent(
-                        testSetupID: submission.testSetupID,
-                        userID: userID,
-                        submissionID: subID,
-                        executionTimeMs: collection.executionTimeMs,
-                        attemptNumber: submission.attemptNumber ?? 1,
-                        disabled: disabled,
-                        on: req.db
+                // A per-variant run (multi-variant validation) is never the
+                // assignment's linked primary, so the two lookups are
+                // disjoint: this one records the verdict on the variant row
+                // the instructor surfaces read.
+                if let variant = try await ValidationVariant.query(on: req.db)
+                    .filter(\.$submissionID == collection.submissionID)
+                    .first()
+                {
+                    variant.status = status
+                    try await variant.save(on: req.db)
+                    req.logger.info(
+                        "Validation variant \(variant.variantIndex) \(status) for setup \(variant.testSetupID)"
                     )
                 }
             }
+
+            try await applyClassWideEffects(
+                submission: submission, collection: collection, on: req)
         }
 
         return ReportResponse(received: true)
+    }
+
+    // MARK: - Class-wide effects
+
+    /// The class-level side effects of one student result: the union of covered
+    /// items, and the class badges a 100% earns.
+    ///
+    /// Extracted from `report` because it is the part that GROWS — every
+    /// class-level signal added to the platform lands here, and inlining them
+    /// pushed the route past the body-length limit. Keeping it separate also
+    /// keeps the two gates visible: coverage is per item and ungated by grade,
+    /// badges are per student and gated at 100%.
+    private func applyClassWideEffects(
+        submission: APISubmission, collection: TestOutcomeCollection, on req: Request
+    ) async throws {
+        guard submission.kind == APISubmission.Kind.student,
+            collection.buildStatus == .passed,
+            let userID = submission.userID,
+            let subID = submission.id
+        else { return }
+
+        // Per item, and deliberately not inside the 100% gate below: a student
+        // who covers one item and nothing else has still contributed that item.
+        //
+        // Only contribution assignments accumulate a union, so the slot count
+        // comes from the instructor's starter notebook. Read through
+        // `notebookBytesCache` (#1171) rather than unzipping per result: a
+        // deadline spike shares one resolution. A setup with no notebook
+        // resolves to nil, which is 0 slots, which is "not a contribution
+        // assignment" — the right answer for every ordinary assignment.
+        let slotCount = await declaredContributionSlotCount(
+            testSetupID: submission.testSetupID, app: req.application, on: req.db)
+        try await recordClassItemCoverage(
+            testSetupID: submission.testSetupID,
+            userID: userID,
+            submissionID: subID,
+            outcomes: collection.outcomes,
+            declaredSlotCount: slotCount,
+            on: req.db
+        )
+
+        guard gradePercent(from: collection) == 100 else { return }
+        let disabled =
+            (try? await APITestSetup.find(submission.testSetupID, on: req.db))
+            .map { BuiltInAchievements.disabled(in: $0) } ?? []
+        try await awardClassBadgesFor100Percent(
+            testSetupID: submission.testSetupID,
+            userID: userID,
+            submissionID: subID,
+            executionTimeMs: collection.executionTimeMs,
+            attemptNumber: submission.attemptNumber ?? 1,
+            disabled: disabled,
+            on: req.db
+        )
     }
 
     // MARK: - DB persistence

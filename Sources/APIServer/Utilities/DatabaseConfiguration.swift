@@ -343,6 +343,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
+    app.migrations.add(CreateValidationVariants())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
@@ -354,6 +355,8 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateAssignmentRequirements())
     app.migrations.add(CreateClassAchievements())
     app.migrations.add(CreateAchievementResults())
+    app.migrations.add(AddAchievementResultCoverage())
+    app.migrations.add(CreateClassItemCoverage())
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
     app.migrations.add(CreateClientDiagnostics())
@@ -468,4 +471,16 @@ func registerMigrations(on app: Application) {
     // `test_setups` has already run (the #1077 boot-order hazard, inverted —
     // here the model query is the late one rather than the column).
     app.migrations.add(BackfillDeclaredLanguage())
+
+    // Generated student avatars: the spec column, the per-course handle, and
+    // the partial unique index that makes lazy materialization safe.
+    app.migrations.add(AddAvatarIdentity())
+
+    // Per-assignment solution-reveal policy (`SolutionVisibility`). Nullable
+    // column on `assignments`; nil = hidden, the pre-existing behaviour.
+    app.migrations.add(AddAssignmentSolutionVisibility())
+
+    // Course-level opt-out for the release-output slip-day reveal hold.
+    // Nullable column on `courses`; nil = hold on, the safe default.
+    app.migrations.add(AddCourseSlipDayRevealHold())
 }

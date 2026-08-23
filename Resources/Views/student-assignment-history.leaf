@@ -13,7 +13,7 @@
     <a class="btn action-btn" href="#(backURL)">Back to student</a>
 </div>
 
-#if(rows.isEmpty):
+#if(count(rows) == 0):
 <p class="empty">No submissions yet for this student on this assignment.</p>
 #else:
 <table class="results-table">
@@ -53,7 +53,5 @@
     </tbody>
 </table>
 #endif
-<style>
-</style>
 #endexport
 #endextend

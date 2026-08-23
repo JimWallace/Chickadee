@@ -170,7 +170,7 @@ enum MCPServerInstructions {
         assignments (list_assignments) and test-suite items (get_suite).
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
-        (public/release/secret/student), points, an optional section, prerequisites (dependsOn), and \
+        (\(MCPTierProse.slashAlternatives)), points, an optional section, prerequisites (dependsOn), and \
         an optional "💡 Hint" shown to the student only when that test fails. \
         get_suite returns the full definition of every item, not just its metadata: each \
         hand-written script's raw body, each pattern family's complete spec (function, paramNames, \
@@ -219,8 +219,8 @@ enum MCPServerInstructions {
         both the solution and the expression load.
         - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
-        competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
-        executionTimeMs, gradeJumpPercent, testPass) combined with `match` (all/any), and the scope's \
+        competitive `record`), a list of conditions over the graded signals \
+        (\(MCPAchievementSignalProse.commaList)) combined with `match` (all/any), and the scope's \
         reward (classPercent + points for a goal, recordDimension for a record). Read them with \
         get_achievements, replace the whole list with update_achievements. They are server-evaluated \
         and DISPLAY-ONLY — they never change what the suite grades, so editing them does not re-validate, \
@@ -348,7 +348,7 @@ enum MCPServerInstructions {
         new cases (`addCases`) or replace the family's prerequisites (`dependsOn`) in place, so you \
         rarely need to recreate a family to grow its coverage or drop a dependency. author_script \
         writes a single \
-        hand-written file into the test setup. A test tier (public/release/secret/student) creates or \
+        hand-written file into the test setup. A test tier (\(MCPTierProse.slashAlternatives)) creates or \
         replaces the script AND its suite entry — set points/displayName/dependsOn/sectionID alongside \
         the body; the runner reads the per-student seed from the CHICKADEE_ASSIGNMENT_SEED env var, so \
         a secret test can re-derive a personalized expected answer. The "support" tier writes a \

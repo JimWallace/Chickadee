@@ -4,10 +4,10 @@
 -->
 <thead>
     <tr>
-        <th>Name</th>
-        <th>Status</th>
-        <th class="due-col col-hide-phone">Due</th>
-        <th>Grade</th>
+        <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
+        <th data-sort-key="status" data-sort-type="text"><button class="sort-header" type="button">Status</button></th>
+        <th class="due-col col-hide-phone" data-sort-key="due" data-sort-type="date"><button class="sort-header" type="button">Due</button></th>
+        <th data-sort-key="grade" data-sort-type="number"><button class="sort-header" type="button">Grade</button></th>
         <th class="col-hide-phone">History</th>
         <th>Actions</th>
     </tr>

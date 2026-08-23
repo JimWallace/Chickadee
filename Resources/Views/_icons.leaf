@@ -69,6 +69,12 @@
         <symbol id="i-book" viewBox="0 0 24 24">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
         </symbol>
+        <!-- The answer key (revealed reference solution). Distinct from the
+             book, which already means "open in notebook" on the history
+             page — one symbol must not carry two actions. -->
+        <symbol id="i-key" viewBox="0 0 24 24">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+        </symbol>
         <symbol id="i-chevron-right" viewBox="0 0 24 24">
             <polyline points="9 18 15 12 9 6"/>
         </symbol>

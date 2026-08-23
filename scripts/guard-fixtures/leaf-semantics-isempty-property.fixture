@@ -1,0 +1,12 @@
+# LeafKit has no property resolution: `rows.isEmpty` walks the keypath as
+# dictionaries, hits an array, and resolves to nil. Nil is false in a
+# conditional and true under negation, so the branch silently never fires (or
+# always does) and the template still renders. Thirty-three sites shipped this
+# way before the guard existed.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/enroll.leaf"
+description="Swift .isEmpty property access in a Leaf tag parameter"
+expect="Leaf cannot resolve Swift properties on a collection"
+apply() {
+    printf '#if(courses.isEmpty):\n<p>guard fixture</p>\n#endif\n' >> Resources/Views/enroll.leaf
+}

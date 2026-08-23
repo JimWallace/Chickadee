@@ -1,0 +1,10 @@
+# A raw colour literal in a rule body bypasses the palette and so bypasses
+# dark mode. The historical bug: a hardcoded #d4edda success banner rendering
+# invisible-text-on-dark.
+guard="scripts/check-design-tokens.sh"
+files="Public/styles.css"
+description="a raw hex colour in a rule body"
+expect="colour literal"
+apply() {
+    printf '\n.ck-guard-fixture { color: #ff0000; }\n' >> Public/styles.css
+}

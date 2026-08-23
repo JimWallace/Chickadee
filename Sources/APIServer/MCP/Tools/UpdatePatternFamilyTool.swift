@@ -142,7 +142,7 @@ struct UpdatePatternFamilyTool: ContentTool {
     static let name = "update_pattern_family"
     static let description =
         "Edit a pattern family for an assignment, by assignment public ID + family id. Set the "
-        + "family's default tier (public/release/secret/student) and/or points, enable/disable cases "
+        + "family's default tier (\(MCPTierProse.slashAlternatives)) and/or points, enable/disable cases "
         + "by key (enableCases / disableCases), set the family-wide `defaultHint` and/or per-case "
         + "`hint` (the \"💡 Hint\" shown to the student only when that test fails; empty string clears "
         + "it), set the family-level `defaultTimeLimitSeconds` and/or a per-case `timeLimitSeconds` "

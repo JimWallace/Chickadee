@@ -271,6 +271,66 @@ final class AssignmentHelpersManifestTests {
                 .minimumRunnerVersion == "0.5.0")
     }
 
+    // Regression: rebuilding the manifest to add or remove a script must
+    // preserve `languageDeclared` alongside `language`.  makeWorkerManifestJSON
+    // builds a fresh dict, so an un-threaded flag was dropped on every script
+    // edit — turning a deliberate "None" declaration (languageDeclared with no
+    // language key, the case where `language` alone carries no evidence) back
+    // into "nobody has been asked".
+    @Test func updateManifestScriptEditsPreserveLanguageDeclaration() throws {
+        let declaredNone = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.sh", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: nil,
+            languageDeclared: true
+        )
+        // Sanity: the builder recorded the declaration.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(declaredNone.utf8))
+                .languageDeclared == true)
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: declaredNone,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.sh", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        let addedProps = try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+        #expect(addedProps.language == nil)
+        #expect(addedProps.languageDeclared == true)
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.sh"))
+        let removedProps = try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+        #expect(removedProps.languageDeclared == true)
+
+        // A declared language survives the same round-trip: the two fields
+        // travel together.
+        let declaredR = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.R", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: .r,
+            languageDeclared: true
+        )
+        let addedR = try #require(
+            updateManifestAddingScript(
+                manifestJSON: declaredR,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.R", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        let addedRProps = try JSONDecoder().decode(TestProperties.self, from: Data(addedR.utf8))
+        #expect(addedRProps.language == .r)
+        #expect(addedRProps.languageDeclared == true)
+    }
+
     @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")

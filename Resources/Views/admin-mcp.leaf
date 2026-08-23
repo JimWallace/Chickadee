@@ -93,7 +93,7 @@ MCP
                             </form>
                         </span>
                         #endfor
-                        #if(account.enrolledCourses.isEmpty):
+                        #if(count(account.enrolledCourses) == 0):
                         <span class="mcp-none">none — no access</span>
                         #endif
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" class="mcp-enroll-form">
@@ -133,7 +133,7 @@ MCP
                 </td>
             </tr>
         #endfor
-        #if(accounts.isEmpty):
+        #if(count(accounts) == 0):
             <tr><td colspan="4" class="text-muted">No MCP accounts yet.</td></tr>
         #endif
         </tbody>
@@ -177,7 +177,7 @@ MCP
                 </td>
             </tr>
         #endfor
-        #if(grants.isEmpty):
+        #if(count(grants) == 0):
             <tr><td colspan="7" class="text-muted mcp-cell-center">No agents have connected yet.</td></tr>
         #endif
         </tbody>

@@ -306,7 +306,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=688
+PAGE_STYLE_BASELINE=677
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -360,7 +360,13 @@ fi
 # row the server is rendering and cannot live in a stylesheet. A width that
 # differs because someone preferred it there is a design decision, and belongs
 # in styles.css as the token's value or as a named modifier class.
-PER_DATUM_INLINE_PROPS="--bar-h"
+# The avatar props are the second honest case, and the same shape as --bar-h:
+# every one carries a palette token chosen for the STUDENT the server is
+# rendering, so no stylesheet can hold it and no modifier class could enumerate
+# 9,216 of them. They are a closed set — one per slot in AvatarSpec, plus the
+# wing-mark that reuses the cheek — and the Swift side names the tokens
+# (Core/AvatarMarkup.swift), so a page cannot invent an eighth.
+PER_DATUM_INLINE_PROPS="--bar-h --av-cap --av-wing --av-accent --av-backdrop"
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
@@ -403,13 +409,18 @@ if [ -n "${s2_impl}${s2_glyph}${s2_orphan}" ]; then
   echo
 fi
 
-# S4: icons come from the sprite (Resources/Views/_icons.leaf), referenced as
-# <svg class="icon"><use href="#i-name"/></svg>. Raw path data anywhere else is
-# a new copy of a shape that already exists — the trash can had fifteen, in
-# three byte-level variants, which is how "change the delete icon" became a
-# grep-and-pray. The sprite is the one file allowed to hold geometry.
+# S4: drawn geometry lives in a sprite and is referenced by a use element.
+# Raw path data anywhere else is a new copy of a shape that already exists —
+# the trash can had fifteen, in three byte-level variants, which is how "change
+# the delete icon" became a grep-and-pray.
+#
+# TWO files may hold geometry, for two different vocabularies: _icons.leaf is
+# the stroked 24x24 Feather set inlined on every page, and _avatar-sprite.leaf
+# is the flat-filled 64x64 chickadee parts, included only by pages that show an
+# avatar. A third would want the same justification: a distinct vocabulary with
+# a distinct set of pages, not just somewhere else to paste a path.
 s4_svg="$(grep -rln '<path d=\|<polyline points=\|<circle cx=' "${views[@]}" Public/*.js \
-  | grep -v 'Resources/Views/_icons.leaf' || true)"
+  | grep -vE 'Resources/Views/(_icons|_avatar-sprite)\.leaf' || true)"
 if [ -n "$s4_svg" ]; then
   status=1
   echo "ERROR: inline SVG geometry outside the icon sprite."
@@ -458,6 +469,14 @@ fi
 
 # ── 5. Class names must resolve ──────────────────────────────────────────────
 scripts/check-class-resolution.sh || status=1
+
+# ── 6. The vocabulary above the token layer ──────────────────────────────────
+# Guard 4 compares selector TEXT and guard 4b prices a page-local copy, so
+# between them a second spelling of an existing component is free as long as
+# it is spelled differently and lives in the global sheet. This prices that,
+# plus the two things nothing else looks at: the affordances that tell a user
+# an element is interactive, and how much prose a tooltip carries.
+scripts/check-ui-vocabulary.sh || status=1
 
 if [ "$status" -eq 0 ]; then
   echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"

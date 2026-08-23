@@ -39,12 +39,8 @@ extension TestOutcomeCollection {
             outcomes.reduce(0) { $0 + ($1.longResult?.utf8.count ?? 0) }
             + (compilerOutput?.utf8.count ?? 0)
         let overhead = max(0, serializedSize() - longBytes)
-        let carrierCount = max(
-            1,
-            outcomes.filter { ($0.longResult?.isEmpty == false) }.count
-                + ((compilerOutput?.isEmpty == false) ? 1 : 0))
 
-        var perCarrierCap = max(1024, (budgetBytes - overhead) / carrierCount)
+        var perCarrierCap = max(1024, (budgetBytes - overhead) / max(1, outputCarrierCount))
         var truncated = self
         for _ in 0..<8 {
             truncated = truncatedCopy(perCarrierCap: perCarrierCap)
@@ -52,6 +48,24 @@ extension TestOutcomeCollection {
             perCarrierCap = max(256, perCarrierCap / 2)
         }
         return (truncated, true)
+    }
+
+    /// Everything that shares the output budget: each outcome carrying a
+    /// non-empty `longResult`, plus `compilerOutput` when it is non-empty.
+    ///
+    /// `compilerOutput` counts because it is truncated by the same cap the
+    /// outcomes are, so leaving it out of the divisor hands every carrier a
+    /// share the collection cannot afford. The halving loop below absorbs that
+    /// — the result still fits — which is exactly why this is a named,
+    /// separately-asserted quantity rather than an expression inline in the
+    /// arithmetic: an off-by-one here is invisible from outside, and the
+    /// 2026-08-19 mutation sweep found two mutants of it surviving on that
+    /// basis. `TestOutcomeCollectionTruncationTests` pins the count itself.
+    ///
+    /// Internal, not private, so the tests can see it; it is not API.
+    var outputCarrierCount: Int {
+        outcomes.filter { ($0.longResult?.isEmpty == false) }.count
+            + ((compilerOutput?.isEmpty == false) ? 1 : 0)
     }
 
     private func serializedSize() -> Int {

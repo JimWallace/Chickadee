@@ -301,4 +301,62 @@ import Vapor
             #expect(reloaded?.isOpen == false)
         }
     }
+
+    // MARK: - solutionVisibility
+
+    @Test func refusesSolutionRevealWithoutASolutionOnFile() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // No validation status, no validation submission, no draft: there
+            // is nothing to reveal, so enabling must fail loudly (the
+            // student-facing routes only fail soft).
+            let assignment = try await enrolledAssignment(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        solutionVisibility: "afterDue"),
+                    context(app))
+            }
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.solutionVisibility == .hidden)
+        }
+    }
+
+    @Test func setsAndClearsSolutionVisibility() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app, validationStatus: "passed")
+            let enabled = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, solutionVisibility: "afterDue"),
+                context(app))
+            #expect(enabled.solutionVisibility == "afterDue")
+            var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.solutionVisibility == .afterDue)
+
+            // Turning it back off needs no solution on file.
+            let disabled = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, solutionVisibility: "hidden"),
+                context(app))
+            #expect(disabled.solutionVisibility == "hidden")
+            reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.solutionVisibility == .hidden)
+        }
+    }
+
+    @Test func rejectsUnknownSolutionVisibility() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app, validationStatus: "passed")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        solutionVisibility: "sometimes"),
+                    context(app))
+            }
+        }
+    }
 }

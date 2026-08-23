@@ -1,0 +1,414 @@
+name: Mutation testing (weekly)
+
+# A REPORT, NEVER A GATE. Nothing here blocks a merge and no score is a target.
+# A surviving mutant is a question for a human: the suite could not tell the
+# difference when that expression changed. Some survivors are unkillable by
+# construction, so chasing a percentage means writing tests for inputs that
+# cannot occur. See docs/mutation-testing-pilot.md.
+#
+# SCOPE: RUNNERCORE + CORE. ~10,200 LOC, ~1,700 mutants, 8 shards of ~60 minutes.
+# Widened after run 3 -- the first sweep that ran end to end -- came back green at
+# 84% (122 killed, 23 survivors, 64 phantoms filtered), which is the condition the
+# RunnerCore-only config named for widening.
+#
+# Eight shards because the cost is FIXED, not marginal: ~29 minutes per shard for
+# a cold build plus the unmutated baseline, then only ~9.8 seconds per mutant.
+# Both measured across run 3. The curve flattens fast -- 84 min over 5 shards, 63
+# over 8, 56 over 10 -- so the eighth shard is roughly where another stops paying.
+#
+# A CORE SURVIVOR IS WEAKER EVIDENCE THAN A RUNNERCORE ONE. The suite skips
+# APITests, which dominates the runtime, and Core is exercised through it: 89% of
+# Core's LOC is reachable from CoreTests or WorkerTests, 5% only from APITests, 6%
+# from no test at all. A survivor in that 5% may be an artefact of the skip rather
+# than a hole -- the missing-interpreter shape again -- so check it against the
+# full suite before writing a test. Tools/mutation/config.json carries the detail.
+#
+# WORKER IS STILL OUT, for the same shape of reason: the baseline fix that made
+# run 3 possible is `--skip WorkerTests/`, which drops the 48 timing-sensitive
+# sandbox and timeout tests, so mutating Sources/Worker would report survivors in
+# exactly the code they cover. That is a separate problem from widening scope.
+#
+# APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
+# mutants, and its mutants must be graded by APITests, the slowest suite, so it
+# is ~1,712h serial -- roughly 96% of the cost of the whole tree for its least
+# informative mutants (route wiring, Leaf rendering, Fluent models). Triage cost
+# scales with SURVIVORS, not mutants, and a report nobody can read is worse than
+# no report because it looks like coverage.
+#
+# THIS BUILDS A PATCHED MUTER, DELIBERATELY. Stock Muter cannot mutate anything
+# here and fails silently at a confident 0% (muter#307, open upstream), and every
+# Muter RELEASE predates the fix that lets it recognise a Swift Testing failure
+# at all, which matters because this repo has zero XCTest. There is no released
+# build that works for us. scripts/mutation-run.sh carries the reasoning; the
+# `Mutation-testing probe (macOS)` workflow re-verifies the tool after a bump,
+# because both upstream failure modes are silent and a plausible-looking report
+# is not evidence the tool ran.
+#
+# AND ITS OUTPUT IS AUDITED, NOT TRUSTED. Muter also reports mutants it never
+# inserted, which always read as "survived" -- measured here, one of four
+# RemoveSideEffects mutants in SuiteExecution.swift was a phantom pointing at a
+# line that an existing test already covers. Tools/mutation/report.py checks
+# every reported survivor against the guards actually present in the mutated copy
+# and quarantines the phantoms, so nobody triages a mutant that does not exist.
+
+on:
+  schedule:
+    # Tuesdays, 06:00 UTC.
+    - cron: "0 6 * * 2"
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: "Shard count override (default: shardCount in Tools/mutation/config.json)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-weekly
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # The shard count is ONE number, and it lives in Tools/mutation/config.json.
+    # It used to live in three places -- that file, the `shard:` matrix literal
+    # below, and whatever `--of` this dispatch passed -- hand-synced, with the
+    # quiet failure mode being the one this whole exercise exists to catch:
+    # dispatching `shards: 5` left the matrix at three jobs, so shards 3 and 4
+    # were never run, while the aggregator (reading config.json) saw 3 of 3 and
+    # called it a complete sweep. 40% of the files silently unmutated, reported
+    # as covered. Deriving the matrix here means the number cannot disagree with
+    # itself.
+    name: Plan the shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: plan
+        env:
+          OVERRIDE: ${{ inputs.shards }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          override = (os.environ.get("OVERRIDE") or "").strip()
+          count = int(override) if override else json.load(
+              open("Tools/mutation/config.json"))["shardCount"]
+          if count < 1:
+              raise SystemExit(f"shard count must be >= 1, got {count}")
+          print(f"count={count}")
+          print("shards=" + json.dumps(list(range(count))))
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  mutate:
+    name: "Shard ${{ matrix.shard }}"
+    needs: plan
+    runs-on: ubuntu-latest
+    # Each shard measures ~70 minutes of mutant testing plus a cold build of the
+    # project inside Muter's copy. Generous, so a slow shard reports rather than
+    # being killed at a ceiling -- a job cancelled at its limit looks identical
+    # to a wedge from the outside.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    container:
+      # swift-CI, not plain swift. The -ci image is the one carrying python3,
+      # lua5.4, octave and r-base; the plain image is the toolchain alone. Run 1
+      # of this workflow died in under a second on all ten shards because it
+      # named the wrong one, and the whole sweep is worthless on an image
+      # missing interpreters anyway: a missing interpreter makes its tests SKIP
+      # rather than fail, so every mutant they covered survives and reads as a
+      # hole that is not there.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Cache the patched Muter build
+        uses: actions/cache@v4
+        with:
+          path: /tmp/muter-src
+          # Keyed on the pin AND the patch, so editing either rebuilds rather
+          # than silently reusing a Muter that no longer carries the fix.
+          key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+
+      - name: Run shard ${{ matrix.shard }}
+        run: |
+          scripts/mutation-run.sh \
+            --shard ${{ matrix.shard }} \
+            --of ${{ needs.plan.outputs.count }} \
+            --muter-src /tmp/muter-src \
+            --out mutation-report
+
+      - name: Upload this shard's report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ matrix.shard }}
+          path: mutation-report/
+          if-no-files-found: warn
+
+  file-issue:
+    name: File one triage issue
+    needs: [plan, mutate]
+    # `always()` so a single wedged shard still yields a report for the other
+    # nine, rather than losing an hour of compute to one bad apple.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # `write` so the run record can be committed. The sweep's output was
+      # otherwise entirely perishable -- expiring artifacts and an issue body --
+      # and a trend needs a series that outlives the retention window.
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-report-*
+          path: shards
+
+      - name: Record this run for the trend
+        id: record
+        run: |
+          # Pull the existing series in first, so trend.py sees every prior run
+          # rather than just this one. The records live on their own branch --
+          # see the commit step for why they cannot live on main.
+          if git fetch --quiet origin mutation-reports 2>/dev/null; then
+            git checkout --quiet FETCH_HEAD -- MutationReports 2>/dev/null || true
+            echo "Restored $(ls MutationReports/*.json 2>/dev/null | wc -l) prior record(s)."
+          else
+            echo "No mutation-reports branch yet; this is the first run recorded."
+          fi
+          date="$(date -u +%Y-%m-%d)"
+          # The filename carries the RUN ID as well as the date. Keying on the
+          # date alone means a second sweep on the same day silently overwrites
+          # the first -- which is not hypothetical: a manual dispatch beside the
+          # Tuesday schedule is the normal way this job gets run. trend.py orders
+          # by the `date` FIELD inside each record, not by filename, so a suffix
+          # costs the series nothing.
+          record="MutationReports/${date}-run${GITHUB_RUN_ID}.json"
+          echo "file=$record" >> "$GITHUB_OUTPUT"
+          if ! python3 Tools/mutation/merge-run.py shards "$record" "$date"; then
+            echo "::warning::No shard produced outcomes; no run recorded."
+            echo "recorded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "recorded=true" >> "$GITHUB_OUTPUT"
+          python3 Tools/mutation/trend.py | tee /tmp/trend.txt
+
+      - name: Commit the run record
+        id: commit
+        # NEVER fatal: a lost record is one gap in a series, a lost issue is the
+        # whole run, and the issue is filed by a later step.
+        #
+        # It targets `mutation-reports`, NOT the default branch. Run 3 tried main
+        # and was refused -- "Changes must be made through a pull request", plus
+        # four required status checks -- which is not a misconfiguration to fix
+        # but the repository's rules working correctly. A bot committing a
+        # generated artifact to main cannot satisfy them and never will, so the
+        # series gets its own unprotected branch. `continue-on-error` then hid
+        # the refusal completely, which is how a trend that can never accumulate
+        # would have looked exactly like a trend with nothing in it yet.
+        #
+        # A SIDE CLONE rather than a branch switch in the workspace: the records
+        # branch holds only MutationReports/, so checking it out over a tree full
+        # of tracked sources means deleting them and putting them back, and every
+        # cheaper-looking variant of that (orphan branch, stash, sparse checkout)
+        # has an edge case that ends with a half-written working tree.
+        continue-on-error: true
+        if: steps.record.outputs.recorded == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          date="$(date -u +%Y-%m-%d)"
+          record="${{ steps.record.outputs.file }}"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          work=/tmp/mutation-reports
+          rm -rf "$work"
+
+          if ! git clone --quiet --depth 1 --branch mutation-reports "$remote" "$work" 2>/dev/null; then
+            echo "Creating the mutation-reports branch."
+            mkdir -p "$work"
+            git -C "$work" init --quiet
+            git -C "$work" remote add origin "$remote"
+            git -C "$work" checkout --quiet -b mutation-reports
+          fi
+
+          mkdir -p "$work/MutationReports"
+          cp "$record" "$work/MutationReports/"
+          git -C "$work" config user.name "github-actions[bot]"
+          git -C "$work" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$work" add MutationReports
+          if git -C "$work" diff --cached --quiet; then
+            echo "This run is already recorded; nothing to push."
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C "$work" commit -qm "chore(mutation): record sweep $date"
+          git -C "$work" push --quiet origin HEAD:mutation-reports
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Say so if the series was not persisted
+        # The point of the record is a SERIES. If it did not land, the next run
+        # has nothing to compare against, and silence is what let that go unseen
+        # for a whole run. This never fails the job -- the report still stands --
+        # but it is impossible to miss in the run summary.
+        if: steps.record.outputs.recorded == 'true' && steps.commit.outputs.pushed != 'true'
+        run: |
+          echo "::warning::The run record was NOT pushed to the mutation-reports branch."
+          {
+            echo "### ⚠️ Trend record not persisted"
+            echo ""
+            echo "This run measured fine, but its record did not reach the"
+            echo '`mutation-reports` branch, so it will be missing from the trend and'
+            echo "the next run has one less point to compare against."
+            echo "The merged record is still in this run's artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge the shards and file the issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const dirs = fs.existsSync('shards')
+              ? fs.readdirSync('shards').sort((a, b) => {
+                  const na = Number(a.split('-').pop()), nb = Number(b.split('-').pop());
+                  return na - nb;
+                })
+              : [];
+
+            // The EXPECTED shard count, so a run where every shard died cannot be
+            // mistaken for a clean sweep. Run 1 did exactly that: all ten shards
+            // failed, no artifact was uploaded, `dirs` came back empty, and this
+            // job reported success and filed nothing. Absence of findings is only
+            // meaningful against a known denominator.
+            //
+            // It comes from the PLAN job, not from re-reading config.json: a
+            // dispatch may override the count, and a denominator that disagrees
+            // with the matrix is exactly the arithmetic that made a partial sweep
+            // read as a whole one.
+            const expected = Number('${{ needs.plan.outputs.count }}');
+            if (!Number.isInteger(expected) || expected < 1) {
+              core.setFailed(`plan job produced no usable shard count (got '${{ needs.plan.outputs.count }}')`);
+              return;
+            }
+
+            let survivors = 0, phantoms = 0, killed = 0, missing = [];
+            const sections = [];
+
+            for (const d of dirs) {
+              const shard = d.split('-').pop();
+              const file = path.join('shards', d, 'report.md');
+              const summaryFile = path.join('shards', d, 'summary.json');
+              if (!fs.existsSync(file) || !fs.existsSync(summaryFile)) { missing.push(shard); continue; }
+              const body = fs.readFileSync(file, 'utf8');
+              // A report can EXIST and still say nothing was mutated -- run 2
+              // uploaded ten of them, each reading "Muter produced no mutant
+              // outcomes at all" after its baseline suite failed. Parsing that as
+              // zero survivors is how a totally broken sweep reported success.
+              // Absence of outcomes is a failed shard, not an empty one.
+              if (body.includes('no mutant outcomes at all')) { missing.push(shard); continue; }
+
+              // COUNTS COME FROM summary.json, NOT from scraping the markdown.
+              // Run 3 shipped two readers of one shard's output that disagreed:
+              // merge-run.py read this file and recorded the right answer (122
+              // killed, 23 survived, 84.1%), while this job scraped the report's
+              // table -- which then carried Muter's raw survivor count -- and
+              // headlined "87 survived ... plus 64 phantoms filtered out". The 87
+              // already CONTAINED the 64. The machine record was honest and the
+              // sentence a human reads was not, which is the whole failure this
+              // job exists to prevent. One source of truth, shared with the trend.
+              let summary;
+              try { summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8')); }
+              catch { missing.push(shard); continue; }
+              if ((summary.killed || 0) + (summary.survived || 0) === 0) { missing.push(shard); continue; }
+              killed += summary.killed || 0;
+              survivors += summary.survived || 0;
+              phantoms += (summary.phantoms || []).length;
+              sections.push(body);
+            }
+
+            // A shard that produced nothing is reported, never silently dropped:
+            // partial coverage that reads as complete is the failure mode this
+            // whole exercise exists to avoid.
+            for (let i = 0; i < expected; i++) {
+              if (!dirs.some(d => Number(d.split('-').pop()) === i)) missing.push(String(i));
+            }
+            missing = [...new Set(missing)].sort((a, b) => Number(a) - Number(b));
+
+            // sections.length, not dirs.length: an artifact can exist and still
+            // carry no report (the shard died after uploading an empty dir), and
+            // counting those as covered is the same lie in smaller print.
+            const header = [
+              `## Mutation sweep — logic tier`,
+              '',
+              `**${killed} killed, ${survivors} survived** — `
+                + `${killed + survivors ? Math.round(100 * killed / (killed + survivors)) : 0}% `
+                + `across ${sections.length} of ${expected} shard(s)`
+                // "excluded", never "plus": the phantoms are NOT additional
+                // survivors sitting beside these, they are already out of the
+                // count above. The earlier wording read as 87 + 64.
+                + (phantoms ? `, with ${phantoms} phantom mutant(s) excluded.` : '.'),
+              '',
+            ];
+            if (missing.length) {
+              header.push(
+                `> ⚠️ **${missing.length} shard(s) produced no report: ${missing.join(', ')}.**`,
+                '> Their files were NOT mutated in this run, so absence of findings there',
+                '> means nothing. Check the job logs.',
+                '',
+              );
+            }
+
+            if (missing.length === expected) {
+              core.summary.addRaw(header.join('\n')).write();
+              core.setFailed(
+                `Every shard (${expected}) produced no report. This is a tooling `
+                + 'failure, not a clean sweep — nothing was mutated. Check the shard logs.');
+              return;
+            }
+
+            if (survivors === 0 && missing.length === 0) {
+              core.info('Nothing survived and no shard failed; not filing an issue.');
+              core.summary.addRaw(header.join('\n')).write();
+              return;
+            }
+
+            const today = new Date().toISOString().slice(0, 10);
+            const body = header.concat(sections).join('\n') + [
+              '',
+              '---',
+              '',
+              '**Triage protocol: [`docs/mutation-triage.md`](../blob/main/docs/mutation-triage.md).**',
+              'A survivor is a question, not a defect. Verify before writing anything —',
+              '`Tools/mutation/verify-survivor.py` replays the exact mutation Muter',
+              'inserted and reports whether it still survives — and again afterwards, so',
+              'the new test is seen to fail. Closing one as "correctly, no test" with the',
+              'reason recorded is a complete outcome, not a backlog item.',
+              '',
+              '<sub>Filed automatically by `.github/workflows/mutation-weekly.yml`.</sub>',
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Mutation sweep: logic tier (${today})`,
+              body: body.length > 60000 ? body.slice(0, 60000) + '\n\n…truncated; see the run artifacts.' : body,
+            });
+            core.info(`Filed ${issue.data.html_url}`);
+            core.summary.addRaw(header.join('\n')).addRaw(`\nFiled ${issue.data.html_url}`).write();

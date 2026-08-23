@@ -9,7 +9,7 @@ Choose Your Courses
 <p class="form-error" role="alert">Please select at least one course to continue.</p>
 #endif
 
-#if(courses.isEmpty):
+#if(count(courses) == 0):
 <p class="empty">No courses are available to enroll in right now. Please check back later or contact your instructor.</p>
 #else:
 <form method="post" action="/enroll">

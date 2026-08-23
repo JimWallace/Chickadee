@@ -95,6 +95,47 @@
     /* The one elevation shadow — pop-out menus, dropdowns, floating
        panels.  Dark mode needs a stronger alpha to read at all. */
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
+
+    /* ── Avatar palette (generated student chickadees) ────
+       Five axes vary: cap family, wing pattern, expression, accessory,
+       backdrop.  Everything else is FIXED — body, cheek, beak, bib, eye — and
+       that is deliberate: they are what keeps every bird a chickadee even when
+       the cap goes plum.  Only the BACKDROPS have dark-mode mirrors; the bird
+       itself must be the same bird in both schemes.
+       An accessory is drawn in one of five accents, picked by cap family, so
+       an accent is never a sixth axis. */
+    --avatar-ink-cap: #2B2F3A;      --avatar-ink-wing: #454B5E;
+    --avatar-slate-cap: #3A4550;    --avatar-slate-wing: #556372;
+    --avatar-teal-cap: #1D5560;     --avatar-teal-wing: #2F7F8C;
+    --avatar-forest-cap: #2B4A35;   --avatar-forest-wing: #436B4E;
+    --avatar-indigo-cap: #3A3F6B;   --avatar-indigo-wing: #565D95;
+    --avatar-plum-cap: #5A3550;     --avatar-plum-wing: #7D5071;
+    --avatar-rust-cap: #7A3F24;     --avatar-rust-wing: #A55F38;
+    --avatar-umber-cap: #5A4630;    --avatar-umber-wing: #836B4A;
+
+    --avatar-accent-ember: #C2523F;
+    --avatar-accent-orchid: #7A4A86;
+    --avatar-accent-lagoon: #2F7F8C;
+    --avatar-accent-honey: #D79A2B;
+    --avatar-accent-moss: #4A6B3A;
+
+    --avatar-back-sky: #DBE9EE;
+    --avatar-back-aqua: #D9ECE8;
+    --avatar-back-sage: #DFEADD;
+    --avatar-back-straw: #F2E9D2;
+    --avatar-back-peach: #F7E3D6;
+    --avatar-back-rose: #F4DFE2;
+    --avatar-back-lilac: #E6E2F0;
+    --avatar-back-pebble: #E6E6E2;
+
+    /* Fixed, every bird: the chickadee under the variation. */
+    --avatar-body: #F6EFE2;
+    --avatar-bib: #3C4250;
+    --avatar-beak: #E2A33C;
+    --avatar-eyewhite: #FFFFFF;
+    --avatar-eye: #22242C;
+    --avatar-glint: #FFFFFF;
+    --avatar-gear: #33363F;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -138,6 +179,16 @@
         --success-fg: #67E8F9;  /* bright cyan-teal — readable on dark teal */
         --danger-fg: #F87171;   /* soft red — readable on dark danger tint */
         --shadow-pop: 0 4px 16px rgba(0, 0, 0, .5);
+        /* Avatar backdrops only — see the palette note above.  A pale disc
+           behind the bird glares on a dark page; the bird does not. */
+        --avatar-back-sky: #2A3A42;
+        --avatar-back-aqua: #23383D;
+        --avatar-back-sage: #26362C;
+        --avatar-back-straw: #3A3529;
+        --avatar-back-peach: #3E2F25;
+        --avatar-back-rose: #3B2C35;
+        --avatar-back-lilac: #2E2B3D;
+        --avatar-back-pebble: #32332F;
         /* --border inherits dark-mode --gray-200 automatically */
     }
 }
@@ -579,7 +630,7 @@ textarea.form-input {
     border-collapse: collapse;
     font-size: var(--text-base);
     background: var(--surface);
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
 }
@@ -601,7 +652,16 @@ textarea.form-input {
     vertical-align: top;
 }
 
-.results-table tr:last-child td { border-bottom: none; }
+/* The table's own border closes the list, so the final row draws no
+   separator of its own. `:last-child` is the DOM's last row, which is not the
+   last one a reader can SEE once list-filter.js hides rows with the `hidden`
+   attribute: the last visible row kept a separator that then collapsed with
+   the table's bottom border, and per CSS conflict resolution the cell wins —
+   so a filtered table's bottom edge quietly rendered a shade lighter
+   (--gray-100 in place of --gray-200). `.row-last-visible` is maintained by
+   list-filter.js, which is the only thing that knows which row that is. */
+.results-table tr:last-child td,
+.results-table tr.row-last-visible td { border-bottom: none; }
 
 /* Section grouping for results tables — one block (optional heading + table)
    per test-suite section.  Shared by the server-rendered submission view
@@ -651,6 +711,8 @@ textarea.form-input {
     background: transparent;
     color: inherit;
     font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
     cursor: pointer;
     white-space: nowrap;
     text-align: inherit;
@@ -659,11 +721,25 @@ textarea.form-input {
     outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
+/* The indicator marks the ACTIVE column only. A sortable table carries a
+   sort button on every header, so a resting glyph on each one drew six
+   identical arrows and none of them said which column the rows were actually
+   ordered by. Hover and keyboard focus reveal it on the column under the
+   pointer; the sorted column shows its direction permanently.
+
+   `visibility`, not `content`, does the hiding: the box keeps its width at
+   rest, so revealing the glyph cannot widen a column and reflow the table
+   under the pointer that is hovering it. */
 .sort-header::after {
     content: "↕";
     font-size: .8em;
     color: var(--gray-500);
+    visibility: hidden;
 }
+.sort-header:hover::after,
+.sort-header:focus-visible::after { visibility: visible; }
+th.sort-asc .sort-header::after,
+th.sort-desc .sort-header::after { visibility: visible; color: var(--gray-900); }
 th.sort-asc .sort-header::after { content: "↑"; }
 th.sort-desc .sort-header::after { content: "↓"; }
 
@@ -753,6 +829,7 @@ details pre {
     border-radius: var(--radius-full);
     border: 1px solid transparent;
     white-space: nowrap;
+    text-transform: lowercase;
 }
 
 .result-mark-pass {
@@ -762,9 +839,9 @@ details pre {
 }
 
 .result-mark-fail {
-    color: var(--closed-fg);
+    color: var(--danger-fg);
     background: var(--danger-bg);
-    border-color: var(--closed-fg);
+    border-color: var(--danger-border);
 }
 
 .result-mark-error {
@@ -916,24 +993,31 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .auth-box {
     max-width: min(420px, 100%);
     margin: 3rem auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
 }
 
 /* Chickadee mascot above the login heading. The PNG is transparent, so it sits
-   cleanly on the page background in both light and dark mode. */
+   cleanly on the card surface in both light and dark mode. Sized as a mark
+   rather than as art: the sign-in controls are the job of this page, and the
+   logo should not compete with them for the first screenful. */
 .auth-logo {
     display: block;
-    width: 200px;
-    height: 200px;
+    width: 72px;
+    height: 72px;
     max-width: 80%;
-    margin: 0 auto 1rem;
+    margin: 0 auto .5rem;
 }
 
-.auth-box h1 { margin-bottom: 1.5rem; }
+.auth-box h1 { margin-bottom: 1.25rem; text-align: center; }
 
 .auth-alt {
     margin-top: 1rem;
     font-size: var(--text-base);
     color: var(--gray-600);
+    text-align: center;
 }
 
 /* ── Nav username + logout button ────────────────────── */
@@ -1262,10 +1346,91 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .submission-score-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: .75rem;
     flex-wrap: wrap;
+    /* The band sits behind .diagnostic-card, whose own background is
+       var(--surface); without a muted ground behind them the tiles would be
+       invisible against the page. That is the only reason it has one. */
+    background: var(--surface-muted);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
 }
+
+/* The count tiles are an auto-fit grid, so inside a flex row they receive only
+   their content width and collapse to a single column — which is what the band
+   did until the graded results page finally had a pixel baseline to show it.
+   Giving them the remaining width restores the row. No `margin: auto` here:
+   an auto margin absorbs the row's free space BEFORE flex-grow can use it, so
+   the grid keeps its flex-basis and the tiles wrap 3+1 instead of filling. */
+/* The band is TWO groups plus a full-width footnote, not one flat row of
+   items. Flattening them is what let the grade, the points, the delta line and
+   the four tiles all compete for a single line: with no delta they fit, and
+   with one — every attempt after the first — the tiles wrapped 3+1 and left a
+   gap beside the grade. The delta is a whole-band remark, so it gets its own
+   line rather than a seat at the same table. */
+.score-summary {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.submission-score-row .diagnostics-cards {
+    flex: 1 1 20rem;
+    /* Always four across: these are one reading, not a responsive grid. Below
+       the flex-basis the whole block wraps under the grade rather than
+       splitting 3+1. */
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.score-delta {
+    flex: 1 0 100%;
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--text-secondary);
+}
+
+/* The grade is the largest thing on the page — the one figure a student opens
+   this page to read. `em` rather than a --text-* step: the type scale tops out
+   at 1.4rem for page headings, and this is display type, which the scale
+   deliberately does not carry. */
+.score-figure {
+    font-size: 2.4em;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+/* The band's own label, sized down and tracked out so the figure below it
+   reads as the answer and this reads as its caption. */
+.score-summary .card-meta {
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+/* Label above value in this band, the reverse of the dashboard tiles it shares
+   a component with: here the four labels are read first, as a row of headings,
+   and the numbers answer them. Done with column-reverse rather than reordered
+   markup so the shared component keeps one DOM shape. */
+.submission-score-row .diagnostic-card {
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    gap: .25rem;
+    min-height: 0;
+}
+
+.submission-score-row .diagnostic-value {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+}
+
+/* The one count that is not neutral information. */
+.diagnostic-value-alert { color: var(--red); }
+
+/* The reveal control sits at the end of the hidden-test header rather than in
+   a notice of its own: it acts on the block it labels. */
+/* Not .inline-form: that rule sets `margin: 0` and is declared later in this
+   sheet, so at equal specificity it silently reset the auto margin that pushes
+   this to the end of the row. A flex item needs no inline display anyway. */
+.secret-reveal-action { margin-left: auto; }
 
 /* Secondary "Autograded: …%" line shown under an overridden grade. */
 .score-autograded { font-size: var(--text-base); color: var(--gray-600); }
@@ -1332,16 +1497,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 
 .test-output-row td { padding-top: 0; }
-
-.test-output-panel { padding: .35rem 0 .2rem; }
-
-.test-output-heading {
-    font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--gray-500);
-    font-weight: 700;
-}
 
 .test-output-pre-wide { margin-top: .35rem; }
 
@@ -1916,7 +2071,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .am-condition .form-input { width: auto; }
 .am-cond-signal { min-width: 9rem; }
 .am-cond-value { width: 6rem; }
-.am-cond-testref { min-width: 12rem; }
+.am-cond-ref { min-width: 12rem; }
 .am-cond-unit { color: var(--gray-500); font-size: var(--text-base); }
 .am-cond-remove { line-height: 1; }
 .form-input--inline { display: inline-block; width: auto; margin: 0 .25rem; }
@@ -2068,6 +2223,16 @@ code { font-family: var(--font-mono); font-size: .9em; }
    so the field carries the kind rather than a second control asking the same
    question in different words. */
 .dataset-stratum { width: 10rem; }
+/* Shown instead of the derivation fields when a spec holds transforms the panel
+   cannot represent — it steps aside rather than rendering a partial view it
+   would then save over. */
+.dataset-note { font-style: italic; color: var(--gray-600); }
+/* The per-row estimates — student-to-student similarity and drift from the
+   pool (docs/datasets.md) — are plain chips, painted by support-files.js
+   from the datasets GET/PUT.  They carry no styling of their own: a chip is
+   already the vocabulary's neutral tag, and these describe a band with two
+   bad ends rather than a threshold, so there is no status colour to add.
+   Each chip is hidden until its number lands. */
 
 /* Pattern-family editor body internals. */
 .label-note { color: var(--gray-600); font-weight: 400; }
@@ -2417,4 +2582,89 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     /* The publish popover is absolutely positioned from an Actions cell;
        its desktop floor would clip off a phone viewport. */
     .publish-form { min-width: 0; }
+}
+
+/* The account page's identity header: the student's chickadee, their name,
+   their username. One class for the row; the name and username inside it are
+   element selectors rather than two more global classes, since they are one
+   rule serving one component and would owe component-vocabulary entries for
+   no gain. */
+.account-identity {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: 0 0 1rem;
+}
+
+.account-identity > div {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.account-identity strong { font-size: var(--text-lg); }
+
+.account-identity .text-muted { font-size: var(--text-sm); }
+
+/* The generated student chickadee.  One svg carrying the size class wraps the
+   five use elements that stack into a bird (see _avatar-sprite.leaf); the spec
+   picks the varying colours by assigning palette tokens to the --av-* custom
+   properties on that element, which is the sanctioned inline form.
+
+   Only four properties are per-student: the fixed parts of the bird read their
+   colours straight from the palette, because a body or a beak that varied
+   would stop the birds being one species. */
+.avatar {
+    display: block;
+    flex: none;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    overflow: hidden;
+    --av-cap: var(--avatar-slate-cap);
+    --av-wing: var(--avatar-slate-wing);
+    --av-accent: var(--avatar-accent-ember);
+    --av-backdrop: var(--avatar-back-sky);
+}
+
+.av-backdrop { fill: var(--av-backdrop); }
+.av-cap { fill: var(--av-cap); }
+.av-wing { fill: var(--av-wing); }
+.av-accent { fill: var(--av-accent); }
+.av-body { fill: var(--avatar-body); }
+.av-bib { fill: var(--avatar-bib); }
+.av-beak { fill: var(--avatar-beak); }
+.av-eyewhite { fill: var(--avatar-eyewhite); }
+.av-pupil { fill: var(--avatar-eye); }
+.av-glint { fill: var(--avatar-glint); }
+.av-wing-mark { fill: var(--avatar-body); }
+.av-lash { fill: none; stroke: var(--avatar-eye); }
+.av-gear { fill: var(--avatar-gear); }
+.av-gear-line { fill: none; stroke: var(--avatar-gear); }
+.av-bloom-eye { fill: var(--avatar-beak); }
+
+/* The drop zone's upload glyph. A descendant selector rather than a class of
+   its own: it is one rule serving one existing component, and a new global
+   class would owe a component-vocabulary entry for no gain. */
+.drop-zone .icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--muted);
+}
+
+/* Deadline and submission count restated inside the assignment name cell at
+   phone width, where .col-hide-phone drops the Due and History columns. Hidden
+   at every width that still shows those columns, so the fact never appears
+   twice. Pairs with .card-meta for its typography. */
+.assignment-phone-meta { display: none; }
+
+@media (max-width: 640px) { .assignment-phone-meta { display: block; } }
+
+/* Phone: the cell gutter drops one spacing step. Four columns at the desktop
+   .9rem gutter push the dashboard table past a 390px viewport (measured 394px
+   in a 386px frame — the Actions column clips). Vertical padding is left
+   alone: row height is what makes a row tappable. */
+@media (max-width: 640px) {
+    .results-table th { padding-left: .5rem; padding-right: .5rem; }
+    .results-table td { padding-left: .5rem; padding-right: .5rem; }
 }

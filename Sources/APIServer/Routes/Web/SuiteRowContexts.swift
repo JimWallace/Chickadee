@@ -4,6 +4,7 @@
 // edit-assignment pages.  Split from the original
 // `AssignmentContextTypes.swift`.
 
+import Core
 import Foundation
 
 /// One section block's server-rendered shell in the suite editor.  Named
@@ -55,6 +56,11 @@ struct EditableSuiteRow: Encodable {
     /// has to travel with the row or an edit would rewrite a stratified spec
     /// into a plain one.
     let datasetStratumColumn: String?
+    /// The spec's derivation steps (docs/datasets.md). Carried so the panel can
+    /// render the one shape it edits — and, more importantly, so it can tell
+    /// when a spec holds a shape it CANNOT edit and step aside rather than
+    /// overwrite it.
+    let datasetTransforms: [DatasetTransform]
 
     /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
     var displayNameOrEmpty: String { displayName ?? "" }
@@ -66,6 +72,36 @@ struct EditableSuiteRow: Encodable {
 
     /// The stratum column as an input-ready string — empty when there is none.
     var datasetStratumColumnOrEmpty: String { datasetStratumColumn ?? "" }
+
+    /// Whether the Files panel can represent this spec's transforms.
+    ///
+    /// The panel edits exactly one shape: no transforms, or a single
+    /// `missingValues` step. The model is richer than that — an ordered list,
+    /// and more kinds to come — so a spec authored through MCP can hold
+    /// something the panel has no fields for. Rendering such a spec into the
+    /// fields it does have would silently discard the rest on the next edit,
+    /// which is the same silent-downgrade shape the stratum column exists to
+    /// avoid. So the panel asks first, and shows a disabled control saying the
+    /// steps are agent-authored rather than pretending to own them.
+    var datasetTransformsEditable: Bool {
+        datasetTransforms.isEmpty
+            || (datasetTransforms.count == 1 && datasetTransforms[0].kind == .missingValues)
+    }
+
+    /// The blanked columns as a comma-separated string — empty when no
+    /// `missingValues` step is present.
+    var datasetBlankColumnsOrEmpty: String {
+        guard datasetTransformsEditable else { return "" }
+        return datasetTransforms.first?.columns.joined(separator: ", ") ?? ""
+    }
+
+    /// The blank rate as a whole-number percentage for the form, or empty.
+    /// Authored as a percentage because that is how an instructor says it; the
+    /// stored value is the `0 < rate <= 1` fraction the materializer folds.
+    var datasetBlankPercentText: String {
+        guard datasetTransformsEditable, let rate = datasetTransforms.first?.rate else { return "" }
+        return String(Int((rate * 100).rounded()))
+    }
 
     /// The dataset pair defaults to "not a dataset": every construction site
     /// but the two support-file row builders is describing a test script, and
@@ -81,7 +117,8 @@ struct EditableSuiteRow: Encodable {
         displayName: String?,
         isDataset: Bool = false,
         datasetSampleSize: Int? = nil,
-        datasetStratumColumn: String? = nil
+        datasetStratumColumn: String? = nil,
+        datasetTransforms: [DatasetTransform] = []
     ) {
         self.name = name
         self.url = url
@@ -94,6 +131,7 @@ struct EditableSuiteRow: Encodable {
         self.isDataset = isDataset
         self.datasetSampleSize = datasetSampleSize
         self.datasetStratumColumn = datasetStratumColumn
+        self.datasetTransforms = datasetTransforms
     }
 
     /// Display name if set, otherwise the filename stem (extension stripped).
@@ -126,6 +164,12 @@ struct EditableSuiteRow: Encodable {
         case displayNameOrStem
         case datasetSampleSizeText
         case datasetStratumColumnOrEmpty
+        // The derivation fields the panel renders. `datasetTransforms` itself is
+        // deliberately NOT encoded — Leaf has no use for the array, and the
+        // three derived strings are exactly what the control's inputs need.
+        case datasetTransformsEditable
+        case datasetBlankColumnsOrEmpty
+        case datasetBlankPercentText
         case dependsOnJSON
     }
 
@@ -146,6 +190,9 @@ struct EditableSuiteRow: Encodable {
         try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
         try container.encode(datasetSampleSizeText, forKey: .datasetSampleSizeText)
         try container.encode(datasetStratumColumnOrEmpty, forKey: .datasetStratumColumnOrEmpty)
+        try container.encode(datasetTransformsEditable, forKey: .datasetTransformsEditable)
+        try container.encode(datasetBlankColumnsOrEmpty, forKey: .datasetBlankColumnsOrEmpty)
+        try container.encode(datasetBlankPercentText, forKey: .datasetBlankPercentText)
         try container.encode(dependsOnJSON, forKey: .dependsOnJSON)
     }
 }

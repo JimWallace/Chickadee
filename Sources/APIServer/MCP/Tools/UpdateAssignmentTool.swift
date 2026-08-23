@@ -19,11 +19,12 @@ struct UpdateAssignmentTool: ContentTool {
         let isOpen: Bool?
         let visibility: String?
         let secretRevealEnabled: Bool?
+        let solutionVisibility: String?
 
         init(
             assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
             startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil,
-            secretRevealEnabled: Bool? = nil
+            secretRevealEnabled: Bool? = nil, solutionVisibility: String? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.title = title
@@ -32,6 +33,7 @@ struct UpdateAssignmentTool: ContentTool {
             self.isOpen = isOpen
             self.visibility = visibility
             self.secretRevealEnabled = secretRevealEnabled
+            self.solutionVisibility = solutionVisibility
         }
     }
 
@@ -47,7 +49,14 @@ struct UpdateAssignmentTool: ContentTool {
         let validationStatus: String?
         /// Whether students may spend their one secret-reveal token here.
         let secretRevealEnabled: Bool
+        /// The solution-reveal policy (`SolutionVisibility` raw value).
+        let solutionVisibility: String
     }
+
+    /// "hidden" or "afterDue" — derived from `allCases` so a new policy value
+    /// cannot leave this tool's prose or schema stale.
+    private static let solutionVisibilityProse =
+        SolutionVisibility.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
 
     static let name = "update_assignment"
     static let description =
@@ -64,8 +73,12 @@ struct UpdateAssignmentTool: ContentTool {
         + "secretRevealEnabled (true/false) controls the secret-reveal token: when true, each student "
         + "may permanently spend their one token on this assignment to see secret-tier test results "
         + "(itemized like public tests) on all of their submissions; false (the default) keeps secret "
-        + "results hidden. Display-only — grades are unaffected. Does not change "
-        + "test content, so it never triggers a regrade."
+        + "results hidden. solutionVisibility (\(solutionVisibilityProse)) controls whether students "
+        + "may view the reference solution: \"afterDue\" reveals it to each student once their own "
+        + "effective deadline has passed and no slip-day claim could still extend it (immediately on "
+        + "an assignment with no due date); \"hidden\" (the default) keeps it staff-only. Enabling is "
+        + "refused while the assignment has no solution on file. Display-only — grades are "
+        + "unaffected. Does not change test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -106,6 +119,16 @@ struct UpdateAssignmentTool: ContentTool {
                         + "their submissions); false (the default) keeps secret results hidden. "
                         + "Display-only — grades are unaffected."),
             ]),
+            "solutionVisibility": .object([
+                "type": .string("string"),
+                "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
+                "description": .string(
+                    "\"afterDue\" reveals the reference solution to each student once their own "
+                        + "effective deadline has passed and no slip-day claim could still extend "
+                        + "it (immediately when the assignment has no due date); \"hidden\" (the "
+                        + "default) keeps the solution staff-only. Enabling is refused while the "
+                        + "assignment has no solution on file."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -125,10 +148,14 @@ struct UpdateAssignmentTool: ContentTool {
             "startsAt": MCPSchema.string,
             "validationStatus": MCPSchema.string,
             "secretRevealEnabled": MCPSchema.boolean,
+            "solutionVisibility": .object([
+                "type": .string("string"),
+                "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
+            ]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
-            .string("visibility"), .string("secretRevealEnabled"),
+            .string("visibility"), .string("secretRevealEnabled"), .string("solutionVisibility"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -140,20 +167,35 @@ struct UpdateAssignmentTool: ContentTool {
         let startsUpdate = try Self.resolveStartDate(input.startsAt)
         let newTitle = try Self.resolveTitle(input.title)
         let visibilityUpdate = try Self.resolveVisibility(input.visibility)
+        let solutionVisibilityUpdate = try Self.resolveSolutionVisibility(input.solutionVisibility)
         guard
             newTitle != nil || input.isOpen != nil || visibilityUpdate != nil
                 || dueUpdate != .unchanged || startsUpdate != .unchanged
-                || input.secretRevealEnabled != nil
+                || input.secretRevealEnabled != nil || solutionVisibilityUpdate != nil
         else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
-                    + "secretRevealEnabled.")
+                    + "secretRevealEnabled, solutionVisibility.")
         }
 
         // Title / due date / open state are lifecycle — instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+        // Fail loudly while authoring: a reveal policy with nothing to reveal
+        // would silently promise students a page that cannot resolve.
+        if solutionVisibilityUpdate == .afterDue {
+            let hasSolution = try await assignmentHasSolution(
+                assignment: assignment, db: context.db,
+                testSetupsDirectory: context.request.application.testSetupsDirectory)
+            guard hasSolution else {
+                throw MCPToolError.invalidArguments(
+                    tool: Self.name,
+                    detail: "This assignment has no solution on file, so there is nothing to "
+                        + "reveal. Set one with update_solution (or upload one in the editor) "
+                        + "before enabling solutionVisibility.")
+            }
+        }
         let previousDueAt = assignment.dueAt
         let previousVisibility = assignment.visibility
         do {
@@ -163,7 +205,8 @@ struct UpdateAssignmentTool: ContentTool {
             try await AssignmentAuthoringService.updateMetadata(
                 assignment, title: newTitle, dueAt: dueUpdate, startsAt: startsUpdate,
                 open: visibilityUpdate == nil ? input.isOpen : nil,
-                secretRevealEnabled: input.secretRevealEnabled, on: context.db)
+                secretRevealEnabled: input.secretRevealEnabled,
+                solutionVisibility: solutionVisibilityUpdate, on: context.db)
             if let visibilityUpdate {
                 try await AssignmentAuthoringService.setVisibility(
                     assignment, visibilityUpdate, on: context.db)
@@ -204,7 +247,8 @@ struct UpdateAssignmentTool: ContentTool {
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,
-            secretRevealEnabled: assignment.secretRevealEnabled == true
+            secretRevealEnabled: assignment.secretRevealEnabled == true,
+            solutionVisibility: assignment.solutionVisibility.rawValue
         )
     }
 
@@ -215,6 +259,20 @@ struct UpdateAssignmentTool: ContentTool {
         guard let visibility = AssignmentVisibility(rawValue: raw) else {
             throw MCPToolError.invalidArguments(
                 tool: name, detail: "visibility must be one of: closed, preview, open.")
+        }
+        return visibility
+    }
+
+    /// Maps the optional `solutionVisibility` argument to a
+    /// `SolutionVisibility` (nil = no change), rejecting unknown values with
+    /// the accepted list derived from `allCases`.
+    private static func resolveSolutionVisibility(_ raw: String?) throws -> SolutionVisibility? {
+        guard let raw else { return nil }
+        guard let visibility = SolutionVisibility(rawValue: raw) else {
+            throw MCPToolError.invalidArguments(
+                tool: name,
+                detail: "solutionVisibility must be one of: "
+                    + SolutionVisibility.allCases.map(\.rawValue).joined(separator: ", ") + ".")
         }
         return visibility
     }

@@ -159,6 +159,14 @@
         header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
         header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
         state.set(table, { header: header, direction: direction });
+
+        // Sorting reorders the rows, so whichever row was last is generally no
+        // longer last. Only list-filter.js knows which rows are hidden, so it
+        // owns the mark; this is the same defensive hand-off table-poll.js
+        // makes, and a page that loads no filter simply has nothing to call.
+        if (global.ChickadeeListFilter && global.ChickadeeListFilter.markLastVisibleRow) {
+            global.ChickadeeListFilter.markLastVisibleRow(table);
+        }
     }
 
     /// Re-apply the table's current sort — for pages that rebuild their rows

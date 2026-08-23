@@ -491,6 +491,255 @@ For A4 this is **variety, not secrecy** — the sample is meant to be seen, so
 delivering it to the editor/browser is fine. The only thing hidden is the full
 pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
 
+### Expressions read the student's slice, not the pool
+
+The two per-student systems — `=` expressions and datasets — were built
+independently and, for one release, disagreed. `PersonalizationEvaluator` spawns
+its subprocess with the cwd set to the shared support directory so an expression
+can `open("cases.csv")`. That directory holds the instructor's **pool**, and is
+the same directory `DatasetResolver` reads as its *source*. In
+`WorkerJobRoutes.buildJobPayload` the two sat thirteen lines apart and neither
+knew about the other.
+
+The consequence was not a crash but a silent wrong answer. An expression
+computing `df["systolic"].mean()` returned the **pool's** mean, which then
+travelled the `expectedVarRef` path into `_ck_inputs.*` as that student's
+expected value — while the student held a slice with a different mean. Every
+student got the same expected value, and every student's own data disagreed with
+it. Only *structural* checks survived, which is why A4's five checks being
+structural read as a coincidence rather than as the ceiling it was.
+
+`PersonalizationSubstitution.resolve` now resolves the student's slices and hands
+them to the evaluator, which spawns against a private overlay: symlinks to every
+support file, with each declared dataset replaced by that student's bytes. Three
+properties are load-bearing:
+
+- **The shared directory is never written to.** Materializing a student's slice
+  there would hand the next student the previous one's data. The overlay is
+  per-evaluation and lives under the evaluator's existing temp directory.
+- **Same source, same seed, same bytes.** The overlay resolves through
+  `DatasetResolver` — the call the worker and editor already use — so the
+  expression and the student's delivered file agree by construction, not because
+  two call sites were kept in step.
+- **A slice that cannot be written is left absent, not symlinked to the pool.**
+  The expression then fails loudly with "no such file" rather than quietly
+  computing the instructor's answer and shipping it as the student's. This is the
+  one place the usual "forgiving at delivery" rule inverts: forgiveness here
+  means being confidently wrong about a grade.
+
+This is what makes a *value-based* check authorable on a dataset assignment at
+all, and it is the prerequisite for any transform that changes values rather
+than selecting rows.
+
+## Derivation — selection says which rows, a transform says what was done to them
+
+Phase 1 and 1.5 are both **selection**: `rowSample` and `stratifiedSample` decide
+which of the instructor's rows a student receives, and only ever copy bytes.
+**Derivation** alters the values themselves, so the pool becomes a *template*
+and each student gets a variation improvised on it.
+
+The two are separate axes on `DatasetSpec`, deliberately:
+
+```swift
+public let kind: DatasetKind               // SELECTION — unchanged meaning
+public let transforms: [DatasetTransform]  // DERIVATION — decodeIfPresent ?? []
+```
+
+"500 rows balanced by ward, then 2% of `bp_systolic` blanked" is two independent
+decisions. A `DatasetKind` case per combination is how that enum reaches thirty
+cases, so combinations are expressed as a list rather than enumerated. Every
+manifest written before derivation existed decodes to `transforms: []` and
+materializes to exactly the bytes it did before.
+
+**Selection runs first, then transforms in array order.** Both halves are
+load-bearing: transforming after selection means a rate applies to what the
+student actually receives rather than to the pool, and the order is stored
+because blanking then jittering is not jittering then blanking.
+
+### The rules that keep a transform from breaking its own assignment
+
+- **Never touch the schema.** No column added, removed, renamed or reordered.
+  The assignment ships code written against column *names*, and a student whose
+  `df["systolic"]` raises `KeyError` cannot fix that. Rows and within-column
+  values only.
+- **Columns are named explicitly** — there is no wildcard. An instructor who
+  blanks the column a notebook check asserts on has broken their own assignment;
+  making them name it is what lets the save-time check tell them so.
+- **A transform that cannot apply leaves the data alone**, and is refused at
+  save. Same pairing as the stratum column: forgiving at delivery, loud while an
+  instructor can still fix it.
+
+### Determinism, which is harder here than for selection
+
+Selection was platform-independent almost for free because it only copies bytes.
+Generating values is where that stops being free, so three rules are enforced by
+`DatasetTransformApplication.swift`:
+
+1. **No `Double` reaches a delivered byte.** `rate` is an authored number, so it
+   is folded to an integer per-mille once, up front — `(rows * permille) / 1000`
+   — and every per-cell decision after that is integer math.
+2. **Each step draws from its own sub-seeded stream**, keyed on the student's
+   seed plus the step's index, kind *and* column. A shared stream would mean
+   appending a second transform re-rolls the first, silently changing data
+   already delivered to a whole class. Two tests pin this: appending a step
+   leaves the first step's column byte-identical, and adding a column to a step
+   leaves the other column's rows unmoved.
+3. **Nothing iterates a `Dictionary` or `Set`.** Columns are visited in the
+   order the instructor listed them, rows in file order.
+
+A fourth rule is about *how* a cell is blanked: the raw line is edited in place
+rather than split and re-joined. A rebuild would re-quote every other field by
+this codebase's rules rather than the source's, changing bytes in cells the
+transform was never asked to touch.
+
+### `missingValues`
+
+The first derivation, and deliberately the simplest: it blanks a deterministic
+subset of cells in the named columns. Pure string replacement — no type
+inference and no formatting decisions — which is why it goes first. It teaches
+the handling of absent data, which is a real skill in health datasets rather
+than a synthetic difficulty.
+
+Save-time refusals (`DatasetSpecValidation.transformIssue`), each paired with
+something delivery absorbs silently:
+
+| Refused at save | Absorbed at delivery |
+|---|---|
+| a step naming no columns | leaves the data alone |
+| a column the file's header does not carry | that column is skipped |
+| a missing rate, or one outside `0 < rate <= 1` | the step does nothing |
+| a rate too small to reach one row of the sample | integer fold yields 0 cells |
+| the same kind twice on one column | order-dependent in a way nobody authored |
+
+That last row deserves its own note: `(sampleSize * permille) / 1000` is exactly
+what delivery computes, so 1% of a 10-row sample is genuinely zero cells. The
+check knows the sample size and can say so, which is the same move
+`stratifiedSample` makes when a sample is smaller than the category count.
+
+### The Files-panel control
+
+A dataset row carries the derivation step beside its sample size and stratum
+column:
+
+```
+[x] Per-student sample  [ 500 ] rows per student  balanced across [ ward ]
+    blanking [ bp_systolic ] in [ 10 ] % of rows                    Saved
+```
+
+Two design rules carried over from the stratum column:
+
+- **The field carries whether the step exists.** Naming columns creates the
+  step; clearing them removes it. There is no separate checkbox or mode picker,
+  because a second control asking the same question in different words is how
+  the two come to disagree.
+- **Percentages in, fractions stored.** An instructor says "10% of rows"; the
+  spec holds `rate: 0.1`, which delivery folds to an integer count.
+
+**The panel edits one shape, and knows it.** It has fields for no transforms or
+a single `missingValues` step. The model is an ordered list with more kinds to
+come, so a spec authored through MCP can hold something the panel cannot draw —
+two steps, or a future kind. Rendering that into the one pair of fields would
+show half the truth and then save over the other half on the next row-count
+edit, which is the silent-downgrade shape this feature has now produced twice.
+So `EditableSuiteRow.datasetTransformsEditable` asks first, and a spec the panel
+cannot represent renders **disabled**, with a note that the steps are
+agent-authored, and survives unrelated edits intact.
+
+That answer lives in two places on purpose and they are tested separately: Swift
+decides it for the server-rendered first paint, and `Public/support-files.js`
+honours it for every repaint after a save — omitting the `transforms` key
+entirely when its fields are disabled, so the merge carries the stored steps
+through.
+
+### What is NOT built yet
+
+`formatNoise` — inconsistent representations of the same value (stray
+whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
+transform, and the most pedagogically honest of the set: real health data
+arrives like this, and it is **answer-preserving**, so correct parsing yields
+the same result the pool would. (It was once the only transform safe to author
+without multi-variant validation, for that reason; that gate exists now — see
+below — so the ordering constraint is gone.)
+
+### `numericJitter` is decided against — do not propose it again
+
+Perturbing numeric values per student was the third transform in the original
+handoff. It is **dropped**, deliberately and permanently, on three independent
+grounds. Recorded here in full so the option is not rediscovered as an open
+question:
+
+1. **It buys no pedagogy.** Its only real benefit is anti-copying, and
+   `rowSample` already delivers that. Unlike `missingValues` and `formatNoise`,
+   there is no data-handling skill a student practises because a weight was
+   nudged.
+2. **It is the only transform that distorts a distribution.** `missingValues`
+   chooses rows uniformly at random, independent of the cell's value, so it is
+   MCAR by construction — it thins the data without biasing it. `formatNoise`
+   changes representation, not value, so it is distribution-preserving too.
+   Jitter inflates variance by construction, so every student would compute
+   statistics over a cohort whose spread is wrong by design.
+3. **It costs the most to get right and damages provenance most.** It needs
+   fixed-point arithmetic at the source's own precision to stay deterministic,
+   and a jittered VitalDB extract is no longer VitalDB: a student reporting "the
+   mean systolic in this cohort is 128" reports a number that exists nowhere
+   outside their own file.
+
+The pedagogy it was reached for is better served by the transforms that keep the
+data honest, and the anti-copying it was reached for already exists.
+
+### Multi-variant validation — closing the one-variant gap
+
+A validation submission grades the reference solution against the enqueuing
+instructor's own seed — one variant of a per-student assignment. That used to
+be the whole story: `hasPersonalization` counts expressions and variables, not
+`datasets`, so `materializeValidationGrading` returned early for a dataset-only
+assignment and validation proved nothing about the material other students
+receive. For selection that was tolerable — the solution sees real rows, just
+fewer. For derivation it was not: a solution that assumes a column is never
+empty validated green and then failed for the students whose seed blanked it.
+
+Every validation enqueue on an assignment that **varies by student** now also
+grades the solution against `validationVariantCount` (4) synthetic seeds. The
+pieces, and the decisions inside them:
+
+- **The gate is a new predicate, `TestProperties.variesPerStudent`** — a
+  per-student `=` expression or a per-student dataset. Deliberately *not* a
+  widening of `hasPersonalization`, whose answer also steers the worker
+  download path's sidecar behaviour; and literal-only personalization does not
+  count, because every seed receives identical material and N identical runs
+  prove nothing the first one did not.
+- **The seeds are `DatasetDiagnostics.preflightSeed(0..<4)`** — the same
+  derived seeds the Files-panel estimates sample, so the variant a validation
+  grades is material the diagnostics already described. Derived, never random,
+  pinned by test.
+- **A variant is an ordinary `kind == .validation` submission** whose
+  `SubmissionMaterialization` is pinned to the variant seed
+  (`materializeValidationGrading(variantSeedHex:)`). Nothing downstream is
+  new: the `.grading` sidecar, `_ck_inputs.*`, and the dataset slices
+  `buildJobPayload` resolves from the cached `seedHex` all behave exactly as
+  they would for a student holding that seed. With a variant seed the
+  materialization is cached even when there is nothing to substitute — the
+  dataset-only case the primary path deliberately skips.
+- **The batch is recorded in `validation_variants`** (one row per variant:
+  index, seed, submission id, verdict), keyed by test setup because the draft
+  flow enqueues validation before the assignment row exists. Each enqueue
+  *replaces* the setup's batch — and clears it outright when the manifest
+  stops varying, so a stale verdict cannot keep describing an assignment that
+  is no longer per-student. Result ingestion writes each verdict onto its
+  variant row; the assignment's own `validationStatus` still reflects only
+  the primary run.
+- **Surfaces.** The instructor assignments list shows the batch under the
+  validation cell ("4 variants passed" / "1 of 4 variants failed", linking to
+  the failing variant's per-test results — an ordinary submission page). MCP
+  `get_validation_result` reports the batch with each variant's seed and, for
+  failed variants, only its non-passing outcomes.
+- **A failed variant does not (yet) block opening the assignment.** The open
+  gate still reads `validationStatus == "passed"`, i.e. the primary run.
+  Display-first is deliberate for the first release: hard-blocking on variant
+  failures would retroactively freeze existing dataset assignments mid-course
+  the next time they are edited. Revisit once a term's worth of variant
+  verdicts shows the false-positive rate is what it should be (zero).
+
 ### Build slices
 
 1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`
@@ -574,6 +823,116 @@ twice, and `set_dataset` drops any existing spec for the file before appending
 its own — two specs for one file would disagree about how many rows a student
 gets, and which one won would be a detail of whichever consumer folded the
 array.
+
+## Diagnostics — how different is each student's data?
+
+Two estimates about a dataset spec, shown in the Files panel and recomputed on
+every saved parameter edit. Both are **read-only with respect to delivery**:
+they describe the delivered bytes and never alter one — in particular, no seed
+is ever reject-sampled to satisfy a tolerance, because a slice that depends on
+an acceptance criterion silently changes for every student when the threshold
+moves.
+
+**Overlap — can students copy?** Closed form, per selection kind, behind an
+exhaustive switch over `DatasetKind` (now `CaseIterable` so the completeness
+guard can iterate it):
+
+- `rowSample`: two size-`k` samples of an `N`-row pool share `k²/N` rows in
+  expectation; the reported *shared fraction* is `k/N` — the fraction of one
+  student's rows a peer also holds. Deliberately not Jaccard, whose union
+  denominator is a set neither student has and which shrinks as students
+  diverge, understating copying risk.
+- `stratifiedSample`: `Σₛ kₛ²/Nₛ`, with `kₛ` from the real `apportion` call —
+  never the `k/N` shortcut, which Titu's lemma makes a strict underestimate
+  whenever allocation is non-proportional, and the one-row-per-stratum floor
+  is non-proportional by construction. The consequence worth knowing: **a rare
+  category with 5 pool rows and 2 rows per student is 40% shared** — turning
+  on stratification to protect a rare category makes that category the most
+  copyable part of the assignment. It is invisible in the aggregate number, so
+  the panel names the most copyable stratum explicitly.
+- The worst pair in a class (the pair the instructor hears from) is an
+  extreme-value estimate over the class's C(C−1)/2 pairs, clamped to
+  `[mean, k]`; class size is a stated constant, not configuration.
+
+**Divergence — are students doing the same exercise?** Measured, not derived:
+every sampled slice comes from `DatasetMaterializer.materialize` — the exact
+call delivery makes — over 20 **derived** preflight seeds
+(`DatasetDiagnostics.preflightSeed`, pinned by test so the numbers cannot
+flicker between page loads). Because it measures the shipped bytes, it covers
+every transform automatically, including kinds that do not exist yet. Per
+column: Wasserstein-1 in units of the pool's SD for numeric columns (an exact
+quantile-function integral — a sort, not an optimal-transport solve), total
+variation for categorical. A column's distribution is that of its *observed*
+(non-empty) values: a `missingValues` hole is thinning, not a value, which is
+exactly what MCAR blanking preserves — pinned by the MCAR test. Aggregation is
+max-and-name-the-column, never a mean (an average over 20 columns hides one
+catastrophically skewed column behind 19 fine ones), and the two measures stay
+two headlines because SD-units and TV are not commensurable.
+
+**The asymmetry is the architecture.** Overlap is a function of *selection*
+alone — transforms alter values inside a student's rows and never change which
+rows they hold — so it is closed-form per kind and a new selection kind must
+answer a formula (the `allCases` completeness test fails until it does, and an
+analytic-vs-Monte-Carlo test checks the formula is *right*, not merely
+present). Divergence has no per-kind logic at all. The row-set theorem that
+licenses this split is itself a test (`transformsNeverChangeTheRowSet`); a
+future row-dropping transform fails it, at which point the decomposition — not
+the test — needs revisiting.
+
+**The surface** is the Files panel, not the validation report — a live
+parameter estimate wants to live where the parameters are, moving as the
+instructor edits the row count (multi-variant validation shares the preflight
+seeds but answers a different question at a different time). Each dataset row
+shows **two chips, one concise number each**: `similarity NN%` (the fraction
+of one student's rows a peer is expected to also hold — a student-to-student
+similarity score) and `drift 0.NN` (the worst column's typical normalized
+distance from the pool). Each chip's `title` is a phrase naming what its
+number measures, within the same word budget the rest of the UI's hover text
+keeps (`datasetEstimateTitleWordCap`); **how the numbers are computed is here,
+in this section, and nowhere in the interface** — the formulas are above, and
+the arithmetic behind each chip is below.
+
+That took two corrections to arrive at. The first release put the estimates
+in a per-row disclosure of prose sentences, which was too heavy for a control
+row. The replacement moved the same prose into hover titles and gave the chips
+a private dotted-underline-and-`cursor: help` treatment, which was worse in a
+way the first version was not: it was a fifth way to reveal detail in a UI
+that had four, and a second kind of chip in a UI whose vocabulary already had
+`.chip`. They are plain chips now, and the sentences are in this file. The
+general rule that came out of it is in
+[ui-design.md](ui-design.md) under "Interaction idioms" and "UI copy", and
+`scripts/check-ui-vocabulary.sh` enforces the mechanical half.
+
+The display strings are built server-side in one
+tested place (`DatasetEditHelpers.datasetEstimateSummary`), and the blocks
+ride the same GET/PUT the controls already use
+(`DatasetsResponse.diagnostics`, computed off the event loop), so a saved
+edit repaints the numbers with no second request. The two estimates pull in
+opposite directions — more rows per student is fairer but more copyable — so
+the chips are deliberately informational: no thresholds, no warnings, and no
+gating on either number (instructors may legitimately want to *maximize*
+divergence). Files above a stated byte ceiling skip the divergence sampling
+and the drift chip says so (`drift —`); overlap, a single pass, is always
+reported.
+
+The drift chip's single number is the max across columns of the *median*
+normalized divergence, whatever that column's measure — a deliberate
+softening of the two-headline rule above for the glanceable layer only: SD
+units and TV still are not commensurable, so the chip never mixes them
+arithmetically (no averaging), and the title names the column and its measure
+so the number is never read as a bare quantity. The per-column table, and the
+second measure's worst column when both kinds exist, are not in the interface
+at all — a tooltip cannot carry a table, and the numbers a row needs while an
+instructor drags a slider are the two on the chips.
+
+The similarity chip reads `k²/N` over `k` — the expected overlap between two
+independent `k`-row samples of an `N`-row pool — and its title gives the
+unluckiest pair in a class of `DatasetDiagnostics.defaultClassSize` and, under
+stratification, the most-shared category by name. Those are the two facts an
+instructor acts on; the derivation is the "Overlap" subsection above.
+
+`numericJitter` stays dead (see above), and these diagnostics do not assume
+it.
 
 ## Train/test splits & grader-only files (option B)
 

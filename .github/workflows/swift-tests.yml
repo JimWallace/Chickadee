@@ -19,6 +19,39 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Every guard must be SEEN to fail. Its own job rather than a step inside
+  # format-lint: each fixture re-runs a whole guard, so the suite costs
+  # minutes, and paying that in wall-clock beside format-lint is free while
+  # paying it inside format-lint is not.
+  guard-self-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Every guard fails on its own defect
+        run: scripts/check-guards.sh
+
+  # The mutation tooling is Python, so this needs python3 and NOTHING else --
+  # no Swift, no container. It rode in format-lint for one commit and failed
+  # with `python3: not found`: that job runs the PLAIN swift image, which is the
+  # toolchain alone. The -ci image is the one carrying python3, and pulling a
+  # ~GB container to run 18 unit tests would be the wrong fix for a job that
+  # never touches Swift.
+  mutation-trend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Mutation tooling self-tests
+        # `*_test.py`, not one named file: report_test.py existed for a week
+        # before anything ran it, because the pattern named its neighbour.
+        run: python3 -m unittest discover -s Tools/mutation -p '*_test.py' -v
+
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -61,11 +94,17 @@ jobs:
       - name: Block defaulted language parameters
         run: scripts/no-language-defaults.sh
 
+      - name: Block Swift property access in Leaf templates
+        run: scripts/check-leaf-semantics.sh
+
       - name: Check generated JS constants match their Swift declarations
         run: scripts/generate-js-constants.sh --check
 
       - name: Check runner wasm size budget
         run: scripts/check-runner-wasm-size.sh
+
+      - name: Check the CI compose fixture covers every required variable
+        run: scripts/ci-compose-env.sh --check
 
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
@@ -342,11 +381,40 @@ jobs:
 
   browser-runner-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    # Runs in the CI image, which ALREADY ships lua5.4, octave, python3 and
+    # node. This job used to be the last one apt-installing its own interpreters
+    # on a bare runner -- the very thing this image was built to stop ("before
+    # this image, every test job apt-get installed these"). That left ~500
+    # interpreter-independent tests depending on an Ubuntu mirror, and on
+    # 2026-08-18 the mirror took the job out five times in seven runs, each time
+    # hanging ~9m20s in `apt-get update` and dying at the ceiling as `cancelled`
+    # -- indistinguishable from a wedged suite, with no test body having run.
+    #
+    # Only 2 of the 54 test files need an interpreter at all
+    # (lua-eval-execution and octave-eval-execution, 31 tests). Those are not
+    # removable: they assert the REAL language behaviour the editor keys on --
+    # that `exist()` answers 103 for a `1;`-guarded definition, that a missing
+    # function says "not defined" -- which is exactly what a mock would get
+    # wrong, and what this project has repeatedly been burned by assuming. The
+    # install was unnecessary; the tests are not.
+    container:
+      # swift-CI, not plain swift. The plain image is the toolchain only; the
+      # -ci image is the one that adds python3, lua5.4, octave, r-base and node
+      # (.github/docker/ci-image/Dockerfile), which is what api-tests and
+      # worker-tests use. Getting this wrong does not fail loudly: spawnSync
+      # simply cannot find the interpreter, and the suites report
+      # `exitError: 'exit null'` with an empty stderr.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
 
+      # Pinned rather than taking the image's node: the suite targets 24 and
+      # `node --test` semantics move between majors.
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -356,14 +424,9 @@ jobs:
 
       # The Lua and Octave auto-compute snippets are EXECUTED, not just
       # shape-checked (*-eval-execution.test.mjs). Those suites skip silently
-      # without an interpreter, so a missing package here would look like a
-      # pass — each asserts its interpreter is present when CI is set.
-      # --no-install-recommends keeps Octave from pulling a desktop stack.
-      - name: Install Lua and Octave
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lua5.4 octave
-
+      # without an interpreter, so a missing one would look like a pass — each
+      # asserts its interpreter is present when CI is set, which is what makes
+      # the image's lua5.4/octave load-bearing rather than incidental.
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
 
@@ -446,6 +509,8 @@ jobs:
   swift-tests-gate:
     needs:
       - format-lint
+      - guard-self-tests
+      - mutation-trend-tests
       - build
       - core-tests
       - api-tests

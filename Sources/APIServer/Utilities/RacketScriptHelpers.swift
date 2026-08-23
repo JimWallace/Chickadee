@@ -1,9 +1,9 @@
 // APIServer/Utilities/RacketScriptHelpers.swift
 //
-// Racket-side helpers for generated scripts: the identifier grammar, and the
-// module-path form a generated test uses to reach the submission.
+// Racket-side helpers for generated scripts: the identifier grammar.
+// (Submission module loading lives in the runtime itself —
+// Tools/runner-support/test_runtime.rkt builds the `(file …)` path.)
 
-import Core
 import Foundation
 
 /// Characters that end an identifier in Racket's reader. Everything else is
@@ -40,14 +40,4 @@ func isValidRacketIdentifier(_ name: String) -> Bool {
         return false
     }
     return true
-}
-
-/// The `(file "…")` module path a generated test hands to `dynamic-require`.
-///
-/// A quoted relative path rather than a bare identifier: `(require student)`
-/// would look up a COLLECTION named `student` on the collection path, not the
-/// file beside the test, and would fail with a confusing "collection not found"
-/// rather than a missing-submission message.
-func racketSubmissionModulePath(_ filename: String) -> String {
-    "(file \(JSONValue.string(filename).racketLiteral))"
 }

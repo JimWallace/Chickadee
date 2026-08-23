@@ -109,6 +109,19 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "secret_reveal_enabled")
     var secretRevealEnabled: Bool?
 
+    /// Solution-reveal policy, stored as the raw `SolutionVisibility` string.
+    /// Use the typed `solutionVisibility` accessor. nil = hidden (the
+    /// default): the reference solution stays staff-only.
+    @OptionalField(key: "solution_visibility")
+    var solutionVisibilityRaw: String?
+
+    /// Typed accessor for `solutionVisibilityRaw`. Defaults to `.hidden` if
+    /// the stored value is missing or unrecognised — the safe direction.
+    var solutionVisibility: SolutionVisibility {
+        get { solutionVisibilityRaw.flatMap(SolutionVisibility.init(rawValue:)) ?? .hidden }
+        set { solutionVisibilityRaw = newValue.rawValue }
+    }
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

@@ -85,6 +85,4 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
             "mcp: clientAllowlist=\(clientAllowlist.origins.count) origin(s) from \(mcpClientAllowlistFile)"
         )
     }
-
-    app.authProvider = LocalAuthProvider()
 }

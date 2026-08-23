@@ -260,7 +260,6 @@ struct AdminCourseDetailContext: Encodable {
     let assignments: [AdminCourseAssignmentRow]
     let isNew: Bool
     let error: String?
-    var assignmentCount: Int { assignments.count }
 }
 
 struct AdminRunnerDetailContext: Encodable {

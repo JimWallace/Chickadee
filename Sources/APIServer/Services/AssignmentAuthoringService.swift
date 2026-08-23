@@ -76,6 +76,7 @@ enum AssignmentAuthoringService {
         startsAt: OpenDateUpdate = .unchanged,
         open: Bool? = nil,
         secretRevealEnabled: Bool? = nil,
+        solutionVisibility: SolutionVisibility? = nil,
         on db: Database,
         now: Date = Date()
     ) async throws {
@@ -84,6 +85,9 @@ enum AssignmentAuthoringService {
         }
         if let secretRevealEnabled {
             assignment.secretRevealEnabled = secretRevealEnabled
+        }
+        if let solutionVisibility {
+            assignment.solutionVisibility = solutionVisibility
         }
         switch dueAt {
         case .unchanged:

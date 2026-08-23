@@ -12,7 +12,13 @@
 // Three rungs ship. The type is `String`-backed, so the vocabulary can grow
 // without a schema change — the column is a string; only the vocabulary grows.
 
-public enum CourseRole: String, Codable, Sendable, Comparable {
+/// `CaseIterable` so guards can be *derived* over the whole vocabulary rather
+/// than hand-listing the rungs they happen to remember. The web authorization
+/// matrix (`RouteAuthorizationMatrixTests`) crosses every discovered route with
+/// `allCases`, so a fourth rung gets a denial row without anyone editing the
+/// test — the shape `LanguageConformanceMatrixTests` uses for languages.
+/// Declaration order is ascending privilege, matching `Comparable` below.
+public enum CourseRole: String, Codable, Sendable, Comparable, CaseIterable {
     /// Submits to the course's assignments and views their own results.
     case student
     /// Teaching assistant: views all students' submissions, retests, and edits

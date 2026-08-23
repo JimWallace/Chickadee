@@ -49,6 +49,24 @@ struct GetValidationResultTool: ContentTool {
         let timeout: Int
     }
 
+    /// One synthetic per-student variant of the validation batch
+    /// (multi-variant validation): the same reference solution graded against
+    /// a derived seed, so a solution that only works for some students'
+    /// material is visible here instead of failing a student.
+    struct VariantDTO: Encodable, Sendable {
+        let variantIndex: Int
+        /// The 64-hex seed this variant graded against — usable with
+        /// preview_personalization to reproduce the variant's material.
+        let seedHex: String
+        /// pending | passed | failed.
+        let status: String
+        /// Collection-level build status of the variant's run, when one exists.
+        let buildStatus: String?
+        /// Only the non-passing outcomes, so N variants stay readable; the
+        /// primary run's full grid is in `outcomes`.
+        let failingOutcomes: [OutcomeDTO]
+    }
+
     struct Output: Encodable, Sendable {
         let assignmentPublicID: String
         /// The assignment's current `validationStatus`: passed | failed |
@@ -70,6 +88,10 @@ struct GetValidationResultTool: ContentTool {
         /// content bug rather than version skew.
         let runnerID: String?
         let runnerVersion: String?
+        /// The current multi-variant batch, ordered by variant index.  Empty
+        /// when the assignment does not vary by student (no expressions and
+        /// no datasets) or no batch has been enqueued yet.
+        let variants: [VariantDTO]
     }
 
     static let name = "get_validation_result"
@@ -80,11 +102,15 @@ struct GetValidationResultTool: ContentTool {
         + "shortResult/longResult so you can see WHICH test failed and WHY, then fix the suite or solution. "
         + "Validation runs only — it resolves the instructor's own reference-solution run from the "
         + "assignment and never accepts or returns a student submission, identity, or grade. All tiers "
-        + "(public/release/secret/student) are included so secret-tier failures are visible. A pending or "
+        + "(\(MCPTierProse.slashAlternatives)) are included so secret-tier failures are visible. A pending or "
         + "missing run returns the current validationStatus with empty outcomes. Also reports runnerID "
         + "and runnerVersion — which runner produced the result and the build it was running — so a "
         + "failure caused by a runner lagging behind the suite's requirements is distinguishable from "
-        + "a content bug."
+        + "a content bug. When the assignment varies by student (per-student expressions or datasets), "
+        + "`variants` reports the multi-variant batch: the same solution graded against derived "
+        + "per-student seeds, each with its failing outcomes — a failed variant means a student holding "
+        + "that seed would fail through no fault of their own, so fix the suite or solution until every "
+        + "variant passes."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -108,9 +134,11 @@ struct GetValidationResultTool: ContentTool {
             "counts": .object(["type": .array([.string("object"), .string("null")])]),
             "runnerID": .object(["type": .array([.string("string"), .string("null")])]),
             "runnerVersion": .object(["type": .array([.string("string"), .string("null")])]),
+            "variants": .object(["type": .string("array")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("validationStatus"), .string("outcomes"),
+            .string("variants"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -143,6 +171,8 @@ struct GetValidationResultTool: ContentTool {
                 tool: Self.name, detail: "Could not read the validation result: \(error)")
         }
 
+        let variants = try await Self.variantBatch(for: assignment, context: context)
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
@@ -150,7 +180,9 @@ struct GetValidationResultTool: ContentTool {
             let collection = try? decoder.decode(
                 TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
         else {
-            return Self.empty(assignmentPublicID: assignment.publicID, validationStatus: status)
+            return Self.empty(
+                assignmentPublicID: assignment.publicID, validationStatus: status,
+                variants: variants)
         }
 
         let outcomes = collection.outcomes.map {
@@ -181,12 +213,65 @@ struct GetValidationResultTool: ContentTool {
             // The version carried on the result itself, so it is the build that
             // actually produced these outcomes rather than whatever that runner
             // happens to be running now.
-            runnerVersion: collection.runnerVersion)
+            runnerVersion: collection.runnerVersion,
+            variants: variants)
+    }
+
+    /// The current multi-variant batch for the assignment's setup, each
+    /// variant carrying only its non-passing outcomes.  Result access goes
+    /// through `MCPStudentDataBoundary.variantResult`, which re-applies the
+    /// validation filter on the way to the row.
+    private static func variantBatch(
+        for assignment: APIAssignment, context: ToolContext
+    ) async throws -> [VariantDTO] {
+        let batch = try await ValidationVariant.query(on: context.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .sort(\.$variantIndex)
+            .all()
+        guard !batch.isEmpty else { return [] }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var dtos: [VariantDTO] = []
+        for variant in batch {
+            var buildStatus: String?
+            var failing: [OutcomeDTO] = []
+            if variant.status == ValidationVariant.Status.failed,
+                let result = try await MCPStudentDataBoundary.variantResult(
+                    for: variant, on: context.db),
+                let json = try? await result.loadCollectionJSON(on: context.db),
+                let collection = try? decoder.decode(
+                    TestOutcomeCollection.self, from: Data(json.utf8))
+            {
+                buildStatus = collection.buildStatus.rawValue
+                failing = collection.outcomes
+                    .filter { $0.status != .pass }
+                    .map {
+                        OutcomeDTO(
+                            testName: $0.testName,
+                            tier: $0.tier.rawValue,
+                            status: $0.status.rawValue,
+                            points: $0.points,
+                            shortResult: $0.shortResult,
+                            longResult: $0.longResult)
+                    }
+            }
+            dtos.append(
+                VariantDTO(
+                    variantIndex: variant.variantIndex,
+                    seedHex: variant.seedHex,
+                    status: variant.status,
+                    buildStatus: buildStatus,
+                    failingOutcomes: failing))
+        }
+        return dtos
     }
 
     /// The pending / no-result-yet response: the current status with no outcomes
     /// (mirrors validate_assignment's pending state).
-    private static func empty(assignmentPublicID: String, validationStatus: String) -> Output {
+    private static func empty(
+        assignmentPublicID: String, validationStatus: String, variants: [VariantDTO]
+    ) -> Output {
         Output(
             assignmentPublicID: assignmentPublicID,
             validationStatus: validationStatus,
@@ -197,6 +282,7 @@ struct GetValidationResultTool: ContentTool {
             outcomes: [],
             counts: nil,
             runnerID: nil,
-            runnerVersion: nil)
+            runnerVersion: nil,
+            variants: variants)
     }
 }

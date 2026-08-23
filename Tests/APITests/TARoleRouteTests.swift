@@ -6,6 +6,26 @@
 // floor `.instructor`). The acting user here is a *global student* with a
 // per-course `.ta` enrollment, so these tests also prove authority is purely
 // per-course (the deployment role is irrelevant).
+//
+// WHAT IS LEFT HERE, AND WHY. This suite used to carry eight spot tests, and
+// they were the *only* thing holding the TA boundary — which meant the boundary
+// held exactly on the routes someone had remembered to write a test for.
+// `RouteAuthorizationMatrixTests` now derives that boundary: it walks the live
+// route table and crosses every parameterized `/instructor` and `/courses`
+// route with `CourseRole.allCases`, asserting each route's declared floor. Six
+// of the eight said something it now says for every route at once — a TA is
+// denied on `POST /instructor/:assignmentID/delete` and
+// `POST /courses/:courseID/role/:userID`, an instructor is not, and a per-course
+// student is denied on `PUT /instructor/:assignmentID/suite` and
+// `POST /instructor/:assignmentID/retest` — so they were removed rather than
+// left to drift out of sync with the matrix.
+//
+// The two that remain are on routes the matrix structurally cannot reach: the
+// per-student action routes are vanity-URL routes whose first path component is
+// the `:courseCode` PARAMETER, and the matrix walks only routes rooted at the
+// constants `instructor` or `courses`. They also assert behaviour rather than
+// authorization — that the extension row is really created and really removed —
+// which is outside what a status-code matrix can see.
 
 import Core
 import Fluent
@@ -27,7 +47,6 @@ import VaporTesting
     private struct Fixture {
         let courseID: UUID
         let assignmentID: String
-        let taUserID: UUID
         let csrf: String
         let sessionCookie: String
     }
@@ -54,7 +73,7 @@ import VaporTesting
         let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
         return Fixture(
             courseID: courseID, assignmentID: assignment.publicID,
-            taUserID: try taUser.requireID(), csrf: csrf, sessionCookie: sessionCookie)
+            csrf: csrf, sessionCookie: sessionCookie)
     }
 
     /// A fresh student enrolled as `.student` in `courseID`, returned with their
@@ -70,25 +89,7 @@ import VaporTesting
         return (target, try target.requireURLToken())
     }
 
-    // MARK: - TA CAN edit assignment content (floor .ta)
-
-    @Test func taCanEditAssignmentSuite() async throws {
-        try await withApp(app) { _ in
-            let fx = try await fixture(role: .ta)
-            try await app.asyncTest(
-                .PUT, "/instructor/\(fx.assignmentID)/suite",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .json
-                    req.body = ByteBuffer(string: #"{"items":[]}"#)
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .ok, "a TA may edit assignment content, got \(res.status): \(res.body.string)")
-                })
-        }
-    }
+    // MARK: - TA CAN grant an individual accommodation (floor .ta)
 
     // A per-student deadline extension is an individual accommodation — a
     // sibling of grade-override, floored at `.ta`, NOT the assignment-wide
@@ -144,110 +145,7 @@ import VaporTesting
         }
     }
 
-    // MARK: - TA CANNOT do instructor-only actions (floor .instructor)
-
-    @Test func taCannotDeleteAssignment() async throws {
-        try await withApp(app) { _ in
-            let fx = try await fixture(role: .ta)
-            try await app.asyncTest(
-                .POST, "/instructor/\(fx.assignmentID)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .urlEncodedForm
-                    req.body = ByteBuffer(string: "")
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .forbidden,
-                        "a TA must not delete an assignment, got \(res.status)")
-                })
-        }
-    }
-
-    @Test func taCannotManageEnrollment() async throws {
-        try await withApp(app) { _ in
-            let fx = try await fixture(role: .ta)
-            // Set-role is enrollment management (instructor floor).
-            try await app.asyncTest(
-                .POST, "/courses/\(fx.courseID)/role/\(fx.taUserID)",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .urlEncodedForm
-                    req.body = ByteBuffer(string: "role=student")
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .forbidden,
-                        "a TA must not manage enrollment/staff, got \(res.status)")
-                })
-        }
-    }
-
-    // MARK: - An instructor in the same fixture CAN do the instructor-only action
-
-    @Test func instructorCanDeleteAssignment() async throws {
-        try await withApp(app) { _ in
-            // Same shape, but the acting user holds the per-course .instructor
-            // role — the delete (instructor floor) now succeeds (303 redirect),
-            // attributing the TA's 403 above to the role, not the fixture.
-            let fx = try await fixture(role: .instructor)
-            try await app.asyncTest(
-                .POST, "/instructor/\(fx.assignmentID)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .urlEncodedForm
-                    req.body = ByteBuffer(string: "")
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther, "an instructor may delete, got \(res.status)")
-                })
-        }
-    }
-
-    // MARK: - A per-course STUDENT is shut out of the instructor area entirely
-
-    @Test func studentCannotEditAssignmentSuite() async throws {
-        try await withApp(app) { _ in
-            // Same fixture, acting user enrolled as a plain `.student` — the
-            // `/instructor` gate (role >= .ta) rejects them before any handler.
-            let fx = try await fixture(role: .student)
-            try await app.asyncTest(
-                .PUT, "/instructor/\(fx.assignmentID)/suite",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .json
-                    req.body = ByteBuffer(string: #"{"items":[]}"#)
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .forbidden,
-                        "a student must not edit assignment content, got \(res.status)")
-                })
-        }
-    }
-
-    @Test func studentCannotRetestSubmissions() async throws {
-        try await withApp(app) { _ in
-            let fx = try await fixture(role: .student)
-            try await app.asyncTest(
-                .POST, "/instructor/\(fx.assignmentID)/retest",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: fx.sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
-                    req.headers.contentType = .urlEncodedForm
-                    req.body = ByteBuffer(string: "")
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .forbidden,
-                        "a student must not retest submissions, got \(res.status)")
-                })
-        }
-    }
+    // MARK: - A per-course STUDENT is shut out of the same route
 
     @Test func studentCannotGrantExtension() async throws {
         try await withApp(app) { _ in

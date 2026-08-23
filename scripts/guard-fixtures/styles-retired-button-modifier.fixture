@@ -1,0 +1,10 @@
+# btn-tiny and action-btn-tight were second sizes for jobs btn-compact and
+# action-btn-icon already did. A name with no rule is caught by
+# check-class-resolution; a name someone re-adds a rule for is caught here.
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="a retired button size modifier"
+expect="retired button size modifier"
+apply() {
+    printf '<button type="button" class="btn btn-tiny">guard fixture</button>\n' >> Resources/Views/login.leaf
+}

@@ -104,17 +104,51 @@ is black in both schemes).
 
 Every page extends `base.leaf` (nav, colour bar, course tabs, `main.main`)
 and then follows ONE of these skeletons.  Don't invent an eighth shape —
-pick the archetype, and reuse its components:
+pick the archetype, and reuse its components.
 
-| Archetype | Skeleton | Examples |
-|-----------|----------|----------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, each opening with an `<h2>` | admin, admin-users, alerts |
-| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | assignments, instructor-students, instructor-mcp |
-| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | admin-course, admin-user, assignment-submissions |
-| **Plain student page** | `<h1>` → content | index, submit, enroll, account |
-| **Auth box** | `.auth-box` centred card | login, register, oauth-consent |
-| **Body-partial shim** | `#extend` of a shared body partial, no markup of its own | assignment-edit, notebook |
-| **Full-bleed app** | `fullBleed` context flag; owns the viewport | workbench |
+**Start a new page by copying its archetype's exemplar.**  The component
+vocabulary and the idiom table below tell you what to *reach for*; this is
+the only rule here that names a **starting artifact**.  It exists because
+the skeleton column describes a shape without providing one: an author who
+reads it and imitates whichever page they happened to open inherits that
+page's private habits along with the archetype.  The example pages in a row
+never agreed with each other, so "which one" was a coin flip.  Now one of
+them is the answer.
+
+| Archetype | Skeleton | Copy this | Also |
+|-----------|----------|-----------|------|
+| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
+| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
+| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
+| **Plain student page** | `<h1>` → content | `account.leaf` | index, submit, enroll |
+| **Auth box** | `.auth-box` centred card | `register.leaf` | login, oauth-consent |
+| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
+| **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
+
+Why each exemplar won its row: `alerts.leaf` carries no page script and the
+least page CSS of any admin page while still showing the whole skeleton;
+`instructor-mcp.leaf` uses no page-private class name at all;
+`admin-user.leaf` is the only page in its row that demonstrates the optional
+`.page-subtitle`; `account.leaf` is the only plain student page that groups
+its content in sections at all; `register.leaf` ties `login` on page CSS and
+private names and wins on having nothing auth-provider-specific to strip out;
+`assignment-edit.leaf` *is* its archetype in eight lines.  `workbench.leaf`
+is the sole full-bleed page and therefore its exemplar by default — it is
+also the least copyable file here, which is the honest reading of an
+archetype with one member.
+
+The pages in the **Also** column are the archetype too; they are just not
+the reference.  `Tests/APITests/PageArchetypeTests.swift` reads this table —
+so the exemplar column and the guard cannot drift apart — and re-checks each
+exemplar against its own row on every run.  It checks the exemplars and
+nothing else: no page fails for not being one.  It does hold them to
+slightly more than the skeleton column asks of the archetype at large —
+`account.leaf` must keep grouping its content in `.page-section` blocks,
+though a one-form page like `submit` is a perfectly good plain student page
+without them.  That asymmetry is the point.  The archetype is the floor; the
+exemplar is the reference, and a reference that has quietly stopped
+demonstrating the full shape is worse than no reference, because it is still
+the file everyone copies.
 
 Anatomy rules that hold across archetypes:
 
@@ -141,6 +175,18 @@ The audit that produced this rule found sixteen page-local names for "a row
 of action buttons" and four pill implementations; the page-style ratchet
 (below) now makes the private copy the expensive option.
 
+For a while it made only the *page-local* copy expensive.  The global sheet
+carried no budget at all, so the cheapest way to add a second spelling of a
+component was to skip the page block and put it in `Public/styles.css` — and
+thirteen components went in without ever reaching this list, followed by a
+pair of estimate chips that were chips in the changelog, in the commit
+message and in their own CSS comment, under a name that shared nothing with
+`.chip`.  Every guard passed.  `scripts/check-ui-vocabulary.sh` now prices
+the global sheet the same way: the count of classes in it that this catalog
+does not name is a shrink-only ratchet, so a new global component costs a
+catalog entry, paid here, where review sees it beside the component it would
+duplicate.
+
 - **Buttons** — one grammar (UI audit S6):
   - a form's primary submit is `btn btn-primary`; secondary actions beside it
     are `btn`;
@@ -155,7 +201,7 @@ of action buttons" and four pill implementations; the page-style ratchet
 - **`.form`**, `.form--wide`, `.form-input`, `.form-error`, `.form-flush`,
   `.inline-form` — forms and the inline error banner (never native
   `alert()`).
-- **`.modal-overlay` / `.modal-card`** (+ `--confirm`) — the one blocking
+- **`.modal-overlay`** / **`.modal-card`** (+ `.modal-card--confirm`) — the one blocking
   dialog shape.  A destructive action asks with `data-confirm="…"` in
   markup (app.js handles it) or `await ChickadeeUI.confirmAction(msg)`
   where there is no element to mark; both render the same themed
@@ -203,12 +249,23 @@ of action buttons" and four pill implementations; the page-style ratchet
   `.input-attention` (amber), `.input-invalid` (red), `.input-computed`
   (muted), `.input-ref-ok` / `.input-ref-broken` (italic green/red `$name`
   refs).  Editors toggle these classes; they never write the colours.
-- **`.modal-overlay`**, `.modal-card`, `.modal-head/-body/-foot`,
-  `.modal-title/-close/-status/-desc` — the one modal shell
+- **`.modal-overlay`**, `.modal-card`, `.modal-card--confirm`, `.modal-head`,
+  `.modal-body`, `.modal-foot`, `.modal-title`, `.modal-close`,
+  `.modal-status`, `.modal-desc` — the one modal shell
   (test-editor-modal.js).  `hidden` does the showing and hiding.
 - **`.editor-stack`**, `.editor-cm-mount`, `.cell-stack`, `.cell-title`,
   `.cell-actions` — editor-built layout: vertical field stacks, the
   CodeMirror host, and table-cell title/meta and action clusters.
+- **`.results-table`** is a CARD: `background: var(--surface)`, a
+  `var(--border)` hairline, `var(--radius-lg)` corners and `overflow: hidden`,
+  which is what clips those corners while the table stays
+  `border-collapse: collapse`.  The separate box model is NOT required for the
+  card look and must not be reached for — `collapse` is what keeps one hairline
+  where two bordered elements meet, and switching it doubles every one of them.
+  There is deliberately no `--card` variant: a second flavour of the site's
+  most-reused component is where the sprawl this rulebook exists to prevent
+  starts.  A bordered wrapper around a table drops its own border, since the
+  table owns that edge.
 - **`.results-table`** (+ `.table-scroll`), **`.sortable-table`** — the one
   column sort (`Public/sortable-table.js`).  Markup:
   `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
@@ -219,20 +276,193 @@ of action buttons" and four pill implementations; the page-style ratchet
   `data-sort-initial="<key>:desc"` declares the load-time sort and
   `data-sort-tiebreak="<key>"` the tie-break; a page that repaints rows calls
   `ChickadeeSortableTable.apply(table)`.  Never hand-roll a sorter or a sort
-  glyph — the guard fails on both.
-- **`.diagnostics-cards`** + `.diagnostic-card/-label/-value` — stat tiles.
-- **`.chip`**, `.chip-row` — neutral tags.  `.tier` + `.tier-*` — status
+  glyph — the guard fails on both.  The glyph marks the ACTIVE column only:
+  `.sort-header::after` carries it at `visibility: hidden` so the box holds
+  its width, hover and `:focus-visible` reveal it, and `th.sort-asc` /
+  `th.sort-desc` show the direction permanently.  A resting glyph on every
+  header drew one arrow per sortable column and said nothing about which
+  column the rows were ordered by.
+  A column that declares `data-sort-key` also becomes **searchable** by
+  `.filter-input`, which matches its DISPLAYED text while the sorter reads its
+  machine value — you sort Due by its ISO and filter it by "in 2 days".  Adding
+  a sort key therefore widens the filter as a side effect; omitting one
+  (Actions, History) is how a column stays out of both.
+  **`.row-last-visible`** closes the list: the table's own border ends it, so
+  the final row draws no separator.  `:last-child` alone is wrong on any
+  filtered table — it is the DOM's last row, while `list-filter.js` hides rows
+  with the `hidden` attribute — and the stale separator then collapsed with
+  the table's bottom border and won it, rendering that edge a shade lighter.
+  `list-filter.js` owns the class (it is the only thing that knows which rows
+  are hidden) and `sortable-table.js` asks it to re-mark after reordering.
+  A page never writes it.
+- **`.diagnostics-cards`** + `.diagnostic-card`, `.diagnostic-label`,
+  `.diagnostic-value` — stat tiles.
+  `.diagnostics-section` wraps a group of them under one heading.
+- **`.chip`**, `.chip-row` — neutral tags.  A chip is the answer for a short
+  labelled value beside a control; it carries no status colour, so if the
+  value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
+  pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only: open/closed/extended/preview/unpublished).
+- **`.account-identity`** — the account page's identity header: the student's
+  `.avatar`, the resolved name beside it, and the username under that.  The name
+  and username are element selectors inside the row, not classes of their own.
+  The name resolves display name → preferred name → username, and the username
+  line is omitted when it would merely repeat the name.
+- **`.avatar`** and the `.av-*` fill classes — the generated student chickadee.
+  One `<svg>` carrying the size class wraps five `<use>` elements naming symbols
+  in `_avatar-sprite.leaf`: backdrop, plumage, wing, expression, accessory.
+  **A page that renders `_avatar` must also include `_avatar-sprite`, once per
+  page** — forget it and the page still returns 200 and shows an empty circle,
+  which no guard can catch.  Only four colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
+  which is the sanctioned form); the fixed parts of the bird — `.av-body`,
+  `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
+  `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  read the palette directly, because a body or a beak that varied would stop
+  the birds being one species.  **One size, 3rem.**  The bird earns its detail
+  at 48px and up; below that it is a smudge, and a small context wants a
+  monogram chip rather than a shrunken bird — which is also why a leaderboard
+  would name a student by their handle and use the bird for recognition.  See
+  [student-avatars.md](student-avatars.md).
+- **`.diagnostic-value-alert`** — the one count in a tile row that is not
+  neutral information (the submission band's failed count), in `--red`.  A
+  modifier on `.diagnostic-value`, not a second tile component.
+- **`.secret-reveal-action`** — the reveal-token form where it belongs: at the
+  end of the hidden-test block's header, acting on the block it labels, rather
+  than as a notice of its own elsewhere on the page.
+- **`.score-summary`**, **`.score-delta`** — the submission result band's two
+  parts: the stacked grade block (label, figure, points) and the whole-band
+  delta remark, which takes its own full-width line beneath the count tiles.
+  Both exist because the band is two groups plus a footnote rather than one row
+  of peers — flattened into a single flex row, the tiles wrapped 3+1 on every
+  attempt after the first, where a delta line joins the row.
+- **`.score-figure`** — the submission result page's grade percentage, the one
+  figure a student opens that page to read, at `2.4em`.  The only display-size
+  type in the product: the `--text-*` scale tops out at 1.4rem for page
+  headings and deliberately does not carry display sizes, so this is `em`
+  against its container rather than a new scale step.  One per page.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
+- **`.assignment-phone-meta`** — the student dashboard's phone-width
+  restatement of the Due and History columns, which `.col-hide-phone` drops
+  below 640px.  Sits inside the name cell, takes `.card-meta` typography, and
+  is `display: none` at every width that still shows those columns, so the
+  fact never appears twice.  Not general-purpose: a table that hides columns
+  on phones and wants them restated should reuse this pattern by name rather
+  than minting a second one.
   `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
+  `.empty` — the "nothing here yet" line a list renders in place of rows.
 - **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
-  forms.
+  forms.  `.popover-panel` is the same shape for a row-anchored panel that
+  is not a set/clear form; `app.js` floats both.
+- **`.nav`**, `.nav-brand`, `.nav-brand-logo`, `.nav-link` — the site header
+  in `base.leaf`, on every page.  `.nav-user`, `.nav-username`,
+  `.nav-dropdown`, `.nav-dropdown-toggle`, `.nav-dropdown-caret`,
+  `.nav-dropdown-menu`, `.nav-dropdown-item`, `.nav-dropdown-item-active` —
+  the account menu; `app.js` toggles `.open` on the `.nav-dropdown`, and the
+  caret and menu follow from that one class.  This is the only pop-out menu
+  shape outside `.popover-panel` and the modal shell — a page needing a third
+  is a conversation, not a new rule.
+- **Drag to reorder** — one vocabulary, two surfaces.  The grip is
+  `.section-drag-handle` (course sections, test sections) or
+  `.suite-drag-handle` (suite rows); the row in flight takes
+  `.section-dragging` or `.suite-row-dragging`; the target cue is
+  `.drop-before` / `.drop-after` for "land beside this" and `.drop-adopt` for
+  "become a child of this", with `.suite-root-drop` the empty tail target and
+  `.drop-hover` its lit state.  `.section-dragging` is deliberately shared —
+  `assignments.js` and `suite-table.js` both apply it to a `.section-block`.
+  A third reorder surface reuses these; it does not mint a third grip.
+- **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
+  targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
+  **Two empty states, and they never borrow each other's words.** An empty
+  COLLECTION (term start, a course with no assignments) replaces the table: an
+  `.empty` line, one `.section-note` of context, one route out.  A filter that
+  matched NOTHING leaves the rows in place — hidden, not absent — so the table
+  stays and the message appears inside it, worded by `data-list-filter-empty`
+  and naming the row type ("No assignments match this filter."), never a
+  generic "No results."  The rule: a filter's empty message never claims the
+  collection is empty, and an empty collection never mentions a filter.  A
+  server-side GET filter is the one place a page decides between the two
+  itself, because there the non-matching rows really are absent.
+  `.standin-panel` — the placeholder a panel shows while its content is
+  unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
+- **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
+  inside `.page-titlebar`.  `.section-gap` adds the standard gap between
+  stacked sections.
+- **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
+  `_icons.leaf` by `<use href="#i-…">`.  Geometry may appear in exactly two
+  files: that sprite, and `_avatar-sprite.leaf` for the avatar parts.
+- **`.textarea-mono`**, `.form-stack` (+ `--wide`) — a monospace textarea and
+  the stacked form column that usually holds one.
 
 If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
 copies, and the page-style ratchet fails CI on growth.
+
+## Interaction idioms
+
+The component vocabulary answers "what class do I write".  This answers the
+question before it: **which of the ways this UI already has of doing a thing
+is the right one** — and the default answer is that there are enough.  A
+page that introduces a fifth way to reveal detail has not added a feature;
+it has made the other four less meaningful.
+
+Reaching for detail, cheapest first.  Pick the first one that fits:
+
+| The reader | Idiom |
+|---|---|
+| should just see it | put it on the page — a `.chip` for a value, `.field-note` under a control, `.card-meta` under a title |
+| wants it occasionally | `<details>` + `.accordion-caret`, closed by default |
+| is acting on one row | `.ext-details`/`.ext-panel`, or `.popover-panel` |
+| must decide before anything else happens | `.modal-card` — the only blocking shape, and only for a decision |
+| wants a reminder of what a control is | `title` — a phrase, and never the only copy of something they need |
+
+The affordances that say an element is interactive are a **closed registry**,
+enforced by `scripts/check-ui-vocabulary.sh`:
+
+- `cursor` — `pointer` (activates), `not-allowed` (disabled), `grab` /
+  `grabbing` (drag to reorder), `col-resize` (the workbench splitter),
+  `default` (deliberately not interactive).
+- `text-decoration` — `underline` (a link), `line-through` (superseded),
+  `none`.
+
+Adding a value is allowed and sometimes right, but it is an edit to this
+list and to that script, with the reasoning in the PR — not a line in a rule
+body.  The registry exists because `cursor: help` and a dotted underline
+arrived together as a private convention for "hover me", in a codebase that
+already had four ways to reveal detail and no fifth one it needed.
+
+Two things a hover title is not.  It is **not a disclosure**: no touch
+device shows it, no in-page search finds it, and screen readers treat it
+inconsistently, so anything a reader actually needs must exist somewhere
+else.  And it is **not a docs page**: if the answer runs to sentences, the
+sentences go in `docs/`, and the UI links there.
+
+## UI copy
+
+Chrome is not prose.  A label names a thing; it does not explain it.  The
+[authoring-voice guide](../CLAUDE.md) governs assignment *content* — what
+instructors and students read as course material — and this is its
+counterpart for the interface around it.
+
+- **Labels and chips: a noun phrase.**  Two or three words.  `similarity
+  20%`, not `Students share about 20% of their rows with each other`.
+- **Hover titles: one phrase, 20 words maximum**, enforced by
+  `scripts/check-ui-vocabulary.sh` for titles written in templates and by a
+  word-budget assertion for any assembled server-side (see
+  `datasetEstimateTitleWordCap`).  Name what the number is.  Do not derive
+  it, qualify it, or give its worked example.
+- **Notes under a control: one sentence**, in `.field-note` or
+  `.field-help`, and only when the control's own label cannot carry it.
+- **Everything longer belongs in `docs/`.**  A measurement's method, a
+  band's two bad ends, why a default is what it is — these are real and
+  worth writing down, in a file a reader can link to, search, and correct.
+
+The test for a number the UI shows: an instructor should be able to read it
+at a glance and know whether to act.  If it needs a paragraph before it means
+anything, the paragraph is not the fix — either show a number that speaks for
+itself, or move it out of the control row.
 
 ## Timestamps
 
@@ -438,10 +668,25 @@ tell you.
   A scale with exceptions is just the old sprawl with extra steps.
 - **New repeated pattern** (a third page grows the same card/banner/table
   flavour) → hoist it into `styles.css` as a named component and note it in
-  the component vocabulary above.
-- **New page** → pick an archetype, assemble it from the vocabulary, and add
-  it to `Tools/visual-regression/pages.mjs` if it introduces a new shape
-  (commit the CI bootstrap capture as its baseline in the same PR).
+  the component vocabulary above.  The note is not optional bookkeeping:
+  `scripts/check-ui-vocabulary.sh` counts the classes in the global sheet
+  this catalog does not name and fails on growth, so the entry is what pays
+  for the component.  Before writing it, search the catalog for the
+  *concept* — a duplicate arrives under a name that shares nothing with its
+  twin, which is why the guard cannot find it for you.
+- **New interaction idiom** (a `cursor`, a `text-decoration`, a way to
+  reveal detail that is not in the table above) → this is a rulebook edit
+  and a change to the affordance registry in that script, with the reasoning
+  in the PR description.  Reach for it last: the table is ordered
+  cheapest-first, and a fifth way to reveal detail makes the other four less
+  meaningful.
+- **New page** → pick an archetype, **copy its exemplar** from the table
+  above, and strip it back to what the page needs.  Then assemble the rest
+  from the vocabulary, and add the page to `Tools/visual-regression/pages.mjs`
+  if it introduces a new shape (commit the CI bootstrap capture as its
+  baseline in the same PR).  Copying beats generating: a `new-page.sh` that
+  stamps out a skeleton would be a second source of truth, drifting from the
+  exemplar the moment either changed.
 - **Shrinking the spacing lattice** → when a step's last usage disappears,
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.

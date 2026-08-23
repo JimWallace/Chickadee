@@ -244,29 +244,6 @@ func declareManifestLanguage(
     }
 }
 
-/// Removes the recorded `language`, returning the assignment to derived
-/// resolution. Returns true when a value was actually removed.
-///
-/// The escape hatch from the one-way door `AssignmentLanguage.rederive`
-/// documents: a recorded language outranks every content signal, so without a
-/// way back an assignment declared wrong once would keep rendering in that
-/// language forever, however its notebook and scripts changed underneath.
-///
-/// Guarded exactly like `setManifestLanguage`, and for the same reason: clearing
-/// changes which language generated tests render in just as setting does, and
-/// only the pattern-family application path knows how to re-render and clean up
-/// the old side.
-func clearManifestLanguage(setup: APITestSetup, on db: any Database) async throws -> Bool {
-    guard currentManifestLanguage(setup.manifest) != nil else { return false }
-    if manifestHasGeneratedScripts(setup.manifest) {
-        throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
-    }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        dict.removeValue(forKey: "language")
-    }
-    return true
-}
-
 /// True when the manifest carries any generated test — a pattern-family case or
 /// a notebook check. Read off `generatedBy` rather than the family/check lists
 /// so a family that has produced no enabled case doesn't block a change that

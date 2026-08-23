@@ -64,6 +64,11 @@ struct GetAssignmentTool: ContentTool {
         /// serialized description: the read-only-mode contract tests assert
         /// the whole tools/list JSON never contains a write tool's name.)
         let secretRevealEnabled: Bool
+        /// The solution-reveal policy (`SolutionVisibility` raw value):
+        /// whether students may view the reference solution after their
+        /// deadline. Set via the assignment-update tool (same naming caveat
+        /// as `secretRevealEnabled` above).
+        let solutionVisibility: String
     }
 
     static let name = "get_assignment"
@@ -75,7 +80,9 @@ struct GetAssignmentTool: ContentTool {
         + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
-        + "secret-tier test results; set via the assignment-update tool), minimumRunnerVersion "
+        + "secret-tier test results; set via the assignment-update tool), solutionVisibility "
+        + "(whether students may view the reference solution after their own deadline passes — "
+        + "\"afterDue\" — or never — \"hidden\", the default), minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
@@ -110,13 +117,18 @@ struct GetAssignmentTool: ContentTool {
             "sectionID": MCPSchema.string,
             "sectionName": MCPSchema.string,
             "secretRevealEnabled": MCPSchema.boolean,
+            "solutionVisibility": .object([
+                "type": .string("string"),
+                "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
+            ]),
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
-            .string("gradingMode"), .string("secretRevealEnabled"), .string("submissionMode"),
+            .string("gradingMode"), .string("secretRevealEnabled"),
+            .string("solutionVisibility"), .string("submissionMode"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -164,7 +176,8 @@ struct GetAssignmentTool: ContentTool {
             minimumRunnerVersion: manifest?.minimumRunnerVersion,
             sectionID: assignment.sectionID?.uuidString,
             sectionName: sectionName,
-            secretRevealEnabled: assignment.secretRevealEnabled == true
+            secretRevealEnabled: assignment.secretRevealEnabled == true,
+            solutionVisibility: assignment.solutionVisibility.rawValue
         )
     }
 }

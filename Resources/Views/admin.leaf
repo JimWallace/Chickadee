@@ -92,7 +92,7 @@ Admin
         <input type="file" name="file" accept=".zip" id="importCourseFile" hidden>
     </form>
 
-    #if(courses.isEmpty):
+    #if(count(courses) == 0):
     <p class="empty">No courses yet.</p>
     #else:
     <div class="table-scroll"><table class="results-table sortable-table" id="courses-table"

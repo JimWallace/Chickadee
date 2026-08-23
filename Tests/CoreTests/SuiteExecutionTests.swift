@@ -39,6 +39,18 @@ private final class EventLog: Sendable {
     var events: [SuiteRunEvent] { storage.withLock { $0 } }
 }
 
+/// `SuiteRunEvent` is not `Equatable` (it carries a `TestOutcome`), so compare
+/// rendered strings — which also makes a failure legible as a sequence diff
+/// rather than a pattern-match that silently matched nothing.
+private func describe(_ event: SuiteRunEvent) -> String {
+    switch event {
+    case .missingScript(let s): return "missingScript(\(s))"
+    case .willRun(let s): return "willRun(\(s))"
+    case .didFinish(let s, let outcome, let timedOut):
+        return "didFinish(\(s), \(outcome.status.rawValue), timedOut: \(timedOut))"
+    }
+}
+
 @Suite struct SuiteExecutionTests {
 
     @Test func runsEachScriptAndShapesOutcomes() async {
@@ -143,5 +155,76 @@ private final class EventLog: Sendable {
         #expect(outcomes[0].status == .pass)
         #expect(outcomes[0].attemptNumber == 3)
         #expect(outcomes[0].isFirstPassSuccess == false)
+    }
+
+    // MARK: - The event stream
+    //
+    // These exist because a mutation run deleted `onEvent(.willRun(…))` and
+    // `onEvent(.didFinish(…))` from the loop and NOTHING failed: the suite
+    // asserted only the returned outcomes, and the events are a separate
+    // output. They are not decoration — `RunnerDaemon+JobProcessing` turns them
+    // into the `test_execution_start` / `test_execution_end` / `timeout`
+    // structured log events that `docs/operational-diagnostics.md` documents,
+    // so losing one blinds the runner's observability without touching a mark.
+    //
+    // `missingScript` was already covered; the other two were not.
+
+    @Test func emitsWillRunAndDidFinishAroundEveryScriptThatRuns() async {
+        let executor = FakeExecutor(outputs: ["a.py": pass(5), "b.py": fail()])
+        let log = EventLog()
+
+        _ = await executeSuites(
+            [SuiteItem(script: "a.py", tier: .pub), SuiteItem(script: "b.py", tier: .pub)],
+            timeLimitSeconds: 10, attemptNumber: 1, executor: executor,
+            onEvent: { log.record($0) })
+
+        // Order matters: `willRun` must precede its script's `didFinish`, which
+        // is what makes the two log events bracket one execution.
+        #expect(
+            log.events.map(describe) == [
+                "willRun(a.py)",
+                "didFinish(a.py, pass, timedOut: false)",
+                "willRun(b.py)",
+                "didFinish(b.py, fail, timedOut: false)",
+            ])
+    }
+
+    @Test func didFinishCarriesTheTimedOutFlagThatDrivesTheTimeoutLogEvent() async {
+        let killed = ScriptOutput(
+            exitCode: -1, stdout: "", stderr: "still running when killed",
+            executionTimeMs: 10_000, timedOut: true)
+        let log = EventLog()
+
+        _ = await executeSuites(
+            [SuiteItem(script: "slow.py", tier: .pub)],
+            timeLimitSeconds: 10, attemptNumber: 1, executor: FakeExecutor(outputs: ["slow.py": killed]),
+            onEvent: { log.record($0) })
+
+        #expect(
+            log.events.map(describe) == [
+                "willRun(slow.py)",
+                "didFinish(slow.py, timeout, timedOut: true)",
+            ])
+    }
+
+    @Test func aScriptSkippedByItsPrerequisiteFiresNoEvents() async {
+        // The dependency gate `continue`s before both emissions, so a skipped
+        // script must not look like an execution in the log.
+        let executor = FakeExecutor(outputs: ["a.py": fail(), "b.py": pass()])
+        let log = EventLog()
+
+        _ = await executeSuites(
+            [
+                SuiteItem(script: "a.py", tier: .pub),
+                SuiteItem(script: "b.py", tier: .pub, dependsOn: ["a.py"]),
+            ],
+            timeLimitSeconds: 10, attemptNumber: 1, executor: executor,
+            onEvent: { log.record($0) })
+
+        #expect(
+            log.events.map(describe) == [
+                "willRun(a.py)",
+                "didFinish(a.py, fail, timedOut: false)",
+            ])
     }
 }

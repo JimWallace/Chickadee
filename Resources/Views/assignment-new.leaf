@@ -33,7 +33,7 @@ Create Assignment
                     Due
                     <input class="form-input input-compact" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
-                #if(!sections.isEmpty):
+                #if(count(sections) > 0):
                 <label class="field-inline">
                     Section
                     <select class="form-input input-compact" name="sectionID" id="sectionID">
@@ -190,7 +190,32 @@ Create Assignment
                                        placeholder="column (optional)"
                                        aria-label="Column to balance the sample of #(supportFile.name) across">
                             </span>
+                            <span class="dataset-size-field js-dataset-blank-field"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                blanking
+                                <input type="text"
+                                       class="form-input input-sm dataset-stratum js-dataset-blank-columns"
+                                       value="#(supportFile.datasetBlankColumnsOrEmpty)"
+                                       placeholder="columns (optional)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Columns to blank values in for #(supportFile.name)">
+                                in
+                                <input type="number" min="1" max="100" step="1"
+                                       class="form-input input-sm dataset-size js-dataset-blank-percent"
+                                       value="#(supportFile.datasetBlankPercentText)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Percent of rows to blank for #(supportFile.name)">
+                                % of rows
+                            </span>
+                            #if(!supportFile.datasetTransformsEditable):
+                            <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
+                            #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
+                            <span class="chip-row js-dataset-estimates"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                <span class="chip js-dataset-similarity" hidden></span>
+                                <span class="chip js-dataset-drift" hidden></span>
+                            </span>
                         </div>
                     </td>
                     <td class="time">
@@ -204,11 +229,11 @@ Create Assignment
     </div>
 
     <!-- ── Runner Requirements ────────────────────────────────────────── -->
-    #if(!detectedLanguages.isEmpty):
+    #if(count(detectedLanguages) > 0):
     <p class="card-meta detected-note">
         <strong>Auto-detected:</strong>
         Languages: #(detectedLanguagesCSV)
-        #if(!detectedCapabilities.isEmpty):
+        #if(count(detectedCapabilities) > 0):
         · Capabilities: #(detectedCapabilitiesCSV)
         #endif
     </p>

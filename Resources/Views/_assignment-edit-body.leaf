@@ -190,7 +190,32 @@
                                        placeholder="column (optional)"
                                        aria-label="Column to balance the sample of #(supportFile.name) across">
                             </span>
+                            <span class="dataset-size-field js-dataset-blank-field"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                blanking
+                                <input type="text"
+                                       class="form-input input-sm dataset-stratum js-dataset-blank-columns"
+                                       value="#(supportFile.datasetBlankColumnsOrEmpty)"
+                                       placeholder="columns (optional)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Columns to blank values in for #(supportFile.name)">
+                                in
+                                <input type="number" min="1" max="100" step="1"
+                                       class="form-input input-sm dataset-size js-dataset-blank-percent"
+                                       value="#(supportFile.datasetBlankPercentText)"
+                                       #if(!supportFile.datasetTransformsEditable):disabled#endif
+                                       aria-label="Percent of rows to blank for #(supportFile.name)">
+                                % of rows
+                            </span>
+                            #if(!supportFile.datasetTransformsEditable):
+                            <span class="dataset-note">Derivation steps authored by an agent — edit them with set_dataset.</span>
+                            #endif
                             <span class="upload-status-inline js-dataset-status" role="status" aria-live="polite"></span>
+                            <span class="chip-row js-dataset-estimates"
+                                  #if(!supportFile.isDataset):hidden#endif>
+                                <span class="chip js-dataset-similarity" hidden></span>
+                                <span class="chip js-dataset-drift" hidden></span>
+                            </span>
                         </div>
                     </td>
                     <td class="time">
@@ -220,7 +245,16 @@
             Allow each student to spend their one reveal token to see this assignment&rsquo;s secret test results
         </label>
         <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
-        <button class="btn action-btn" type="submit">Save</button>
+        <button class="btn action-btn" type="submit">Save reveal setting</button>
+    </form>
+    <form method="post" action="/instructor/#(assignmentID)/solution-visibility" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="afterDue" #if(solutionVisibilityAfterDue):checked#endif>
+            Show the reference solution to each student once their deadline has passed
+        </label>
+        <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
+        <button class="btn action-btn" type="submit">Save solution setting</button>
     </form>
 </section>
 
@@ -294,7 +328,7 @@
                 <input class="form-input input-compact suite-default-limit-input"
                        type="number" min="1" max="600" step="1"
                        id="suite-default-time-limit" value="#(timeLimitSeconds)"
-                       title="Seconds each test may run before it is killed and recorded as a timeout. Individual tests can override this in the test editor.">
+                       title="Seconds before a test times out, unless the test sets its own limit.">
                 s
                 <span id="suite-default-limit-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </label>
@@ -423,20 +457,26 @@
     <!-- One condition row, cloned into #am-conditions per condition. -->
     <template id="achievement-condition-template">
         <div class="am-condition">
-            <select class="form-input am-cond-signal">
+            <select class="form-input am-cond-signal" aria-label="Measure">
                 #for(opt in achievementSignalOptions):
-                <option value="#(opt.value)" data-unit="#(opt.unit)" data-is-test="#(opt.isTest)">#(opt.label)</option>
+                <option value="#(opt.value)" data-unit="#(opt.unit)" data-scope="#(opt.scopes)"
+                        data-ref-control="#(opt.refControl)" data-ref-field="#(opt.refField)"
+                        data-ref-label="#(opt.refLabel)" data-ref-placeholder="#(opt.refPlaceholder)"
+                        data-ref-replaces-value="#(opt.refReplacesValue)">#(opt.label)</option>
                 #endfor
             </select>
-            <select class="form-input js-am-cond-comparator">
+            <select class="form-input js-am-cond-comparator" aria-label="Comparison">
                 <option value="atLeast">at least</option>
                 <option value="atMost">at most</option>
                 <option value="equals">exactly</option>
             </select>
-            <input type="number" class="form-input am-cond-value">
+            <input type="number" class="form-input am-cond-value" aria-label="Value">
             <span class="am-cond-unit"></span>
-            <input type="text" class="form-input am-cond-testref"
-                   placeholder="secrettest_x.py" style="display:none">
+            <input type="text" class="form-input am-cond-ref" style="display:none">
+            <!-- Populated by the editor from the live suite sections on the
+                 page, so a section added or renamed without a reload is
+                 offered under its current name. -->
+            <select class="form-input am-cond-ref" style="display:none"></select>
             <button type="button" class="btn action-btn action-danger am-cond-remove"
                     aria-label="Remove condition">&#215;</button>
         </div>

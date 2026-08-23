@@ -4,6 +4,22 @@
 // from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still
 // starts with `AssignmentRoutes+` for blame continuity until the next
 // rename pass.
+//
+// Course-section structure is **instructor-level** (#417): it is course
+// LIFECYCLE, not assignment content, so every handler here calls
+// `requireCourseWriteAccess(atLeast: .instructor)` on top of the `/instructor`
+// group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
+// *active* course).  The floor is stated in three other places — the
+// convention comment on `evaluateCourseWrite`, the header of
+// `CourseAdminRoutes+ContentItems.swift` ("course-section structure stays
+// instructor-level"), and the MCP twins in `CourseSectionTools.swift`, whose
+// own comments read "instructor-level (#417), matching the web".  The web did
+// NOT match until the derived authorization matrix landed: these five handlers
+// scoped their writes to the active course but never checked the role, so a TA
+// could create, rename, reorder and delete a course's sections and move
+// assignments between them — and, lacking `requireCourseWriteAccess`, could do
+// it in an archived course.  `RouteAuthorizationMatrixTests` is what surfaced
+// it, and is what holds the floor now.
 
 import Core
 import Fluent
@@ -24,6 +40,8 @@ extension CourseAdminRoutes {
         guard let courseID = courseState.activeCourseUUID else {
             throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
+        try await requireCourseWriteAccess(
+            caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
         let body = try req.content.decode(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -54,6 +72,8 @@ extension CourseAdminRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else { return .ok }
+        try await requireCourseWriteAccess(
+            caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
         let body = try req.content.decode(ReorderBody.self)
         let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
@@ -104,6 +124,8 @@ extension CourseAdminRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
+        try await requireCourseWriteAccess(
+            caller: user, courseID: section.courseID, atLeast: .instructor, db: req.db)
         let body = try req.content.decode(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -139,6 +161,8 @@ extension CourseAdminRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
+        try await requireCourseWriteAccess(
+            caller: user, courseID: section.courseID, atLeast: .instructor, db: req.db)
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await section.delete(on: req.db)
         return req.redirect(to: "/instructor")
@@ -160,6 +184,11 @@ extension CourseAdminRoutes {
         guard assignment.courseID == courseID else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
+        // `loadAssignment` is the deliberately unauthorized loader, so this is
+        // the only role check on the path. Which section an assignment sits in
+        // is course structure, so the floor matches `set_assignment_course_section`.
+        try await requireCourseWriteAccess(
+            caller: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db)
         let body = (try? req.content.decode(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         assignment.sectionID = newSectionID

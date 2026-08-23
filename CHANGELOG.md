@@ -9,6 +9,1360 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.171] - 2026-08-23
+
+### Added
+
+- **Post-deadline solution reveal.** A per-assignment "Student Options" policy
+  (`solutionVisibility`, default off) lets students view the reference
+  solution after the deadline: the notebook page opens it read-personalized
+  in the editor, a download route serves upload-only languages, and the
+  dashboard, submission page, and notebook toolbar link it once visible. Each
+  student's reveal waits for their *own* effective deadline — extensions and
+  any slip-day claim they could still make included — so the answer key can
+  never be read and then submitted on freshly bought time; an assignment with
+  no due date reveals immediately (posted lecture material). Enabling the
+  policy is refused while no solution is on file, and a manual re-open
+  suppresses the reveal for its duration. Set from the assignment edit page
+  or MCP `update_assignment`; reported by `get_assignment`.
+
+### Fixed
+
+- **Release-tier output no longer leaks inside the slip-day claim window.**
+  Release output (expected/actual values) used to appear the moment a
+  student's effective deadline passed — which, in a slip-day course, is
+  exactly when they could still claim a slip day and act on it.
+  `releaseVisibilityDeadline` now waits for the end of any slip-day claim
+  window the student could still use, on the web view, the results API, and
+  the data export alike. Instructors who prefer prompt results may opt out
+  per course on the slip-day settings ("Hold release-test output until
+  slip-day claims lapse", default on); the solution reveal never honours the
+  opt-out.
+
+
+## [0.5.170] - 2026-08-22
+
+### Fixed
+
+- **The wedge-watchdog arming guard no longer races parallel tests.**
+  `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` asserted a before/inside
+  delta of the process-global tracked-scope counter, which any concurrent
+  test's scope could zero out by draining between the two reads — it was the
+  sole failure in a 3,045-test `api-tests-postgres` run on a loaded lane
+  (2026-08-22). `WedgeWatchdog.track` now also sets a task-local,
+  `isInsideTrackedScope`, and the guard asserts that from inside `withApp`:
+  another suite's scope can neither satisfy it nor disturb it, so the
+  assertion is race-free and strictly stronger. Verified in both directions —
+  it fails when the `track` wrapper is stripped from `withApp`.
+  `docs/ci-flakiness.md` records the sighting, and marks Family 5's
+  ceiling-equalization attack note done (the workflow has carried matching
+  25-minute ceilings on both api-tests lanes for some time).
+
+
+## [0.5.169] - 2026-08-22
+
+### Fixed
+
+- **Adding or removing a raw script no longer un-declares the assignment's
+  language.** The add-script and remove-script manifest rebuilds preserved
+  `language` but dropped `languageDeclared`, so one script edit through the
+  suite editor turned a deliberate "None" declaration back into "nobody has
+  been asked" — the exact conflation the declaration rule exists to remove.
+  Both rebuilds now thread the flag, like the pattern-family rebuild always
+  did, with a regression test covering the declared-None round-trip.
+
+### Removed
+
+- **The single-implementation `AuthProvider` protocol (#449).** `LocalAuthProvider`
+  is now a plain struct called directly from the login route; the protocol,
+  the `Application.authProvider` storage seam, and its eager bootstrap wiring
+  carried abstraction for a polymorphism that never existed (SSO login is not
+  username/password-shaped and never went through it, and no test mocked it).
+- **Four dead functions.** `updateManifestLanguage` (superseded by
+  `mutateManifest`-based edits, and it dropped `languageDeclared` on rebuild —
+  the same defect fixed above, waiting in a function nothing called),
+  `clearManifestLanguage` (superseded by `declareManifestLanguage(nil)`; its
+  doc comment cited the deleted `rederive` mechanism), `cppIdentifier` (unused
+  wrapper over `isValidCppIdentifier`, which every caller uses directly), and
+  `racketSubmissionModulePath` (submission module loading lives in
+  `test_runtime.rkt`, which builds its own `(file …)` path).
+- **Two dead stylesheet rules.** `.test-output-panel` and `.test-output-heading`
+  were referenced by no template, page script, or JS-built markup; the live
+  `test-output-*` family (`-row`, `-details`, `-pre`, `-pre-wide`) is untouched.
+
+
+## [0.5.168] - 2026-08-22
+
+### Added
+
+- **Chickadee avatar artwork.** `Resources/Views/_avatar-sprite.leaf` draws the
+  generated student avatar — a symmetrical, front-facing bird: cap, cheeks,
+  bib, belly, six folded-wing patterns drawn once and mirrored, beak and eyes — with an `--avatar-*` palette in `Public/styles.css`
+  (8 cap families × 4 cheeks × 6 flanks × 8 backdrops × 6 wings = 9,216 birds).
+  `Tools/avatar-preview/preview.mjs` renders a contact sheet from the sprite and
+  the stylesheet. Art only: nothing renders an avatar yet.
+
+### Changed
+
+- **`check-styles.sh` guard S4 admits a second sprite.** Drawn geometry may now
+  live in `_avatar-sprite.leaf` as well as `_icons.leaf` — two distinct
+  vocabularies for two distinct sets of pages — and nowhere else.
+
+### Added
+
+- **Every student has a chickadee and a per-course handle.** The account page
+  shows a generated avatar in place of the initials monogram, and names the
+  handle reserved for the student in each of their courses. Both are drawn on
+  first view and stored — `users.avatar_spec` and
+  `course_enrollments.avatar_handle`, the latter unique within a course — so
+  neither changes between page loads, and neither is derived from the student's
+  identity. Handles come from two curated word lists (6,400 pairs) drawn without
+  replacement per course, and are issued to student enrollments only: staff
+  teaching a course appear under their own name. Both appear in the
+  personal-data export. Nothing displays either to anyone else yet — they are
+  stored now so they are stable when a leaderboard does.
+- **The avatar has five axes: 92,160 distinct birds.** Cap (8), wing pattern
+  (6, symmetrical), expression (6), accessory (8 in 5 accents) and backdrop (8).
+  Body, cheek, beak and bib are fixed — they are what keeps every bird a
+  chickadee even when the cap goes plum.
+
+### Changed
+
+- **The account page's initials monogram is retired.** `accountMonogram`, the
+  `.account-monogram` rule and its component-vocabulary entry are gone; the
+  identity circle is the student's bird.
+- **`check-styles.sh` admits the avatar custom properties inline.** The four
+  `--av-*` names join `--bar-h` on the per-datum allowlist, for the reason the
+  rule already states: each carries a value that varies per student, which no
+  stylesheet can hold.
+
+### Added
+
+- **`AvatarSpec` and `AvatarMarkup` (Core).** The five-slot avatar model, a
+  seeded deterministic draw, and a markup builder that turns a spec into the
+  `<svg>` stack for a page. The builder holds no geometry and no colour — it
+  names symbols in `_avatar-sprite.leaf` and tokens in `styles.css`, and two
+  tests assert those names against both files in both directions. There is
+  deliberately no seed-to-SVG shortcut: drawing is a one-time act whose result
+  is stored, so that re-deriving per render cannot reshuffle every existing
+  avatar when a slot gains an option. Not yet persisted or displayed.
+
+### Documentation
+
+- **Student avatars design note.** `docs/student-avatars.md` plans generated
+  chickadee avatars to replace the account page's initials monogram, and the
+  pseudonymous per-course handle a leaderboard would identify students by. No
+  behaviour changes; the note records the decisions (a stored spec rather than a
+  hash of a username, uniqueness carried by the handle rather than the picture,
+  SVG sprite layers recoloured through design tokens) and a five-slice plan.
+
+
+## [0.5.167] - 2026-08-20
+
+### Changed
+
+- **The sort glyph marks the active column only.** Every sortable header
+  carried a resting `↕`, so a six-column table drew six identical arrows and
+  none of them said which column the rows were ordered by. Hover and keyboard
+  focus now reveal it; the sorted column shows its direction permanently. The
+  glyph hides with `visibility` rather than `content`, so revealing it cannot
+  widen a column and reflow the table under the pointer.
+
+### Fixed
+
+- **A filtered table's bottom edge no longer shifts colour.** The rule
+  suppressing the final row's separator targeted `:last-child` — the DOM's
+  last row, not the last one a reader can see once `list-filter.js` hides rows
+  with the `hidden` attribute. The stale separator collapsed with the table's
+  own bottom border and won it (a cell beats the table in CSS conflict
+  resolution), rendering that edge in `--gray-100` instead of `--gray-200`.
+  `list-filter.js` now marks the last visible row and `sortable-table.js` asks
+  it to re-mark after reordering.
+- **The student dashboard's filter and column sort were dead.** `index.leaf`
+  declared `data-list-filter`, four sortable columns, `data-sort-initial`
+  and a tiebreak — and loaded neither `list-filter.js` nor `sortable-table.js`
+  (`base.leaf` loads neither; every other page includes them itself). The
+  filter box accepted typing and filtered nothing, no result count was
+  announced, the headers were inert, and assignments rendered in server order
+  rather than by due date. It was invisible while the stylesheet drew a sort
+  arrow on every column regardless. A new test pairs each declaration with the
+  script that provides it.
+
+### Changed
+
+- **Phone tables get their gutter back.** At 640px and below the cell gutter
+  drops one spacing step, so four columns no longer push the dashboard table
+  past a 390px viewport. Row height is unchanged — that is what makes a row
+  tappable.
+
+
+## [0.5.166] - 2026-08-20
+
+### Changed
+
+- **The account page shows who you are, not just your initials.** The identity
+  circle now sits beside the name it was derived from — the display name the
+  IdP released, else the preferred name, else the username — with the username
+  on a muted line under it, dropped when it would merely repeat the name. One
+  resolution feeds both the heading and the monogram, so the circle can never
+  show initials the name beside it does not have.
+- **Slip-day balances read as a sentence.** A course row now says
+  "3 of 5 slip days left" rather than "Slip days: 3 of 5 remaining"; the phrase
+  carries its own noun, so the label beside it was redundant.
+- **A pending data export is announced above the description**, not below it,
+  so the status of the request you just made is the first thing in the section
+  rather than the last.
+
+
+## [0.5.165] - 2026-08-20
+
+### Fixed
+
+- **Empty states across 22 pages now render.** LeafKit has no property
+  resolution, so `#if(rows.isEmpty)` on an array resolved to nil and never
+  fired, while its negation always did. Enrollment with no open courses showed
+  the enrollment form; submission history and five admin pages showed a
+  header-only table promising rows and listing none; an "Auto-detected:" note,
+  a Section picker and empty badge containers rendered with nothing in them.
+  All 33 sites now use the `count()` tag, which resolves arrays properly.
+- **The idiom is now blocked.** `scripts/check-leaf-semantics.sh` fails on
+  Swift property access in a Leaf tag parameter, with a `check-guards.sh`
+  fixture proving it still catches its own defect, and
+  `LeafEmptyStateRenderTests` asserts the empty copy appears rather than merely
+  that the page returns 200.
+- **The new course page shows its assignment count again.** `assignmentCount`
+  was a computed property, and Swift's synthesized `Encodable` encodes stored
+  properties only — so it never reached the Leaf context and the heading read
+  "Assignments ()" above a working "Enrolled students (0)". It renders through
+  `count()` now.
+
+
+## [0.5.164] - 2026-08-20
+
+### Changed
+
+- **A hidden test's result is reduced to a case count, and the block explains
+  itself in one line.** The short result was passed through verbatim, and a
+  short result is whatever the instructor's script printed last — so a suite
+  printing "expected 42, got 7" leaked the expectation of a test whose whole
+  point is being hidden. It now goes through an allowlist of case-count shapes
+  and degrades to "passed" / "did not pass" otherwise. The block's explanation
+  moves from a footnote into its header as a single phrase.
+
+
+## [0.5.163] - 2026-08-20
+
+### Changed
+
+- **The submission result page matches its approved design.** The grade is
+  display type under a `GRADE` caption rather than a pill; the count tiles read
+  label-then-number with the failed count in red and a Skipped tile in place of
+  Timed out; marks are lowercase filled status pills; the delta column is named
+  `vs last` rather than `Δ`; and the first failure's output opens while the rest
+  stay collapsed. The hidden-test block carries its pass/fail counts and the
+  reveal control in its own header, shows each masked test's result, and
+  explains itself in a footnote instead of a separate notice elsewhere on the
+  page.
+
+
+## [0.5.162] - 2026-08-20
+
+### Fixed
+
+- **The submission result band lays out correctly on every attempt after the
+  first.** The grade, the points, the delta remark and the four count tiles were
+  peers in one flex row, so a delta line — which appears on every attempt but
+  the first — pushed the tiles into a 3+1 wrap and left a gap beside the grade.
+  The band is now the two groups the design describes: a stacked grade block and
+  a tile row, with the delta on its own full-width line beneath. The fixture
+  grades twice so a baseline covers the case at all, which also gave the results
+  table's Δ column its first coverage — and caught an empty `<th>` in the
+  hidden-test table that axe flags as `empty-table-header`.
+
+
+## [0.5.161] - 2026-08-20
+
+### Fixed
+
+- **The graded submission result page now has pixel and accessibility
+  coverage.** Its baseline captured only the pending spinner, because the
+  fixture attaches no runner and a worker-graded submission therefore never
+  finishes — so the score band, the count tiles, partial-credit points labels,
+  the collapsed output panel and the masked hidden-test rows had no coverage on
+  any page, in either scheme. The seed now posts a fixed
+  `TestOutcomeCollection` through the same endpoint the in-browser grader uses,
+  producing a second, graded submission beside the pending one. Adding the
+  coverage immediately caught a layout defect it would otherwise have hidden:
+  the count tiles collapsed to a single column beside the grade, because a
+  shared auto-fit grid receives only its content width inside a flex row.
+
+
+## [0.5.160] - 2026-08-20
+
+### Changed
+
+- **Login is a card, and the student dashboard sorts, filters and survives a
+  phone.** The auth panel gains a surface, border and padding; the mascot drops
+  from 200px to 72px so it stops competing with the sign-in controls for the
+  first screenful. The assignment table's Name / Status / Due / Grade headers
+  become sortable, each section gains a filter box, and the Due column renders a
+  relative countdown (with the absolute date beneath it and as the no-JS
+  fallback) per the house timestamp rule. At phone width, where `.col-hide-phone`
+  drops the Due and History columns, the name cell restates both through the new
+  `.assignment-phone-meta`. The slip-day line becomes a chip phrase rather than a
+  sentence, the empty state explains itself, and a row with nothing to do renders
+  a dash instead of an empty cell.
+
+### Changed
+
+- **The account page leads with identity and courses, and its "Available
+  courses" section always says something.** Order is now Account info → My
+  courses → Available courses → Your data, with an identity circle carrying
+  initials (there is no SSO photo — no claim in play releases one). The
+  available-courses section previously carried a guard that reads as "hide when
+  empty" but rendered a header-only table with no rows; it now renders either
+  rows with a Join action or a line saying there is nothing to join. The
+  data-export prose is unchanged and stays on the page — it is compliance text,
+  not chrome.
+- **Fixed: empty-list states on the account page never rendered.** LeafKit has
+  no property resolution for `.isEmpty` on an array — the path resolves to nil,
+  so `#if(rows.isEmpty)` is always false and `#if(!rows.isEmpty)` always true.
+  Emptiness is decided in Swift now. The same idiom appears in 23 other
+  templates and wants its own pass.
+
+### Fixed
+
+- **The browser-graded results view matches the server-rendered one again.**
+  `docs/ui-design.md` records the result-row classes as shared between
+  `submission.leaf` and the browser runner's inline results, which means CSS
+  changes reach both for free and markup changes do not. The score band and its
+  outcome tiles are now built in `notebook.js` too, and its output disclosure
+  carries the shared `.test-output-details` / `.test-output-pre` classes it had
+  been missing, so the stylesheet's rules reach it.
+
+### Changed
+
+- **Hidden tests are itemized without being revealed.** A student used to see
+  one aggregate line per section ("1 passed, 1 failed") for the secret tier, and
+  could not tell how many points had moved or how many things had broken. Each
+  hidden test now gets its own masked row — "hidden test 1…N" carrying its real
+  mark and its points — under a header stating the stake ("4 hidden tests · 4 of
+  8 points"). Names, messages, output, hints and blocker names stay hidden until
+  the reveal token is spent, and the delta arrows are withheld too: the number is
+  positional within one render, so an arrow against it would not correlate across
+  attempts. No new data — `secretOutcomes` already existed.
+- **The result page leads with the grade.** The percentage is the largest thing
+  on the page, with the pass/fail/error/timeout counts as tiles beneath it, and
+  non-passing output collapsed into `<details>` (so five failures stop being a
+  wall of stderr) rather than standing permanently open.
+
+### Changed
+
+- **The submit page states which file types it takes, and enforces them.** The
+  `accept` list used to union every `AssignmentLanguage`'s extensions on the
+  reasoning that a browser treats it as a hint so "breadth costs nothing" — true
+  of the picker, false of the student: a Racket assignment offered `.py`, `.r`,
+  `.lua` and `.m` beside `.rkt`, the page never said which language it wanted,
+  and a wrong type was stored and handed to the runner, where it failed as what
+  looked like a broken test script. The list is now the assignment's own
+  language plus `.zip` (and `.ipynb` unless the assignment is upload-only), said
+  in one sentence under the drop zone, refused client-side as a courtesy and
+  server-side as the gate. An assignment that declares no language keeps the
+  full union, where guessing would be worse than breadth. The page also shows
+  the attempt number and the deadline in force for that student.
+
+
+## [0.5.159] - 2026-08-19
+
+### Added
+
+- **Tests for eight Core invariants the mutation sweep found unpinned.** The
+  2026-08-19 sweep (run 32265903112) reported 31 surviving candidates across
+  them; each was confirmed SURVIVED against the run record before a test was
+  written and KILLED after, and every kill names the suite that added the
+  assertion. Two further survivors turned out to be Muter re-emitting the
+  original statement — see the verifier change below.
+  - `DatasetOverlap.worstPairSharedRows` was asserted only as
+    `>= expectedSharedRows`, which equality satisfies — five separate mutants
+    collapsed the extreme-value estimate onto the mean and survived, every one
+    of them reporting "the unluckiest pair shares the average amount". The
+    estimate is now pinned to its documented closed form, with the two
+    degenerate inputs (a class of one, a whole-file sample) stated as the cases
+    where the mean *is* the honest answer.
+  - `NotebookFunctionInfo`'s decoder realigns a `paramTypes` / `paramHasDefault`
+    array whose length disagrees with `paramNames`; nothing asserted it from
+    either side, so the mutants that discard a correct array and keep a
+    wrong-length one went unnoticed. The scanner's identifier-start rule is
+    pinned too: a parameter may begin with `_` and may not begin with a digit.
+  - `PatternCase` applies the same alignment rule to `argsProvided` /
+    `argVarRefs`. It was exercised only from `Tests/APITests`, which the sweep
+    does not run — and a Core model invariant pinned solely by an APIServer
+    renderer suite is unpinned for every other consumer.
+  - `ZipProcessSerialization`'s process-wide lock had no mutual-exclusion test:
+    deleting either `lock()` call left the whole suite green while restoring the
+    Foundation `Process` spawn race. The EFAULT retry's condition is now pinned
+    by domain and by code separately, so retrying the wrong failure is a test
+    failure rather than a silent 10 ms tax on the notebook-open path.
+  - `CourseRole`'s `<` — the relation every `requireCourseRole(atLeast:)` gate
+    resolves to — and `WorkerHMACSigning.constantTimeEquals`, the comparison
+    every runner request is admitted by, were both in that same
+    APITests-only class. Each now has assertions beside the type, including an
+    RFC 4231 vector for the HMAC itself.
+  - `renderInputsFile`'s Racket form had no assertion anywhere, and a surviving
+    mutant emitted an unterminated `(define ck-inputs (hash` for an assignment
+    with no personalization inputs — a read error on every generated test, for
+    every student. Pinned by byte, plus an `allCases` property (balanced
+    delimiters, header present, final newline) that a seventh language inherits
+    without editing the file.
+  - `TestOutcomeCollection`'s output budget is now split by a named
+    `outputCarrierCount`. The count was an inline expression inside the
+    per-carrier arithmetic, and the halving loop that follows absorbs an
+    off-by-one — the result still fits the budget, it just keeps roughly twice
+    or half as much of a student's output as it should — so no assertion made
+    from outside could see it.
+
+### Changed
+
+- **`Tools/mutation/verify-survivor.py` reports `INERT`.** Muter's `SwapTernary`
+  sometimes re-emits the original statement unchanged; `report.py` already
+  quarantines those out of a run's survivor list, but the verifier reads a
+  record directly, so it would apply an unchanged file, run the suite for two
+  minutes, and report `SURVIVED` — "nothing detects this change", about a change
+  that was never made. Two survivors in run 32265903112 were exactly this.
+
+
+## [0.5.158] - 2026-08-19
+
+### Added
+
+- **The notebook extractor's three top-level predicates are now tested.**
+  `isSafeTopLevelStatement`, `rhsContainsFunctionCall` and the whitespace trims
+  decide whether a notebook line is kept at module level or quarantined, and
+  the 2026-08-19 sweep reported seven surviving candidates across them — in
+  RunnerCore, whose covering tests all run in the sweep, so the suite really
+  did exercise this code and really could not tell the difference.
+  `NotebookExtractionPredicateTests` pins the cases that separate them: a plain
+  one-delimiter string literal (a module-level docstring the survivors
+  quarantine, which drops it from the introspectable source and so from
+  `inspect.getsource` and any `astStructure` check), an indented declaration
+  that only matches once leading whitespace is trimmed, an identifier ending in
+  a digit, underscore or close paren before a call (a false negative there
+  leaves a function call running at import time, which is what the quarantine
+  exists to prevent), and whitespace-only cells of every whitespace kind.
+- **A second entry in the equivalent-mutant ledger.** The bare-string-literal
+  guard tests four prefixes, and its first two are redundant: a line starting
+  with a triple quote necessarily starts with a single one, so the chain
+  reduces to the two single-delimiter tests. The mutant that ANDs the two
+  triple-quote tests together is therefore unkillable — nothing starts with
+  both — and is recorded with that argument rather than chased.
+
+
+## [0.5.157] - 2026-08-19
+
+### Added
+
+- **Class goals can grade on the UNION of what the class produced.** A new
+  achievement condition signal, `itemsCovered`, counts the DISTINCT suite items
+  the class has collectively passed — the collaborative bug-hunt shape, where
+  every student contributes a test or two and the goal is "the class has found
+  12 of the seeded bugs". Optionally scoped to one suite section, so a hunt's
+  seeded variants are counted and the well-formedness gate beside them is not.
+  Every other class goal counts students clearing a grade threshold; this one
+  reads the accumulated coverage table.
+- **The union goal has a breadth half, and it is what makes a contribution cap
+  unnecessary.** `classPercent` keeps its exact sentence — the share of the
+  class that must satisfy the per-student part — and for a union goal that part
+  is "contributed at least one covered item". Progress is the smaller of the two
+  halves, so one student finding every bug reaches full coverage and then fails
+  the goal on breadth. The alternative (crediting only each student's K rarest
+  items) would bound the solo hero too, and would break the sweep's determinism
+  doing it.
+- **The achievement snapshot records what it froze at.** `achievement_results`
+  gained nullable `items_covered` / `items_required`, written by the sweep and
+  shown to students as "9 / 15 found" beside the existing student count. A
+  snapshot freezes at the deadline and its bonus rides into the LEARN push, so a
+  frozen row now says what coverage produced that bonus.
+
+### Changed
+
+- **The MCP surface derives its achievement signal list.** Four hand-typed lists
+  across `initialize`, `get_achievements` and `update_achievements` are now
+  rendered from `AchievementSignal.allCases` via `MCPAchievementSignalProse`,
+  with `MCPAchievementSignalCoverageTests` failing on any list that stops short
+  anywhere in the served catalog. Adding a seventh signal needs no MCP prose
+  edit. Same fix as `MCPLanguageProse` and `MCPTierProse`, one type over.
+- **An achievement condition may now compare a value AND name a reference.**
+  The editor's per-signal `isTest` boolean became a closed ref kind
+  (none / test / section), because a second referencing signal arrived and two
+  booleans could have been true at once.
+
+
+## [0.5.156] - 2026-08-19
+
+### Added
+
+- **The `.0`-suffix rule every literal renderer shares is now pinned once, in a
+  table.** A finite double must render as something the target language reads
+  back as a float, and each of the seven renderers implements that the same way:
+  `(s.contains(".") || s.contains("e") || …) ? s : s + ".0"`. Every suite tested
+  the first term — `2.0` is the obvious case — and a search for e-notation across
+  all five existing literal suites returned zero hits, so the second term was
+  covered nowhere. The 2026-08-19 sweep found the identical hole in four
+  renderers, which is what copying a working renderer *and its tests* produces.
+  `JSONValueDoubleFormattingTests` covers all seven from one table, so a new
+  language is one line and cannot inherit the gap from a neighbour; it also
+  asserts the property underneath the rule, that every rendered finite double
+  reads back as itself.
+- **`pythonLiteral` has a CoreTests file**, chiefly for its object-key sort. It
+  was the only renderer without one — its assertions live in `APITests`, which
+  the sweep skips — which is why the sweep flagged a sort that had already been
+  pinned for Racket and Java. Key order is not cosmetic: generated filenames
+  embed a `spec_hash` of the rendered bytes, so an unstable order makes a pattern
+  family look edited on every save.
+
+### Fixed
+
+- **Seventeen recorded mutations the verifier could not replay now replay.**
+  Two unrelated causes, each measured against run 32265903112 before being
+  fixed. Muter re-emits a body's leading comment *after* the statement, so the
+  recorded text was `[comment][statement][the same comment again]` — not a
+  contiguous region of any file, which made an exact search fail for 14 of 110
+  candidates; stripping that duplicate makes all 14 match exactly once. And
+  three candidates were refused as ambiguous because their statement is
+  byte-identical across sibling functions (`let pairs = o.sorted { $0.key <
+  $1.key }` appears in all four literal renderers) — Muter's line is unreliable
+  on its own but is a sound *discriminator* among exact content matches, so it
+  now chooses between them, and only when one begins exactly at that line.
+  There is deliberately no nearest-match fallback: picking the closest would
+  mean mutating one renderer while reporting a verdict about another.
+
+
+## [0.5.155] - 2026-08-19
+
+### Fixed
+
+- **The visual-regression fixture now publishes and opens its assignment, so
+  the student dashboard is captured populated.** The seed uploaded a test setup
+  but never published it, and students cannot see an unpublished assignment —
+  so `student-dashboard` baselined only "No assignments available yet." The
+  populated assignment table had no pixel coverage on any page in either
+  scheme: the `tier-open` / `tier-closed` / `tier-extended` / `tier-preview`
+  status chips, achievement badges and their `+N` overflow chip, the grade
+  override tag, the submission-history cell, and the icon-button action row
+  were all invisible to the harness — the same class of regression the
+  dark-mode banner bugs in #1133 were, which is what the harness exists to
+  catch. Opening needs no runner: quick-publish leaves `validationStatus` nil
+  and `applyVisibility` admits nil. The axe-core scan covers that markup for
+  the first time too, since it shares the fixture.
+  The capture harness also had to pin the submission-history timestamp: it is
+  server-rendered absolute text (not a `js-relative-time` element), so it read
+  as the run's own wall-clock and would have made the new baseline fail on
+  every subsequent run. It is normalized to a constant the same way relative
+  times already were, rather than masked — a mask would have been a blind spot
+  over the cell.
+  Two further baselines were stale and had passed anyway: the submit page's
+  heading is the assignment title, so publishing changed it from the raw setup
+  ID, and the diff landed at 1,118 px against an 1,152 px budget — under the
+  floor by 34 px. Refreshed, because a page sitting at 97% of its tolerance
+  would have failed on the next unrelated edit and read as that edit's fault.
+
+
+## [0.5.154] - 2026-08-19
+
+### Added
+
+- **The `Achievement` classification predicates are now tested in both
+  directions.** `isClassGoal`, `isPerSubmissionBadge`,
+  `isAuthorableIndividualBadge`, `usesDynamicSignal` and
+  `isSweepEvaluableClassGoal` decide which grading path an achievement takes,
+  and every existing test built one achievement satisfying *all* operands and
+  asserted the predicate held — so flipping an `&&` to `||` changed nothing
+  anyone checked. The 2026-08-19 sweep reported sixteen survivors across them,
+  every candidate confirmed alive before a line was written.
+  `AchievementClassificationTests` adds the cases that satisfy exactly one
+  operand, drives the dynamic-signal test off `AchievementSignal.allCases` so a
+  sixth signal must be classified rather than silently defaulting to static,
+  and pins the partition that `isPerSubmissionBadge` and
+  `isAuthorableIndividualBadge` must never both claim the same badge. Also
+  covers the `.equals` arm of a condition's comparator, which had no test at
+  all.
+
+
+## [0.5.153] - 2026-08-19
+
+### Changed
+
+- **Class-wide item coverage is recorded only for contribution assignments.**
+  The accumulator shipped recording a row for every passing test on every
+  assignment, on the reasoning that the union is generically useful. It is not:
+  an ordinary lab's passing tests are not a class-wide union, and the rows would
+  accrue forever while leaving the instructor coverage view with no cheap way to
+  tell a bug hunt from a normal assignment — so it would need a second signal, or
+  it would render a coverage section on every instructor page. The write is now
+  gated on the assignment declaring contribution slots, resolved from the starter
+  notebook through `notebookBytesCache` so a deadline spike shares one resolution,
+  and best-effort so a lookup failure skips accumulation rather than failing a
+  student's result report. The existence of coverage rows now means "this is a
+  contribution assignment".
+
+### Added
+
+- **Instructors can see which items the class has collectively covered.** A "Bug
+  coverage" section on the per-assignment submissions page lists every suite item
+  of a contribution assignment with a found / not-found chip, who found it first,
+  and when. The uncovered items are the point: a list of what the class has found
+  is a scoreboard, while one that also shows what is missing is what an
+  instructor acts on mid-lab. It renders only for contribution assignments, and
+  needs no flag to know that — the accumulator writes coverage rows only for
+  assignments declaring contribution slots, so the existence of rows is itself the
+  gate, and an ordinary assignment's page is unchanged. Assembled entirely from
+  the existing component vocabulary, so it adds no CSS.
+
+### Fixed
+
+- **The per-PR mutation job was not watching most of the code it claimed to.**
+  Its `paths:` filter was written as `Sources/RunnerCore/**` when that was the
+  whole sweep scope, and widening the sweep to `Sources/Core` hours later did
+  not update it — so for eleven days a pull request touching only
+  `Sources/Core` (8,639 lines, and 58 of the 75 survivors in the latest run)
+  silently never triggered a mutation run, while the workflow's own comment
+  claimed parity with `config.json`. The trigger now names all of `Sources/**`
+  and lets the run-time step that already reads `include` do the deciding, so
+  there is one list rather than two that must agree. A guard
+  (`workflow_scope_test.py`) fails if the filter is ever narrowed below the
+  configured scope again.
+
+### Added
+
+- **Survivors closed with a reason are now recorded where the sweep can read
+  them.** `Tools/mutation/equivalent-mutants.json` holds mutants that are
+  unkillable by construction, each with the argument for why nothing reaching
+  the site can observe the change. Previously that reasoning lived only in a
+  commit message, so an equivalent mutant returned every week indistinguishable
+  from an untriaged gap. Entries are keyed on the mutation text rather than a
+  line number, so one cannot drift onto a neighbouring mutant and stops
+  matching the moment the code it excuses is edited; `report.py` refuses an
+  entry whose reason is a label rather than an argument. This is what makes the
+  survivor list a queue that can reach zero — the honest target, since no suite
+  can drive the percentage to 100.
+- **The per-PR report says it is a report.** The step summary now opens with
+  the three legitimate answers to a survivor, including that closing one with a
+  recorded reason is a real answer. `continue-on-error` already stops the job
+  failing a PR; the pressure worth heading off is social, since the cheapest
+  way to clear a survivor listed on your own diff is an assertion that runs the
+  line without checking the result.
+
+
+## [0.5.152] - 2026-08-19
+
+### Added
+
+- **The result-footer parser is now tested for the grammar it accepts, not just
+  the numbers it computes.** RunnerCore's `JSONLite` is a general JSON parser,
+  but the footer contract only names `shortResult` and `score`, so it had been
+  exercised on those two field types alone — leaving arrays, `null`, booleans,
+  `\u` escapes, interior tabs and trailing-content rejection unpinned. The
+  2026-08-19 sweep reported ten surviving mutants there and killed only the two
+  in number parsing. `JSONFooterGrammarTests` covers the rest, each test naming
+  the mutation it kills. One mutant is deliberately left alive with its reason
+  recorded: flipping `parseNumber`'s `if current == "-"` to `!=` is an
+  equivalent mutant, because the loop that follows accepts `-` as well, so the
+  slice handed to `parseDoubleLiteral` is unchanged for every input that can
+  reach it.
+
+### Fixed
+
+- **The sweep no longer reports mutations Muter never actually made.** Nine of
+  run 32265903112's 75 survivors were `SwapTernary` mutations emitted
+  *identical to the original* apart from whitespace — the branches came back
+  unswapped. These are not phantoms (the schema really was inserted, so the
+  existing guard-based filter passes them) and not equivalent mutants (the code
+  is textually unchanged, not merely behaviourally so); nothing can kill them,
+  and they read exactly like real holes. Recording each mutation's `original`
+  made them detectable for the first time, and `report.py` now quarantines them
+  into their own section beside the phantoms. Two had already been mistaken for
+  leftover gaps in a file that had just been covered properly.
+
+
+## [0.5.151] - 2026-08-19
+
+### Added
+
+- **The class-wide union of covered items is now accumulated at result time.**
+  A collaborative assignment's class goal asks which items the class collectively
+  covered — "9 of the 15 seeded bugs" — and the per-test outcomes that answer it
+  already existed in `result_collections`. `APIClassItemCoverage` materialises the
+  union: one row per (assignment, item), attributed to the submission that covered
+  it first, written on both the worker and browser result paths. Accumulating at
+  ingest rather than in the class-goal sweep keeps that sweep blob-free (#1160) —
+  unioning per-outcome data on a five-minute timer would mean decoding every
+  submission's collection for the whole term. First-finder-wins is enforced by a
+  unique index rather than by convention, so the union is monotone and idempotent
+  under re-tests, replayed reports and concurrent submissions; coverage is
+  deliberately not gated on the submission's overall grade; and it is roster-scoped
+  so a staff test submission cannot inflate a number that carries bonus points.
+
+
+## [0.5.150] - 2026-08-19
+
+### Added
+
+- **Contribution slots bound a student's notebook contribution, server-side.**
+  A collaborative assignment gives each student a fixed number of places to write
+  (three cells, one test each). Enforcing that in the editor cannot work —
+  JupyterLite keeps the document in the student's own browser, and notebook mode
+  deliberately keeps the upload form open beside it — so the bound is applied
+  where every submission already converges: `mergeNotebook` reassembles the
+  submitted notebook before it is stored, and now keeps only the slot-marked
+  cells, in document order, capped at the count the instructor's starter notebook
+  declares. Extra cells are not prevented, they are ignored, which needs no UI
+  enforcement and survives an offline-edited upload unchanged. The marker is
+  Chickadee-owned cell metadata (`chickadee_slot`), following the
+  `chickadee_personalized` precedent, because a first-line comment convention
+  breaks the moment a student presses return at the top of a cell. An assignment
+  declaring no slots is unaffected — nothing is dropped — so every existing
+  notebook assignment goes through this path byte-identical.
+
+
+## [0.5.149] - 2026-08-19
+
+### Added
+
+- **Design note: collaborative class assignments.** `docs/collaborative-class-assignments.md`
+  works through what it would take to support assignments where students contribute
+  individual artifacts (typically test cases) that accumulate into a class-wide result —
+  a coverage target, or a set of seeded bugs to find. Records which parts already exist
+  (grading a contributed test against seeded-buggy variants needs no code changes; the
+  `.classWide` achievement already carries the bonus, the deadline freeze and the LEARN
+  re-push) and the one part that does not: every class goal today counts students whose
+  own best grade cleared a threshold, and none aggregates over the union of what the class
+  collectively covered. Also sizes the per-student contribution cap the feature implies,
+  recommending server-side notebook slot extraction for the shape of a contribution and
+  participation breadth for its spread, over per-item attribution ranking or any rule
+  enforced only inside the editor. Nothing is locked;
+  the note exists to be argued with before anything is built.
+
+### Changed
+
+- **Collaborative-assignment plan: the browser-grading refusal was already built.**
+  The plan's slice 1 proposed refusing `gradingMode: browser` for contribution
+  assignments so seeded bugs could not be streamed to the students hunting them.
+  Reading the download path found the general mechanism already in place:
+  `graderOnlyFiles` marks files withheld from every student-facing path, and
+  combining it with browser grading is refused at all three authoring doors,
+  filtered at the download, and blanked out of the served manifest. Marking the
+  variant implementations `graderOnly` is an authoring instruction, not a code
+  change, so the slice is struck.
+
+### Fixed
+
+- **The per-PR mutation job could never run.** `mutation-pr.yml` runs in a
+  container, where the resolved default shell is `sh`, but two of its steps are
+  bash — `mapfile` with process substitution to read the include globs, and array
+  building to assemble the `--file` list. Under dash the first died at parse time
+  with "Syntax error: redirection unexpected", before working out which files to
+  mutate. The job now declares `shell: bash`. It had never been exercised: the
+  workflow only triggers on `Sources/RunnerCore/**`, and the first PR to touch
+  that since it was added is the one that found this.
+
+- **…and then reported a false clean.** With the shell fixed, the same step's
+  `git diff` failed with "Not a git repository" and the trailing `|| true` — there
+  so that grep finding no Swift files is not an error — swallowed it, so an empty
+  result was read as "No mutable files changed; nothing to do." on a PR that had
+  changed `Sources/RunnerCore/TestTier.swift`. The step now checks it is inside a
+  work tree and checks `git diff`'s own exit status, failing loudly with what went
+  wrong; only grep's no-match stays a legitimate empty result. The job is
+  `continue-on-error`, so a loud failure blocks nobody — it just stops a run that
+  measured nothing from reading as a clean bill of health.
+
+- **…and the first diagnostic hid its own evidence.** The work-tree check
+  suppressed git's stderr, so it named the symptom ("Not inside a git work tree
+  at /__w/Chickadee/Chickadee") while discarding the message that separates a
+  missing `.git` from a refusal to use one that is present. It now prints git's
+  own error plus the container user, git version, `ls -ld . .git` and any
+  `safe.directory` entries, so the next run identifies the cause rather than
+  restating the effect.
+
+- **…and the cause was an untrusted worktree.** With git's own error finally
+  printed, the diagnosis was unambiguous: the workspace is owned by uid 1001 (the
+  host runner user) while the container job runs as root, and no `safe.directory`
+  entry exists inside the container — `actions/checkout` writes one, but into a
+  temporary HOST HOME no container step shares. Git 2.43 therefore refuses the
+  repository. The job now adds `safe.directory` for `$GITHUB_WORKSPACE` before any
+  git command runs. Reproduced locally by chowning a worktree to 1001 and running
+  git as root (`fatal: detected dubious ownership`), and verified that the same
+  `git config --global --add safe.directory` makes `rev-parse
+  --is-inside-work-tree` return true.
+
+- **…and a diff with nothing mutable is no longer a red check.** With the
+  pipeline repaired, Muter ran and correctly reported that this PR's two changed
+  files — an enum with no logic and a version constant — contain nothing it can
+  mutate, exiting 255. `mutation-run.sh` treats no-outcomes as a tooling failure,
+  which is right for the weekly sweep and wrong on a PR, where it told the author
+  their change was broken when it was only unmutable. The per-PR job now
+  downgrades that to a `::warning::`. Nothing is hidden: `report.py` still writes
+  "Do not read a score from this run" into the step summary, so a run that
+  measured nothing still says so. The weekly sweep keeps the strict exit.
+
+### Fixed
+
+- **The `student` test tier never existed, and the MCP surface offered it anyway.**
+  `TestTier` has three cases — `public`, `release`, `secret` — but the MCP schema
+  enum and thirteen hand-typed strings advertised a fourth. An agent could pass
+  `student` through JSON Schema validation and then be rejected one layer down by
+  `TestTier(rawValue:)`, with an error message that listed the same impossible
+  value back at it; the web suite editor meanwhile coerced an unrecognized tier to
+  `public` rather than refusing it, so one door silently changed the value and the
+  other refused it. The tier is gone from the schema and the prose, and the prose
+  is now derived from `TestTier.allCases` (`MCPTierProse`) rather than typed, so
+  neither a phantom nor a truncated list can come back.
+
+### Changed
+
+- **Tier prose in the MCP surface is derived, and guarded.** `MCPTierCoverageTests`
+  scopes to the whole served catalog, the way the language guards do: it fails if
+  the schema advertises a tier the parser refuses, if a real tier is unadvertised,
+  or if any served text continues a correct tier list with its own separator (a
+  phantom) or stops short of it (a truncation).
+
+
+## [0.5.148] - 2026-08-19
+
+### Added
+
+- **The Java and Racket literal renderers now have tests.** `javaLiteral`,
+  `javaDeclaredType` and `racketLiteral` appeared under `Sources/` and nowhere
+  under `Tests/`, so the 2026-08-19 mutation sweep reported all 23 of their
+  mutants as survivors — the answer it must give for code no test references.
+  `JSONValueJavaLiteralTests` and `JSONValueRacketLiteralTests` pin the
+  behaviours those mutants poke at: the `int`/`long` boundary exactly at
+  `Int32.max` and `Int32.min` (where a wrong answer is a compile error in the
+  generated test, not a wrong mark), integral and exponential doubles keeping
+  exactly one decimal point, sorted object keys, `Arrays.asList` admitting
+  nulls, `(list)` versus `(list …)`, and control-character escaping — Java's in
+  three-digit octal, never a backslash-u escape the lexer would eat.
+  `JavaLiteralTypingTests`, which `JSONValueJavaLiteral.swift`'s own doc comment
+  already cited as pinning the literal-to-declared-type round trip, did not
+  exist; it does now, under the name the doc already used.
+
+### Fixed
+
+- **The mutation verifier could report a real gap as already covered.**
+  `verify-survivor.py` applied a recorded mutation by replacing Muter's reported
+  line, but Muter records the *enclosing statement* while its line and column
+  point at one operator inside it — positions `report.py` already calls
+  known-wrong. Measured across run 32255707345, the reported line held the whole
+  mutated statement for 15 of 84 candidates; for the other 69 the edit deleted a
+  `case` label, pasted an expression beside the half already above it, or
+  spliced in text opening with `//`. Those edits do not fail honestly, they fail
+  to compile — and `swift test` going red was read as `KILLED`, which the triage
+  protocol spells "already covered, do not write a test". `report.py` now
+  records each mutation's `original` (the trailing `else` of Muter's schema
+  chain) so the edit is an exact textual swap needing no position at all; the
+  verifier refuses to apply anything it cannot place faithfully, never calls a
+  build failure a kill, and restores the file if it is interrupted mid-run.
+  Records written before this carry no `original` and are now honestly reported
+  `UNVERIFIABLE` rather than silently mis-applied.
+
+
+## [0.5.147] - 2026-08-19
+
+### Added
+
+- **Mutation survivors are now reproducible, and there is a protocol for acting
+  on them.** A survivor used to be recorded as a file, a line and an operator
+  name — not enough to reproduce it, since one line can carry several mutable
+  sub-expressions and the operator says nothing about what replaced which. The
+  run record now carries the mutation Muter actually inserted, lifted from the
+  schemata in the mutated copy, and `Tools/mutation/verify-survivor.py` replays
+  it against the sweep's own suite. Run it before writing a test (expect the
+  mutant to survive; anything else means the finding is stale) and after
+  (expect it killed, by the test just added). `docs/mutation-triage.md` is the
+  protocol, including the three legitimate outcomes — one of which is "no test,
+  here is why".
+
+
+## [0.5.146] - 2026-08-19
+
+### Changed
+
+- **The weekly mutation sweep now covers `Sources/Core` as well as
+  `Sources/RunnerCore`** — ~10,200 LOC and ~1,700 mutants across 8 shards, up
+  from ~1,600 and ~266 across 3. Widened on the condition the previous config
+  named: a green run at the narrower scope, which run 3 delivered at 84%.
+  Shard count is set by measured cost — ~29 min fixed per shard plus ~9.8s per
+  mutant — so the estimate in `--plan` now reflects both terms instead of a
+  per-mutant figure that omitted setup entirely. Core survivors carry a caveat
+  RunnerCore's do not: 5% of Core is reachable only from the skipped `APITests`,
+  and a survivor there may be an artefact rather than a hole.
+
+### Fixed
+
+- **A second mutation sweep on the same day silently overwrote the first.** The
+  run record was keyed by date alone, so a manual dispatch beside the Tuesday
+  schedule — the normal way the sweep gets run on demand — replaced that week's
+  record rather than adding to it. Records now carry the run id, and `trend.py`
+  orders same-day runs deterministically.
+
+
+## [0.5.145] - 2026-08-19
+
+### Fixed
+
+- **The mutation sweep's headline counted phantom mutants as survivors.** The
+  first successful sweep reported "122 killed, 87 survived ... plus 64 phantom
+  mutant(s) filtered out" — but the 87 already contained the 64, so the real
+  figures were 23 survivors and 84%, not 58%. One shard read 37% when its true
+  score was 81%. The per-shard table carried Muter's raw count while the JSON
+  beside it carried the filtered one, and the aggregator scraped the table; it
+  now reads the same `summary.json` the trend does, so the two cannot disagree.
+  `Tools/mutation/report_test.py` pins the published numbers.
+
+- **The sweep's trend record could never be saved.** It pushed to the default
+  branch, which requires a pull request and four status checks — rules a bot
+  committing a generated file cannot satisfy. `continue-on-error` then hid the
+  refusal, so a series that could never accumulate looked exactly like a series
+  with nothing in it yet. Records go to a `mutation-reports` branch, and a
+  failure to persist is announced in the run summary.
+
+### Fixed
+
+- **Two corrections to the mutation pilot's write-up.** The exponent finding was
+  attributed to a mutant Muter does not generate — its operators never rewrite a
+  numeric literal — so that gap was found *near* the report rather than in it;
+  the one exponent mutant testable faithfully was already covered. And the
+  pilot's 69% predates phantom filtering, so it is not comparable to the first
+  full sweep's 84%; the page now says so rather than inviting the comparison.
+
+### Added
+
+- **Tests for the six real gaps the mutation pilot found**, each seen to fail
+  under the mutation it exists to catch: the suite runner's `willRun` /
+  `didFinish` event stream (which drives the runner's `test_execution_start` /
+  `test_execution_end` / `timeout` log events), the classifier's comment-and-blank
+  line filter and its five Python keywords taken one at a time, the leading
+  BOM/whitespace trim, and the JSON footer's exponent — where the existing tests
+  proved the number *parsed* without ever reading its value.
+
+### Fixed
+
+- **The mutation pilot's write-up, which overstated its own findings.** Of the
+  eleven survivors examined, four were already covered by the suite and one is
+  unkillable by construction; only six were real. `Tools/mutation/report.py`
+  exists to catch that class automatically and did not exist when the pilot ran.
+
+### Fixed
+
+- **The mutation sweep derives its shard count from one place.** The number
+  lived in three — `Tools/mutation/config.json`, the workflow's hardcoded
+  `shard: [0, 1, 2]` matrix, and whatever `--of` a dispatch passed — hand-synced,
+  with a silent failure mode: dispatching `shards: 5` left the matrix at three
+  jobs, so two shards' files were never mutated while the aggregator, reading
+  the config, saw 3 of 3 and called it a complete sweep. A `plan` job now emits
+  the matrix and the denominator from a single read.
+
+
+## [0.5.144] - 2026-08-19
+
+### Fixed
+
+- **The mutation sweep's baseline suite no longer fails before anything is
+  mutated.** Muter writes a preamble — including `import class
+  Foundation.ProcessInfo` — into every file it will mutate, *before* running the
+  suite unmutated to establish a baseline. `ZipProcessEnvironmentTests` reads
+  `Sources/Core/ZipArchiver.swift` and `ZipProcessSerialization.swift` and scans
+  them for `Process(` constructions, so the preamble tripped it: one test, two
+  files, exactly the two failures that aborted every shard of run 2 after 13–22
+  minutes of work. It is skipped now — a guard asserting on the *text* of a file
+  under mutation cannot coexist with mutation, and has no mutants worth killing
+  anyway.
+- **A sweep where every shard reports "no mutant outcomes" is no longer green.**
+  The shards uploaded reports; the reports said nothing was mutated; the
+  aggregator parsed zero survivors and called it a clean sweep. It now treats a
+  report with no outcome table as a failed shard rather than an empty one.
+
+### Added
+
+- **Mutation testing now also runs per pull request, over just the files that PR
+  changed.** The weekly sweep answers "how strong is the suite over this target";
+  this answers "did the tests arriving with this change actually pin the behaviour
+  it adds" — cheaper to ask and far cheaper to act on, since the author still has
+  the code in mind. At one mutant per 6 lines a 60-line diff is roughly ten
+  mutants and a couple of minutes. It is a report, never a gate: `continue-on-error`
+  means a broken Muter or a red baseline cannot fail somebody's PR, and if it
+  covers only part of a large diff it says so rather than implying the rest was
+  clean.
+
+
+## [0.5.143] - 2026-08-18
+
+### Added
+
+- **The mutation sweep now produces a trend, not just a snapshot.** Each weekly
+  run merges its ten shards into a committed `MutationReports/<date>.json` and
+  `Tools/mutation/trend.py` prints the series — one row per run, plus the
+  survivors present in every comparable run, which is the standing backlog.
+  Previously the sweep's entire output was perishable (expiring artifacts and a
+  prose issue body), so there was no way to ask whether the suite was improving.
+  The trend refuses three comparisons that would read as good news without
+  being it: a partial sweep whose smaller survivor count is missing coverage
+  rather than progress, a configuration change that makes the next number a
+  different measurement in the same units, and a moved line — survivors are
+  keyed by source text, not line number, so an unrelated edit above one no
+  longer reports the hole as fixed. Still a report, never a gate, and still no
+  threshold anywhere. See [docs/mutation-trend.md](docs/mutation-trend.md).
+
+
+## [0.5.142] - 2026-08-18
+
+### Fixed
+
+- **The weekly mutation sweep now names the image that has the interpreters.**
+  Run 1 died on all ten shards in under a second: the workflow asked for
+  `swift:6.3-noble`, the toolchain-only image, where the runner's own
+  `python3 not on PATH` guard fires immediately. It now uses `swift-ci:6.3-noble`
+  like `api-tests` and `worker-tests`.
+- **A sweep where every shard dies no longer reports success.** The aggregator
+  counted only the artifacts it found, so ten failed shards produced an empty
+  list, zero survivors, and a green job that filed nothing — the exact "partial
+  coverage reads as clean" failure the sweep is built to prevent, in its most
+  complete form. It now compares against the expected shard count from
+  `Tools/mutation/config.json`, fails the job when nothing reported at all, and
+  counts shards that actually produced a report rather than shards that uploaded
+  a directory.
+
+
+## [0.5.141] - 2026-08-18
+
+### Fixed
+
+- **`browser-runner-tests` no longer installs its own interpreters.** It was the
+  last job apt-installing `lua5.4` and `octave` on a bare runner — the exact
+  thing the CI image was built to stop — which left ~500 interpreter-independent
+  tests depending on an Ubuntu mirror. On 2026-08-18 that mirror took the job out
+  five times in seven runs, each time hanging ~9m20s in `apt-get update` and
+  dying at the job ceiling as `cancelled`, indistinguishable from a wedged suite
+  and with no test body having run. The job now runs in the CI image, which
+  already ships `lua5.4`, `octave`, `python3` and `node`, so the failure mode is
+  gone rather than retried. The two suites that genuinely execute an interpreter
+  keep their guard asserting it is present under CI.
+
+### Changed
+
+- **The mutation-testing question got a precise trigger, and a measured answer.**
+  The Muter spike closed negative but could not say *why*, leaving "watch for a
+  release mentioning schemata or Swift 6.3 support" as the revisit condition.
+  There is no version boundary: Muter `99624ec` (PR #302, "Prevent memory
+  exhaustion on large codebases") made discovery stop handing its parsed trees to
+  `ApplySchemata`, which now re-parses each file — and since the schemata are
+  keyed by SwiftSyntax nodes, which hash by identity, no key can ever match a
+  re-parsed tree and no mutant is ever inserted. Restoring that one cache takes
+  the probe from a fabricated 0% to a correct 66%. Both failures are already
+  filed upstream (muter#307, muter#308, both open), so the trigger is now a
+  single watchable issue rather than a release feed, and the probe workflow says
+  so at the point of dispatch.
+- **A patched Muter was then run against real source.** Four `RunnerCore` files,
+  763 LOC: **69% — 88 mutants killed, 39 survived, zero build errors, 46
+  minutes**, the first mutation score against Chickadee source that measures
+  anything. It surfaced seven specific gaps, including an entirely untested
+  suite-runner event stream (deleting `.missingScript` would make a missing
+  script invisible in both the outcome and the log), untested BOM/whitespace
+  trimming and content-based Python classification, and no test parsing a
+  numeric exponent in a result footer. `docs/mutation-testing-pilot.md` records
+  the costs (one mutant per 6 LOC, so a whole-tree run is ~10,000 mutants), the
+  survivors worth chasing versus the ones that are unkillable by construction,
+  and the argument for and against a standing monthly run.
+
+
+## [0.5.140] - 2026-08-18
+
+### Security
+
+- **Course-section management is instructor-level again.** Creating, renaming,
+  reordering and deleting a course's sections, and moving an assignment between
+  them, enforced nothing beyond the `/instructor` area gate — so any TA of the
+  course could restructure it, including in an archived course. The floor was
+  already documented in three places (the convention on `evaluateCourseWrite`,
+  the header of `CourseAdminRoutes+ContentItems.swift`, and the MCP twins in
+  `CourseSectionTools.swift`, whose comments read "instructor-level (#417),
+  matching the web"), and the MCP surface has always enforced it; the web half
+  did not. All five handlers now call
+  `requireCourseWriteAccess(atLeast: .instructor)`, which also brings them under
+  the archived-course block they were missing.
+
+### Changed
+
+- **The web authorization matrix is derived over `CourseRole.allCases`.**
+  `RouteAuthorizationMatrixTests` walked every parameterized `/instructor` and
+  `/courses` route but crossed it with only two personas — a student of the
+  owning course and an instructor of a different one — so `.ta` appeared nowhere
+  in it and an instructor-only route that forgot its floor passed: a TA of the
+  owning course is neither persona. The matrix now states each route's floor
+  once, in a declared map the discovered route table keeps exhaustive (a walked
+  route with no entry fails by name), and crosses it with every `CourseRole`,
+  asserting denial below the floor and non-denial at or above it. That replaced
+  six of the eight hand-written spot tests in `TARoleRouteTests` — the two that
+  remain cover vanity-URL routes the walk cannot reach — and found the
+  course-section defect above. `CourseRole` gained `CaseIterable` so a fourth
+  rung would get its row with no edit to the test.
+
+
+## [0.5.139] - 2026-08-18
+
+### Added
+
+- **Every page archetype names the page to copy, and a guard keeps it worth
+  copying.** The seven-row archetype table in `docs/ui-design.md` described
+  skeletons without providing one, so a new page was assembled by reading the
+  rulebook and imitating whichever existing page the author happened to open —
+  and nothing checked archetype conformance at all, despite the rulebook
+  asserting it. Each row now names one exemplar (`alerts`, `instructor-mcp`,
+  `admin-user`, `account`, `register`, `assignment-edit`, `workbench`), chosen
+  per row against its own alternatives and with the reason recorded beside the
+  table. `PageArchetypeTests` reads that column out of the table rather
+  than restating it, and re-checks each exemplar against its own row. It guards
+  the exemplars and nothing else: no page fails for not being one.
+
+### Changed
+
+- **The UI vocabulary guard redirects instead of only refusing.** A rejected
+  global class is now reported alongside the catalog components its name is
+  built out of (`dataset-estimate-chip` → `chip`), the affordance registry
+  carries what each registered value already means rather than only its
+  spelling, and hover text over budget prints the cheapest-first ladder of
+  reveal idioms. The refusals are unchanged; what follows them is actionable.
+- **The two markup-contract guards share one tag walker.** `LeafMarkupScanner`
+  is extracted from `ListFilterMarkupTests`, which gains HTML-comment stripping
+  in the move — prose about markup is no longer read as markup.
+
+- **The redirect has a fixture of its own.** v0.5.138 gave
+  `check-ui-vocabulary.sh` its first self-test fixtures, one per rule.
+  `ui-vocabulary-duplicate-component-name` adds the one those cannot cover: the
+  suggestion is a separate awk pass over two derived sets, so it can go dead
+  while the refusal it decorates still fires.
+
+
+## [0.5.138] - 2026-08-18
+
+### Added
+
+- **The UI-vocabulary guard now ships with its fixtures.** Its three rules —
+  the catalog ratchet, the affordance registry (`cursor` and
+  `text-decoration`), and the 20-word hover-text cap — each gain a fixture in
+  `scripts/guard-fixtures/`, so each is now *seen to fail* on the defect it
+  exists to catch. The four defects are the ones that actually shipped in
+  0.5.136: a global component the rulebook does not name, `cursor: help`, a
+  dotted underline, and a paragraph in a `title`. The guard and the self-test
+  harness landed in separate PRs and could only meet on `main`; this is the
+  rule those PRs established — a guard ships with its fixture — paying its own
+  tax. 22 fixtures total.
+
+
+## [0.5.137] - 2026-08-18
+
+### Added
+
+- **`docs/fitness-functions.md`** — an inventory of the automated checks that
+  hold the architecture, sorted by the Building Evolutionary Architectures
+  taxonomy (atomic vs holistic, triggered vs continual). No new machinery: the
+  point is that nothing answered "what governs this?" in one place, and the
+  taxonomy makes one real gap visible. `RouteAuthorizationMatrixTests` walks
+  the **live route table**, so routes are discovered — but it crosses every
+  route with exactly two personas, and `.ta` appears nowhere in it, leaving the
+  TA boundary on eight hand-written spot tests. A new instructor-only route
+  that forgets its floor passes both. That is the "enumerated rather than
+  discovered, fails open" shape the language work was built to escape, on the
+  dimension where the failure mode is cross-course access rather than a
+  mis-rendered test.
+
+### Added
+
+- **Every guard is now proved to fail on its own defect.** The house rule —
+  "a check never seen to fail is not a check" — was the one discipline here
+  with nothing enforcing it, and the cost is on the record four times: a
+  regression test matching a wiring string after the wiring went dead, the
+  repaint probe's filter assertion passing against a dead poll, the S5 guard
+  matching its own documentation, and a hover-budget test that passed three
+  times while exercising nothing. `scripts/check-guards.sh` runs each fixture
+  in `scripts/guard-fixtures/` — a guard, a defect that guard exists to catch,
+  and the message it must produce — and **fails the build if the guard
+  passes**. 18 fixtures cover the token, name and idiom layers: raw colours,
+  off-scale font sizes, radii and spacing, undefined and hardcoded-fallback
+  CSS vars, unresolved classes, inline styles in templates and in JS-built
+  HTML, native `alert()` in both, inline `<script>`, native `confirm()`,
+  icon geometry outside the sprite, retired button modifiers, page blocks
+  re-defining global selectors, page-local sorters, and JS-written colour.
+  Its own runner refuses an empty fixture set, checks each guard is green on
+  the clean tree before trusting any result, asserts the *expected message*
+  rather than just a non-zero exit (so a defect tripping a neighbouring rule
+  is not mistaken for coverage), and restores every file it touches on all
+  exit paths. Runs as its own CI job and joins the merge gate.
+
+### Added
+
+- **The UI rulebook now covers which interaction to reach for, and how much
+  text it may carry — and CI enforces the mechanical half.**
+  `scripts/check-ui-vocabulary.sh` joins the `format-lint` job with three
+  rules. The count of classes in `Public/styles.css` that
+  `docs/ui-design.md` does not name is a **shrink-only ratchet**, so a new
+  global component costs a catalog entry, paid in the PR that adds it: the
+  page-style ratchet already priced a page-local copy, but the global sheet
+  carried no budget at all, which made "put it in `styles.css`" the cheapest
+  way to add a second spelling of an existing component. `cursor` and
+  `text-decoration` values are a closed **affordance registry** — adding a way
+  to signal that an element is interactive is now a rulebook edit rather than
+  a line in a rule body. Hover text written in a template is capped at 20
+  words. `docs/ui-design.md` gains the two sections it never had: an
+  **interaction-idiom** table (cheapest first: on the page → `<details>` →
+  row-anchored popover → modal) and a **UI copy** budget, whose rule is that
+  anything longer than a phrase belongs in `docs/` with the interface linking
+  to it. A `ui-review` agent covers the judgement the guards cannot reach.
+  The catalog debt this exposed was paid down in the same pass: the shorthand
+  the doc used for component families (`.modal-head/-body/-foot`) is spelled
+  out so the names are greppable, and the site navigation and the
+  drag-to-reorder vocabulary — one grip, one in-flight class, one set of drop
+  cues, shared across the two reorder surfaces — are catalogued for the first
+  time. There is no dead CSS to remove: every rule in the global sheet is
+  reached by a template, by page JS, by a Leaf-interpolated class family, or
+  by the vendored CodeMirror bundle.
+
+### Changed
+
+- **The per-student dataset estimates are plain chips.** They shipped as a
+  private variant with a dotted underline and `cursor: help`, carrying
+  50-word explanatory paragraphs in their hover titles — a fifth way to reveal
+  detail in a UI that had four, and a second kind of chip beside `.chip`,
+  which every guard passed. They now use `.chip`/`.chip-row`, each title is a
+  phrase naming what its number measures, and the method they used to explain
+  is in `docs/datasets.md`. Three over-long hover titles elsewhere (the
+  no-runner and failed-variant badges, the default time limit) were cut to a
+  sentence, and the "no runner" badge — the one validation state whose only
+  remedy lived in a tooltip — gains the same on-page follow-up line its
+  `failed` and `pending` siblings already had. A hover title assembled from an
+  instructor's own column names and category values is now bounded to a
+  fixed number of words, so a course whose stratum is "Type 2 Diabetes"
+  cannot silently breach the budget the same release introduced. The numbers,
+  and the thirteen components that had reached `styles.css` without ever
+  reaching the catalog, are unchanged and now documented.
+
+
+## [0.5.136] - 2026-08-17
+
+### Changed
+
+- **The dataset estimates are now two glanceable chips, not a disclosure.**
+  Each marked dataset row shows `similarity NN%` — the fraction of one
+  student's rows a peer is expected to also hold, a student-to-student
+  similarity score — and `drift 0.NN`, the worst column's typical normalized
+  distance from the pool, inline beside the controls. The full detail (shared
+  row counts, the unluckiest pair, the most-shared category under
+  stratification, which column drifts in which measure) moved into each
+  chip's mouse-over title. The first release's collapsed "Per-student
+  estimates" panel of prose sentences is gone.
+
+
+## [0.5.135] - 2026-08-17
+
+### Added
+
+- **Per-student dataset estimates in the Files panel.** Each marked dataset row
+  gains a collapsed "Per-student estimates" disclosure answering the two
+  questions the parameters could not: how many rows two students share
+  (closed-form overlap, with the unluckiest pair in a class and — for a
+  stratified sample — the most copyable category by name), and how far a
+  student's slice drifts from the pool (per-column Wasserstein-1 in pool-SD
+  units for numeric columns, total variation for categorical, measured through
+  the real materializer over derived preflight seeds). The numbers recompute on
+  every saved parameter edit and never alter a delivered byte.
+- **Multi-variant validation.** On an assignment that varies by student (a
+  per-student `=` expression or a per-student dataset), every validation
+  enqueue now also grades the reference solution against four derived
+  per-student seeds — the same preflight seeds the estimates sample — so a
+  solution that only works for some students' material fails validation
+  instead of failing a student. Per-variant verdicts appear under the
+  validation cell on the instructor assignments list (with a link to the
+  failing variant's per-test results) and in the MCP `get_validation_result`
+  tool, which reports each variant's seed and its failing outcomes.
+
+
+## [0.5.134] - 2026-08-17
+
+### Fixed
+
+- **A personalization expression now reads the student's dataset slice, not the
+  instructor's pool.** `PersonalizationEvaluator` spawned in the shared support
+  directory, which holds the full source pool, so an `=` expression over a
+  per-student dataset — the mechanism an `expectedVarRef` answer key uses —
+  computed the pool's answer and delivered it to every student as their own
+  expected value. Structural notebook checks did not notice; any value-based
+  check was wrong for the whole class, and identical for all of them. The
+  evaluation now runs against a private overlay in which each declared dataset
+  carries that student's bytes, resolved from the same source and seed the
+  delivered file comes from. Assignments declaring no datasets are unaffected.
+
+### Added
+
+- **Per-student datasets can now derive values, not just select rows.** A
+  `DatasetSpec` carries an ordered `transforms` list alongside its selection
+  `kind`, so the instructor's pool becomes a template each student varies on.
+  The first transform is `missingValues`, which blanks a deterministic subset of
+  cells in explicitly named columns — teaching the handling of absent data,
+  which real health datasets arrive with. Selection runs first and transforms in
+  order, each drawing from its own sub-seeded stream so appending a step never
+  re-rolls an earlier one, and no `Double` reaches a delivered byte. A transform
+  never adds, removes, renames or reorders a column. Authored through
+  `set_dataset` and the two datasets endpoints; the Files panel does not offer
+  it yet, and deliberately will not until validation covers more than the
+  instructor's own variant.
+
+### Fixed
+
+- **The Files panel and `set_dataset` no longer rebuild a dataset spec from only
+  the fields they know about.** Both constructed a fresh spec on every edit, so
+  a setting one of them had not been taught about would be dropped by an
+  unrelated change — the shape that came within a release of silently
+  downgrading every stratified spec to a plain sample. Both now carry forward
+  what they were not asked to change. The datasets endpoints also read the
+  source file when a spec carries transforms, not only when it stratifies, so a
+  transform naming a column the file lacks is refused at save rather than
+  ignored at delivery.
+
+### Added
+
+- **The Files panel can now author a `missingValues` step.** A dataset row grows
+  a "blanking … in … % of rows" control beside its sample size and stratum
+  column. As with the stratum column, the field carries whether the step exists
+  — naming columns creates it, clearing them removes it — so there is no mode
+  picker whose state could contradict the fields. Rates are authored as a
+  percentage and stored as the fraction the materializer folds to an integer
+  count.
+
+  The panel edits exactly one shape: no transforms, or a single `missingValues`
+  step. A spec holding anything richer — two steps, or a kind a later release
+  adds — renders with the fields **disabled** and a note that the steps are
+  agent-authored, and an unrelated edit to that row carries them through
+  untouched. Showing half of a two-step spec is how the next row-count edit
+  would save over the half not shown.
+
+
+## [0.5.133] - 2026-08-17
+
+### Fixed
+
+- **The weekly ZAP baseline scan runs again.** Making `RUNNER_SHARED_SECRET` a
+  required Compose variable (so the runner container, which no longer mounts the
+  data volume, could still learn it) left the ZAP workflow's CI `.env` short one
+  value, and `docker compose up` refused to interpolate. The scan had not
+  started since the change.
+- **The CI Compose fixture is derived from `docker-compose.yml`, not hand-kept.**
+  `scripts/ci-compose-env.sh` writes the scan's `.env` from the required
+  `${VAR:?}` interpolations it finds, and the `format-lint` job runs it with
+  `--check` so a newly required variable fails on the PR that introduces it.
+  Previously the only signal was the weekly scan going red, which is how this
+  one stayed broken for two weeks. An unrecognised requirement is a loud failure
+  rather than an auto-generated value, so nothing silently boots misconfigured.
+
+
 ## [0.5.132] - 2026-08-17
 
 ### Added

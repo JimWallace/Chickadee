@@ -7,7 +7,7 @@
 //
 //   auth            → login
 //   student (bare)  → student-dashboard, student-submit, submission-pending,
-//                     student-account
+//                     submission-graded, student-account
 //   instructor tabs → instructor-assignments, instructor-students,
 //                     instructor-slip-days
 //   admin tabs      → admin-dashboard, admin-users, admin-alerts
@@ -19,7 +19,9 @@
 // markup is covered by the render tests.
 //
 // Keep names stable — they are the baseline filenames.
-export function pageList({ setupID, instructorState, studentState, resultsPath }) {
+export function pageList({
+  setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+}) {
   const pages = [
     { name: "login", path: "/login", state: null },
     { name: "student-dashboard", path: "/", state: studentState },
@@ -36,6 +38,9 @@ export function pageList({ setupID, instructorState, studentState, resultsPath }
   ];
   if (resultsPath) {
     pages.push({ name: "submission-pending", path: resultsPath, state: studentState });
+  }
+  if (gradedResultsPath) {
+    pages.push({ name: "submission-graded", path: gradedResultsPath, state: studentState });
   }
   return pages;
 }

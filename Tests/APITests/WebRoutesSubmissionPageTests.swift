@@ -225,7 +225,7 @@ import VaporTesting
                     #expect(html.contains("<th>Output</th>") == false)
                     #expect(html.contains("test-short-result"))
                     #expect(html.contains("Expected 42, got 0"))
-                    #expect(html.contains("test-output-panel"))
+                    #expect(html.contains("test-output-details"))
                     #expect(html.contains("Traceback line 1"))
                 })
 
@@ -337,7 +337,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("test-output-panel"))
+                    #expect(html.contains("test-output-details"))
                     #expect(html.contains("Traceback (most recent call last):"))
                     #expect(html.contains("AssertionError"))
                     #expect(html.contains("test output here") == false)
@@ -684,8 +684,13 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("1 passed, 1 failed"), "Secret aggregate counts should be shown")
-                    #expect(html.contains("count toward your grade"), "Secret note should say they count")
+                    // Hidden tests are now ITEMIZED but masked: the stake in
+                    // the header, one numbered row per test carrying its mark,
+                    // and no name, message or output anywhere.
+                    #expect(html.contains("2 hidden tests"), "the stake should be stated")
+                    #expect(html.contains("hidden test 1"), "each hidden test gets a masked row")
+                    #expect(html.contains("hidden test 2"), "each hidden test gets a masked row")
+                    #expect(html.contains("visible only to your instructor"))
                     #expect(html.contains("secret_alpha") == false, "Secret test names must never be shown")
                     #expect(html.contains("secret_beta") == false, "Secret test names must never be shown")
                 })
@@ -749,13 +754,16 @@ import VaporTesting
                     let html = res.body.string
                     #expect(html.contains("Question One"), "Section headings should render")
                     #expect(html.contains("Question Two"), "Section headings should render")
-                    // Q1's secret test failed; Q2's passed.
+                    // Q1's secret test failed; Q2's passed. Each section now
+                    // states its own stake and itemizes its hidden tests as
+                    // masked rows, so the student can see how many broke and
+                    // what they were worth without learning which they are.
                     #expect(
-                        html.contains("0 passed, 1 failed"),
-                        "Question One's secret aggregate should show its failure")
+                        html.components(separatedBy: "1 hidden test").count - 1 == 2,
+                        "each section should state its own hidden-test stake")
                     #expect(
-                        html.contains("1 passed, 0 failed"),
-                        "Question Two's secret aggregate should show its pass")
+                        html.components(separatedBy: "hidden test 1").count - 1 == 2,
+                        "each section should itemize its hidden test as a masked row")
                     #expect(
                         html.contains("sec_q1") == false && html.contains("sec_q2") == false,
                         "Secret test names must never be shown")
@@ -953,5 +961,37 @@ import VaporTesting
                 })
 
         }
+    }
+}
+
+/// A hidden test's short result is normalized through an allowlist before it
+/// reaches the page. A short result is whatever the instructor's script printed
+/// last, so passing it through would leak the expectation of a test whose whole
+/// point is being hidden.
+@Suite struct MaskedShortResultTests {
+
+    @Test func caseCountsPassThrough() {
+        #expect(maskedShortResult("all cases passed", status: .pass) == "all cases passed")
+        #expect(maskedShortResult("2 of 4 cases passed", status: .fail) == "2 of 4 cases passed")
+        #expect(maskedShortResult("3/4 cases passed", status: .fail) == "3/4 cases passed")
+        #expect(maskedShortResult("1 case failed", status: .fail) == "1 case failed")
+    }
+
+    @Test func anythingElseDegradesToTheMark() {
+        // The leak this exists to stop: an expectation printed on the last line.
+        #expect(maskedShortResult("expected 42, got 7", status: .fail) == "did not pass")
+        #expect(
+            maskedShortResult("AssertionError: classify(18.5) == 'normal'", status: .fail)
+                == "did not pass")
+        #expect(maskedShortResult("ok", status: .pass) == "passed")
+        #expect(maskedShortResult("", status: .pass) == "passed")
+    }
+
+    @Test func aCaseCountWithTrailingCommentaryIsNotACaseCount() {
+        // Anchored on both ends, so a prefix that looks safe cannot smuggle a
+        // suffix through.
+        #expect(
+            maskedShortResult("2 of 4 cases passed — expected 42, got 7", status: .fail)
+                == "did not pass")
     }
 }

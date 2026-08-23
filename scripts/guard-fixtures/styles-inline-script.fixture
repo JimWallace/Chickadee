@@ -1,0 +1,14 @@
+# JS inside a template <script> block is invisible to ESLint, CodeQL and
+# node --check. Page behaviour belongs in a Public/*.js file.
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="a multi-line inline script in a template"
+expect="multi-line inline <script>"
+apply() {
+    {
+        printf '<script>\n'
+        printf 'var ckGuardFixture = 1;\n'
+        printf 'console.log(ckGuardFixture);\n'
+        printf '</script>\n'
+    } >> Resources/Views/login.leaf
+}

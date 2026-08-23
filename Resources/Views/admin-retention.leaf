@@ -13,7 +13,7 @@ Retention
         its data. <strong>Deletion cannot be undone.</strong>
     </p>
 
-    #if(rows.isEmpty):
+    #if(count(rows) == 0):
     <p class="text-muted">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
     #if(deletableCount > 0):

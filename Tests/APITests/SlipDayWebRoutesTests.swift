@@ -98,7 +98,7 @@ import VaporTesting
             let (cookie, _, _) = try await seedSlipDayFixture(app: app, setupID: "setup_sd1")
             let (status, html) = try await pageHTML(app: app, path: "/", cookie: cookie)
             #expect(status == .ok)
-            #expect(html.contains("Slip days: 2 of 2 remaining."))
+            #expect(html.contains("2 of 2 slip days"))
             #expect(html.contains("/testsetups/setup_sd1/slip-day"))
             #expect(html.contains("Use a slip day"))
         }
@@ -195,12 +195,12 @@ import VaporTesting
             // The dashboard reflects the spend: one day left, the row now
             // "extended", and the stacked relabel on the action.
             let (_, html) = try await pageHTML(app: app, path: "/", cookie: cookie)
-            #expect(html.contains("Slip days: 1 of 2 remaining."))
+            #expect(html.contains("1 of 2 slip days"))
             #expect(html.contains("Use another slip day"))
 
             // The balance shows on /account too.
             let (_, accountHTML) = try await pageHTML(app: app, path: "/account", cookie: cookie)
-            #expect(accountHTML.contains("Slip days: 1 of 2 remaining"))
+            #expect(accountHTML.contains("1 of 2 slip days left"))
         }
     }
 

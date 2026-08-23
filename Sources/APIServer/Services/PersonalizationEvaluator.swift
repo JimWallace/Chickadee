@@ -111,11 +111,22 @@ enum PersonalizationEvaluator {
         }
     }
 
+    /// Evaluates `expressions` with `seed` bound to the per-student seed.
+    ///
+    /// `datasetFiles` maps a support filename to the bytes THIS student
+    /// receives (`DatasetResolver.resolve`).  When it is non-empty the
+    /// subprocess runs against an overlay of the support directory in which
+    /// those files carry the student's slice, so an expression that reads a
+    /// per-student dataset computes that student's answer rather than the
+    /// instructor's pool.  Empty (the default) spawns directly in the support
+    /// directory exactly as before, so every non-dataset assignment is
+    /// byte-for-byte unchanged.
     static func evaluate(
         seedHex: String,
         staticVariables: [FamilyVariable],
         expressions: [PersonalizationExpression],
         supportFilesDirectory: String? = nil,
+        datasetFiles: [String: String] = [:],
         language: AssignmentLanguage,
         timeoutSeconds: Int = defaultTimeoutSeconds
     ) async throws -> [String: String] {
@@ -159,9 +170,17 @@ enum PersonalizationEvaluator {
         var env: [String: String] = ["CHICKADEE_ASSIGNMENT_SEED": seedHex]
         let spawnCwd: URL
         if let supportFilesDirectory, fm.fileExists(atPath: supportFilesDirectory) {
-            spawnCwd = URL(fileURLWithPath: supportFilesDirectory, isDirectory: true)
+            // A per-student dataset makes the shared support directory the WRONG
+            // thing to read: it holds the instructor's full pool, while the
+            // student holds a slice of it.  Evaluating there computed the pool's
+            // answer and delivered it as the student's expected value, so an
+            // `expectedVarRef` over a sampled dataset was wrong for the whole
+            // class.  Overlay the student's bytes instead — and never write them
+            // into the shared directory, which every student's evaluation reads.
+            spawnCwd = DatasetOverlayDirectory.root(
+                over: supportFilesDirectory, datasetFiles: datasetFiles, in: tempDir, fm: fm)
             if let pathVariable = language.supportFilesPathEnvironmentVariable {
-                env[pathVariable] = supportFilesDirectory
+                env[pathVariable] = spawnCwd.path
             }
         } else {
             spawnCwd = tempDir

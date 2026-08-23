@@ -37,6 +37,10 @@ struct DataExportProfile: Codable, Sendable {
     let accountCreatedAt: Date?
     let lastLoginAt: Date?
     let lastSeenAt: Date?
+    /// The student's generated chickadee, as stored: the slot choices, not an
+    /// image. Personal information about them, so it belongs in the export;
+    /// nil when they have never had one materialized.
+    let avatar: AvatarSpec?
 }
 
 struct DataExportEnrollment: Codable, Sendable {
@@ -45,6 +49,10 @@ struct DataExportEnrollment: Codable, Sendable {
     let role: String
     let enrolledAt: Date?
     let learnSection: String?
+    /// The per-course handle reserved for this student. Nothing displays it to
+    /// anyone else yet; it is stored so it is stable when something does. nil
+    /// before one has been materialized, and never set for a staff enrollment.
+    let avatarHandle: String?
 }
 
 struct DataExportSubmission: Codable, Sendable {
@@ -154,7 +162,8 @@ func gatherDataExportContent(
             ssoSubject: user.externalSubject,
             accountCreatedAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
-            lastSeenAt: user.lastSeenAt
+            lastSeenAt: user.lastSeenAt,
+            avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode)
         ),
         enrollments: enrollments,
         submissions: submissionData.submissions,
@@ -180,7 +189,8 @@ private func gatherEnrollments(
                 courseName: row.course.name,
                 role: row.role.rawValue,
                 enrolledAt: row.enrolledAt,
-                learnSection: row.brightspaceSection
+                learnSection: row.brightspaceSection,
+                avatarHandle: row.avatarHandle
             )
         }
         .sorted { $0.courseCode < $1.courseCode }
@@ -501,10 +511,11 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
         ## Contents
 
         - `profile.json` — your account profile: username, names, email,
-          student ID, sign-in provider, and account timestamps. Passwords are
-          stored only as one-way hashes and are never included.
+          student ID, sign-in provider, account timestamps, and the choices
+          behind your generated avatar. Passwords are stored only as one-way
+          hashes and are never included.
         - `enrollments.json` — the courses you are enrolled in, your role in
-          each, and when you enrolled.
+          each, when you enrolled, and the per-course handle reserved for you.
         - `submissions.json` — an index of every submission you have made:
           course, assignment, attempt number, timestamps, and where in this
           archive to find the uploaded file and its grading results.

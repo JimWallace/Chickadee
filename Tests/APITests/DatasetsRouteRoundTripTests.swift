@@ -253,6 +253,20 @@ import VaporTesting
         return String(rest[..<end.lowerBound])
     }
 
+    /// Whether the ONE element carrying `hook` is hidden — read off that
+    /// element's own open tag rather than by searching the whole row, which
+    /// silently became a different question the moment any other element in
+    /// the row started rendering hidden (the estimate chips, which begin
+    /// hidden and appear when their numbers arrive).
+    private func isHidden(_ hook: String, in row: String) throws -> Bool {
+        let at = try #require(row.range(of: hook), "no element carrying \(hook)")
+        let opened = try #require(
+            row[..<at.lowerBound].lastIndex(of: "<"), "\(hook) is not inside a tag")
+        let closed = try #require(
+            row[at.upperBound...].firstIndex(of: ">"), "the tag holding \(hook) never closes")
+        return row[opened...closed].contains("hidden")
+    }
+
     @Test func editPageRendersTheDatasetControlFromTheStoredSpec() async throws {
         try await withApp(app) { _ in
             let fx = try await fixture("e")
@@ -266,12 +280,16 @@ import VaporTesting
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"), "a marked file renders a checked toggle")
             #expect(marked.contains("value=\"25\""), "and its stored row count")
-            #expect(marked.contains("hidden") == false, "and shows the row-count field")
+            #expect(
+                try isHidden("js-dataset-size-field", in: marked) == false,
+                "and shows the row-count field")
 
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("js-dataset-toggle"))
             #expect(plain.contains("checked") == false, "an unmarked file renders an unchecked toggle")
-            #expect(plain.contains("hidden"), "and keeps its row-count field hidden")
+            #expect(
+                try isHidden("js-dataset-size-field", in: plain),
+                "and keeps its row-count field hidden")
         }
     }
 
@@ -288,11 +306,11 @@ import VaporTesting
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"))
             #expect(marked.contains("value=\"8\""))
-            #expect(marked.contains("hidden") == false)
+            #expect(try isHidden("js-dataset-size-field", in: marked) == false)
 
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("checked") == false)
-            #expect(plain.contains("hidden"))
+            #expect(try isHidden("js-dataset-size-field", in: plain))
         }
     }
 
@@ -370,6 +388,133 @@ import VaporTesting
             // this field exists to prevent.
             let plain = try rowMarkup(for: "notes.txt", in: html)
             #expect(plain.contains("value=\"\""), "an unmarked file renders an empty column field")
+        }
+    }
+
+    // MARK: - Transforms survive the round trip on both pairs
+
+    @Test func transformsRoundTripThroughBothPairs() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("t")
+            let body = #"""
+                {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":5,
+                "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                """#
+            for path in [
+                "/instructor/\(fx.assignmentID)/datasets",
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)",
+            ] {
+                try await put(path, fx, body: body, expect: .ok, "a transform is storable")
+                let specs = try await get(path, fx)
+                #expect(specs.first?.transforms.count == 1, "\(path) reports it back")
+                #expect(specs.first?.transforms.first?.columns == ["ward"])
+                #expect(specs.first?.transforms.first?.rate == 0.5)
+            }
+        }
+    }
+
+    /// The Files panel owns kind, sampleSize and stratumColumn and nothing else,
+    /// so a payload shaped like the one it sends must not be able to clear a
+    /// transform it never knew about. The panel merges rather than rebuilds
+    /// (`Public/support-files.js`); this pins the server half — a PUT carrying
+    /// the transforms round-trips them rather than normalizing them away.
+    @Test func aControlShapedPayloadCarryingTransformsKeepsThem() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("m")
+            let path = "/instructor/\(fx.assignmentID)/datasets"
+            try await put(
+                path, fx,
+                body: #"""
+                    {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":5,
+                    "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                    """#, expect: .ok, "stored with a transform")
+
+            // What the panel PUTs after the merge: its three fields, plus the
+            // transform block carried forward untouched.
+            try await put(
+                path, fx,
+                body: #"""
+                    {"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":9,
+                    "transforms":[{"kind":"missingValues","columns":["ward"],"rate":0.5}]}]}
+                    """#, expect: .ok, "a row-count edit")
+
+            let specs = try await get(path, fx)
+            #expect(specs.first?.sampleSize == 9)
+            #expect(specs.first?.transforms.first?.columns == ["ward"])
+        }
+    }
+
+    @Test func aTransformNamingAnUnknownColumnIsRejectedOnBothPairs() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("u")
+            let body = #"""
+                {"datasets":[{"file":"cases.csv","sampleSize":5,
+                "transforms":[{"kind":"missingValues","columns":["nope"],"rate":0.5}]}]}
+                """#
+            try await put(
+                "/instructor/\(fx.assignmentID)/datasets", fx, body: body,
+                expect: .badRequest, "the column must exist in the file")
+            try await put(
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)", fx, body: body,
+                expect: .badRequest, "the draft pair agrees")
+        }
+    }
+
+    // MARK: - The estimate blocks ride the same responses
+    //
+    // The Files panel's estimates disclosure renders from `diagnostics` on the
+    // GET/PUT it already uses — served on the same response so a saved
+    // parameter edit moves the numbers without a second request. Computed by
+    // Core's DatasetDiagnostics, which has its own suite; what is pinned here
+    // is the plumbing: the blocks describe the stored spec against the
+    // bundled file's real bytes, on both pairs.
+
+    private func fullResponse(_ path: String, _ fx: Fixture) async throws -> DatasetsResponse {
+        var response = DatasetsResponse(datasets: [], diagnostics: [])
+        try await app.asyncTest(
+            .GET, path,
+            beforeRequest: { req in req.headers.add(name: .cookie, value: fx.cookie) },
+            afterResponse: { res in
+                #expect(res.status == .ok, "GET \(path) — \(res.body.string)")
+                response = try res.content.decode(DatasetsResponse.self)
+            })
+        return response
+    }
+
+    @Test func datasetsResponsesCarryTheEstimateBlocks() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("g")
+            for path in [
+                "/instructor/\(fx.assignmentID)/datasets",
+                "/instructor/new/draft/datasets?draftID=\(fx.draftID)",
+            ] {
+                let putBody = try await put(
+                    path, fx,
+                    body: #"{"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":2}]}"#,
+                    expect: .ok, "marking a bundled file is accepted")
+                #expect(
+                    putBody.contains("\"diagnostics\""),
+                    "\(path): the PUT response carries the estimates for its live repaint")
+
+                let state = try await fullResponse(path, fx)
+                let block = try #require(
+                    state.diagnostics.first, "\(path): a marked CSV gets an estimate block")
+                #expect(block.file == "cases.csv")
+                // Two of the fixture's three rows: shared fraction k/N = 2/3
+                // — the chip describes the real bundled bytes, not a
+                // placeholder.  Wording itself is pinned in
+                // DatasetEstimateSummaryTests; this is the plumbing.
+                #expect(block.similarityDisplay == "similarity 67%")
+                #expect(block.similarityTitle.contains("Unluckiest pair"))
+                #expect(block.driftDisplay.hasPrefix("drift "))
+                #expect(block.driftTitle.contains("Worst column"))
+
+                try await put(
+                    path, fx, body: #"{"datasets":[]}"#, expect: .ok, "clearing the mark")
+                #expect(
+                    try await fullResponse(path, fx).diagnostics.isEmpty,
+                    "\(path): no marked file, no estimate blocks")
+            }
         }
     }
 

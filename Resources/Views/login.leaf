@@ -4,7 +4,7 @@ Log in
 #endexport
 #export("content"):
 <div class="auth-box">
-    <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="200" height="200">
+    <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="72" height="72">
     <h1>Log in to Chickadee</h1>
     #if(loggedOut && !error):
     <div class="notice-box">
@@ -33,6 +33,7 @@ Log in
     #if(showSSOLogin):
     <div class="form">
         <a class="btn btn-primary btn--center" href="/auth/sso/start">Login with UWaterloo</a>
+        <p class="field-note">Use your WatIAM username and password.</p>
     </div>
     #endif
     #if(showLocalLogin):

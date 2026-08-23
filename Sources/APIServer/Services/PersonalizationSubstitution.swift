@@ -77,12 +77,25 @@ enum PersonalizationSubstitution {
                 evaluationError: nil)
         }
 
+        // The student's dataset slices, so an expression reading a per-student
+        // dataset sees what that student holds.  Resolved from the same source
+        // directory and seed the delivered file comes from, so the expression
+        // and the student's copy are the same bytes by construction rather than
+        // by two call sites agreeing.  Nil for every assignment declaring no
+        // datasets, which leaves the evaluation exactly as it was.
+        let datasetFiles =
+            supportFilesDirectory.flatMap {
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seedHex, sourceDirectory: $0)
+            } ?? [:]
+
         do {
             let evaluated = try await PersonalizationEvaluator.evaluate(
                 seedHex: seedHex,
                 staticVariables: staticVars,
                 expressions: allExpressions,
                 supportFilesDirectory: supportFilesDirectory,
+                datasetFiles: datasetFiles,
                 language: language)
             // Per-student values override literals on name collision (the
             // validator forbids cross-kind clashes at save time anyway).

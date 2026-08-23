@@ -1,0 +1,224 @@
+name: Mutation testing (changed files)
+
+# A REPORT, NEVER A GATE — same rule as the weekly sweep, and it matters more
+# here because this one runs on pull requests. Nothing it says blocks a merge. A
+# surviving mutant is a question: the suite could not tell the difference when
+# that expression changed. Some survivors are unkillable by construction. See
+# docs/mutation-testing-pilot.md before acting on anything it reports.
+#
+# WHY A PER-PR RUN AT ALL, given the weekly sweep exists. The sweep answers "how
+# strong is the suite over this target"; this answers "did the tests arriving
+# with THIS change actually pin the behaviour it adds". The second question is
+# cheaper to ask and far cheaper to act on, because the author still has the code
+# in their head. It is also the shape that survives the arithmetic: one mutant per
+# 6 lines means a 60-line diff is ~10 mutants and a couple of minutes, where the
+# whole tree is ~10,000 and never affordable.
+#
+# SCOPE is the same set the weekly sweep mutates, and there is exactly ONE list
+# of it: `include` in Tools/mutation/config.json, which the "Work out which
+# mutable files this PR touches" step reads at run time. A PR touching nothing in
+# that set exits there with count=0, so every later step is skipped and the job
+# is a no-op that says so.
+#
+# THE TRIGGER IS DELIBERATELY WIDER THAN THE SCOPE, and that is the fix for a
+# defect rather than sloppiness. `paths:` cannot be computed from a file, so a
+# narrow filter here is a SECOND copy of the include list — hand-maintained, and
+# required to agree with the first. It did not: this filter was written as
+# `Sources/RunnerCore/**` in #1456, when that was the whole sweep scope, and #1460
+# widened the sweep to Sources/Core hours later without touching it. For the next
+# eleven days a PR changing only Sources/Core — 8,639 lines, and 58 of the 75
+# survivors in run 32265903112 — was silently never mutation-tested, while this
+# comment claimed parity with config.json.
+#
+# So the filter now names the whole of Sources/ and lets the derived list do the
+# deciding. The cost is a container spin-up on a PR that turns out to touch
+# nothing mutable; the benefit is that widening the sweep can never again leave
+# the per-PR job behind, because there is nothing here to forget to update.
+#
+# It opts out of the drive-to-green reflex on purpose: `continue-on-error` means a
+# broken Muter, a red baseline or a slow shard cannot fail somebody's pull
+# request. Two runs of the weekly sweep died on infrastructure before producing a
+# single mutant; none of that belongs in a contributor's way.
+
+on:
+  pull_request:
+    paths:
+      - "Sources/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per PR, and cancel superseded runs: only the latest push is worth mutating.
+  group: mutation-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changed:
+    name: Mutate what this PR changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    defaults:
+      run:
+        # bash, explicitly. Inside a `container:` job the resolved default shell
+        # is `sh`, and two steps here are bash: `mapfile` + process substitution
+        # when reading the include globs, and array building (`args+=(...)`) when
+        # assembling the --file list. Under dash the first of those dies at parse
+        # time with "Syntax error: redirection unexpected", which is what
+        # happened the first time this workflow ever ran (PR #1464 — the first
+        # to touch Sources/RunnerCore since it was added).
+        shell: bash
+    container:
+      # swift-CI, not plain swift: the -ci image carries python3, lua5.4, octave
+      # and r-base. The plain one is the toolchain alone, and the failure is
+      # quiet — spawnSync simply cannot find the interpreter.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need the base commit to diff against; a shallow clone cannot.
+          fetch-depth: 0
+
+      # Measured, not guessed: the workspace is owned by uid 1001 (the host
+      # runner user) while this container job runs as root, and git 2.43 refuses
+      # a repository whose worktree it does not trust. `actions/checkout` does
+      # add a safe.directory entry, but into a TEMPORARY HOST HOME
+      # ("Temporarily overriding HOME=/__w/_temp/..."), which no step inside the
+      # container shares — the step's own diagnosis printed "(no safe.directory
+      # entries)". The refusal is quiet in the worst way: `git diff` falls back
+      # to --no-index and prints "Not a git repository", which the step then read
+      # as "no files changed".
+      - name: Trust the workspace inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache the patched Muter build
+        uses: actions/cache@v4
+        with:
+          path: /tmp/muter-src
+          key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+
+      - name: Work out which mutable files this PR touches
+        id: files
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          mapfile -t includes < <(python3 -c "
+          import json
+          for p in json.load(open('Tools/mutation/config.json'))['include']: print(p)")
+
+          # git's failure must NOT read as "no files changed". It did: the
+          # pipeline below ended in `|| true` so that grep finding nothing is
+          # not an error, and that swallowed a failing `git diff` too — which
+          # then fell into the empty-result branch and reported a clean run over
+          # a diff it had never looked at. Same silent-coverage-gap this file's
+          # own 6-file cap comment warns about, one step earlier.
+          if ! worktree_check=$(git rev-parse --is-inside-work-tree 2>&1); then
+            # Print git's OWN message, and enough context to tell the two
+            # candidate causes apart: a missing .git (the checkout did not land
+            # where this step runs) versus a refusal to use one that is there
+            # (dubious ownership — the container user differs from the owner,
+            # and checkout's `safe.directory` entry went to a HOST HOME this
+            # step does not share). The first version of this guard threw the
+            # message away with `2>&1 >/dev/null`, which named the symptom and
+            # hid the evidence.
+            echo "::error::Not inside a git work tree at $(pwd); nothing was mutation-tested. git said: ${worktree_check}"
+            echo "--- diagnosis ---"
+            echo "whoami: $(id -un 2>/dev/null) ($(id -u 2>/dev/null))"
+            echo "git: $(git --version)"
+            ls -ld . .git 2>&1 || true
+            git config --get-all safe.directory 2>&1 || echo "(no safe.directory entries)"
+            exit 1
+          fi
+
+          if ! changed_paths=$(git diff --name-only --diff-filter=d "$base"...HEAD -- "${includes[@]}"); then
+            echo "::error::git diff against base $base failed; cannot tell which files this PR changed, so nothing was mutation-tested."
+            exit 1
+          fi
+
+          # Only grep's "no match" is a legitimate empty result.
+          changed=$(printf '%s\n' "$changed_paths" | grep -E '\.swift$' || true)
+
+          if [ -z "$changed" ]; then
+            echo "No mutable files changed; nothing to do."
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A cap, and it is ANNOUNCED rather than silent: a report that quietly
+          # covered half a diff reads as a clean bill of health for all of it.
+          total=$(echo "$changed" | wc -l)
+          kept=$(echo "$changed" | head -6)
+          echo "$kept" > /tmp/mutate-files.txt
+          echo "count=$(echo "$kept" | wc -l)" >> "$GITHUB_OUTPUT"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "Changed mutable files ($total):"; echo "$changed"
+          if [ "$total" -gt 6 ]; then
+            echo "::warning::Mutating only the first 6 of $total changed files; the rest were NOT covered by this run."
+          fi
+
+      # A WARNING, NOT AN ERROR. `mutation-run.sh` exits non-zero when the run
+      # yields no mutant outcomes, because for the weekly sweep that reliably
+      # means the tooling broke. On a PR it does not: a diff can legitimately
+      # contain nothing mutable — an enum with no logic, a version constant —
+      # and Muter says so ("wasn't able to discover any code it could mutation
+      # test") and exits 255. Failing the check there tells an author their
+      # change is broken when it is only unmutable.
+      #
+      # The honesty is not lost by downgrading it: `report.py` writes "Do not
+      # read a score from this run" into the step summary either way, so a run
+      # that measured nothing still SAYS it measured nothing. What changes is
+      # only whether that shows up as somebody's red check. The weekly sweep
+      # keeps the strict exit — this is scoped to the per-PR job on purpose.
+      - name: Mutate them
+        if: steps.files.outputs.count != '0'
+        run: |
+          args=()
+          while read -r f; do [ -n "$f" ] && args+=(--file "$f"); done < /tmp/mutate-files.txt
+          if ! scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"; then
+            echo "::warning::Mutation produced no measurable outcome for this diff — either it contains nothing mutable, or the tooling failed. Read the step summary; do not read a score from this run. This is a report, not a gate."
+          fi
+
+      - name: Report
+        if: always() && steps.files.outputs.count != '0'
+        run: |
+          # The header goes in the SUMMARY, not just in this file's comments.
+          # `continue-on-error` already stops this job failing a PR, but the
+          # pressure that matters is social: a survivor listed on your own diff
+          # reads as a to-do, and the cheapest way to clear a to-do is an
+          # assertion that runs the line without checking the result. That is
+          # precisely the failure mutation testing exists to detect, so the one
+          # place guaranteed to be read has to say that closing an item with a
+          # reason is a real answer.
+          {
+            echo "> **This is a report, not a gate, and there is no score to chase.**"
+            echo "> A survivor is a question — *could the suite tell the difference?*"
+            echo "> Three answers are legitimate and the third is not failure: write the"
+            echo "> test; decide nothing reaching this code can tell the difference and"
+            echo "> **record why**; or find the mutant already dead. Some are unkillable by"
+            echo "> construction, so a run that 'fixed' every one would be worse than this"
+            echo "> one. See \`docs/mutation-triage.md\`."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f mutation-report/report.md ]; then
+            cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Mutation run produced no report"
+              echo ""
+              echo "The run did not get far enough to measure anything, so this PR has"
+              echo "**not** been mutation-tested. That is a tooling failure, not a clean"
+              echo "result — see the step log."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the report
+        if: always() && steps.files.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-pr
+          path: mutation-report/
+          if-no-files-found: warn

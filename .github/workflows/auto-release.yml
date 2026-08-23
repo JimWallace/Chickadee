@@ -40,8 +40,15 @@ jobs:
     timeout-minutes: 15
     env:
       RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-    # Never re-trigger on our own release commit.
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    # Never re-trigger on our own release commit, and never let the weekly
+    # mutation sweep's data commit cut one. With no fragments pending that
+    # commit is already a no-op, but "already a no-op" depends on timing, and a
+    # release whose triggering commit is a report data file is confusing at
+    # best. Both prefixes are machine-written, so neither can be typed by
+    # accident.
+    if: >-
+      ${{ !startsWith(github.event.head_commit.message, 'chore(release):')
+       && !startsWith(github.event.head_commit.message, 'chore(mutation):') }}
     steps:
       - uses: actions/checkout@v6
         with:

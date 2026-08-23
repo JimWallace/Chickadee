@@ -13,9 +13,6 @@ Submission #(submissionID)
 .class-goal-progress { width: 100%; height: 0.6rem; }
 .class-goal-status { font-size: var(--text-base); margin-top: 0.15rem; }
 .class-goal-detail { font-size: var(--text-base); margin: 0.15rem 0 0; }
-.reveal-token-banner { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); font-size: var(--text-base); }
-.reveal-token-offer { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); }
-.reveal-token-text { margin: 0 0 .5rem; font-size: var(--text-base); }
 </style>
 <div id="submission-root"
      data-submission-id="#(submissionID)"
@@ -36,13 +33,26 @@ Submission #(submissionID)
     #if(buildFailed):
     #else:
     <div class="submission-score-row">
-        #if(gradeIsOverridden):
-        <p class="score score-header">Grade: <span class="grade-pill grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
-        <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
-        #else:
-        <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        <div class="score-summary">
+            <p class="card-meta">Grade</p>
+            #if(gradeIsOverridden):
+            <p class="score score-header"><span class="score-figure grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
+            <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
+            #else:
+            <p class="score score-header"><span class="score-figure">#(gradePercent)%</span></p>
+            <p class="score score-autograded">#if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif</p>
+            #endif
+        </div>
+        <div class="diagnostics-cards">
+            <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">Passed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">#(failCount)</div><div class="diagnostic-label">Failed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">Errors</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value">#(skippedCount)</div><div class="diagnostic-label">Skipped</div></div>
+        </div>
+        #if(deltaHeaderText):
+        <p class="score-delta"><span class="delta-summary">#(deltaHeaderText)</span></p>
         #endif
-        #if(!badges.isEmpty):
+        #if(count(badges) > 0):
         <div class="achievement-badges achievement-badges-full">
             #for(badge in badges):
             <span class="achievement-badge" title="#(badge.tooltip)">#(badge.label)</span>
@@ -64,7 +74,7 @@ Submission #(submissionID)
             <span class="class-goal-reward">#(goal.rewardLabel)</span>
         </div>
         <progress class="class-goal-progress" max="100" value="#(goal.progressPercent)">#(goal.progressPercent)%</progress>
-        <div class="class-goal-status">#if(goal.met):✅ Reached!#else:#(goal.progressPercent)% of the way#endif · #(goal.studentsMeeting) / #(goal.denominator) students#if(goal.locked): · final#endif</div>
+        <div class="class-goal-status">#if(goal.met):✅ Reached!#else:#(goal.progressPercent)% of the way#endif · #(goal.studentsMeeting) / #(goal.denominator) #(goal.studentsLabel)#if(goal.coverageSummary): · #(goal.coverageSummary)#endif#if(goal.locked): · final#endif</div>
         #if(goal.detail):<p class="class-goal-detail">#(goal.detail)</p>#endif
     </div>
     #endfor
@@ -90,6 +100,12 @@ Submission #(submissionID)
 </div>
 #endif
 
+#if(solutionURL):
+<div class="notice-box">
+    <strong>Solution available</strong> &mdash; <a href="#(solutionURL)">view the reference solution</a> for this assignment.
+</div>
+#endif
+
 #if(buildFailed):
 <div class="error-box">
     <h2>Build failed</h2>
@@ -100,19 +116,8 @@ Submission #(submissionID)
 
 #else:
 #if(secretRevealActive):
-<div class="reveal-token-banner">
+<div class="notice-box">
     🔓 <strong>Secret tests revealed</strong> — you used your reveal token for this assignment, so hidden-test details are shown on all of your submissions.
-</div>
-#endif
-#if(secretRevealAvailable):
-<div class="reveal-token-offer">
-    <p class="reveal-token-text">You have <strong>one reveal token</strong> for this assignment. Spending it permanently shows the secret (hidden) test results — names, output, and hints — on all of your past and future submissions here.</p>
-    <form method="post" action="/testsetups/#(testSetupID)/reveal-secret"
-          data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
-        #csrfFormField()
-        <input type="hidden" name="submissionID" value="#(submissionID)">
-        <button class="btn action-btn" type="submit">Reveal secret tests</button>
-    </form>
 </div>
 #endif
 #for(sec in sectionedOutcomes):
@@ -120,13 +125,13 @@ Submission #(submissionID)
     #if(sec.sectionName):
     <h3 class="submission-section-heading">#(sec.sectionName)</h3>
     #endif
-    #if(!sec.outcomes.isEmpty):
+    #if(count(sec.outcomes) > 0):
     <table class="results-table">
         <thead>
             <tr>
                 <th>Test</th>
                 <th>Tier</th>
-                #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">Δ</th>#endif
+                #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">vs last</th>#endif
                 <th>Mark</th>
             </tr>
         </thead>
@@ -164,26 +169,59 @@ Submission #(submissionID)
                     #if(outcome.pointsLabel):<span class="points-label">#(outcome.pointsLabel)</span>#endif
                 </td>
             </tr>
+            <!-- No output panel on a skipped row: it never ran, and the panel
+                 would only repeat the skip reason already shown above. -->
+            #if(!outcome.isSkipped):
             #if(outcome.status != "pass" && outcome.longResult):
             <tr class="test-output-row">
                 <td colspan="#if(hasDelta):4#else:3#endif">
-                    <div class="test-output-panel">
-                        <div class="test-output-heading">Output</div>
+                    <details class="test-output-details"#if(outcome.isFirstFailureOutput): open#endif>
+                        <summary>Output</summary>
                         <pre class="test-output-pre test-output-pre-wide">#(outcome.longResult)</pre>
-                    </div>
+                    </details>
                 </td>
             </tr>
+            #endif
             #endif
         #endfor
         </tbody>
     </table>
     #endif
-    #if(sec.secretSummary):
+    #if(sec.secretStake):
     <div class="tier-summary-row tier-summary-secret">
         <span class="tier">secret</span>
-        <span class="tier-summary-counts">#(sec.secretSummary.passCount) passed, #(sec.secretSummary.failCount) failed#if(sec.secretSummary.errorCount): , #(sec.secretSummary.errorCount) error(s)#endif</span>
-        <span class="tier-summary-note">— hidden tests in this section; they count toward your grade, but individual tests aren't shown</span>
+        <span class="tier-summary-counts">#(sec.secretStake)</span>
+        <span class="tier-summary-note">names and output are visible only to your instructor</span>
+        #if(secretRevealAvailable):
+        <form class="secret-reveal-action" method="post" action="/testsetups/#(testSetupID)/reveal-secret"
+              data-confirm="Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.">
+            #csrfFormField()
+            <input type="hidden" name="submissionID" value="#(submissionID)">
+            <button class="btn action-btn" type="submit">Reveal these tests</button>
+        </form>
+        #endif
     </div>
+    <table class="results-table">
+        <thead>
+            <!-- No delta column here: a masked row carries no arrows, because
+                 its number is positional within one render and would not
+                 correlate across attempts. An empty header is also an axe
+                 violation (empty-table-header). -->
+            <tr><th>Test</th><th>Result</th><th>Mark</th></tr>
+        </thead>
+        <tbody>
+        #for(row in sec.secretRows):
+            <tr class="status-#(row.status)">
+                <td><div class="test-cell-main"><code>#(row.testName)</code></div></td>
+                <td>#(row.shortResult)</td>
+                <td>
+                    <span class="result-mark result-mark-#(row.markClass)">#(row.markLabel)</span>
+                    #if(row.pointsLabel):<span class="points-label">#(row.pointsLabel)</span>#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
     #endif
 </section>
 #endfor

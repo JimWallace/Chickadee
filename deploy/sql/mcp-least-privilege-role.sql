@@ -56,6 +56,17 @@ GRANT SELECT ON users, course_enrollments TO chickadee_mcp;
 --    table result_collections".
 GRANT SELECT ON submissions, results, result_collections TO chickadee_mcp;
 
+--    validation_variants (multi-variant validation) records the per-variant
+--    verdicts of the instructor's reference-solution runs against synthetic
+--    seeds — no student identity or grade in any column, and every linked
+--    submission is a validation run by construction. get_validation_result
+--    reads it to report the batch. Deployments that applied this file before
+--    the table existed must re-run this section, or every
+--    get_validation_result call fails with "permission denied for table
+--    validation_variants". Writes (enqueue, verdict ingestion, cleanup) all
+--    run on the main (owner) pool, so SELECT is the only grant needed.
+GRANT SELECT ON validation_variants TO chickadee_mcp;
+
 ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS mcp_validation_submissions ON submissions;
 CREATE POLICY mcp_validation_submissions ON submissions
@@ -80,6 +91,21 @@ CREATE POLICY mcp_validation_result_collections ON result_collections
         JOIN submissions s ON s.id = r.submission_id
         WHERE r.id = result_collections.result_id AND s.kind = 'validation'
     ));
+
+-- A variant row with a pruned (NULL) submission keeps its recorded verdict
+-- visible; a linked one must resolve to a validation submission — through
+-- this role's own submissions policy, so a row somehow pointing at a student
+-- submission is invisible rather than a leak.
+ALTER TABLE validation_variants ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mcp_validation_variant_rows ON validation_variants;
+CREATE POLICY mcp_validation_variant_rows ON validation_variants
+    FOR SELECT TO chickadee_mcp
+    USING (
+        submission_id IS NULL OR EXISTS (
+            SELECT 1 FROM submissions s
+            WHERE s.id = validation_variants.submission_id AND s.kind = 'validation'
+        )
+    );
 
 -- 5. Everything else is DENIED by omission — no GRANT is issued, so the role
 --    cannot touch any of these student-data tables:

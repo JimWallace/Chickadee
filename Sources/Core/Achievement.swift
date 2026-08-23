@@ -245,6 +245,43 @@ public enum AchievementSignal: String, Codable, CaseIterable, Sendable {
     case gradeJumpPercent
     /// Whether the condition's target test passed.
     case testPass
+    /// How many DISTINCT items the class has collectively covered — the union
+    /// a collaborative assignment grades on, not a per-submission signal.
+    ///
+    /// The odd one out in this enum, deliberately. Every other signal reads one
+    /// submission; this one reads the accumulated coverage of the whole class,
+    /// so it is only meaningful on a `classWide` goal and the sweep is the only
+    /// thing that can evaluate it. The condition's `target` scopes which items
+    /// count: a `.section` target counts only that suite section's items (a bug
+    /// hunt's variants, not the "your test is well-formed" gate beside them),
+    /// and no target counts every item in the suite.
+    case itemsCovered
+}
+
+extension AchievementSignal {
+    /// True when this signal reads the WHOLE CLASS rather than one submission.
+    ///
+    /// Such a signal is meaningful only on a `classWide` goal: the class-goal
+    /// sweep is the only evaluator that can compute it, and every per-submission
+    /// evaluation must report it unmet because it cannot be proven satisfied
+    /// there. So an individual badge or a record carrying one would save
+    /// cleanly and then never fire for anyone — the silent-never-fires shape the
+    /// `testPass` ref validation (audit A1/A17) and `isSweepEvaluableClassGoal`
+    /// (audit A4) each exist to close. Authoring refuses it, and the editor
+    /// derives which signals its dropdown may offer from this.
+    public var readsTheWholeClass: Bool {
+        switch self {
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass:
+            return false
+        case .itemsCovered:
+            return true
+        }
+    }
+
+    /// The scopes an achievement may carry this signal under.
+    public var allowedScopes: [AchievementScope] {
+        readsTheWholeClass ? [.classWide] : AchievementScope.allCases
+    }
 }
 
 /// How a condition compares its signal against `value`.
@@ -262,7 +299,7 @@ public enum ConditionMatch: String, Codable, Sendable {
 
 /// Whether an achievement is earned per-student, computed across the class, or a
 /// single-holder competitive record.
-public enum AchievementScope: String, Codable, Sendable {
+public enum AchievementScope: String, Codable, CaseIterable, Sendable {
     case individual
     case classWide
     /// Competitive: one holder per assignment, ranked on `recordDimension`.

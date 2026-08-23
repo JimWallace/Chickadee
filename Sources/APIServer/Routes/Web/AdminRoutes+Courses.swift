@@ -281,11 +281,15 @@ extension AdminRoutes {
                     .filter(\.$submissionID ~~ subIDs).delete()
             }
 
-            // 3. Delete submission zip files then submission records.
+            // 3. Delete submission zip files then submission records (variant
+            // batches first — their FK is `.setNull`, so the other order
+            // leaves unlinked rows for setups that no longer exist).
             for sub in submissions {
                 try? FileManager.default.removeItem(atPath: sub.zipPath)
             }
             if !setupIDs.isEmpty {
+                try await ValidationVariant.query(on: db)
+                    .filter(\.$testSetupID ~~ setupIDs).delete()
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }

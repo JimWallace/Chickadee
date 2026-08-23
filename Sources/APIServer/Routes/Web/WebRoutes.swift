@@ -27,6 +27,9 @@ struct WebRoutes: RouteCollection {
         // Course-staff-only: persist what the author is editing in JupyterLite
         // back to the assignment (WebRoutes+NotebookSave.swift).
         routes.post("testsetups", ":testSetupID", "notebook", "save", use: saveNotebookFromEditor)
+        // Reference-solution download, gated per viewer by the reveal
+        // predicate (staff always; students via `solutionVisibleToStudent`).
+        routes.get("testsetups", ":testSetupID", "solution", "download", use: solutionDownload)
         routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.post("testsetups", ":testSetupID", "reveal-secret", use: spendSecretRevealToken)
         // Slip days (#1228): explicit confirmation page + the spend POST.

@@ -36,18 +36,33 @@ func builtInBadgesForSubmission(
         }
 }
 
-/// The `accept` attribute for the student upload input, derived from the one
-/// language table plus the archive/notebook formats every assignment takes.
-/// The hand-listed predecessor (".zip,.ipynb,.py,.r") had gone stale twice
-/// over — it never learned `.lua` or `.m`.  The assignment's `requiredFiles`
-/// contribute their own extensions so an upload-mode assignment in a language
-/// no `AssignmentLanguage` claims (e.g. C++ sources for a makefile-graded
-/// lab) still hints the right types.  Sorted for deterministic output; a
-/// browser treats the list as a hint, not a filter, so breadth costs nothing.
-func submissionAcceptAttribute(manifest: TestProperties?) -> String {
-    var extensions: Set<String> = ["zip", "ipynb"]
-    for language in AssignmentLanguage.allCases {
+/// The extensions a submission to this assignment may carry.
+///
+/// This used to union EVERY `AssignmentLanguage`'s extensions, on the reasoning
+/// that a browser treats `accept` as a hint so "breadth costs nothing".  That is
+/// true of the file picker and false of the student: a Racket assignment offered
+/// `.py`, `.r`, `.lua` and `.m` beside `.rkt`, and the page never said which
+/// language it wanted.  Now that a wrong type is REJECTED (client-side as a
+/// courtesy, server-side as the gate), breadth costs the student a rejected
+/// upload, so the list is the assignment's own.
+///
+/// `zip` is always accepted — it is the documented way to submit several files
+/// at once — and `ipynb` unless the assignment is upload-only, which is exactly
+/// the case with no notebook workflow.  The full union survives as the fallback
+/// for an assignment that declares no language, where guessing would be worse
+/// than breadth.  `requiredFiles` contribute their own extensions so a lab whose
+/// files no language claims still accepts them.
+func submissionAcceptedExtensions(manifest: TestProperties?) -> [String] {
+    var extensions: Set<String> = ["zip"]
+    if manifest?.effectiveSubmissionMode != .uploadOnly {
+        extensions.insert("ipynb")
+    }
+    if let language = manifest?.language {
         extensions.formUnion(language.scriptExtensions)
+    } else {
+        for language in AssignmentLanguage.allCases {
+            extensions.formUnion(language.scriptExtensions)
+        }
     }
     for file in manifest?.requiredFiles ?? [] {
         let ext = URL(fileURLWithPath: file).pathExtension.lowercased()
@@ -55,7 +70,43 @@ func submissionAcceptAttribute(manifest: TestProperties?) -> String {
             extensions.insert(ext)
         }
     }
-    return extensions.sorted().map { ".\($0)" }.joined(separator: ",")
+    return extensions.sorted()
+}
+
+/// The same set as the `accept` attribute for the file input.
+func submissionAcceptAttribute(manifest: TestProperties?) -> String {
+    submissionAcceptedExtensions(manifest: manifest).map { ".\($0)" }.joined(separator: ",")
+}
+
+/// One sentence under the drop zone naming what this assignment takes, because
+/// an `accept` attribute is invisible until the picker opens and says nothing at
+/// all to a drag-and-drop.  Chrome is not prose: one sentence, no more.
+func submissionAcceptHintText(manifest: TestProperties?) -> String {
+    let list = submissionAcceptedExtensions(manifest: manifest).map { ".\($0)" }
+    let joined: String = {
+        guard let last = list.last else { return "" }
+        guard list.count > 1 else { return last }
+        return list.dropLast().joined(separator: ", ") + " or " + last
+    }()
+    if let language = manifest?.language {
+        return "\(language.displayName) assignment — accepts \(joined)."
+    }
+    return "Accepts \(joined)."
+}
+
+/// Whether an uploaded filename carries one of this assignment's accepted
+/// extensions.  Shared by the server gate and the tests; the page's client-side
+/// check reads the same list off the input's `accept` attribute, so there is one
+/// source for what is accepted.
+func submissionFilenameIsAccepted(_ filename: String, manifest: TestProperties?) -> Bool {
+    let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
+    guard !ext.isEmpty else { return true }
+    return submissionAcceptedExtensions(manifest: manifest).contains(ext)
+}
+
+/// The refusal a student sees, in the same words the page's hint uses.
+func submissionRejectionMessage(manifest: TestProperties?) -> String {
+    "That file type is not accepted. " + submissionAcceptHintText(manifest: manifest)
 }
 
 extension WebRoutes {
@@ -96,14 +147,35 @@ extension WebRoutes {
             }
         }
         let requiredFiles = manifest?.requiredFiles ?? []
+        // The deadline actually in force for this student: a personal extension
+        // outranks the class due date, which is what the chip must show.
+        let extensionDueAt: Date? =
+            if let assignment {
+                try await studentExtensionDueAt(for: assignment, user: user, on: req.db)
+            } else { nil }
+        let deadline = laterDeadline(
+            baseline: assignment?.dueAt, extensionDueAt: extensionDueAt)
+        let priorAttempts: Int =
+            if let userID = user.id {
+                try await APISubmission.query(on: req.db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$userID == userID)
+                    .count()
+            } else { 0 }
         return try await req.view.render(
             "submit",
             SubmitContext(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
                 acceptAttribute: submissionAcceptAttribute(manifest: manifest),
+                acceptHintText: submissionAcceptHintText(manifest: manifest),
+                errorText: req.query[String.self, at: "error"] == "filetype"
+                    ? submissionRejectionMessage(manifest: manifest) : nil,
                 requiredFilesText: requiredFiles.isEmpty
                     ? nil : requiredFiles.joined(separator: ", "),
+                attemptNumber: priorAttempts + 1,
+                deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
+                deadlineISO: deadline.map(iso8601String),
                 currentUser: req.currentUserContext
             )
         ).encodeResponse(for: req)
@@ -124,15 +196,27 @@ extension WebRoutes {
 
         // Browser-graded assignments must be submitted from the notebook page.
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = decodeManifest(from: manifestData),
-            manifest.effectiveGradingMode == .browser
-        {
+        let manifest = decodeManifest(from: manifestData)
+        if manifest?.effectiveGradingMode == .browser {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
 
         _ = try await requireOpenStudentAssignment(for: setupID, user: user, on: req)
 
         let body = try req.content.decode(SubmitFormBody.self)
+
+        // The file-type gate. The page rejects a wrong type client-side as a
+        // courtesy, but that is a convenience, not a control: a direct POST
+        // bypasses it entirely, and before this the upload was simply stored
+        // with whatever extension it arrived with and handed to the runner,
+        // where a Racket assignment fed a .py failed as a broken test script.
+        // An empty filename is left to the existing content sniffing rather
+        // than refused, so a legitimate upload never dies on a missing header.
+        if let uploaded = body.files.filename.isEmpty ? nil : body.files.filename,
+            !submissionFilenameIsAccepted(uploaded, manifest: manifest)
+        {
+            return req.redirect(to: "/testsetups/\(setupID)/submit?error=filetype")
+        }
         let subsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
 
@@ -345,7 +429,10 @@ extension WebRoutes {
             secretOutcomes: processed.secretOutcomes,
             manifestEntries: manifestDisplay.entries,
             manifestSections: manifestDisplay.sections,
-            allowedTiers: itemized
+            allowedTiers: itemized,
+            // Same weighting test the visible rows use, so a masked row prices
+            // its points exactly as a named one would.
+            weighted: displayCollection.map { $0.totalPoints != $0.totalTests } ?? false
         )
 
         let currentAttempt = submission.attemptNumber ?? 1
@@ -367,6 +454,22 @@ extension WebRoutes {
         let classGoals = try await loadClassGoalViews(
             testSetupID: submission.testSetupID, props: setupProps, on: req.db)
 
+        // Post-reveal solution link for the owner-student reviewing their
+        // results (`solutionVisibleToStudent` — the same gate the serving
+        // routes enforce).  Staff reach the solution through the workbench,
+        // and a staff view of a student's submission should not read as the
+        // student's page anyway.
+        var solutionURL: String?
+        if !isStaff, submission.userID == user.id, let submissionAssignment,
+            try await solutionVisibleToStudent(
+                assignment: submissionAssignment, user: user, on: req.db)
+        {
+            solutionURL =
+                setupProps?.effectiveSubmissionMode == .uploadOnly
+                ? "/testsetups/\(submission.testSetupID)/solution/download"
+                : "/testsetups/\(submission.testSetupID)/notebook?file=solution"
+        }
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
@@ -380,7 +483,8 @@ extension WebRoutes {
                 secretReveal: SecretRevealBanner(
                     available: reveal.enabled && !reveal.spent && !isStaff
                         && hasSecretTierTests(setupProps),
-                    active: reveal.revealed)
+                    active: reveal.revealed),
+                solutionURL: solutionURL
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

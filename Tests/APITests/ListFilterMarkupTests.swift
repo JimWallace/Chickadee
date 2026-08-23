@@ -16,29 +16,14 @@
 // containment itself is checked here by walking the tag structure: for each
 // `.filter-input`, the nearest enclosing open tag must carry `filter-group`.
 //
-// Walking BACKWARDS from the input and stopping at the first unclosed open tag
-// keeps the check local — whatever conditional markup a template has earlier in
-// the file cannot throw the result off, which a whole-file tag stack would not
-// survive.
+// The walk itself lives in `LeafMarkupScanner`, shared with the other
+// markup-contract guard rather than copied into it — the duplicate spelling of
+// a shared thing being the exact failure the UI vocabulary work is about.
 
 import Foundation
 import Testing
 
-@testable import APIServer
-
 @Suite struct ListFilterMarkupTests {
-
-    private static var viewsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url.appendingPathComponent("Resources/Views")
-    }
-
-    /// Elements that never enclose anything, so they are not candidates for
-    /// "the tag that encloses this input".
-    private static let voidElements: Set<String> = [
-        "input", "br", "img", "meta", "link", "hr", "use", "source", "col", "area",
-    ]
 
     private struct FilterInput {
         let file: String
@@ -46,75 +31,18 @@ import Testing
         let enclosingTag: String?
     }
 
-    // MARK: - Tag walking
-
-    /// The tag name and whether it is a closing tag, for a `<…>` at `index`.
-    private static func tagName(at index: String.Index, in html: String) -> (name: String, isClose: Bool)? {
-        var cursor = html.index(after: index)
-        guard cursor < html.endIndex else { return nil }
-        var isClose = false
-        if html[cursor] == "/" {
-            isClose = true
-            cursor = html.index(after: cursor)
-        }
-        var name = ""
-        while cursor < html.endIndex, html[cursor].isLetter || html[cursor].isNumber {
-            name.append(html[cursor])
-            cursor = html.index(after: cursor)
-        }
-        return name.isEmpty ? nil : (name.lowercased(), isClose)
-    }
-
-    /// The full text of the open tag starting at `index` (`<span class="…">`).
-    private static func openTagText(at index: String.Index, in html: String) -> String {
-        guard let end = html[index...].firstIndex(of: ">") else { return String(html[index...]) }
-        return String(html[index...end])
-    }
-
-    /// The open tag that encloses the element beginning at `index`.
-    ///
-    /// Scans backwards counting close tags: a close tag seen on the way back
-    /// means the next open tag of any name is its partner, not our parent. The
-    /// first open tag reached at depth zero is the enclosing element.
-    private static func enclosingOpenTag(before index: String.Index, in html: String) -> String? {
-        var depth = 0
-        var cursor = index
-        while cursor > html.startIndex {
-            cursor = html.index(before: cursor)
-            guard html[cursor] == "<", let tag = tagName(at: cursor, in: html) else { continue }
-            if tag.isClose {
-                depth += 1
-                continue
-            }
-            if Self.voidElements.contains(tag.name) { continue }
-            let text = openTagText(at: cursor, in: html)
-            if text.hasSuffix("/>") { continue }  // self-closing
-            if depth == 0 { return text }
-            depth -= 1
-        }
-        return nil
-    }
-
     /// Every `.filter-input` in every template, with the tag that encloses it.
     private static func filterInputs() throws -> [FilterInput] {
-        let files = try FileManager.default
-            .contentsOfDirectory(at: viewsDirectory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "leaf" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-
         var found: [FilterInput] = []
-        for file in files {
-            let html = try String(contentsOf: file, encoding: .utf8)
-            var search = html.startIndex
-            while let hit = html.range(of: "<input", range: search..<html.endIndex) {
-                search = hit.upperBound
-                let tag = openTagText(at: hit.lowerBound, in: html)
-                guard tag.contains("filter-input") else { continue }
+        for file in try LeafMarkupScanner.templateNames() {
+            let html = try LeafMarkupScanner.markup(of: file)
+            for tag in LeafMarkupScanner.openTags("input", in: html) {
+                guard tag.text.contains("filter-input") else { continue }
                 found.append(
                     FilterInput(
-                        file: file.lastPathComponent,
-                        tag: tag,
-                        enclosingTag: enclosingOpenTag(before: hit.lowerBound, in: html)
+                        file: file,
+                        tag: tag.text,
+                        enclosingTag: LeafMarkupScanner.enclosingOpenTag(before: tag.index, in: html)
                     )
                 )
             }
@@ -134,11 +62,77 @@ import Testing
                 "admin-audit.leaf",
                 "admin-users.leaf",
                 "assignment-submissions.leaf",
+                "index.leaf",
                 "instructor-activity.leaf",
                 "instructor-students.leaf",
             ],
             "the filter-input extractor found \(files.sorted()) — update this list when a page gains or loses a filter"
         )
+    }
+
+    /// The result count belongs to the script, not to the page.
+    ///
+    /// `list-filter.js` mints `.filter-status` into the `.filter-group` and
+    /// uses it as the `role="status"` live region — it is how a screen-reader
+    /// user learns the filter did anything, and it is empty while the box is.
+    /// A page that hand-writes its own count gets two: one live region the
+    /// script owns and one stale string it does not update. The design brief
+    /// draws label + input only, so this pins that the markup stays that way.
+    @Test func noPageDeclaresItsOwnFilterResultCount() throws {
+        for file in try LeafMarkupScanner.templateNames() {
+            let html = try LeafMarkupScanner.markup(of: file)
+            guard html.contains("filter-input") else { continue }
+            #expect(
+                !html.contains("filter-status"),
+                "\(file): the result count is minted by list-filter.js — a page never declares .filter-status"
+            )
+        }
+    }
+
+    /// Every filter box is one width, and that width is a root token.
+    ///
+    /// `--filter-width` is declared once in `:root` and consumed by
+    /// `.filter-input`. It is not a per-page dial: five boxes once came in
+    /// three sizes, which is the whole reason the token exists.
+    @Test func noFilterInputCarriesItsOwnWidth() throws {
+        for input in try Self.filterInputs() {
+            #expect(
+                !input.tag.contains("width"),
+                "\(input.file): filter width comes from --filter-width, never from the tag"
+            )
+        }
+    }
+
+    /// A page that DECLARES the behaviour must LOAD the script that provides it.
+    ///
+    /// Every assertion in this suite reads markup, so all of them passed on the
+    /// student dashboard while its filter did nothing at all: `index.leaf`
+    /// declared `data-list-filter`, four `data-sort-key` columns,
+    /// `data-sort-initial="due:asc"` and a tiebreak, and loaded neither
+    /// `list-filter.js` nor `sortable-table.js` (base.leaf loads neither, and
+    /// every other page includes them itself). The filter box accepted typing
+    /// and filtered nothing, no result count was ever announced, the headers
+    /// were inert buttons, and assignments rendered in server order rather than
+    /// by due date — while the stylesheet drew a sort affordance on all four
+    /// columns, advertising a promise the page could not keep.
+    ///
+    /// This is the failure `check-guards.sh` names in its own header: a test
+    /// matching a wiring string after the wiring went dead. Markup alone cannot
+    /// see it, so pair the declaration with the script.
+    @Test func everyPageDeclaringTableBehaviourLoadsItsScript() throws {
+        let contracts = [
+            (declaration: "data-list-filter=", script: "list-filter.js"),
+            (declaration: "sortable-table\"", script: "sortable-table.js"),
+        ]
+        for file in try LeafMarkupScanner.templateNames() {
+            let source = try LeafMarkupScanner.source(of: file)
+            for contract in contracts where source.contains(contract.declaration) {
+                #expect(
+                    source.contains(contract.script),
+                    "\(file): declares \(contract.declaration) but never loads \(contract.script) — the behaviour is dead"
+                )
+            }
+        }
     }
 
     @Test func everyFilterInputSitsInAFilterGroup() throws {
@@ -179,7 +173,10 @@ import Testing
     /// A live filter names its table; a GET-form filter names none and posts to
     /// the server. Nothing else is a valid filter.
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
-        let liveFilters = ["admin-users.leaf", "assignment-submissions.leaf", "instructor-students.leaf"]
+        let liveFilters = [
+            "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
+            "instructor-students.leaf",
+        ]
         for input in try Self.filterInputs() {
             let isLive = input.tag.contains("data-list-filter=")
             #expect(

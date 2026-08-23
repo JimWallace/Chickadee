@@ -1,0 +1,9 @@
+# Spacing is a shrink-only lattice, not a scale: a value off it is a new step
+# nobody agreed to.
+guard="scripts/check-design-tokens.sh"
+files="Public/styles.css"
+description="a spacing value off the lattice"
+expect="spacing"
+apply() {
+    printf '\n.ck-guard-fixture { padding: 0.37rem; }\n' >> Public/styles.css
+}

@@ -195,6 +195,17 @@ representable and creatable.
     staff management, assignment create/delete/open/close and the
     assignment-wide due date, course sections, archive, BrightSpace binding,
     test-setup upload.
+- **The convention is now enforced, not just written down.**
+  `RouteAuthorizationMatrixTests` walks the live route table and crosses every
+  parameterized `/instructor` and `/courses` route with `CourseRole.allCases`,
+  asserting each route's declared floor: denied below it, not denied at or above
+  it. A route with no declared floor fails the walk by name, so the split above
+  cannot be silently skipped by the next route someone adds. Before it, the
+  convention was stated here and in the code comments but held only where
+  someone had written a spot test — which is how all five course-section
+  handlers came to enforce nothing beyond the `/instructor` area gate while
+  three separate comments (including the MCP twins' "matching the web") said
+  they were instructor-level. They enforce it now.
 
 ### 3.5 UI touchpoints
 

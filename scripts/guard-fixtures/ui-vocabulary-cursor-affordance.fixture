@@ -1,0 +1,9 @@
+# `cursor: help` is the exact value that shipped in 0.5.136 as a private
+# "hover me" convention, in a UI that already had four ways to reveal detail.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/styles.css"
+description="an unregistered cursor affordance"
+expect="unregistered cursor affordance"
+apply() {
+    printf '\n.ck-guard-fixture-cursor { cursor: help; }\n' >> Public/styles.css
+}

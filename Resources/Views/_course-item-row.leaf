@@ -70,7 +70,7 @@
                         </label>
                         <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
                     </form>
-                    #if(!item.content.attachments.isEmpty):
+                    #if(count(item.content.attachments) > 0):
                     <div class="content-item-attachment-list">
                         #for(att in item.content.attachments):
                         <div class="content-item-attachment">
@@ -154,9 +154,26 @@
             </div>
             #endif
             #elseif(item.assignment.validationStatus == "no-runner"):
-            <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
+            <span class="tier tier-closed" title="No runner could grade this when it was last saved, so validation did not run.">no runner</span>
+            <div class="cell-subrow">Ask an admin for a compatible runner, then re-save.</div>
             #else:
             <span class="tier">—</span>
+            #endif
+            #if(item.assignment.variantState == "failed"):
+            <div class="cell-subrow">
+                <span class="tier tier-closed" title="The solution failed on some per-student variants; those students would fail too.">#(item.assignment.variantSummaryText)</span>
+                #if(item.assignment.failedVariantSubmissionID):
+                <a href="/submissions/#(item.assignment.failedVariantSubmissionID)">View variant</a>
+                #endif
+            </div>
+            #elseif(item.assignment.variantState == "pending"):
+            <div class="cell-subrow">
+                <span class="tier" title="The reference solution is also being graded against synthetic per-student seeds.">#(item.assignment.variantSummaryText)</span>
+            </div>
+            #elseif(item.assignment.variantState == "passed"):
+            <div class="cell-subrow">
+                <span class="tier tier-open" title="The reference solution also passed against every synthetic per-student seed.">#(item.assignment.variantSummaryText)</span>
+            </div>
             #endif
         </td>
         <td class="due-col col-hide-phone">#if(item.assignment.dueAt):#(item.assignment.dueAt)#else:—#endif</td>

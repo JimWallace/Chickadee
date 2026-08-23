@@ -11,7 +11,36 @@
     #extend("_diagnostic-cards")
 </section>
 
-#if(rows.isEmpty):
+#if(hasCoverage):
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Class coverage</h2>
+        <span class="chip">#(coverageSummary)</span>
+    </div>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Status</th>
+                <th>First found by</th>
+                <th class="time col-hide-phone">When</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in coverageRows):
+            <tr>
+                <td><code>#(row.item)</code></td>
+                <td>#if(row.found):<span class="tier tier-open">found</span>#else:<span class="tier tier-closed">not yet found</span>#endif</td>
+                <td>#if(row.found):#(row.foundBy)#else:—#endif</td>
+                <td class="time col-hide-phone#if(row.found): js-relative-time#endif"#if(row.found): data-iso="#(row.foundAtISO)"#endif>#if(row.found):#(row.foundAt)#else:—#endif</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+</section>
+#endif
+
+#if(count(rows) == 0):
 <p class="empty">No student users found.</p>
 #else:
 <div class="toolbar toolbar--end section-gap">

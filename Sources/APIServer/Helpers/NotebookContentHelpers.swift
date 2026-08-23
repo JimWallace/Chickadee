@@ -106,8 +106,19 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
         let instructorCells = instructorNB["cells"] as? [[String: Any]]
     else { return studentData }
 
-    let solutionCells = studentCells.filter { !isTestCell($0) }
+    var solutionCells = studentCells.filter { !isTestCell($0) }
     let testCells = instructorCells.filter { isTestCell($0) }
+
+    // Contribution slots (see `NotebookContributionSlots`). When the
+    // instructor's notebook declares slots, the student's contribution is
+    // bounded to what they wrote IN them — extra cells are ignored rather than
+    // prevented, which is the only form of the rule that survives an
+    // offline-edited upload. An assignment declaring no slots is unaffected:
+    // `declaredSlotCount` is 0 and `retainedStudentCells` returns its input, so
+    // every existing assignment goes through this path byte-identical.
+    let slotCount = NotebookContributionSlots.declaredSlotCount(inInstructorCells: instructorCells)
+    solutionCells = NotebookContributionSlots.retainedStudentCells(
+        solutionCells, limit: slotCount)
 
     studentNB["cells"] = solutionCells + testCells
 

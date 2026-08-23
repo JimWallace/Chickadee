@@ -35,12 +35,99 @@ import Vapor
 /// the student gets a signal for that question; secret outcomes with no
 /// (or a stale) section fall into the trailing/ungrouped bucket alongside
 /// any ungrouped visible rows.
+/// Renders secret-tier outcomes as MASKED rows: numbered, marked and priced,
+/// but unnamed and unexplained.
+///
+/// The short result is shown as a CASE COUNT and nothing else: a student needs
+/// to know how many cases moved, and "2 of 4 cases passed" says that without
+/// naming the test.
+///
+/// It is normalized through an allowlist rather than passed through, because a
+/// short result is whatever the instructor's script printed on its last line —
+/// a suite that prints "expected 42, got 7" there would otherwise leak the
+/// expectation of a test whose whole point is being hidden. Anything that is
+/// not recognisably a case count degrades to "passed" / "did not pass", which
+/// the mark already says.
+///
+/// Still withheld: `longResult` (the full output), `hint` (it describes the
+/// test), `blockerName` (it names another test), and the delta arrows — the
+/// number is positional within one render, so an arrow against it would not
+/// correlate across attempts and would mislead rather than inform.
+func maskedSecretRows(_ outcomes: [TestOutcome], weighted: Bool) -> [OutcomeRow] {
+    outcomes.enumerated().map { index, outcome in
+        let (markLabel, markClass): (String, String) =
+            switch outcome.status {
+            case .pass: ("Pass", "pass")
+            case .fail: ("Fail", "fail")
+            case .error: ("Error", "error")
+            case .timeout: ("Timeout", "timeout")
+            }
+        let pointsLabel: String? = {
+            if outcome.score > 0, outcome.score < 1 {
+                let earned = formatPoints(outcome.score * Double(outcome.points))
+                let unit = outcome.points == 1 ? "pt" : "pts"
+                return "\(earned) / \(outcome.points) \(unit)"
+            }
+            return weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
+        }()
+        return OutcomeRow(
+            testName: "hidden test \(index + 1)",
+            tier: TestTier.secret.rawValue,
+            status: outcome.status.rawValue,
+            shortResult: maskedShortResult(outcome.shortResult, status: outcome.status),
+            longResult: nil,
+            markLabel: markLabel,
+            markClass: markClass,
+            isSkipped: false,
+            blockerName: nil,
+            deltaImproved: false,
+            deltaRegressed: false,
+            pointsLabel: pointsLabel,
+            hint: nil
+        )
+    }
+}
+
+/// A hidden test's short result reduced to a case count.
+///
+/// An ALLOWLIST, deliberately: the safe set is enumerated and everything else
+/// degrades, so a short result nobody anticipated cannot leak by default. The
+/// opposite shape — blocking known-bad patterns — fails open on the first
+/// wording no one thought of.
+func maskedShortResult(_ raw: String, status: TestStatus) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let caseCountShapes = [
+        "^all cases passed$",
+        "^no cases passed$",
+        "^[0-9]+ */ *[0-9]+ cases? passed$",
+        "^[0-9]+ of [0-9]+ cases? passed$",
+        "^[0-9]+ cases? (passed|failed)$",
+    ]
+    for shape in caseCountShapes
+    where trimmed.range(of: shape, options: [.regularExpression, .caseInsensitive]) != nil {
+        return trimmed
+    }
+    return status == .pass ? "passed" : "did not pass"
+}
+
+/// "4 hidden tests · 4 of 8 points" — what the hidden block is worth, so the
+/// arithmetic is transparent even though the tests are not.
+func secretStakeText(_ outcomes: [TestOutcome]) -> String? {
+    guard !outcomes.isEmpty else { return nil }
+    let noun = outcomes.count == 1 ? "hidden test" : "hidden tests"
+    let earned = outcomes.reduce(0.0) { $0 + $1.score * Double($1.points) }
+    let total = outcomes.reduce(0) { $0 + $1.points }
+    guard total > 0 else { return "\(outcomes.count) \(noun)" }
+    return "\(outcomes.count) \(noun) · \(formatPoints(earned)) of \(total) points"
+}
+
 func groupOutcomesBySection(
     _ outcomes: [OutcomeRow],
     sections: [TestSuiteSection],
     sectionIDPerOutcome: [String?],
     secretOutcomes: [TestOutcome] = [],
-    sectionIDPerSecretOutcome: [String?] = []
+    sectionIDPerSecretOutcome: [String?] = [],
+    weighted: Bool = false
 ) -> [SectionedOutcomes] {
     let knownSectionIDs = Set(sections.map(\.id))
     var bucketsByID: [String: [OutcomeRow]] = [:]
@@ -75,7 +162,9 @@ func groupOutcomesBySection(
         if rows.isEmpty && secret.isEmpty { continue }
         result.append(
             SectionedOutcomes(
-                sectionName: section.name, outcomes: rows, secretSummary: summary(secret)))
+                sectionName: section.name, outcomes: rows, secretSummary: summary(secret),
+                secretRows: maskedSecretRows(secret, weighted: weighted),
+                secretStake: secretStakeText(secret)))
     }
     if !ungrouped.isEmpty || !secretUngrouped.isEmpty {
         // Trailing bucket label: when sections exist, call it "Ungrouped"
@@ -85,14 +174,19 @@ func groupOutcomesBySection(
         let label: String? = sections.isEmpty ? nil : "Ungrouped"
         result.append(
             SectionedOutcomes(
-                sectionName: label, outcomes: ungrouped, secretSummary: summary(secretUngrouped)))
+                sectionName: label, outcomes: ungrouped, secretSummary: summary(secretUngrouped),
+                secretRows: maskedSecretRows(secretUngrouped, weighted: weighted),
+                secretStake: secretStakeText(secretUngrouped)))
     }
     if result.isEmpty {
         // Empty outcome list still needs one bucket so the template's
         // `#for(sec in sectionedOutcomes)` has something to skip over
         // gracefully.  An empty `outcomes` array renders as an empty
         // tbody, just like today.
-        result.append(SectionedOutcomes(sectionName: nil, outcomes: [], secretSummary: nil))
+        result.append(
+            SectionedOutcomes(
+                sectionName: nil, outcomes: [], secretSummary: nil, secretRows: [],
+                secretStake: nil))
     }
     return result
 }
@@ -141,6 +235,9 @@ extension WebRoutes {
         processed.compilerOutput = collection.compilerOutput
         processed.warnings = collection.warnings
         processed.passCount = collection.passCount
+        processed.failCount = collection.failCount
+        processed.errorCount = collection.errorCount
+        processed.timeoutCount = collection.timeoutCount
         processed.totalTests = collection.totalTests
         processed.executionTimeMs = collection.executionTimeMs
         processed.totalPoints = collection.totalPoints
@@ -172,6 +269,15 @@ extension WebRoutes {
                 displayNameMap: manifestDisplay.displayNameMap,
                 hintByFilename: manifestDisplay.hintByFilename
             )
+        }
+        // Counted from the rendered rows: "skipped" is a short-result pattern
+        // rather than a status, so the collection cannot report it.
+        processed.skippedCount = processed.outcomes.filter(\.isSkipped).count
+        // Open the first failure's output and leave the rest closed.
+        if let first = processed.outcomes.firstIndex(where: {
+            $0.status != "pass" && !$0.isSkipped && $0.longResult != nil
+        }) {
+            processed.outcomes[first].isFirstFailureOutput = true
         }
         return processed
     }
@@ -278,7 +384,8 @@ extension WebRoutes {
         secretOutcomes: [TestOutcome],
         manifestEntries: [TestSuiteEntry],
         manifestSections: [TestSuiteSection],
-        allowedTiers: Set<String>
+        allowedTiers: Set<String>,
+        weighted: Bool
     ) -> [SectionedOutcomes] {
         let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
         let sectionIDPerOutcome = alignSectionIDs(
@@ -293,7 +400,8 @@ extension WebRoutes {
             sections: manifestSections,
             sectionIDPerOutcome: sectionIDPerOutcome,
             secretOutcomes: secretOutcomes,
-            sectionIDPerSecretOutcome: sectionIDPerSecret
+            sectionIDPerSecretOutcome: sectionIDPerSecret,
+            weighted: weighted
         )
     }
 
@@ -367,6 +475,10 @@ extension WebRoutes {
             outcomes: processed.outcomes,
             sectionedOutcomes: sectionedOutcomes,
             passCount: processed.passCount,
+            failCount: processed.failCount,
+            errorCount: processed.errorCount,
+            timeoutCount: processed.timeoutCount,
+            skippedCount: processed.skippedCount,
             totalTests: processed.totalTests,
             gradePercent: processed.gradePercent,
             gradeIsOverridden: overrideGradePercent != nil,
@@ -382,9 +494,21 @@ extension WebRoutes {
             classGoals: decorations.classGoals,
             hasClassGoals: !decorations.classGoals.isEmpty,
             secretRevealAvailable: secretReveal.available,
-            secretRevealActive: secretReveal.active
+            secretRevealActive: secretReveal.active,
+            solutionURL: decorations.solutionURL
         )
     }
+}
+
+/// "9 / 15 items found" for a union goal's snapshot, or nil when the snapshot
+/// carries no coverage — either because the goal is grade-counted or because
+/// the sweep has not run since the goal was authored.
+///
+/// Formatted by the same helper the instructor coverage section uses, so the
+/// two views cannot drift into naming one number two ways.
+private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
+    guard let covered = row?.itemsCovered, let required = row?.itemsRequired else { return nil }
+    return coverageFoundSummary(covered: covered, total: required)
 }
 
 /// Loads an assignment's class-goal achievements joined with their latest
@@ -420,6 +544,8 @@ func loadClassGoalViews(
             progressPercent: Int((progress * 100).rounded()),
             studentsMeeting: row?.studentsMeeting ?? 0,
             denominator: row?.denominator ?? 0,
+            studentsLabel: goal.isUnionClassGoal ? "students contributing" : "students",
+            coverageSummary: classGoalCoverageSummary(row),
             met: progress >= 1,
             locked: row?.locked ?? false)
     }
@@ -439,6 +565,17 @@ struct ProcessedCollection {
     var warnings: [String]
     var outcomes: [OutcomeRow]
     var passCount: Int
+    /// The other three outcome states, for the count tiles.  Deliberately the
+    /// four states `TestOutcomeStatus` actually has — "skipped" is derived from
+    /// a short-result pattern, not a status, so it is not a tile.
+    var failCount: Int
+    var errorCount: Int
+    var timeoutCount: Int
+    /// Rows whose short result matches the dependency-skip pattern.  Unlike the
+    /// other three this is not a `TestOutcomeStatus` — it is derived per row —
+    /// so it is counted from the rendered rows rather than read off the
+    /// collection.
+    var skippedCount: Int
     var totalTests: Int
     var totalPoints: Int
     var earnedPoints: String
@@ -462,6 +599,10 @@ struct ProcessedCollection {
         warnings: [],
         outcomes: [],
         passCount: 0,
+        failCount: 0,
+        errorCount: 0,
+        timeoutCount: 0,
+        skippedCount: 0,
         totalTests: 0,
         totalPoints: 0,
         earnedPoints: "0",
@@ -616,4 +757,8 @@ struct SubmissionDecorations {
     let classGoals: [ClassGoalView]
     /// Secret-reveal offer/active state for the reveal-token UI.
     let secretReveal: SecretRevealBanner
+    /// Link to the revealed reference solution for the owner-student, nil
+    /// while their reveal moment has not arrived (or for staff, who reach the
+    /// solution through the workbench).
+    let solutionURL: String?
 }
