@@ -250,6 +250,7 @@ import VaporTesting
                         "\(base)/edit/save",
                         "\(base)/create-solution",
                         "\(base)/secret-reveal",
+                        "\(base)/solution-visibility",
                         "\(base)/suite-sections",
                         "\(base)/suite-sections/sec1/rename",
                     ]
