@@ -222,19 +222,80 @@ private func isAssignmentEffectivelyOpenResolved(
     )
 }
 
+/// The moment after which post-deadline reveals are safe for `user` on
+/// `assignment`: the later of their effective (extension-aware) deadline and
+/// the end of any slip-day claim window they could still use to buy more time
+/// (`slipDayClaimWindowCeiling`). Nil when the assignment has no deadline at
+/// all — the reveal is then immediate.
+///
+/// The slip-day half exists because the claim window opens *after* the
+/// deadline: gating a reveal on the effective deadline alone would let a
+/// student read revealed material (release-tier output, the reference
+/// solution) one minute past the due date and then claim a slip day to act on
+/// it. Shared by the release-output gate and the solution-visibility gate so
+/// the two can never disagree about when a student is done buying time.
+func postDeadlineRevealDeadline(
+    for assignment: APIAssignment,
+    user: APIUser,
+    on db: Database,
+    now: Date = Date()
+) async throws -> Date? {
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    let effective = laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
+    let ceiling = try await slipDayClaimWindowCeiling(
+        for: assignment, user: user, extensionDueAt: extensionDueAt, on: db, now: now)
+    return laterDeadline(baseline: effective, extensionDueAt: ceiling)
+}
+
 /// The deadline that gates release-tier *result visibility* for `user` viewing
-/// `assignment`'s results: the effective (extension-aware) deadline, or nil when
-/// there is no assignment or no deadline at all (release then visible
-/// immediately).  A non-instructor may only view their own submission, so the
-/// viewer is the submission owner and their extension is the right one to honour;
-/// instructors see every tier regardless, so the value is unused for them.
+/// `assignment`'s results: the effective (extension-aware) deadline, pushed
+/// out to the end of any slip-day claim window the student could still use
+/// (`postDeadlineRevealDeadline`), or nil when there is no assignment or no
+/// deadline at all (release then visible immediately).  A non-instructor may
+/// only view their own submission, so the viewer is the submission owner and
+/// their extension is the right one to honour; instructors see every tier
+/// regardless, so the value is unused for them.
 func releaseVisibilityDeadline(
     for assignment: APIAssignment?,
     user: APIUser,
     on db: Database
 ) async throws -> Date? {
     guard let assignment else { return nil }
-    return try await effectiveDueAt(for: assignment, user: user, on: db)
+    return try await postDeadlineRevealDeadline(for: assignment, user: user, on: db)
+}
+
+/// Whether `user` (a student — staff callers bypass this) may currently view
+/// `assignment`'s reference solution.
+///
+/// All four conditions, each with a reason:
+/// - the assignment's `solutionVisibility` policy is `.afterDue` (off by
+///   default; enabling it is refused while no solution is on file, so this
+///   predicate does not re-check existence — the serving routes fail soft if
+///   the solution has since vanished);
+/// - no manual deadline override is active — a re-opened assignment accepts
+///   submissions from everyone, so the reveal is suppressed while it lasts
+///   (students may have already seen the solution; the re-open control warns);
+/// - the assignment is student-visible by its own state (published and open,
+///   or published-then-closed) — never a draft, a staff-only preview, or a
+///   scheduled assignment that has not started;
+/// - the student's `postDeadlineRevealDeadline` has passed: their own
+///   effective deadline AND the end of any slip-day claim window they could
+///   still use. Nil means no deadline at all — the solution is visible
+///   immediately, which is the posted-lecture-material case.
+func solutionVisibleToStudent(
+    assignment: APIAssignment,
+    user: APIUser,
+    on db: Database,
+    now: Date = Date()
+) async throws -> Bool {
+    guard assignment.solutionVisibility == .afterDue else { return false }
+    guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
+    guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
+    guard
+        let revealAt = try await postDeadlineRevealDeadline(
+            for: assignment, user: user, on: db, now: now)
+    else { return true }
+    return revealAt <= now
 }
 
 @discardableResult

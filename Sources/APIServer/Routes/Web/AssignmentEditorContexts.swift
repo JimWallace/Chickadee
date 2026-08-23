@@ -269,6 +269,10 @@ struct EditAssignmentContext: Encodable {
     /// The per-assignment secret-reveal toggle: whether students may spend
     /// their one reveal token here.  Renders the "Student Options" checkbox.
     let secretRevealEnabled: Bool
+    /// The per-assignment solution-reveal policy: true when
+    /// `solutionVisibility` is `afterDue`.  Renders the second "Student
+    /// Options" checkbox.
+    let solutionVisibilityAfterDue: Bool
     /// Assignment-wide default per-test execution limit (seconds) from the
     /// manifest (`TestProperties.timeLimitSeconds`).  Renders the editable
     /// "Default time limit" input in the Test Suite header, saved live via

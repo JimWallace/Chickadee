@@ -46,15 +46,27 @@ extension WebRoutes {
         let fileKind = notebookFileKind(from: query.file)
         // Staff-ness is per-course (#417 Slice G — was the global
         // `user.isInstructor`). It gates two things here: who may see the
-        // reference solution at all, and who keeps an editable editor on a
-        // closed assignment.
+        // reference solution before its reveal, and who keeps an editable
+        // editor on a closed assignment.
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
-        // The reference solution is staff-only. The student notebook route is
-        // reachable by any enrolled student (and now, read-only, for closed
-        // assignments), so guard the solution view here rather than relying on
-        // the absence of a UI link — never serve the answer key to a student.
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first()
+        // The reference solution is staff-only until the assignment's reveal
+        // policy and this student's own gate admit them
+        // (`solutionVisibleToStudent`: policy on, published, no re-open
+        // override, their effective deadline passed, and no slip-day claim
+        // still reachable). The student notebook route is reachable by any
+        // enrolled student (and, read-only, for closed assignments), so guard
+        // the solution view here rather than relying on the absence of a UI
+        // link — never serve the answer key early.
         if fileKind == .solution, !isStaff {
-            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
+            guard let assignment,
+                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
+            else {
+                throw Abort(
+                    .forbidden, reason: "The solution to this assignment is not available.")
+            }
         }
         // An upload-only assignment has no notebook workflow: send students to
         // the upload form instead of scaffolding an empty editor (the vanity
@@ -76,9 +88,6 @@ extension WebRoutes {
             return req.redirect(to: "/testsetups/\(setupID)/submit")
         }
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
         let viewMode = try await resolveNotebookViewMode(
             req: req, setup: setup, assignment: assignment,
             fileKind: fileKind, isStaff: isStaff, requested: query.view)
@@ -264,6 +273,8 @@ extension WebRoutes {
                 // bytes a student ran — and has no template to switch to.
                 isTemplateView: false,
                 viewToggleURL: nil,
+                solutionViewURL: nil,
+                isStudentSolutionView: false,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                 currentUser: req.currentUserContext,
                 embedded: args.embedded
@@ -337,13 +348,7 @@ extension WebRoutes {
         let notebookURL =
             "/testsetups/\(setupID)/notebook/source"
             + "?file=\(fileKind.rawValue)&view=\(viewMode.rawValue)"
-        let downloadURL: String? = {
-            guard let assignment else { return nil }
-            return switch fileKind {
-            case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
-            case .solution: "/instructor/\(assignment.publicID)/files/solution"
-            }
-        }()
+        let links = try await notebookFileLinks(req: req, args: args, fileKind: fileKind)
 
         let workingCopyAbsPath =
             req.application.directory.publicDirectory
@@ -391,7 +396,7 @@ extension WebRoutes {
             assignmentTitle: args.assignmentTitle,
             notebookURL: notebookURL,
             jupyterLiteEditorURL: editorURL,
-            downloadURL: downloadURL,
+            downloadURL: links.downloadURL,
             gradingMode: decodeManifestGradingMode(setup),
             browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
             // A template still holds `{{name}}`, which does not run and
@@ -404,6 +409,8 @@ extension WebRoutes {
             fileKind: fileKind.rawValue,
             isTemplateView: viewMode == .template,
             viewToggleURL: viewToggleURL,
+            solutionViewURL: links.solutionViewURL,
+            isStudentSolutionView: fileKind == .solution && !args.isStaff,
             workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
             currentUser: req.currentUserContext,
             embedded: args.embedded
@@ -491,6 +498,38 @@ extension WebRoutes {
         /// editor iframe fill the pane.  `nil` (not `false`) when absent, so
         /// the standalone page's HTML is unchanged.
         let embedded: Bool?
+    }
+
+    /// The Download target for the open file plus the student "View solution"
+    /// link, resolved together because both depend on who is looking:
+    /// students reach the solution only through the reveal gate
+    /// (`solutionVisibleToStudent`), so their download targets the gated
+    /// student route rather than the staff files route (which would 403 the
+    /// same student the page just admitted), and the solution link renders
+    /// only on the assignment view once the gate admits them — staff reach
+    /// the solution through the workbench tabs instead.
+    private func notebookFileLinks(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        fileKind: NotebookFileKind
+    ) async throws -> (downloadURL: String?, solutionViewURL: String?) {
+        let downloadURL: String? = {
+            guard let assignment = args.assignment else { return nil }
+            return switch fileKind {
+            case .assignment: "/api/v1/testsetups/\(args.setupID)/assignment/download"
+            case .solution:
+                args.isStaff
+                    ? "/instructor/\(assignment.publicID)/files/solution"
+                    : "/testsetups/\(args.setupID)/solution/download"
+            }
+        }()
+        var solutionViewURL: String?
+        if !args.isStaff, fileKind == .assignment, let assignment = args.assignment,
+            try await solutionVisibleToStudent(assignment: assignment, user: args.user, on: req.db)
+        {
+            solutionViewURL = "/testsetups/\(args.setupID)/notebook?file=solution"
+        }
+        return (downloadURL, solutionViewURL)
     }
 
     /// Which reading of the notebook this request gets.
@@ -620,17 +659,23 @@ extension WebRoutes {
         }
 
         let fileKind = notebookFileKind(from: query.file)
-        // The reference solution is staff-only.  `notebookPage` has always
-        // guarded this, but the raw content endpoint did not, so any enrolled
-        // student could fetch the answer key as JSON by asking for
-        // `?file=solution` directly — the exact bypass the page's own comment
-        // warns about ("never serve the answer key to a student").
-        if fileKind == .solution, !isStaff {
-            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
-        }
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        // The reference solution stays gated on the raw content endpoint with
+        // exactly the page's rule (`solutionVisibleToStudent` for students,
+        // unconditional for staff).  This endpoint once had no guard at all, so
+        // any enrolled student could fetch the answer key as JSON by asking for
+        // `?file=solution` directly — the exact bypass the page's own comment
+        // warns about ("never serve the answer key early").
+        if fileKind == .solution, !isStaff {
+            guard let assignment,
+                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
+            else {
+                throw Abort(
+                    .forbidden, reason: "The solution to this assignment is not available.")
+            }
+        }
         // Same resolution as the page, so the editor's frame and its content
         // fetch never disagree about which copy is open — and so a student
         // asking for `?view=template` by hand still gets their rendering.
@@ -660,5 +705,38 @@ extension WebRoutes {
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
         return Response(status: .ok, headers: headers, body: .init(data: payload))
+    }
+
+    // MARK: - GET /testsetups/:id/solution/download
+
+    /// Streams the reference solution file to a viewer the reveal gate admits:
+    /// course staff always, an enrolled student once `solutionVisibleToStudent`
+    /// says their reveal moment has passed.  This is the download students are
+    /// linked to — the instructor files route stays staff-gated — and the only
+    /// solution delivery an upload-only assignment has, since its solution is a
+    /// source file with no notebook view.
+    @Sendable
+    func solutionDownload(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
+        let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first()
+        if !isStaff {
+            guard let assignment,
+                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
+            else {
+                throw Abort(
+                    .forbidden, reason: "The solution to this assignment is not available.")
+            }
+        }
+        return try await solutionFileDownloadResponse(req: req, assignment: assignment, setup: setup)
     }
 }

@@ -89,6 +89,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
+        r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -681,6 +682,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             assignmentLanguageOptions: AssignmentLanguageOption.options(
                 recorded: currentManifestLanguage(setup.manifest)),
             secretRevealEnabled: assignment.secretRevealEnabled == true,
+            solutionVisibilityAfterDue: assignment.solutionVisibility == .afterDue,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error,

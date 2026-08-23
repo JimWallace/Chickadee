@@ -157,6 +157,9 @@ enum AuditAction: String, Sendable, CaseIterable {
     case secretRevealRegranted = "secret_reveal.regranted"
     case secretRevealToggled = "secret_reveal.toggle_changed"
 
+    // Solution reveal policy
+    case solutionVisibilityChanged = "solution_visibility.changed"
+
     // Slip days (#1228)
     case slipDaySpent = "slip_day.spent"
     case slipDayRefunded = "slip_day.refunded"
@@ -216,6 +219,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
+            .solutionVisibilityChanged,
             .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
@@ -277,6 +281,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .secretRevealSpent: return "Reveal token spent"
         case .secretRevealRegranted: return "Reveal token re-granted"
         case .secretRevealToggled: return "Reveal token setting changed"
+        case .solutionVisibilityChanged: return "Solution visibility changed"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
         case .slipDaySettingsChanged: return "Slip day settings changed"

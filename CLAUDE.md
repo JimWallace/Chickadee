@@ -418,6 +418,23 @@ fraction of the CURRENT roster — audit A7's shape. `achievement_results` store
 can say what coverage produced the bonus in every student's grade of record. See
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
+**Post-deadline reveals wait for the slip-day claim window, not just the
+deadline.** Slip days are claimed *after* the due date (first-claim window
+`dueAt + extensionHours`), so "this student's effective deadline has passed"
+does not mean they are done buying time — gating a reveal on it alone lets a
+student read the revealed material at due+1min, claim a slip day, and act on
+it. `postDeadlineRevealDeadline` (AssignmentDeadlineService) is the one
+resolver for that moment — the later of the effective deadline and
+`slipDayClaimWindowCeiling`, the end of any claim window still reachable —
+and both reveal surfaces flow through it: release-tier output
+(`releaseVisibilityDeadline`) and the per-assignment **solution reveal**
+(`SolutionVisibility.afterDue`, off by default), which lets students open the
+reference solution — personalized with their own inputs — once their reveal
+moment passes. An assignment with no due date reveals immediately (posted
+lecture material); enabling the policy is refused with no solution on file;
+a manual deadline override suppresses it. See
+[docs/solution-visibility.md](docs/solution-visibility.md).
+
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
 (plus the non-human `mcp` service-account role) — the legacy global
@@ -1617,6 +1634,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
 - `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
+- `docs/solution-visibility.md` — post-deadline solution reveal: the per-assignment `SolutionVisibility` policy, the per-student reveal gate and its slip-day claim-window ceiling (shared with release-output gating), the enforcement chokepoints, and the accepted residual leak
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary

@@ -247,6 +247,15 @@
         <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
         <button class="btn action-btn" type="submit">Save</button>
     </form>
+    <form method="post" action="/instructor/#(assignmentID)/solution-visibility" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="afterDue" #if(solutionVisibilityAfterDue):checked#endif>
+            Show the reference solution to each student once their deadline has passed
+        </label>
+        <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline — extensions and any slip days they could still claim included. An assignment with no due date shows the solution immediately, and re-opening one after its deadline hides the solution again while the re-open lasts. Requires a solution on file.</p>
+        <button class="btn action-btn" type="submit">Save</button>
+    </form>
 </section>
 
 <!-- ── Global Inputs (Slice 1 of #461) ─────────────────────────────────

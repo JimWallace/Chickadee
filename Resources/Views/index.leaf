@@ -163,6 +163,12 @@
                         <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
                     </a>
                     #endif
+                    #if(item.setup.solutionAvailable):
+                    <a class="btn action-btn action-btn-icon" href="#(item.setup.solutionURL)"
+                       title="View the solution" aria-label="View the solution">
+                        <svg class="icon" aria-hidden="true"><use href="#i-book"/></svg>
+                    </a>
+                    #endif
                 </div>
             </td>
         </tr>

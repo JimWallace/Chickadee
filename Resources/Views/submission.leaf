@@ -100,6 +100,12 @@ Submission #(submissionID)
 </div>
 #endif
 
+#if(solutionURL):
+<div class="notice-box">
+    <strong>Solution available</strong> &mdash; the reference solution for this assignment is now visible. <a href="#(solutionURL)">View the solution</a>.
+</div>
+#endif
+
 #if(buildFailed):
 <div class="error-box">
     <h2>Build failed</h2>
