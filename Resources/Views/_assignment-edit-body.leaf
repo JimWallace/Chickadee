@@ -245,7 +245,16 @@
             Allow each student to spend their one reveal token to see this assignment&rsquo;s secret test results
         </label>
         <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
-        <button class="btn action-btn" type="submit">Save</button>
+        <button class="btn action-btn" type="submit">Save reveal setting</button>
+    </form>
+    <form method="post" action="/instructor/#(assignmentID)/solution-visibility" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="afterDue" #if(solutionVisibilityAfterDue):checked#endif>
+            Show the reference solution to each student once their deadline has passed
+        </label>
+        <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
+        <button class="btn action-btn" type="submit">Save solution setting</button>
     </form>
 </section>
 

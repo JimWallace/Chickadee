@@ -323,6 +323,7 @@ import VaporTesting
         "POST /instructor/:assignmentID/delete": .instructor,
         "POST /instructor/:assignmentID/clone": .instructor,
         "POST /instructor/:assignmentID/secret-reveal": .instructor,
+        "POST /instructor/:assignmentID/solution-visibility": .instructor,
         "POST /instructor/setup/:setupID/delete": .instructor,
 
         // MARK: BrightSpace binding — `.instructor`

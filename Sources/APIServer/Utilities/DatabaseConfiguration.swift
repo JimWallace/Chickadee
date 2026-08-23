@@ -475,4 +475,12 @@ func registerMigrations(on app: Application) {
     // Generated student avatars: the spec column, the per-course handle, and
     // the partial unique index that makes lazy materialization safe.
     app.migrations.add(AddAvatarIdentity())
+
+    // Per-assignment solution-reveal policy (`SolutionVisibility`). Nullable
+    // column on `assignments`; nil = hidden, the pre-existing behaviour.
+    app.migrations.add(AddAssignmentSolutionVisibility())
+
+    // Course-level opt-out for the release-output slip-day reveal hold.
+    // Nullable column on `courses`; nil = hold on, the safe default.
+    app.migrations.add(AddCourseSlipDayRevealHold())
 }

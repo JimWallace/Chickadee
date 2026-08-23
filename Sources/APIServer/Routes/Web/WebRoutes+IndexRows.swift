@@ -419,6 +419,9 @@ extension WebRoutes {
         let slipDayLabel = slipDayActionLabel(
             assignment: assignment, extensionDueAt: extensionDueAt,
             setupID: setupID, context: context)
+        let solutionAvailable = solutionRevealAvailable(
+            assignment: assignment, extensionDueAt: extensionDueAt,
+            effectiveDueAt: effectiveDueAt, setupID: setupID, context: context)
         let badgeSplit = AchievementBadge.dashboardSplit(context.gradeData.latestBadgesBySetupID[setupID] ?? [])
         let gates = dashboardRowActionGates(
             props: props, canEdit: canEdit, isOpenForThisUser: isOpenForThisUser,
@@ -466,10 +469,14 @@ extension WebRoutes {
             showEditAction: gates.edit,
             showUploadAction: gates.upload,
             showResetNotebookAction: gates.resetNotebook,
-            hasAnyAction: gates.any,
+            hasAnyAction: gates.any || solutionAvailable,
             slipDayAvailable: gates.slipDay,
             slipDayURL: "/testsetups/\(setupID)/slip-day",
-            slipDayActionLabel: slipDayLabel ?? ""
+            slipDayActionLabel: slipDayLabel ?? "",
+            solutionAvailable: solutionAvailable,
+            solutionURL: props?.effectiveSubmissionMode == .uploadOnly
+                ? "/testsetups/\(setupID)/solution/download"
+                : "/testsetups/\(setupID)/notebook?file=solution"
         )
     }
 
@@ -499,5 +506,36 @@ extension WebRoutes {
         return offer.isStacked
             ? "Use another slip day — extends your deadline to \(deadlineText)"
             : "Use a slip day — extends your deadline to \(deadlineText)"
+    }
+
+    /// Whether the "View solution" action is offered on this row: the same
+    /// rule the serving routes enforce (`solutionVisibleToStudent` — policy
+    /// on, published, no re-open override, this student's effective deadline
+    /// passed, no slip-day claim still reachable), computed from the row
+    /// inputs the dashboard has already loaded so no extra per-row queries
+    /// run.  Students only; staff reach the solution through the workbench.
+    private static func solutionRevealAvailable(
+        assignment: APIAssignment?,
+        extensionDueAt: Date?,
+        effectiveDueAt: Date?,
+        setupID: String,
+        context: IndexRowContext,
+        now: Date = Date()
+    ) -> Bool {
+        guard let assignment, !context.isActiveCourseStaff else { return false }
+        guard assignment.solutionVisibility == .afterDue else { return false }
+        guard !(assignment.deadlineOverrideActive ?? false) else { return false }
+        guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
+        let spentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0
+        let ceiling = slipDayClaimWindowCeiling(
+            policy: context.slipDay.policy,
+            dueAt: assignment.dueAt,
+            balance: context.slipDay.balance,
+            spentOnAssignment: spentCount,
+            hasForeignExtension: extensionDueAt != nil && spentCount == 0,
+            now: now)
+        guard let revealAt = laterDeadline(baseline: effectiveDueAt, extensionDueAt: ceiling)
+        else { return true }
+        return revealAt <= now
     }
 }

@@ -59,19 +59,14 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let setupID = assignment.testSetupID
 
-        // Whether there is a solution to offer a tab for.  Resolved exactly the
-        // way the edit page's Files table resolves it — same helper, same
-        // fallback — so the workbench can never advertise a solution tab the
-        // edit page says does not exist, or vice versa.
-        let existingSolutionName = try await existingSolutionFilename(req: req, assignment: assignment)
-        let draftSolutionPath = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-        let hasDraftSolution = FileManager.default.fileExists(atPath: draftSolutionPath)
-        let hasSolution =
-            existingSolutionName != nil
-            || assignment.validationStatus == "passed"
-            || assignment.validationSubmissionID != nil
-            || hasDraftSolution
+        // Whether there is a solution to offer a tab for.  Resolved by the
+        // shared four-source helper the edit page's Files table and the
+        // solution-visibility enable guard also use, so the workbench can
+        // never advertise a solution tab the edit page says does not exist,
+        // or vice versa.
+        let hasSolution = try await assignmentHasSolution(
+            assignment: assignment, db: req.db,
+            testSetupsDirectory: req.application.testSetupsDirectory)
 
         // Whether each notebook still carries `{{name}}` — i.e. whether its
         // template and its rendering are actually different documents. When

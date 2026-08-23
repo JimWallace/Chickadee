@@ -454,6 +454,22 @@ extension WebRoutes {
         let classGoals = try await loadClassGoalViews(
             testSetupID: submission.testSetupID, props: setupProps, on: req.db)
 
+        // Post-reveal solution link for the owner-student reviewing their
+        // results (`solutionVisibleToStudent` — the same gate the serving
+        // routes enforce).  Staff reach the solution through the workbench,
+        // and a staff view of a student's submission should not read as the
+        // student's page anyway.
+        var solutionURL: String?
+        if !isStaff, submission.userID == user.id, let submissionAssignment,
+            try await solutionVisibleToStudent(
+                assignment: submissionAssignment, user: user, on: req.db)
+        {
+            solutionURL =
+                setupProps?.effectiveSubmissionMode == .uploadOnly
+                ? "/testsetups/\(submission.testSetupID)/solution/download"
+                : "/testsetups/\(submission.testSetupID)/notebook?file=solution"
+        }
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
@@ -467,7 +483,8 @@ extension WebRoutes {
                 secretReveal: SecretRevealBanner(
                     available: reveal.enabled && !reveal.spent && !isStaff
                         && hasSecretTierTests(setupProps),
-                    active: reveal.revealed)
+                    active: reveal.revealed),
+                solutionURL: solutionURL
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

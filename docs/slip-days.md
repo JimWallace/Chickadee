@@ -48,12 +48,17 @@ the budget, the ledger, and the affordances:
   `slip_days_per_student + slip_days_adjustment − count(unrefunded spends in
   the course)`. The ledger is course-scoped and courses are per-term, so the
   budget resets naturally at term rollover.
-- **Course policy** — three nullable columns on `courses`
-  (`slip_days_enabled`, `slip_days_per_student`,
-  `slip_day_extension_hours`), read through `APICourse.slipDayPolicy`
+- **Course policy** — four nullable columns on `courses`
+  (`slip_days_enabled`, `slip_days_per_student`, `slip_day_extension_hours`,
+  `slip_day_release_reveal_hold`), read through `APICourse.slipDayPolicy`
   (`SlipDayPolicy.resolve`, Core). Policy travels in the `.chickadee` course
   bundle; the ledger and adjustments deliberately do not (per-term student
-  data).
+  data). The fourth column is the **release reveal hold** (nil = on): release
+  output waits out the claim window rather than appearing at the effective
+  deadline, where a student could read it and then claim a slip day — see
+  [solution-visibility.md](solution-visibility.md). Instructors may opt out
+  on the settings form, restoring the pre-hold timing knowingly; the solution
+  reveal never honours the opt-out.
 - **Per-student adjustment** — `course_enrollments.slip_days_adjustment`:
   staff grant extras or claw back without touching course-wide policy.
 

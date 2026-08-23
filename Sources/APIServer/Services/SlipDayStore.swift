@@ -404,3 +404,89 @@ func slipDayOffer(
         isStacked: spentOnAssignment >= 1
     )
 }
+
+/// The end of the claim window this student currently holds — the moment
+/// after which no slip-day claim can extend their deadline any further — or
+/// nil when no claim is reachable at `now` (policy off, no deadline, no
+/// balance, a staff-granted extension, or the window already lapsed).
+///
+/// This is the missing half of every post-deadline reveal gate. The claim
+/// window opens when the deadline passes, so "the student's effective
+/// deadline is behind us" does not mean they are done: they could read the
+/// revealed material and then buy more time. Because the window only ever
+/// closes (a lapsed offer cannot come back except by a staff refund or
+/// adjustment, which are recomputed live), gating on
+/// `max(effectiveDueAt, ceiling)` is monotone in practice.
+///
+/// Unlike `slipDayOffer` this does not require the deadline to have passed:
+/// callers compare the returned date against `now` themselves, and returning
+/// the same window end on both sides of the deadline keeps the gate stable
+/// across that boundary.
+func slipDayClaimWindowCeiling(
+    policy: SlipDayPolicy,
+    dueAt: Date?,
+    balance: Int,
+    spentOnAssignment: Int,
+    hasForeignExtension: Bool,
+    now: Date = Date()
+) -> Date? {
+    guard policy.enabled else { return nil }
+    guard let dueAt else { return nil }
+    guard !hasForeignExtension else { return nil }
+    guard balance >= 1 else { return nil }
+    let heldWindowEnd = dueAt.addingTimeInterval(
+        TimeInterval(max(spentOnAssignment, 1) * policy.extensionHours) * 3600)
+    guard now < heldWindowEnd else { return nil }
+    return heldWindowEnd
+}
+
+/// Database-resolving form of `slipDayClaimWindowCeiling` for one (student,
+/// assignment) pair, mirroring `resolveSlipDayOffer`'s inputs: the course
+/// policy (nil when the course is missing, archived, or has slip days off or
+/// the assignment is a staff-only preview), the student's course-wide
+/// balance, and their unrefunded spends on this assignment.
+///
+/// `extensionDueAt` is the student's raw extension date, passed in because
+/// every caller has already loaded it for the effective-deadline half of the
+/// gate. The caller is always the student viewer — staff bypass reveal gates
+/// before this is consulted.
+func slipDayClaimWindowCeiling(
+    for assignment: APIAssignment,
+    user: APIUser,
+    extensionDueAt: Date?,
+    on db: Database,
+    now: Date = Date()
+) async throws -> Date? {
+    guard let userID = user.id, let assignmentID = assignment.id else { return nil }
+    guard assignment.visibility != .preview else { return nil }
+    guard
+        let course = try await APICourse.find(assignment.courseID, on: db),
+        !course.isArchived
+    else { return nil }
+    let policy = course.slipDayPolicy
+    guard policy.enabled else { return nil }
+
+    guard
+        let enrollment = try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == assignment.courseID)
+            .first()
+    else { return nil }
+    let adjustment = enrollment.slipDaysAdjustment ?? 0
+
+    let spentInCourse = try await SlipDayStore.unrefundedCount(
+        userID: userID, courseID: assignment.courseID, on: db)
+    let spentOnAssignment = try await APISlipDaySpend.query(on: db)
+        .filter(\.$userID == userID)
+        .filter(\.$assignmentID == assignmentID)
+        .filter(\.$refundedAt == nil)
+        .count()
+
+    return slipDayClaimWindowCeiling(
+        policy: policy,
+        dueAt: assignment.dueAt,
+        balance: policy.daysPerStudent + adjustment - spentInCourse,
+        spentOnAssignment: spentOnAssignment,
+        hasForeignExtension: extensionDueAt != nil && spentOnAssignment == 0,
+        now: now)
+}

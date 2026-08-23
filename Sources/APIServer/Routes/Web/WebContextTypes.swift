@@ -92,6 +92,13 @@ struct TestSetupRow: Encodable {
     /// the spend would produce ("Use a slip day — extends your deadline to
     /// …"); empty when the action is hidden.
     let slipDayActionLabel: String
+    /// True when the "View solution" action is offered on this row: the
+    /// assignment's reveal policy is on and this student's own reveal moment
+    /// has passed — the same rule the serving routes enforce.
+    let solutionAvailable: Bool
+    /// Where the solution action leads: the notebook page's solution view, or
+    /// the plain download for an upload-only assignment.
+    let solutionURL: String
 }
 
 struct LatestSubmissionItem: Encodable {
@@ -280,6 +287,14 @@ struct NotebookContext: Encodable {
     /// nothing to switch between (no placeholders, or the viewer is not
     /// staff).  Rides `?view=` on the notebook page.
     let viewToggleURL: String?
+    /// Student link to the revealed reference solution, or nil when the viewer
+    /// may not see it (policy off, their reveal moment not reached, staff —
+    /// who use the workbench tabs — or already on the solution view).
+    let solutionViewURL: String?
+    /// True when a student is viewing the revealed reference solution — drives
+    /// the "Reference solution" toolbar notice.  Always false for staff, whose
+    /// solution view is an authoring surface with its own save controls.
+    let isStudentSolutionView: Bool
     /// Unix-epoch mtime (seconds) of the user's working-copy notebook file
     /// on disk at render time.  Embedded in the iframe as
     /// `data-working-copy-mtime`; `notebook.js` compares it against a
@@ -590,6 +605,10 @@ struct SubmissionContext: Encodable {
     /// True when the reveal is active (toggle on + token spent): secret
     /// rows are itemized and the "revealed" info banner shows.
     let secretRevealActive: Bool
+    /// Link to the revealed reference solution for the owner-student, nil
+    /// while their reveal moment has not arrived (or for staff).  Renders
+    /// the "Solution available" notice box.
+    let solutionURL: String?
 }
 
 /// One class-goal achievement's display state for the submission page.

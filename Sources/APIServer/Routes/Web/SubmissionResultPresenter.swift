@@ -494,7 +494,8 @@ extension WebRoutes {
             classGoals: decorations.classGoals,
             hasClassGoals: !decorations.classGoals.isEmpty,
             secretRevealAvailable: secretReveal.available,
-            secretRevealActive: secretReveal.active
+            secretRevealActive: secretReveal.active,
+            solutionURL: decorations.solutionURL
         )
     }
 }
@@ -756,4 +757,8 @@ struct SubmissionDecorations {
     let classGoals: [ClassGoalView]
     /// Secret-reveal offer/active state for the reveal-token UI.
     let secretReveal: SecretRevealBanner
+    /// Link to the revealed reference solution for the owner-student, nil
+    /// while their reveal moment has not arrived (or for staff, who reach the
+    /// solution through the workbench).
+    let solutionURL: String?
 }
