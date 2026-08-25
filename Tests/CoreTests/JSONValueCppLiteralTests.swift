@@ -114,4 +114,17 @@ import Testing
         #expect(JSONValue.array([.int(1), .double(2)]).cppRenderabilityIssue == nil)
         #expect(JSONValue.object(["k": .string("v")]).cppRenderabilityIssue == nil)
     }
+
+    /// Kills the `SwapTernary` on the object arm's empty/unrenderable split
+    /// (2026-08-25 sweep, run 32886018037). Swapped, an empty object renders
+    /// the loud backstop while a mixed-value object renders a plausible empty
+    /// `std::map` — the silent wrong value the backstop exists to prevent.
+    /// The tests above pin the mixed object's *renderability issue* but never
+    /// the literal text either branch actually emits, which is why the swap
+    /// survived.
+    @Test func emptyObjectsRenderAsEmptyMapsAndUnrenderableOnesStayLoud() {
+        #expect(JSONValue.object([:]).cppLiteral == "std::map<std::string, double>{}")
+        let mixedObject = JSONValue.object(["a": .int(1), "b": .string("x")])
+        #expect(mixedObject.cppLiteral == "CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE")
+    }
 }
