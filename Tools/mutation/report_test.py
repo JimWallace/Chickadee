@@ -289,14 +289,14 @@ if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"] 
 }
 '''
 
-    def _with_ledger(self, entries):
+    def _with_ledger(self, entries, raw=None, mutated=None):
         """Point report.py at a temporary ledger and run it."""
         real = os.path.join(HERE, "equivalent-mutants.json")
         backup = open(real).read() if os.path.exists(real) else None
         with open(real, "w") as fh:
             json.dump({"entries": entries}, fh)
         try:
-            return run(self.RAW, self.MUTATED)
+            return run(raw or self.RAW, mutated or self.MUTATED)
         finally:
             if backup is None:
                 os.unlink(real)
@@ -338,6 +338,76 @@ if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"] 
         }])
         self.assertNotEqual(code, 0)
         self.assertIsNone(summary)
+
+    # One site, two candidates: a ledgered equivalent beside a killable
+    # sibling. Muter's verdict rows carry no column, so the only per-candidate
+    # signal is their COUNT -- one row per candidate, all naming the same
+    # (file, line, operator). Run 32886018037's NotebookExtraction.swift:458
+    # is the real instance: the ledgered first-connector mutant survived, the
+    # second connector was killed by the suite, and requiring every candidate
+    # to be ledgered kept the site in the open queue forever.
+
+    MIXED_RAW = """\
+Probe.swift:10  ChangeLogicalConnector  mutant survived
+Probe.swift:10  ChangeLogicalConnector  mutant killed
+
+Of the 2 mutants introduced into your code, your test suite killed 1.
+Mutation Score of Test Suite: 50%
+Muter took 00:00:01.000
+"""
+
+    MIXED_MUTATED = (
+        'import class Foundation.ProcessInfo\n'
+        'if ProcessInfo.processInfo.environment["Probe_ChangeLogicalConnector_10_5_120"]'
+        ' != nil {\n'
+        '    return a && b || c\n'
+        '} else if ProcessInfo.processInfo.environment'
+        '["Probe_ChangeLogicalConnector_10_9_124"] != nil {\n'
+        '    return a || b && c\n'
+        '} else {\n'
+        '    return a || b || c\n'
+        '}\n'
+    )
+
+    LEDGERED_FIRST_CONNECTOR = {
+        "file": "Probe.swift",
+        "operator": "ChangeLogicalConnector",
+        "mutated": "return a && b || c",
+        "reason": "Fixture argument in the real entries' shape: the first disjunct "
+                  "is subsumed for every reachable input, so conjoining the first "
+                  "pair cannot change the expression's value.",
+    }
+
+    def test_a_mixed_site_is_answered_when_killed_rows_account_for_the_rest(self):
+        """Survived rows == ledgered candidates, killed rows == the rest: every
+        candidate ran and every survivor slot is a ledgered one."""
+        _code, report, summary = self._with_ledger(
+            [self.LEDGERED_FIRST_CONNECTOR],
+            raw=self.MIXED_RAW, mutated=self.MIXED_MUTATED)
+        self.assertEqual(summary["survived"], 0)
+        self.assertEqual(len(summary["answeredWithReason"]), 1)
+        self.assertIn("Already answered", report)
+
+    def test_a_mixed_site_stays_open_when_more_than_the_ledgered_survive(self):
+        """Two survivors against one ledger entry: at least one open question."""
+        both_survived = self.MIXED_RAW.replace("mutant killed", "mutant survived")
+        _code, _report, summary = self._with_ledger(
+            [self.LEDGERED_FIRST_CONNECTOR],
+            raw=both_survived, mutated=self.MIXED_MUTATED)
+        self.assertEqual(summary["survived"], 2)
+        self.assertEqual(summary["answeredWithReason"], [])
+
+    def test_a_mixed_site_stays_open_when_a_candidate_has_no_verdict(self):
+        """A candidate with no row at all might be the one that survived
+        somewhere the report cannot see; without every candidate accounted
+        for, the counts prove nothing."""
+        no_killed_row = "\n".join(
+            line for line in self.MIXED_RAW.splitlines() if "killed" not in line) + "\n"
+        _code, _report, summary = self._with_ledger(
+            [self.LEDGERED_FIRST_CONNECTOR],
+            raw=no_killed_row, mutated=self.MIXED_MUTATED)
+        self.assertEqual(summary["survived"], 1)
+        self.assertEqual(summary["answeredWithReason"], [])
 
 
 if __name__ == "__main__":

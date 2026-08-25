@@ -332,12 +332,52 @@ def main() -> int:
     ledger = load_equivalent_ledger()
     equivalent = []
     if ledger:
+        # Verdict counts per site. Muter's rows carry no column, so a site
+        # holding several candidates gets one row PER candidate, every one
+        # naming the same (file, line, operator) -- the counts are the only
+        # per-candidate signal the raw report has.
+        survived_rows: dict[tuple[str, int, str], int] = {}
+        for base, line, operator, _ in survived:
+            row_key = (repo_path(base, cache), line, operator)
+            survived_rows[row_key] = survived_rows.get(row_key, 0) + 1
+        killed_rows: dict[tuple[str, int, str], int] = {}
+        for base, line, operator, _ in killed:
+            row_key = (repo_path(base, cache), line, operator)
+            killed_rows[row_key] = killed_rows.get(row_key, 0) + 1
+
         for key in list(mutation_of):
             path, _line, operator = key
             muts = mutation_of[key]
             if not muts:
                 continue
-            if all((path, operator, " ".join(m["mutated"].split())) in ledger for m in muts):
+            ledgered = sum(
+                1 for m in muts if (path, operator, " ".join(m["mutated"].split())) in ledger
+            )
+            if ledgered == len(muts):
+                equivalent.append(key)
+                continue
+            # A site can hold a ledgered equivalent BESIDE killable siblings,
+            # and requiring every candidate to be ledgered left such a site
+            # open forever: NotebookExtraction.swift:458 in run 32886018037
+            # carries the ledgered first-connector mutant plus a second
+            # connector the suite kills, so each week Muter reported the
+            # equivalent as survived and the site re-entered the queue --
+            # which can then never reach zero, the one number this whole
+            # filter exists to make honest.
+            #
+            # The verdict counts settle it without knowing which row is
+            # which: a correctly-ledgered equivalent always survives, so if
+            # the survived rows number exactly the ledgered candidates and
+            # the killed rows account for all the rest, every candidate ran
+            # and every survivor slot is a ledgered one. This inherits the
+            # ledger's existing trust model -- a WRONG entry could mask a
+            # real survivor when the counts happen to coincide, exactly as
+            # it already could when it was the only candidate at its site.
+            if (
+                0 < ledgered
+                and survived_rows.get(key, 0) == ledgered
+                and killed_rows.get(key, 0) == len(muts) - ledgered
+            ):
                 equivalent.append(key)
         if equivalent:
             eq_set = set(equivalent)

@@ -193,4 +193,76 @@ import Testing
             !achievement(scope: .individual, reward: .badge, conditions: [])
                 .isSweepEvaluableClassGoal)
     }
+
+    // MARK: the union-goal family (2026-08-25 sweep, run 32886018037)
+    //
+    // Four survivors, one cause: these predicates' only assertions lived in
+    // `Tests/APITests/ClassUnionGoalTests`, which the sweep skips — the
+    // "detected from the wrong layer" shape docs/mutation-triage.md names.
+    // They are Core model invariants, so they get Core-layer assertions here.
+
+    /// Kills the `ChangeLogicalConnector` on `isUnionClassGoal`
+    /// (`isClassGoal && conditions.contains { $0.signal == .itemsCovered }`).
+    /// Under `||` every grade-counted class goal reads as union-counted, and
+    /// the sweep would grade it on item coverage it never accumulates.
+    @Test func unionClassGoalNeedsAClassGoalAndAnItemsCoveredCondition() {
+        let union = achievement(
+            scope: .classWide, reward: .points, conditions: [condition(.itemsCovered, .atLeast, 12)])
+        #expect(union.isUnionClassGoal)
+
+        // Each of these satisfies exactly one operand.
+        let gradeCounted = achievement(
+            scope: .classWide, reward: .points, conditions: [condition(.grade, .atLeast, 80)])
+        #expect(!gradeCounted.isUnionClassGoal)
+        let individualItems = achievement(
+            scope: .individual, reward: .badge, conditions: [condition(.itemsCovered, .atLeast, 12)])
+        #expect(!individualItems.isUnionClassGoal)
+    }
+
+    /// Kills the `RelationalOperatorReplacement` inside
+    /// `coveredItemsRequirement` (`$0.signal == .itemsCovered` → `!=`). The
+    /// sweep admits exactly one condition, so under the mutant the lookup
+    /// finds nothing on precisely the valid shape and every union goal reads
+    /// as having no requirement at all.
+    @Test func coveredItemsRequirementReadsTheItemsCoveredCondition() {
+        let target = AchievementTarget(kind: .section, ref: "bughunt")
+        let union = achievement(
+            scope: .classWide, reward: .points,
+            conditions: [
+                AchievementCondition(
+                    signal: .itemsCovered, comparator: .atLeast, value: 12, target: target)
+            ])
+        let requirement = union.coveredItemsRequirement
+        #expect(requirement?.count == 12)
+        #expect(requirement?.scope == target)
+    }
+
+    /// Kills the `RelationalOperatorReplacement` in `coveredItemNames`
+    /// (`$0.sectionID == ref` → `!=`), which counts every OTHER section's
+    /// items — the well-formedness gate beside a bug hunt instead of the
+    /// hunt's variants, so coverage would fill from tests the goal is
+    /// deliberately scoped away from.
+    @Test func sectionScopedItemNamesComeFromThatSectionOnly() {
+        let props = TestProperties(testSuites: [
+            TestSuiteEntry(tier: .pub, script: "publictest_variant_a.py", sectionID: "bughunt"),
+            TestSuiteEntry(tier: .pub, script: "publictest_variant_b.py", sectionID: "bughunt"),
+            TestSuiteEntry(tier: .pub, script: "publictest_wellformed.py", sectionID: "gate"),
+        ])
+        let scoped = props.coveredItemNames(
+            inScopeOf: AchievementTarget(kind: .section, ref: "bughunt"))
+        #expect(scoped == ["publictest_variant_a", "publictest_variant_b"])
+        #expect(props.coveredItemNames(inScopeOf: nil).count == 3)
+    }
+
+    /// Kills the `SwapTernary` on `AchievementSignal.allowedScopes`
+    /// (`readsTheWholeClass ? [.classWide] : allCases` swapped). Swapped, a
+    /// per-student scope is offered for `itemsCovered` — the badge that saves
+    /// cleanly and then never fires, the exact shape the property exists to
+    /// refuse — while every other signal is locked to class goals only.
+    @Test func itemsCoveredIsScopedToClassGoalsAndNothingElseIs() {
+        #expect(AchievementSignal.itemsCovered.allowedScopes == [.classWide])
+        for signal in AchievementSignal.allCases where signal != .itemsCovered {
+            #expect(signal.allowedScopes == AchievementScope.allCases)
+        }
+    }
 }
