@@ -1089,9 +1089,11 @@ import Testing
             if rendezvousClosed {
                 return
             }
+            // `Task {}` inherits this actor's isolation, so after the sleep
+            // the close runs as a synchronous same-actor call.
             let watchdog = Task { [holdTimeout] in
                 try? await Task.sleep(for: holdTimeout)
-                await self.closeRendezvous()
+                self.closeRendezvous()
             }
             await withCheckedContinuation { held.append($0) }
             watchdog.cancel()
