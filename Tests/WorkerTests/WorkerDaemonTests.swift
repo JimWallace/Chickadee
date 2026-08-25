@@ -1038,18 +1038,30 @@ import Testing
 
     /// Records the peak number of simultaneous `run(...)` invocations so a
     /// concurrency test can prove the daemon's worker-loop fanout actually
-    /// processes jobs in parallel.  Holds each invocation open for `delay`
-    /// so the time window for overlap is reliable.
+    /// processes jobs in parallel.
+    ///
+    /// Overlap is a RENDEZVOUS, not a race: each invocation is held open
+    /// until a second one is simultaneously active (or `holdTimeout`
+    /// expires).  An earlier version held each invocation open for a fixed
+    /// 100 ms and hoped two would coincide, but the per-job pipeline stages
+    /// ahead of the runner (submission download, workspace prep) jitter by
+    /// more than that on a loaded runner, so the executions can serialize
+    /// with no regression present — which failed the weekly mutation
+    /// sweep's baseline (2026-08-25, shard 1) and cost the shard.  Holding
+    /// until the second arrival makes overlap an event the daemon must
+    /// produce rather than a scheduling coincidence.
     private actor ConcurrencyRecordingRunner: ScriptRunner {
         private var activeCount = 0
         private var maxObserved = 0
         private var totalCompletions = 0
+        private var held: [CheckedContinuation<Void, Never>] = []
+        private var rendezvousClosed = false
         private let output: ScriptOutput
-        private let delay: Duration
+        private let holdTimeout: Duration
 
-        init(output: ScriptOutput, delay: Duration) {
+        init(output: ScriptOutput, holdTimeout: Duration) {
             self.output = output
-            self.delay = delay
+            self.holdTimeout = holdTimeout
         }
 
         func run(
@@ -1057,10 +1069,43 @@ import Testing
         ) async -> ScriptOutput {
             activeCount += 1
             maxObserved = Swift.max(maxObserved, activeCount)
-            try? await Task.sleep(for: delay)
+            await holdForOverlap()
             activeCount -= 1
             totalCompletions += 1
             return output
+        }
+
+        /// Suspends until a second invocation is active.  The moment two
+        /// are, the rendezvous closes and every held (and future)
+        /// invocation returns immediately.  A genuinely serialized daemon
+        /// never produces the second arrival; the watchdog then closes the
+        /// rendezvous at `holdTimeout` so the jobs drain and the test fails
+        /// on the `maxConcurrent` assertion instead of hanging.
+        private func holdForOverlap() async {
+            if activeCount >= 2 {
+                closeRendezvous()
+                return
+            }
+            if rendezvousClosed {
+                return
+            }
+            // `Task {}` inherits this actor's isolation, so after the sleep
+            // the close runs as a synchronous same-actor call.
+            let watchdog = Task { [holdTimeout] in
+                try? await Task.sleep(for: holdTimeout)
+                self.closeRendezvous()
+            }
+            await withCheckedContinuation { held.append($0) }
+            watchdog.cancel()
+        }
+
+        private func closeRendezvous() {
+            rendezvousClosed = true
+            let released = held
+            held = []
+            for continuation in released {
+                continuation.resume()
+            }
         }
 
         func snapshot() -> (maxConcurrent: Int, total: Int) {
@@ -1075,10 +1120,12 @@ import Testing
 
     /// With `maxConcurrentJobs > 1`, the daemon should actually run more
     /// than one job at a time — not serialize them through a single
-    /// worker loop.  This test feeds 5 jobs and a 100 ms per-job delay,
-    /// then asserts the recording runner observed at least 2 concurrent
-    /// invocations (more is fine; less means the worker-loop fanout
-    /// regressed).
+    /// worker loop.  This test feeds 5 jobs; the recording runner holds
+    /// each invocation open until a second one is simultaneously active,
+    /// then asserts at least 2 concurrent invocations were observed (more
+    /// is fine; less means the worker-loop fanout regressed).  The hold is
+    /// safe because each slot runs its own worker loop, so one held slot
+    /// cannot stop another slot's job from reaching the runner.
     @Test func workerDaemonRunsJobsConcurrentlyWhenMaxConcurrentJobsAllows() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-concurrent-\(UUID().uuidString)", isDirectory: true)
@@ -1097,9 +1144,13 @@ import Testing
         }
         let poller = MockPoller(jobs: jobs.map(Optional.some) + [nil])
         let reporter = MockReporter()
+        // Generous for the same reason as `waitUntil`'s default: the hold
+        // releases the instant the second job arrives, so a large ceiling
+        // adds nothing to passing runs — it only decides how long a real
+        // fanout regression takes to drain and fail.
         let runner = ConcurrencyRecordingRunner(
             output: ScriptOutput(exitCode: 0, stdout: "passed", stderr: "", executionTimeMs: 1, timedOut: false),
-            delay: .milliseconds(100)
+            holdTimeout: .seconds(15)
         )
         let daemon = WorkerDaemon(
             poller: poller,
@@ -1115,7 +1166,11 @@ import Testing
         )
 
         let task = Task { try await daemon.run() }
-        _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 5 }
+        // 30s, not the usual 10: on a real fanout regression the first job
+        // is held for the full 15s hold timeout before the rest drain, and
+        // this gate must outlast that so the failure reads "1 concurrent
+        // invocation", not "jobs never completed".
+        _ = await waitUntil(timeoutSeconds: 30) { await reporter.snapshot().count == 5 }
         let shutDown = await awaitCancelledDaemon(task)
         #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
