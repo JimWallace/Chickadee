@@ -97,7 +97,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Cache the patched Muter build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/muter-src
           key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
@@ -217,7 +217,7 @@ jobs:
 
       - name: Upload the report
         if: always() && steps.files.outputs.count != '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report-pr
           path: mutation-report/

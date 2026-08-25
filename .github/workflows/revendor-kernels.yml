@@ -72,13 +72,13 @@ jobs:
     # cache. chickadee-lua adds ~10 MB of packages and little time.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Needed to push the rebuild back; harmless otherwise.
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           persist-credentials: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           # Must match the kernel's own Python (currently 3.13). The derived
           # module index takes its C-extension stdlib names from the building
@@ -105,7 +105,7 @@ jobs:
       # Solving and downloading the environments is the slow half. Keyed on the
       # env files so a rebuild triggered by anything else reuses the packages.
       - name: Cache the empack package downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/empack
           key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
