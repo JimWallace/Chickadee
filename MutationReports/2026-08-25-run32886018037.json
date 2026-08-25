@@ -1,0 +1,107 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "6907a7c4da2d",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
+  },
+  "date": "2026-08-25",
+  "killed": 366,
+  "phantomsFiltered": 143,
+  "shardsExpected": 8,
+  "shardsReported": 8,
+  "survived": 6,
+  "survivors": [
+    {
+      "file": "Sources/Core/Achievement.swift",
+      "line": 283,
+      "mutations": [
+        {
+          "column": 70,
+          "mutated": "readsTheWholeClass  ? AchievementScope.allCases :  [.classWide]",
+          "offset": 12989,
+          "original": "readsTheWholeClass ? [.classWide] : AchievementScope.allCases"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "readsTheWholeClass ? [.classWide] : AchievementScope.allCases"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 157,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "isClassGoal || conditions.contains { $0.signal == .itemsCovered }",
+          "offset": 7317,
+          "original": "isClassGoal && conditions.contains { $0.signal == .itemsCovered }"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "isClassGoal && conditions.contains { $0.signal == .itemsCovered }"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 169,
+      "mutations": [
+        {
+          "column": 65,
+          "mutated": "$0.signal != .itemsCovered",
+          "offset": 7974,
+          "original": "$0.signal == .itemsCovered"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let condition = conditions.first(where: { $0.signal == .itemsCovered })"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 254,
+      "mutations": [
+        {
+          "column": 56,
+          "mutated": "$0.sectionID != ref",
+          "offset": 12253,
+          "original": "$0.sectionID == ref"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "entries = testSuites.filter { $0.sectionID == ref }"
+    },
+    {
+      "file": "Sources/Core/JSONValueCppLiteral.swift",
+      "line": 79,
+      "mutations": [
+        {
+          "column": 76,
+          "mutated": "return pairs.isEmpty ? \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\" :  \"std::map<std::string, double>{}\"",
+          "offset": 4226,
+          "original": "return pairs.isEmpty\n                    ? \"std::map<std::string, double>{}\"\n                    : \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\""
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": \"CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE\""
+    },
+    {
+      "file": "Sources/RunnerCore/NotebookExtraction.swift",
+      "line": 458,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") && trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20713,
+          "original": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment)."
+        },
+        {
+          "column": 64,
+          "mutated": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") && trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).",
+          "offset": 20741,
+          "original": "// Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment).\n    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))\n\n    // A line that was nothing but a comment is harmless at module level.\n    if trimmed.isEmpty {\n        return true\n    }\n\n    for prefix in [\"def \", \"async def \", \"class \", \"import \", \"from \", \"@\"]\n    where trimmed.hasPrefix(prefix) {\n        return true\n    }\n\n    // Bare string literals are module-level docstrings \u2014 safe.\n    if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")\n        || trimmed.hasPrefix(\"'\")\n    {\n        return true\n    }\n\n    // Control-flow / side-effecting statements are quarantined. The `token + \"(\"`\n    // branch catches bare calls whose name matches a keyword while avoiding false\n    // matches on names that merely share a prefix (e.g. `format` vs `for`).\n    for token in [\n        \"assert\", \"raise\", \"return\", \"del\", \"pass\", \"for\", \"while\",\n        \"if\", \"with\", \"try\", \"except\", \"match\", \"finally\", \"else\",\n        \"elif\", \"break\", \"continue\", \"yield\", \"global\", \"nonlocal\",\n        \"async for\", \"async with\",\n    ] {\n        if trimmed == token || trimmed.hasPrefix(token + \" \") || trimmed.hasPrefix(token + \":\")\n            || trimmed.hasPrefix(token + \"(\")\n        {\n            return false\n        }\n    }\n\n    // Assignments: module level only when the RHS has no function calls. Keeps\n    // module-level constants while quarantining `p = Patient(...)`-style code.\n    if let rhsStart = findAssignmentRHS(in: trimmed) {\n        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))\n        return !rhsContainsFunctionCall(rhs)\n    }\n\n    return false\n    // Strip any trailing `#` comment first, so comment text (which may contain\n    // `=` or `(`) can't be mistaken for assignment or call syntax below\n    // (e.g. `print(x)  # a = b` must not look like an assignment)."
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if trimmed.hasPrefix(\"\\\"\\\"\\\"\") || trimmed.hasPrefix(\"'''\") || trimmed.hasPrefix(\"\\\"\")"
+    }
+  ]
+}
