@@ -88,7 +88,16 @@ jobs:
       # become empty boxes, the sort reverts, the filter forgets), so it needs
       # its own assertions rather than a picture. Reuses this job's server and
       # browser; adds a few seconds.
+      #
+      # Runs even when the capture step failed. These assert different
+      # properties: the capture compares pictures, this compares behaviour, and
+      # one stale baseline is a look change that says nothing about whether the
+      # widgets still work. Gated on the capture, a single intentional UI change
+      # silently disabled every behavioural check here for as long as the
+      # baselines were pending — which is how a guard stops guarding without
+      # anyone being told.
       - name: Table repaint probe
+        if: ${{ !cancelled() }}
         working-directory: Tools/visual-regression
         run: ./run-repaint-probe.sh
 
