@@ -99,12 +99,15 @@ run, 43 of 50 in one shard. `Tools/mutation/report.py` quarantines them against
 the guards actually present in the mutated copy. Read survivors from the run
 record or the issue's Survivors section, never from Muter's raw output.
 
-**A `Sources/Core` survivor is weaker evidence than a `Sources/RunnerCore` one.**
-The sweep skips `APITests` because it dominates the runtime, and ~5% of Core is
-reachable only from there. If a Core survivor sits in such a file, confirm it
-against the full suite before writing anything — otherwise you are looking at
-the same artefact a missing interpreter produces, where a test that never ran
-makes its mutants read as gaps.
+**A `Sources/Core` survivor is weaker evidence than a `Sources/RunnerCore` or
+`Sources/Worker` one.** The sweep skips `APITests` because it dominates the
+runtime, and ~5% of Core is reachable only from there — all four
+achievement-family survivors of the 2026-08-25 sweep were this shape.
+RunnerCore's and Worker's covering tests all run in the sweep, so their
+survivors carry no such caveat. If a Core survivor sits in an APITests-only
+file, confirm it against the full suite before writing anything — otherwise you
+are looking at the same artefact a missing interpreter produces, where a test
+that never ran makes its mutants read as gaps.
 
 **A full-suite kill on a Core survivor is not automatically a close.** The
 question the confirmation answers is "does any test detect this", and a second

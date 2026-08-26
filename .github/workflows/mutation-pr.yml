@@ -77,6 +77,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      # The baseline runs the full suite now that config.json no longer skips
+      # WorkerTests, and its sandbox tests need `unshare`: probe run
+      # 32913719441 measured 20/20 deterministic failures without this. Same
+      # setting as the worker-tests CI job.
+      options: --privileged
 
     steps:
       - uses: actions/checkout@v6
