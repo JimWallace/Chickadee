@@ -17,6 +17,15 @@ un-filtered**. The first full sweep of the same target, with filtering, scored
 **84%** — 122 killed, 23 survivors, 64 phantoms removed. That is the figure to
 compare against.
 
+**The question this page ends on — "is it worth a monthly run?" — was answered
+with a weekly one.** `mutation-weekly.yml` sweeps the whole logic tier
+(RunnerCore + Core + Worker, ~2,750 mutants, 12 shards) every Tuesday;
+`mutation-pr.yml` covers just what a pull request changed. This page stays the
+method-and-cost record those workflows cite; the current scope and its
+reasoning live in `Tools/mutation/config.json`, and the running state of the
+whole effort in
+[handoff-mutation-testing.md](handoff-mutation-testing.md).
+
 Read [handoff-mutation-testing.md](handoff-mutation-testing.md) first for why
 stock Muter cannot do this, and
 [mutation-testing-spike.md](mutation-testing-spike.md) for the root cause.

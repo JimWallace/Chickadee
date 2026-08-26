@@ -18,9 +18,11 @@ is a patched fork.
 
 ## Where the numbers come from
 
-The weekly sweep shards ten ways. Each shard writes a `summary.json`; the merge
-job folds all ten into one `MutationReports/<date>.json` and commits it. The
-trend tool reads that directory and nothing else.
+The weekly sweep shards the logic tier (`shardCount` in
+`Tools/mutation/config.json` — twelve as of the Worker widening). Each shard
+writes a `summary.json`; the merge job folds them into one
+`MutationReports/<date>-run<id>.json` and commits it to the `mutation-reports`
+branch. The trend tool reads that directory and nothing else.
 
 | | |
 |---|---|
@@ -73,8 +75,10 @@ and both are marked in the table rather than left to be noticed.
 
 **`PARTIAL` — the run did not cover everything.** A shard that dies uploads
 nothing, so its mutants are absent from both counts. Fewer survivors, which
-reads exactly like progress. A row showing `7/10` is not comparable with one
-showing `10/10`, and partial runs are excluded from the persistent backlog.
+reads exactly like progress. A row showing `7/8` is not comparable with one
+showing `8/8` — the 2026-08-25 scheduled run was exactly this, one shard lost
+to a baseline flake — and partial runs are excluded from the persistent
+backlog.
 
 **`CONFIG CHANGED` — the measurement changed.** The score depends on what was
 mutated (`include`), how mutants were graded (`testArgs`), and which Muter built

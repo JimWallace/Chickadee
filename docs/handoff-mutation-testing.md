@@ -19,6 +19,27 @@ whole answer — the open question is not *does it work* but *is a scoped monthl
 run worth the standing commitment of carrying a fork*. The pilot document has
 the costs, the findings, and the counter-argument.
 
+**And then it shipped, so most of this document is now history.** The standing
+commitment was made: `.github/workflows/mutation-weekly.yml` runs a sharded
+sweep every Tuesday (a report, never a gate), `mutation-pr.yml` mutates just
+what a pull request changed, `Tools/mutation/report.py` audits Muter's output
+(phantom mutants quarantined against the mutated copy, equivalents closed with
+recorded reasons in `equivalent-mutants.json`), and the run series accumulates
+on the `mutation-reports` branch for `trend.py`. Scope grew the way the config
+planned — one target at a time, after a green run: RunnerCore (runs 3–5), + Core
+(runs 6–8), + Worker after the 2026-08-25 sweep came back **366 killed / 6
+survived (98%)** and all six survivors were answered the same day. Worker's
+admission was measured by `mutation-baseline-probe.yml`: unprivileged, 20/20
+baseline iterations failed deterministically on the sandbox's `unshare` being
+refused (a container capability — hence `--privileged` on the mutation jobs,
+matching worker-tests); privileged, 20/20 passed at 11–12s flat. The logic tier
+is now fully covered; `APIServer` stays out permanently by arithmetic
+(~1,712h serial for its least informative mutants), and the ~5% of Core
+reachable only from the skipped `APITests` carries a documented caveat in
+`config.json`. What remains live below: the upstream-#307 watch (the fork is
+still load-bearing), the probe-rerun protocol, and the guard-discipline
+comparison at the end.
+
 ## Why we wanted it
 
 The recurring defect in this codebase is **verification that passes while
