@@ -363,12 +363,80 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
         }
         #expect(cleaned, "cancelled population must clean up like any failed population")
 
-        // The key must be acquirable again afterwards.
+        // The key must be acquirable again afterwards. Deterministic since
+        // the generation fix: an acquirer arriving while the cancelled
+        // population is still unwinding starts a fresh population rather
+        // than joining the dying one, so this retry can no longer inherit
+        // its `CancellationError` (the 2026-08-26 worker-tests flake, run
+        // 32922017488 — the uncaught error was attributed to this test's
+        // declaration line because it escaped from exactly this call).
         let retry = try await cache.acquire(testSetupID: "setup-cancel-last") {
             try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: retry.directory) }
         #expect(retry.didHit == false)
+    }
+
+    /// Kills the join-a-dying-population race directly, with the unwind
+    /// parked so the window is held open rather than raced: an acquirer
+    /// arriving while a cancelled population unwinds must start a fresh
+    /// population and succeed — not inherit the dying task's
+    /// `CancellationError`, which its own task never had. Before the
+    /// generation fix this failed deterministically with the parked unwind;
+    /// in production the same race made a job fail with a spurious
+    /// cancellation when a sibling slot shut down mid-download of the same
+    /// setup.
+    @Test func acquireDuringACancelledPopulationsUnwindStartsAFreshPopulation() async throws {
+        let (cache, _) = makeCache()
+        let populateStarted = TestGate()
+        let unwindRelease = TestGate()
+        let secondPopulateRan = Counter()
+
+        let firstAcquirer = Task {
+            try await cache.acquire(testSetupID: "setup-unwind-race") {
+                await populateStarted.open()
+                do {
+                    try await Task.sleep(for: .seconds(600))
+                } catch {
+                    // Park the unwind: the dying population cannot reach
+                    // `finishPopulation` until the test releases it, holding
+                    // the race window open instead of sprinting through it.
+                    await unwindRelease.wait()
+                    throw error
+                }
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        firstAcquirer.cancel()
+        do {
+            let result = try await firstAcquirer.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected — the detached waiter's own cancellation.
+        }
+
+        // The population is now cancelled and parked mid-unwind. A fresh,
+        // uncancelled acquirer must not join it.
+        let retry = Task {
+            try await cache.acquire(testSetupID: "setup-unwind-race") {
+                secondPopulateRan.increment()
+                return try makeTestStagingDir()
+            }
+        }
+        // Post-fix the registration decision is synchronous and this pause
+        // decides nothing; it exists so the PRE-fix behaviour (the retry
+        // registering on the dying entry) demonstrably precedes the unwind's
+        // release when the fix is reverted.
+        try await Task.sleep(for: .milliseconds(100))
+        await unwindRelease.open()
+
+        let result = try await retry.value
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+        #expect(result.didHit == false)
+        #expect(secondPopulateRan.value == 1, "the retry must run its own population")
     }
 
     private func pollUntil(

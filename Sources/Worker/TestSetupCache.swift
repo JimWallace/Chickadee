@@ -38,6 +38,14 @@ actor TestSetupCache {
     /// ignore cancellation on the artifact-download path (issue #1233,
     /// docs/ci-flakiness.md "what in daemon.run() ignores cancellation").
     private struct InFlightPopulation {
+        /// Identity for the finish handshake. A population cancelled by its
+        /// last waiter's detach unwinds asynchronously, and a fresh acquirer
+        /// arriving in that window starts a REPLACEMENT population under the
+        /// same key — so `finishPopulation` must prove the entry it is about
+        /// to remove is its own, or the dying generation would clobber its
+        /// successor's entry and resume the successor's waiters with a
+        /// `CancellationError` their tasks never had.
+        let generation: UUID
         var task: Task<Void, Never>
         var waiters: [UUID: CheckedContinuation<URL, Error>] = [:]
     }
@@ -184,7 +192,7 @@ actor TestSetupCache {
                     continuation.resume(throwing: CancellationError())
                     return
                 }
-                if var population = inProgress[testSetupID] {
+                if var population = inProgress[testSetupID], !population.task.isCancelled {
                     writeStructuredRunnerLog(
                         event: "test_setup_cache_await_in_progress",
                         fields: [
@@ -193,13 +201,26 @@ actor TestSetupCache {
                     population.waiters[waiterID] = continuation
                     inProgress[testSetupID] = population
                 } else {
+                    // Either no population is in flight, or the one that is
+                    // has already been CANCELLED and is merely unwinding: its
+                    // last waiter detached (that is the only path that
+                    // cancels the task), so joining it would resume this
+                    // uncancelled caller with someone else's
+                    // `CancellationError`. Start a fresh generation instead —
+                    // replacing the entry orphans nobody (a cancelled
+                    // population has no waiters), and the dying task's
+                    // `finishPopulation` is generation-guarded so it cannot
+                    // clobber this entry.
                     writeStructuredRunnerLog(
                         event: "test_setup_cache_miss",
                         fields: [
                             "test_setup_id": testSetupID
                         ])
+                    let generation = UUID()
                     var population = InFlightPopulation(
-                        task: makePopulationTask(testSetupID: testSetupID, populate: populate))
+                        generation: generation,
+                        task: makePopulationTask(
+                            testSetupID: testSetupID, generation: generation, populate: populate))
                     population.waiters[waiterID] = continuation
                     inProgress[testSetupID] = population
                 }
@@ -215,6 +236,7 @@ actor TestSetupCache {
     /// `finishPopulation`, which resumes whichever waiters remain.
     private func makePopulationTask(
         testSetupID: String,
+        generation: UUID,
         populate: @escaping @Sendable () async throws -> URL
     ) -> Task<Void, Never> {
         let cacheRoot = self.cacheRoot  // capture value type, not actor ref
@@ -230,13 +252,27 @@ actor TestSetupCache {
             } catch {
                 result = .failure(error)
             }
-            self.finishPopulation(testSetupID: testSetupID, result: result)
+            self.finishPopulation(testSetupID: testSetupID, generation: generation, result: result)
         }
     }
 
-    /// Terminal bookkeeping for a population: exactly once per key, whether
-    /// it succeeded, failed, or was cancelled after its last waiter left.
-    private func finishPopulation(testSetupID: String, result: Result<URL, Error>) {
+    /// Terminal bookkeeping for a population: exactly once per GENERATION,
+    /// whether it succeeded, failed, or was cancelled after its last waiter
+    /// left. The generation guard is what makes the cancelled-unwind window
+    /// safe: a dying population whose key has already been re-populated by a
+    /// fresh acquirer must not remove the successor's entry, resume the
+    /// successor's waiters, or clean up files the successor now owns. Such a
+    /// stale finish has nothing left to do — a population is only cancelled
+    /// once it has no waiters.
+    private func finishPopulation(testSetupID: String, generation: UUID, result: Result<URL, Error>) {
+        guard let current = inProgress[testSetupID], current.generation == generation else {
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_stale_population_finished",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
+            return
+        }
         guard let population = inProgress.removeValue(forKey: testSetupID) else { return }
         switch result {
         case .success(let preparedDir):
