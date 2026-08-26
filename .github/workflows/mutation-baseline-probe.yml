@@ -53,6 +53,15 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      # Same privilege as the worker-tests job, and MEASURED as required, not
+      # assumed: run 32913719441 ran this probe unprivileged and all 20
+      # iterations failed identically -- not on timing, but on
+      # `sandboxedRunnerTimeoutReapsBackgroundChildProcess` with "unshare:
+      # Operation not permitted", the sandbox's namespace primitive being
+      # refused by the default container profile. So a widened sweep needs
+      # this on its mutate job too; without it every Worker shard's baseline
+      # is deterministically red.
+      options: --privileged
 
     steps:
       - uses: actions/checkout@v6
