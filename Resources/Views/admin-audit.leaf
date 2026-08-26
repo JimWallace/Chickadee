@@ -45,34 +45,39 @@ Audit Log
         Showing #count(rows) of #(matchCount) matching #if(matchCount == 1):entry#else:entries#endif.
     </p>
     <!-- The log/event shape: when, who, what, how it went, and a payload that
-         is usually noise.  Category, target, remote address and metadata all
-         live in the closed disclosure — nothing is dropped, it just stops
-         competing with the four facts a reader scans. -->
-    <div class="table-scroll"><table class="results-table sortable-table"
-        data-sort-initial="when:desc" data-sort-tiebreak="when">
+         is usually noise.  Category, target, remote address and metadata live
+         in the closed disclosure on a full-width second row — the same shape a
+         submission's output panel uses.  Nothing is dropped; it just stops
+         competing with the four facts a reader scans.  In the last column
+         instead, the payload would have wrapped JSON into the ~200px the four
+         fixed widths left over.
+
+         Deliberately NOT a sortable-table: the server sends the most recent
+         200 of matchCount, newest first, so a client-side re-sort would offer
+         "oldest" rows that are only the oldest of that window — a wrong answer
+         wearing a sorted table's authority, on a compliance surface. -->
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
-                <th class="audit-col-time" data-sort-key="when" data-sort-type="date"><button class="sort-header" type="button">When</button></th>
-                <th class="audit-col-actor" data-sort-key="actor" data-sort-type="text"><button class="sort-header" type="button">Actor</button></th>
-                <th class="audit-col-action" data-sort-key="event" data-sort-type="text"><button class="sort-header" type="button">Event</button></th>
-                <th class="audit-col-outcome" data-sort-key="outcome" data-sort-type="text"><button class="sort-header" type="button">Outcome</button></th>
-                <!-- Phone drops the payload disclosure: it is the column this
-                     shape exists to demote, and the four facts beside it are
-                     what a reader opened the log for. -->
-                <th class="col-hide-phone">Detail</th>
+                <th class="audit-col-time">When</th>
+                <th class="audit-col-actor">Actor</th>
+                <th class="audit-col-action">Event</th>
+                <th class="audit-col-outcome">Outcome</th>
             </tr>
         </thead>
         <tbody>
             #for(row in rows):
             <tr>
-                <td class="audit-col-time" data-sort-value="#(row.timestampISO)">
-                    <span class="js-relative-time" data-iso="#(row.timestampISO)">#(row.timestamp)</span>
+                <td class="audit-col-time">
+                    <span class="js-relative-time" data-iso="#(row.timestampISO)"></span>
                     <span class="log-when-absolute">#(row.timestamp)</span>
                 </td>
                 <td>#(row.actor)</td>
                 <td>#(row.label)<br><code class="audit-action-code">#(row.action)</code></td>
                 <td><span class="tier #(row.outcomeTier)">#(row.outcome)</span></td>
-                <td class="col-hide-phone">
+            </tr>
+            <tr class="test-output-row">
+                <td colspan="4">
                     <details class="test-output-details">
                         <summary>Payload</summary>
                         <dl class="detail-grid log-payload">
@@ -98,7 +103,7 @@ Audit Log
 .audit-col-actor { width: 8rem; }
 .audit-col-action { width: 14rem; }
 .audit-col-outcome { width: 7rem; }
-/* The forensic instant, under the relative reading that leads the cell. */
+/* Forensic instant; also the no-JS fallback for the empty relative span. */
 .log-when-absolute {
     display: block;
     font-family: var(--font-mono);
@@ -116,7 +121,6 @@ Audit Log
     word-break: break-word;
 }
 </style>
-<script src="/sortable-table.js?v=#appVersion()"></script>
 <script src="/list-filter.js?v=#appVersion()"></script>
 #endexport
 #endextend

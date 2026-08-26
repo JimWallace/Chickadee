@@ -54,8 +54,8 @@ Admin
                     <th class="col-hide-phone" data-sort-key="version" data-sort-type="text"><button class="sort-header" type="button">Version</button></th>
                     <th class="time" data-sort-key="load" data-sort-type="number"><button class="sort-header" type="button">Load</button></th>
                     <th class="time col-hide-phone" data-sort-key="jobs-processed" data-sort-type="number"><button class="sort-header" type="button">Jobs Processed</button></th>
-                    <th class="time col-hide-tablet" data-sort-key="avg-run" data-sort-type="duration"><button class="sort-header" type="button">Avg Run</button></th>
-                    <th class="time col-hide-tablet" data-sort-key="avg-wait" data-sort-type="duration"><button class="sort-header" type="button">Avg Wait</button></th>
+                    <th class="time col-hide-phone" data-sort-key="avg-run" data-sort-type="duration"><button class="sort-header" type="button">Avg Run</button></th>
+                    <th class="time col-hide-phone" data-sort-key="avg-wait" data-sort-type="duration"><button class="sort-header" type="button">Avg Wait</button></th>
                     <th class="time" data-sort-key="last-active" data-sort-type="date"><button class="sort-header" type="button">Last Active</button></th>
                 </tr>
             </thead>
@@ -82,7 +82,7 @@ Admin
                    value="#(workerSecret)"
                    autocomplete="new-password"
                    spellcheck="false">
-            <p class="field-note">Runners re-authenticate on their next heartbeat. Changing this drops any runner still using the old value.</p>
+            <p class="field-note">Changing this drops any runner still using the old value.</p>
         </div>
         <div class="toolbar toolbar--end">
             <button class="btn btn-primary" type="submit">Save secret</button>
@@ -135,7 +135,7 @@ Admin
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit"
                                 title="Copy course" aria-label="Copy course"
-                                data-confirm="Copy #(course.code)? Its assignments and test suites are duplicated into a new course. The original is unchanged and the copy starts with no students enrolled.">
+                                data-confirm="Copy #(course.code)? Its assignments and test suites are duplicated into a new course, and the copy starts with no students enrolled.">
                             <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
                         </button>
                     </form>
@@ -143,7 +143,7 @@ Admin
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Archive course" aria-label="Archive course"
-                                data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and you can un-archive from the course page.">
+                                data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back.">
                             <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>
                         </button>
                     </form>

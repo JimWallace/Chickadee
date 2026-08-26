@@ -25,7 +25,7 @@ Server Health Alerts
                    name="webhookURL"
                    value="#(webhookURL)"
                    placeholder="https://hooks.slack.com/services/…">
-            <p class="field-note">Alerts POST here as they fire and resolve. A change takes effect on the next firing.</p>
+            <p class="field-note">Alerts POST here as they fire and resolve.</p>
             #if(webhookURLFromEnvironment):
             <p class="field-note">A fallback URL is also set in the environment as <code>ALERT_WEBHOOK_URL</code>.</p>
             #endif
@@ -69,7 +69,7 @@ Server Health Alerts
                 </td>
                 <td>
                     #if(rule.isFiring):
-                        <span class="tier tier-closed">FIRING</span>
+                        <span class="tier tier-danger">FIRING</span>
                     #else:
                         <span class="tier tier-open">ok</span>
                     #endif
@@ -86,41 +86,45 @@ Server Health Alerts
     #if(count(recentFirings) == 0):
     <p class="empty">No alerts have fired since startup.</p>
     #else:
-    <!-- Same log/event shape as the audit log: when, who, what, how it went,
-         and the payload behind a closed disclosure.  The actor is always the
-         server here — a rule fires itself — and WHEN stays relative-only,
-         because a firing is operational activity where recency is the
-         question.  The audit log is the forensic table, and the one that
-         carries the absolute instant beneath. -->
+    <!-- The audit log's shape — when, what, how it went, payload — minus the
+         actor column, because a rule fires itself and a column reading "system"
+         on every row carries no information.  Two log tables share a shape by
+         asking the same questions, not by having the same column count.
+
+         The summary is the reading a firing exists to deliver ("queue backed
+         up: 64 pending"), so it stays on the page; the payload row holds the
+         delivery mechanics, which are what an operator checks only when the
+         page did not reach them.  WHEN stays relative-only: a firing is
+         operational activity where recency is the question, and the audit log
+         is the forensic table that carries the absolute instant. -->
     <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th class="time">When</th>
-                <th>Actor</th>
                 <th>Event</th>
                 <th>Outcome</th>
-                <th>Detail</th>
+                <th>Summary</th>
             </tr>
         </thead>
         <tbody>
         #for(firing in recentFirings):
             <tr>
                 <td class="time js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
-                <td>system</td>
                 <td><code>#(firing.rule)</code></td>
                 <td>
                     #if(firing.resolved):
                         <span class="tier tier-open">resolved</span>
                     #else:
-                        <span class="tier tier-closed">fired</span>
+                        <span class="tier tier-danger">fired</span>
                     #endif
                 </td>
-                <td>
+                <td>#(firing.summary)</td>
+            </tr>
+            <tr class="test-output-row">
+                <td colspan="4">
                     <details class="test-output-details">
                         <summary>Payload</summary>
                         <dl class="detail-grid log-payload">
-                            <dt>Summary</dt>
-                            <dd>#(firing.summary)</dd>
                             <dt>Delivery</dt>
                             <dd>
                                 #if(firing.paged):

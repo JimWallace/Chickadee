@@ -358,11 +358,14 @@ enum AuditOutcome: String, Sendable, CaseIterable {
     case ok
     case failed
 
-    /// The status-badge variant this outcome renders as.
+    /// The status-badge variant this outcome renders as.  A success is the
+    /// neutral grey, not the teal "open": nearly every row is a success, so
+    /// colouring them all would leave the three that are not to stand out by
+    /// being duller than their neighbours.
     var tierClass: String {
         switch self {
-        case .ok: return "tier-open"
-        case .failed: return "tier-closed"
+        case .ok: return "tier-closed"
+        case .failed: return "tier-danger"
         }
     }
 }

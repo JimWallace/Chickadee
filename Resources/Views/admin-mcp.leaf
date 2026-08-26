@@ -64,7 +64,7 @@ MCP
             <input id="mcp-new-account" class="form-input" type="text" name="username" required
                    autocomplete="new-password"
                    placeholder="course-bot">
-            <p class="field-note">Creates a service account with no course access. Enroll it in a course before an agent can author anything.</p>
+            <p class="field-note">A new account has no course access until you enroll it in a course.</p>
         </div>
         <div class="toolbar toolbar--end">
             <button class="btn btn-primary" type="submit">Create account</button>

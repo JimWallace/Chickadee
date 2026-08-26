@@ -55,7 +55,7 @@
                     data-confirm="Unarchive #(course.code)? #(course.enrollmentCount) students regain access immediately, and the retention clock stops.">Unarchive</button>
             #else:
             <button class="btn action-danger" type="submit"
-                    data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and you can un-archive from this page.">Archive</button>
+                    data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back.">Archive</button>
             #endif
         </form>
         <a href="/admin/courses/#(course.id)/export" class="btn">Export bundle</a>

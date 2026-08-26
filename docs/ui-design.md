@@ -302,7 +302,10 @@ duplicate.
   labelled value beside a control; it carries no status colour, so if the
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
-  badges (defined variants only: open/closed/extended/preview/unpublished).
+  badges (defined variants only:
+  open/closed/extended/preview/unpublished/danger).  `.tier-danger` is the one
+  that means something went wrong; `.tier-closed` is a neutral inactive grey
+  and must not be borrowed for it.
 - **`.account-identity`** — the account page's identity header: the student's
   `.avatar`, the resolved name beside it, and the username under that.  The name
   and username are element selectors inside the row, not classes of their own.
@@ -392,8 +395,11 @@ duplicate.
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,
   metadata, delivery — goes in a `<details>` that stays closed, so the payload
-  stops competing with the four facts a reader scans.  The disclosure itself is
-  `.test-output-details` + `.test-output-pre`, reused rather than respelled.
+  stops competing with the facts a reader scans.  It rides the same full-width
+  second row as a submission's output panel — `.test-output-row` + `colspan` —
+  with `.test-output-details` as the disclosure and a `.detail-grid` inside it.
+  A payload in a last column instead would wrap JSON into whatever width the
+  fixed columns left over.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
@@ -488,6 +494,13 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
 - **Forensic or compliance** times — the audit log, retention dates —
   render **absolute**, in `--font-mono`, deliberately.  Here the exact
   instant *is* the content, and "2 months ago" would destroy it.
+  The audit log's When cell is the one place both readings appear: a relative
+  line leads and the absolute sits under it in `.log-when-absolute`, because
+  an admin scanning for what just happened asks for recency while the row
+  itself is evidence.  The absolute line is the **no-JS fallback for both**, so
+  the relative span above it is seeded empty — seed both with the server string
+  and the cell prints the same instant twice on every load before the script
+  runs.  A hover `title` does not satisfy this: it is not a disclosure.
 
 The server-formatted string stays in the cell as the no-JS fallback, so a
 column degrades to an absolute date rather than to nothing.  Staleness

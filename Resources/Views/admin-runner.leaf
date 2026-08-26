@@ -12,7 +12,7 @@ Runner #(runner.workerID)
      heading. -->
 <section class="page-section">
     <div data-runner-id="#(runner.workerID)" class="page-titlebar">
-        <h1><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="tier tier-unpublished"#if(!runner.isOffline): style="display:none"#endif>Offline</span></h1>
+        <h1><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="tier"#if(!runner.isOffline): hidden#endif>Offline</span></h1>
     </div>
     <p class="page-subtitle">
         <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
@@ -21,8 +21,8 @@ Runner #(runner.workerID)
         #if(firstSeenAt):· registered <span class="js-relative-time" data-iso="#(firstSeenAt)">#(firstSeenAt)</span>#endif
     </p>
 
-    <div id="runner-offline-status" class="flash flash-warning section-gap" role="status"#if(!runner.isOffline): style="display:none"#endif>
-        No heartbeat recently, so Chickadee has stopped handing this runner work. Jobs it has not claimed are picked up by the other online runners.
+    <div id="runner-offline-status" class="flash flash-warning" role="status"#if(!runner.isOffline): hidden#endif>
+        No heartbeat recently, so Chickadee has stopped handing this runner work. Queued jobs wait for a runner that is online.
     </div>
 
     <dl class="detail-grid section-gap">

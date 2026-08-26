@@ -10,11 +10,14 @@
      People, Data and Integrations.  The menus are the site's existing
      nav-dropdown idiom (app.js drives every [data-nav-dropdown]: one open at a
      time, outside-click and Escape to close), so this adds no component and no
-     script.  The toggle wears admin-tab so a group reads as a tab, and takes
-     aria-current when the page showing is one of its members; the member
-     itself takes nav-dropdown-item-active, the same way the nav's course
-     picker marks the active course.  activeAdminTab values are unchanged — a
-     menu item sets exactly what its flat tab used to. -->
+     script.  activeAdminTab values are unchanged — a menu item sets exactly
+     what its flat tab used to.
+
+     aria-current goes on the menu ITEM that is the current page, as the nav's
+     course tabs do.  The toggle wears data-group-current instead: a menu
+     button navigates nowhere, so calling it the current page both misstates it
+     and leaves a screen reader unable to tell which of the items below is the
+     one showing.  Both drive the same underline rule in styles.css. -->
 <h1 class="visually-hidden">Admin —
 #if(activeAdminTab == "overview"):Overview#endif
 #if(activeAdminTab == "alerts"):Health Alerts#endif
@@ -31,43 +34,43 @@
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "users"): aria-current="page"#endif>
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "users"): data-group-current#endif>
             <span>People</span>
             <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
         <div class="nav-dropdown-menu" role="menu">
             <a class="nav-dropdown-item#if(activeAdminTab == "users"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/users">Users</a>
+               role="menuitem" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
         </div>
     </div>
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "storage"): aria-current="page"#endif#if(activeAdminTab == "retention"): aria-current="page"#endif#if(activeAdminTab == "audit"): aria-current="page"#endif>
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "storage"): data-group-current#endif#if(activeAdminTab == "retention"): data-group-current#endif#if(activeAdminTab == "audit"): data-group-current#endif>
             <span>Data</span>
             <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
         <div class="nav-dropdown-menu" role="menu">
             <a class="nav-dropdown-item#if(activeAdminTab == "storage"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/storage">Storage</a>
+               role="menuitem" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
             <a class="nav-dropdown-item#if(activeAdminTab == "retention"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/retention">Retention</a>
+               role="menuitem" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
             <a class="nav-dropdown-item#if(activeAdminTab == "audit"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/audit">Audit Log</a>
+               role="menuitem" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
         </div>
     </div>
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): aria-current="page"#endif#if(activeAdminTab == "mcp"): aria-current="page"#endif>
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif>
             <span>Integrations</span>
             <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
         <div class="nav-dropdown-menu" role="menu">
             <a class="nav-dropdown-item#if(activeAdminTab == "brightspace"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/brightspace">LEARN</a>
+               role="menuitem" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
             #if(mcpEnabled()):<a class="nav-dropdown-item#if(activeAdminTab == "mcp"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/mcp">MCP</a>#endif
+               role="menuitem" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
         </div>
     </div>
 </nav>

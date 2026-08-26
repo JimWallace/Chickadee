@@ -17,9 +17,9 @@
     function updateOfflineBadge() {
         var laEl = document.getElementById('runner-last-active');
         var laIso = laEl ? laEl.getAttribute('data-iso') : null;
-        var display = window.ChickadeeRelativeTime.isStale(laIso) ? '' : 'none';
-        if (offlineBadge) offlineBadge.style.display = display;
-        if (offlineStatus) offlineStatus.style.display = display;
+        var stale = window.ChickadeeRelativeTime.isStale(laIso);
+        if (offlineBadge) offlineBadge.hidden = !stale;
+        if (offlineStatus) offlineStatus.hidden = !stale;
     }
     window.ChickadeeRelativeTime.applyRelativeTimes();
     updateOfflineBadge();

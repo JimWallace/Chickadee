@@ -3,7 +3,7 @@
                     data-max-jobs="#(worker.maxConcurrentJobs)"#if(worker.isOffline): class="runner-row-offline"#endif>
                     <td data-sort-value="#(worker.workerID)">
                         <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
-                        #if(worker.isOffline):<span class="tier tier-unpublished">Offline</span>#endif
+                        #if(worker.isOffline):<span class="tier">Offline</span>#endif
                         #if(worker.hostname != ""):
                             <br><span class="worker-host">#(worker.hostname)</span>
                         #endif
@@ -18,8 +18,8 @@
                         #endif
                     </td>
                     <td class="time col-hide-phone" data-sort-value="#(worker.jobsProcessed)">#(worker.jobsProcessed)</td>
-                    <td class="time col-hide-tablet" data-sort-value="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
-                    <td class="time col-hide-tablet" data-sort-value="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
+                    <td class="time col-hide-phone" data-sort-value="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
+                    <td class="time col-hide-phone" data-sort-value="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
                     <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
                 </tr>
             #endfor
