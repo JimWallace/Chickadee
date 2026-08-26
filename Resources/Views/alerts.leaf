@@ -15,23 +15,28 @@ Server Health Alerts
     #endif
 
     <h2>Webhook</h2>
-    <form method="post" action="/admin/alerts/config" class="toolbar section-gap">
+    <form method="post" action="/admin/alerts/config" class="form-stack section-gap">
         #csrfFormField()
-        <input class="form-input alerts-webhook-input"
-               type="url"
-               name="webhookURL"
-               value="#(webhookURL)"
-               placeholder="https://hooks.slack.com/services/…">
-        <button class="btn btn-primary" type="submit">Save webhook</button>
+        <div class="field-stack">
+            <label for="alert-webhook">Webhook URL</label>
+            <input id="alert-webhook"
+                   class="form-input"
+                   type="url"
+                   name="webhookURL"
+                   value="#(webhookURL)"
+                   placeholder="https://hooks.slack.com/services/…">
+            <p class="field-note">Alerts POST here as they fire and resolve. A change takes effect on the next firing.</p>
+            #if(webhookURLFromEnvironment):
+            <p class="field-note">A fallback URL is also set in the environment as <code>ALERT_WEBHOOK_URL</code>.</p>
+            #endif
+        </div>
+        <div class="toolbar toolbar--end">
+            <button class="btn btn-primary" type="submit">Save webhook</button>
+        </div>
     </form>
     <form method="post" action="/admin/alerts/test" class="alerts-test-form">
         #csrfFormField()
         <button class="btn" type="submit">Send test alert</button>
-        #if(webhookURLFromEnvironment):
-        <span class="alerts-env-note">
-            (Fallback URL also configured via <code>ALERT_WEBHOOK_URL</code>.)
-        </span>
-        #endif
     </form>
 
     <h2>Rules</h2>
@@ -81,20 +86,27 @@ Server Health Alerts
     #if(count(recentFirings) == 0):
     <p class="empty">No alerts have fired since startup.</p>
     #else:
+    <!-- Same log/event shape as the audit log: when, who, what, how it went,
+         and the payload behind a closed disclosure.  The actor is always the
+         server here — a rule fires itself — and WHEN stays relative-only,
+         because a firing is operational activity where recency is the
+         question.  The audit log is the forensic table, and the one that
+         carries the absolute instant beneath. -->
     <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th class="time">When</th>
-                <th>Rule</th>
-                <th>Kind</th>
-                <th>Summary</th>
-                <th>Delivery</th>
+                <th>Actor</th>
+                <th>Event</th>
+                <th>Outcome</th>
+                <th>Detail</th>
             </tr>
         </thead>
         <tbody>
         #for(firing in recentFirings):
             <tr>
                 <td class="time js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
+                <td>system</td>
                 <td><code>#(firing.rule)</code></td>
                 <td>
                     #if(firing.resolved):
@@ -103,18 +115,27 @@ Server Health Alerts
                         <span class="tier tier-closed">fired</span>
                     #endif
                 </td>
-                <td>#(firing.summary)</td>
                 <td>
-                    #if(firing.paged):
-                        #if(firing.delivered):
-                            delivered
-                        #else:
-                            <span class="text-error">failed</span>
-                            #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
-                        #endif
-                    #else:
-                        advisory — not paged
-                    #endif
+                    <details class="test-output-details">
+                        <summary>Payload</summary>
+                        <dl class="detail-grid log-payload">
+                            <dt>Summary</dt>
+                            <dd>#(firing.summary)</dd>
+                            <dt>Delivery</dt>
+                            <dd>
+                                #if(firing.paged):
+                                    #if(firing.delivered):
+                                        delivered
+                                    #else:
+                                        <span class="text-error">failed</span>
+                                        #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
+                                    #endif
+                                #else:
+                                    advisory — not paged
+                                #endif
+                            </dd>
+                        </dl>
+                    </details>
                 </td>
             </tr>
         #endfor
@@ -123,9 +144,7 @@ Server Health Alerts
     #endif
 </section>
 <style>
-.alerts-webhook-input { flex: 1; min-width: min(320px, 100%); }
 .alerts-test-form { margin-bottom: 1.5rem; }
-.alerts-env-note { margin-left: .6rem; color: var(--muted); font-size: var(--text-base); }
 .alerts-rule-code { font-size: .8em; color: var(--muted); }
 .alerts-recent-heading { margin-top: 1.5rem; }
 .alerts-delivery-error { font-size: .75em; color: var(--muted); }

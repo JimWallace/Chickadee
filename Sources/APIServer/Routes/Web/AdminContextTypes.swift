@@ -314,6 +314,9 @@ struct AdminAlertsContext: Encodable {
 
 struct AdminAuditRow: Encodable {
     let timestamp: String
+    /// Machine instant behind `timestamp`, so the WHEN cell can lead with a
+    /// relative reading and keep the forensic one beneath it.
+    let timestampISO: String
     let actor: String
     /// Coarse grouping (e.g. "Authentication", "MCP / agents").
     let category: String
@@ -325,6 +328,10 @@ struct AdminAuditRow: Encodable {
     let targetID: String?
     let metadata: String
     let remoteAddr: String
+    /// "ok" / "failed" — see `AuditAction.outcome`.
+    let outcome: String
+    /// The status-badge variant `outcome` renders as.
+    let outcomeTier: String
 }
 
 /// One selectable option in the action-filter dropdown.

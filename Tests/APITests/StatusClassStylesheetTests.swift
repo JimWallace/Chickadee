@@ -22,6 +22,8 @@ import Core
 import Foundation
 import Testing
 
+@testable import APIServer
+
 @Suite struct StatusClassStylesheetTests {
 
     private static var repoRoot: URL {
@@ -47,6 +49,20 @@ import Testing
             #expect(
                 css.contains(".status-\(name)"),
                 "Public/styles.css defines no .status-\(name) — submission.leaf mints this class for every outcome row"
+            )
+        }
+    }
+
+    /// admin-audit.leaf mints `tier #(row.outcomeTier)` on every log row, so
+    /// the badge variant each `AuditOutcome` names has to exist in the sheet.
+    /// Same failure mode as the two above: a third outcome would ship a pill
+    /// with no colour and nothing would fail.
+    @Test func tierSelectorExistsForEveryAuditOutcome() throws {
+        let css = try Self.globalStylesheet()
+        for outcome in AuditOutcome.allCases {
+            #expect(
+                css.contains(".\(outcome.tierClass)"),
+                "Public/styles.css defines no .\(outcome.tierClass) — admin-audit.leaf mints this class for every audit row"
             )
         }
     }

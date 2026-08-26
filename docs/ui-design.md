@@ -342,13 +342,14 @@ duplicate.
   headings and deliberately does not carry display sizes, so this is `em`
   against its container rather than a new scale step.  One per page.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
-- **`.assignment-phone-meta`** — the student dashboard's phone-width
-  restatement of the Due and History columns, which `.col-hide-phone` drops
-  below 640px.  Sits inside the name cell, takes `.card-meta` typography, and
-  is `display: none` at every width that still shows those columns, so the
-  fact never appears twice.  Not general-purpose: a table that hides columns
-  on phones and wants them restated should reuse this pattern by name rather
-  than minting a second one.
+- **`.row-phone-meta`** — a table's phone-width restatement of the columns
+  `.col-hide-phone` drops below 640px: the student dashboard's Due and History,
+  the admin runners table's version and job count.  Sits inside the name cell,
+  takes `.card-meta` typography, and is `display: none` at every width that
+  still shows those columns, so the fact never appears twice.  A table that
+  hides columns on phones and wants them restated reuses this one — the name is
+  the mechanism, not the first table that needed it, precisely so the second
+  table does not mint a twin.
   `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
   `.empty` — the "nothing here yet" line a list renders in place of rows.
@@ -387,6 +388,12 @@ duplicate.
   itself, because there the non-matching rows really are absent.
   `.standin-panel` — the placeholder a panel shows while its content is
   unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
+- **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
+  disclosure (the audit log, alert firings).  A log row shows when, who, what
+  and how it went; everything else — category, target, remote address,
+  metadata, delivery — goes in a `<details>` that stays closed, so the payload
+  stops competing with the four facts a reader scans.  The disclosure itself is
+  `.test-output-details` + `.test-output-pre`, reused rather than respelled.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.

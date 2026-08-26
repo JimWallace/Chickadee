@@ -45,10 +45,13 @@ extension AdminRoutes {
             .all()
 
         let timestampFormatter = waterlooDateTimeFormatter()
+        let isoFormatter = ISO8601DateFormatter()
         let rows = entries.map { entry -> AdminAuditRow in
             let display = AuditActionDisplay.categoryLabel(forRaw: entry.action)
+            let outcome = AuditActionDisplay.outcome(forRaw: entry.action)
             return AdminAuditRow(
                 timestamp: entry.createdAt.map { timestampFormatter.string(from: $0) } ?? "—",
+                timestampISO: entry.createdAt.map { isoFormatter.string(from: $0) } ?? "",
                 actor: entry.actorUsername ?? "—",
                 category: display.category,
                 label: display.label,
@@ -56,7 +59,9 @@ extension AdminRoutes {
                 targetType: entry.targetType,
                 targetID: entry.targetID,
                 metadata: entry.metadata ?? "",
-                remoteAddr: entry.remoteAddr ?? "—"
+                remoteAddr: entry.remoteAddr ?? "—",
+                outcome: outcome.rawValue,
+                outcomeTier: outcome.tierClass
             )
         }
 

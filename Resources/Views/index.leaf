@@ -76,7 +76,7 @@
                         </span>
                         #endif
                     </div>
-                    <div class="card-meta assignment-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0): · #(item.setup.submissionCount) submitted#endif</div>
+                    <div class="card-meta row-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0): · #(item.setup.submissionCount) submitted#endif</div>
                 #else:
                 <span class="text-muted">Unpublished</span>
                 #endif

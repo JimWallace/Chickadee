@@ -3,37 +3,60 @@
 Runner #(runner.workerID)
 #endexport
 #export("content"):
+<!-- Detail-page shape, shared with the course and user pages: titlebar (name,
+     current state, actions) → subtitle (the identifiers you would paste into a
+     ticket) → a status block ONLY when something is wrong → the facts → the
+     history.  The facts used to be a second column inside the titlebar, which
+     put ten measurements level with the page name and left the one fact that
+     needed attention — that the runner is offline — as a grey pill in the
+     heading. -->
 <section class="page-section">
-    <div data-runner-id="#(runner.workerID)" class="page-titlebar runner-header">
-        <div>
-            <h1><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="runner-badge-offline"#if(!runner.isOffline): style="display:none"#endif>Offline</span></h1>
-            <p class="titlebar-subtitle">
-                <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
-                ·
-                <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
-            </p>
-            #if(count(tags) > 0):
-            <div class="chip-row runner-tags">
+    <div data-runner-id="#(runner.workerID)" class="page-titlebar">
+        <h1><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="tier tier-unpublished"#if(!runner.isOffline): style="display:none"#endif>Offline</span></h1>
+    </div>
+    <p class="page-subtitle">
+        <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
+        ·
+        <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
+        #if(firstSeenAt):· registered <span class="js-relative-time" data-iso="#(firstSeenAt)">#(firstSeenAt)</span>#endif
+    </p>
+
+    <div id="runner-offline-status" class="flash flash-warning section-gap" role="status"#if(!runner.isOffline): style="display:none"#endif>
+        No heartbeat recently, so Chickadee has stopped handing this runner work. Jobs it has not claimed are picked up by the other online runners.
+    </div>
+
+    <dl class="detail-grid section-gap">
+        <dt>Last active</dt>
+        <dd><span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></dd>
+        <dt>Capacity</dt>
+        <dd>#(summary.activeJobs) / #(summary.maxJobs)</dd>
+        <dt>Jobs processed</dt>
+        <dd>#(summary.jobsProcessed)</dd>
+        <dt>Avg run</dt>
+        <dd>#if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</dd>
+        <dt>Avg wait</dt>
+        <dd>#if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</dd>
+        <dt>Avg setup/other</dt>
+        <dd>#if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</dd>
+        <dt>Avg cache acquire</dt>
+        <dd>#if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</dd>
+        <dt>Cache hit rate</dt>
+        <dd>#if(summary.cacheHitRateFormatted):#(summary.cacheHitRateFormatted)#else:—#endif</dd>
+        <dt>Avg download</dt>
+        <dd>#if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</dd>
+        <dt>Avg prep</dt>
+        <dd>#if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</dd>
+        #if(count(tags) > 0):
+        <dt>Tags</dt>
+        <dd>
+            <div class="chip-row">
                 #for(tag in tags):
                 <span class="chip">#(tag)</span>
                 #endfor
             </div>
-            #endif
-        </div>
-        <div class="runner-meta">
-            <div><strong>Last active:</strong> <span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
-            #if(firstSeenAt):<div><strong>Online since:</strong> <span class="js-relative-time" data-iso="#(firstSeenAt)">#(firstSeenAt)</span></div>#endif
-            <div><strong>Capacity:</strong> #(summary.activeJobs) / #(summary.maxJobs)</div>
-            <div><strong>Jobs processed:</strong> #(summary.jobsProcessed)</div>
-            <div><strong>Avg run:</strong> #if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</div>
-            <div><strong>Avg wait:</strong> #if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</div>
-            <div><strong>Avg setup/other:</strong> #if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</div>
-            <div><strong>Avg cache acquire:</strong> #if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</div>
-            <div><strong>Cache hit rate:</strong> #if(summary.cacheHitRateFormatted):#(summary.cacheHitRateFormatted)#else:—#endif</div>
-            <div><strong>Avg download:</strong> #if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</div>
-            <div><strong>Avg prep:</strong> #if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</div>
-        </div>
-    </div>
+        </dd>
+        #endif
+    </dl>
 
     <div class="diagnostics-cards section-gap">
         <div class="diagnostic-card"><span class="diagnostic-label">Passed</span><span class="diagnostic-value">#(summary.passedCount)</span></div>
@@ -111,20 +134,6 @@ Runner #(runner.workerID)
     #endif
 </section>
 
-<style>
-/* .page-titlebar centres its items; the runner header's right column is a
-   tall metadata block, so it aligns to the top instead. */
-.runner-header {
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-.runner-meta {
-    min-width: 220px;
-}
-.runner-tags {
-    margin-top: .6rem;
-}
-</style>
 <!-- Offline badge + 5s live-status poll are wired by
      Public/admin-runner.js. -->
 <script src="/admin-runner.js?v=#appVersion()"></script>

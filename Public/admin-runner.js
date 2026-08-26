@@ -7,14 +7,19 @@
     'use strict';
 
     var offlineBadge = document.getElementById('runner-offline-badge');
+    var offlineStatus = document.getElementById('runner-offline-status');
 
     // The badge's initial state is server-rendered; this keeps it honest as
-    // the page ages without a reload, using the shared staleness rule.
+    // the page ages without a reload, using the shared staleness rule.  The
+    // status block says what being offline MEANS and is only present when
+    // something is wrong, so it tracks the same answer — left behind, it would
+    // still be explaining an outage minutes after the runner came back.
     function updateOfflineBadge() {
-        if (!offlineBadge) return;
         var laEl = document.getElementById('runner-last-active');
         var laIso = laEl ? laEl.getAttribute('data-iso') : null;
-        offlineBadge.style.display = window.ChickadeeRelativeTime.isStale(laIso) ? '' : 'none';
+        var display = window.ChickadeeRelativeTime.isStale(laIso) ? '' : 'none';
+        if (offlineBadge) offlineBadge.style.display = display;
+        if (offlineStatus) offlineStatus.style.display = display;
     }
     window.ChickadeeRelativeTime.applyRelativeTimes();
     updateOfflineBadge();
