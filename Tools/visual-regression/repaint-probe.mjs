@@ -131,6 +131,51 @@ check(second.repainted && hiddenAfter, "the filter survives the repaint",
     ? "rows reappeared despite a non-matching filter"
     : "no repaint landed while the filter was set, so the check proved nothing");
 
+// ── Admin diagnostic cards: alive on load, not a minute later ───────────────
+//
+// Same blind spot as the repaints above, from the other direction. Three of
+// the four cards on /admin (Jobs Processed, Max Load, P95 Wait) have no
+// server-rendered seed — only the Active Users card does — so they are drawn
+// entirely from GET /admin/metrics/cards. Until that payload lands their
+// sparklines are empty and cycleWindow early-returns, while the cards still
+// advertise themselves with cursor:pointer, role="button" and tabindex="0".
+//
+// That state shipped: the fetch was wired to a 60s interval with no call on
+// load, so every visit spent its first minute with three inert cards. Nothing
+// could see it — the ~300ms capture screenshots the empty state as both
+// baseline AND actual, so the diff agrees with itself, and a unit test on the
+// module cannot prove the wiring runs on a real page.
+await page.goto("/admin", { waitUntil: "networkidle" });
+
+const cardKeys = ["jobsProcessed", "load", "queueWaitP95Ms"];
+const barsPerCard = async () =>
+  page.evaluate((keys) => Object.fromEntries(keys.map((k) => [
+    k,
+    document.querySelector(`.diagnostic-card[data-card="${k}"] .diagnostic-spark`)?.children.length ?? -1,
+  ])), cardKeys);
+
+// Generous enough for a slow fetch, far below the 60s interval that would
+// make this pass for the wrong reason.
+await page.waitForFunction((keys) => keys.every((k) => {
+  const spark = document.querySelector(`.diagnostic-card[data-card="${k}"] .diagnostic-spark`);
+  return spark && spark.children.length > 0;
+}), cardKeys, { timeout: 15000 }).catch(() => {});
+
+const bars = await barsPerCard();
+const drawn = cardKeys.filter((k) => bars[k] > 0);
+check(drawn.length === cardKeys.length, "the diagnostic cards draw without waiting for the poll",
+  `only ${drawn.length}/${cardKeys.length} had bars: ${JSON.stringify(bars)}`);
+
+// Drawn is necessary but not sufficient: the click cycles the window off the
+// same payload, so a card can look right and still do nothing.
+const chipFor = (key) => page.textContent(`.diagnostic-card[data-card="${key}"] .diagnostic-window-chip`);
+const beforeChip = (await chipFor("load"))?.trim();
+await page.click('.diagnostic-card[data-card="load"]');
+await page.waitForTimeout(300);
+const afterChip = (await chipFor("load"))?.trim();
+check(!!beforeChip && beforeChip !== afterChip, "a diagnostic card cycles its window on click",
+  `the Max Load chip stayed "${beforeChip}" — the card is clickable-looking but inert`);
+
 await browser.close();
 console.log(failures === 0
   ? "repaint-probe: OK"

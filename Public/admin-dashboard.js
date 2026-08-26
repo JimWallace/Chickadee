@@ -141,6 +141,14 @@
     setInterval(function () {
         window.ChickadeeRelativeTime.applyRelativeTimes(document);
     }, 5000);
+    // Populate now, not in a minute. Unlike the Active Users card below — whose
+    // 24h bars the server renders into the markup — these three cards have no
+    // seed, so until the first payload lands `cardsPayload` is null. That makes
+    // renderSparkCard AND cycleWindow both early-return, so the cards sit with
+    // empty sparklines, a "—" headline, and a click that does nothing, while
+    // still carrying cursor:pointer and role="button". Left to the interval
+    // alone that state lasted 60 seconds after every load.
+    refreshCards();
     setInterval(refreshCards, 60000);
 
     // Active Users card: sparkline + click-cycle 24h/7d/30d.
