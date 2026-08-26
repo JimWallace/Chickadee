@@ -78,7 +78,13 @@ jobs:
         working-directory: Tools/visual-regression
         run: ./run-visual.sh
 
+      # Ungated for the same reason as the probe below: axe asserts properties
+      # a screenshot diff knows nothing about, and critical/serious violations
+      # here are zero-tolerance. Gated on the capture, a stale baseline turned
+      # that zero-tolerance gate off silently — which is how #1503's admin
+      # changes reached main having never been scanned at all.
       - name: Accessibility scan (axe-core)
+        if: ${{ !cancelled() }}
         working-directory: Tools/visual-regression
         run: ./run-a11y.sh
 
