@@ -815,11 +815,14 @@ private struct PassthroughResponder: AsyncResponder {
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = String(buffer: res.body)
-                    #expect(body.contains("Avg cache acquire:"))
+                    // The stage-timing facts are <dl> rows on the detail page's
+                    // facts block, so the label is a <dt> rather than the
+                    // "<strong>Label:</strong>" the titlebar column used.
+                    #expect(body.contains("<dt>Avg cache acquire</dt>"))
                     #expect(body.contains("200ms"))
-                    #expect(body.contains("Avg download:"))
+                    #expect(body.contains("<dt>Avg download</dt>"))
                     #expect(body.contains("150ms"))
-                    #expect(body.contains("Avg prep:"))
+                    #expect(body.contains("<dt>Avg prep</dt>"))
                     #expect(body.contains("100ms"))
                     #expect(body.contains("sortable-table"))
                     #expect(body.contains("Active Jobs"))

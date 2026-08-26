@@ -241,6 +241,40 @@ enum AuditAction: String, Sendable, CaseIterable {
         }
     }
 
+    /// Whether the recorded action succeeded.  An audit entry is written after
+    /// the action completes, so almost everything here is a success; the three
+    /// exceptions are the events an admin actually scans this table for.  The
+    /// switch is exhaustive rather than a `default` so a new action has to
+    /// answer this question at the compiler, not silently read as "ok".
+    var outcome: AuditOutcome {
+        switch self {
+        case .loginFailure, .loginLocked, .mcpRefreshReuseDetected:
+            return .failed
+        case .loginSuccess, .logout, .sessionIdleTimeout, .userRegistered,
+            .userProvisioned, .userRoleChanged, .userDeleted, .userDataExportRequested,
+            .userDataExportDownloaded, .courseCreated, .courseArchived, .courseUnarchived,
+            .courseDeleted, .courseBundleImported, .courseBundleExported,
+            .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged,
+            .assignmentCreated, .assignmentCloned, .assignmentDeleted,
+            .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
+            .submissionRetestAll, .submissionRetestForStudent, .extensionGranted,
+            .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
+            .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
+            .solutionVisibilityChanged, .slipDaySpent, .slipDayRefunded,
+            .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
+            .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
+            .brightspaceAccountConnected, .brightspaceAccountDisconnected,
+            .brightspaceSyncIdentitySet, .brightspaceOrgUnitBound,
+            .brightspaceOrgUnitCleared, .brightspaceGradeItemMapped,
+            .brightspaceAutoMapped, .brightspaceSyncNow, .brightspacePushAll,
+            .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
+            .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled,
+            .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
+            .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
+            return .ok
+        }
+    }
+
     /// Human-readable label shown in the admin table instead of the raw
     /// machine identifier (e.g. "MCP access authorized" for
     /// `mcp.consent_granted`).
@@ -318,6 +352,24 @@ enum AuditAction: String, Sendable, CaseIterable {
 
 /// Coarse grouping for audit actions, surfaced as the "Category" column and the
 /// category filter on /admin/audit.
+/// The OUTCOME column on /admin/audit: did the recorded action succeed.  Two
+/// states only — the Event column carries which failure it was.
+enum AuditOutcome: String, Sendable, CaseIterable {
+    case ok
+    case failed
+
+    /// The status-badge variant this outcome renders as.  A success is the
+    /// neutral grey, not the teal "open": nearly every row is a success, so
+    /// colouring them all would leave the three that are not to stand out by
+    /// being duller than their neighbours.
+    var tierClass: String {
+        switch self {
+        case .ok: return "tier-closed"
+        case .failed: return "tier-danger"
+        }
+    }
+}
+
 enum AuditCategory: String, Sendable, CaseIterable {
     case authentication = "Authentication"
     case users = "Users & roles"
@@ -340,6 +392,13 @@ enum AuditActionDisplay {
             return (action.category.rawValue, action.label)
         }
         return ("Other", raw)
+    }
+
+    /// A historical action no longer in `AuditAction` reads as "ok": it was
+    /// recorded after the fact like every other entry, and claiming a failure
+    /// we cannot substantiate is worse than claiming nothing.
+    static func outcome(forRaw raw: String) -> AuditOutcome {
+        AuditAction(rawValue: raw)?.outcome ?? .ok
     }
 }
 

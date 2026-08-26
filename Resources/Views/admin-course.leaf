@@ -52,10 +52,10 @@
             #csrfFormField()
             #if(course.isArchived):
             <button class="btn action-danger" type="submit"
-                    data-confirm="Unarchive #(course.code)? Students will be able to see it again.">Unarchive</button>
+                    data-confirm="Unarchive #(course.code)? #(course.enrollmentCount) students regain access immediately, and the retention clock stops.">Unarchive</button>
             #else:
             <button class="btn action-danger" type="submit"
-                    data-confirm="Archive #(course.code)? Students will no longer see this course.">Archive</button>
+                    data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back.">Archive</button>
             #endif
         </form>
         <a href="/admin/courses/#(course.id)/export" class="btn">Export bundle</a>
@@ -234,7 +234,7 @@
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Remove from course" aria-label="Remove from course"
-                                data-confirm="Remove @#(user.username) from #(course.code)?">
+                                data-confirm="Remove @#(user.username) from #(course.code)? They lose access immediately. Their submissions and grades are kept, and you can add them back from this page.">
                             <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
                         </button>
                     </form>

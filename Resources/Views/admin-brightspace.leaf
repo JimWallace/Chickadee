@@ -49,7 +49,7 @@ LEARN
         #endif
         #if(keySource == "authorized"):
         <form method="post" action="/admin/brightspace/clear" class="inline-form"
-              data-confirm="Clear the stored LEARN authorization? Grade sync reverts to the env key if set, otherwise it stops.">
+              data-confirm="Clear the stored LEARN authorization? Grade sync reverts to the environment key if one is set, otherwise it stops. You can re-authorize from this page.">
             #csrfFormField()
             <button class="btn action-danger" type="submit">Clear authorization</button>
         </form>

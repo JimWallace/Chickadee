@@ -39,33 +39,23 @@ Admin
 </section>
 
 <section class="page-section">
-    <div class="page-titlebar admin-section-head">
-        <h2>Runners</h2>
-        <div class="toolbar">
-            <form method="post" action="/admin/runner-secret" class="toolbar toolbar--nowrap">
-                #csrfFormField()
-                <input class="form-input worker-secret-input"
-                       type="text"
-                       name="secret"
-                       value="#(workerSecret)"
-                       autocomplete="new-password"
-                       placeholder="Worker shared secret">
-                <button class="btn btn-primary" type="submit">Save secret</button>
-            </form>
-        </div>
-    </div>
+    <h2>Runners</h2>
 
     <div class="table-scroll"><table id="workers-table" class="results-table sortable-table"
             data-sort-initial="runner:asc" data-sort-tiebreak="runner"
             data-poll-url="/admin/runners?fragment=rows" data-poll-interval="5000">
             <thead>
+                <!-- Phone keeps the three columns that answer "is it up and is
+                     it coping": runner, load, last heartbeat. Version and job
+                     count fold into the name cell as .row-phone-meta; the two
+                     averages are trend figures, and trends are desk work. -->
                 <tr>
                     <th data-sort-key="runner" data-sort-type="text"><button class="sort-header" type="button">Runner</button></th>
-                    <th data-sort-key="version" data-sort-type="text"><button class="sort-header" type="button">Version</button></th>
+                    <th class="col-hide-phone" data-sort-key="version" data-sort-type="text"><button class="sort-header" type="button">Version</button></th>
                     <th class="time" data-sort-key="load" data-sort-type="number"><button class="sort-header" type="button">Load</button></th>
-                    <th class="time" data-sort-key="jobs-processed" data-sort-type="number"><button class="sort-header" type="button">Jobs Processed</button></th>
-                    <th class="time" data-sort-key="avg-run" data-sort-type="duration"><button class="sort-header" type="button">Avg Run</button></th>
-                    <th class="time" data-sort-key="avg-wait" data-sort-type="duration"><button class="sort-header" type="button">Avg Wait</button></th>
+                    <th class="time col-hide-phone" data-sort-key="jobs-processed" data-sort-type="number"><button class="sort-header" type="button">Jobs Processed</button></th>
+                    <th class="time col-hide-phone" data-sort-key="avg-run" data-sort-type="duration"><button class="sort-header" type="button">Avg Run</button></th>
+                    <th class="time col-hide-phone" data-sort-key="avg-wait" data-sort-type="duration"><button class="sort-header" type="button">Avg Wait</button></th>
                     <th class="time" data-sort-key="last-active" data-sort-type="date"><button class="sort-header" type="button">Last Active</button></th>
                 </tr>
             </thead>
@@ -73,6 +63,31 @@ Admin
             #extend("_worker-rows")
             </tbody>
         </table></div>
+</section>
+
+<!-- The worker secret is a setting, so it reads as one: a label, a note saying
+     what saving does, and the button beside the field it saves. It used to sit
+     unlabelled in the Runners heading row, with a placeholder standing in for
+     the label and no statement of the consequence. -->
+<section class="page-section">
+    <h2>Worker shared secret</h2>
+    <form method="post" action="/admin/runner-secret" class="form-stack">
+        #csrfFormField()
+        <div class="field-stack">
+            <label for="worker-secret">Secret</label>
+            <input id="worker-secret"
+                   class="form-input"
+                   type="text"
+                   name="secret"
+                   value="#(workerSecret)"
+                   autocomplete="new-password"
+                   spellcheck="false">
+            <p class="field-note">Changing this drops any runner still using the old value.</p>
+        </div>
+        <div class="toolbar toolbar--end">
+            <button class="btn btn-primary" type="submit">Save secret</button>
+        </div>
+    </form>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
@@ -102,7 +117,9 @@ Admin
                 <th data-sort-key="code" data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
                 <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
                 <th data-sort-key="students" data-sort-type="number"><button class="sort-header" type="button">Students</button></th>
-                <th data-sort-key="submissions" data-sort-type="number"><button class="sort-header" type="button">Submissions</button></th>
+                <!-- Phone: the submission total is scale you read at a desk;
+                     the enrolment count is the one an archive decision needs. -->
+                <th class="col-hide-phone" data-sort-key="submissions" data-sort-type="number"><button class="sort-header" type="button">Submissions</button></th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -112,13 +129,13 @@ Admin
                 <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
-                <td>#(course.submissionCount)</td>
+                <td class="col-hide-phone">#(course.submissionCount)</td>
                 <td class="action-cell">
                     <form method="post" action="/admin/courses/#(course.id)/copy" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit"
                                 title="Copy course" aria-label="Copy course"
-                                data-confirm="Copy #(course.code)? All test setups and assignments will be duplicated into a new course.">
+                                data-confirm="Copy #(course.code)? Its assignments and test suites are duplicated into a new course, and the copy starts with no students enrolled.">
                             <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
                         </button>
                     </form>
@@ -126,7 +143,7 @@ Admin
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Archive course" aria-label="Archive course"
-                                data-confirm="Archive #(course.code)? Students will no longer see this course.">
+                                data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back.">
                             <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>
                         </button>
                     </form>
@@ -142,19 +159,6 @@ Admin
 <style>
 /* Clickable diagnostic-card + sparkline styles are global (styles.css),
    shared with the instructor dashboard. */
-.admin-section-head {
-    gap: .5rem;
-}
-.toolbar--nowrap {
-    flex-wrap: nowrap;
-}
-.worker-secret-input {
-    width: 16rem;
-}
-@media (max-width: 640px) {
-    .toolbar--nowrap { flex-wrap: wrap; }
-    .worker-secret-input { width: 100%; }
-}
 .worker-host {
     font-size: .8em;
     color: var(--muted);

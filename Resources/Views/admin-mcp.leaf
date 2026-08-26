@@ -57,13 +57,18 @@ MCP
     </p>
     #endif
 
-    <form method="post" action="/admin/mcp/accounts" class="mcp-create-form">
+    <form method="post" action="/admin/mcp/accounts" class="form-stack mcp-create-form">
         #csrfFormField()
-        <input class="form-input mcp-username-input" type="text" name="username" required
-               autocomplete="new-password"
-               placeholder="agent name, e.g. course-bot"
-               aria-label="New MCP account username">
-        <button class="btn btn-primary" type="submit">Create account</button>
+        <div class="field-stack">
+            <label for="mcp-new-account">Account name</label>
+            <input id="mcp-new-account" class="form-input" type="text" name="username" required
+                   autocomplete="new-password"
+                   placeholder="course-bot">
+            <p class="field-note">A new account has no course access until you enroll it in a course.</p>
+        </div>
+        <div class="toolbar toolbar--end">
+            <button class="btn btn-primary" type="submit">Create account</button>
+        </div>
     </form>
 
     <div class="table-scroll"><table class="results-table sortable-table">
@@ -127,7 +132,7 @@ MCP
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
-                                    data-confirm="Delete this MCP account? Existing tokens stay valid until they expire.">Delete</button>
+                                    data-confirm="Delete the MCP account #(account.username)? It loses access immediately. Tokens it already minted stay valid until they expire, and the account cannot be restored.">Delete</button>
                         </form>
                     </div>
                 </td>
@@ -171,7 +176,7 @@ MCP
                     <form method="post" action="/agents/#(grant.id)/revoke" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
-                                data-confirm="Revoke this agent? It will lose access immediately.">Revoke</button>
+                                data-confirm="Revoke this agent? It loses access immediately. The audit record of what it did is kept, and the agent can be authorized again from its client.">Revoke</button>
                     </form>
                     #endif
                 </td>
@@ -189,13 +194,7 @@ MCP
     color: var(--gray-600);
     font-size: var(--text-sm);
 }
-.mcp-create-form {
-    display: flex;
-    gap: .5rem;
-    align-items: center;
-    margin: 1rem 0;
-}
-.mcp-username-input { width: 260px; max-width: 100%; }
+.mcp-create-form { margin: 1rem 0; }
 .mcp-course-cell {
     display: flex;
     gap: .35rem;

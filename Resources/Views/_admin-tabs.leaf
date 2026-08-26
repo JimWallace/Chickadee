@@ -3,24 +3,74 @@
      was inlined into all eight admin pages for years behind a comment blaming
      a LeafKit false-positive cycle error; the #1266 investigation showed those
      historical Leaf diagnoses were unreliable, and the render tests prove the
-     shared partial resolves. -->
+     shared partial resolves.
+
+     Eight flat tabs are now five: Overview and Health Alerts — the two an
+     admin opens daily — stay top-level, and the remaining six group into
+     People, Data and Integrations.  The menus are the site's existing
+     nav-dropdown idiom (app.js drives every [data-nav-dropdown]: one open at a
+     time, outside-click and Escape to close), so this adds no component and no
+     script.  activeAdminTab values are unchanged — a menu item sets exactly
+     what its flat tab used to.
+
+     aria-current goes on the menu ITEM that is the current page, as the nav's
+     course tabs do.  The toggle wears data-group-current instead: a menu
+     button navigates nowhere, so calling it the current page both misstates it
+     and leaves a screen reader unable to tell which of the items below is the
+     one showing.  Both drive the same underline rule in styles.css. -->
 <h1 class="visually-hidden">Admin —
 #if(activeAdminTab == "overview"):Overview#endif
-#if(activeAdminTab == "users"):Users#endif
-#if(activeAdminTab == "storage"):Storage#endif
-#if(activeAdminTab == "retention"):Retention#endif
-#if(activeAdminTab == "brightspace"):LEARN#endif
-#if(activeAdminTab == "mcp"):MCP#endif
-#if(activeAdminTab == "audit"):Audit Log#endif
 #if(activeAdminTab == "alerts"):Health Alerts#endif
+#if(activeAdminTab == "users"):People — Users#endif
+#if(activeAdminTab == "storage"):Data — Storage#endif
+#if(activeAdminTab == "retention"):Data — Retention#endif
+#if(activeAdminTab == "audit"):Data — Audit Log#endif
+#if(activeAdminTab == "brightspace"):Integrations — LEARN#endif
+#if(activeAdminTab == "mcp"):Integrations — MCP#endif
 </h1>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
-    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
-    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
-    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
-    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
-    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+
+    <div class="nav-dropdown" data-nav-dropdown>
+        <button type="button" class="admin-tab nav-dropdown-toggle"
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "users"): data-group-current#endif>
+            <span>People</span>
+            <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+            <a class="nav-dropdown-item#if(activeAdminTab == "users"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+        </div>
+    </div>
+
+    <div class="nav-dropdown" data-nav-dropdown>
+        <button type="button" class="admin-tab nav-dropdown-toggle"
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "storage"): data-group-current#endif#if(activeAdminTab == "retention"): data-group-current#endif#if(activeAdminTab == "audit"): data-group-current#endif>
+            <span>Data</span>
+            <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+            <a class="nav-dropdown-item#if(activeAdminTab == "storage"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+            <a class="nav-dropdown-item#if(activeAdminTab == "retention"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+            <a class="nav-dropdown-item#if(activeAdminTab == "audit"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+        </div>
+    </div>
+
+    <div class="nav-dropdown" data-nav-dropdown>
+        <button type="button" class="admin-tab nav-dropdown-toggle"
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif>
+            <span>Integrations</span>
+            <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+            <a class="nav-dropdown-item#if(activeAdminTab == "brightspace"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
+            #if(mcpEnabled()):<a class="nav-dropdown-item#if(activeAdminTab == "mcp"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
+        </div>
+    </div>
 </nav>
