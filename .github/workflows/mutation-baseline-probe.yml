@@ -1,0 +1,124 @@
+name: Mutation baseline probe (Worker)
+
+# MEASURES ONE PRECONDITION, ON DEMAND: whether the logic-tier suite WITH the
+# WorkerTests suite -- the 48 timing-sensitive sandbox and timeout tests the
+# weekly sweep currently skips -- survives the sweep's own configuration (one
+# process, the swift-ci container, a hosted runner) reliably enough to be
+# Muter's baseline. Widening the sweep to Sources/Worker is gated on exactly
+# this: a baseline flake loses a whole shard (2026-08-25, shard 1), and
+# mutating Worker while its tests are skipped would report survivors in
+# precisely the code they cover. Tools/mutation/config.json carries the
+# reasoning; this workflow exists to replace its "separate problem" caveat
+# with a number.
+#
+# The command below is the EXACT prospective baseline -- the sweep's testArgs
+# minus `--skip WorkerTests/`. Measured 2026-08-25 on a 4-CPU dev container it
+# passes in ~8.4s (887 tests, one process); the question this probe answers is
+# the loaded hosted runner, which is where the daemon-fanout race actually
+# flaked. Per-iteration durations double as the marginal per-mutant cost a
+# Worker shard would pay, so the summary table is also the input to the shard
+# arithmetic.
+#
+# A PROBE, NEVER A GATE: dispatch-only, no schedule. Every iteration runs even
+# after a failure -- one flake must not hide a second -- and the job then fails
+# loudly, so a red run can never be misread as a clean one. A failing
+# iteration names the test that needs the event-based-wait treatment the
+# fanout fix used, before any widening of the sweep.
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "How many suite runs (default 20)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Run the unskipped suite repeatedly
+    runs-on: ubuntu-latest
+    # One cold build (~20 min) plus N suite runs of a few minutes each on a
+    # loaded runner. Generous, so a slow run reports rather than being killed
+    # at a ceiling -- a job cancelled at its limit looks identical to a wedge.
+    timeout-minutes: 150
+    container:
+      # swift-CI, not plain swift: the interpreters matter here exactly as
+      # they do for the sweep -- on the toolchain-only image the
+      # interpreter-dependent tests SKIP and the probe would measure a
+      # different suite than the one the baseline runs.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build once, then run the suite repeatedly
+        env:
+          ITERATIONS: ${{ inputs.iterations }}
+        run: |
+          set -u
+          iterations="${ITERATIONS:-20}"
+          echo "runner reports $(nproc) CPU core(s)"
+          mkdir -p /tmp/probe-logs
+          failures=0
+          {
+            echo "### Mutation baseline probe: unskipped suite x $iterations"
+            echo ""
+            echo '`swift test --skip APITests --skip ZipProcessEnvironmentTests -Xswiftc -no-warnings-as-errors`'
+            echo ""
+            echo "Runner cores: $(nproc)"
+            echo ""
+            echo "| iteration | result | duration |"
+            echo "|---:|---|---:|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for i in $(seq 1 "$iterations"); do
+            start=$(date +%s)
+            if [ "$i" -eq 1 ]; then
+              swift test --skip APITests --skip ZipProcessEnvironmentTests \
+                -Xswiftc -no-warnings-as-errors \
+                > "/tmp/probe-logs/iteration-$i.log" 2>&1
+            else
+              swift test --skip-build --skip APITests --skip ZipProcessEnvironmentTests \
+                -Xswiftc -no-warnings-as-errors \
+                > "/tmp/probe-logs/iteration-$i.log" 2>&1
+            fi && result=pass || result=FAIL
+            took=$(( $(date +%s) - start ))
+            note=""
+            [ "$i" -eq 1 ] && note=" (includes the cold build)"
+            echo "| $i | $result | ${took}s$note |" >> "$GITHUB_STEP_SUMMARY"
+            echo "iteration $i: $result in ${took}s$note"
+            if [ "$result" = "FAIL" ]; then
+              failures=$((failures + 1))
+              {
+                echo ""
+                echo "Iteration $i failing tests:"
+                echo ""
+                echo '```'
+                grep "✘" "/tmp/probe-logs/iteration-$i.log" | head -20
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              grep "✘" "/tmp/probe-logs/iteration-$i.log" | head -20
+            fi
+          done
+          {
+            echo ""
+            echo "**$failures of $iterations iteration(s) failed.**"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::$failures of $iterations iterations failed; the baseline is not ready for Worker. The summary names the flaking tests."
+            exit 1
+          fi
+          echo "All $iterations iterations passed."
+
+      - name: Upload the per-iteration logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-probe-logs
+          path: /tmp/probe-logs/
+          if-no-files-found: ignore
