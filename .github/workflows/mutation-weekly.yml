@@ -6,27 +6,35 @@ name: Mutation testing (weekly)
 # construction, so chasing a percentage means writing tests for inputs that
 # cannot occur. See docs/mutation-testing-pilot.md.
 #
-# SCOPE: RUNNERCORE + CORE. ~10,200 LOC, ~1,700 mutants, 8 shards of ~60 minutes.
-# Widened after run 3 -- the first sweep that ran end to end -- came back green at
-# 84% (122 killed, 23 survivors, 64 phantoms filtered), which is the condition the
-# RunnerCore-only config named for widening.
+# SCOPE: RUNNERCORE + CORE + WORKER -- the whole logic tier. ~15,900 LOC, ~2,650
+# mutants, 12 shards of ~70 minutes. Widened to Core after run 3 came back green
+# at 84%, and to Worker after the 2026-08-25 sweep emptied the survivor queue --
+# one target at a time, after a green run, as the original config planned.
 #
-# Eight shards because the cost is FIXED, not marginal: ~29 minutes per shard for
-# a cold build plus the unmutated baseline, then only ~9.8 seconds per mutant.
-# Both measured across run 3. The curve flattens fast -- 84 min over 5 shards, 63
-# over 8, 56 over 10 -- so the eighth shard is roughly where another stops paying.
+# Twelve shards because the cost is FIXED, not marginal: ~29 minutes per shard
+# for a cold build plus the unmutated baseline (measured across run 3), then a
+# per-mutant cost of one suite run -- ~11-12s with the full suite, measured by
+# probe run 32916211705. ~220 mutants per shard keeps the wall-clock where the
+# 8-shard sweep had it.
 #
-# A CORE SURVIVOR IS WEAKER EVIDENCE THAN A RUNNERCORE ONE. The suite skips
-# APITests, which dominates the runtime, and Core is exercised through it: 89% of
-# Core's LOC is reachable from CoreTests or WorkerTests, 5% only from APITests, 6%
-# from no test at all. A survivor in that 5% may be an artefact of the skip rather
-# than a hole -- the missing-interpreter shape again -- so check it against the
-# full suite before writing a test. Tools/mutation/config.json carries the detail.
+# A CORE SURVIVOR IS WEAKER EVIDENCE THAN A RUNNERCORE OR WORKER ONE. The suite
+# skips APITests, which dominates the runtime, and Core is exercised through it:
+# 89% of Core's LOC is reachable from CoreTests or WorkerTests, 5% only from
+# APITests, 6% from no test at all. A survivor in that 5% may be an artefact of
+# the skip rather than a hole -- the missing-interpreter shape again -- so check
+# it against the full suite before writing a test. All four achievement-family
+# survivors of the 2026-08-25 sweep were exactly this shape.
+# Tools/mutation/config.json carries the detail.
 #
-# WORKER IS STILL OUT, for the same shape of reason: the baseline fix that made
-# run 3 possible is `--skip WorkerTests/`, which drops the 48 timing-sensitive
-# sandbox and timeout tests, so mutating Sources/Worker would report survivors in
-# exactly the code they cover. That is a separate problem from widening scope.
+# WORKER'S ADMISSION WAS MEASURED, NOT DECLARED. The old `--skip WorkerTests/`
+# existed because the 48 timing-sensitive sandbox and timeout tests were
+# believed unable to survive this one-process configuration, and mutating
+# Sources/Worker while they were skipped would have reported survivors in
+# exactly the code they cover. Two probe runs settled it
+# (mutation-baseline-probe.yml): unprivileged, 20/20 iterations failed
+# deterministically on the sandbox's `unshare` being refused -- a container
+# CAPABILITY, hence `--privileged` on the mutate job below -- and privileged,
+# 20/20 passed at 11-12s flat. The skip is gone from config.json's testArgs.
 #
 # APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
 # mutants, and its mutants must be graded by APITests, the slowest suite, so it
@@ -129,6 +137,12 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      # Required by the baseline now that WorkerTests runs in it, and measured
+      # rather than assumed: probe run 32913719441 ran the same suite
+      # unprivileged and all 20 iterations failed identically on the sandbox's
+      # `unshare` being refused ("Operation not permitted"). Same setting as
+      # the worker-tests CI job, for the same reason.
+      options: --privileged
 
     steps:
       - uses: actions/checkout@v6
