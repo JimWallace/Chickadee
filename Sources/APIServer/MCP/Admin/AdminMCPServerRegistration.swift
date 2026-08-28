@@ -65,6 +65,14 @@ func registerAdminMCPRoutes(_ app: Application) throws {
         app.logger.error("admin-mcp: \(refusal)")
         return
     }
+    // Same client-allowlist fail-safe as the content surface: the admin
+    // surface shares its OAuth flow, so it shares the policy.
+    if let refusal = mcpClientAllowlistRefusal(
+        environment: app.environment, allowedClientOrigins: app.mcpClientAllowlistOrigins)
+    {
+        app.logger.error("admin-mcp: \(refusal)")
+        return
+    }
     if let warning = mcpAllowlistWarning(
         environment: app.environment,
         allowedHosts: mcp.allowedHosts,

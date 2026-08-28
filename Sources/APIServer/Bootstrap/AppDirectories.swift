@@ -16,6 +16,7 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
     let alertWebhookURLFile = workDir + ".alert-webhook-url"
+    let mcpClientAllowlistFile = workDir + ".mcp-client-allowlist"
 
     let resultsDir = workDir + "results/"
     let setupsDir = workDir + "testsetups/"
@@ -61,4 +62,27 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     )
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[DataExportManagerKey.self] = DataExportManager()
+
+    // Which OAuth clients an instructor may consent to, stated by the operator
+    // in a file rather than an environment variable (standing repo rule).  Read
+    // once here: the route-registration guards need it synchronously, and the
+    // actor serves the per-request checks.
+    app.storage[MCPClientAllowlistFilePathKey.self] = mcpClientAllowlistFile
+    let clientAllowlist = readMCPClientAllowlistFromDisk(filePath: mcpClientAllowlistFile)
+    app.storage[MCPClientAllowlistOriginsKey.self] = clientAllowlist.origins
+    app.storage[MCPClientAllowlistStoreKey.self] = MCPClientAllowlistStore(
+        initialOrigins: clientAllowlist.origins)
+    if app.appConfig.mcp.mode.isMounted {
+        for entry in clientAllowlist.invalidEntries {
+            // Named rather than silently dropped: a typo here fails closed, and
+            // an operator staring at a refused client needs to see why.
+            let detail =
+                "mcp: ignoring unusable client allowlist entry \"\(entry)\" — expected an origin "
+                + "such as https://example.org (https required except for localhost)."
+            app.logger.warning("\(detail)")
+        }
+        app.logger.info(
+            "mcp: clientAllowlist=\(clientAllowlist.origins.count) origin(s) from \(mcpClientAllowlistFile)"
+        )
+    }
 }

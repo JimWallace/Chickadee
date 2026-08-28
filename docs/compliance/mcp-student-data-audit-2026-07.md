@@ -66,7 +66,7 @@ and demonstrable from the repository.
 | F-6 | Content | Wall guard test scanned `MCP/Tools/` only and did not forbid `APIUser` / enrollment models (authz uses them legitimately) | Info / hardening | **Remediated** (this PR): scan extended to `Transport/` + `Resources/`; identity models confined to an explicit authz allowlist |
 | F-7 | Admin | Admin surface runs on the owner DB pool (by recorded design decision); guarantee is code-level DTOs + tests, not DB-enforced | Info / recorded | Open — state plainly in the submission; DB-view hardening path recorded in `docs/admin-mcp.md` §4.1 |
 | F-8 | Both | Compliance-record drift: `tool-inventory.md` predated 6 content tools and the entire admin surface; `CLAUDE.md` said 40 | Info / docs | **Remediated** (this PR): inventory/data-flow/Policy-46/trust-boundary addenda; `CLAUDE.md` corrected to 51 |
-| F-9 | Deployment | Repo cannot prove prod env: `MCP_DATABASE_USER` (DB wall), `MCP_ALLOWED_HOSTS/ORIGINS`, `AUDIT_LOG_RETENTION_DAYS` need operator confirmation | Verify | Open — operator attestation checklist in §3 F-9 and `uw-ai-approval-readiness.md` §4 |
+| F-9 | Deployment | Repo cannot prove prod env: `MCP_DATABASE_USER` (DB wall), `MCP_ALLOWED_HOSTS/ORIGINS`, `AUDIT_LOG_RETENTION_DAYS` need operator confirmation; `.mcp-client-allowlist` contents state which clients may connect (its *presence* is enforced — production will not mount without it) | Verify | Open — operator attestation checklist in §3 F-9 and `uw-ai-approval-readiness.md` §4 |
 
 ---
 
@@ -449,9 +449,16 @@ For the submission, the operator should attest the production environment:
    Verification queries are at the bottom of the SQL file.
 2. `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` are set (production refuses to
    mount otherwise unless `MCP_ALLOW_OPEN_GUARDS=true` — confirm it is not).
-3. `AUDIT_LOG_RETENTION_DAYS` matches the retention the submission states
+3. `.mcp-client-allowlist` in the work directory names the approved client
+   redirect origins, one per line, and its contents match the AI tools approved
+   for the data class in play. Production refuses to mount `/mcp`,
+   `/admin-mcp` and the OAuth consent flow while it is absent or empty, so
+   unlike the items above this one cannot be silently left off — but its
+   *contents* are the operator's statement of policy and should be recorded
+   verbatim in the attestation.
+4. `AUDIT_LOG_RETENTION_DAYS` matches the retention the submission states
    (default 90).
-4. The deployment-layer egress allowlist (`deploy/egress-allowlist.md`) is
+5. The deployment-layer egress allowlist (`deploy/egress-allowlist.md`) is
    applied; Chickadee itself calls no model API (re-verified: no model-provider
    client or key exists in `Sources/` or `Package.swift`).
 
