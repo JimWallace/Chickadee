@@ -5,13 +5,17 @@
      historical Leaf diagnoses were unreliable, and the render tests prove the
      shared partial resolves.
 
-     Eight flat tabs are now five: Overview and Health Alerts — the two an
-     admin opens daily — stay top-level, and the remaining six group into
-     People, Data and Integrations.  The menus are the site's existing
-     nav-dropdown idiom (app.js drives every [data-nav-dropdown]: one open at a
-     time, outside-click and Escape to close), so this adds no component and no
-     script.  activeAdminTab values are unchanged — a menu item sets exactly
-     what its flat tab used to.
+     Eight flat tabs are now four: Overview, Health Alerts and People are
+     direct links, and the remaining five group into Data and Integrations.
+     The menus are the site's existing nav-dropdown idiom (app.js drives every
+     [data-nav-dropdown]: one open at a time, outside-click and Escape to
+     close), so this adds no component and no script.  activeAdminTab values
+     are unchanged — a menu item sets exactly what its flat tab used to.
+
+     People is a plain link because Users is the only page under it.  A menu
+     of one is an extra click and a caret promising a choice that does not
+     exist; when a second People page arrives, this becomes a nav-dropdown
+     like the two below it and nothing else has to change.
 
      aria-current goes on the menu ITEM that is the current page, as the nav's
      course tabs do.  The toggle wears data-group-current instead: a menu
@@ -21,7 +25,7 @@
 <h1 class="visually-hidden">Admin —
 #if(activeAdminTab == "overview"):Overview#endif
 #if(activeAdminTab == "alerts"):Health Alerts#endif
-#if(activeAdminTab == "users"):People — Users#endif
+#if(activeAdminTab == "users"):People#endif
 #if(activeAdminTab == "storage"):Data — Storage#endif
 #if(activeAdminTab == "retention"):Data — Retention#endif
 #if(activeAdminTab == "audit"):Data — Audit Log#endif
@@ -32,17 +36,7 @@
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 
-    <div class="nav-dropdown" data-nav-dropdown>
-        <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "users"): data-group-current#endif>
-            <span>People</span>
-            <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
-        </button>
-        <div class="nav-dropdown-menu" role="menu">
-            <a class="nav-dropdown-item#if(activeAdminTab == "users"): nav-dropdown-item-active#endif"
-               role="menuitem" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
-        </div>
-    </div>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>People</a>
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
