@@ -1,0 +1,949 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "664706612f87",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.3.3 (swift-6.3.3-RELEASE)"
+  },
+  "date": "2026-09-01",
+  "killed": 459,
+  "phantomsFiltered": 198,
+  "shardsExpected": 12,
+  "shardsReported": 12,
+  "survived": 64,
+  "survivors": [
+    {
+      "file": "Sources/Worker/BoundedPipeRead.swift",
+      "line": 60,
+      "mutations": [
+        {
+          "column": 19,
+          "mutated": "var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)\n        let readyCount = poll(&pollDescriptor, 1, 100)\n        if readyCount == -1 {\n            if errno == EINTR { continue }\n            return accumulated\n        }\n        if readyCount > 0 {\n            let bytesRead = read(descriptor, &chunk, chunk.count)\n            if bytesRead > 0 {\n                let remaining = maxBytes - accumulated.count\n                if remaining > 0 {\n                    accumulated.append(contentsOf: chunk[0..<min(bytesRead, remaining)])\n                }\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            return accumulated  // 0 = EOF (every write end closed); -1 = unrecoverable.\n        }\n        if Date() <= deadline { return accumulated }",
+          "offset": 2601,
+          "original": "var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)\n        let readyCount = poll(&pollDescriptor, 1, 100)\n        if readyCount == -1 {\n            if errno == EINTR { continue }\n            return accumulated\n        }\n        if readyCount > 0 {\n            let bytesRead = read(descriptor, &chunk, chunk.count)\n            if bytesRead > 0 {\n                let remaining = maxBytes - accumulated.count\n                if remaining > 0 {\n                    accumulated.append(contentsOf: chunk[0..<min(bytesRead, remaining)])\n                }\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            return accumulated  // 0 = EOF (every write end closed); -1 = unrecoverable.\n        }\n        if Date() >= deadline { return accumulated }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if Date() >= deadline { return accumulated }"
+    },
+    {
+      "file": "Sources/Worker/NotebookExtractor.swift",
+      "line": 29,
+      "mutations": [
+        {
+          "column": 50,
+          "mutated": "guard notebook[\"metadata\"] != nil,\n            notebook[\"nbformat\"] != nil,\n            notebook[\"cells\"] is [[String: Any]] && notebook[\"cells\"] is [Any]\n        else {\n            return false\n        }\n        return true",
+          "offset": 1277,
+          "original": "guard notebook[\"metadata\"] != nil,\n            notebook[\"nbformat\"] != nil,\n            notebook[\"cells\"] is [[String: Any]] || notebook[\"cells\"] is [Any]\n        else {\n            return false\n        }\n        return true"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "notebook[\"cells\"] is [[String: Any]] || notebook[\"cells\"] is [Any]"
+    },
+    {
+      "file": "Sources/Worker/Reporter.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 47,
+          "mutated": "let event = context.stage != .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])",
+          "offset": 4617,
+          "original": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\""
+    },
+    {
+      "file": "Sources/Worker/Reporter.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 118,
+          "mutated": "let event = context.stage == .heartbeat  ? \"network_retry_scheduled\" :  \"heartbeat_retry_scheduled\" \n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])",
+          "offset": 4688,
+          "original": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\""
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 172,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "let currentActiveJobs = activeJobs\n        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {\n            recordConnectionRestoredIfNeeded(stage: .poll)\n            backoff.reset()\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"job_assigned\",\n                    \"submission_id\": job.submissionID,\n                ])\n            await runAssignedJob(job)\n        } else {\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"no_job\",\n                ])\n            let delay = backoff.next()\n            try await Task.sleep(for: delay)\n        }",
+          "offset": 6815,
+          "original": "let currentActiveJobs = activeJobs\n        writeStructuredRunnerLog(\n            event: \"poll_cycle_start\",\n            fields: [\n                \"runner_id\": workerID,\n                \"slot\": slot,\n                \"runner_active_jobs\": currentActiveJobs,\n                \"max_jobs\": maxConcurrentJobs,\n                \"api_base_url\": apiBaseURL.absoluteString,\n            ])\n        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {\n            recordConnectionRestoredIfNeeded(stage: .poll)\n            backoff.reset()\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"job_assigned\",\n                    \"submission_id\": job.submissionID,\n                ])\n            await runAssignedJob(job)\n        } else {\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"no_job\",\n                ])\n            let delay = backoff.next()\n            try await Task.sleep(for: delay)\n        }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 233,
+      "mutations": [
+        {
+          "column": 10,
+          "mutated": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)",
+          "offset": 9137,
+          "original": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": ")"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 244,
+      "mutations": [
+        {
+          "column": 74,
+          "mutated": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        try await Task.sleep(for: delay)",
+          "offset": 9594,
+          "original": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 286,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "let stage: RunnerRetryStage =\n            destination.lastPathComponent != \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )",
+          "offset": 11091,
+          "original": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 286,
+      "mutations": [
+        {
+          "column": 105,
+          "mutated": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\"  ? .downloadTestSetup :  .downloadSubmission \n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )",
+          "offset": 11153,
+          "original": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 379,
+      "mutations": [
+        {
+          "column": 31,
+          "mutated": "let timeLimitSeconds = max(1, config.makeTimeoutSeconds)\n        let launch = ScriptLaunch(\n            executablePath: \"/usr/bin/make\",\n            arguments: target.map { [$0] } ?? [],\n            env: mergedScriptEnvironment(overrides: [:])\n        )\n        let output = await executeScriptLaunch(\n            launch,\n            workDir: directory,\n            timeLimitSeconds: timeLimitSeconds,\n            launchErrorPrefix: \"Failed to launch make\"\n        )\n        if output.timedOut {\n            throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)\n        }\n        guard output.exitCode != 0 else {\n            let detail = [output.stderr, output.stdout]\n                .filter { !$0.isEmpty }\n                .joined(separator: \"\\n\")\n            throw WorkerDaemonError.makeFailed(\n                target: target, detail: detail.isEmpty ? nil : detail)\n        }",
+          "offset": 15772,
+          "original": "let timeLimitSeconds = max(1, config.makeTimeoutSeconds)\n        let launch = ScriptLaunch(\n            executablePath: \"/usr/bin/make\",\n            arguments: target.map { [$0] } ?? [],\n            env: mergedScriptEnvironment(overrides: [:])\n        )\n        let output = await executeScriptLaunch(\n            launch,\n            workDir: directory,\n            timeLimitSeconds: timeLimitSeconds,\n            launchErrorPrefix: \"Failed to launch make\"\n        )\n        if output.timedOut {\n            throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)\n        }\n        guard output.exitCode == 0 else {\n            let detail = [output.stderr, output.stdout]\n                .filter { !$0.isEmpty }\n                .joined(separator: \"\\n\")\n            throw WorkerDaemonError.makeFailed(\n                target: target, detail: detail.isEmpty ? nil : detail)\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard output.exitCode == 0 else {"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 424,
+      "mutations": [
+        {
+          "column": 64,
+          "mutated": "try await reporter.heartbeat(payload)",
+          "offset": 17395,
+          "original": "try await reporter.heartbeat(payload)\n            recordConnectionRestoredIfNeeded(stage: .heartbeat)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "recordConnectionRestoredIfNeeded(stage: .heartbeat)"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 451,
+      "mutations": [
+        {
+          "column": 25,
+          "mutated": "if !serverConnectionLost {\n            serverConnectionLost = true\n            writeStructuredRunnerLog(\n                event: \"server_connection_lost\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds ?? 0,\n                    \"error_message_summary\": message,\n                ])\n        } else if stage != .heartbeat, let retryInSeconds {\n            writeStructuredRunnerLog(\n                event: \"heartbeat_retry_scheduled\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds,\n                    \"error_message_summary\": message,\n                ])\n        }",
+          "offset": 18249,
+          "original": "if !serverConnectionLost {\n            serverConnectionLost = true\n            writeStructuredRunnerLog(\n                event: \"server_connection_lost\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds ?? 0,\n                    \"error_message_summary\": message,\n                ])\n        } else if stage == .heartbeat, let retryInSeconds {\n            writeStructuredRunnerLog(\n                event: \"heartbeat_retry_scheduled\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds,\n                    \"error_message_summary\": message,\n                ])\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "} else if stage == .heartbeat, let retryInSeconds {"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 477,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "if collection.timeoutCount < 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed",
+          "offset": 19213,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if collection.timeoutCount > 0 { return .timeout }"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 478,
+      "mutations": [
+        {
+          "column": 34,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount < 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed",
+          "offset": 19270,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if collection.errorCount > 0 { return .error }"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 479,
+      "mutations": [
+        {
+          "column": 46,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed && collection.failCount > 0 { return .failed }\n        return .passed",
+          "offset": 19337,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 479,
+      "mutations": [
+        {
+          "column": 35,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus != .failed || collection.failCount > 0 { return .failed }\n        return .passed",
+          "offset": 19326,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        },
+        {
+          "column": 70,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount < 0 { return .failed }\n        return .passed",
+          "offset": 19361,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 479,
+      "mutations": [
+        {
+          "column": 35,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus != .failed || collection.failCount > 0 { return .failed }\n        return .passed",
+          "offset": 19326,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        },
+        {
+          "column": 70,
+          "mutated": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount < 0 { return .failed }\n        return .passed",
+          "offset": 19361,
+          "original": "if collection.timeoutCount > 0 { return .timeout }\n        if collection.errorCount > 0 { return .error }\n        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }\n        return .passed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 496,
+      "mutations": [
+        {
+          "column": 75,
+          "mutated": "$0.key > $1.key",
+          "offset": 20337,
+          "original": "$0.key < $1.key"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "for (name, source) in allRuntimeHelperFiles().sorted(by: { $0.key < $1.key }) {"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemonConfig.swift",
+      "line": 119,
+      "mutations": [
+        {
+          "column": 11,
+          "mutated": "",
+          "offset": 5920,
+          "original": "writeStructuredRunnerLog(\n        event: \"runner_config_parse_failed\",\n        fields: [\n            \"variable\": key,\n            \"raw_value\": raw,\n            \"using_default\": fallback,\n        ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemonConfig.swift",
+      "line": 143,
+      "mutations": [
+        {
+          "column": 59,
+          "mutated": "return defaultValue",
+          "offset": 6743,
+          "original": "reportUnparseable(key, trimmed, \"\\(defaultValue)\")\n        return defaultValue"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "reportUnparseable(key, trimmed, \"\\(defaultValue)\")"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 72,
+      "mutations": [
+        {
+          "column": 59,
+          "mutated": "$0.language != AssignmentLanguage.python.capabilityName",
+          "offset": 3652,
+          "original": "$0.language == AssignmentLanguage.python.capabilityName"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if languageVersions.contains(where: { $0.language == AssignmentLanguage.python.capabilityName }) {"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 79,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "",
+          "offset": 4103,
+          "original": "group.addTask {\n                        (module, await pythonImportAvailable(module: module))\n                    }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "}"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 99,
+      "mutations": [
+        {
+          "column": 69,
+          "mutated": "$0.language > $1.language",
+          "offset": 4875,
+          "original": "$0.language < $1.language"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "languageVersions: languageVersions.sorted { $0.language < $1.language },"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 100,
+      "mutations": [
+        {
+          "column": 57,
+          "mutated": "$0.name > $1.name",
+          "offset": 4948,
+          "original": "$0.name < $1.name"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "capabilities: capabilities.sorted { $0.name < $1.name }"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 198,
+      "mutations": [
+        {
+          "column": 11,
+          "mutated": "await runStatus(\n            command: \"python3\",\n            arguments: [\"-c\", \"import \\(module)\"]\n        ) != 0",
+          "offset": 9035,
+          "original": "await runStatus(\n            command: \"python3\",\n            arguments: [\"-c\", \"import \\(module)\"]\n        ) == 0"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": ") == 0"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 202,
+      "mutations": [
+        {
+          "column": 65,
+          "mutated": "await runStatus(command: \"which\", arguments: [command]) != 0",
+          "offset": 9177,
+          "original": "await runStatus(command: \"which\", arguments: [command]) == 0"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "await runStatus(command: \"which\", arguments: [command]) == 0"
+    },
+    {
+      "file": "Sources/Worker/RunnerProfileDetector.swift",
+      "line": 296,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "try? await Task.sleep(nanoseconds: 25_000_000)  // 25 ms",
+          "offset": 13267,
+          "original": "if Date() >= deadline {\n                process.terminate()\n                try? await Task.sleep(nanoseconds: 200_000_000)\n                if process.isRunning {\n                    kill(process.processIdentifier, SIGKILL)\n                }\n                _ = try? await Task.sleep(nanoseconds: 100_000_000)\n                writeStructuredRunnerLog(\n                    event: \"local_execution_error\",\n                    fields: [\n                        \"error_type\": \"capability_detection_timeout\",\n                        \"error_message_summary\": \"\\(command) \\(arguments.joined(separator: \" \"))\",\n                        \"timeout_seconds\": Self.probeTimeoutSeconds,\n                    ])\n                return false\n            }\n            try? await Task.sleep(nanoseconds: 25_000_000)  // 25 ms"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "}"
+    },
+    {
+      "file": "Sources/Worker/RunnerStructuredLog.swift",
+      "line": 74,
+      "mutations": [
+        {
+          "column": 55,
+          "mutated": "",
+          "offset": 2768,
+          "original": "FileHandle.standardError.write(Data(message.utf8))"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "FileHandle.standardError.write(Data(message.utf8))"
+    },
+    {
+      "file": "Sources/Worker/RunnerStructuredLog.swift",
+      "line": 85,
+      "mutations": [
+        {
+          "column": 107,
+          "mutated": "return",
+          "offset": 3266,
+          "original": "writeToStandardError(\n            \"{\\\"event\\\":\\\"\\(event)\\\",\\\"timestamp\\\":\\\"\\(ISO8601DateFormatter().string(from: Date()))\\\"}\\n\")\n        return"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "\"{\\\"event\\\":\\\"\\(event)\\\",\\\"timestamp\\\":\\\"\\(ISO8601DateFormatter().string(from: Date()))\\\"}\\n\")"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 343,
+      "mutations": [
+        {
+          "column": 22,
+          "mutated": "let flags = fcntl(descriptor, F_GETFD)\n            if flags == -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }",
+          "offset": 14832,
+          "original": "let flags = fcntl(descriptor, F_GETFD)\n            if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 343,
+      "mutations": [
+        {
+          "column": 82,
+          "mutated": "let flags = fcntl(descriptor, F_GETFD)",
+          "offset": 14892,
+          "original": "let flags = fcntl(descriptor, F_GETFD)\n            if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 406,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "close(standardOutput.readEnd)",
+          "offset": 17531,
+          "original": "close(standardOutput.readEnd)\n        close(standardError.readEnd)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "close(standardError.readEnd)"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 424,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 || errno == EINTR { continue }\n            break",
+          "offset": 18341,
+          "original": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            break"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if bytesRead == -1 && errno == EINTR { continue }"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 424,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead != -1 && errno == EINTR { continue }\n            break",
+          "offset": 18335,
+          "original": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            break"
+        },
+        {
+          "column": 41,
+          "mutated": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno != EINTR { continue }\n            break",
+          "offset": 18350,
+          "original": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            break"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if bytesRead == -1 && errno == EINTR { continue }"
+    },
+    {
+      "file": "Sources/Worker/ScriptExecution.swift",
+      "line": 424,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead != -1 && errno == EINTR { continue }\n            break",
+          "offset": 18335,
+          "original": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            break"
+        },
+        {
+          "column": 41,
+          "mutated": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno != EINTR { continue }\n            break",
+          "offset": 18350,
+          "original": "let bytesRead = read(stream.readEnd, &chunk, chunk.count)\n            if bytesRead > 0 {\n                stream.buffer.append(Data(chunk[0..<bytesRead]))\n                continue\n            }\n            if bytesRead == -1 && errno == EINTR { continue }\n            break"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if bytesRead == -1 && errno == EINTR { continue }"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 86,
+      "mutations": [
+        {
+          "column": 88,
+          "mutated": "writeStructuredRunnerLog(\n                    event: \"submission_file_refused\",\n                    fields: [\n                        \"file\": fileRelativePath,\n                        \"reason\": \"belongs_to_test_setup\",\n                    ])\n                continue",
+          "offset": 3602,
+          "original": "progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))\n                writeStructuredRunnerLog(\n                    event: \"submission_file_refused\",\n                    fields: [\n                        \"file\": fileRelativePath,\n                        \"reason\": \"belongs_to_test_setup\",\n                    ])\n                continue"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 92,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))\n                continue",
+          "offset": 3860,
+          "original": "progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))\n                writeStructuredRunnerLog(\n                    event: \"submission_file_refused\",\n                    fields: [\n                        \"file\": fileRelativePath,\n                        \"reason\": \"belongs_to_test_setup\",\n                    ])\n                continue"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 145,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)\n        let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)\n\n        let classification = try classify(fileURL: fileURL, mimeType: mimeType)\n        switch classification {\n        case .pythonScript:\n            try handlePythonScript(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                workspaceDirectory: workspaceDirectory,\n                progress: &progress\n            )\n        case .jupyterNotebook(let data, let notebook):\n            try handleJupyterNotebook(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                workspaceDirectory: workspaceDirectory,\n                data: data,\n                notebook: notebook,\n                progress: &progress\n            )\n        case .unsupported(let reason):\n            handleUnsupported(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                reason: reason,\n                progress: &progress\n            )\n        }",
+          "offset": 5688,
+          "original": "let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)\n        let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)\n        writeStructuredRunnerLog(\n            event: \"submission_file_mime_detected\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"mime_type\": mimeType,\n            ])\n\n        let classification = try classify(fileURL: fileURL, mimeType: mimeType)\n        switch classification {\n        case .pythonScript:\n            try handlePythonScript(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                workspaceDirectory: workspaceDirectory,\n                progress: &progress\n            )\n        case .jupyterNotebook(let data, let notebook):\n            try handleJupyterNotebook(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                workspaceDirectory: workspaceDirectory,\n                data: data,\n                notebook: notebook,\n                progress: &progress\n            )\n        case .unsupported(let reason):\n            handleUnsupported(\n                fileURL: fileURL,\n                fileRelativePath: fileRelativePath,\n                reason: reason,\n                progress: &progress\n            )\n        }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 197,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "let destinationURL = workspaceDirectory.appendingPathComponent(fileRelativePath)\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try? FileManager.default.removeItem(at: destinationURL)\n        try FileManager.default.copyItem(at: fileURL, to: destinationURL)\n        progress.producedPythonFiles.append(destinationURL)\n        progress.preferredStudentModule =\n            progress.preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)",
+          "offset": 7700,
+          "original": "let destinationURL = workspaceDirectory.appendingPathComponent(fileRelativePath)\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try? FileManager.default.removeItem(at: destinationURL)\n        try FileManager.default.copyItem(at: fileURL, to: destinationURL)\n        progress.producedPythonFiles.append(destinationURL)\n        progress.preferredStudentModule =\n            progress.preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"python_script\",\n                \"generated_file\": fileRelativePath,\n            ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 229,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule != nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])",
+          "offset": 9124,
+          "original": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])"
+        },
+        {
+          "column": 95,
+          "mutated": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) == nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])",
+          "offset": 9175,
+          "original": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 229,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule != nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])",
+          "offset": 9124,
+          "original": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])"
+        },
+        {
+          "column": 95,
+          "mutated": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) == nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])",
+          "offset": 9175,
+          "original": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 267,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)",
+          "offset": 10961,
+          "original": "let extracted = try notebookExtractor.extractPythonSource(\n            from: notebook,\n            filename: fileURL.lastPathComponent\n        )\n        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)\n        let destinationURL = uniqueDestination(\n            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)\n        )\n        try FileManager.default.createDirectory(\n            at: destinationURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)\n        progress.producedPythonFiles.append(destinationURL)\n\n        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)\n\n        // Sidecar: the introspectable source (real module-level defs) so\n        // student_source()-based structural / AST NotebookChecks work \u2014 the\n        // executable module is exec(compile())-wrapped and not AST-introspectable.\n        // Written for the first root-level module, mirroring .chickadee_student_module.\n        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {\n            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + \".source.py\"\n            try extracted.introspectableSource.write(\n                to: workspaceDirectory.appendingPathComponent(sidecarName),\n                atomically: true,\n                encoding: .utf8\n            )\n            try sidecarName.write(\n                to: workspaceDirectory.appendingPathComponent(\".chickadee_student_source\"),\n                atomically: true,\n                encoding: .utf8\n            )\n        }\n\n        progress.preferredStudentModule =\n            progress.preferredStudentModule\n            ?? preferredModuleIfRootLevel(moduleRelative)\n\n        // v0.4.114: also preserve the original notebook bytes\n        // alongside the flattened .py so source-level checks\n        // (`.cellContains`, future `.markdownPresent`) can read\n        // the cell-by-cell structure that flattening discards.\n        // Stable filename so generated tests can `Path(\"_submission.ipynb\")`\n        // without knowing the original upload name.\n        let preservedNotebookURL = workspaceDirectory.appendingPathComponent(\"_submission.ipynb\")\n        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {\n            try data.write(to: preservedNotebookURL, options: .atomic)\n        }\n\n        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)\n\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"jupyter_notebook\",\n                \"generated_file\": relativePath(of: destinationURL, under: workspaceDirectory),\n                \"code_cell_count\": extracted.codeCellCount,\n            ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 292,
+      "mutations": [
+        {
+          "column": 45,
+          "mutated": "if progress.unsupportedOnlyFilename != nil {\n            progress.unsupportedOnlyFilename = fileURL.lastPathComponent\n        }\n        progress.warnings.append(\"Ignoring unsupported file \\(fileURL.lastPathComponent): \\(reason)\")\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"unsupported\",\n                \"reason\": reason,\n            ])",
+          "offset": 11902,
+          "original": "if progress.unsupportedOnlyFilename == nil {\n            progress.unsupportedOnlyFilename = fileURL.lastPathComponent\n        }\n        progress.warnings.append(\"Ignoring unsupported file \\(fileURL.lastPathComponent): \\(reason)\")\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"unsupported\",\n                \"reason\": reason,\n            ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if progress.unsupportedOnlyFilename == nil {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 302,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "if progress.unsupportedOnlyFilename == nil {\n            progress.unsupportedOnlyFilename = fileURL.lastPathComponent\n        }\n        progress.warnings.append(\"Ignoring unsupported file \\(fileURL.lastPathComponent): \\(reason)\")",
+          "offset": 12340,
+          "original": "if progress.unsupportedOnlyFilename == nil {\n            progress.unsupportedOnlyFilename = fileURL.lastPathComponent\n        }\n        progress.warnings.append(\"Ignoring unsupported file \\(fileURL.lastPathComponent): \\(reason)\")\n        writeStructuredRunnerLog(\n            event: \"submission_file_classified\",\n            fields: [\n                \"file\": fileRelativePath,\n                \"classification\": \"unsupported\",\n                \"reason\": reason,\n            ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 311,
+      "mutations": [
+        {
+          "column": 34,
+          "mutated": "guard progress.producedPythonFiles.isEmpty else { return }\n        if submissionFiles.count != 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {\n            throw SubmissionNormalizationError.invalidSubmission(unsupportedOnlyFilename, .python)\n        }\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_failed\",\n            fields: [\n                \"workspace_directory\": workspaceDirectory.path,\n                \"error\": SubmissionNormalizationError.noSourcesFound(.python).localizedDescription,\n            ])\n        throw SubmissionNormalizationError.noSourcesFound(.python)",
+          "offset": 12612,
+          "original": "guard progress.producedPythonFiles.isEmpty else { return }\n        if submissionFiles.count == 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {\n            throw SubmissionNormalizationError.invalidSubmission(unsupportedOnlyFilename, .python)\n        }\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_failed\",\n            fields: [\n                \"workspace_directory\": workspaceDirectory.path,\n                \"error\": SubmissionNormalizationError.noSourcesFound(.python).localizedDescription,\n            ])\n        throw SubmissionNormalizationError.noSourcesFound(.python)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if submissionFiles.count == 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 357,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "guard let expectedFilename = singleExpectedPythonFilename(from: manifest),\n            !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),\n            progress.producedPythonFiles.count == 1,\n            let sourceURL = progress.producedPythonFiles.first\n        else { return }\n        // The source has to actually be Python. `classify` accepts ANY `text/*`\n        // as a Python script, so a student who uploaded `solution.lua` to a\n        // Python assignment \u2014 wrong assignment, or a mis-set language on a\n        // course clone \u2014 had it copied to `solution.py` and was then shown\n        // Python syntax errors against Lua source, under a warning saying\n        // Chickadee had made a copy \"from the single detected Python source\n        // file\". Extensionless is allowed: a notebook extracts to `.py`, and a\n        // bare script is genuinely ambiguous rather than wrong.\n        let sourceExtension = sourceURL.pathExtension.lowercased()\n        guard sourceExtension.isEmpty || sourceExtension == \"py\" else {\n            progress.warnings.append(\n                \"Expected file \\(expectedFilename) was not present, and \\(sourceURL.lastPathComponent) \"\n                    + \"is not a Python file, so no compatibility copy was made.\")\n            return\n        }\n\n        let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)\n        try FileManager.default.createDirectory(\n            at: compatibilityURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try? FileManager.default.removeItem(at: compatibilityURL)\n        try FileManager.default.copyItem(at: sourceURL, to: compatibilityURL)\n        progress.producedPythonFiles.append(compatibilityURL)\n        if progress.preferredStudentModule != nil {\n            progress.preferredStudentModule = preferredModuleIfRootLevel(expectedFilename)\n        }\n        progress.warnings.append(\n            \"Expected file \\(expectedFilename) was not present. Chickadee created a compatibility copy from the single detected Python source file.\"\n        )\n        writeStructuredRunnerLog(\n            event: \"submission_compatibility_copy_created\",\n            fields: [\n                \"expected_file\": expectedFilename,\n                \"source_file\": relativePath(of: sourceURL, under: workspaceDirectory),\n            ])",
+          "offset": 15155,
+          "original": "guard let expectedFilename = singleExpectedPythonFilename(from: manifest),\n            !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),\n            progress.producedPythonFiles.count == 1,\n            let sourceURL = progress.producedPythonFiles.first\n        else { return }\n        // The source has to actually be Python. `classify` accepts ANY `text/*`\n        // as a Python script, so a student who uploaded `solution.lua` to a\n        // Python assignment \u2014 wrong assignment, or a mis-set language on a\n        // course clone \u2014 had it copied to `solution.py` and was then shown\n        // Python syntax errors against Lua source, under a warning saying\n        // Chickadee had made a copy \"from the single detected Python source\n        // file\". Extensionless is allowed: a notebook extracts to `.py`, and a\n        // bare script is genuinely ambiguous rather than wrong.\n        let sourceExtension = sourceURL.pathExtension.lowercased()\n        guard sourceExtension.isEmpty || sourceExtension == \"py\" else {\n            progress.warnings.append(\n                \"Expected file \\(expectedFilename) was not present, and \\(sourceURL.lastPathComponent) \"\n                    + \"is not a Python file, so no compatibility copy was made.\")\n            return\n        }\n\n        let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)\n        try FileManager.default.createDirectory(\n            at: compatibilityURL.deletingLastPathComponent(),\n            withIntermediateDirectories: true\n        )\n        try? FileManager.default.removeItem(at: compatibilityURL)\n        try FileManager.default.copyItem(at: sourceURL, to: compatibilityURL)\n        progress.producedPythonFiles.append(compatibilityURL)\n        if progress.preferredStudentModule == nil {\n            progress.preferredStudentModule = preferredModuleIfRootLevel(expectedFilename)\n        }\n        progress.warnings.append(\n            \"Expected file \\(expectedFilename) was not present. Chickadee created a compatibility copy from the single detected Python source file.\"\n        )\n        writeStructuredRunnerLog(\n            event: \"submission_compatibility_copy_created\",\n            fields: [\n                \"expected_file\": expectedFilename,\n                \"source_file\": relativePath(of: sourceURL, under: workspaceDirectory),\n            ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if progress.preferredStudentModule == nil {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 414,
+      "mutations": [
+        {
+          "column": 70,
+          "mutated": "relativePath(of: $0, under: directory) > relativePath(of: $1, under: directory)",
+          "offset": 17667,
+          "original": "relativePath(of: $0, under: directory) < relativePath(of: $1, under: directory)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return files.sorted { relativePath(of: $0, under: directory) < relativePath(of: $1, under: directory) }"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 428,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "let relativeNSString = relativePath as NSString\n        let ext = relativeNSString.pathExtension.lowercased()\n        if ext == \"ipynb\" {\n            return relativeNSString.deletingPathExtension + \".py\"\n        }\n        let stem =\n            relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init)\n            ?? relativeNSString.deletingPathExtension\n        let parent = relativeNSString.deletingLastPathComponent\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty && parent == \".\" {\n            return generatedName\n        }\n        return (parent as NSString).appendingPathComponent(generatedName)",
+          "offset": 18336,
+          "original": "let relativeNSString = relativePath as NSString\n        let ext = relativeNSString.pathExtension.lowercased()\n        if ext == \"ipynb\" {\n            return relativeNSString.deletingPathExtension + \".py\"\n        }\n        let stem =\n            relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init)\n            ?? relativeNSString.deletingPathExtension\n        let parent = relativeNSString.deletingLastPathComponent\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty || parent == \".\" {\n            return generatedName\n        }\n        return (parent as NSString).appendingPathComponent(generatedName)"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if parent.isEmpty || parent == \".\" {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 428,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "let relativeNSString = relativePath as NSString\n        let ext = relativeNSString.pathExtension.lowercased()\n        if ext == \"ipynb\" {\n            return relativeNSString.deletingPathExtension + \".py\"\n        }\n        let stem =\n            relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init)\n            ?? relativeNSString.deletingPathExtension\n        let parent = relativeNSString.deletingLastPathComponent\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty || parent != \".\" {\n            return generatedName\n        }\n        return (parent as NSString).appendingPathComponent(generatedName)",
+          "offset": 18346,
+          "original": "let relativeNSString = relativePath as NSString\n        let ext = relativeNSString.pathExtension.lowercased()\n        if ext == \"ipynb\" {\n            return relativeNSString.deletingPathExtension + \".py\"\n        }\n        let stem =\n            relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init)\n            ?? relativeNSString.deletingPathExtension\n        let parent = relativeNSString.deletingLastPathComponent\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty || parent == \".\" {\n            return generatedName\n        }\n        return (parent as NSString).appendingPathComponent(generatedName)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if parent.isEmpty || parent == \".\" {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionPolicy.swift",
+      "line": 128,
+      "mutations": [
+        {
+          "column": 11,
+          "mutated": "",
+          "offset": 6129,
+          "original": "writeStructuredRunnerLog(\n        event: \"submission_guarantee_skipped\",\n        fields: [\n            \"guarantee\": guarantee.rawValue,\n            \"language\": language.rawValue,\n            \"file\": filename,\n            \"reason\": submissionGuaranteeExemption(guarantee, for: language) ?? \"\",\n        ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/SubmissionPolicy.swift",
+      "line": 157,
+      "mutations": [
+        {
+          "column": 48,
+          "mutated": "guard submissionGuaranteeApplies(.validNotebookJSON, to: language) else {\n            // Exempt: parse leniently and let the caller skip on failure.\n            reportSkippedGuarantee(.validNotebookJSON, language: language, filename: filename)\n            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]\n        }\n        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {\n            throw SubmissionNormalizationError.invalidNotebookJSON(filename)\n        }\n        guard object[\"metadata\"] != nil, object[\"nbformat\"] != nil,\n            object[\"cells\"] is [[String: Any]] && object[\"cells\"] is [Any]\n        else {\n            throw SubmissionNormalizationError.invalidSubmission(filename, language)\n        }\n        return object",
+          "offset": 7518,
+          "original": "guard submissionGuaranteeApplies(.validNotebookJSON, to: language) else {\n            // Exempt: parse leniently and let the caller skip on failure.\n            reportSkippedGuarantee(.validNotebookJSON, language: language, filename: filename)\n            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]\n        }\n        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {\n            throw SubmissionNormalizationError.invalidNotebookJSON(filename)\n        }\n        guard object[\"metadata\"] != nil, object[\"nbformat\"] != nil,\n            object[\"cells\"] is [[String: Any]] || object[\"cells\"] is [Any]\n        else {\n            throw SubmissionNormalizationError.invalidSubmission(filename, language)\n        }\n        return object"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "object[\"cells\"] is [[String: Any]] || object[\"cells\"] is [Any]"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 78,
+      "mutations": [
+        {
+          "column": 46,
+          "mutated": "var names = Set(manifest.testSuites.map(\\.script))\n    names.formUnion(allRuntimeHelperFiles().keys)\n    names.formUnion(AssignmentLanguage.allCases.map(\\.inputsFileName))\n    names.insert(\".chickadee_student_module\")\n    return names",
+          "offset": 3548,
+          "original": "var names = Set(manifest.testSuites.map(\\.script))\n    names.formUnion(allRuntimeHelperFiles().keys)\n    names.formUnion(AssignmentLanguage.allCases.map(\\.inputsFileName))\n    names.insert(\".chickadee_student_module\")\n    names.insert(\".chickadee_student_source\")\n    return names"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "names.insert(\".chickadee_student_source\")"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 251,
+      "mutations": [
+        {
+          "column": 81,
+          "mutated": "if let submissionFilename,\n            URL(fileURLWithPath: submissionFilename).pathExtension.lowercased() != \"ipynb\"\n        {\n            return stagedSubmissionDestination(\n                submissionDirectory: submissionDirectory, submittedFilename: submissionFilename)\n        }\n        let entries =\n            (try? FileManager.default.contentsOfDirectory(\n                at: submissionDirectory, includingPropertiesForKeys: nil)) ?? []\n        return entries.first { $0.pathExtension.lowercased() == \"ipynb\" }",
+          "offset": 11594,
+          "original": "if let submissionFilename,\n            URL(fileURLWithPath: submissionFilename).pathExtension.lowercased() == \"ipynb\"\n        {\n            return stagedSubmissionDestination(\n                submissionDirectory: submissionDirectory, submittedFilename: submissionFilename)\n        }\n        let entries =\n            (try? FileManager.default.contentsOfDirectory(\n                at: submissionDirectory, includingPropertiesForKeys: nil)) ?? []\n        return entries.first { $0.pathExtension.lowercased() == \"ipynb\" }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "URL(fileURLWithPath: submissionFilename).pathExtension.lowercased() == \"ipynb\""
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 378,
+      "mutations": [
+        {
+          "column": 18,
+          "mutated": "// 1. A required `.py` is an explicit demand for an importable module.\n    let requiredPythonFiles = manifest.requiredFiles.filter {\n        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python\n    }\n    if !requiredPythonFiles.isEmpty { return .pythonModule }\n\n    // 2. Another language owns the manifest: extract to ITS source, whatever\n    //    the submission's kernelspec says. The manifest is authoritative about\n    //    the assignment's language; the submission metadata is not, because the\n    //    in-browser editor can rewrite it.\n    if let owner = manifestOwningLanguage(manifest) {\n        return .extractToSource(forcedLanguage: owner)\n    }\n\n    let hasPythonSuite = manifest.testSuites.contains {\n        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)\n            == .python\n    }\n\n    // 3. No Python suite, and the submission itself positively declares a\n    //    non-Python language: honour that rather than treating any `.ipynb` as\n    //    Python at step 4. Generalised from the old `submissionIsRNotebook`.\n    //    Python is excluded by name because steps 4-6 are Python's own\n    //    heuristics \u2014 letting a `python3` kernelspec short-circuit to\n    //    `.extractToSource(.python)` here would skip them.\n    if !hasPythonSuite,\n        let declared = submissionNotebookLanguage(\n            submissionDirectory: submissionDirectory, submissionFilename: submissionFilename),\n        declared == .python\n    {\n        return .extractToSource(forcedLanguage: declared)\n    }\n\n    // 4-6. Python's heuristics: it is the default, so it claims the shapes that\n    //      no other language has claimed by now.\n    if let submissionFilename {\n        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()\n        if pythonSubmissionExtensions.contains(ext) { return .pythonModule }\n    }\n    if hasPythonSuite { return .pythonModule }\n    if let enumerator = FileManager.default.enumerator(\n        at: submissionDirectory,\n        includingPropertiesForKeys: [.isRegularFileKey],\n        options: [.skipsHiddenFiles]\n    ) {\n        for case let fileURL as URL in enumerator {\n            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])\n            guard values?.isRegularFile == true else { continue }\n            if pythonSubmissionExtensions.contains(fileURL.pathExtension.lowercased()) {\n                return .pythonModule\n            }\n        }\n    }\n\n    // 7. Nothing claimed it. Extract generically and trust the notebook.\n    return .extractToSource(forcedLanguage: nil)\n    // 1. A required `.py` is an explicit demand for an importable module.",
+          "offset": 18114,
+          "original": "// 1. A required `.py` is an explicit demand for an importable module.\n    let requiredPythonFiles = manifest.requiredFiles.filter {\n        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python\n    }\n    if !requiredPythonFiles.isEmpty { return .pythonModule }\n\n    // 2. Another language owns the manifest: extract to ITS source, whatever\n    //    the submission's kernelspec says. The manifest is authoritative about\n    //    the assignment's language; the submission metadata is not, because the\n    //    in-browser editor can rewrite it.\n    if let owner = manifestOwningLanguage(manifest) {\n        return .extractToSource(forcedLanguage: owner)\n    }\n\n    let hasPythonSuite = manifest.testSuites.contains {\n        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)\n            == .python\n    }\n\n    // 3. No Python suite, and the submission itself positively declares a\n    //    non-Python language: honour that rather than treating any `.ipynb` as\n    //    Python at step 4. Generalised from the old `submissionIsRNotebook`.\n    //    Python is excluded by name because steps 4-6 are Python's own\n    //    heuristics \u2014 letting a `python3` kernelspec short-circuit to\n    //    `.extractToSource(.python)` here would skip them.\n    if !hasPythonSuite,\n        let declared = submissionNotebookLanguage(\n            submissionDirectory: submissionDirectory, submissionFilename: submissionFilename),\n        declared != .python\n    {\n        return .extractToSource(forcedLanguage: declared)\n    }\n\n    // 4-6. Python's heuristics: it is the default, so it claims the shapes that\n    //      no other language has claimed by now.\n    if let submissionFilename {\n        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()\n        if pythonSubmissionExtensions.contains(ext) { return .pythonModule }\n    }\n    if hasPythonSuite { return .pythonModule }\n    if let enumerator = FileManager.default.enumerator(\n        at: submissionDirectory,\n        includingPropertiesForKeys: [.isRegularFileKey],\n        options: [.skipsHiddenFiles]\n    ) {\n        for case let fileURL as URL in enumerator {\n            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])\n            guard values?.isRegularFile == true else { continue }\n            if pythonSubmissionExtensions.contains(fileURL.pathExtension.lowercased()) {\n                return .pythonModule\n            }\n        }\n    }\n\n    // 7. Nothing claimed it. Extract generically and trust the notebook.\n    return .extractToSource(forcedLanguage: nil)\n    // 1. A required `.py` is an explicit demand for an importable module."
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "declared != .python"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 430,
+      "mutations": [
+        {
+          "column": 48,
+          "mutated": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
+          "offset": 20194,
+          "original": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\""
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "material.append(Data(job.testSetupID.utf8))"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 431,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
+          "offset": 20217,
+          "original": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\""
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "material.append(0)"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 432,
+      "mutations": [
+        {
+          "column": 64,
+          "mutated": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
+          "offset": 20281,
+          "original": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\""
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "material.append(Data(job.testSetupURL.absoluteString.utf8))"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 433,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
+          "offset": 20304,
+          "original": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\""
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "material.append(0)"
+    },
+    {
+      "file": "Sources/Worker/SubmissionStaging.swift",
+      "line": 434,
+      "mutations": [
+        {
+          "column": 35,
+          "mutated": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
+          "offset": 20339,
+          "original": "let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()\n    var material = Data()\n    material.append(Data(job.testSetupID.utf8))\n    material.append(0)\n    material.append(Data(job.testSetupURL.absoluteString.utf8))\n    material.append(0)\n    material.append(manifestBytes)\n    let digest = sha256HexDigest(material)\n    return \"\\(job.testSetupID)-\\(digest.prefix(16))\""
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "material.append(manifestBytes)"
+    },
+    {
+      "file": "Sources/Worker/TestRuntimeSources.swift",
+      "line": 117,
+      "mutations": [
+        {
+          "column": 80,
+          "mutated": "files[name] = source",
+          "offset": 5577,
+          "original": "precondition(\n                files[name] == nil,\n                \"two languages both claim the runtime helper filename \\(name)\")\n            files[name] = source"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "\"two languages both claim the runtime helper filename \\(name)\")"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 92,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let lhsDate =\n                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                let rhsDate =\n                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                return lhsDate > rhsDate",
+          "offset": 4629,
+          "original": "let lhsDate =\n                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                let rhsDate =\n                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                return lhsDate < rhsDate"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return lhsDate < rhsDate"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 136,
+      "mutations": [
+        {
+          "column": 58,
+          "mutated": "// The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.\n        do {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        } catch let error as CocoaError where error.code != .fileReadNoSuchFile {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        }\n        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.",
+          "offset": 6778,
+          "original": "// The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.\n        do {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        }\n        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path."
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "} catch let error as CocoaError where error.code == .fileReadNoSuchFile {"
+    },
+    {
+      "file": "Sources/Worker/WorkerCommand.swift",
+      "line": 101,
+      "mutations": [
+        {
+          "column": 101,
+          "mutated": "guard let baseURL = URL(string: apiBaseURL) else {\n            writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")\n            throw ExitCode.failure\n        }\n\n        let env = ProcessInfo.processInfo.environment\n        let config = RunnerDaemonConfig.loadFromEnvironment(env)\n\n        let cacheDirPath =\n            testSetupCacheDir\n            ?? config.testSetupCacheDir\n            ?? TestSetupCache.defaultCacheRoot.path\n        // The cache directory IS the runner's working directory: prepared test\n        // setups, the per-job scratch copies made from them, and the job\n        // workspaces all live under it. One directory, one existing setting \u2014\n        // moving it moves everything, which is what an operator does when the\n        // default lands on a `noexec` mount and a compiled language cannot\n        // execute the binary it just built there.\n        //\n        // The same root feeds the executable-output capability probe below, so\n        // the probe cannot pass in a directory jobs never use.\n        let workRoot = URL(fileURLWithPath: cacheDirPath, isDirectory: true)\n        // Created up front because scratch copies land here directly, and\n        // `copyItem` needs the parent to exist \u2014 the system temp directory this\n        // replaced always did.\n        try FileManager.default.createDirectory(\n            at: workRoot, withIntermediateDirectories: true)\n\n        let runnerProfile = await RunnerProfileDetector(\n            discoveryEnabled: config.capabilityDiscoveryEnabled,\n            workRoot: workRoot\n        ).detect()\n        guard\n            let effectiveWorkerSecret = resolveWorkerSharedSecret(\n                cliWorkerSecret: workerSecret,\n                environment: env\n            )\n        else {\n            writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")\n            throw ExitCode.failure\n        }\n\n        let poller = JobPoller(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            profile: runnerProfile\n        )\n        let reporter = Reporter(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            heartbeatRetryPolicy: .heartbeat(config: config),\n            resultUploadRetryPolicy: .resultUpload(config: config)\n        )\n        let runner: any ScriptRunner = sandbox  ? UnsandboxedScriptRunner() :  SandboxedScriptRunner() \n\n        let testSetupCache = TestSetupCache(\n            cacheRoot: workRoot,\n            scratchRoot: workRoot)\n\n        let daemon = WorkerDaemon(\n            poller: poller,\n            reporter: reporter,\n            runner: runner,\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            runnerProfile: runnerProfile,\n            downloadRetryPolicy: .download(config: config),\n            testSetupCache: testSetupCache,\n            config: config,\n            workRoot: workRoot\n        )\n\n        let sandboxLabel = sandbox ? \"sandboxed\" : \"unsandboxed\"\n        writeStructuredRunnerLog(\n            event: \"runner_startup\",\n            fields: [\n                \"runner_id\": workerID,\n                \"status\": \"starting\",\n            ])\n        writeStructuredRunnerLog(\n            event: \"runner_configuration\",\n            fields: [\n                \"runner_id\": workerID,\n                \"api_base_url\": apiBaseURL,\n                \"max_jobs\": maxJobs,\n                \"sandbox_mode\": sandboxLabel,\n                \"test_setup_cache_dir\": cacheDirPath,\n            ])\n        if let runnerProfile {\n            writeStructuredRunnerLog(\n                event: \"runner_profile_detected\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"platform\": runnerProfile.platform,\n                    \"architecture\": runnerProfile.architecture,\n                    \"languages\": runnerProfile.languageVersions.map { \"\\($0.language)=\\($0.version)\" },\n                    \"capabilities\": runnerProfile.capabilities.map(\\.name),\n                ])\n        }\n        try await daemon.run()",
+          "offset": 4201,
+          "original": "guard let baseURL = URL(string: apiBaseURL) else {\n            writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")\n            throw ExitCode.failure\n        }\n\n        let env = ProcessInfo.processInfo.environment\n        let config = RunnerDaemonConfig.loadFromEnvironment(env)\n\n        let cacheDirPath =\n            testSetupCacheDir\n            ?? config.testSetupCacheDir\n            ?? TestSetupCache.defaultCacheRoot.path\n        // The cache directory IS the runner's working directory: prepared test\n        // setups, the per-job scratch copies made from them, and the job\n        // workspaces all live under it. One directory, one existing setting \u2014\n        // moving it moves everything, which is what an operator does when the\n        // default lands on a `noexec` mount and a compiled language cannot\n        // execute the binary it just built there.\n        //\n        // The same root feeds the executable-output capability probe below, so\n        // the probe cannot pass in a directory jobs never use.\n        let workRoot = URL(fileURLWithPath: cacheDirPath, isDirectory: true)\n        // Created up front because scratch copies land here directly, and\n        // `copyItem` needs the parent to exist \u2014 the system temp directory this\n        // replaced always did.\n        try FileManager.default.createDirectory(\n            at: workRoot, withIntermediateDirectories: true)\n\n        let runnerProfile = await RunnerProfileDetector(\n            discoveryEnabled: config.capabilityDiscoveryEnabled,\n            workRoot: workRoot\n        ).detect()\n        guard\n            let effectiveWorkerSecret = resolveWorkerSharedSecret(\n                cliWorkerSecret: workerSecret,\n                environment: env\n            )\n        else {\n            writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")\n            throw ExitCode.failure\n        }\n\n        let poller = JobPoller(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            profile: runnerProfile\n        )\n        let reporter = Reporter(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            heartbeatRetryPolicy: .heartbeat(config: config),\n            resultUploadRetryPolicy: .resultUpload(config: config)\n        )\n        let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()\n\n        let testSetupCache = TestSetupCache(\n            cacheRoot: workRoot,\n            scratchRoot: workRoot)\n\n        let daemon = WorkerDaemon(\n            poller: poller,\n            reporter: reporter,\n            runner: runner,\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            runnerProfile: runnerProfile,\n            downloadRetryPolicy: .download(config: config),\n            testSetupCache: testSetupCache,\n            config: config,\n            workRoot: workRoot\n        )\n\n        let sandboxLabel = sandbox ? \"sandboxed\" : \"unsandboxed\"\n        writeStructuredRunnerLog(\n            event: \"runner_startup\",\n            fields: [\n                \"runner_id\": workerID,\n                \"status\": \"starting\",\n            ])\n        writeStructuredRunnerLog(\n            event: \"runner_configuration\",\n            fields: [\n                \"runner_id\": workerID,\n                \"api_base_url\": apiBaseURL,\n                \"max_jobs\": maxJobs,\n                \"sandbox_mode\": sandboxLabel,\n                \"test_setup_cache_dir\": cacheDirPath,\n            ])\n        if let runnerProfile {\n            writeStructuredRunnerLog(\n                event: \"runner_profile_detected\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"platform\": runnerProfile.platform,\n                    \"architecture\": runnerProfile.architecture,\n                    \"languages\": runnerProfile.languageVersions.map { \"\\($0.language)=\\($0.version)\" },\n                    \"capabilities\": runnerProfile.capabilities.map(\\.name),\n                ])\n        }\n        try await daemon.run()"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()"
+    },
+    {
+      "file": "Sources/Worker/WorkerCommand.swift",
+      "line": 122,
+      "mutations": [
+        {
+          "column": 65,
+          "mutated": "guard let baseURL = URL(string: apiBaseURL) else {\n            writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")\n            throw ExitCode.failure\n        }\n\n        let env = ProcessInfo.processInfo.environment\n        let config = RunnerDaemonConfig.loadFromEnvironment(env)\n\n        let cacheDirPath =\n            testSetupCacheDir\n            ?? config.testSetupCacheDir\n            ?? TestSetupCache.defaultCacheRoot.path\n        // The cache directory IS the runner's working directory: prepared test\n        // setups, the per-job scratch copies made from them, and the job\n        // workspaces all live under it. One directory, one existing setting \u2014\n        // moving it moves everything, which is what an operator does when the\n        // default lands on a `noexec` mount and a compiled language cannot\n        // execute the binary it just built there.\n        //\n        // The same root feeds the executable-output capability probe below, so\n        // the probe cannot pass in a directory jobs never use.\n        let workRoot = URL(fileURLWithPath: cacheDirPath, isDirectory: true)\n        // Created up front because scratch copies land here directly, and\n        // `copyItem` needs the parent to exist \u2014 the system temp directory this\n        // replaced always did.\n        try FileManager.default.createDirectory(\n            at: workRoot, withIntermediateDirectories: true)\n\n        let runnerProfile = await RunnerProfileDetector(\n            discoveryEnabled: config.capabilityDiscoveryEnabled,\n            workRoot: workRoot\n        ).detect()\n        guard\n            let effectiveWorkerSecret = resolveWorkerSharedSecret(\n                cliWorkerSecret: workerSecret,\n                environment: env\n            )\n        else {\n            writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")\n            throw ExitCode.failure\n        }\n\n        let poller = JobPoller(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            profile: runnerProfile\n        )\n        let reporter = Reporter(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            heartbeatRetryPolicy: .heartbeat(config: config),\n            resultUploadRetryPolicy: .resultUpload(config: config)\n        )\n        let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()\n\n        let testSetupCache = TestSetupCache(\n            cacheRoot: workRoot,\n            scratchRoot: workRoot)\n\n        let daemon = WorkerDaemon(\n            poller: poller,\n            reporter: reporter,\n            runner: runner,\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            runnerProfile: runnerProfile,\n            downloadRetryPolicy: .download(config: config),\n            testSetupCache: testSetupCache,\n            config: config,\n            workRoot: workRoot\n        )\n\n        let sandboxLabel = sandbox  ? \"unsandboxed\" :  \"sandboxed\" \n        writeStructuredRunnerLog(\n            event: \"runner_startup\",\n            fields: [\n                \"runner_id\": workerID,\n                \"status\": \"starting\",\n            ])\n        writeStructuredRunnerLog(\n            event: \"runner_configuration\",\n            fields: [\n                \"runner_id\": workerID,\n                \"api_base_url\": apiBaseURL,\n                \"max_jobs\": maxJobs,\n                \"sandbox_mode\": sandboxLabel,\n                \"test_setup_cache_dir\": cacheDirPath,\n            ])\n        if let runnerProfile {\n            writeStructuredRunnerLog(\n                event: \"runner_profile_detected\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"platform\": runnerProfile.platform,\n                    \"architecture\": runnerProfile.architecture,\n                    \"languages\": runnerProfile.languageVersions.map { \"\\($0.language)=\\($0.version)\" },\n                    \"capabilities\": runnerProfile.capabilities.map(\\.name),\n                ])\n        }\n        try await daemon.run()",
+          "offset": 4874,
+          "original": "guard let baseURL = URL(string: apiBaseURL) else {\n            writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")\n            throw ExitCode.failure\n        }\n\n        let env = ProcessInfo.processInfo.environment\n        let config = RunnerDaemonConfig.loadFromEnvironment(env)\n\n        let cacheDirPath =\n            testSetupCacheDir\n            ?? config.testSetupCacheDir\n            ?? TestSetupCache.defaultCacheRoot.path\n        // The cache directory IS the runner's working directory: prepared test\n        // setups, the per-job scratch copies made from them, and the job\n        // workspaces all live under it. One directory, one existing setting \u2014\n        // moving it moves everything, which is what an operator does when the\n        // default lands on a `noexec` mount and a compiled language cannot\n        // execute the binary it just built there.\n        //\n        // The same root feeds the executable-output capability probe below, so\n        // the probe cannot pass in a directory jobs never use.\n        let workRoot = URL(fileURLWithPath: cacheDirPath, isDirectory: true)\n        // Created up front because scratch copies land here directly, and\n        // `copyItem` needs the parent to exist \u2014 the system temp directory this\n        // replaced always did.\n        try FileManager.default.createDirectory(\n            at: workRoot, withIntermediateDirectories: true)\n\n        let runnerProfile = await RunnerProfileDetector(\n            discoveryEnabled: config.capabilityDiscoveryEnabled,\n            workRoot: workRoot\n        ).detect()\n        guard\n            let effectiveWorkerSecret = resolveWorkerSharedSecret(\n                cliWorkerSecret: workerSecret,\n                environment: env\n            )\n        else {\n            writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")\n            throw ExitCode.failure\n        }\n\n        let poller = JobPoller(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            profile: runnerProfile\n        )\n        let reporter = Reporter(\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            heartbeatRetryPolicy: .heartbeat(config: config),\n            resultUploadRetryPolicy: .resultUpload(config: config)\n        )\n        let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()\n\n        let testSetupCache = TestSetupCache(\n            cacheRoot: workRoot,\n            scratchRoot: workRoot)\n\n        let daemon = WorkerDaemon(\n            poller: poller,\n            reporter: reporter,\n            runner: runner,\n            apiBaseURL: baseURL,\n            workerID: workerID,\n            workerSecret: effectiveWorkerSecret,\n            maxConcurrentJobs: maxJobs,\n            runnerProfile: runnerProfile,\n            downloadRetryPolicy: .download(config: config),\n            testSetupCache: testSetupCache,\n            config: config,\n            workRoot: workRoot\n        )\n\n        let sandboxLabel = sandbox ? \"sandboxed\" : \"unsandboxed\"\n        writeStructuredRunnerLog(\n            event: \"runner_startup\",\n            fields: [\n                \"runner_id\": workerID,\n                \"status\": \"starting\",\n            ])\n        writeStructuredRunnerLog(\n            event: \"runner_configuration\",\n            fields: [\n                \"runner_id\": workerID,\n                \"api_base_url\": apiBaseURL,\n                \"max_jobs\": maxJobs,\n                \"sandbox_mode\": sandboxLabel,\n                \"test_setup_cache_dir\": cacheDirPath,\n            ])\n        if let runnerProfile {\n            writeStructuredRunnerLog(\n                event: \"runner_profile_detected\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"platform\": runnerProfile.platform,\n                    \"architecture\": runnerProfile.architecture,\n                    \"languages\": runnerProfile.languageVersions.map { \"\\($0.language)=\\($0.version)\" },\n                    \"capabilities\": runnerProfile.capabilities.map(\\.name),\n                ])\n        }\n        try await daemon.run()"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let sandboxLabel = sandbox ? \"sandboxed\" : \"unsandboxed\""
+    }
+  ]
+}
