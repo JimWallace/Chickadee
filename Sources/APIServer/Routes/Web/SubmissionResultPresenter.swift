@@ -495,7 +495,8 @@ extension WebRoutes {
             hasClassGoals: !decorations.classGoals.isEmpty,
             secretRevealAvailable: secretReveal.available,
             secretRevealActive: secretReveal.active,
-            solutionURL: decorations.solutionURL
+            solutionURL: decorations.solutionURL,
+            leaderboardURL: decorations.leaderboardURL
         )
     }
 }
@@ -761,4 +762,8 @@ struct SubmissionDecorations {
     /// while their reveal moment has not arrived (or for staff, who reach the
     /// solution through the workbench).
     let solutionURL: String?
+    /// Link to the activity's leaderboard, nil unless the assignment is a
+    /// leaderboard activity the viewer may open (staff always; students once
+    /// it is published).
+    let leaderboardURL: String?
 }

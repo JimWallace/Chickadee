@@ -148,15 +148,8 @@ let achievementRowSchema: JSONValue = .object([
         ]),
         "recordDimension": .object([
             "type": .string("string"),
-            "enum": .array([
-                .string("firstToSolve"), .string("firstToSubmit"), .string("fastest"),
-                .string("shortest"),
-            ]),
-            "description": .string(
-                "record only: the dimension students are ranked on. firstToSolve = first to 100%; "
-                    + "firstToSubmit = first submission of any kind; fastest = lowest execution time "
-                    + "at 100%; shortest = FEWEST ATTEMPTS to reach 100% (a legacy name — it does not "
-                    + "measure solution length)."),
+            "enum": .array(RecordDimension.allCases.map { .string($0.rawValue) }),
+            "description": .string(RecordDimensionPresentation.schemaDescription),
         ]),
     ]),
     "required": .array([.string("name"), .string("scope")]),

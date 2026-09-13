@@ -336,7 +336,8 @@ struct NewAssignmentDraftService {
             gradingMode: sectionGradingMode,
             starterNotebook: starterNotebook,
             language: declared.language,
-            languageDeclared: declared.declared
+            languageDeclared: declared.declared,
+            activity: setup.decodedManifest()?.activity
         )
         try await setup.save(on: req.db)
         extractSupportFilesToSharedDirectory(
@@ -362,7 +363,8 @@ struct NewAssignmentDraftService {
                 req: req, courseID: courseID, sectionIDRaw: payload.sectionIDRaw),
             starterNotebook: starterNotebook,
             language: declared.language,
-            languageDeclared: declared.declared
+            languageDeclared: declared.declared,
+            activity: setup.decodedManifest()?.activity
         )
         try await setup.save(on: req.db)
     }

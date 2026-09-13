@@ -133,6 +133,26 @@ import VaporTesting
         }
     }
 
+    /// A snapshot carries the manifest verbatim, so the class-activity block
+    /// survives a version round trip — restore writes the stored string back
+    /// (`RestoreAssignmentVersionTool`), so what the snapshot holds is what a
+    /// restore reproduces.
+    @Test func snapshotCarriesTheActivityBlock() async throws {
+        try await withApp(app) { app in
+            let fx = try await fixture(app)
+            let activity = ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)
+            try await setManifestActivity(setup: fx.setup, to: activity, on: app.db)
+
+            _ = try await record(app, fx.setup, origin: "mcp:set_activity")
+
+            let setupID = try #require(fx.setup.id)
+            let version = try #require(
+                try await AssignmentVersionStore.newestVersion(setupID: setupID, on: app.db))
+            let restored = try #require(decodeManifest(from: Data(version.manifest.utf8)))
+            #expect(restored.activity == activity)
+        }
+    }
+
     /// Recording twice with nothing changed in between must not write a second
     /// row. This is what lets a capture point be generous about when it calls.
     @Test func recordingUnchangedContentIsANoOp() async throws {

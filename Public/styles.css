@@ -2637,6 +2637,17 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     --av-backdrop: var(--avatar-back-sky);
 }
 
+/* The 1.5rem form for a table row where the handle beside it carries the
+   identity (a leaderboard): inline so it sits before the text, with the one
+   gap a row needs. Recognition, not identification — see AvatarSize.small. */
+.avatar-sm {
+    display: inline-block;
+    vertical-align: middle;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-right: .5rem;
+}
+
 .av-backdrop { fill: var(--av-backdrop); }
 .av-cap { fill: var(--av-cap); }
 .av-wing { fill: var(--av-wing); }

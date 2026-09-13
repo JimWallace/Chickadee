@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings + partial-credit `score` interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult, score). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult. `score` is the fraction of the test's points earned, in 0...1: an explicit footer `score` wins (clamped, orthogonal to the exit-code status), else 1 on a pass and 0 otherwise. NOTE: the wasm side only asserts `score` once the vendored artifact carries it (re-vendored on main by runner-wasm-vendor.yml); the native side always asserts it.",
+  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings + partial-credit `score` interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult, score). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult. `score` is the fraction of the test's points earned, in 0...1: an explicit footer `score` wins (clamped, orthogonal to the exit-code status), else 1 on a pass and 0 otherwise. NOTE: the wasm side only asserts `score` once the vendored artifact carries it (re-vendored on main by runner-wasm-vendor.yml); the native side always asserts it. `metric` is the footer's optional unclamped ranking number (a leaderboard's sort key, never credit): surfaced verbatim when present, absent (null) otherwise, orthogonal to both `score` and the exit code. Rows written before it existed carry no `metric` key in `native`, which means null; the wasm side asserts it under the same once-present rule as `score`.",
   "cases": [
     {
       "name": "pass with JSON footer only",
@@ -114,6 +114,30 @@
       "timedOut": true,
       "status": "timeout",
       "native": { "shortResult": "timed out", "score": 0, "longResult": "stderr:\nstill running when killed" }
+    },
+    {
+      "name": "metric field present beside score (ranking number surfaced unclamped)",
+      "stdout": "{\"score\":1,\"metric\":1234.5,\"shortResult\":\"tour length 1234.5\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "tour length 1234.5", "score": 1, "longResult": null, "metric": 1234.5 }
+    },
+    {
+      "name": "metric on a failing exit code (metric is orthogonal to status and score)",
+      "stdout": "{\"metric\":-7,\"shortResult\":\"lost 7 of 10 games\",\"status\":\"fail\"}\n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "lost 7 of 10 games", "score": 0, "longResult": null, "metric": -7 }
+    },
+    {
+      "name": "non-numeric metric is ignored (no ranking position, credit unchanged)",
+      "stdout": "{\"metric\":\"fast\",\"shortResult\":\"t: passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "t: passed", "score": 1, "longResult": null, "metric": null }
     }
   ]
 }

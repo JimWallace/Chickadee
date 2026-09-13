@@ -13,8 +13,8 @@ import Foundation
 /// `makeWorkerManifestJSON` builds a fresh dictionary, so **anything not
 /// threaded through here is lost.** That is the failure mode this phase is
 /// most prone to: `submissionMode`, `requiredFiles`, `minimumRunnerVersion`,
-/// achievements and datasets are all carried forward explicitly for that
-/// reason, and a new manifest field needs adding here as well as to the
+/// `activity`, achievements and datasets are all carried forward explicitly
+/// for that reason, and a new manifest field needs adding here as well as to the
 /// encoder.
 func rebuildPatternFamilyManifest(
     entries: [ConfiguredSuiteEntry],
@@ -58,7 +58,8 @@ func rebuildPatternFamilyManifest(
         // assignment, least of all one whose declaration is "none" — which is
         // exactly the case where `language` alone carries no evidence.
         languageDeclared: props.languageDeclared == true,
-        minimumRunnerVersion: props.minimumRunnerVersion
+        minimumRunnerVersion: props.minimumRunnerVersion,
+        activity: props.activity
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner

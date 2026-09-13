@@ -454,21 +454,9 @@ extension WebRoutes {
         let classGoals = try await loadClassGoalViews(
             testSetupID: submission.testSetupID, props: setupProps, on: req.db)
 
-        // Post-reveal solution link for the owner-student reviewing their
-        // results (`solutionVisibleToStudent` — the same gate the serving
-        // routes enforce).  Staff reach the solution through the workbench,
-        // and a staff view of a student's submission should not read as the
-        // student's page anyway.
-        var solutionURL: String?
-        if !isStaff, submission.userID == user.id, let submissionAssignment,
-            try await solutionVisibleToStudent(
-                assignment: submissionAssignment, user: user, on: req.db)
-        {
-            solutionURL =
-                setupProps?.effectiveSubmissionMode == .uploadOnly
-                ? "/testsetups/\(submission.testSetupID)/solution/download"
-                : "/testsetups/\(submission.testSetupID)/notebook?file=solution"
-        }
+        let links = try await studentFacingLinks(
+            submission: submission, assignment: submissionAssignment, props: setupProps,
+            user: user, isStaff: isStaff, on: req.db)
 
         let ctx = buildSubmissionContext(
             subID: subID,
@@ -484,7 +472,8 @@ extension WebRoutes {
                     available: reveal.enabled && !reveal.spent && !isStaff
                         && hasSecretTierTests(setupProps),
                     active: reveal.revealed),
-                solutionURL: solutionURL
+                solutionURL: links.solutionURL,
+                leaderboardURL: links.leaderboardURL
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
@@ -492,6 +481,36 @@ extension WebRoutes {
     }
 
     // MARK: - submissionPage helpers
+
+    /// The two optional links a student reviewing their results may follow.
+    ///
+    /// The solution link is for the owner-student once their reveal moment
+    /// has arrived (`solutionVisibleToStudent` — the same gate the serving
+    /// routes enforce); staff reach the solution through the workbench, and a
+    /// staff view of a student's submission should not read as the student's
+    /// page anyway. The leaderboard link appears when the viewer may open it:
+    /// staff always, a student once the instructor has published it.
+    private func studentFacingLinks(
+        submission: APISubmission, assignment: APIAssignment?, props: TestProperties?,
+        user: APIUser, isStaff: Bool, on db: Database
+    ) async throws -> (solutionURL: String?, leaderboardURL: String?) {
+        var solutionURL: String?
+        if !isStaff, submission.userID == user.id, let assignment,
+            try await solutionVisibleToStudent(assignment: assignment, user: user, on: db)
+        {
+            solutionURL =
+                props?.effectiveSubmissionMode == .uploadOnly
+                ? "/testsetups/\(submission.testSetupID)/solution/download"
+                : "/testsetups/\(submission.testSetupID)/notebook?file=solution"
+        }
+        var leaderboardURL: String?
+        if let activity = props?.activity, activity.kind.aggregatesToLeaderboard,
+            isStaff || activity.leaderboardVisibleToStudents
+        {
+            leaderboardURL = "/testsetups/\(submission.testSetupID)/leaderboard"
+        }
+        return (solutionURL, leaderboardURL)
+    }
 
     /// Class-goal bonus: true extra credit on the autograded grade, so a
     /// student already at full marks reads above 100% (no-op unless the

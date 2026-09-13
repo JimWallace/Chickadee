@@ -468,6 +468,14 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// grading (no runner version there); it only bites the worker path.
     public let minimumRunnerVersion: String?
 
+    /// The optional class-activity block — see `ClassActivity` and
+    /// docs/class-activities.md. Nil means an ordinary assignment at every
+    /// branch. Server-side only: the runner never reads it (a runner learns
+    /// what a match needs from the job), so `runnerSanitized()` drops it via
+    /// the memberwise default — which is also what keeps an older runner from
+    /// choking on an `ActivityKind` case it predates.
+    public let activity: ClassActivity?
+
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
@@ -480,6 +488,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         language: AssignmentLanguage? = nil,
         languageDeclared: Bool? = nil,
         minimumRunnerVersion: String? = nil,
+        activity: ClassActivity? = nil,
         patternFamilies: [PatternFamily] = [],
         notebookChecks: [NotebookCheck] = [],
         sections: [TestSuiteSection] = [],
@@ -503,6 +512,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.language = language
         self.languageDeclared = languageDeclared
         self.minimumRunnerVersion = minimumRunnerVersion
+        self.activity = activity
         // `testItems` wins when supplied; otherwise synthesize it from the
         // legacy `patternFamilies` / `notebookChecks` arguments (families
         // first, then checks) so every existing call site keeps working.
@@ -538,6 +548,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         language = try c.decodeIfPresent(AssignmentLanguage.self, forKey: .language)
         languageDeclared = try c.decodeIfPresent(Bool.self, forKey: .languageDeclared)
         minimumRunnerVersion = try c.decodeIfPresent(String.self, forKey: .minimumRunnerVersion)
+        activity = try c.decodeIfPresent(ClassActivity.self, forKey: .activity)
         // `testItems` is the canonical unified list when present.  A legacy
         // manifest carries the separate `patternFamilies` / `notebookChecks`
         // arrays instead — migrate them on read.  (An explicitly-empty
@@ -582,6 +593,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case language
         case languageDeclared
         case minimumRunnerVersion
+        case activity
         case testItems
         case patternFamilies
         case notebookChecks
@@ -614,6 +626,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // state and writing `false` would be a third state nothing reads.
         try c.encodeIfPresent(languageDeclared, forKey: .languageDeclared)
         try c.encodeIfPresent(minimumRunnerVersion, forKey: .minimumRunnerVersion)
+        // encodeIfPresent: an ordinary assignment's bytes must not change.
+        try c.encodeIfPresent(activity, forKey: .activity)
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.
@@ -684,6 +698,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
             // default: the runner receives the materialized per-student file
             // (delivered with the job, like `_ck_inputs.py`) and the grader-only
             // file (via the test-setup zip) directly — never the specs/markers.
+            // `activity` is dropped the same way, and for the enum-decoder
+            // reason above: an `ActivityKind` a runner's build predates would
+            // fail the whole manifest, so a match's needs travel on the job.
             achievements: []
         )
     }

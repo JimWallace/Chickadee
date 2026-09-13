@@ -81,6 +81,13 @@ test('browser wasm interprets output identically to the native worker (shared fi
         assert.ok(Math.abs(outcome.score - c.native.score) < 1e-9,
           `score mismatch for case '${c.name}': ${outcome.score} != ${c.native.score}`);
       }
+      // `metric` follows the same once-present rule: an artifact built before
+      // the field existed leaves it undefined, and only a re-vendored one
+      // reports null-or-number. Once it does, it must match the native value.
+      if (outcome.metric !== undefined) {
+        assert.equal(outcome.metric ?? null, c.native.metric ?? null,
+          `metric mismatch for case '${c.name}'`);
+      }
     }
 
     assert.ok(!leaksEnvelope(outcome.shortResult),

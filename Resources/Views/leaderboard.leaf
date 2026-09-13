@@ -1,0 +1,59 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — Leaderboard
+#endexport
+#export("content"):
+<h1>#(assignmentTitle)</h1>
+
+#extend("_avatar-sprite")
+
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Leaderboard</h2>
+        <div>
+            <span class="chip">#(kindLabel)</span>
+            #if(isStaff):
+            #if(!visibleToStudents):
+            <span class="chip">Hidden from students</span>
+            #endif
+            #endif
+        </div>
+    </div>
+    <p class="text-muted">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
+    #if(count(rows) == 0):
+    <p class="empty">No submission has reported a ranking metric yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Metric</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in rows):
+            <tr>
+                <td>#(row.rank)</td>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.metricText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+#endexport
+#endextend

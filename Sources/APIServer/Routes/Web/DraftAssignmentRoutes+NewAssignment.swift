@@ -336,7 +336,9 @@ extension DraftAssignmentRoutes {
             // and the assignment came out with the language the author picked
             // erased.
             language: preserved.props?.language,
-            languageDeclared: preserved.props?.languageDeclared == true
+            languageDeclared: preserved.props?.languageDeclared == true,
+            // The draft's activity block, for the same fresh-dict reason.
+            activity: preserved.props?.activity
         )
         let setup = try await persistNewAssignmentSetup(
             req: req,

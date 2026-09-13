@@ -78,6 +78,7 @@ Classification column references `policy46-classification.md`.
 | `get_validation_result` | validation submission + its result; `validation_variants` batch | per-test outcomes; per-variant verdicts + synthetic seeds + failing outcomes (all reference-solution runs); **`submissionID`/`userID` dropped** (`GetValidationResultTool.swift:18-24`) | No (instructor reference run; variant seeds are derived constants, not student seeds) | Restricted |
 | `update_assignment` | assignment | echo of saved metadata | No | Confidential |
 | `set_grading_mode` | assignment, setup | echo of mode | No | Confidential |
+| `set_activity` | assignment, setup | echo of the activity block | No | Confidential |
 | `update_suite` | manifest | reconciled suite state | No | Restricted |
 | `author_script` | setup zip | echo (filename, tier, validation status) | No | Restricted |
 | `delete_suite_item` | manifest + zip | reconciled suite state | No | Restricted |

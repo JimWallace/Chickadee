@@ -80,6 +80,11 @@ import Testing
         // Minimum-runner-version gate: changes which runner may grade, not what
         // the suite grades; enforced server-side at claim time. No close/regrade.
         "SetMinimumRunnerVersionTool.swift",
+        // The class-activity block and its leaderboard visibility: how the
+        // class's results are ranked and shown, not what the suite grades — and
+        // the kind is locked once a student has submitted, so the case that
+        // would warrant a close cannot arise. No close/regrade.
+        "SetActivityTool.swift",
         // Dataset marks change delivery (per-student slices), not the graded
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.

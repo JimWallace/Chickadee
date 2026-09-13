@@ -347,6 +347,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `submissions` | `retested_by_user_id` | SET NULL | Submission row preserved; retest attribution drops. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
 | `course_enrollments` | `user_id` | CASCADE | Enrollment row goes when the user goes. |
 | `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
+| `leaderboard_entries` | `user_id` | CASCADE | Derived per-user ranking row (class activities); goes with the user. DB-level cascade on both engines (the FK is declared at create time); `AdminRoutes.deleteUser` also clears it explicitly for symmetry with `class_achievements`. |
 | `client_diagnostics` | `user_id` | CASCADE | Browser-error breadcrumb; tied to the user. |
 | `assignment_personalization_seeds` | `user_id` | CASCADE | Per-user seed; gone with the user. |
 | `job_execution_metrics` | `user_id` | SET NULL | Metric row preserved for capacity reporting; user attribution drops. |

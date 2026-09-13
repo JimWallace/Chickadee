@@ -13,12 +13,20 @@ public struct InterpretedScriptResult: Equatable, Sendable {
     /// and 0 for fail/error/timeout — so a script that emits no `score` grades
     /// exactly as it did before partial credit existed.
     public let score: Double
+    /// The footer's optional `metric`: an unclamped number for ranking (a
+    /// leaderboard's sort key), never for credit. Nil when the footer carries
+    /// none or the value is not a number.
+    public let metric: Double?
 
-    public init(status: TestStatus, shortResult: String, longResult: String?, score: Double) {
+    public init(
+        status: TestStatus, shortResult: String, longResult: String?, score: Double,
+        metric: Double? = nil
+    ) {
         self.status = status
         self.shortResult = shortResult
         self.longResult = longResult
         self.score = score
+        self.metric = metric
     }
 }
 
@@ -108,7 +116,18 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
 
     return InterpretedScriptResult(
         status: status, shortResult: shortResult, longResult: longResult,
-        score: partialCreditScore(footer: footer, status: status))
+        score: partialCreditScore(footer: footer, status: status),
+        metric: rankingMetric(footer: footer))
+}
+
+/// The footer's `metric`, unclamped, or nil. Deliberately NOT derived from the
+/// status the way `score` is: a metric is a measurement the script chose to
+/// report ("tour length 1234"), and a script that reports none has no ranking
+/// position rather than a default one. It is also orthogonal to `score` — a
+/// failing run may still report the distance it reached.
+private func rankingMetric(footer: [String: JSONValue]?) -> Double? {
+    guard let footer, case .number(let m)? = footer["metric"] else { return nil }
+    return m
 }
 
 /// The fraction of a test's points the submission earned, in `0...1`. An explicit

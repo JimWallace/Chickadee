@@ -8,6 +8,7 @@
 //   GET  /testsetups/:id/submit     → submit.leaf     (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
+//   GET  /testsetups/:id/leaderboard → leaderboard.leaf (class activity ranking)
 //   GET  /submissions/:id           → submission.leaf (live results)
 
 import Core
@@ -22,6 +23,9 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "submit", use: submitForm)
         routes.post("testsetups", ":testSetupID", "submit", use: createSubmission)
         routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
+        // A class activity's ranking (docs/class-activities.md); 404 unless the
+        // assignment has one, and for students unless it is published.
+        routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         // Course-staff-only: persist what the author is editing in JupyterLite

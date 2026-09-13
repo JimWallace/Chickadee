@@ -25,6 +25,9 @@ import Testing
         let shortResult: String
         let score: Double
         let longResult: String?
+        /// Absent on rows written before ranking metrics existed — same
+        /// meaning as an explicit null.
+        let metric: Double?
     }
 
     private func loadCorpus() throws -> Corpus {
@@ -53,6 +56,9 @@ import Testing
             #expect(
                 abs(result.score - c.native.score) < 1e-9,
                 "score mismatch for case '\(c.name)': \(result.score) != \(c.native.score)")
+            #expect(
+                result.metric == c.native.metric,
+                "metric mismatch for case '\(c.name)': \(String(describing: result.metric))")
         }
     }
 }

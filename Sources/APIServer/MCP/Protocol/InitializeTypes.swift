@@ -260,6 +260,10 @@ enum MCPServerInstructions {
         check via author_notebook_check — 0 clears an override), \
         set_minimum_runner_version (the optional minimum native-runner version that may grade the \
         assignment; a semver like "0.5.0", or null to clear — worker path only), \
+        set_activity (make the assignment a class activity — \(MCPActivityProse.tokens) — ranked on \
+        the unclamped `metric` a script prints in its JSON footer beside `score`, with a per-assignment \
+        leaderboard that is hidden from students until leaderboardVisibility is "visible"; the kind \
+        is locked once a student has submitted; "none" clears it), \
         update_suite (script metadata). To add or change a GRADED test, prefer Chickadee's native \
         check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
         (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
@@ -315,7 +319,8 @@ enum MCPServerInstructions {
         student submission, identity, or grade. \
         Metadata-only edits (update_assignment, set_grading_mode, set_submission_mode, \
         set_assignment_language, set_time_limit, set_dataset, \
-        set_minimum_runner_version, update_achievements, the section-organization tools) never trigger \
+        set_minimum_runner_version, set_activity, update_achievements, the section-organization \
+        tools) never trigger \
         a regrade or a close. \
         update_global_inputs and update_section_variables re-inline the shared inputs into the \
         affected scripts in place and likewise neither close nor regrade (matching the web Global \

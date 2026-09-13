@@ -144,3 +144,61 @@ enum AchievementSignalPresentation {
             refPlaceholder: ref.placeholder, refReplacesValue: refReplacesValue)
     }
 }
+
+// MARK: - Record dimensions
+
+/// One `RecordDimension` as the editor and the MCP schema present it.
+struct RecordDimensionOption: Encodable {
+    /// Raw `RecordDimension` value.
+    let value: String
+    /// Short label for the "Ranked by" select.
+    let label: String
+    /// One clause for the MCP schema's description of the dimension.
+    let detail: String
+}
+
+/// Single source of truth for how a record's ranking dimension is named — the
+/// same discipline as `AchievementSignalPresentation`, for the same reason: the
+/// "Ranked by" select, the JS rule summary and the MCP `recordDimension` enum
+/// were each a hand-typed copy of the four cases, and none of them could see a
+/// fifth. Every surface now renders from `all`; `RecordDimensionCoverageTests`
+/// holds them to it.
+enum RecordDimensionPresentation {
+
+    static var all: [RecordDimensionOption] {
+        RecordDimension.allCases.map(option(for:))
+    }
+
+    private static func option(for dimension: RecordDimension) -> RecordDimensionOption {
+        switch dimension {
+        case .firstToSubmit:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "First to submit",
+                detail: "first submission of any kind")
+        case .firstToSolve:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "First to 100%", detail: "first to 100%")
+        case .fastest:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "Fastest run",
+                detail: "lowest execution time at 100%")
+        case .shortest:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "Fewest attempts",
+                detail: "FEWEST ATTEMPTS to reach 100% (a legacy name — it does not measure "
+                    + "solution length)")
+        case .highestMetric:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "Highest metric",
+                detail: "highest ranking `metric` any submission reported (a class activity's "
+                    + "leaderboard record; not gated on 100%)")
+        }
+    }
+
+    /// "firstToSolve = first to 100%; firstToSubmit = …" — the MCP schema's
+    /// description, derived so it cannot stop short of the enum.
+    static var schemaDescription: String {
+        "record only: the dimension students are ranked on. "
+            + all.map { "\($0.value) = \($0.detail)" }.joined(separator: "; ") + "."
+    }
+}

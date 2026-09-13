@@ -18,10 +18,22 @@
         individual: 'This student', classWide: 'The class', record: 'Class record'
     };
     var CMP_LABEL = { atLeast: '≥', atMost: '≤', equals: '=' };
-    var DIM_LABEL = {
-        firstToSubmit: 'first to submit', firstToSolve: 'first to 100%',
-        fastest: 'fastest run', shortest: 'fewest attempts'
-    };
+    // record dimension -> label, read off the "Ranked by" select's options so
+    // RecordDimensionPresentation stays the single source of truth.  Filled
+    // lazily: the select lives inside a <template> until the editor opens.
+    var DIM_LABEL = null;
+    function dimLabel(value) {
+        if (!DIM_LABEL) {
+            DIM_LABEL = {};
+            var tpl = document.getElementById('achievement-editor-template');
+            var root = tpl && tpl.content ? tpl.content : document;
+            var opts = root.querySelectorAll('#am-recordDimension option');
+            Array.prototype.forEach.call(opts, function (o) {
+                DIM_LABEL[o.value] = o.textContent.trim().toLowerCase();
+            });
+        }
+        return DIM_LABEL[value] || n(value);
+    }
     // signal value -> every fact about the signal, read off the condition
     // template's <option> data attributes so AchievementSignalPresentation stays
     // the single source of truth.  Nothing per-signal is written here: a JS-side
@@ -83,7 +95,7 @@
 
     function summary(row) {
         if (row.scope === 'record') {
-            return 'record · ' + (DIM_LABEL[row.recordDimension] || n(row.recordDimension));
+            return 'record · ' + dimLabel(row.recordDimension);
         }
         if (row.scope === 'classWide') {
             return conditionsText(row) + ' · by ' + n(row.classPercent)

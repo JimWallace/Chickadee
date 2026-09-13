@@ -115,7 +115,9 @@ func updateManifestAddingScript(
         language: props.language,
         languageDeclared: props.languageDeclared == true,
         // Likewise preserve the minimum-runner-version gate across the rebuild.
-        minimumRunnerVersion: props.minimumRunnerVersion
+        minimumRunnerVersion: props.minimumRunnerVersion,
+        // And the class-activity block, which a script edit must not erase.
+        activity: props.activity
     )
 }
 
@@ -175,7 +177,9 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         language: props.language,
         languageDeclared: props.languageDeclared == true,
         // Likewise preserve the minimum-runner-version gate across the rebuild.
-        minimumRunnerVersion: props.minimumRunnerVersion
+        minimumRunnerVersion: props.minimumRunnerVersion,
+        // And the class-activity block, which a script edit must not erase.
+        activity: props.activity
     )
 }
 
@@ -218,7 +222,13 @@ func makeWorkerManifestJSON(
     // callers pass the previous manifest's value; a caller creating a manifest
     // from nothing leaves it false and declares separately.
     languageDeclared: Bool = false,
-    minimumRunnerVersion: String? = nil
+    minimumRunnerVersion: String? = nil,
+    // The class-activity block. Threaded for the same reason as
+    // `languageDeclared`: this builder writes a fresh dict, so a suite edit on
+    // an activity that was not carried here would quietly turn a leaderboard
+    // challenge back into an ordinary lab. Rebuild callers pass the previous
+    // manifest's value; a caller creating from nothing leaves it nil.
+    activity: ClassActivity? = nil
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -253,6 +263,11 @@ func makeWorkerManifestJSON(
     // omitted (no gate) when nil/blank, matching `TestProperties.encodeIfPresent`.
     if let minimumRunnerVersion, !minimumRunnerVersion.isEmpty {
         manifest["minimumRunnerVersion"] = minimumRunnerVersion
+    }
+    // Omitted when nil, matching `TestProperties.encodeIfPresent`, so an
+    // ordinary assignment's manifest bytes are unchanged.
+    if let activity {
+        try spliceEncodedObject(into: &manifest, key: "activity", value: activity)
     }
     try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
     try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)
@@ -374,6 +389,22 @@ private func spliceEncodedArray<T: Encodable>(
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(values)
     if let parsed = try JSONSerialization.jsonObject(with: data) as? [Any] {
+        manifest[key] = parsed
+    }
+}
+
+/// The single-value twin of `spliceEncodedArray`: encodes one `Encodable`
+/// object with sorted keys and reparses it so it splices into the
+/// dictionary-of-Any manifest under `key`.
+private func spliceEncodedObject<T: Encodable>(
+    into manifest: inout [String: Any],
+    key: String,
+    value: T
+) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = try encoder.encode(value)
+    if let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
         manifest[key] = parsed
     }
 }
