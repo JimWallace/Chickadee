@@ -609,6 +609,9 @@ struct SubmissionContext: Encodable {
     /// while their reveal moment has not arrived (or for staff).  Renders
     /// the "Solution available" notice box.
     let solutionURL: String?
+    /// Link to the class activity's leaderboard, nil unless one is open to
+    /// the viewer.
+    let leaderboardURL: String?
 }
 
 /// One class-goal achievement's display state for the submission page.

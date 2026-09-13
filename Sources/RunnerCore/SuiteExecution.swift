@@ -110,6 +110,7 @@ private func makeOutcome(item: SuiteItem, output: ScriptOutput, attemptNumber: I
         longResult: interpreted.longResult,
         score: interpreted.score,
         points: item.points,
+        metric: interpreted.metric,
         executionTimeMs: output.executionTimeMs,
         memoryUsageBytes: nil,
         attemptNumber: attemptNumber,

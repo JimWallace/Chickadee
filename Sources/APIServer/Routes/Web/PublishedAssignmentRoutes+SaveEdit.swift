@@ -72,25 +72,10 @@ extension PublishedAssignmentRoutes {
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
-        // Persist a changed submission mode before anything else touches the
-        // row: `setManifestSubmissionMode` refuses the upload + browser
-        // combination, and refusing must leave the assignment entirely
-        // unmodified — not half-saved.
-        if let refusal = await persistSubmissionMode(
-            requested: form.submissionMode, setup: setup, on: req.db)
-        {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(refusal))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
-        // Then the declared language, in that order deliberately: an upload-only
-        // language (C++) is refused while the setup is still in notebook mode,
-        // so a save that switches both at once has to apply the mode first or
-        // the pair would be rejected on its way to a coherent state.
-        if let refusal = await persistDeclaredLanguage(
-            requested: form.assignmentLanguage, setup: setup, on: req.db)
-        {
+        // Persist the manifest settings before anything else touches the row:
+        // each helper refuses an incoherent state, and refusing must leave the
+        // assignment entirely unmodified — not half-saved.
+        if let refusal = await persistManifestSettings(form: form, setup: setup, on: req.db) {
             let q =
                 "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(refusal))"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
@@ -178,6 +163,12 @@ extension PublishedAssignmentRoutes {
         /// string and nil mean different things here and must stay distinct:
         /// one clears a declaration, the other is silence.
         let assignmentLanguage: String?
+        /// An `ActivityKind` raw value or "none" from the Class activity
+        /// select, or nil when the form carried no such field — a stale tab,
+        /// or the select rendered disabled because the kind is locked (a
+        /// disabled control is not submitted), which leaves the stored block
+        /// untouched rather than clearing it.
+        let activityKind: String?
         /// Set by the assignment workbench's embedded form.  Suppresses the
         /// close-on-save below; see the comment at that call site.
         let liveEdit: Bool
@@ -187,6 +178,24 @@ extension PublishedAssignmentRoutes {
         let data: Data
         let filename: String
         let isNotebook: Bool
+    }
+
+    /// Applies the three manifest selects in order, returning the first
+    /// refusal or nil. The order is deliberate: an upload-only language (C++)
+    /// is refused while the setup is still in notebook mode, so a save that
+    /// switches both at once has to apply the mode first or the pair would be
+    /// rejected on its way to a coherent state; the activity kind comes last
+    /// and is locked once a student has submitted.
+    fileprivate func persistManifestSettings(
+        form: SaveEditedAssignmentForm, setup: APITestSetup, on db: any Database
+    ) async -> String? {
+        if let refusal = await persistSubmissionMode(requested: form.submissionMode, setup: setup, on: db) {
+            return refusal
+        }
+        if let refusal = await persistDeclaredLanguage(requested: form.assignmentLanguage, setup: setup, on: db) {
+            return refusal
+        }
+        return await persistActivityKind(requested: form.activityKind, setup: setup, on: db)
     }
 
     /// Applies the Submission select's value to the manifest, returning a
@@ -252,6 +261,38 @@ extension PublishedAssignmentRoutes {
         }
     }
 
+    /// Applies the Class activity select's value, returning a user-facing
+    /// refusal or nil. nil `requested` is silence (see the form field); "none"
+    /// clears; a kind token sets it, keeping the stored leaderboard visibility
+    /// when the kind is unchanged so a Save does not un-publish a leaderboard.
+    fileprivate func persistActivityKind(
+        requested: String?, setup: APITestSetup, on db: any Database
+    ) async -> String? {
+        guard let requested else { return nil }
+        let token = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = currentManifestActivity(setup.manifest)
+        let next: ClassActivity?
+        if token == SetActivityTool.noActivityChoice {
+            next = nil
+        } else if let kind = ActivityKind(rawValue: token) {
+            next = ClassActivity(
+                kind: kind,
+                leaderboardVisibility: current?.kind == kind
+                    ? (current?.leaderboardVisibility ?? .hidden) : .hidden)
+        } else {
+            // An unrecognised value — a stale tab posting a kind this build no
+            // longer has — is ignored, as the submission-mode helper does.
+            return nil
+        }
+        guard next != current else { return nil }
+        do {
+            try await ActivityAuthoring.setActivity(setup: setup, to: next, on: db)
+            return nil
+        } catch {
+            return (error as? any AbortError)?.reason ?? "Could not set the class activity."
+        }
+    }
+
     fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {
         struct SaveBody: Content {
             var assignmentName: String?
@@ -262,6 +303,7 @@ extension PublishedAssignmentRoutes {
             var gradeObjectID: String?
             var submissionMode: String?
             var assignmentLanguage: String?
+            var activityKind: String?
             var liveEdit: String?
         }
 
@@ -283,6 +325,8 @@ extension PublishedAssignmentRoutes {
                 ?? body.submissionMode,
             assignmentLanguage: try multipartTextField(named: ["assignmentLanguage"], from: req)
                 ?? body.assignmentLanguage,
+            activityKind: try multipartTextField(named: ["activityKind"], from: req)
+                ?? body.activityKind,
             liveEdit: (try multipartTextField(named: ["liveEdit"], from: req) ?? body.liveEdit) != nil
         )
     }

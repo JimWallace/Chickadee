@@ -669,6 +669,12 @@ exit code — the exit code drives the pass/fail badge, `score` drives the credi
 `score` grades exactly as before: full credit on a pass, none otherwise. A test
 skipped because a `dependsOn` prerequisite failed scores 0.
 
+`metric` is an optional, unclamped `Double` for **ranking**, never credit: a
+class activity's leaderboard sorts on it, highest first, and nothing reads it
+for a grade (`docs/class-activities.md`). Orthogonal to both `score` and the
+exit code; a script that reports none has no ranking position. A non-numeric
+value is ignored.
+
 **stderr:** Captured verbatim as `longResult` (nil if empty).
 
 ---
@@ -702,6 +708,9 @@ struct TestOutcome: Codable {
     let status: TestOutcomeStatus
     let shortResult: String
     let longResult: String?
+    let score: Double               // fraction of points earned, 0...1
+    let points: Int                 // grade weight, default 1
+    let metric: Double?             // footer `metric` for ranking; nil when none
     let executionTimeMs: Int
     let memoryUsageBytes: Int?      // nullable until measured
     let attemptNumber: Int
@@ -1398,7 +1407,7 @@ browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (8 kinds) and notebook checks (10 kinds); achievements; student slip days;
 per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
-an MCP authoring surface of 54 tools plus a read-only admin-diagnostics MCP
+an MCP authoring surface of 55 tools plus a read-only admin-diagnostics MCP
 of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
 source of truth); OIDC SSO; and zero-downtime auto-deploys.
@@ -1641,6 +1650,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
 - `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now largely shipped, so it opens with a **Status** table separating built behaviour from the two things deliberately not built: coverage % (which needs a corpus aggregation run, unlike a bug-set union, which is a query over stored outcomes) and a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
+- `docs/class-activities.md` — class activities (#1508): leaderboard challenges, beat-the-instructor bots and, in later slices, round robins, king of the hill and brackets. Opens with a **Status** table per slice; the model is two hidden axes (opponent source × class aggregation) behind one instructor-chosen `ActivityKind`, the `activity` manifest block, the footer's `metric` field (ranking, never credit), the ingest-time `leaderboard_entries` materialisation, the pseudonymous leaderboard page, the kind-locked-once-submitted rule, and the compatibility rules every slice must keep (the `makeWorkerManifestJSON` fresh-dict trap, `runnerSanitized` stripping the block so an old runner never decodes a kind it predates)
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/student-avatars.md` — generated chickadee avatars, shipped for the account page (art, `Core/` model, storage, per-course handles; leaderboards and the customization wardrobe are not built) replacing the account-page initials monogram, and the pseudonymous identity primitive a leaderboard would be built on: why the spec is stored rather than derived from a username (a hash of an identifier is reproducible by any classmate, which looks private without being private) and rather than re-derived from a stored seed (appending one option reshuffles everyone), why uniqueness is carried by a per-course handle rather than by the picture (uniqueness must hold at the granularity a viewer can distinguish, at the scope where they see them together — and enforcing it per course would make an avatar change when somebody drops), and how the existing UI guards decide the rendering mechanism (sprite symbols plus custom-property recolouring, since raw path data in a template already fails S4)
 - `docs/browser-freeze-investigation.md` — the Aug 2026 post-boot editor freeze (`page_unresponsive` beacons): telemetry signature, the measured root cause (two upstream listeners each forcing a reflow per IOPub output message — `updatePromptOverlayIcon` and the `:scroll-output` plugin), the runtime prototype mitigation (`Public/jl-cell-perf-patch.js`, which also carries the auto-collapse rule) and why it is not a vendored-bundle edit, and the reusable freeze tracer (`Tools/editor-smoke-test/freeze-trace-check.mjs`)

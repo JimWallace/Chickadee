@@ -272,6 +272,50 @@ final class AssignmentHelpersManifestTests {
     }
 
     // Regression: rebuilding the manifest to add or remove a script must
+    // preserve the class-activity block. makeWorkerManifestJSON builds a fresh
+    // dict, so an un-threaded block would turn a leaderboard challenge back
+    // into an ordinary lab on the next script edit — the `languageDeclared`
+    // trap, one field later.
+    @Test func updateManifestScriptEditsPreserveActivity() throws {
+        let activity = ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            activity: activity
+        )
+        // Sanity: the builder emitted the block.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(original.utf8))
+                .activity == activity)
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .activity == activity)
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.py"))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+                .activity == activity)
+    }
+
+    // An ordinary assignment's manifest must not grow an `activity` key.
+    @Test func makeWorkerManifestJSONOmitsActivityWhenNil() throws {
+        let json = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false)
+        #expect(!json.contains("activity"))
+    }
+
+    // Regression: rebuilding the manifest to add or remove a script must
     // preserve `languageDeclared` alongside `language`.  makeWorkerManifestJSON
     // builds a fresh dict, so an un-threaded flag was dropped on every script
     // edit — turning a deliberate "None" declaration (languageDeclared with no

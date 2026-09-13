@@ -93,6 +93,7 @@ extension TestOutcomeCollection {
                 longResult: cut(outcome.longResult),
                 score: outcome.score,
                 points: outcome.points,
+                metric: outcome.metric,
                 executionTimeMs: outcome.executionTimeMs,
                 memoryUsageBytes: outcome.memoryUsageBytes,
                 attemptNumber: outcome.attemptNumber,

@@ -76,6 +76,15 @@
                     </select>
                 </label>
                 <p class="card-meta fine-print">File upload only hides the notebook editor and grades every submission on the native runner. Use it for makefile-graded work (for example C++) or multi-file projects submitted as a zip.</p>
+                <label class="form-label field-gap">
+                    Class activity
+                    <select class="form-input" name="activityKind" id="activityKindSelect" #if(activity.locked):disabled#endif>
+                        #for(option in activity.kindOptions):
+                        <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                        #endfor
+                    </select>
+                </label>
+                <p class="card-meta fine-print">#if(activity.locked):The activity kind is locked because students have submitted. Clone the assignment to run it as a different kind.#else:A class activity ranks students on the number a test script reports as <code>metric</code> in its JSON footer, highest first. See the class activities guide in docs before choosing one.#endif</p>
                 <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             </div>
         </div>
@@ -228,6 +237,33 @@
         </table>
     </div>
 </form>
+
+#if(activity.isSet):
+<!-- ── Activity ────────────────────────────────────────────────────────
+     Renders only when the manifest carries an activity block.  Like the
+     Student Options below it lives OUTSIDE the multipart Save & Validate
+     form and persists through its own lightweight endpoint, so publishing
+     a leaderboard mid-lab never closes or re-validates the assignment. -->
+<section class="editor-block">
+    <div class="editor-block-head">
+        <h2>Activity</h2>
+        <div class="toolbar toolbar--end">
+            <span class="chip">#(activity.kindLabel)</span>
+            <a class="btn action-btn" href="#(activity.leaderboardURL)">Open leaderboard</a>
+        </div>
+    </div>
+    <p class="field-note text-muted">#(activity.summary)</p>
+    <form method="post" action="/instructor/#(assignmentID)/activity" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="visible" #if(activity.leaderboardVisible):checked#endif>
+            Show the leaderboard to students
+        </label>
+        <p class="field-note text-muted">Students appear under their class handle and see rank and metric only. Staff always see the leaderboard, with names.</p>
+        <button class="btn action-btn" type="submit">Save leaderboard setting</button>
+    </form>
+</section>
+#endif
 
 <!-- ── Student Options ─────────────────────────────────────────────────
      Per-assignment student-facing policy toggles.  Lives OUTSIDE the
@@ -446,10 +482,9 @@
         <label class="form-label field-gap js-am-scope-field" data-scope="record">
             Ranked by
             <select class="form-input" id="am-recordDimension">
-                <option value="firstToSubmit">First to submit</option>
-                <option value="firstToSolve">First to 100%</option>
-                <option value="fastest">Fastest run</option>
-                <option value="shortest">Fewest attempts</option>
+                #for(dim in recordDimensionOptions):
+                <option value="#(dim.value)">#(dim.label)</option>
+                #endfor
             </select>
         </label>
     </template>

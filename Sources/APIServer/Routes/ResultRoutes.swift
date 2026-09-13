@@ -167,6 +167,17 @@ struct ResultRoutes: RouteCollection {
             on: req.db
         )
 
+        // The activity leaderboard, likewise outside the 100% gate: a ranking
+        // metric is whatever the script measured, and the script decides
+        // whether a failing run reports one.
+        try await recordLeaderboardEntry(
+            testSetupID: submission.testSetupID,
+            userID: userID,
+            submissionID: subID,
+            outcomes: collection.outcomes,
+            on: req.db
+        )
+
         guard gradePercent(from: collection) == 100 else { return }
         let disabled =
             (try? await APITestSetup.find(submission.testSetupID, on: req.db))

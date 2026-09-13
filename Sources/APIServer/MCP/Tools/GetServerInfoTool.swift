@@ -42,6 +42,9 @@ struct GetServerInfoTool: ContentTool {
         /// an agent nothing; adding a tool costs it a round-trip it has to
         /// think to make.
         let languages: [MCPLanguageCapability]
+        /// Every class-activity kind the server can author and grade — see
+        /// `MCPActivityKindCapability`. Same reasoning as `languages`.
+        let activityKinds: [MCPActivityKindCapability]
     }
 
     static let name = "get_server_info"
@@ -55,7 +58,9 @@ struct GetServerInfoTool: ContentTool {
         + "pattern-family and notebook-check kinds it can render (with the reason for every "
         + "exclusion). Read `languages` BEFORE authoring for an unfamiliar language: the kinds are "
         + "NOT uniform across languages, and this is the same predicate that refuses a save, so it "
-        + "will not disagree with what you are allowed to write. Also use it to confirm a deploy is "
+        + "will not disagree with what you are allowed to write. `activityKinds` lists every class-"
+        + "activity kind (\(MCPActivityProse.tokens)) with what each does and how the class's results "
+        + "combine. Also use it to confirm a deploy is "
         + "live (a tool call hits the running process, unlike a cached tool list) or to check "
         + "whether write tools will work before calling them. Read-only; touches no course, "
         + "student, or database state."
@@ -105,10 +110,23 @@ struct GetServerInfoTool: ContentTool {
                     ]),
                 ]),
             ]),
+            "activityKinds": .object([
+                "type": .string("array"),
+                "description": .string("Every class-activity kind the server supports."),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "name": MCPSchema.string,
+                        "displayName": MCPSchema.string,
+                        "summary": MCPSchema.string,
+                        "aggregation": MCPSchema.string,
+                    ]),
+                ]),
+            ]),
         ]),
         "required": .array([
             .string("version"), .string("mcpMode"), .string("advertisedScopes"),
-            .string("writeEnabled"), .string("languages"),
+            .string("writeEnabled"), .string("languages"), .string("activityKinds"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -120,6 +138,7 @@ struct GetServerInfoTool: ContentTool {
             mcpMode: mode.rawValue,
             advertisedScopes: mode.advertisedScopes.map(\.rawValue),
             writeEnabled: mode.scopeCeiling.contains(.write),
-            languages: MCPLanguageCapability.all)
+            languages: MCPLanguageCapability.all,
+            activityKinds: MCPActivityKindCapability.all)
     }
 }

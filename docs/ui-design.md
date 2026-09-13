@@ -322,10 +322,11 @@ duplicate.
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
   read the palette directly, because a body or a beak that varied would stop
-  the birds being one species.  **One size, 3rem.**  The bird earns its detail
-  at 48px and up; below that it is a smudge, and a small context wants a
-  monogram chip rather than a shrunken bird — which is also why a leaderboard
-  would name a student by their handle and use the bird for recognition.  See
+  the birds being one species.  **Two sizes.**  `.avatar` alone is 3rem: the
+  bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
+  table row where the handle beside it carries the identity — the leaderboard —
+  because below 48px the bird is recognition, not identification, and a row
+  with no text beside it would want a monogram chip instead.  See
   [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A

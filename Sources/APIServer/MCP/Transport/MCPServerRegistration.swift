@@ -40,6 +40,7 @@ enum MCPToolCatalog {
             SetTimeLimitTool().erased(),
             SetDatasetTool().erased(),
             SetMinimumRunnerVersionTool().erased(),
+            SetActivityTool().erased(),
             UpdateSuiteTool().erased(),
             UpdateGlobalInputsTool().erased(),
             UpdateAchievementsTool().erased(),

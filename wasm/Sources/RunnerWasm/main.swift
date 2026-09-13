@@ -139,7 +139,7 @@ JSObject.global.runnerClassifyScript = .object(runnerClassifyScript)
 //   run           — (name: string, timeLimit: number) => Promise<ScriptOutput>
 //                   ScriptOutput = { exitCode, stdout, stderr, executionTimeMs, timedOut }
 //   resolves to   — [{ testName, testClass, tier, status, shortResult, longResult,
-//                      score, points, executionTimeMs, memoryUsageBytes,
+//                      score, points, metric, executionTimeMs, memoryUsageBytes,
 //                      attemptNumber, isFirstPassSuccess }]  (canonical TestOutcome shape)
 
 /// Drives `executeSuites` by delegating to JS callbacks (callable `JSObject`s —
@@ -235,6 +235,7 @@ private func outcomesToJS(_ outcomes: [TestOutcome]) -> JSValue {
         obj.longResult = outcome.longResult.map { JSValue.string($0) } ?? .null
         obj.score = .number(outcome.score)
         obj.points = .number(Double(outcome.points))
+        obj.metric = outcome.metric.map { JSValue.number($0) } ?? .null
         obj.executionTimeMs = .number(Double(outcome.executionTimeMs))
         obj.memoryUsageBytes = outcome.memoryUsageBytes.map { JSValue.number(Double($0)) } ?? .null
         obj.attemptNumber = .number(Double(outcome.attemptNumber))

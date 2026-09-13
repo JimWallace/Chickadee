@@ -17,6 +17,7 @@ struct VanityURLRoutes: RouteCollection {
         routes.get(":courseCode", ":assignmentSlug", "notebook", use: vanityNotebookRedirect)
         routes.get(":courseCode", ":assignmentSlug", "submit", use: vanitySubmitRedirect)
         routes.get(":courseCode", ":assignmentSlug", "history", use: vanityHistoryRedirect)
+        routes.get(":courseCode", ":assignmentSlug", "leaderboard", use: vanityLeaderboardRedirect)
     }
 
     @Sendable
@@ -41,6 +42,12 @@ struct VanityURLRoutes: RouteCollection {
     func vanityHistoryRedirect(req: Request) async throws -> Response {
         let assignment = try await resolveAssignment(req: req)
         return req.redirect(to: "/testsetups/\(assignment.testSetupID)/history")
+    }
+
+    @Sendable
+    func vanityLeaderboardRedirect(req: Request) async throws -> Response {
+        let assignment = try await resolveAssignment(req: req)
+        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/leaderboard")
     }
 
     private func resolveAssignment(req: Request) async throws -> APIAssignment {

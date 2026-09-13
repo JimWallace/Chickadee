@@ -11,6 +11,7 @@
 // flat via `#(field)`, so nesting would force a template-side rewrite.
 
 import Core
+import Fluent
 import Foundation
 
 struct NewAssignmentContext: Encodable {
@@ -251,6 +252,9 @@ struct EditAssignmentContext: Encodable {
     /// order.  The condition-builder's signal dropdown renders from this list —
     /// see `AchievementSignalPresentation`.
     let achievementSignalOptions: [AchievementSignalOption]
+    /// The "Ranked by" select's options, in `RecordDimension.allCases` order —
+    /// see `RecordDimensionPresentation`.
+    let recordDimensionOptions: [RecordDimensionOption]
     let brightspaceSyncEnabled: Bool
     let brightspaceGradeObjectID: String?
     /// "notebook" | "uploadOnly" from the manifest — renders the Submission
@@ -266,6 +270,9 @@ struct EditAssignmentContext: Encodable {
     /// `NewAssignmentContext`. Both pages carry the same fine print and both
     /// had gone stale the same way.
     let uploadOnlyLanguagesProse: String = LanguageProse.uploadOnlyDisplayNames
+    /// Everything the Class activity select and the Activity section render —
+    /// see `ActivityEditFacts`.
+    let activity: ActivityEditFacts
     /// The per-assignment secret-reveal toggle: whether students may spend
     /// their one reveal token here.  Renders the "Student Options" checkbox.
     let secretRevealEnabled: Bool
@@ -320,6 +327,54 @@ struct AssignmentLanguageOption: Encodable {
                     label: language.displayName,
                     selected: normalized == language.rawValue
                 )
+            }
+    }
+}
+
+/// The edit page's class-activity facts (docs/class-activities.md), nested
+/// under one key so the page context stays within its body budget. Every
+/// field is a plain value because Leaf resolves no Swift properties.
+struct ActivityEditFacts: Encodable {
+    /// The "Class activity" select's options: "None" first, then every
+    /// `ActivityKind` in `allCases` order — derived, never written out.
+    let kindOptions: [ActivityKindOption]
+    /// True once a student has submitted: the select renders disabled and the
+    /// fine print says why (`ActivityAuthoring.kindLockedMessage`'s rule).
+    let locked: Bool
+    /// True when the manifest carries an activity block; gates the Activity
+    /// section. Explicit Bool, as every Leaf gate here is.
+    let isSet: Bool
+    let kindLabel: String
+    let summary: String
+    let leaderboardVisible: Bool
+    let leaderboardURL: String
+
+    static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
+        let activity = setup.decodedManifest()?.activity
+        let testSetupID = setup.id ?? ""
+        return ActivityEditFacts(
+            kindOptions: ActivityKindOption.options(current: activity?.kind),
+            locked: try await ActivityAuthoring.hasStudentSubmissions(setup: setup, on: db),
+            isSet: activity != nil,
+            kindLabel: activity?.kind.displayName ?? "",
+            summary: activity?.kind.summary ?? "",
+            leaderboardVisible: activity?.leaderboardVisibleToStudents == true,
+            leaderboardURL: "/testsetups/\(testSetupID)/leaderboard")
+    }
+}
+
+/// One entry in the edit page's "Class activity" select.
+struct ActivityKindOption: Encodable {
+    /// An `ActivityKind` raw value, or `SetActivityTool.noActivityChoice`.
+    let value: String
+    let label: String
+    let selected: Bool
+
+    /// "None" followed by every kind, marking the stored one selected.
+    static func options(current: ActivityKind?) -> [ActivityKindOption] {
+        [ActivityKindOption(value: SetActivityTool.noActivityChoice, label: "None", selected: current == nil)]
+            + ActivityKind.allCases.map { kind in
+                ActivityKindOption(value: kind.rawValue, label: kind.displayName, selected: kind == current)
             }
     }
 }

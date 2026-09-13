@@ -360,7 +360,11 @@ public enum RewardType: String, Codable, Sendable {
 }
 
 /// The dimension a `record`-scoped achievement ranks students on.
-public enum RecordDimension: String, Codable, Sendable {
+///
+/// `CaseIterable` so every surface that lists dimensions — the editor's
+/// select, the MCP schema — derives its list rather than typing one; the
+/// guard is `RecordDimensionCoverageTests`.
+public enum RecordDimension: String, Codable, CaseIterable, Sendable {
     /// Earliest correct (100%) submission — the "Trailblazer" record.
     case firstToSolve
     /// Earliest submission of any kind — the "Pathfinder" record (awarded at
@@ -372,4 +376,9 @@ public enum RecordDimension: String, Codable, Sendable {
     /// is a legacy name (it never measured solution length); it stays
     /// `shortest` because manifests already persist it.
     case shortest
+    /// Highest ranking `metric` reported by any submission — the record a
+    /// class activity's leaderboard crowns (docs/class-activities.md). Unlike
+    /// the other four it is NOT gated on a 100% grade: the metric is what the
+    /// script chose to measure, and it is awarded on the leaderboard path.
+    case highestMetric
 }

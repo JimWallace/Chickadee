@@ -458,6 +458,11 @@ func registerMigrations(on app: Application) {
     // of. Index-only; `submissions` is created far above.
     app.migrations.add(CreateClaimPriorityIndex())
 
+    // Class-activity leaderboards (docs/class-activities.md): one row per
+    // (assignment, student) with the best ranking metric reported so far.
+    // New table; FK to `users`, created far above, so no ordering constraint.
+    app.migrations.add(CreateLeaderboardEntries())
+
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.
     app.migrations.add(CreateSessionReaperIndex())

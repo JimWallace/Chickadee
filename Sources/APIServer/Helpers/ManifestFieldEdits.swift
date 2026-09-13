@@ -395,3 +395,39 @@ func setManifestMinimumRunnerVersion(
     }
     return effective
 }
+
+/// Reads the `activity` block straight from a manifest JSON string — the same
+/// access pattern as `currentManifestGradingMode` — nil when the field is
+/// absent, unreadable, or names a kind this build does not know.
+func currentManifestActivity(_ manifest: String?) -> ClassActivity? {
+    guard let manifest,
+        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any],
+        let block = dict["activity"],
+        let data = try? JSONSerialization.data(withJSONObject: block)
+    else { return nil }
+    return try? JSONDecoder().decode(ClassActivity.self, from: data)
+}
+
+/// Sets (or clears, with nil) the test setup's `activity` block, saving only
+/// when it actually changes. A surgical edit like `setManifestMinimumRunnerVersion`,
+/// so fields this build does not model survive; the dict builder is threaded
+/// separately so a later suite rebuild keeps the block too.
+///
+/// Callers decide the lifecycle rule (the kind is locked once a student has
+/// submitted); this helper only writes.
+func setManifestActivity(
+    setup: APITestSetup, to activity: ClassActivity?, on db: any Database
+) async throws {
+    guard currentManifestActivity(setup.manifest) != activity else { return }
+    let encoded: [String: Any]? = try activity.map { value in
+        let data = try JSONEncoder().encode(value)
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        if let encoded {
+            dict["activity"] = encoded
+        } else {
+            dict.removeValue(forKey: "activity")
+        }
+    }
+}

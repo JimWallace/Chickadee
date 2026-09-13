@@ -50,7 +50,7 @@ source of truth; a census re-count is required whenever either changes
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 
-## Write tools (`content:write`) — 26
+## Write tools (`content:write`) — 27
 
 | Tool | Handler (`file`) | Resource arg | Authz | Writes / touches |
 |------|------------------|--------------|-------|------------------|
@@ -60,6 +60,7 @@ source of truth; a census re-count is required whenever either changes
 | `set_grading_mode` | `SetGradingModeTool.swift:31` | `assignmentPublicID` | course-enrol (`:73`) | `APIAssignment` grading mode |
 | `set_submission_mode` | `SetSubmissionModeTool.swift:36` | `assignmentPublicID` | course-enrol (`:76`) | `APITestSetup` manifest (submission mode) |
 | `set_assignment_language` | `SetAssignmentLanguageTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APITestSetup` manifest (declared language) |
+| `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement) |
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |

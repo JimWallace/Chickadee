@@ -260,6 +260,20 @@ struct BrowserResultRoutes: RouteCollection {
             }
         }
 
+        // The activity leaderboard — the third class-level effect, wired here
+        // beside the other two for the reason recorded above.
+        if reconciled.buildStatus == .passed, let userID {
+            await bestEffort("leaderboard_entry") {
+                try await recordLeaderboardEntry(
+                    testSetupID: setup.id ?? "",
+                    userID: userID,
+                    submissionID: subID,
+                    outcomes: reconciled.outcomes,
+                    on: req.db
+                )
+            }
+        }
+
         if reconciled.buildStatus == .passed,
             let userID,
             gradePercent(from: reconciled) == 100
@@ -510,6 +524,7 @@ struct BrowserResultRoutes: RouteCollection {
                 longResult: o.longResult,
                 score: o.score,
                 points: o.points,
+                metric: o.metric,
                 executionTimeMs: o.executionTimeMs,
                 memoryUsageBytes: o.memoryUsageBytes,
                 attemptNumber: attemptNumber,

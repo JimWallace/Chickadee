@@ -51,7 +51,34 @@ func awardClassBadgesFor100Percent(
                 newValue: Double(attemptNumber), on: db)
         case .firstToSubmit, .none:
             continue
+        case .highestMetric:
+            // Awarded on the leaderboard path (`awardHighestMetricRecords`),
+            // not here: a ranking metric is reported on any result, and gating
+            // it on 100% would crown nobody on an activity with no such gate.
+            continue
         }
+    }
+}
+
+/// Awards the `highestMetric` class records when `metric` beats the current
+/// holder (higher wins; a tie keeps the incumbent). Called from
+/// `recordLeaderboardEntry`, which has already applied the per-course student
+/// gate — so this takes the loaded setup rather than re-checking.
+func awardHighestMetricRecords(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    metric: Double,
+    on db: Database
+) async throws {
+    guard let setupID = setup.id else { return }
+    let records = BuiltInAchievements.classRecordsForAward(
+        in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+    for record in records where record.recordDimension == .highestMetric {
+        try await updateRecordBadge(
+            achievementID: record.id,
+            testSetupID: setupID, userID: userID, submissionID: submissionID,
+            newValue: metric, higherWins: true, on: db)
     }
 }
 
@@ -100,15 +127,17 @@ private func awardImmutableBadge(
     try? await badge.save(on: db)
 }
 
-/// Inserts the badge if none exists, or updates it when the new metric is strictly better
-/// (lower value wins — both speed in ms and attempt count are lower-is-better).
-/// In case of a tie the existing holder keeps the record (first achiever wins ties).
+/// Inserts the badge if none exists, or updates it when the new metric is strictly better.
+/// Lower wins by default — both speed in ms and attempt count are lower-is-better —
+/// and `higherWins` flips it for a ranking metric. In case of a tie the existing
+/// holder keeps the record (first achiever wins ties).
 private func updateRecordBadge(
     achievementID: String,
     testSetupID: String,
     userID: UUID,
     submissionID: String,
     newValue: Double,
+    higherWins: Bool = false,
     on db: Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
@@ -116,7 +145,9 @@ private func updateRecordBadge(
         .filter(\.$achievementID == achievementID)
         .first()
     if let record = existing {
-        guard let current = record.metricValue, newValue < current else { return }
+        guard let current = record.metricValue,
+            higherWins ? newValue > current : newValue < current
+        else { return }
         record.userID = userID
         record.submissionID = submissionID
         record.metricValue = newValue

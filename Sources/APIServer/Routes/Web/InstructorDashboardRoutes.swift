@@ -90,6 +90,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
+        r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -672,6 +673,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             sectionFormsInPlace: true,
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
             achievementSignalOptions: AchievementSignalPresentation.all,
+            recordDimensionOptions: RecordDimensionPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             submissionMode: manifest?.submissionMode.rawValue
@@ -681,6 +683,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             // in with a derived answer the author never chose.
             assignmentLanguageOptions: AssignmentLanguageOption.options(
                 recorded: currentManifestLanguage(setup.manifest)),
+            activity: try await ActivityEditFacts.make(setup: setup, on: req.db),
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibilityAfterDue: assignment.solutionVisibility == .afterDue,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,

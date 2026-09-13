@@ -53,84 +53,93 @@ import Testing
     /// (write/content-edit) tools and checks its keys against the declared
     /// schema: every encoded key must be declared, and every `required` key
     /// must be present in the encoding.
-    @Test func representativeOutputsMatchDeclaredSchemas() throws {
-        let cases: [(name: String, schema: JSONValue?, output: any Encodable & Sendable)] = [
-            (
-                SetGradingModeTool.name, SetGradingModeTool.outputSchema,
-                SetGradingModeTool.Output(assignmentPublicID: "abc123", gradingMode: "worker")
-            ),
-            (
-                SetTimeLimitTool.name, SetTimeLimitTool.outputSchema,
-                SetTimeLimitTool.Output(assignmentPublicID: "abc123", timeLimitSeconds: 10)
-            ),
-            (
-                SetDatasetTool.name, SetDatasetTool.outputSchema,
-                SetDatasetTool.Output(
-                    assignmentPublicID: "abc123",
-                    datasets: [
-                        SetDatasetTool.DatasetEntry(
-                            file: "cases.csv", sampleSize: 100,
-                            kind: "rowSample", stratumColumn: nil, transforms: [])
-                    ])
-            ),
-            (
-                SetMinimumRunnerVersionTool.name, SetMinimumRunnerVersionTool.outputSchema,
-                SetMinimumRunnerVersionTool.Output(
-                    assignmentPublicID: "abc123", minimumRunnerVersion: "0.5.0")
-            ),
-            (
-                AuthorScriptTool.name, AuthorScriptTool.outputSchema,
-                AuthorScriptTool.Output(
-                    assignmentPublicID: "abc123", filename: "test_x.py", tier: "public",
-                    isTest: true, created: true, validationStatus: "pending", assignmentClosed: true)
-            ),
-            (
-                DeleteSuiteItemTool.name, DeleteSuiteItemTool.outputSchema,
-                DeleteSuiteItemTool.Output(
-                    assignmentPublicID: "abc123", kind: "script", removed: "test_x.py",
-                    remainingItemCount: 3, validationStatus: "pending", assignmentClosed: true)
-            ),
-            (
-                UpdateSolutionTool.name, UpdateSolutionTool.outputSchema,
-                UpdateSolutionTool.Output(
-                    assignmentPublicID: "abc123", cellCount: 4,
-                    solutionFilename: "solution.ipynb",
-                    validationStatus: "pending", assignmentClosed: true)
-            ),
-            (
-                GetServerInfoTool.name, GetServerInfoTool.outputSchema,
-                // The REAL capability payload, not a stub: it is derived from
-                // `allCases`, so validating it here means a seventh language
-                // whose entry does not match the declared schema fails at this
-                // test rather than at an agent's client.
-                GetServerInfoTool.Output(
-                    version: "0.0.0", mcpMode: "read_write",
-                    advertisedScopes: ["content:read"], writeEnabled: true,
-                    languages: MCPLanguageCapability.all)
-            ),
-            (
-                CloneAssignmentTool.name, CloneAssignmentTool.outputSchema,
-                CloneAssignmentTool.Output(
-                    publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
-                    sourceAssignmentPublicID: "def456", isOpen: false, validationStatus: "pending")
-            ),
-            (
-                CreateAssignmentTool.name, CreateAssignmentTool.outputSchema,
-                CreateAssignmentTool.Output(
-                    publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
-                    cellCount: 2, isOpen: false)
-            ),
-            (
-                UpdateAssignmentTool.name, UpdateAssignmentTool.outputSchema,
-                UpdateAssignmentTool.Output(
-                    publicID: "abc123", title: "T", slug: "t", isOpen: true,
-                    visibility: "open", dueAt: "2026-01-01T00:00:00Z",
-                    startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
-                    secretRevealEnabled: false, solutionVisibility: "hidden")
-            ),
-        ]
+    /// One fully-populated representative `Output` per drift-prone tool.
+    private static let representativeCases: [(name: String, schema: JSONValue?, output: any Encodable & Sendable)] = [
+        (
+            SetGradingModeTool.name, SetGradingModeTool.outputSchema,
+            SetGradingModeTool.Output(assignmentPublicID: "abc123", gradingMode: "worker")
+        ),
+        (
+            SetTimeLimitTool.name, SetTimeLimitTool.outputSchema,
+            SetTimeLimitTool.Output(assignmentPublicID: "abc123", timeLimitSeconds: 10)
+        ),
+        (
+            SetDatasetTool.name, SetDatasetTool.outputSchema,
+            SetDatasetTool.Output(
+                assignmentPublicID: "abc123",
+                datasets: [
+                    SetDatasetTool.DatasetEntry(
+                        file: "cases.csv", sampleSize: 100,
+                        kind: "rowSample", stratumColumn: nil, transforms: [])
+                ])
+        ),
+        (
+            SetMinimumRunnerVersionTool.name, SetMinimumRunnerVersionTool.outputSchema,
+            SetMinimumRunnerVersionTool.Output(
+                assignmentPublicID: "abc123", minimumRunnerVersion: "0.5.0")
+        ),
+        (
+            AuthorScriptTool.name, AuthorScriptTool.outputSchema,
+            AuthorScriptTool.Output(
+                assignmentPublicID: "abc123", filename: "test_x.py", tier: "public",
+                isTest: true, created: true, validationStatus: "pending", assignmentClosed: true)
+        ),
+        (
+            DeleteSuiteItemTool.name, DeleteSuiteItemTool.outputSchema,
+            DeleteSuiteItemTool.Output(
+                assignmentPublicID: "abc123", kind: "script", removed: "test_x.py",
+                remainingItemCount: 3, validationStatus: "pending", assignmentClosed: true)
+        ),
+        (
+            UpdateSolutionTool.name, UpdateSolutionTool.outputSchema,
+            UpdateSolutionTool.Output(
+                assignmentPublicID: "abc123", cellCount: 4,
+                solutionFilename: "solution.ipynb",
+                validationStatus: "pending", assignmentClosed: true)
+        ),
+        (
+            GetServerInfoTool.name, GetServerInfoTool.outputSchema,
+            // The REAL capability payload, not a stub: it is derived from
+            // `allCases`, so validating it here means a seventh language
+            // whose entry does not match the declared schema fails at this
+            // test rather than at an agent's client.
+            GetServerInfoTool.Output(
+                version: "0.0.0", mcpMode: "read_write",
+                advertisedScopes: ["content:read"], writeEnabled: true,
+                languages: MCPLanguageCapability.all,
+                activityKinds: MCPActivityKindCapability.all)
+        ),
+        (
+            SetActivityTool.name, SetActivityTool.outputSchema,
+            SetActivityTool.Output(
+                assignmentPublicID: "abc123", kind: "bestMetric",
+                leaderboardVisibility: "hidden", leaderboardPath: "/testsetups/x/leaderboard",
+                recordAchievementSeeded: true)
+        ),
+        (
+            CloneAssignmentTool.name, CloneAssignmentTool.outputSchema,
+            CloneAssignmentTool.Output(
+                publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
+                sourceAssignmentPublicID: "def456", isOpen: false, validationStatus: "pending")
+        ),
+        (
+            CreateAssignmentTool.name, CreateAssignmentTool.outputSchema,
+            CreateAssignmentTool.Output(
+                publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
+                cellCount: 2, isOpen: false)
+        ),
+        (
+            UpdateAssignmentTool.name, UpdateAssignmentTool.outputSchema,
+            UpdateAssignmentTool.Output(
+                publicID: "abc123", title: "T", slug: "t", isOpen: true,
+                visibility: "open", dueAt: "2026-01-01T00:00:00Z",
+                startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
+                secretRevealEnabled: false, solutionVisibility: "hidden")
+        ),
+    ]
 
-        for testCase in cases {
+    @Test func representativeOutputsMatchDeclaredSchemas() throws {
+        for testCase in Self.representativeCases {
             let schema = try #require(testCase.schema, "\(testCase.name) declares no outputSchema")
             guard case .object(let fields) = schema,
                 case .object(let properties)? = fields["properties"]

@@ -26,6 +26,9 @@ Submission #(submissionID)
             #if(openInNotebookURL):
             <a class="btn action-btn" href="#(openInNotebookURL)">Open in notebook</a>
             #endif
+            #if(leaderboardURL):
+            <a class="btn action-btn" href="#(leaderboardURL)">Leaderboard</a>
+            #endif
         </div>
     </div>
     #if(isPending):

@@ -69,6 +69,18 @@ struct GetAssignmentTool: ContentTool {
         /// deadline. Set via the assignment-update tool (same naming caveat
         /// as `secretRevealEnabled` above).
         let solutionVisibility: String
+        /// The class-activity block, or nil for an ordinary assignment. Set via
+        /// the activity tool (same naming caveat as `secretRevealEnabled`).
+        let activity: ActivityOutput?
+    }
+
+    /// The activity block as reported: its kind, the leaderboard's visibility,
+    /// and where students find the leaderboard.
+    struct ActivityOutput: Encodable, Sendable {
+        let kind: String
+        let kindDisplayName: String
+        let leaderboardVisibility: String
+        let leaderboardPath: String
     }
 
     static let name = "get_assignment"
@@ -86,8 +98,10 @@ struct GetAssignmentTool: ContentTool {
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
-        + "shell-script suite; get_server_info reports what each language supports) — which "
-        + "together decide what may be authored here."
+        + "shell-script suite; get_server_info reports what each language supports), and activity "
+        + "(null for an ordinary assignment; otherwise the class-activity kind — "
+        + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility and the "
+        + "leaderboard path) — which together decide what may be authored here."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -123,6 +137,26 @@ struct GetAssignmentTool: ContentTool {
             ]),
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
+            "activity": .object([
+                "type": .string("object"),
+                "description": .string("The class-activity block; absent for an ordinary assignment."),
+                "properties": .object([
+                    "kind": .object([
+                        "type": .string("string"),
+                        "enum": .array(ActivityKind.allCases.map { .string($0.rawValue) }),
+                    ]),
+                    "kindDisplayName": MCPSchema.string,
+                    "leaderboardVisibility": .object([
+                        "type": .string("string"),
+                        "enum": .array(LeaderboardVisibility.allCases.map { .string($0.rawValue) }),
+                    ]),
+                    "leaderboardPath": MCPSchema.string,
+                ]),
+                "required": .array([
+                    .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
+                    .string("leaderboardPath"),
+                ]),
+            ]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -177,7 +211,14 @@ struct GetAssignmentTool: ContentTool {
             sectionID: assignment.sectionID?.uuidString,
             sectionName: sectionName,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
-            solutionVisibility: assignment.solutionVisibility.rawValue
+            solutionVisibility: assignment.solutionVisibility.rawValue,
+            activity: manifest?.activity.map { activity in
+                ActivityOutput(
+                    kind: activity.kind.rawValue,
+                    kindDisplayName: activity.kind.displayName,
+                    leaderboardVisibility: activity.leaderboardVisibility.rawValue,
+                    leaderboardPath: "/testsetups/\(assignment.testSetupID)/leaderboard")
+            }
         )
     }
 }
