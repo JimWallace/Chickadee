@@ -87,7 +87,6 @@ struct MCPEndpoints {
     let metadataOrigin: String
 
     var resourceMetadataURL: String { metadataOrigin + "/.well-known/oauth-protected-resource" }
-    var authorizationServerMetadataURL: String { metadataOrigin + "/.well-known/oauth-authorization-server" }
     var jwksURL: String { metadataOrigin + "/.well-known/jwks.json" }
     var authorizationEndpoint: String { metadataOrigin + "/oauth/authorize" }
     var tokenEndpoint: String { metadataOrigin + "/oauth/token" }

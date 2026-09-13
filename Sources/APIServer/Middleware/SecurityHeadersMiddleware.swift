@@ -155,13 +155,6 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         "object-src 'none'",
     ]
 
-    /// CSP used when no extra form-action origins apply (e.g. local-only mode
-    /// or pre-OIDC-load).  Kept around for tests that pin the literal header.
-    static let defaultContentSecurityPolicy: String = renderCSP(
-        base: defaultContentSecurityPolicyBase,
-        formActionOrigins: []
-    )
-
     /// Builds the CSP string from the base directives plus a `form-action`
     /// directive whose allow-list always includes `'self'` and any extra
     /// origins passed in.

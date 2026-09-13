@@ -189,6 +189,15 @@ produced*, because a `--version` probe cannot see that; Java's artefacts are
 `.class` files the JVM **reads**, which `noexec` does not block. The capability
 Java can genuinely lack is the compiler, and that is what the probe covers.
 
+`gradingCompilesBeforeRunning` is **true**, and the pair is the point. The
+custom-script scaffold (`TestScriptTemplates`) used to pick its compile branch
+from the exec fact alone, which put Java in the interpreted branch as
+`java solution.java` — single-file source mode, which compiles exactly one file
+and so breaks the moment a submission needs a second one (#1394). The scaffold
+now asks the compile fact first and the exec fact second, so Java renders a
+`javac -d .` step followed by `java -cp . solution`, the shape the generated
+wrappers use, and C++ keeps its compile-then-exec form.
+
 ## Measured costs (OpenJDK 21.0.10 / Ubuntu 24.04)
 
 | what | cost |

@@ -559,11 +559,6 @@ func rhsContainsFunctionCall(_ rhs: String) -> Bool {
 
 // MARK: - Stdlib-only string helpers (Foundation-free for WASM)
 
-/// Split on "\n" keeping empty substrings (matches `components(separatedBy:)`).
-private func splitLines(_ s: String) -> [String] {
-    s.split(separator: "\n" as Character, omittingEmptySubsequences: false).map(String.init)
-}
-
 /// Trim leading/trailing spaces and tabs only (matches `.whitespaces`).
 private func trimSpacesAndTabs(_ s: String) -> String {
     let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
@@ -572,7 +567,7 @@ private func trimSpacesAndTabs(_ s: String) -> String {
 
 /// Trim leading/trailing whitespace and newlines (matches `.whitespacesAndNewlines`).
 private func trimWhitespaceAndNewlines(_ s: String) -> String {
-    let isWS: (Character) -> Bool = { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
     return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
 }
 

@@ -58,7 +58,7 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
         }
     }
 
-    let lines = splitOnNewlines(output.stdout)
+    let lines = splitLines(output.stdout)
     let lastLine = lines.map(trimHorizontal).last { !$0.isEmpty }
 
     // The footer is the last non-empty line iff it's a JSON object.
@@ -155,16 +155,12 @@ private func stripTestLabelPrefix(_ shortResult: String, footer: [String: JSONVa
 
 // MARK: - Embedded-safe string helpers (file-private to avoid collisions)
 
-private func splitOnNewlines(_ s: String) -> [String] {
-    s.split(separator: "\n" as Character, omittingEmptySubsequences: false).map(String.init)
-}
-
 private func trimHorizontal(_ s: String) -> String {
     let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
     return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
 }
 
 private func trimWhitespaceAndNewlines(_ s: String) -> String {
-    let isWS: (Character) -> Bool = { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
     return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
 }

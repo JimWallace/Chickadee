@@ -154,7 +154,7 @@ enum SubmissionValidation {
             throw SubmissionNormalizationError.invalidNotebookJSON(filename)
         }
         guard object["metadata"] != nil, object["nbformat"] != nil,
-            object["cells"] is [[String: Any]] || object["cells"] is [Any]
+            object["cells"] is [Any]
         else {
             throw SubmissionNormalizationError.invalidSubmission(filename, language)
         }

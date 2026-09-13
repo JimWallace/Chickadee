@@ -291,12 +291,6 @@ final class ScriptCapture: Sendable {
         let buffer = CapturedPipeBuffer()
     }
 
-    /// Grace given to the final drain after the child should be gone. Whatever
-    /// it wrote is already in the kernel pipe buffer, so the happy path
-    /// completes immediately; the deadline only bounds the leaked-descriptor
-    /// case.
-    private static let drainGraceSeconds: TimeInterval = 2
-
     /// Handshake between the drain threads (and the deadline) on one side and
     /// the awaiting task on the other.
     ///

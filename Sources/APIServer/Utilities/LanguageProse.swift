@@ -71,11 +71,6 @@ enum LanguageProse {
         tokens(where: { !$0.scriptExtensions.contains($0.generatedScriptExtension) })
     }
 
-    /// `mustDeclareTokens` as display names.
-    static var mustDeclareDisplayNames: String {
-        displayNames(where: { !$0.scriptExtensions.contains($0.generatedScriptExtension) })
-    }
-
     /// Every wire token, comma-separated with no connector:
     /// `"python, r, lua, octave, cpp, racket"`.
     ///

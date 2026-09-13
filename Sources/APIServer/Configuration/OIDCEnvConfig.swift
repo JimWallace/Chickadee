@@ -48,12 +48,6 @@ struct OIDCEnvConfig: Sendable {
             } ?? false
         )
     }
-
-    /// True when both clientID and clientSecret are configured. SSO/dual modes
-    /// require this; AppConfig.fromEnvironment surfaces it as a startup warning.
-    var hasCredentials: Bool {
-        clientID?.isEmpty == false && clientSecret?.isEmpty == false
-    }
 }
 
 private func normalizedCallbackPath(_ raw: String?) -> String {

@@ -415,6 +415,19 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// the step after `g++`.
     public let capabilityRequiresExecutableOutput: Bool
 
+    /// Whether grading BUILDS the submission before it runs it.
+    ///
+    /// This is a different question from `capabilityRequiresExecutableOutput`,
+    /// and the custom-script scaffold used to ask that one in its place: it
+    /// means "grading execs a file it just produced", which is C++ alone. Java
+    /// is compiled too and answers it `false` — its `.class` files are read by
+    /// the JVM, never exec'd — so a Java author's scaffold rendered
+    /// `java solution.java`, which works only by single-file source mode and
+    /// breaks the moment a submission needs a second file (#1394). The two
+    /// facts select three shapes: run the file directly; compile to a binary
+    /// and exec it; compile to artefacts a runtime then loads.
+    public let gradingCompilesBeforeRunning: Bool
+
     /// The command that RUNS a source file in this language, which is not
     /// always the command that PROBES for it.
     ///
@@ -455,7 +468,8 @@ public struct LanguageDescriptor: Equatable, Sendable {
         scriptRunCommand: String,
         moduleResolution: ModuleResolution,
         workingDirectoryIsOnDefaultSearchPath: Bool,
-        capabilityRequiresExecutableOutput: Bool
+        capabilityRequiresExecutableOutput: Bool,
+        gradingCompilesBeforeRunning: Bool
     ) {
         self.displayName = displayName
         self.scriptExtensions = scriptExtensions
@@ -472,6 +486,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.moduleResolution = moduleResolution
         self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
         self.capabilityRequiresExecutableOutput = capabilityRequiresExecutableOutput
+        self.gradingCompilesBeforeRunning = gradingCompilesBeforeRunning
     }
 }
 
@@ -563,7 +578,10 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: false,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // Interpreted: the runner hands the source to the interpreter it
+        // probed for, and nothing is built first.
+        gradingCompilesBeforeRunning: false
     )
     private static let rDescriptor = LanguageDescriptor(
         displayName: "R",
@@ -592,7 +610,10 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // Interpreted: the runner hands the source to the interpreter it
+        // probed for, and nothing is built first.
+        gradingCompilesBeforeRunning: false
     )
     private static let luaDescriptor = LanguageDescriptor(
         displayName: "Lua",
@@ -625,7 +646,10 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // Interpreted: the runner hands the source to the interpreter it
+        // probed for, and nothing is built first.
+        gradingCompilesBeforeRunning: false
     )
     private static let octaveDescriptor = LanguageDescriptor(
         displayName: "Octave",
@@ -664,7 +688,10 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // Interpreted: the runner hands the source to the interpreter it
+        // probed for, and nothing is built first.
+        gradingCompilesBeforeRunning: false
     )
     private static let cppDescriptor = LanguageDescriptor(
         displayName: "C++",
@@ -716,7 +743,9 @@ extension AssignmentLanguage {
         // The generated wrapper compiles a binary and `exec`s it, so a
         // runner must be able to run what g++ writes into its work
         // directory — not merely own a g++. See the property's doc.
-        capabilityRequiresExecutableOutput: true
+        capabilityRequiresExecutableOutput: true,
+        // The wrapper runs g++ before anything of the student's executes.
+        gradingCompilesBeforeRunning: true
     )
     private static let racketDescriptor = LanguageDescriptor(
         displayName: "Racket",
@@ -767,7 +796,10 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner hands a file to `racket`. Nothing is
         // built, so there is no second capability to prove.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // Interpreted: the runner hands the source to the interpreter it
+        // probed for, and nothing is built first.
+        gradingCompilesBeforeRunning: false
     )
     private static let javaDescriptor = LanguageDescriptor(
         displayName: "Java",
@@ -846,7 +878,12 @@ extension AssignmentLanguage {
         // nothing is ever handed to the kernel as an executable. The
         // capability this language can genuinely lack is the compiler, and
         // that is covered by probing `javac` above.
-        capabilityRequiresExecutableOutput: false
+        capabilityRequiresExecutableOutput: false,
+        // True even though the fact above is false, and the pair is the point:
+        // grading runs `javac` first, but what it produces is loaded by the
+        // JVM rather than exec'd. A scaffold keyed on the exec fact alone put
+        // Java in the interpreted branch (#1394).
+        gradingCompilesBeforeRunning: true
     )
 }
 

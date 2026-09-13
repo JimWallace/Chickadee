@@ -244,7 +244,7 @@ extension WorkerDaemon {
             runnerID: workerID,
             startedAt: jobStartedAt,
             finishedAt: collection.timestamp,
-            finalStatus: inferredCollectionStatus(collection).rawValue,
+            finalStatus: Self.inferredCollectionStatus(collection).rawValue,
             timedOut: collection.timeoutCount > 0,
             exitCode: nil,
             terminationReason: nil,
@@ -692,7 +692,7 @@ extension WorkerDaemon {
                 fields: [
                     "runner_id": workerID,
                     "submission_id": job.submissionID,
-                    "status": inferredCollectionStatus(collection).rawValue,
+                    "status": Self.inferredCollectionStatus(collection).rawValue,
                 ])
         } catch {
             writeStructuredRunnerLog(
