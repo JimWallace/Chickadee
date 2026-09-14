@@ -464,6 +464,46 @@ The current implementation is tested against UWaterloo DUO; claim names
 (`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
 adjusted for other providers.
 
+**The CSP `script-src` permits no inline execution, and that is load-bearing
+for the templates.** An AppScan run on 2026-09-11 reported `'unsafe-inline'` in
+`script-src` as a High (CVSS 8.2); it is gone (#1516). What this costs a future
+author is worth knowing BEFORE writing a page: an inline `<script>` in a
+template **does not run**, and an `onclick=` / `onchange=` attribute **never
+fires** — neither fails loudly, the control just stops responding. Page JS goes
+in a `Public/*.js` file; a handler becomes a data attribute read by a delegated
+listener (`data-ck-click-target`, `data-ck-submit-on-change`,
+`data-ck-select-all`, all at the foot of `app.js`). `<script
+type="application/json">` seeds are data blocks and are unaffected.
+`check-styles.sh` rules 3b/3b-2/3b-3 catch all three shapes, including the
+one-line `<script>` that the JSON-island exemption used to let through.
+
+`'unsafe-eval'` stays — JupyterLab compiles JSON-schema validators at run time,
+measured with Pyodide fully removed — and so does `style-src 'unsafe-inline'`,
+which the templates use for CSS custom-property assignments. The vendored
+JupyterLite entry points carry inline bootstraps we do not author, so they ride
+the policy by **sha256 hash**, derived at startup from the bytes FileMiddleware
+actually serves (`EditorInlineScriptHashes`) and attached to `/jupyterlite/`
+responses only. Derived rather than pinned because a hash in source goes stale
+the moment a kernel is re-vendored, and the failure is upstream of everything
+the editor smoke test measures — the page breaks before a kernel is fetched.
+A nonce cannot do this job at all: those are static files, and the one script
+that would most want a nonce hands the document to `document.write`, which
+inherits the writing response's policy. Chickadee's own stray-editor-tab page
+is the one inline script it still serves, under a hash named from the same
+constant that renders it — inline on purpose, since a page whose only job is to
+close the tab the instant it paints should not first wait on a fetch that can
+fail.
+
+The scan-side lesson is the more general one. **ZAP baseline had been running
+weekly the whole time and could not see this**, because `.zap/rules.tsv` sets a
+threshold per RULE, ZAP reports every CSP finding under one rule id, and the
+`IGNORE` that accepted `'unsafe-eval'` accepted `'unsafe-inline'` with it. Do
+not suppress a coarse third-party rule to accept one of its findings; assert
+the policy where you have an exact opinion about it
+(`scripts/check-security-headers.sh` against the running container,
+`ContentSecurityPolicyInlineScriptTests` per directive) and leave the rule at
+`WARN`.
+
 **HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
 reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
 `SESSION_COOKIE_SECURE`. `HTTPSRedirectMiddleware` handles the enforcement and

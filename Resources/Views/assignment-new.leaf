@@ -116,11 +116,11 @@ Create Assignment
                             #if(assignmentNotebook):
                             <a class="btn action-btn" href="#(assignmentNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
-                                    onclick="document.getElementById('js-clear-assignment-notebook').click()">Clear</button>
+                                    data-ck-click-target="js-clear-assignment-notebook">Clear</button>
                             #else:
                             <button class="btn action-btn" type="button" id="upload-assignment-notebook-btn">Upload</button>
                             <button class="btn action-btn" type="button"
-                                    onclick="document.getElementById('js-create-assignment-notebook').click()">Create Blank</button>
+                                    data-ck-click-target="js-create-assignment-notebook">Create Blank</button>
                             #endif
                         </div>
                     </td>
@@ -139,18 +139,18 @@ Create Assignment
                             #if(solutionNotebook):
                             <a class="btn action-btn" href="#(solutionNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
-                                    onclick="document.getElementById('js-clear-solution-notebook').click()">Clear</button>
+                                    data-ck-click-target="js-clear-solution-notebook">Clear</button>
                             #else:
                             <button class="btn action-btn" type="button" id="upload-solution-notebook-btn">Upload</button>
                             <button class="btn action-btn" type="button"
-                                    onclick="document.getElementById('js-create-solution-notebook').click()">Create Blank</button>
+                                    data-ck-click-target="js-create-solution-notebook">Create Blank</button>
                             #if(assignmentNotebook):
                             <!-- Parity PR 4 of #433: only meaningful once an
                                  assignment notebook exists; copies its bytes
                                  into the draft solution path. -->
                             <button class="btn action-btn" type="button"
                                     title="Copy the assignment notebook as a starting point for the solution"
-                                    onclick="document.getElementById('js-create-solution-from-assignment').click()">Create from Assignment</button>
+                                    data-ck-click-target="js-create-solution-from-assignment">Create from Assignment</button>
                             #endif
                             #endif
                         </div>

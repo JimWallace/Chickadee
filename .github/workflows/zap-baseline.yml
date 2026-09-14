@@ -43,6 +43,16 @@ jobs:
           echo "Server did not become healthy within 60s"
           exit 1
 
+      # Deterministic header assertions, BEFORE the crawl and gating it.
+      # ZAP's CSP rule is one rule covering every CSP finding at once, and
+      # `.zap/rules.tsv` sets a threshold per rule — so suppressing the
+      # `'unsafe-eval'` this app permanently needs also suppressed the
+      # `'unsafe-inline'` an external AppScan run reported as a High (#1516).
+      # This step says exactly what the header must contain, so accepting one
+      # finding costs nothing in coverage of its neighbours.
+      - name: Assert security response headers
+        run: scripts/check-security-headers.sh http://localhost:8080
+
       - name: Run ZAP baseline scan
         uses: zaproxy/action-baseline@v0.15.0
         with:

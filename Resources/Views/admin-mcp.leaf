@@ -45,7 +45,7 @@ MCP
             &middot; scopes: <code>#(mintedScopes)</code> &middot; expires after #(tokenTTLSeconds)s.
             Copy it now — it is shown only once.</p>
         <textarea readonly rows="4" class="form-input textarea-mono"
-                  onclick="this.select()">#(mintedToken)</textarea>
+                  data-ck-select-all>#(mintedToken)</textarea>
     </div>
     #endif
 

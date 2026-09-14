@@ -95,7 +95,29 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         securityConfiguration.enforceHTTPS
         ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
         : nil
-    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
+    // `script-src` permits no inline execution anywhere (#1516), with one
+    // narrow exception attached to `/jupyterlite/` responses only: sha256
+    // hashes for the inline bootstraps in the vendored editor's entry points,
+    // which we do not author and must not hand-edit.  They are DERIVED here,
+    // once, from the bytes FileMiddleware will serve, so re-vendoring a kernel
+    // carries its own allow-list.  See EditorInlineScriptHashes.
+    //
+    // The stray-tab page Chickadee composes itself is under the same prefix and
+    // is named rather than scanned; it stays inline because its only job is to
+    // close the tab the instant it paints.
+    let vendoredEditorHashes =
+        EditorInlineScriptHashes.derive(publicDirectory: app.directory.publicDirectory)
+    if vendoredEditorHashes == nil {
+        app.logger.debug(
+            "No vendored editor inline scripts found; only Chickadee's own /jupyterlite/ page is hashed."
+        )
+    }
+    let editorInlineScriptHashes =
+        (vendoredEditorHashes ?? []) + [JupyterLiteAppIndexMiddleware.selfCloseScriptSourceExpression]
+    app.middleware.use(
+        SecurityHeadersMiddleware(
+            editorInlineScriptHashes: editorInlineScriptHashes,
+            strictTransportSecurity: hstsValue))
 
     // Error page middleware sits beneath SecurityHeadersMiddleware so it
     // catches errors from all subsequent middleware and route handlers.

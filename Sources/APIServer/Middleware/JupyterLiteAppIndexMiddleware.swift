@@ -31,6 +31,25 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
         "lab", "notebooks", "tree", "edit", "consoles", "repl",
     ]
 
+    /// The stray tab's whole behaviour, kept as a constant so the CSP hash that
+    /// admits it is derived from the same bytes the page carries.
+    ///
+    /// It stays INLINE under a `script-src` that permits no inline execution
+    /// (#1516), rather than moving to a file, because this page's only job is
+    /// to close itself the instant it paints: an external script adds a round
+    /// trip before that can happen and a failure mode where the fetch does not
+    /// land and the tab stays open forever. An inline script with a hash costs
+    /// neither. The vendored editor's bootstraps are allowed the same way, but
+    /// by a directory scan — this one is ours, so it is named.
+    static let selfCloseScript =
+        "try { window.close() } catch (e) { /* self-close may be blocked; the message below covers it */ }"
+
+    /// The CSP source expression admitting `selfCloseScript`.  Bootstrap adds
+    /// it to the `/jupyterlite/` allow-list beside the vendored hashes.
+    static var selfCloseScriptSourceExpression: String {
+        EditorInlineScriptHashes.sourceExpression(forScriptBody: selfCloseScript)
+    }
+
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard request.method == .GET || request.method == .HEAD,
             let path = request.url.path.removingPercentEncoding,
@@ -64,7 +83,7 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
             <title>Return to your assignment</title>
             </head>
             <body>
-            <script>try { window.close() } catch (e) { /* self-close may be blocked; the message below covers it */ }</script>
+            <script>\(Self.selfCloseScript)</script>
             <p>This notebook opened in an extra browser tab. You can close this tab and return to your assignment.</p>
             </body>
             </html>

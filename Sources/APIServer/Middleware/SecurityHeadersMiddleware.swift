@@ -30,11 +30,14 @@
 //     assignment paths to third-party resources.
 //
 //   Content-Security-Policy
-//     Tight-ish CSP that still allows JupyterLite + Pyodide (which both
-//     require 'unsafe-eval' for in-browser WASM execution).  Inline scripts
-//     and styles are permitted today because the Leaf templates use inline
-//     event handlers and style attributes; tightening to nonces is a
-//     follow-up.
+//     Tight-ish CSP that still allows JupyterLite (which requires
+//     'unsafe-eval' for in-browser WASM execution and for JupyterLab's
+//     run-time schema-validator compilation).  `script-src` carries NO
+//     'unsafe-inline': Chickadee's own pages have no executable inline
+//     script and no inline event handler, and the vendored JupyterLite entry
+//     points are allowed by hash on their own responses instead (#1516).
+//     `style-src` still allows inline styles — the templates assign CSS
+//     custom properties in `style=""`, which is the documented idiom.
 //
 //   Permissions-Policy
 //     Nothing in Chickadee uses camera, microphone, or geolocation —
@@ -116,8 +119,19 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ///     JupyterLab compiles JSON-schema validators at run time, which needs
     ///     real `eval`.  Do not retry this without a plan for that; the editor
     ///     smoke catches it, but only on a full boot.
-    ///   - 'unsafe-inline' covers inline `<script>` and `onclick=` handlers
-    ///     in the Leaf templates.
+    ///   - 'unsafe-inline' is GONE from script-src (#1516, an AppScan High).
+    ///     Chickadee's templates carry no executable inline script and no
+    ///     inline event handler: the multipart interceptor that lived at the
+    ///     foot of `base.leaf` is now `/multipart-forms.js`, and the twelve
+    ///     `onclick=` / `onchange=` one-liners became data attributes read by
+    ///     delegated listeners in `app.js`.  `<script type="application/json">`
+    ///     seeds are data blocks, which `script-src` does not govern.  Adding
+    ///     an inline script to a template will now silently not run — add a
+    ///     file instead.  `cSPScriptSrcForbidsInlineExecution` guards it.
+    ///   - The vendored JupyterLite entry points DO carry inline bootstraps,
+    ///     and are allowed by sha256 hash on their own responses only — see
+    ///     `EditorInlineScriptHashes` for why a derivation rather than a
+    ///     pinned table, and why not a nonce.
     ///   - blob: in worker-src is required by JupyterLite's web workers, and by
     ///     the Atomics.waitAsync polyfill that `scripts/patch-waitasync-worker.py`
     ///     rewrites from a (CSP-blocked) data: worker into a blob: one.
@@ -133,7 +147,6 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// editor had never been repointed, so its kernel broke (a student-facing
     /// outage).  Pyodide is gone entirely now, but the lesson stands and
     /// `cSPHasNoExternalScriptConnectOrWorkerOrigins` still guards it.
-    /// Tighten with per-response nonces in a follow-up.
     ///
     /// `form-action` is rendered per-request so the IdP origin from
     /// `app.oidcConfig?.discovery.endSessionEndpoint` can be appended when
@@ -143,7 +156,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// button.
     static let defaultContentSecurityPolicyBase: [String] = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
+        scriptSrc(inlineScriptHashes: []),
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
@@ -154,6 +167,21 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         "base-uri 'self'",
         "object-src 'none'",
     ]
+
+    /// The `script-src` directive, with hash source expressions appended.
+    ///
+    /// `'unsafe-eval'` stays (JupyterLab compiles schema validators at run
+    /// time); `'unsafe-inline'` does not, and must not come back — a hash or
+    /// nonce in the directive would make a browser ignore it anyway, so its
+    /// only effect would be on the engines that do not support hashes.
+    static func scriptSrc(inlineScriptHashes: [String]) -> String {
+        (["script-src 'self' 'unsafe-eval' blob:"] + inlineScriptHashes)
+            .joined(separator: " ")
+    }
+
+    /// URL prefix whose responses carry the editor's inline-script hashes.
+    /// The vendored entry points live under it; nothing else does.
+    static let vendoredEditorPathPrefix = "/jupyterlite/"
 
     /// Builds the CSP string from the base directives plus a `form-action`
     /// directive whose allow-list always includes `'self'` and any extra
@@ -211,6 +239,11 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     static let defaultStrictTransportSecurity: String = "max-age=63072000; includeSubDomains"
 
     let cspBaseDirectives: [String]
+    /// CSP `script-src` hash expressions for the vendored editor's inline
+    /// bootstraps, applied only to `/jupyterlite/` responses.  Empty when the
+    /// vendored tree is absent (a test app), in which case those responses get
+    /// the same inline-free policy as everything else.
+    let editorInlineScriptHashes: [String]
     let permissionsPolicy: String
     let crossOriginOpenerPolicy: String
     let crossOriginResourcePolicy: String
@@ -218,12 +251,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
 
     init(
         cspBaseDirectives: [String] = Self.defaultContentSecurityPolicyBase,
+        editorInlineScriptHashes: [String] = [],
         permissionsPolicy: String = Self.defaultPermissionsPolicy,
         crossOriginOpenerPolicy: String = Self.defaultCrossOriginOpenerPolicy,
         crossOriginResourcePolicy: String = Self.defaultCrossOriginResourcePolicy,
         strictTransportSecurity: String? = nil
     ) {
         self.cspBaseDirectives = cspBaseDirectives
+        self.editorInlineScriptHashes = editorInlineScriptHashes
         self.permissionsPolicy = permissionsPolicy
         self.crossOriginOpenerPolicy = crossOriginOpenerPolicy
         self.crossOriginResourcePolicy = crossOriginResourcePolicy
@@ -236,7 +271,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ) async throws -> Response {
         let response = try await next.respond(to: request)
         let csp = Self.renderCSP(
-            base: cspBaseDirectives,
+            base: cspDirectives(for: request),
             formActionOrigins: formActionExtras(for: request)
         )
         // Never cache authenticated HTML — a logged-out browser must re-ask
@@ -269,6 +304,19 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             response.headers.replaceOrAdd(name: "Strict-Transport-Security", value: hsts)
         }
         return response
+    }
+
+    /// The base directives for this request: the configured set, with
+    /// `script-src` re-rendered to carry the editor's inline-script hashes on
+    /// the vendored editor's own responses.  Everything else — every page a
+    /// student or instructor logs into — keeps a `script-src` that permits no
+    /// inline execution of any kind.
+    private func cspDirectives(for request: Request) -> [String] {
+        guard !editorInlineScriptHashes.isEmpty,
+            request.url.path.hasPrefix(Self.vendoredEditorPathPrefix)
+        else { return cspBaseDirectives }
+        let scriptSrc = Self.scriptSrc(inlineScriptHashes: editorInlineScriptHashes)
+        return cspBaseDirectives.map { $0.hasPrefix("script-src ") ? scriptSrc : $0 }
     }
 
     /// The SSO `end_session_endpoint` is an external origin the browser is

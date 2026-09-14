@@ -1,0 +1,11 @@
+# Rule 3b skips one-line <script>…</script> elements because that is the shape
+# of the JSON seed islands, which are data and are never executed.  Written
+# without a type, the same shape IS executed, slips past 3b, and is then
+# blocked by the CSP at run time with nothing a test would see.
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="an executable single-line inline script in a template"
+expect="executable single-line inline <script>"
+apply() {
+    printf '<script>var ckGuardFixture = 1;</script>\n' >> Resources/Views/login.leaf
+}

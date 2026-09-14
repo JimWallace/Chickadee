@@ -119,7 +119,7 @@
                 #csrfFormField()
                 <label class="visually-hidden" for="status-#(item.assignment.assignmentID)">Status for #(item.assignment.title)</label>
                 <select id="status-#(item.assignment.assignmentID)" class="form-input status-toggle-btn" name="status"
-                        onchange="this.form.submit()">
+                        data-ck-submit-on-change>
                     <option value="open" #if(item.assignment.status == "open"):selected#endif>open</option>
                     <option value="preview" #if(item.assignment.status == "preview"):selected#endif>staff only</option>
                     <option value="closed" #if(item.assignment.status == "closed"):selected#endif>closed</option>

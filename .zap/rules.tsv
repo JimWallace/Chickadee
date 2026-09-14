@@ -49,16 +49,32 @@
 # Accepted-by-design warnings.
 # ---------------------------------------------------------------------------
 
-# CSP: script-src unsafe-eval
-# Pyodide's WASM bootstrap requires `unsafe-eval` to run Python in the
-# browser. Removing it would break the student notebook page, the
-# instructor validate flow, the browser-runner grading path, and every
-# JupyterLite-embedded view. The CSP base directives in
-# Sources/APIServer/Middleware/SecurityHeadersMiddleware.swift document
-# this; the same file also explains why `unsafe-inline` is kept (Leaf
-# templates use inline event handlers and style attributes — tightening
-# to per-response nonces is tracked as a separate follow-up).
-10055	IGNORE	.*
+# CSP
+# WARN, not IGNORE — and the demotion is the point.
+#
+# This is ONE ZAP rule covering every CSP finding at once: script-src
+# 'unsafe-eval', script-src 'unsafe-inline', style-src 'unsafe-inline',
+# wildcard directives. This file can only set a threshold per RULE, so
+# the IGNORE that was here to accept 'unsafe-eval' also hid the rest.
+# It hid a High: `script-src 'unsafe-inline'` sat in the served header
+# through every weekly scan until an external AppScan run reported it
+# (#1516, CVSS 8.2). Ignoring a rule to accept one of its findings
+# accepts all of them, silently, for as long as the line stands.
+#
+# What is accepted: 'unsafe-eval', which JupyterLab needs to compile
+# JSON-schema validators at run time — measured, with Pyodide fully
+# removed, in the SecurityHeadersMiddleware header comment — and
+# style-src 'unsafe-inline', which the templates use for CSS
+# custom-property assignments. Nothing else.
+#
+# What owns the rest now: scripts/check-security-headers.sh, which runs
+# against this same booted container BEFORE the crawl and fails the job
+# on an inline-script allowance by name, and
+# Tests/APITests/ContentSecurityPolicyInlineScriptTests.swift, which
+# pins the policy per directive with no server at all. WARN here keeps
+# the alert visible in the report — where a reader can see WHICH part
+# fired — without failing on the two accepted parts.
+10055	WARN	.*
 
 # Cross-Origin-Embedder-Policy Header Missing or Invalid
 # COEP `require-corp` would block the JupyterLite iframe: its service
