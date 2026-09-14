@@ -167,4 +167,26 @@ import Vapor
             }
         }
     }
+
+    @Test func setsCheckFailureDetailAndSurfacesInGetSuite() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorNotebookCheckTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
+                    failureDetail: "verdictOnly", minFigures: 2),
+                context(app))
+            let check = try await reloadCheck(assignment, id: "figs", on: app.db)
+            #expect(check.failureDetail == .verdictOnly)
+
+            let readCtx = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
+            let row = try #require(suite.items.first { $0.check?.id == "figs" })
+            #expect(row.failureDetail == "verdictOnly")
+        }
+    }
 }

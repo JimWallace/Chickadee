@@ -206,7 +206,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
                         displayName: entry.name,
                         dependsOn: collapseDeps(entry.dependsOn),
                         hint: entry.hint,
-                        timeLimitSeconds: entry.timeLimitSeconds
+                        timeLimitSeconds: entry.timeLimitSeconds,
+                        failureDetail: entry.failureDetail?.rawValue
                     ),
                     family: nil,
                     check: nil,

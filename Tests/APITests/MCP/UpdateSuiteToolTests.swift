@@ -272,4 +272,29 @@ import Vapor
             }
         }
     }
+
+    @Test func setsAndRevertsFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "verdictOnly")]),
+                context(app))
+            var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            var items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == "verdictOnly")
+            #expect(items.first { $0.script?.script == "test_b.sh" }?.script?.failureDetail == nil)
+
+            _ = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "")]),
+                context(app))
+            reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == nil)
+        }
+    }
 }

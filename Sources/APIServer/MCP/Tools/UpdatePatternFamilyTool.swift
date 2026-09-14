@@ -50,12 +50,16 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// the existing value untouched; `0` clears it (the case reverts to the
         /// family default / assignment-wide default).
         let timeLimitSeconds: Int?
+        /// Per-case student-facing failure detail (`FailureDetail` raw value).
+        /// nil leaves it untouched; "" or "full" clears it (the case reverts to
+        /// the family default).
+        let failureDetail: String?
 
         init(
             key: String, args: [JSONValue]? = nil, expected: JSONValue? = nil,
             argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil,
             expectedVarRef: String? = nil, hint: String? = nil,
-            timeLimitSeconds: Int? = nil
+            timeLimitSeconds: Int? = nil, failureDetail: String? = nil
         ) {
             self.key = key
             self.args = args
@@ -65,6 +69,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             self.expectedVarRef = expectedVarRef
             self.hint = hint
             self.timeLimitSeconds = timeLimitSeconds
+            self.failureDetail = failureDetail
         }
     }
 
@@ -81,6 +86,9 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// no per-case override. nil leaves it untouched; `0` clears it (revert
         /// to the assignment-wide default).
         let defaultTimeLimitSeconds: Int?
+        /// Family-level student-facing failure detail (`FailureDetail` raw
+        /// value). nil leaves it untouched; "" or "full" clears it.
+        let defaultFailureDetail: String?
         let enableCases: [String]?
         let disableCases: [String]?
         /// Per-case `args` / `expected` edits (the test logic).
@@ -103,7 +111,8 @@ struct UpdatePatternFamilyTool: ContentTool {
         init(
             assignmentPublicID: String, familyID: String, defaultTier: String? = nil,
             defaultPoints: Int? = nil, defaultHint: String? = nil,
-            defaultTimeLimitSeconds: Int? = nil, enableCases: [String]? = nil,
+            defaultTimeLimitSeconds: Int? = nil, defaultFailureDetail: String? = nil,
+            enableCases: [String]? = nil,
             disableCases: [String]? = nil, cases: [CaseEdit]? = nil,
             addCases: [CreatePatternFamilyTool.CaseInput]? = nil, dependsOn: [String]? = nil,
             referenceImplementation: String? = nil
@@ -114,6 +123,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             self.defaultPoints = defaultPoints
             self.defaultHint = defaultHint
             self.defaultTimeLimitSeconds = defaultTimeLimitSeconds
+            self.defaultFailureDetail = defaultFailureDetail
             self.enableCases = enableCases
             self.disableCases = disableCases
             self.cases = cases
@@ -147,6 +157,9 @@ struct UpdatePatternFamilyTool: ContentTool {
         + "`hint` (the \"💡 Hint\" shown to the student only when that test fails; empty string clears "
         + "it), set the family-level `defaultTimeLimitSeconds` and/or a per-case `timeLimitSeconds` "
         + "(per-test execution time limit, 1–600s, overriding the assignment default; 0 clears it), "
+        + "set the family-level `defaultFailureDetail` and/or a per-case `failureDetail` "
+        + "(\(MCPFailureDetailProse.slashAlternatives); how much of a failing case the student sees; "
+        + "\"full\" or an empty string clears it), "
         + "and/or edit individual cases' test logic via `cases` "
         + "(each { key, args?, expected? }). args/expected are raw JSON values (a list of args in "
         + "parameter order, and the expected return). Append brand-new cases with `addCases` (each a "
@@ -182,6 +195,9 @@ struct UpdatePatternFamilyTool: ContentTool {
                         + "generated entry without its own override. 0 clears it (revert to the "
                         + "assignment default); omit to leave unchanged."),
             ]),
+            "defaultFailureDetail": MCPFailureDetailProse.schema(
+                "Family-level student-facing failure detail. " + MCPFailureDetailProse.fieldDescription
+                    + " Empty string clears it; omit to leave unchanged."),
             "enableCases": .object([
                 "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Case keys to enable."),
@@ -235,6 +251,9 @@ struct UpdatePatternFamilyTool: ContentTool {
                                 "Per-case execution time limit (seconds, 1–600), overriding the family "
                                     + "default. 0 clears it; omit to leave unchanged."),
                         ]),
+                        "failureDetail": MCPFailureDetailProse.schema(
+                            "Per-case student-facing failure detail, overriding the family default. "
+                                + "Empty string clears it; omit to leave unchanged."),
                     ]),
                     "required": .array([.string("key")]),
                     "additionalProperties": .bool(false),
@@ -371,7 +390,10 @@ struct UpdatePatternFamilyTool: ContentTool {
             hint: Self.resolveHintEdit(input.defaultHint, existing: family.defaults.hint),
             tolerance: family.defaults.tolerance,
             timeLimitSeconds: Self.resolveTimeLimitEdit(
-                input.defaultTimeLimitSeconds, existing: family.defaults.timeLimitSeconds))
+                input.defaultTimeLimitSeconds, existing: family.defaults.timeLimitSeconds),
+            failureDetail: try MCPFailureDetailProse.parse(
+                input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail")
+                ?? family.defaults.failureDetail)
         let updatedFamily = try Self.rebuild(
             family, defaults: newDefaults,
             changes: CaseChanges(
@@ -487,6 +509,9 @@ struct UpdatePatternFamilyTool: ContentTool {
             hint: resolveHintEdit(edit.hint, existing: caseSpec.hint),
             tier: caseSpec.tier, points: caseSpec.points,
             timeLimitSeconds: resolveTimeLimitEdit(edit.timeLimitSeconds, existing: caseSpec.timeLimitSeconds),
+            failureDetail: try MCPFailureDetailProse.parse(
+                edit.failureDetail, tool: name, field: "cases[\(edit.key)].failureDetail")
+                ?? caseSpec.failureDetail,
             enabled: enabled)
     }
 
@@ -539,6 +564,7 @@ extension PatternCase {
             key: key, label: label, args: args, expected: expected,
             argsProvided: argsProvided, argVarRefs: argVarRefs, expectedVarRef: expectedVarRef,
             hint: hint, tier: tier, points: points, timeLimitSeconds: timeLimitSeconds,
+            failureDetail: failureDetail,
             enabled: enabled)
     }
 }

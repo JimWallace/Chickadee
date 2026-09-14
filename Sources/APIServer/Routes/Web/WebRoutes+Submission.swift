@@ -668,6 +668,7 @@ extension WebRoutes {
         }
         return ManifestDisplayData(
             displayNameMap: displayNameMap, hintByFilename: hintByFilename,
+            failureDetailByFilename: props.map(buildFailureDetailByFilename) ?? [:],
             sections: sections, entries: entries,
             testNameAliases: props?.testNameAliases() ?? [:])
     }

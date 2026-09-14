@@ -227,7 +227,8 @@ func applySuiteEdit(
                         sectionID: item.sectionID,
                         content: s.content,
                         hint: s.hint,
-                        timeLimitSeconds: s.timeLimitSeconds
+                        timeLimitSeconds: s.timeLimitSeconds,
+                        failureDetail: try parseFailureDetail(s.failureDetail, script: s.script)
                     )))
         case "family":
             guard var f = item.family else {
@@ -424,4 +425,20 @@ func reorderSuiteSectionsCore(
         }
         dict["sections"] = sectionIDs.compactMap { byID[$0] }
     }
+}
+
+/// Maps a `ScriptDTO.failureDetail` string to the enum: absent or empty means
+/// "full" (stored as nil), an unknown token is refused rather than silently
+/// dropped, since a dropped setting would show a student the answer the
+/// instructor meant to withhold.
+func parseFailureDetail(_ raw: String?, script: String) throws -> FailureDetail? {
+    guard let raw, !raw.isEmpty else { return nil }
+    guard let detail = FailureDetail(rawValue: raw) else {
+        throw WebAssignmentError.invalidParameter(
+            name: "failureDetail",
+            reason:
+                "Script \(script): failureDetail must be one of "
+                + FailureDetail.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+    }
+    return detail == .full ? nil : detail
 }

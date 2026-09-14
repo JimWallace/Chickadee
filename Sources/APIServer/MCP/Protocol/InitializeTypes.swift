@@ -257,7 +257,10 @@ enum MCPServerInstructions {
         timeLimitSeconds override, 1–600s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
         (family-wide defaultTimeLimitSeconds and/or per-case timeLimitSeconds), and on a notebook \
-        check via author_notebook_check — 0 clears an override), \
+        check via author_notebook_check — 0 clears an override; the same four doors take a \
+        failureDetail, \(MCPFailureDetailProse.slashAlternatives), which decides how much of a \
+        FAILING run the student is shown — "actualOnly" lets a public-tier test withhold its \
+        expected value — applied at results-display time, so staff always see everything), \
         set_minimum_runner_version (the optional minimum native-runner version that may grade the \
         assignment; a semver like "0.5.0", or null to clear — worker path only), \
         set_activity (make the assignment a class activity — \(MCPActivityProse.tokens) — ranked on \

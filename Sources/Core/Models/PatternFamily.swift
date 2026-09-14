@@ -123,16 +123,22 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
     /// guard.  A case may override it (`PatternCase.timeLimitSeconds`); when
     /// both are nil the entry inherits the assignment-wide default.
     public let timeLimitSeconds: Int?
+    /// Family-level student-facing failure detail applied to every generated
+    /// case that does not set its own (`PatternCase.failureDetail`). nil =
+    /// full.
+    public let failureDetail: FailureDetail?
 
     public init(
         tier: TestTier = .pub, points: Int = 1, hint: String? = nil,
-        tolerance: Double? = nil, timeLimitSeconds: Int? = nil
+        tolerance: Double? = nil, timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil
     ) {
         self.tier = tier
         self.points = points
         self.hint = hint
         self.tolerance = tolerance
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
     }
 
     public init(from decoder: Decoder) throws {
@@ -142,6 +148,7 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         tolerance = try c.decodeIfPresent(Double.self, forKey: .tolerance)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
+        failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
     }
 }
 
@@ -196,6 +203,10 @@ public struct PatternCase: Codable, Equatable, Sendable {
     /// (`defaults.timeLimitSeconds`) applies; when both are nil the generated
     /// entry inherits the assignment-wide default.
     public let timeLimitSeconds: Int?
+    /// Per-case student-facing failure detail.  When nil, the family default
+    /// (`defaults.failureDetail`) applies; when both are nil the student sees
+    /// the full message.
+    public let failureDetail: FailureDetail?
     /// Disabled cases remain in the spec but are not rendered into the zip.
     public let enabled: Bool
 
@@ -205,6 +216,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         expectedVarRef: String? = nil,
         hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
         timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil,
         enabled: Bool = true
     ) {
         self.key = key
@@ -218,6 +230,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         self.tier = tier
         self.points = points
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
         self.enabled = enabled
     }
 
@@ -236,6 +249,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)
         points = try c.decodeIfPresent(Int.self, forKey: .points)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
+        failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
     }
 }
@@ -413,6 +427,12 @@ extension PatternCase {
     public func resolvedHint(defaults: PatternDefaults) -> String? {
         if let h = hint, !h.isEmpty { return h }
         return defaults.hint
+    }
+
+    /// Student-facing failure detail for this case: override if set, else the
+    /// family default, else nil (full).
+    public func resolvedFailureDetail(defaults: PatternDefaults) -> FailureDetail? {
+        failureDetail ?? defaults.failureDetail
     }
 
     /// Tier applied to this case: override if set, else family default.

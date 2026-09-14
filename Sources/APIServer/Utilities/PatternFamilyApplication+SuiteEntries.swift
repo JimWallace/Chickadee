@@ -83,7 +83,8 @@ private struct SuiteEntryBuilder {
                 generatedBy: nil,
                 sectionID: s.sectionID,
                 hint: s.hint,
-                timeLimitSeconds: s.timeLimitSeconds
+                timeLimitSeconds: s.timeLimitSeconds,
+                failureDetail: s.failureDetail
             ))
     }
 
@@ -106,8 +107,9 @@ private struct SuiteEntryBuilder {
                 displayName: guardScript.displayName,
                 generatedBy: guardScript.familyID,
                 sectionID: section,
-                // The guard inherits the family-level time limit.
-                timeLimitSeconds: guardScript.timeLimitSeconds
+                // The guard inherits the family-level time limit and detail.
+                timeLimitSeconds: guardScript.timeLimitSeconds,
+                failureDetail: guardScript.failureDetail
             ))
         return guardScript.filename
     }
@@ -157,7 +159,8 @@ private struct SuiteEntryBuilder {
                     displayName: generated.displayName,
                     generatedBy: generated.familyID,
                     sectionID: section,
-                    timeLimitSeconds: generated.timeLimitSeconds
+                    timeLimitSeconds: generated.timeLimitSeconds,
+                    failureDetail: generated.failureDetail
                 ))
         }
     }
@@ -182,7 +185,8 @@ private struct SuiteEntryBuilder {
                 generatedBy: nil,
                 generatedByCheck: check.id,
                 sectionID: section,
-                timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
+                timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds),
+                failureDetail: check.failureDetail
             ))
     }
 

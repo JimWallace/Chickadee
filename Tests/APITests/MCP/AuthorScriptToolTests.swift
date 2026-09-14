@@ -70,13 +70,14 @@ import Vapor
         sourceUrl: String? = nil,
         tier: String? = nil, points: Int? = nil, displayName: String? = nil,
         dependsOn: [String]? = nil, sectionID: String? = nil,
-        timeLimitSeconds: Int? = nil, graderOnly: Bool? = nil
+        timeLimitSeconds: Int? = nil, failureDetail: String? = nil, graderOnly: Bool? = nil
     ) -> AuthorScriptTool.Input {
         AuthorScriptTool.Input(
             assignmentPublicID: assignment.publicID, filename: filename, content: content,
             sourceUrl: sourceUrl,
             tier: tier, points: points, displayName: displayName, dependsOn: dependsOn,
-            sectionID: sectionID, timeLimitSeconds: timeLimitSeconds, graderOnly: graderOnly)
+            sectionID: sectionID, timeLimitSeconds: timeLimitSeconds, failureDetail: failureDetail,
+            graderOnly: graderOnly)
     }
 
     @Test func createsNewTestScriptWithMetadata() async throws {
@@ -231,6 +232,58 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
                     input(assignment, filename: "t.py", content: "x=1\n", tier: "secret"), context(app))
+            }
+        }
+    }
+
+    // MARK: - failureDetail
+
+    @Test func setsAndRevertsFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "publictest_masked.py",
+                    content: "#!/usr/bin/env python3\nprint('ok')\n",
+                    tier: "public", failureDetail: "actualOnly"),
+                context(app))
+            var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            var items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
+
+            // Replacing the body without mentioning the field leaves it alone.
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "publictest_masked.py",
+                    content: "#!/usr/bin/env python3\nprint('still ok')\n"),
+                context(app))
+            reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
+
+            // "full" reverts to the default, stored as absence.
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "publictest_masked.py",
+                    content: "#!/usr/bin/env python3\nprint('ok')\n", failureDetail: "full"),
+                context(app))
+            reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == nil)
+        }
+    }
+
+    @Test func rejectsAnUnknownFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await AuthorScriptTool().execute(
+                    input(
+                        assignment, filename: "publictest_x.py",
+                        content: "#!/usr/bin/env python3\nprint('ok')\n", failureDetail: "some"),
+                    context(app))
             }
         }
     }

@@ -389,4 +389,32 @@ import Vapor
             }
         }
     }
+
+    @Test func createsFamilyWithDefaultAndPerCaseFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "masked", name: "Masked",
+                    kind: "boundary_equality", function: "f", paramNames: ["x"],
+                    defaultFailureDetail: "actualOnly",
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"),
+                            failureDetail: "verdictOnly"),
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "02", args: [.int(2)], expected: .string("two"),
+                            failureDetail: "full"),
+                    ]),
+                context(app))
+            let family = try await reloadFamily(assignment, id: "masked", on: app.db)
+            #expect(family.defaults.failureDetail == .actualOnly)
+            #expect(family.cases.first { $0.key == "01" }?.failureDetail == .verdictOnly)
+            // "full" on a case means no per-case value, so the default applies.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.failureDetail == nil)
+            #expect(c2.resolvedFailureDetail(defaults: family.defaults) == .actualOnly)
+        }
+    }
 }

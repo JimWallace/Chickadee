@@ -49,6 +49,9 @@ struct AuthorNotebookCheckTool: ContentTool {
         /// Check-level per-test execution time limit (seconds), in `1...600`,
         /// overriding the assignment default. 0 / omitted = inherit the default.
         let timeLimitSeconds: Int?
+        /// Student-facing failure detail (`FailureDetail` raw value). Omitted /
+        /// "full" = full.
+        let failureDetail: String?
 
         // Per-kind config (the validator enforces which are required per kind).
         let variable: String?
@@ -76,7 +79,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             assignmentPublicID: String, id: String, kind: String,
             name: String? = nil, tier: String? = nil, points: Int? = nil,
             dependsOn: [String]? = nil, sectionID: String? = nil, hint: String? = nil,
-            timeLimitSeconds: Int? = nil,
+            timeLimitSeconds: Int? = nil, failureDetail: String? = nil,
             variable: String? = nil, expectedRows: Int? = nil, expectedCols: Int? = nil,
             expectedColumns: [String]? = nil, columnMatch: String? = nil, expectedCSV: String? = nil,
             checkDtype: Bool? = nil, checkLike: Bool? = nil, rtol: Double? = nil, atol: Double? = nil,
@@ -94,6 +97,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             self.sectionID = sectionID
             self.hint = hint
             self.timeLimitSeconds = timeLimitSeconds
+            self.failureDetail = failureDetail
             self.variable = variable
             self.expectedRows = expectedRows
             self.expectedCols = expectedCols
@@ -141,8 +145,9 @@ struct AuthorNotebookCheckTool: ContentTool {
         + "data_frame_shape needs variable + expectedRows + expectedCols; figure_count needs minFigures; "
         + "cell_contains needs containsText; ast_structure needs requiredConstructs. Optional tier "
         + "(\(MCPTierProse.slashAlternatives), default public), points, dependsOn, sectionID, a \"💡 "
-        + "Hint\" shown on failure, and a per-test timeLimitSeconds (1–600s, overriding the assignment "
-        + "default; 0 inherits it). Saving renders the check's script, validates it synchronously "
+        + "Hint\" shown on failure, a per-test timeLimitSeconds (1–600s, overriding the assignment "
+        + "default; 0 inherits it), and a failureDetail (\(MCPFailureDetailProse.slashAlternatives) — how "
+        + "much of a failing check the student sees). Saving renders the check's script, validates it synchronously "
         + "(rejecting missing/!malformed kind fields), closes the assignment if it was open (reported as "
         + "`assignmentClosed`), and re-runs validation. Read existing checks (and their exact specs) "
         + "from get_suite; remove one with delete_suite_item."
@@ -184,6 +189,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                     "Per-test execution time limit (seconds, 1–600) for this check, overriding the "
                         + "assignment default. Omit / 0 to inherit the default."),
             ]),
+            "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
             "variable": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -384,6 +390,8 @@ struct AuthorNotebookCheckTool: ContentTool {
             sectionID: sectionID,
             hint: input.hint.flatMap { $0.isEmpty ? nil : $0 },
             timeLimitSeconds: try normalizedTimeLimit(input.timeLimitSeconds),
+            failureDetail: try MCPFailureDetailProse.parseValue(
+                input.failureDetail, tool: name, field: "failureDetail"),
             variable: input.variable,
             expectedRows: input.expectedRows,
             expectedCols: input.expectedCols,

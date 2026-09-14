@@ -561,4 +561,57 @@ import Vapor
             #expect(family.dependsOn.isEmpty)
         }
     }
+
+    @Test func setsAndClearsFamilyAndPerCaseFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultFailureDetail: "actualOnly",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", failureDetail: "verdictOnly")]),
+                context(app))
+            var family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.failureDetail == .actualOnly)
+            #expect(family.cases.first { $0.key == "01" }?.failureDetail == .verdictOnly)
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.failureDetail == nil)
+            #expect(c2.resolvedFailureDetail(defaults: family.defaults) == .actualOnly)
+
+            // get_suite reports the family default on the row.
+            let readCtx = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
+            let row = try #require(suite.items.first { $0.familyID == "bmi_category" })
+            #expect(row.failureDetail == "actualOnly")
+
+            // An empty string clears both.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultFailureDetail: "",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", failureDetail: "")]),
+                context(app))
+            family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.failureDetail == nil)
+            #expect(family.cases.first { $0.key == "01" }?.failureDetail == nil)
+        }
+    }
+
+    @Test func rejectsAnUnknownFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        defaultFailureDetail: "everything"),
+                    context(app))
+            }
+        }
+    }
 }

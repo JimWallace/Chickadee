@@ -225,6 +225,7 @@
         var fnSelect         = document.getElementById('family-function-select');
         var fnHint           = document.getElementById('family-function-hint');
         var defaultHintInput = document.getElementById('family-default-hint');
+        var defaultFailureDetailSelect = document.getElementById('family-default-failure-detail');
         var toleranceInput   = document.getElementById('family-default-tolerance');
         var toleranceLabel   = document.getElementById('family-tolerance-label');
         var referenceInput   = document.getElementById('family-reference-implementation');
@@ -1363,6 +1364,9 @@
                 editingTier = (family.defaults && family.defaults.tier) || 'public';
                 editingPoints = Math.max(1, parseInt(family.defaults && family.defaults.points) || 1);
                 defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
+                if (defaultFailureDetailSelect) {
+                    defaultFailureDetailSelect.value = (family.defaults && family.defaults.failureDetail) || '';
+                }
                 var tol = family.defaults && family.defaults.tolerance;
                 toleranceInput.value = (tol == null) ? '' : String(tol);
                 if (referenceInput) {
@@ -1384,6 +1388,7 @@
                 editingTier = 'public';
                 editingPoints = 1;
                 defaultHintInput.value = '';
+                if (defaultFailureDetailSelect) defaultFailureDetailSelect.value = '';
                 toleranceInput.value = '';
                 if (referenceInput) referenceInput.value = '';
                 familyVariables = [];
@@ -1453,6 +1458,30 @@
                 points: editingPoints,
                 hint: defaultHintInput.value.trim() || null
             };
+            if (defaultFailureDetailSelect && defaultFailureDetailSelect.value) {
+                defaults.failureDetail = defaultFailureDetailSelect.value;
+            }
+            // Carry forward the family-level and per-case fields this modal
+            // does not expose (a time limit set through the MCP tools, a
+            // per-case failure detail). The server takes the family from the
+            // payload unconditionally, so anything not re-emitted here is
+            // wiped on the next save — which is how a defaults.timeLimitSeconds
+            // set by an agent used to vanish on the instructor's next edit.
+            var existingFamily = (editingIndex >= 0 && familiesState[editingIndex]) || null;
+            var existingDefaults = (existingFamily && existingFamily.defaults) || {};
+            if (existingDefaults.timeLimitSeconds != null) {
+                defaults.timeLimitSeconds = existingDefaults.timeLimitSeconds;
+            }
+            var existingCasesByKey = {};
+            ((existingFamily && existingFamily.cases) || []).forEach(function (c) {
+                if (c && c.key) existingCasesByKey[c.key] = c;
+            });
+            cases.forEach(function (c) {
+                var prev = existingCasesByKey[c.key];
+                if (!prev) return;
+                if (prev.timeLimitSeconds != null) c.timeLimitSeconds = prev.timeLimitSeconds;
+                if (prev.failureDetail) c.failureDetail = prev.failureDetail;
+            });
             if (kind === 'approximate_equality') {
                 var tolRaw = (toleranceInput.value || '').trim();
                 if (tolRaw !== '') {

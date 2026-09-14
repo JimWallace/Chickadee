@@ -133,7 +133,8 @@ func buildAuthoredOrdering(
                     dependsOn: e.dependsOn,
                     sectionID: inputs.normaliseSectionID(e.sectionID),
                     hint: e.hint,
-                    timeLimitSeconds: e.timeLimitSeconds
+                    timeLimitSeconds: e.timeLimitSeconds,
+                    failureDetail: e.failureDetail
                 )
             }
         return AuthoredOrdering(
@@ -159,7 +160,8 @@ func buildAuthoredOrdering(
             sectionID: inputs.normaliseSectionID(s.sectionID),
             content: s.content,
             hint: s.hint,
-            timeLimitSeconds: s.timeLimitSeconds
+            timeLimitSeconds: s.timeLimitSeconds,
+            failureDetail: s.failureDetail
         )
     }
 

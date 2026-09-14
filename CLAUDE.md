@@ -677,6 +677,18 @@ value is ignored.
 
 **stderr:** Captured verbatim as `longResult` (nil if empty).
 
+**How much of a failure the student sees is a per-entry display setting**
+(`TestSuiteEntry.failureDetail`: `full` | `actualOnly` | `verdictOnly`),
+applied by the server at results-display time and never by the script.
+`actualOnly` keeps only the student's own side of a generated message (the
+`input:` / `got:` / `error:` labels and a recognised headline) and withholds
+`expected:`, a diff, a tolerance or a budget; a hand-written script degrades
+to the verdict under it, because nothing in its output says which half is
+the answer. Staff always read the full text, and the hint shows at every
+level. Family defaults, per-case values and notebook checks write their
+resolved level onto the entries they generate. See
+[docs/failure-detail.md](docs/failure-detail.md).
+
 ---
 
 ## Data Models (Core/)

@@ -48,11 +48,15 @@ struct AuthoredRawScript: Equatable {
     /// assignment-wide default. Only meaningful for hand-written raw scripts;
     /// generated family / notebook-check entries currently inherit the default.
     let timeLimitSeconds: Int?
+    /// Student-facing failure detail for this hand-written script, persisted
+    /// onto `TestSuiteEntry.failureDetail`. nil = full.
+    let failureDetail: FailureDetail?
 
     init(
         script: String, tier: TestTier, points: Int,
         displayName: String?, dependsOn: [String], sectionID: String? = nil,
-        content: String? = nil, hint: String? = nil, timeLimitSeconds: Int? = nil
+        content: String? = nil, hint: String? = nil, timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -63,6 +67,7 @@ struct AuthoredRawScript: Equatable {
         self.content = content
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
     }
 }
 

@@ -157,4 +157,30 @@ enum GeneratedMessage {
     /// `elapsed:`) and R ones (`budget:` / `took:`) differ likewise.
     static let wrongElements = "wrong elements"
     static let wrongElementsUnordered = "wrong elements (order doesn't matter)"
+
+    // MARK: - What `FailureDetail.actualOnly` keeps
+
+    /// The field labels that describe the STUDENT's side of a failure — what
+    /// they passed in, what their code produced or raised, where it raised,
+    /// how long it took — and so survive `.actualOnly` masking. Everything
+    /// else (`expected`, `delta`, `missing`, `budget`, `threshold`, the
+    /// widened `expected …` variants) carries the answer and is withheld.
+    ///
+    /// An ALLOWLIST, like `maskedShortResult`'s: a label nobody anticipated is
+    /// withheld by default, so a new field cannot leak the answer until
+    /// someone decides it is the student's.
+    static let studentSideLabels: [String] = [
+        "input", "got", "error", "source", "raised", "took", "elapsed", "position",
+        "searched", "content", "row",
+    ]
+
+    /// The first lines a generated failure may open with. `.actualOnly` keeps
+    /// a first line only when it is one of these, since a hand-written
+    /// script's first line is whatever it printed — "expected 42, got 7"
+    /// included.
+    static let failureHeadlines: [String] = [
+        unexpectedException, wrongValue, wrongReturnType, wrongOutput, outsideTolerance,
+        referenceFailed, wrongElements, wrongElementsUnordered,
+        "wrong stdout", "wrong error raised", "no error raised", "too slow",
+    ]
 }

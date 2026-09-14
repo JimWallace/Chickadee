@@ -267,7 +267,9 @@ extension WebRoutes {
                 redactOutput: redactOutput,
                 priorOutcomeMap: priorAttempt.outcomeMap,
                 displayNameMap: manifestDisplay.displayNameMap,
-                hintByFilename: manifestDisplay.hintByFilename
+                hintByFilename: manifestDisplay.hintByFilename,
+                failureDetailByFilename: manifestDisplay.failureDetailByFilename,
+                viewerIsStaff: viewer.isStaff
             )
         }
         // Counted from the rendered rows: "skipped" is a short-result pattern
@@ -291,11 +293,13 @@ extension WebRoutes {
         redactOutput: Bool,
         priorOutcomeMap: [String: TestStatus],
         displayNameMap: [String: String],
-        hintByFilename: [String: String]
+        hintByFilename: [String: String],
+        failureDetailByFilename: [String: FailureDetail] = [:],
+        viewerIsStaff: Bool = true
     ) -> OutcomeRow {
         let skip = parseSkip(shortResult: outcome.shortResult)
-        let shortOutput: String
-        let longOutput: String?
+        var shortOutput: String
+        var longOutput: String?
         if redactOutput {
             // Release before the deadline: the name, mark, and hint still show
             // so the student knows which hidden test is failing, but the result
@@ -315,6 +319,19 @@ extension WebRoutes {
                     fallback: outcome.shortResult,
                     status: outcome.status
                 )
+        }
+        // The entry's student-facing failure detail (staff always read the
+        // full text). Applied AFTER the formatting above so the masked text
+        // is the same one the student would otherwise have read, and only on
+        // a genuine failure — a pass or a dependency skip reveals nothing.
+        if !viewerIsStaff, !redactOutput, outcome.status != .pass, !skip.isSkipped,
+            let detail = failureDetailByFilename[outcome.testName], detail != .full
+        {
+            let masked = maskFailureOutput(
+                shortResult: shortOutput, longResult: longOutput,
+                status: outcome.status, detail: detail)
+            shortOutput = masked.shortResult
+            longOutput = masked.longResult
         }
         let (markLabel, markClass): (String, String) = {
             if skip.isSkipped { return ("—", "skipped") }
@@ -676,11 +693,29 @@ func buildHintByFilename(_ props: TestProperties) -> [String: String] {
     return map
 }
 
+/// Each suite entry's student-facing failure detail, keyed by filename AND
+/// extensionless stem exactly as `buildHintByFilename` keys hints — the
+/// generated entries already carry the value resolved from their family /
+/// case / check spec, so unlike hints this reads the entries alone.
+func buildFailureDetailByFilename(_ props: TestProperties) -> [String: FailureDetail] {
+    var map: [String: FailureDetail] = [:]
+    for entry in props.testSuites {
+        guard let detail = entry.failureDetail, detail != .full else { continue }
+        let stem = (entry.script as NSString).deletingPathExtension
+        map[entry.script] = detail
+        map[stem.isEmpty ? entry.script : stem] = detail
+    }
+    return map
+}
+
 // Internal (was private): produced by `loadManifestDisplayData` in
 // WebRoutes+Submission.swift, consumed by the presentation pipeline here.
 struct ManifestDisplayData {
     let displayNameMap: [String: String]
     let hintByFilename: [String: String]
+    /// Each entry's student-facing `FailureDetail`, keyed like
+    /// `hintByFilename` (filename and stem). Absent = full.
+    let failureDetailByFilename: [String: FailureDetail]
     let sections: [TestSuiteSection]
     let entries: [TestSuiteEntry]
     /// Manifest-derived alias map for achievement `testPass` matching (audit
@@ -690,12 +725,14 @@ struct ManifestDisplayData {
     init(
         displayNameMap: [String: String],
         hintByFilename: [String: String],
+        failureDetailByFilename: [String: FailureDetail] = [:],
         sections: [TestSuiteSection],
         entries: [TestSuiteEntry],
         testNameAliases: [String: Set<String>] = [:]
     ) {
         self.displayNameMap = displayNameMap
         self.hintByFilename = hintByFilename
+        self.failureDetailByFilename = failureDetailByFilename
         self.sections = sections
         self.entries = entries
         self.testNameAliases = testNameAliases
