@@ -1,0 +1,10 @@
+# A path the compile stage copies but .dockerignore drops from the context.
+# The build fails naming the COPY, not the ignore rule that caused it, which is
+# how Tools/runner-support went missing while the Dockerfile looked correct.
+guard="scripts/check-docker-build-context.sh"
+files=".dockerignore"
+description="an ignore rule excluding a path the compile stage copies"
+expect="excludes 'Tools/runner-support'"
+apply() {
+    printf 'Tools/runner-support\n' >> .dockerignore
+}

@@ -21,9 +21,14 @@ results/
 submissions/
 testsetups/
 
-# JupyterLite build toolchain — built output is in Public/ (already checked in)
+# JupyterLite build toolchain — built output is in Public/ (already checked in).
+# Tools/runner-support is the exception: the EmbedRunnerSupport build-tool plugin
+# compiles those files into the runner binary, so the compile stage needs them.
+# Excluding `Tools/*` rather than `Tools/` keeps the parent directory in the
+# context, which is what lets the negation below re-include a child of it.
 node_modules/
-Tools/
+Tools/*
+!Tools/runner-support
 
 # Documentation and deploy configs — not needed inside the image
 *.md
