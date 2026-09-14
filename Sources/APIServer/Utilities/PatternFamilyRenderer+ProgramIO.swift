@@ -250,6 +250,76 @@ func rProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: String)
 
 // MARK: - Lua
 
+/// The Lua stdin reader (`io.read` forms `l`/`L`/`n`/`a`/count, with or
+/// without the legacy `*`) and the two stream proxies the submission's `io`
+/// is built from. Hoisted so the case renderer stays within the body-length
+/// limit; it is one string, interpolated verbatim.
+private let luaProgramIOStreamProxies = """
+    local ck_pos = 1
+    local function ck_read_line(keep_newline)
+        if ck_pos > #stdin_text then return nil end
+        local nl = stdin_text:find("\\n", ck_pos, true)
+        local line
+        if nl then
+            line = stdin_text:sub(ck_pos, keep_newline and nl or nl - 1)
+            ck_pos = nl + 1
+        else
+            line = stdin_text:sub(ck_pos)
+            ck_pos = #stdin_text + 1
+        end
+        return line
+    end
+    local function ck_read_one(fmt)
+        if fmt == nil then return ck_read_line(false) end
+        if type(fmt) == "number" then
+            if ck_pos > #stdin_text then return nil end
+            local s = stdin_text:sub(ck_pos, ck_pos + fmt - 1)
+            ck_pos = ck_pos + fmt
+            return s
+        end
+        fmt = tostring(fmt):gsub("^%*", "")
+        if fmt == "n" then
+            local rest = stdin_text:sub(ck_pos)
+            local _, e, num = rest:find("^%s*([%+%-]?%d*%.?%d+[eE]?[%+%-]?%d*)")
+            if not num then return nil end
+            ck_pos = ck_pos + e
+            return tonumber(num)
+        elseif fmt == "a" then
+            local s = stdin_text:sub(ck_pos)
+            ck_pos = #stdin_text + 1
+            return s
+        elseif fmt == "L" then
+            return ck_read_line(true)
+        end
+        return ck_read_line(false)
+    end
+
+    local captured = {}
+    local ck_stdout = {}
+    function ck_stdout.write(...)
+        local n = select("#", ...)
+        local start = (n >= 1 and select(1, ...) == ck_stdout) and 2 or 1
+        for i = start, n do
+            captured[#captured + 1] = tostring((select(i, ...)))
+        end
+        return ck_stdout
+    end
+    local ck_stdin = {}
+    function ck_stdin.read(...)
+        local n = select("#", ...)
+        local start = (n >= 1 and select(1, ...) == ck_stdin) and 2 or 1
+        if n < start then return ck_read_one(nil) end
+        local results = {}
+        for i = start, n do
+            results[#results + 1] = ck_read_one((select(i, ...)))
+        end
+        return table.unpack(results, 1, n - start + 1)
+    end
+    function ck_stdin.lines(...)
+        return function() return ck_read_line(false) end
+    end
+    """
+
 /// Loads the file into a fresh environment whose `io` proxies both directions:
 /// the stdout capture the stdout kind uses, plus `read`, `lines` and `stdin`
 /// drawing from the case text. `io.read` honours `"l"`, `"L"`, `"n"`, `"a"`
@@ -287,69 +357,7 @@ func luaProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: Strin
             return table.concat(lines, "\\n")
         end
 
-        local ck_pos = 1
-        local function ck_read_line(keep_newline)
-            if ck_pos > #stdin_text then return nil end
-            local nl = stdin_text:find("\\n", ck_pos, true)
-            local line
-            if nl then
-                line = stdin_text:sub(ck_pos, keep_newline and nl or nl - 1)
-                ck_pos = nl + 1
-            else
-                line = stdin_text:sub(ck_pos)
-                ck_pos = #stdin_text + 1
-            end
-            return line
-        end
-        local function ck_read_one(fmt)
-            if fmt == nil then return ck_read_line(false) end
-            if type(fmt) == "number" then
-                if ck_pos > #stdin_text then return nil end
-                local s = stdin_text:sub(ck_pos, ck_pos + fmt - 1)
-                ck_pos = ck_pos + fmt
-                return s
-            end
-            fmt = tostring(fmt):gsub("^%*", "")
-            if fmt == "n" then
-                local rest = stdin_text:sub(ck_pos)
-                local _, e, num = rest:find("^%s*([%+%-]?%d*%.?%d+[eE]?[%+%-]?%d*)")
-                if not num then return nil end
-                ck_pos = ck_pos + e
-                return tonumber(num)
-            elseif fmt == "a" then
-                local s = stdin_text:sub(ck_pos)
-                ck_pos = #stdin_text + 1
-                return s
-            elseif fmt == "L" then
-                return ck_read_line(true)
-            end
-            return ck_read_line(false)
-        end
-
-        local captured = {}
-        local ck_stdout = {}
-        function ck_stdout.write(...)
-            local n = select("#", ...)
-            local start = (n >= 1 and select(1, ...) == ck_stdout) and 2 or 1
-            for i = start, n do
-                captured[#captured + 1] = tostring((select(i, ...)))
-            end
-            return ck_stdout
-        end
-        local ck_stdin = {}
-        function ck_stdin.read(...)
-            local n = select("#", ...)
-            local start = (n >= 1 and select(1, ...) == ck_stdin) and 2 or 1
-            if n < start then return ck_read_one(nil) end
-            local results = {}
-            for i = start, n do
-                results[#results + 1] = ck_read_one((select(i, ...)))
-            end
-            return table.unpack(results, 1, n - start + 1)
-        end
-        function ck_stdin.lines(...)
-            return function() return ck_read_line(false) end
-        end
+        \(luaProgramIOStreamProxies)
 
         local env = setmetatable({}, { __index = _G })
         env.print = function(...)
@@ -403,6 +411,44 @@ func luaProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: Strin
 
 // MARK: - Octave
 
+/// The command-line functions that shadow `input`, `exit` and `quit` while
+/// the program runs. `input` draws from the global line cursor the case sets
+/// up; the exit masks raise `chickadee:exit` only while `ck_program_running`
+/// is set, and otherwise forward to the exit that was visible before them.
+private let octaveProgramIOMasks = """
+    function r = input(prompt, varargin)
+        global ck_stdin_lines ck_stdin_pos
+        printf("%s", prompt);
+        if ck_stdin_pos > numel(ck_stdin_lines)
+            error("chickadee:eof", "end of input");
+        end
+        line = ck_stdin_lines{ck_stdin_pos};
+        ck_stdin_pos = ck_stdin_pos + 1;
+        if nargin > 1
+            r = line;
+        else
+            r = str2num(line);
+            if isempty(r)
+                r = line;
+            end
+        end
+    end
+    function exit(varargin)
+        global ck_program_running ck_prev_exit
+        if ck_program_running
+            error("chickadee:exit", "exit");
+        end
+        ck_prev_exit(varargin{:});
+    end
+    function quit(varargin)
+        global ck_program_running ck_prev_quit
+        if ck_program_running
+            error("chickadee:exit", "exit");
+        end
+        ck_prev_quit(varargin{:});
+    end
+    """
+
 /// Shadows `input` (and `exit` / `quit`) with command-line functions for the
 /// duration of the program run. Command-line functions shadow builtins, and
 /// the masks read the previously visible `exit` through a handle captured
@@ -448,37 +494,7 @@ func octaveProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: St
         ck_prev_exit = @exit;
         ck_prev_quit = @quit;
 
-        function r = input(prompt, varargin)
-            global ck_stdin_lines ck_stdin_pos
-            printf("%s", prompt);
-            if ck_stdin_pos > numel(ck_stdin_lines)
-                error("chickadee:eof", "end of input");
-            end
-            line = ck_stdin_lines{ck_stdin_pos};
-            ck_stdin_pos = ck_stdin_pos + 1;
-            if nargin > 1
-                r = line;
-            else
-                r = str2num(line);
-                if isempty(r)
-                    r = line;
-                end
-            end
-        end
-        function exit(varargin)
-            global ck_program_running ck_prev_exit
-            if ck_program_running
-                error("chickadee:exit", "exit");
-            end
-            ck_prev_exit(varargin{:});
-        end
-        function quit(varargin)
-            global ck_program_running ck_prev_quit
-            if ck_program_running
-                error("chickadee:exit", "exit");
-            end
-            ck_prev_quit(varargin{:});
-        end
+        \(octaveProgramIOMasks)
 
         ck_text = fileread(ck_file);
         ck_error = "";
@@ -574,27 +590,28 @@ func racketProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: St
 
 // MARK: - C++
 
-/// A shell wrapper that compiles the submission to its own binary (the
-/// student's `main` is the program), writes the stdin text to a file, then
-/// compiles and runs a checker translation unit that spawns the binary with
-/// that file on its stdin and grades what came back. Two compiles, because
-/// the program and the checker cannot share a `main`.
-func cppProgramIOCase(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
-    let comparison = family.resolvedIOComparison
-    let stem = "\(family.id)_\(c.key)"
-    let programBinary = ".ck_prog_\(stem)"
-    let stdinFile = ".ck_stdin_\(stem)"
-    let outFile = ".ck_out_\(stem)"
-    let errFile = ".ck_err_\(stem)"
-    let checkerSource = ".ck_src_\(stem).cpp"
-    let checkerBinary = ".ck_bin_\(stem)"
+/// The checker translation unit: spawns the compiled program with the stdin
+/// file on its input, reads back both streams, and grades under the family's
+/// comparison. Split from the wrapper for the body-length limit.
+/// The scratch filenames one C++ case's wrapper and checker share.
+private struct CppProgramIOFiles {
+    let programBinary: String
+    let stdinFile: String
+    let outFile: String
+    let errFile: String
+}
+
+private func cppProgramIOChecker(
+    family: PatternFamily, case c: PatternCase, specHash: String, comparison: ProgramIOComparison,
+    files: CppProgramIOFiles
+) -> String {
     let compare: String
     switch comparison {
     case .exact: compare = "bool ck_ok = ck_normalize(ck_printed) == ck_normalize(expected);"
     case .included: compare = "bool ck_ok = ck_printed.find(expected) != std::string::npos;"
     case .regex: compare = "bool ck_ok = ck_regex_any_line(ck_normalize(ck_printed), expected);"
     }
-    let checker = """
+    return """
         \(cppComment("Generated by Chickadee — pattern family '\(family.id)', case '\(c.key)'."))
         \(cppComment("Edit the family, not this file. spec_hash: \(specHash)"))
         #include "test_runtime.hpp"
@@ -639,9 +656,9 @@ func cppProgramIOCase(family: PatternFamily, case c: PatternCase, specHash: Stri
         int main() {
             std::string stdin_text = \(JSONValue.string(programIOStdin(c)).cppLiteral);
             std::string expected = \(JSONValue.string(programIOExpected(c)).cppLiteral);
-            int ck_status = std::system("./\(programBinary) < \(stdinFile) > \(outFile) 2> \(errFile)");
-            std::string ck_printed = ck_read_file("\(outFile)");
-            std::string ck_stderr = ck_read_file("\(errFile)");
+            int ck_status = std::system("./\(files.programBinary) < \(files.stdinFile) > \(files.outFile) 2> \(files.errFile)");
+            std::string ck_printed = ck_read_file("\(files.outFile)");
+            std::string ck_stderr = ck_read_file("\(files.errFile)");
             int ck_code = WIFEXITED(ck_status) ? WEXITSTATUS(ck_status) : -1;
             if (ck_code != 0) {
                 ck::failed(std::string("\(GeneratedMessage.unexpectedException)\\n")
@@ -660,6 +677,26 @@ func cppProgramIOCase(family: PatternFamily, case c: PatternCase, specHash: Stri
             ck::passed("Printed the expected output");
         }
         """
+}
+
+/// A shell wrapper that compiles the submission to its own binary (the
+/// student's `main` is the program), writes the stdin text to a file, then
+/// compiles and runs a checker translation unit that spawns the binary with
+/// that file on its stdin and grades what came back. Two compiles, because
+/// the program and the checker cannot share a `main`.
+func cppProgramIOCase(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+    let comparison = family.resolvedIOComparison
+    let stem = "\(family.id)_\(c.key)"
+    let programBinary = ".ck_prog_\(stem)"
+    let stdinFile = ".ck_stdin_\(stem)"
+    let outFile = ".ck_out_\(stem)"
+    let errFile = ".ck_err_\(stem)"
+    let checkerSource = ".ck_src_\(stem).cpp"
+    let checkerBinary = ".ck_bin_\(stem)"
+    let checker = cppProgramIOChecker(
+        family: family, case: c, specHash: specHash, comparison: comparison,
+        files: CppProgramIOFiles(
+            programBinary: programBinary, stdinFile: stdinFile, outFile: outFile, errFile: errFile))
     return """
         #!/bin/sh
         # Generated by Chickadee — do not edit. This wrapper compiles the
