@@ -496,7 +496,8 @@ extension WebRoutes {
             secretRevealAvailable: secretReveal.available,
             secretRevealActive: secretReveal.active,
             solutionURL: decorations.solutionURL,
-            leaderboardURL: decorations.leaderboardURL
+            leaderboardURL: decorations.leaderboardURL,
+            diffURL: decorations.diffURL
         )
     }
 }
@@ -766,4 +767,6 @@ struct SubmissionDecorations {
     /// leaderboard activity the viewer may open (staff always; students once
     /// it is published).
     let leaderboardURL: String?
+    /// Staff-only link to the starter-to-submission diff page.
+    let diffURL: String?
 }

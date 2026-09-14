@@ -29,6 +29,9 @@ Submission #(submissionID)
             #if(leaderboardURL):
             <a class="btn action-btn" href="#(leaderboardURL)">Leaderboard</a>
             #endif
+            #if(diffURL):
+            <a class="btn action-btn" href="#(diffURL)">Diff against starter</a>
+            #endif
         </div>
     </div>
     #if(isPending):

@@ -9,3 +9,8 @@
   zip of every student's latest submission for the assignment, one directory
   per student plus an `index.csv`, for offline marking or a
   similarity-detection run.
+- **Diff against starter.** Course staff can open a unified diff of any
+  student submission against the assignment's starter, from the submission
+  history page or the results view: notebooks cell by cell with instructor
+  test cells left out of both sides, single files against the starter file of
+  the same name.

@@ -467,7 +467,13 @@ extension WebRoutes {
                         && hasSecretTierTests(setupProps),
                     active: reveal.revealed),
                 solutionURL: links.solutionURL,
-                leaderboardURL: links.leaderboardURL
+                leaderboardURL: links.leaderboardURL,
+                // Staff only, and only for student work with a published
+                // assignment to link back through.
+                diffURL: (isStaff && submission.kind == APISubmission.Kind.student)
+                    ? submissionAssignment.map {
+                        "/instructor/\($0.publicID)/submissions/\(subID)/diff"
+                    } : nil
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

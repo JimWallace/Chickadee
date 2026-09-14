@@ -1503,6 +1503,48 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 .test-output-pre-wide { margin-top: .35rem; }
 
+/* ── Diff listing ─────────────────────────────────────
+   The starter-to-submission diff page (submission-diff.leaf): a unified
+   listing, one row per line, two gutters (old / new line number) and the
+   text. A row is added, removed, unchanged context, or a fold standing in
+   for a run of unchanged lines. .diff-marker is the notebook cell boundary. */
+.diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.45;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.diff-gutter {
+    width: 3.5rem;
+    padding: 0 .5rem;
+    text-align: right;
+    color: var(--gray-600);
+    border-right: 1px solid var(--gray-100);
+    white-space: nowrap;
+    user-select: none;
+}
+.diff-line {
+    padding: 0 .75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.diff-context { color: var(--gray-900); }
+.diff-added { background: var(--success-bg); color: var(--success-fg); }
+.diff-removed { background: var(--danger-bg); color: var(--danger-fg); }
+.diff-fold td {
+    padding: .2rem .75rem;
+    background: var(--gray-50);
+    color: var(--gray-600);
+    font-style: italic;
+    text-align: center;
+}
+.diff-marker .diff-line { color: var(--gray-600); font-weight: 600; }
+
 .warning-box {
     margin-bottom: 1rem;
     padding: .85rem 1rem;

@@ -310,6 +310,7 @@ import VaporTesting
         "GET /instructor/:assignmentID/submissions": .ta,
         "GET /instructor/:assignmentID/submissions.zip": .ta,
         "GET /instructor/:assignmentID/students/:studentID/history": .ta,
+        "GET /instructor/:assignmentID/submissions/:submissionID/diff": .ta,
         "POST /instructor/:assignmentID/submissions/:submissionID/retest": .ta,
         "POST /instructor/:assignmentID/retest": .ta,
         "POST /instructor/:assignmentID/students/:studentID/reset-notebook": .ta,

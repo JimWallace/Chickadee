@@ -612,6 +612,9 @@ struct SubmissionContext: Encodable {
     /// Link to the class activity's leaderboard, nil unless one is open to
     /// the viewer.
     let leaderboardURL: String?
+    /// Staff-only link to the starter-to-submission diff; nil for students,
+    /// for whom the comparison is not offered.
+    let diffURL: String?
 }
 
 /// One class-goal achievement's display state for the submission page.
