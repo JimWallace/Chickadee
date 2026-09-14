@@ -66,6 +66,10 @@ func renderJavaPatternCase(
         body = javaStdoutBody(target: target, context: context, c: c)
     case .differential:
         body = javaDifferentialBody(family: family, context: context, c: c)
+    case .programIO:
+        // Its own wrapper: the submission is run in source-file mode as the
+        // program, so no checker method calls into it.
+        return javaProgramIOCase(family: family, case: c, specHash: specHash)
     }
 
     let stem = "\(family.id)_\(c.key)"

@@ -56,6 +56,11 @@ struct ScriptDTO: Content {
     /// entry; on `PUT /suite` it's persisted onto the entry. Omitted by older
     /// clients, which keeps decoding.
     var timeLimitSeconds: Int?
+    /// Student-facing failure detail (`FailureDetail` raw value). nil = full.
+    /// On `GET /suite` it's read from the manifest entry; on `PUT /suite` it's
+    /// persisted onto the entry. Omitted by older clients, which keeps
+    /// decoding.
+    var failureDetail: String?
 }
 
 /// Name + opaque id of a single section.  Order of `SuitePayload.sections`

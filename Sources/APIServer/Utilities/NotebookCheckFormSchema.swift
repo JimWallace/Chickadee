@@ -112,7 +112,21 @@ private let commonCheckFormFields: [CheckFormField] = [
         valueType: .optionalString,
         label: "Hint (shown to students when this check fails)",
         placeholder: "e.g. Did you group by the right column before aggregating?",
-        rows: 2)
+        rows: 2),
+    // `optionalString` rather than `enum` on purpose: the blank option means
+    // "full", stored as absence, so a check saved from the editor carries no
+    // key for the default and its spec hash stays what it was.
+    CheckFormField(
+        name: "failureDetail",
+        control: .select,
+        valueType: .optionalString,
+        label: "Failure detail shown to students",
+        help: "Staff always see everything.",
+        enumOptions: [CheckFormEnumOption(value: "", label: "Full (default)")]
+            + FailureDetail.allCases.filter { $0 != .full }.map {
+                CheckFormEnumOption(value: $0.rawValue, label: $0.displayName)
+            },
+        defaultValue: ""),
 ]
 
 /// The per-kind form fields.  Exhaustive over `NotebookCheckKind`: a new case

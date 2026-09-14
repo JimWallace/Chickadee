@@ -333,6 +333,12 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     if let limit = entry.timeLimitSeconds, limit > 0 {
         dict["timeLimitSeconds"] = limit
     }
+    // Student-facing failure detail. Absent = full; `.full` is never written
+    // so an entry that was reset to the default reads as it did before the
+    // field existed.
+    if let detail = entry.failureDetail, detail != .full {
+        dict["failureDetail"] = detail.rawValue
+    }
     return dict
 }
 

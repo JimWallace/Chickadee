@@ -49,13 +49,16 @@ struct CreatePatternFamilyTool: ContentTool {
         /// Per-case execution time limit (seconds), in `1...600`, overriding the
         /// family default. 0 / omitted = no per-case override.
         let timeLimitSeconds: Int?
+        /// Per-case student-facing failure detail (`FailureDetail` raw value),
+        /// overriding the family default. Omitted / "full" = no per-case value.
+        let failureDetail: String?
         let enabled: Bool?
 
         init(
             key: String, label: String? = nil, args: [JSONValue]? = nil, expected: JSONValue? = nil,
             argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil, expectedVarRef: String? = nil,
             hint: String? = nil, points: Int? = nil, tier: String? = nil,
-            timeLimitSeconds: Int? = nil, enabled: Bool? = nil
+            timeLimitSeconds: Int? = nil, failureDetail: String? = nil, enabled: Bool? = nil
         ) {
             self.key = key
             self.label = label
@@ -68,6 +71,7 @@ struct CreatePatternFamilyTool: ContentTool {
             self.points = points
             self.tier = tier
             self.timeLimitSeconds = timeLimitSeconds
+            self.failureDetail = failureDetail
             self.enabled = enabled
         }
     }
@@ -97,6 +101,10 @@ struct CreatePatternFamilyTool: ContentTool {
         /// applied to every generated entry (cases + existence guard) without a
         /// per-case override. 0 / omitted = inherit the assignment default.
         let defaultTimeLimitSeconds: Int?
+        /// Family-level student-facing failure detail (`FailureDetail` raw
+        /// value) applied to every generated entry without a per-case value.
+        /// Omitted / "full" = full.
+        let defaultFailureDetail: String?
         let tolerance: Double?
         /// Existing section id to place the family in; nil = ungrouped.
         let sectionID: String?
@@ -105,16 +113,20 @@ struct CreatePatternFamilyTool: ContentTool {
         /// Required by `differential`, ignored by every other kind: the
         /// instructor's reference implementation, in the assignment's language.
         let referenceImplementation: String?
+        /// Read by `program_io` only: how each case's expected text is matched
+        /// against the program's output (`ProgramIOComparison` raw value;
+        /// omitted = exact).
+        let ioComparison: String?
         let cases: [CaseInput]
 
         init(
             assignmentPublicID: String, id: String, name: String, kind: String,
             function: String? = nil, paramNames: [String]? = nil,
             defaultTier: String? = nil, defaultPoints: Int? = nil, defaultHint: String? = nil,
-            defaultTimeLimitSeconds: Int? = nil,
+            defaultTimeLimitSeconds: Int? = nil, defaultFailureDetail: String? = nil,
             tolerance: Double? = nil, sectionID: String? = nil, dependsOn: [String]? = nil,
             variables: [VariableInput]? = nil, referenceImplementation: String? = nil,
-            cases: [CaseInput]
+            ioComparison: String? = nil, cases: [CaseInput]
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.id = id
@@ -126,11 +138,13 @@ struct CreatePatternFamilyTool: ContentTool {
             self.defaultPoints = defaultPoints
             self.defaultHint = defaultHint
             self.defaultTimeLimitSeconds = defaultTimeLimitSeconds
+            self.defaultFailureDetail = defaultFailureDetail
             self.tolerance = tolerance
             self.sectionID = sectionID
             self.dependsOn = dependsOn
             self.variables = variables
             self.referenceImplementation = referenceImplementation
+            self.ioComparison = ioComparison
             self.cases = cases
         }
     }
@@ -163,6 +177,9 @@ struct CreatePatternFamilyTool: ContentTool {
         + "shown only when that test fails (per-case overrides the family default). "
         + "Set a family-level `defaultTimeLimitSeconds` and/or per-case `timeLimitSeconds` "
         + "(per-test execution time limit, 1–600s, overriding the assignment default). "
+        + "Set a family-level `defaultFailureDetail` and/or per-case `failureDetail` "
+        + "(\(MCPFailureDetailProse.slashAlternatives)) to limit how much of a failing case the student "
+        + "sees — \"actualOnly\" is what lets a public-tier case withhold its expected value. "
         + "Saving renders the family's scripts and runs validation synchronously, rejecting a wrong arg "
         + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. It "
         + "also closes the assignment if it was open (reported as `assignmentClosed`; re-open with "
@@ -211,6 +228,9 @@ struct CreatePatternFamilyTool: ContentTool {
                     "Per-case execution time limit (seconds, 1–600), overriding the family "
                         + "default. Omit / 0 for no per-case override."),
             ]),
+            "failureDetail": MCPFailureDetailProse.schema(
+                "Per-case student-facing failure detail, overriding the family default. "
+                    + MCPFailureDetailProse.fieldDescription),
             "enabled": MCPSchema.boolean,
         ]),
         "required": .array([.string("key")]),
@@ -254,6 +274,9 @@ struct CreatePatternFamilyTool: ContentTool {
                     "Family-level per-test execution time limit (seconds, 1–600) for every generated "
                         + "entry without a per-case override. Omit / 0 to inherit the assignment default."),
             ]),
+            "defaultFailureDetail": MCPFailureDetailProse.schema(
+                "Family-level student-facing failure detail for every generated entry without a "
+                    + "per-case value. " + MCPFailureDetailProse.fieldDescription),
             "tolerance": .object([
                 "type": .string("number"),
                 "description": .string("Float tolerance for approximate_equality (default 1e-6)."),
@@ -272,6 +295,7 @@ struct CreatePatternFamilyTool: ContentTool {
                         + "Note it is rendered into the generated test, which a browser-graded "
                         + "assignment downloads to the student's browser."),
             ]),
+            "ioComparison": MCPProgramIOProse.schema,
             "dependsOn": .object([
                 "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Prerequisite script names or family:<id> tokens."),
@@ -398,14 +422,17 @@ struct CreatePatternFamilyTool: ContentTool {
             hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance,
             timeLimitSeconds: try normalizedTimeLimit(
-                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"))
+                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"),
+            failureDetail: try MCPFailureDetailProse.parseValue(
+                input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail"))
         let cases = try input.cases.map { try patternCase(from: $0, tool: Self.name) }
         return PatternFamily(
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
             paramNames: input.paramNames ?? [], defaults: defaults, cases: cases,
             variables: (input.variables ?? []).map { FamilyVariable(name: $0.name, value: $0.value) },
             dependsOn: input.dependsOn ?? [],
-            referenceImplementation: input.referenceImplementation)
+            referenceImplementation: input.referenceImplementation,
+            ioComparison: try MCPProgramIOProse.parse(input.ioComparison, tool: Self.name))
     }
 
     /// Builds one `PatternCase` from a case input, filling the parallel
@@ -430,6 +457,8 @@ struct CreatePatternFamilyTool: ContentTool {
             points: c.points,
             timeLimitSeconds: try normalizedTimeLimit(
                 c.timeLimitSeconds, tool: tool, field: "cases[\(c.key)].timeLimitSeconds"),
+            failureDetail: try MCPFailureDetailProse.parseValue(
+                c.failureDetail, tool: tool, field: "cases[\(c.key)].failureDetail"),
             enabled: c.enabled ?? true)
     }
 

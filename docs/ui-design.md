@@ -345,6 +345,12 @@ duplicate.
   type in the product: the `--text-*` scale tops out at 1.4rem for page
   headings and deliberately does not carry display sizes, so this is `em`
   against its container rather than a new scale step.  One per page.
+- **`.diff-table`** — the one unified diff listing (the instructor's
+  starter-to-submission page).  Rows are `.diff-added` / `.diff-removed` /
+  `.diff-context`, or `.diff-fold` standing in for a run of unchanged lines;
+  cells are two `.diff-gutter` line-number columns and one `.diff-line`;
+  `.diff-marker` is a notebook cell boundary.  A second comparison view
+  (two attempts, two students) reuses this rather than minting a twin.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
 - **`.row-phone-meta`** — a table's phone-width restatement of the columns
   `.col-hide-phone` drops below 640px: the student dashboard's Due and History,

@@ -30,6 +30,9 @@ struct UpdateSuiteTool: ContentTool {
         /// sets the override; 0 clears it (the script reverts to the assignment
         /// default); absent/null leaves it unchanged.
         let timeLimitSeconds: Int?
+        /// Student-facing failure detail (`FailureDetail` raw value). Sets the
+        /// level; "" or "full" reverts to full; absent leaves it unchanged.
+        let failureDetail: String?
 
         // Explicit init so `timeLimitSeconds` can default to nil — keeps the
         // older positional/labelled call sites (which predate the field)
@@ -37,7 +40,8 @@ struct UpdateSuiteTool: ContentTool {
         init(
             script: String, tier: String? = nil, points: Int? = nil,
             displayName: String? = nil, dependsOn: [String]? = nil,
-            sectionID: String? = nil, timeLimitSeconds: Int? = nil
+            sectionID: String? = nil, timeLimitSeconds: Int? = nil,
+            failureDetail: String? = nil
         ) {
             self.script = script
             self.tier = tier
@@ -46,6 +50,7 @@ struct UpdateSuiteTool: ContentTool {
             self.dependsOn = dependsOn
             self.sectionID = sectionID
             self.timeLimitSeconds = timeLimitSeconds
+            self.failureDetail = failureDetail
         }
     }
 
@@ -70,7 +75,9 @@ struct UpdateSuiteTool: ContentTool {
         + "script provide any of: tier (\(MCPTierProse.slashAlternatives)), points, displayName, "
         + "dependsOn (prerequisite script names), sectionID (\"\" to ungroup), and timeLimitSeconds "
         + "(a per-test execution time limit override in seconds, 1–600; 0 clears the override so the "
-        + "script reverts to the assignment default set by set_time_limit). Does NOT change "
+        + "script reverts to the assignment default set by set_time_limit), and failureDetail "
+        + "(\(MCPFailureDetailProse.slashAlternatives) — how much of a failing run the student sees; "
+        + "\"full\" reverts to the default). Does NOT change "
         + "script content or pattern families. Saving re-runs the assignment's validation and closes "
         + "the assignment if it was open (re-open with update_assignment once validation passes)."
     static let inputSchema: JSONValue = .object([
@@ -104,6 +111,7 @@ struct UpdateSuiteTool: ContentTool {
                                     + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); "
                                     + "0 clears the override (revert to the assignment default)."),
                         ]),
+                        "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
                     ]),
                     "required": .array([.string("script")]),
                     "additionalProperties": .bool(false),
@@ -169,6 +177,11 @@ struct UpdateSuiteTool: ContentTool {
                     payload.items[idx].script?.timeLimitSeconds =
                         try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
                 }
+            }
+            if let detailUpdate = try MCPFailureDetailProse.parse(
+                edit.failureDetail, tool: Self.name, field: "failureDetail")
+            {
+                payload.items[idx].script?.failureDetail = detailUpdate?.rawValue
             }
             updated.append(edit.script)
         }

@@ -69,6 +69,10 @@ struct GetAssignmentTool: ContentTool {
         /// deadline. Set via the assignment-update tool (same naming caveat
         /// as `secretRevealEnabled` above).
         let solutionVisibility: String
+        /// The advisory passing threshold (1...100), or nil when off. Set via
+        /// the assignment-update tool (same naming caveat as
+        /// `secretRevealEnabled`).
+        let passingThresholdPercent: Int?
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
@@ -94,7 +98,9 @@ struct GetAssignmentTool: ContentTool {
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
         + "secret-tier test results; set via the assignment-update tool), solutionVisibility "
         + "(whether students may view the reference solution after their own deadline passes — "
-        + "\"afterDue\" — or never — \"hidden\", the default), minimumRunnerVersion "
+        + "\"afterDue\" — or never — \"hidden\", the default), passingThresholdPercent (the "
+        + "advisory best-grade percentage that marks a student as passing on the instructor "
+        + "submissions page, null when off; set via the assignment-update tool), minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
@@ -128,6 +134,7 @@ struct GetAssignmentTool: ContentTool {
                 "type": .string("string"),
                 "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
             ]),
+            "passingThresholdPercent": MCPSchema.nullableInteger,
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
             "activity": .object([
@@ -205,6 +212,7 @@ struct GetAssignmentTool: ContentTool {
             sectionName: sectionName,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibility: assignment.solutionVisibility.rawValue,
+            passingThresholdPercent: assignment.passingThresholdPercent,
             activity: manifest?.activity.map { activity in
                 ActivityOutput(
                     kind: activity.kind.rawValue,

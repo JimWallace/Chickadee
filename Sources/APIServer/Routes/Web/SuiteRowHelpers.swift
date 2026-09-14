@@ -48,13 +48,15 @@ struct ConfiguredSuiteEntry {
     let sectionID: String?  // id into TestProperties.sections; nil = ungrouped
     let hint: String?  // instructor hint for raw scripts; nil for generated/no-hint
     let timeLimitSeconds: Int?  // per-test override; nil = inherit assignment default
+    let failureDetail: FailureDetail?  // student-facing failure detail; nil = full
 
     init(
         script: String, tier: String, order: Int,
         dependsOn: [String], points: Int, displayName: String?,
         generatedBy: String? = nil, generatedByCheck: String? = nil,
         sectionID: String? = nil, hint: String? = nil,
-        timeLimitSeconds: Int? = nil
+        timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -67,6 +69,7 @@ struct ConfiguredSuiteEntry {
         self.sectionID = sectionID
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
     }
 
     /// A manifest entry carried into a rebuild unchanged, apart from its
@@ -83,7 +86,8 @@ struct ConfiguredSuiteEntry {
             generatedByCheck: entry.generatedByCheck,
             sectionID: entry.sectionID,
             hint: entry.hint,
-            timeLimitSeconds: entry.timeLimitSeconds
+            timeLimitSeconds: entry.timeLimitSeconds,
+            failureDetail: entry.failureDetail
         )
     }
 }

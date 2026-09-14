@@ -151,6 +151,9 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// onto the generated `TestSuiteEntry.timeLimitSeconds`.  nil = inherit the
     /// assignment-wide default.
     public let timeLimitSeconds: Int?
+    /// Optional student-facing failure detail, persisted onto the generated
+    /// `TestSuiteEntry.failureDetail`.  nil = full.
+    public let failureDetail: FailureDetail?
 
     // MARK: Per-kind config (presence enforced by validator)
 
@@ -247,6 +250,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         dependsOn: [String] = [], sectionID: String? = nil,
         hint: String? = nil,
         timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil,
         variable: String? = nil,
         expectedRows: Int? = nil, expectedCols: Int? = nil,
         expectedColumns: [String]? = nil,
@@ -273,6 +277,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.sectionID = sectionID
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
         self.variable = variable
         self.expectedRows = expectedRows
         self.expectedCols = expectedCols
@@ -305,6 +310,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
+        failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
         variable = try c.decodeIfPresent(String.self, forKey: .variable)
         expectedRows = try c.decodeIfPresent(Int.self, forKey: .expectedRows)
         expectedCols = try c.decodeIfPresent(Int.self, forKey: .expectedCols)

@@ -298,7 +298,10 @@
                     // override on the next reorder. null = inherit the
                     // assignment default.
                     timeLimitSeconds: s.timeLimitSeconds != null
-                        ? Math.max(1, parseInt(s.timeLimitSeconds) || 0) : null
+                        ? Math.max(1, parseInt(s.timeLimitSeconds) || 0) : null,
+                    // Student-facing failure detail. Same carry-and-re-emit
+                    // contract as hint and the time limit: null = full.
+                    failureDetail: s.failureDetail || null
                 };
             });
         }
@@ -816,7 +819,9 @@
                         // (the server takes hint from the DTO unconditionally).
                         hint:        (item.hint && item.hint.trim()) ? item.hint.trim() : null,
                         // Same contract for the per-test time-limit override.
-                        timeLimitSeconds: item.timeLimitSeconds != null ? item.timeLimitSeconds : null
+                        timeLimitSeconds: item.timeLimitSeconds != null ? item.timeLimitSeconds : null,
+                        // And for the student-facing failure detail.
+                        failureDetail: item.failureDetail || null
                     };
                     // Only send the body when a fresh edit staged it; omitting
                     // it leaves the existing file untouched (a reorder/retier
@@ -1675,8 +1680,9 @@
         /// through the single `PUT /suite` write path, replacing the legacy
         /// `POST /scripts` / `PUT /scripts/:name` endpoints in the script
         /// editor. `spec` = { filename, content, hint, timeLimitSeconds?,
-        /// tier?, points?, isTest? } (timeLimitSeconds: int, or null to
-        /// inherit the assignment default; omit the key to leave unchanged).
+        /// failureDetail?, tier?, points?, isTest? } (timeLimitSeconds: int,
+        /// or null to inherit the assignment default; failureDetail: a level
+        /// token, or null for full; omit either key to leave it unchanged).
         /// The body rides on a transient `_content` that buildPayload emits and
         /// the post-push re-seed drops; `hint` persists via the DTO. New scripts
         /// land in the clicked section; an existing script keeps its tier /
@@ -1695,6 +1701,9 @@
                 if (spec.timeLimitSeconds !== undefined) {
                     existing.timeLimitSeconds = spec.timeLimitSeconds;
                 }
+                if (spec.failureDetail !== undefined) {
+                    existing.failureDetail = spec.failureDetail || null;
+                }
                 if (spec.tier) existing.tier = spec.tier;
                 if (spec.points != null) existing.points = Math.max(0, parseInt(spec.points) || 0);
             } else {
@@ -1711,6 +1720,7 @@
                     sectionID: targetSid,
                     hint: spec.hint || '',
                     timeLimitSeconds: spec.timeLimitSeconds != null ? spec.timeLimitSeconds : null,
+                    failureDetail: spec.failureDetail || null,
                     _content: spec.content != null ? spec.content : ''
                 });
             }

@@ -43,6 +43,20 @@ enum OpenDateUpdate: Sendable, Equatable {
     case set(Date)
 }
 
+/// How a metadata update should treat the advisory passing threshold
+/// (absent / clear / set). Same shape as `DueDateUpdate`; a threshold is
+/// cleared, not zeroed, because "no threshold" is the off state and a 0%
+/// threshold would mark every graded student as passing.
+enum PassingThresholdUpdate: Sendable, Equatable {
+    case unchanged
+    case clear
+    case set(Int)
+
+    /// The inclusive range a threshold may take. 0 is excluded because it
+    /// is indistinguishable from "off" — every grade is at least 0%.
+    static let validRange = 1...100
+}
+
 enum AssignmentAuthoringService {
     /// Opens or closes an assignment for student submissions.
     ///
@@ -77,6 +91,7 @@ enum AssignmentAuthoringService {
         open: Bool? = nil,
         secretRevealEnabled: Bool? = nil,
         solutionVisibility: SolutionVisibility? = nil,
+        passingThreshold: PassingThresholdUpdate = .unchanged,
         on db: Database,
         now: Date = Date()
     ) async throws {
@@ -88,6 +103,14 @@ enum AssignmentAuthoringService {
         }
         if let solutionVisibility {
             assignment.solutionVisibility = solutionVisibility
+        }
+        switch passingThreshold {
+        case .unchanged:
+            break
+        case .clear:
+            assignment.passingThresholdPercent = nil
+        case .set(let percent):
+            assignment.passingThresholdPercent = percent
         }
         switch dueAt {
         case .unchanged:

@@ -31,6 +31,15 @@
                         <option value="stdout_equality">Stdout equality (compare captured print output)</option>
                         <option value="unordered_equality">Unordered equality (list compare, ignore order)</option>
                         <option value="differential">Differential (compare against a reference implementation)</option>
+                        <option value="program_io">Program I/O (run the whole program with stdin, compare stdout)</option>
+                    </select>
+                </label>
+                <label id="family-io-comparison-label" class="field-stack" style="display:none">
+                    Output comparison
+                    <select class="form-input editor-input" id="family-io-comparison">
+                        <option value="exact">Exact (whole output, trailing whitespace ignored)</option>
+                        <option value="included">Contains the expected text</option>
+                        <option value="regex">Matches a regular expression</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" class="field-stack" style="display:none">
@@ -46,11 +55,21 @@
                           rows="8" spellcheck="false"
                           placeholder="def ck_ref_classify(bmi):&#10;    ..."></textarea>
             </label>
-            <label class="field-stack">
-                Default hint <span class="label-note">(optional — shown to students when a case with no hint of its own fails)</span>
-                <input type="text" class="form-input editor-input" id="family-default-hint" value=""
-                       placeholder="e.g. Re-check the boundary values in the spec.">
-            </label>
+            <div class="family-editor-grid">
+                <label class="field-stack">
+                    Default hint <span class="label-note">(optional — shown to students when a case with no hint of its own fails)</span>
+                    <input type="text" class="form-input editor-input" id="family-default-hint" value=""
+                           placeholder="e.g. Re-check the boundary values in the spec.">
+                </label>
+                <label class="field-stack">
+                    Failure detail <span class="label-note">(staff always see everything)</span>
+                    <select class="form-input editor-input" id="family-default-failure-detail">
+                        <option value="">Full (default)</option>
+                        <option value="actualOnly">Actual output only</option>
+                        <option value="verdictOnly">Verdict only</option>
+                    </select>
+                </label>
+            </div>
             <!-- Hidden fields: the family id, function name, and param list
                  are derived from the function dropdown selection. -->
             <input type="hidden" id="family-id">

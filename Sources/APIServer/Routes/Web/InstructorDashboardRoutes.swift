@@ -66,7 +66,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("slip-days", "refund", use: refundSlipDaySpendAction)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
+        r.get(":assignmentID", "submissions.zip", use: downloadAssignmentSubmissions)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
+        r.get(":assignmentID", "submissions", ":submissionID", "diff", use: submissionDiffPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.post(":assignmentID", "retest", use: retestAllSubmissions)
         r.post(":assignmentID", "students", ":studentID", "reset-notebook", use: resetStudentNotebook)
@@ -90,6 +92,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
+        r.post(":assignmentID", "passing-threshold", use: savePassingThresholdSetting)
         r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
@@ -466,36 +469,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
-    // MARK: - POST /instructor/:assignmentID/secret-reveal
-
-    /// Saves the per-assignment secret-reveal toggle. A dedicated lightweight
-    /// endpoint rather than a field on the main Save form: `saveEditedAssignment`
-    /// closes the assignment and re-enqueues validation on every save, which
-    /// would make a mid-semester toggle flip needlessly destructive. Display
-    /// policy only — no manifest change, no regrade, no close.
-    @Sendable
-    func saveSecretRevealSetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
-        struct ToggleBody: Content {
-            // Checkbox: "on" when checked, absent from the body when not —
-            // decode as optional and treat absence as false, so unchecking
-            // actually turns the toggle off.
-            var enabled: String?
-        }
-        let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
-        try await AssignmentAuthoringService.updateMetadata(
-            assignment, secretRevealEnabled: enabled, on: req.db)
-        await AuditLogger.record(
-            action: .secretRevealToggled,
-            targetType: .assignment,
-            targetID: assignment.id?.uuidString,
-            metadata: ["assignment": assignment.publicID, "enabled": String(enabled)],
-            on: req
-        )
-        return req.redirect(
-            to: "/instructor/\(assignment.publicID)/edit?notice=Secret+reveal+token+setting+saved")
-    }
-
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
@@ -686,6 +659,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             activity: try await ActivityEditFacts.make(setup: setup, on: req.db),
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibilityAfterDue: assignment.solutionVisibility == .afterDue,
+            passingThresholdPercent: assignment.passingThresholdPercent,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error,

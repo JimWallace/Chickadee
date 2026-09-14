@@ -90,6 +90,9 @@ enum GeneratedSourceFixtures {
                 key: "01", label: "u", args: [.int(1)], expected: .array([.int(1), .int(2)]))
         case .performanceThreshold:
             example = PatternCase(key: "01", label: "p", args: [.int(1)], expected: .double(0.5))
+        case .programIO:
+            example = PatternCase(
+                key: "01", label: "io", args: [.string("3\n4\n")], expected: .string("7"))
         case .boundaryEquality, .approximateEquality:
             example = PatternCase(key: "01", label: "b", args: [.double(18.49)], expected: .int(1))
         }

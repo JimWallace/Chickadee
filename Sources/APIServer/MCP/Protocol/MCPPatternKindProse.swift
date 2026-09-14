@@ -42,6 +42,9 @@ enum MCPPatternKindProse {
         case .differential:
             return "a function agrees with a reference implementation you supply, "
                 + "which computes each case's expected value"
+        case .programIO:
+            return "the whole submission, run as a program with given standard input, "
+                + "prints expected output (exact, contains, or regex)"
         }
     }
 

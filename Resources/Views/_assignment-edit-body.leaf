@@ -292,6 +292,15 @@
         <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
         <button class="btn action-btn" type="submit">Save solution setting</button>
     </form>
+    <form method="post" action="/instructor/#(assignmentID)/passing-threshold" data-ck-inplace>
+        #csrfFormField()
+        <label class="field-inline">
+            Passing threshold (%)
+            <input type="number" name="passingThresholdPercent" min="1" max="100" step="1" class="form-input input-compact" value="#(passingThresholdPercent)" placeholder="off">
+        </label>
+        <p class="field-note text-muted">Students whose best grade reaches this appear as passing on the submissions page; grades are unaffected.</p>
+        <button class="btn action-btn" type="submit">Save passing threshold</button>
+    </form>
 </section>
 
 <!-- ── Global Inputs (Slice 1 of #461) ─────────────────────────────────

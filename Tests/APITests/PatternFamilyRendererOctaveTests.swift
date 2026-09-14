@@ -372,4 +372,35 @@ import Testing
                 script: script,
                 submission: "function r = double_it(x)\n  r = x * 2;\nend\n") == 1)
     }
+
+    /// `.programIO`: `input()` is shadowed to draw from the case's lines and
+    /// the program's `exit` is masked, so a script that reads two numbers,
+    /// prints their sum and exits grades on the sum.
+    @Test func programIOPassesAndFails() throws {
+        guard Self.hasOctave else { return }
+        let script = try single(
+            kind: .programIO, functionName: "", paramNames: ["stdin"],
+            args: [.string("3\n4\n")], expected: .string("7"))
+        #expect(
+            try Self.run(
+                script: script,
+                submission: "a = input(\"\");\nb = input(\"\");\nprintf(\"%d\\n\", a + b);\nexit(0);\n") == 0)
+        #expect(
+            try Self.run(
+                script: script,
+                submission: "a = input(\"\");\nb = input(\"\");\nprintf(\"%d\\n\", a * b);\n") == 1)
+        #expect(try Self.run(script: script, submission: "error(\"boom\");\n") == 1)
+    }
+
+    /// Regex anchors are line anchors, matched against the normalized output.
+    @Test func programIORegexMatchesALineOfTheOutput() throws {
+        guard Self.hasOctave else { return }
+        let fam = PatternFamily(
+            id: "fam", name: "Fam", kind: .programIO, functionName: "", paramNames: ["stdin"],
+            cases: [PatternCase(key: "01", label: "Case 1", args: [.string("")], expected: .string("^sum=7$"))],
+            ioComparison: .regex)
+        let script = try #require(renderPatternFamily(fam, language: .octave).first)
+        #expect(try Self.run(script: script, submission: "printf(\"header\\nsum=7\\n\");\n") == 0)
+        #expect(try Self.run(script: script, submission: "printf(\"sum=8\\n\");\n") == 1)
+    }
 }

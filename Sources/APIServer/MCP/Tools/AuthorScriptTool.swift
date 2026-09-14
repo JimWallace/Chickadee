@@ -49,6 +49,10 @@ struct AuthorScriptTool: ContentTool {
         /// assignment default); absent/null leaves an existing script's
         /// override unchanged and a new script on the assignment default.
         let timeLimitSeconds: Int?
+        /// Student-facing failure detail (`FailureDetail` raw value) for a test
+        /// tier. Sets the level; "" or "full" reverts to full; absent leaves an
+        /// existing script's setting unchanged and a new script on full.
+        let failureDetail: String?
         /// Support files only: mark the file **grader-only** (true) or clear the
         /// mark (false). A grader-only support file still reaches the native
         /// worker (via the zip) but is withheld from every student-facing path —
@@ -98,7 +102,8 @@ struct AuthorScriptTool: ContentTool {
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
         + "script names or family:<id> tokens), sectionID (an existing section), and timeLimitSeconds "
         + "(a per-test execution time-limit override in seconds, 1–600; 0 clears it so the script uses "
-        + "the assignment default). Cannot edit "
+        + "the assignment default), and failureDetail (\(MCPFailureDetailProse.slashAlternatives) — "
+        + "how much of a failing run the student sees; \"full\" is the default). Cannot edit "
         + "pattern-family or notebook-check generated scripts — edit the family/check instead. "
         + "For a support file, set graderOnly:true to withhold it from every student-facing path "
         + "(editor, browser-runner download, support download) while still bundling it for the worker — "
@@ -163,6 +168,8 @@ struct AuthorScriptTool: ContentTool {
                         + "override (revert to the assignment default set by set_time_limit). Ignored for "
                         + "support files."),
             ]),
+            "failureDetail": MCPFailureDetailProse.schema(
+                MCPFailureDetailProse.fieldDescription + " Ignored for support files."),
             "graderOnly": .object([
                 "type": .string("boolean"),
                 "description": .string(
@@ -391,6 +398,8 @@ struct AuthorScriptTool: ContentTool {
         let validatedLimit: Int? = try input.timeLimitSeconds.map { limit in
             limit == 0 ? 0 : try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
         }
+        let detailUpdate = try MCPFailureDetailProse.parse(
+            input.failureDetail, tool: Self.name, field: "failureDetail")
 
         if let idx = payload.items.firstIndex(where: { $0.kind == "script" && $0.script?.script == filename }) {
             // Replace an existing hand-written script. Content + tier always
@@ -404,6 +413,9 @@ struct AuthorScriptTool: ContentTool {
             if let validatedLimit {
                 payload.items[idx].script?.timeLimitSeconds = validatedLimit == 0 ? nil : validatedLimit
             }
+            if let detailUpdate {
+                payload.items[idx].script?.failureDetail = detailUpdate?.rawValue
+            }
         } else {
             // Create a new hand-written script. Insert it adjacent to its
             // section's existing block (or the ungrouped block) so the
@@ -412,7 +424,8 @@ struct AuthorScriptTool: ContentTool {
                 script: filename, tier: tier, points: points,
                 displayName: displayName, dependsOn: input.dependsOn ?? [],
                 content: content, hint: nil,
-                timeLimitSeconds: (validatedLimit == 0 ? nil : validatedLimit))
+                timeLimitSeconds: (validatedLimit == 0 ? nil : validatedLimit),
+                failureDetail: detailUpdate.flatMap { $0 }?.rawValue)
             let item = SuiteItemDTO(
                 kind: "script", script: dto, family: nil, check: nil,
                 dependsOn: nil, sectionID: normalizedSection)

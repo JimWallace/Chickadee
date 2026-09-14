@@ -280,6 +280,9 @@ struct EditAssignmentContext: Encodable {
     /// `solutionVisibility` is `afterDue`.  Renders the second "Student
     /// Options" checkbox.
     let solutionVisibilityAfterDue: Bool
+    /// The advisory passing threshold (1...100), or nil when the passing
+    /// concept is off.  Renders the third "Student Options" control.
+    let passingThresholdPercent: Int?
     /// Assignment-wide default per-test execution limit (seconds) from the
     /// manifest (`TestProperties.timeLimitSeconds`).  Renders the editable
     /// "Default time limit" input in the Test Suite header, saved live via

@@ -515,4 +515,45 @@ import Testing
         // Undefined is a clean failure, not an error.
         #expect(try runWith("other <- 9.5\n") == 1)
     }
+
+    /// `.programIO`: the file is sourced with `readline` / `readLines("stdin")`
+    /// / `scan()` masked to the case's lines, and `quit()` masked so a script
+    /// that quits after its answer is still graded.
+    @Test func programIOPassesAndFails() throws {
+        guard Self.hasRscript else { return }
+        let script = single(
+            kind: .programIO, functionName: "", paramNames: ["stdin"],
+            args: [.string("3\n4\n")], expected: .string("7"))
+        #expect(
+            try run(
+                script: script,
+                submission: "a <- as.integer(readline())\nb <- as.integer(readline())\ncat(a + b, \"\\n\")\n")
+                == 0)
+        #expect(
+            try run(
+                script: script,
+                submission: "x <- as.integer(readLines(\"stdin\"))\ncat(sum(x), \"\\n\")\n") == 0)
+        #expect(
+            try run(
+                script: script, submission: "x <- scan(file = \"stdin\", quiet = TRUE)\ncat(sum(x), \"\\n\")\nquit()\n")
+                == 0)
+        #expect(
+            try run(
+                script: script,
+                submission: "a <- as.integer(readline())\nb <- as.integer(readline())\ncat(a * b, \"\\n\")\n")
+                == 1)
+        #expect(try run(script: script, submission: "stop(\"boom\")\n") == 1)
+    }
+
+    /// Regex anchors are line anchors, matched against the normalized output.
+    @Test func programIORegexMatchesALineOfTheOutput() throws {
+        guard Self.hasRscript else { return }
+        let fam = PatternFamily(
+            id: "fam", name: "Fam", kind: .programIO, functionName: "", paramNames: ["stdin"],
+            cases: [PatternCase(key: "01", label: "Case 1", args: [.string("")], expected: .string("^sum=7$"))],
+            ioComparison: .regex)
+        let script = try #require(renderPatternFamily(fam, language: .r).first)
+        #expect(try run(script: script, submission: "cat(\"header\\nsum=7\\n\")\n") == 0)
+        #expect(try run(script: script, submission: "cat(\"sum=8\\n\")\n") == 1)
+    }
 }

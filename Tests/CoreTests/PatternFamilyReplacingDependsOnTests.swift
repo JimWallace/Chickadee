@@ -36,7 +36,8 @@ import Testing
         ],
         variables: [FamilyVariable(name: "threshold", value: .double(18.5))],
         dependsOn: ["family:other"],
-        referenceImplementation: "def ck_ref_classify(x, y):\n    return 1"
+        referenceImplementation: "def ck_ref_classify(x, y):\n    return 1",
+        ioComparison: .regex
     )
 
     @Test func everyStoredPropertyButDependsOnSurvivesTheCopy() throws {

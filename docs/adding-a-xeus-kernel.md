@@ -1066,7 +1066,7 @@ no per-language work at all:
 
 | Capability | How your language gets it |
 |---|---|
-| all 9 pattern-family kinds | the compiler names each renderer arm; there is no opt-out |
+| all 10 pattern-family kinds | the compiler names each renderer arm; there is no opt-out |
 | the Add Test menu, both renderings | `TestEditorCatalogCoverageTests` — the catalog is per-KIND, not per-language |
 | the authoring UI's literals, scan and eval flags | `AuthoringLanguageFacts`, all derived — **zero JavaScript edits** |
 | MCP tool descriptions, schemas, `get_server_info` | `MCPLanguageProse` / `MCPPatternKindProse` / `MCPLanguageCapability`, all from `allCases` |

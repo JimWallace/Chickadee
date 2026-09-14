@@ -140,6 +140,39 @@ def _module_name_for_path(path: Path) -> str:
     return f"student_{safe}"
 
 
+def _exec_student_module(spec, module) -> None:
+    # Importing a submission DEFINES its functions; it must not READ the test's
+    # stdin or WRITE the test's stdout.  A whole-program submission (`a =
+    # int(input())` at top level, the shape program_io grades) would otherwise
+    # block on a terminal, wait on a kernel that has no stdin channel, or print
+    # its banner into every test's longResult.  Stdin is empty -- an `input()`
+    # at import raises EOFError, recorded as this module's load error -- and
+    # both output streams are captured and discarded.
+    import builtins as _builtins
+    import io as _io
+
+    saved = (sys.stdin, sys.stdout, sys.stderr, _builtins.input)
+
+    def _no_input(prompt=""):
+        raise EOFError("EOF when reading a line")
+
+    try:
+        sys.stdin = _io.StringIO("")
+        sys.stdout = _io.StringIO()
+        sys.stderr = _io.StringIO()
+        _builtins.input = _no_input
+        spec.loader.exec_module(module)
+    except SystemExit as exit_request:
+        # `sys.exit()` at the top of a submission is a BaseException: left
+        # alone it ends the TEST process with the submission's status, which
+        # for `sys.exit(0)` reads as a pass with no output at all.
+        raise RuntimeError(
+            f"the submission exited during import (SystemExit: {exit_request.code!r})"
+        ) from None
+    finally:
+        sys.stdin, sys.stdout, sys.stderr, _builtins.input = saved
+
+
 def _ordered_student_files() -> List[Path]:
     preferred = _preferred_student_module()
     # When a specific submission module is hinted, only evaluate that file.
@@ -174,7 +207,7 @@ def load_student_modules(force_reload: bool = False) -> Dict[str, Any]:
                 continue
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
-            spec.loader.exec_module(module)
+            _exec_student_module(spec, module)
             modules[key] = module
             order.append(key)
         except Exception:

@@ -17,6 +17,7 @@
 // stay identical.
 
 import Core
+import Foundation
 import Vapor
 
 /// Behaviour for one `PatternKind`: how a case renders to Python and how a
@@ -67,6 +68,77 @@ func patternKindHandler(for kind: PatternKind) -> any PatternKindHandler {
     case .stdoutEquality: return StdoutEqualityKind()
     case .unorderedEquality: return UnorderedEqualityKind()
     case .differential: return DifferentialKind()
+    case .programIO: return ProgramIOKind()
+    }
+}
+
+// MARK: - programIO
+
+/// Runs the submission as a program with each case's stdin and compares its
+/// stdout. See `PatternKind.programIO`.
+struct ProgramIOKind: PatternKindHandler {
+    /// No function is called, so no existence guard and no identifier check
+    /// on `functionName` — the same posture as `.variableEquality`.
+    var requiresFunctionName: Bool { false }
+
+    func render(
+        family: PatternFamily, case c: PatternCase,
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
+    ) -> String {
+        renderProgramIO(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+    }
+
+    func validateCase(family: PatternFamily, case c: PatternCase, language: AssignmentLanguage) throws {
+        // Exactly one arg — the stdin text — which may be empty (a program
+        // that reads nothing). `paramNames` is a UI hint only.
+        guard c.args.count == 1, case .string = c.args[0] else {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' must have exactly one "
+                    + "arg, the text fed to the program's standard input (a string, possibly empty)")
+        }
+        guard case .string(let expected) = c.expected else {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected must be a "
+                    + "string (the standard output to match)")
+        }
+        let comparison = family.resolvedIOComparison
+        // An empty needle matches everything under `included` / `regex`, so
+        // the case could never fail — refuse it rather than ship a test that
+        // grades nothing. Exact may be empty: "prints nothing" is a real case.
+        if comparison != .exact, expected.isEmpty {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected must not be "
+                    + "empty for the \(comparison.rawValue) comparison — it would match any output")
+        }
+        if comparison == .regex {
+            // Lua patterns are a different language from PCRE; the
+            // `cellContains` rule applies here for the same reason.
+            guard language != .lua else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)' (program_io): the regex comparison is not "
+                        + "available on a Lua assignment — Lua patterns are not regular expressions, "
+                        + "so an authored pattern would quietly match the wrong thing. Use exact or "
+                        + "included.")
+            }
+            // A cheap compile check; each language's own engine has the last
+            // word, but an unbalanced group is a typo in every dialect.
+            guard (try? NSRegularExpression(pattern: expected)) != nil else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected is not a "
+                        + "valid regular expression")
+            }
+        }
     }
 }
 

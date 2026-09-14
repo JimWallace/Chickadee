@@ -123,6 +123,15 @@ import {
     var cmMount = null;
     var hintInput = null;
     var timeLimitInput = null;
+    var failureDetailSelect = null;
+    // The student-facing failure-detail levels. The values are
+    // FailureDetail's raw values; FailureDetailOptionCoverageTests pins this
+    // list to `FailureDetail.allCases` so it cannot drift from the server.
+    var FAILURE_DETAIL_OPTIONS = [
+        { value: '', label: 'Full (default)' },
+        { value: 'actualOnly', label: 'Actual output only' },
+        { value: 'verdictOnly', label: 'Verdict only' }
+    ];
 
     var view = null;
     var mode = 'create';      // 'create' | 'edit' | 'uploadEdit'
@@ -209,6 +218,19 @@ import {
             });
             limitLabel.appendChild(timeLimitInput);
             metaRow.appendChild(limitLabel);
+            var detailLabel = el('label', { 'class': 'field-stack field-stack--narrow' });
+            detailLabel.appendChild(document.createTextNode('Failure detail'));
+            failureDetailSelect = el('select', {
+                'class': 'form-input input-compact',
+                title: 'Detail a student sees on failure'
+            });
+            FAILURE_DETAIL_OPTIONS.forEach(function (opt) {
+                var o = el('option', { value: opt.value });
+                o.textContent = opt.label;
+                failureDetailSelect.appendChild(o);
+            });
+            detailLabel.appendChild(failureDetailSelect);
+            metaRow.appendChild(detailLabel);
             bodyEl.appendChild(metaRow);
 
             // Keep the filename extension in sync with the chosen template.
@@ -247,6 +269,7 @@ import {
             if (nameInput) { nameInput.value = ''; }
             if (hintInput) hintInput.value = '';
             if (timeLimitInput) timeLimitInput.value = '';
+            if (failureDetailSelect) failureDetailSelect.value = '';
             freshView('', '');
             setTimeout(function () { if (nameInput) nameInput.focus(); }, 0);
         },
@@ -260,6 +283,7 @@ import {
                 if (newControls) newControls.style.display = 'none';
                 if (hintInput) hintInput.value = '';
                 if (timeLimitInput) timeLimitInput.value = '';
+                if (failureDetailSelect) failureDetailSelect.value = '';
                 freshView(item.content || '', item.name || '');
                 return;
             }
@@ -271,6 +295,7 @@ import {
             if (timeLimitInput) {
                 timeLimitInput.value = item.timeLimitSeconds != null ? String(item.timeLimitSeconds) : '';
             }
+            if (failureDetailSelect) failureDetailSelect.value = item.failureDetail || '';
             freshView('Loading…', currentFilename);
             var urlFn = cfg().scriptContentURL;
             if (typeof urlFn === 'function') {
@@ -296,14 +321,15 @@ import {
             if (mode === 'uploadEdit') {
                 return { uploadEdit: true, name: uploadEditName, content: content };
             }
+            var failureDetail = (failureDetailSelect && failureDetailSelect.value) ? failureDetailSelect.value : null;
             if (mode === 'edit') {
                 if (!currentFilename) throw new Error('No script selected.');
-                return { filename: currentFilename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds };
+                return { filename: currentFilename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, failureDetail: failureDetail };
             }
             // create
             var filename = (nameInput.value || '').trim();
             if (!filename) throw new Error('Enter a filename first.');
-            return { filename: filename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, tier: 'public', points: 1, isTest: true };
+            return { filename: filename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, failureDetail: failureDetail, tier: 'public', points: 1, isTest: true };
         },
 
         persistAndSync: function (spec) {

@@ -362,10 +362,16 @@ struct AssignmentSubmissionsContext: Encodable {
     let assignmentTitle: String
     let metrics: [AssignmentStatCard]
     let rows: [AssignmentStudentRow]
+    /// One-shot error banner from a redirect back to this page (`?error=`),
+    /// rendered by the `_flash` partial in `base.leaf`.
+    let flashError: String?
     /// The assignment's secret-reveal toggle.  Gates the whole reveal-token
     /// affordance on this page (spent tag + re-grant action) — when off the
     /// page renders identically to the pre-feature layout.
     let secretRevealEnabled: Bool
+    /// The assignment's advisory passing threshold, or nil when off.  Gates
+    /// the passing badge column and the Passing metric card.
+    let passingThresholdPercent: Int?
     /// One row per suite item on a CONTRIBUTION assignment: whether the class
     /// has collectively covered it, and who got there first.  Empty for every
     /// other assignment, which is what gates the section off the page — the
@@ -424,6 +430,21 @@ struct AssignmentStudentRow: Encodable {
     /// assignment (always false when the assignment's toggle is off — the
     /// affordance is hidden entirely then).
     let secretRevealSpent: Bool
+    /// The advisory passing badge beside the grade: `"passing"` or `"below
+    /// threshold"` when the assignment sets a threshold and the student has a
+    /// grade, else nil (no badge). Never a grade change — a label only.
+    let passingLabel: String?
+    /// True iff `passingLabel == "passing"`; the template picks the badge
+    /// colour from this rather than comparing strings in Leaf.
+    let isPassing: Bool
+}
+
+/// The advisory pass/fail label for one student's effective best grade.
+/// Returns nil when the assignment sets no threshold or the student has no
+/// grade yet, so no badge renders in either case.
+func passingLabel(bestGradePercent: Int?, threshold: Int?) -> String? {
+    guard let threshold, let grade = bestGradePercent else { return nil }
+    return grade >= threshold ? "passing" : "below threshold"
 }
 
 /// MCP tab (`GET /instructor/mcp`): the active course's authoring voice for

@@ -104,7 +104,7 @@ struct CourseBundleRoutes: RouteCollection {
             .appendingPathComponent(bundleName).path
 
         // No defer here: the response body streams AFTER this handler
-        // returns, so the temp zip must outlive the handler. streamExportZip
+        // returns, so the temp zip must outlive the handler. streamTemporaryZip
         // deletes it in the stream's onCompleted hook; the catch below covers
         // the paths where no stream ever starts.
         try await createZipArchive(sourceDir: stagingDir, outputPath: bundleZipPath)
@@ -117,8 +117,8 @@ struct CourseBundleRoutes: RouteCollection {
             on: req
         )
         do {
-            return try await streamExportZip(
-                req: req, bundleZipPath: bundleZipPath, bundleName: bundleName)
+            return try await streamTemporaryZip(
+                req: req, zipPath: bundleZipPath, downloadName: bundleName)
         } catch {
             try? FileManager.default.removeItem(atPath: bundleZipPath)
             throw error
@@ -393,24 +393,6 @@ struct CourseBundleRoutes: RouteCollection {
 
     // ── 6. Stream the ZIP to the browser ──────────────────────────────
 
-    private func streamExportZip(
-        req: Request, bundleZipPath: String, bundleName: String
-    ) async throws -> Response {
-        // Stream instead of buffering: a bundle holds every submission for
-        // the course and routinely runs to hundreds of MB — the old
-        // Data(contentsOf:) held all of it in heap per download (#1158).
-        // The file is opened lazily when the body streams (after the handler
-        // has returned), so the temp zip is deleted in onCompleted, not in a
-        // handler defer — a defer fires before the first byte is read.
-        let response = try await req.fileio.asyncStreamFile(at: bundleZipPath) { _ in
-            try? FileManager.default.removeItem(atPath: bundleZipPath)
-        }
-        response.headers.replaceOrAdd(name: .contentType, value: "application/zip")
-        response.headers.replaceOrAdd(
-            name: .contentDisposition,
-            value: "attachment; filename=\"\(bundleName)\"")
-        return response
-    }
 }
 
 // ── 4. Write staging directory ─────────────────────────────────────

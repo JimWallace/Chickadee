@@ -389,4 +389,79 @@ import Vapor
             }
         }
     }
+
+    @Test func createsFamilyWithDefaultAndPerCaseFailureDetail() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "masked", name: "Masked",
+                    kind: "boundary_equality", function: "f", paramNames: ["x"],
+                    defaultFailureDetail: "actualOnly",
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"),
+                            failureDetail: "verdictOnly"),
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "02", args: [.int(2)], expected: .string("two"),
+                            failureDetail: "full"),
+                    ]),
+                context(app))
+            let family = try await reloadFamily(assignment, id: "masked", on: app.db)
+            #expect(family.defaults.failureDetail == .actualOnly)
+            #expect(family.cases.first { $0.key == "01" }?.failureDetail == .verdictOnly)
+            // "full" on a case means no per-case value, so the default applies.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.failureDetail == nil)
+            #expect(c2.resolvedFailureDetail(defaults: family.defaults) == .actualOnly)
+        }
+    }
+
+    /// A `program_io` family calls no function: it stores the comparison, one
+    /// string arg per case (the stdin text) and a string expected.
+    @Test func createsAProgramIOFamilyWithItsComparison() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let output = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "io", name: "Adds two numbers",
+                    kind: "program_io", function: nil, paramNames: ["stdin"],
+                    ioComparison: "included",
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", label: "sum", args: [.string("3\n4\n")], expected: .string("7"),
+                            argVarRefs: nil, argsProvided: nil, expectedVarRef: nil, points: nil,
+                            tier: nil, enabled: nil)
+                    ]),
+                context(app))
+            #expect(output.kind == "program_io")
+
+            let family = try await reloadFamily(assignment, id: "io", on: app.db)
+            #expect(family.kind == .programIO)
+            #expect(family.ioComparison == .included)
+            #expect(family.cases.first?.args == [.string("3\n4\n")])
+        }
+    }
+
+    @Test func rejectsAnUnknownIOComparison() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: (any Error).self) {
+                try await CreatePatternFamilyTool().execute(
+                    CreatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, id: "io", name: "IO",
+                        kind: "program_io", paramNames: ["stdin"], ioComparison: "fuzzy",
+                        cases: [
+                            CreatePatternFamilyTool.CaseInput(
+                                key: "01", label: "sum", args: [.string("")], expected: .string("7"),
+                                argVarRefs: nil, argsProvided: nil, expectedVarRef: nil, points: nil,
+                                tier: nil, enabled: nil)
+                        ]),
+                    context(app))
+            }
+        }
+    }
 }

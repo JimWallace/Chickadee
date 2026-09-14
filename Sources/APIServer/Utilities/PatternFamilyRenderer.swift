@@ -35,6 +35,11 @@ struct GeneratedScript: Equatable {
     /// `case.resolvedTimeLimit(defaults:)`; for the existence guard it is the
     /// family default. A non-positive resolved value is normalised to nil.
     let timeLimitSeconds: Int?
+    /// The resolved student-facing failure detail for this generated entry,
+    /// or nil for full. For a case it is
+    /// `case.resolvedFailureDetail(defaults:)`; for the existence guard it is
+    /// the family default.
+    let failureDetail: FailureDetail?
 }
 
 /// Top-level entry point.  Returns one `GeneratedScript` per **enabled** case
@@ -162,7 +167,8 @@ func existenceGuard(
         // The guard applies to all the family's generated entries, so it
         // inherits the family-level limit (the cases inherit it too unless
         // they set their own).
-        timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
+        timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds),
+        failureDetail: family.defaults.failureDetail
     )
 }
 
@@ -293,7 +299,8 @@ private func renderCase(
         displayName: c.label,
         caseKey: c.key,
         familyID: family.id,
-        timeLimitSeconds: normalizedGeneratedTimeLimit(c.resolvedTimeLimit(defaults: family.defaults))
+        timeLimitSeconds: normalizedGeneratedTimeLimit(c.resolvedTimeLimit(defaults: family.defaults)),
+        failureDetail: c.resolvedFailureDetail(defaults: family.defaults)
     )
 }
 

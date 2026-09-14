@@ -134,7 +134,8 @@ import Testing
                 publicID: "abc123", title: "T", slug: "t", isOpen: true,
                 visibility: "open", dueAt: "2026-01-01T00:00:00Z",
                 startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
-                secretRevealEnabled: false, solutionVisibility: "hidden")
+                secretRevealEnabled: false, solutionVisibility: "hidden",
+                passingThresholdPercent: 60)
         ),
     ]
 

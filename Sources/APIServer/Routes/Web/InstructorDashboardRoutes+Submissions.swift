@@ -83,7 +83,8 @@ extension InstructorDashboardRoutes {
             latestRowByID: latestRowByID,
             bestByStudentID: bestByStudentID,
             overrideByStudentID: overrideByStudentID,
-            spentRevealUserIDs: spentRevealUserIDs)
+            spentRevealUserIDs: spentRevealUserIDs,
+            passingThresholdPercent: assignment.passingThresholdPercent)
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
@@ -99,7 +100,8 @@ extension InstructorDashboardRoutes {
         let metrics = buildAssignmentSubmissionsMetrics(
             rows: rows,
             submissions: recentSubmissions,
-            enrolledStudentRosterCount: enrolledStudentRosterCount
+            enrolledStudentRosterCount: enrolledStudentRosterCount,
+            passingThresholdPercent: assignment.passingThresholdPercent
         )
 
         // Class-wide coverage, for a contribution assignment. Returns [] for
@@ -120,7 +122,9 @@ extension InstructorDashboardRoutes {
                 assignmentTitle: assignment.title,
                 metrics: metrics,
                 rows: rows,
+                flashError: req.query[String.self, at: "error"],
                 secretRevealEnabled: secretRevealEnabled,
+                passingThresholdPercent: assignment.passingThresholdPercent,
                 coverageRows: coverageRows,
                 hasCoverage: !coverageRows.isEmpty,
                 coverageSummary: assignmentCoverageSummary(coverageRows)
@@ -172,6 +176,7 @@ extension InstructorDashboardRoutes {
         let bestByStudentID: [UUID: Int]
         let overrideByStudentID: [UUID: Int]
         let spentRevealUserIDs: Set<UUID>
+        let passingThresholdPercent: Int?
     }
 
     private func buildAssignmentStudentRow(
@@ -193,6 +198,8 @@ extension InstructorDashboardRoutes {
             splitHumanName(student.displayName)
             ?? splitHumanName(student.preferredName)
             ?? inferNameFromStudentID(student.username)
+        let passing = passingLabel(
+            bestGradePercent: bestGradePercent, threshold: lookups.passingThresholdPercent)
         return AssignmentStudentRow(
             studentID: student.username,
             studentUUID: studentID.uuidString,
@@ -209,14 +216,17 @@ extension InstructorDashboardRoutes {
             additionalSubmissionCount: max(submissionCount - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
-            secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID)
+            secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID),
+            passingLabel: passing,
+            isPassing: passing == "passing"
         )
     }
 
     private func buildAssignmentSubmissionsMetrics(
         rows: [AssignmentStudentRow],
         submissions: [APISubmission],
-        enrolledStudentRosterCount: Int
+        enrolledStudentRosterCount: Int,
+        passingThresholdPercent: Int?
     ) -> [AssignmentStatCard] {
         let now = Date()
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
@@ -265,12 +275,27 @@ extension InstructorDashboardRoutes {
                 cyclable: false, windowChip: "", windows: [])
         }
 
+        // The Passing card exists only while the assignment sets a threshold:
+        // with none, the page renders identically to the pre-feature layout.
+        let passingCard: [AssignmentStatCard] =
+            passingThresholdPercent.map { threshold in
+                let passingCount = rows.filter(\.isPassing).count
+                return [
+                    AssignmentStatCard(
+                        label: "Passing (\(threshold)%)",
+                        value: "\(passingCount)/\(gradedRows.count)",
+                        hasSpark: false, sparkSummary: "", bars: [],
+                        cyclable: false, windowChip: "", windows: [])
+                ]
+            } ?? []
+
         return [
             AssignmentStatCard(
                 label: "Students Submitted",
                 value: "\(submittedCount)/\(enrolledStudentRosterCount)",
                 hasSpark: false, sparkSummary: "", bars: [],
-                cyclable: false, windowChip: "", windows: []),
+                cyclable: false, windowChip: "", windows: [])
+        ] + passingCard + [
             AssignmentStatCard(
                 label: "Avg Attempts/Student", value: avgAttempts,
                 hasSpark: !attemptBars.isEmpty,

@@ -88,6 +88,11 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     // `entry.timeLimitSeconds ?? manifest.timeLimitSeconds`. Back-compat:
     // absent in JSON decodes to nil (inherit the default).
     public let timeLimitSeconds: Int?
+    // How much of a failure the student sees (`FailureDetail`). Applied at
+    // results-display time by the server, never by the script. nil = full,
+    // the pre-feature behaviour; generated entries carry the value resolved
+    // from their family / case / check spec.
+    public let failureDetail: FailureDetail?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
@@ -96,7 +101,8 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedByCheck: String? = nil,
         sectionID: String? = nil,
         hint: String? = nil,
-        timeLimitSeconds: Int? = nil
+        timeLimitSeconds: Int? = nil,
+        failureDetail: FailureDetail? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -108,6 +114,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.sectionID = sectionID
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
+        self.failureDetail = failureDetail
     }
 
     public init(from decoder: Decoder) throws {
@@ -122,6 +129,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
+        failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
     }
 
     /// True if this entry was produced by a pattern family or a notebook

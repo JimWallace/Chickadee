@@ -16,6 +16,11 @@ enum MCPSchema {
     static let string: JSONValue = .object(["type": .string("string")])
     /// `{"type": "integer"}`
     static let integer: JSONValue = .object(["type": .string("integer")])
+    /// An integer that may be null (an optional numeric setting reported as
+    /// absent).
+    static let nullableInteger: JSONValue = .object([
+        "type": .array([.string("integer"), .string("null")])
+    ])
     /// `{"type": "boolean"}`
     static let boolean: JSONValue = .object(["type": .string("boolean")])
     /// `{"type": "number"}`

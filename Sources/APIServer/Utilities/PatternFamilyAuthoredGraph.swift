@@ -128,7 +128,8 @@ func reconstructAuthoredOrdering(
                         dependsOn: entry.dependsOn,
                         sectionID: normaliseSectionID(entry.sectionID),
                         hint: entry.hint,
-                        timeLimitSeconds: entry.timeLimitSeconds
+                        timeLimitSeconds: entry.timeLimitSeconds,
+                        failureDetail: entry.failureDetail
                     )))
         }
     }

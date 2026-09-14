@@ -265,4 +265,54 @@ import Testing
         #expect(broken.code == 1)
         #expect(broken.stdout.contains("could not be loaded"))
     }
+
+    // MARK: - programIO
+
+    /// `.programIO`: the module is instantiated under a parameterized input
+    /// port, so a `#lang racket` program's `read-line` reads the case text,
+    /// and an `(exit)` after the answer is still graded.
+    @Test func programIOPassesAndFails() throws {
+        guard Self.racketAvailable else { return }
+        let script = Self.render(
+            Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
+        let good = try Self.execute(
+            script: script,
+            submission: """
+                #lang racket
+                (define a (string->number (read-line)))
+                (define b (string->number (read-line)))
+                (displayln (+ a b))
+                (exit 0)
+
+                """)
+        #expect(good.code == 0, Comment(rawValue: good.stdout))
+        let bad = try Self.execute(
+            script: script,
+            submission: """
+                #lang racket
+                (define a (string->number (read-line)))
+                (define b (string->number (read-line)))
+                (displayln (* a b))
+
+                """)
+        #expect(bad.code == 1)
+        #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
+        let crashed = try Self.execute(script: script, submission: "#lang racket\n(error \"boom\")\n")
+        #expect(crashed.code == 1)
+        #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
+    }
+
+    /// Regex anchors are line anchors, matched against the normalized output.
+    @Test func programIORegexMatchesALineOfTheOutput() throws {
+        guard Self.racketAvailable else { return }
+        let family = PatternFamily(
+            id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
+            defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
+            cases: [PatternCase(key: "01", label: "case", args: [.string("")], expected: .string("^sum=7$"))],
+            ioComparison: .regex)
+        let result = try Self.execute(
+            script: Self.render(family),
+            submission: "#lang racket\n(displayln \"header\")\n(displayln \"sum=7\")\n")
+        #expect(result.code == 0, Comment(rawValue: result.stdout))
+    }
 }

@@ -1,0 +1,41 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — #(studentID) diff
+#endexport
+#export("content"):
+<div class="page-titlebar page-titlebar--baseline">
+    <h1>#(assignmentTitle)</h1>
+    <div class="toolbar">
+        <a class="btn action-btn" href="#(resultsURL)">Results</a>
+        <a class="btn action-btn" href="#(historyURL)">History</a>
+    </div>
+</div>
+<p class="titlebar-subtitle">Student ID: <strong>#(studentID)</strong> · attempt #(attemptNumber) · #(comparedLabel)</p>
+
+#if(unavailableReason):
+<p class="empty">#(unavailableReason)</p>
+#else:
+<div class="chip-row section-gap">
+    <span class="chip chip-ok">+#(addedCount) added</span>
+    <span class="chip chip-err">−#(removedCount) removed</span>
+</div>
+#if(count(rows) == 0):
+<p class="empty">The submission is identical to the starter.</p>
+#else:
+<div class="table-scroll">
+<table class="diff-table">
+    <tbody>
+    #for(row in rows):
+        <tr class="#if(row.isAdded):diff-added#elseif(row.isRemoved):diff-removed#elseif(row.isFold):diff-fold#else:diff-context#endif#if(row.isMarker): diff-marker#endif">
+            <td class="diff-gutter">#(row.oldNumber)</td>
+            <td class="diff-gutter">#(row.newNumber)</td>
+            <td class="diff-line">#(row.text)</td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+</div>
+#endif
+#endif
+#endexport
+#endextend

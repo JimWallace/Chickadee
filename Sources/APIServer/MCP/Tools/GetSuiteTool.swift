@@ -69,6 +69,11 @@ struct GetSuiteTool: ContentTool {
             /// (`timeLimitSeconds` at the top level). Generated family/check
             /// rows always inherit the default, so this is nil for them.
             let timeLimitSeconds: Int?
+            /// Student-facing failure detail (`FailureDetail` raw value) when
+            /// one is set: the script entry's own for a hand-written script,
+            /// the family default for a family row, the check's for a check.
+            /// nil means full.
+            let failureDetail: String?
             /// Full pattern-family spec — function, kind, paramNames, defaults
             /// (including the family `hint`), variables, and every case's
             /// args/expected/hint — for `kind == "family"` items. This is the
@@ -102,7 +107,9 @@ struct GetSuiteTool: ContentTool {
         + "`author_script` / `update_suite`; generated rows list the file(s) they produce in "
         + "`generatedFilenames` (read-only — edit the family/check instead). The response also "
         + "reports the assignment's default per-test execution time limit (`timeLimitSeconds` at the "
-        + "top level), any per-script override (`timeLimitSeconds` on a script item), and the optional "
+        + "top level), any per-script override (`timeLimitSeconds` on a script item), each item's "
+        + "student-facing `failureDetail` (\(MCPFailureDetailProse.slashAlternatives); null means full), "
+        + "and the optional "
         + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated). Read-only — "
         + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
         + "points) before editing the suite."
@@ -182,6 +189,8 @@ struct GetSuiteTool: ContentTool {
                                 "Per-test execution time-limit override (seconds) for a hand-written "
                                     + "script; absent means it inherits the assignment default."),
                         ]),
+                        "failureDetail": MCPFailureDetailProse.schema(
+                            "Student-facing failure detail set on this item; absent means full."),
                         "family": .object([
                             "type": .string("object"),
                             "description": .string(
@@ -281,6 +290,7 @@ struct GetSuiteTool: ContentTool {
                 content: nil,
                 hint: nil,
                 timeLimitSeconds: nil,
+                failureDetail: family?.defaults.failureDetail?.rawValue,
                 family: family,
                 check: nil)
         case "check":
@@ -299,6 +309,7 @@ struct GetSuiteTool: ContentTool {
                 content: nil,
                 hint: nil,
                 timeLimitSeconds: nil,
+                failureDetail: check?.failureDetail?.rawValue,
                 family: nil,
                 check: check)
         default:
@@ -317,6 +328,7 @@ struct GetSuiteTool: ContentTool {
                 content: script?.content,
                 hint: script?.hint,
                 timeLimitSeconds: script?.timeLimitSeconds,
+                failureDetail: script?.failureDetail,
                 family: nil,
                 check: nil)
         }

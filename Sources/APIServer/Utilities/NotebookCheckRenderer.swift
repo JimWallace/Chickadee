@@ -111,7 +111,8 @@ func renderNotebookCheck(
         // The check's per-test limit (0/negative → nil = inherit the default).
         // The apply path re-derives this from `check.timeLimitSeconds` when it
         // builds the entry; carrying it here keeps GeneratedScript self-describing.
-        timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
+        timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds),
+        failureDetail: check.failureDetail
     )
     return GeneratedCheck(script: script, sidecars: sidecars)
 }

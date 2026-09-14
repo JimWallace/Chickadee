@@ -44,6 +44,7 @@
 <p class="empty">No student users found.</p>
 #else:
 <div class="toolbar toolbar--end section-gap">
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions.zip" title="Download every student's latest submission">Download all</a>
     <span class="filter-group">
         <label class="filter-label" for="submissions-filter">Filter</label>
         <input id="submissions-filter" class="form-input filter-input" type="search"
@@ -70,7 +71,7 @@
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
             <td class="col-hide-phone"><strong>#(row.studentID)</strong>#if(secretRevealEnabled):#if(row.secretRevealSpent): <span title="Student spent their secret-reveal token — secret test results are visible to them">🔓</span>#endif#endif</td>
-            <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
+            <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif#if(row.passingLabel): <span class="tier #if(row.isPassing):tier-open#else:tier-closed#endif">#(row.passingLabel)</span>#endif</td>
             <td class="col-hide-phone" data-sort-value="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
                     <div class="submission-history-cell">

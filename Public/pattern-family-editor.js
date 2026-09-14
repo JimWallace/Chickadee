@@ -13,6 +13,7 @@
 //   family-kind, family-function, family-params, family-function-select,
 //   family-function-hint, family-function-label,
 //   family-default-hint, family-default-tolerance, family-tolerance-label,
+//   family-io-comparison, family-io-comparison-label,
 //   family-reference-implementation, family-reference-label,
 //   family-cases-header, family-cases-body, family-cases-empty,
 //   add-case-btn, family-section-name-label.
@@ -225,8 +226,11 @@
         var fnSelect         = document.getElementById('family-function-select');
         var fnHint           = document.getElementById('family-function-hint');
         var defaultHintInput = document.getElementById('family-default-hint');
+        var defaultFailureDetailSelect = document.getElementById('family-default-failure-detail');
         var toleranceInput   = document.getElementById('family-default-tolerance');
         var toleranceLabel   = document.getElementById('family-tolerance-label');
+        var ioComparisonSelect = document.getElementById('family-io-comparison');
+        var ioComparisonLabel  = document.getElementById('family-io-comparison-label');
         var referenceInput   = document.getElementById('family-reference-implementation');
         var referenceLabel   = document.getElementById('family-reference-label');
         var functionLabel    = document.getElementById('family-function-label');
@@ -1071,6 +1075,22 @@
         /// value in a cell when the modal reopens.  Strings render without
         /// surrounding quotes so the user's original typing round-trips;
         /// everything else renders as JSON.
+        /// A program_io cell (stdin text or expected stdout) as TEXT: a
+        /// JSON-quoted cell — how `renderTypedCellValue` shows a multi-line
+        /// string in a single-line input — decodes; anything else is taken
+        /// verbatim, so `3` stays the text "3".
+        function readProgramIOText(raw) {
+            var text = String(raw == null ? '' : raw);
+            var trimmed = text.trim();
+            if (trimmed.length >= 2 && trimmed[0] === '"' && trimmed[trimmed.length - 1] === '"') {
+                try {
+                    var parsed = JSON.parse(trimmed);
+                    if (typeof parsed === 'string') return parsed;
+                } catch (_) { /* verbatim */ }
+            }
+            return text;
+        }
+
         function renderTypedCellValue(v) {
             if (v === null) return 'null';
             if (typeof v === 'string') {
@@ -1125,7 +1145,16 @@
                 var args = [];
                 var argsProvided = [];
                 var argVarRefs   = [];
-                if (paramNames.length === 0) {
+                var isProgramIO = (kindInput && kindInput.value === 'program_io');
+                if (isProgramIO) {
+                    // The one column is the text fed to the program's stdin:
+                    // never parsed as a literal ("3" is what the program
+                    // reads, not the number 3), and legitimately empty.
+                    var stdinCell = row.querySelector('.js-pf-case-arg[data-arg-index="0"]');
+                    args = [readProgramIOText(stdinCell ? stdinCell.value : '')];
+                    argsProvided = [true];
+                    argVarRefs   = [null];
+                } else if (paramNames.length === 0) {
                     var rawArgs = (row.querySelector('.js-pf-case-args') || {}).value || '';
                     rawArgs = rawArgs.trim();
                     if (rawArgs !== '') {
@@ -1175,10 +1204,12 @@
                 // stdout_equality permits an empty Expected — that's the
                 // legitimate "this function should print nothing" case.
                 // For all other kinds an empty cell is still an error.
-                var allowEmptyExpected = (kindInput && kindInput.value === 'stdout_equality');
+                var allowEmptyExpected = (kindInput && kindInput.value === 'stdout_equality') || isProgramIO;
                 if (rawExp === '' && !allowEmptyExpected) throw new Error('Case ' + caseNum + ': expected value is required');
                 if (rawExp === '') {
                     expected = '';
+                } else if (isProgramIO) {
+                    expected = readProgramIOText(rawExp);
                 } else {
                     // Per-student expected: `$name` references a declared input
                     // (a global/section `=` expression), resolved per student at
@@ -1300,12 +1331,24 @@
             if (referenceLabel) {
                 referenceLabel.style.display = (kind === 'differential') ? 'flex' : 'none';
             }
-            // Variable-equality families don't target a function — hide the
-            // function dropdown entirely and replace its role in the data
-            // model with `paramNames = ["variable"]`.
-            if (functionLabel) {
-                functionLabel.style.display = (kind === 'variable_equality') ? 'none' : 'flex';
+            if (ioComparisonLabel) {
+                ioComparisonLabel.style.display = (kind === 'program_io') ? 'flex' : 'none';
             }
+            // Variable-equality and program-I/O families don't target a
+            // function — hide the function dropdown entirely and replace its
+            // role in the data model with a single fixed parameter name.
+            if (functionLabel) {
+                functionLabel.style.display = functionlessParamName(kind) ? 'none' : 'flex';
+            }
+        }
+
+        /// The one case column a kind that calls no function uses — the
+        /// variable name for variable_equality, the stdin text for
+        /// program_io — or null for every function-calling kind.
+        function functionlessParamName(kind) {
+            if (kind === 'variable_equality') return 'variable';
+            if (kind === 'program_io') return 'stdin';
+            return null;
         }
 
         /// Applies the data-model defaults that go with a given kind.
@@ -1314,16 +1357,16 @@
         /// layout, so we rebuild the rows.
         function applyKindDefaults(newKind, previousKind) {
             if (newKind === previousKind) return;
-            var switchedIntoVar  = (newKind      === 'variable_equality');
-            var switchedOutOfVar = (previousKind === 'variable_equality');
-            if (!switchedIntoVar && !switchedOutOfVar) return;
+            var newParam      = functionlessParamName(newKind);
+            var previousParam = functionlessParamName(previousKind);
+            if (newParam === previousParam) return;
 
-            if (switchedIntoVar) {
+            if (newParam) {
                 fnInput.value = '_';
-                paramsInput.value = 'variable';
-                rebuildCasesHeader(['variable']);
+                paramsInput.value = newParam;
+                rebuildCasesHeader([newParam]);
                 casesBody.innerHTML = '';
-                addCaseRow(null, ['variable']);
+                addCaseRow(null, [newParam]);
             } else {
                 fnInput.value = '';
                 paramsInput.value = '';
@@ -1363,10 +1406,16 @@
                 editingTier = (family.defaults && family.defaults.tier) || 'public';
                 editingPoints = Math.max(1, parseInt(family.defaults && family.defaults.points) || 1);
                 defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
+                if (defaultFailureDetailSelect) {
+                    defaultFailureDetailSelect.value = (family.defaults && family.defaults.failureDetail) || '';
+                }
                 var tol = family.defaults && family.defaults.tolerance;
                 toleranceInput.value = (tol == null) ? '' : String(tol);
                 if (referenceInput) {
                     referenceInput.value = family.referenceImplementation || '';
+                }
+                if (ioComparisonSelect) {
+                    ioComparisonSelect.value = family.ioComparison || 'exact';
                 }
                 preselectedFn = family.functionName || '';
                 familyVariables = Array.isArray(family.variables)
@@ -1384,8 +1433,10 @@
                 editingTier = 'public';
                 editingPoints = 1;
                 defaultHintInput.value = '';
+                if (defaultFailureDetailSelect) defaultFailureDetailSelect.value = '';
                 toleranceInput.value = '';
                 if (referenceInput) referenceInput.value = '';
+                if (ioComparisonSelect) ioComparisonSelect.value = 'exact';
                 familyVariables = [];
                 // New family: pull section context from the per-section
                 // "+ New Family" toolbar's stashed target id (set in
@@ -1439,12 +1490,13 @@
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
             var cases = readCasesFromTable(paramNames);
             var kind = kindInput.value || 'boundary_equality';
-            // For variable-equality families there's no function to derive
-            // the family id from — fall back to a sanitised family name.
-            if (kind === 'variable_equality' && !idInput.value.trim()) {
+            // For variable-equality and program-I/O families there's no
+            // function to derive the family id from — fall back to a
+            // sanitised family name.
+            if (functionlessParamName(kind) && !idInput.value.trim()) {
                 var derivedID = sanitizeFamilyID(nameInput.value);
                 if (!derivedID) {
-                    throw new Error('Family name is required (used to derive the family id for variable-equality families).');
+                    throw new Error('Family name is required (used to derive the family id for families that call no function).');
                 }
                 idInput.value = derivedID;
             }
@@ -1453,6 +1505,30 @@
                 points: editingPoints,
                 hint: defaultHintInput.value.trim() || null
             };
+            if (defaultFailureDetailSelect && defaultFailureDetailSelect.value) {
+                defaults.failureDetail = defaultFailureDetailSelect.value;
+            }
+            // Carry forward the family-level and per-case fields this modal
+            // does not expose (a time limit set through the MCP tools, a
+            // per-case failure detail). The server takes the family from the
+            // payload unconditionally, so anything not re-emitted here is
+            // wiped on the next save — which is how a defaults.timeLimitSeconds
+            // set by an agent used to vanish on the instructor's next edit.
+            var existingFamily = (editingIndex >= 0 && familiesState[editingIndex]) || null;
+            var existingDefaults = (existingFamily && existingFamily.defaults) || {};
+            if (existingDefaults.timeLimitSeconds != null) {
+                defaults.timeLimitSeconds = existingDefaults.timeLimitSeconds;
+            }
+            var existingCasesByKey = {};
+            ((existingFamily && existingFamily.cases) || []).forEach(function (c) {
+                if (c && c.key) existingCasesByKey[c.key] = c;
+            });
+            cases.forEach(function (c) {
+                var prev = existingCasesByKey[c.key];
+                if (!prev) return;
+                if (prev.timeLimitSeconds != null) c.timeLimitSeconds = prev.timeLimitSeconds;
+                if (prev.failureDetail) c.failureDetail = prev.failureDetail;
+            });
             if (kind === 'approximate_equality') {
                 var tolRaw = (toleranceInput.value || '').trim();
                 if (tolRaw !== '') {
@@ -1489,6 +1565,10 @@
                 // an invisible copy that reappears on switching back.
                 referenceImplementation: (kind === 'differential' && referenceInput)
                     ? (referenceInput.value || '').trim() || null
+                    : null,
+                // Likewise sent only for program_io, the one kind that reads it.
+                ioComparison: (kind === 'program_io' && ioComparisonSelect)
+                    ? (ioComparisonSelect.value || 'exact')
                     : null
             };
         }
@@ -2036,8 +2116,9 @@
             // the fact rather than assuming it, which is the whole point of the
             // fact existing.
             if (!ChickadeeLanguage.canEvaluateExpressions()) return;
-            // Variable-equality families don't call a function — skip.
-            if (kindInput && kindInput.value === 'variable_equality') return;
+            // Variable-equality and program-I/O families don't call a
+            // function — skip.
+            if (kindInput && functionlessParamName(kindInput.value)) return;
             // Return-type-check expected is a type name (e.g. "DataFrame"),
             // not the function's actual return value — auto-compute would
             // write the value, which is wrong.  Instructor types the

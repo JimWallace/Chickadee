@@ -20,11 +20,15 @@ struct UpdateAssignmentTool: ContentTool {
         let visibility: String?
         let secretRevealEnabled: Bool?
         let solutionVisibility: String?
+        /// 1...100 sets the advisory passing threshold; 0 clears it. Absent
+        /// = no change.
+        let passingThresholdPercent: Int?
 
         init(
             assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
             startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil,
-            secretRevealEnabled: Bool? = nil, solutionVisibility: String? = nil
+            secretRevealEnabled: Bool? = nil, solutionVisibility: String? = nil,
+            passingThresholdPercent: Int? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.title = title
@@ -34,6 +38,7 @@ struct UpdateAssignmentTool: ContentTool {
             self.visibility = visibility
             self.secretRevealEnabled = secretRevealEnabled
             self.solutionVisibility = solutionVisibility
+            self.passingThresholdPercent = passingThresholdPercent
         }
     }
 
@@ -51,6 +56,8 @@ struct UpdateAssignmentTool: ContentTool {
         let secretRevealEnabled: Bool
         /// The solution-reveal policy (`SolutionVisibility` raw value).
         let solutionVisibility: String
+        /// The advisory passing threshold (1...100), or null when off.
+        let passingThresholdPercent: Int?
     }
 
     /// "hidden" or "afterDue" — derived from `allCases` so a new policy value
@@ -78,7 +85,10 @@ struct UpdateAssignmentTool: ContentTool {
         + "effective deadline has passed and no slip-day claim could still extend it (immediately on "
         + "an assignment with no due date); \"hidden\" (the default) keeps it staff-only. Enabling is "
         + "refused while the assignment has no solution on file. Display-only — grades are "
-        + "unaffected. Does not change test content, so it never triggers a regrade."
+        + "unaffected. passingThresholdPercent (integer 1 to 100, or 0 to turn it off) is the "
+        + "advisory best-grade percentage at or above which the instructor submissions page marks "
+        + "a student as passing; it labels and counts, and never changes a grade. Does not change "
+        + "test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -129,6 +139,15 @@ struct UpdateAssignmentTool: ContentTool {
                         + "default) keeps the solution staff-only. Enabling is refused while the "
                         + "assignment has no solution on file."),
             ]),
+            "passingThresholdPercent": .object([
+                "type": .string("integer"),
+                "minimum": .int(0),
+                "maximum": .int(100),
+                "description": .string(
+                    "Advisory passing threshold: a best grade at or above this percentage marks "
+                        + "the student as passing on the instructor submissions page. 1 to 100 "
+                        + "sets it; 0 turns it off. Display-only — grades are unaffected."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -152,6 +171,7 @@ struct UpdateAssignmentTool: ContentTool {
                 "type": .string("string"),
                 "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
             ]),
+            "passingThresholdPercent": MCPSchema.nullableInteger,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
@@ -168,15 +188,17 @@ struct UpdateAssignmentTool: ContentTool {
         let newTitle = try Self.resolveTitle(input.title)
         let visibilityUpdate = try Self.resolveVisibility(input.visibility)
         let solutionVisibilityUpdate = try Self.resolveSolutionVisibility(input.solutionVisibility)
+        let thresholdUpdate = try Self.resolvePassingThreshold(input.passingThresholdPercent)
         guard
             newTitle != nil || input.isOpen != nil || visibilityUpdate != nil
                 || dueUpdate != .unchanged || startsUpdate != .unchanged
                 || input.secretRevealEnabled != nil || solutionVisibilityUpdate != nil
+                || thresholdUpdate != .unchanged
         else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
-                    + "secretRevealEnabled, solutionVisibility.")
+                    + "secretRevealEnabled, solutionVisibility, passingThresholdPercent.")
         }
 
         // Title / due date / open state are lifecycle — instructor-level (#417).
@@ -206,7 +228,8 @@ struct UpdateAssignmentTool: ContentTool {
                 assignment, title: newTitle, dueAt: dueUpdate, startsAt: startsUpdate,
                 open: visibilityUpdate == nil ? input.isOpen : nil,
                 secretRevealEnabled: input.secretRevealEnabled,
-                solutionVisibility: solutionVisibilityUpdate, on: context.db)
+                solutionVisibility: solutionVisibilityUpdate,
+                passingThreshold: thresholdUpdate, on: context.db)
             if let visibilityUpdate {
                 try await AssignmentAuthoringService.setVisibility(
                     assignment, visibilityUpdate, on: context.db)
@@ -248,8 +271,24 @@ struct UpdateAssignmentTool: ContentTool {
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
-            solutionVisibility: assignment.solutionVisibility.rawValue
+            solutionVisibility: assignment.solutionVisibility.rawValue,
+            passingThresholdPercent: assignment.passingThresholdPercent
         )
+    }
+
+    /// Maps the optional `passingThresholdPercent` argument to a
+    /// `PassingThresholdUpdate`: absent → no change, 0 → clear, 1...100 → set
+    /// (anything else invalid).
+    private static func resolvePassingThreshold(_ raw: Int?) throws -> PassingThresholdUpdate {
+        guard let raw else { return .unchanged }
+        if raw == 0 { return .clear }
+        guard PassingThresholdUpdate.validRange.contains(raw) else {
+            throw MCPToolError.invalidArguments(
+                tool: name,
+                detail: "passingThresholdPercent must be an integer from 1 to 100, or 0 to turn "
+                    + "the threshold off.")
+        }
+        return .set(raw)
     }
 
     /// Maps the optional `visibility` argument to an `AssignmentVisibility`
