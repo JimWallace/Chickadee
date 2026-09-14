@@ -44,10 +44,7 @@
 <p class="empty">No student users found.</p>
 #else:
 <div class="toolbar toolbar--end section-gap">
-    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions.zip" title="Download every student's latest submission">
-        <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
-        Download all
-    </a>
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions.zip" title="Download every student's latest submission">Download all</a>
     <span class="filter-group">
         <label class="filter-label" for="submissions-filter">Filter</label>
         <input id="submissions-filter" class="form-input filter-input" type="search"

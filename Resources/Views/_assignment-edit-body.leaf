@@ -294,11 +294,11 @@
     </form>
     <form method="post" action="/instructor/#(assignmentID)/passing-threshold" data-ck-inplace>
         #csrfFormField()
-        <label class="form-label field-inline">
+        <label class="field-inline">
             Passing threshold (%)
-            <input type="number" name="passingThresholdPercent" min="1" max="100" step="1" class="form-input input-compact" value="#(passingThresholdPercent)">
+            <input type="number" name="passingThresholdPercent" min="1" max="100" step="1" class="form-input input-compact" value="#(passingThresholdPercent)" placeholder="off">
         </label>
-        <p class="field-note text-muted">Marks a student as passing on the submissions page at or above this best grade. Leave empty to turn it off. Grades are unaffected.</p>
+        <p class="field-note text-muted">Students whose best grade reaches this appear as passing on the submissions page; grades are unaffected.</p>
         <button class="btn action-btn" type="submit">Save passing threshold</button>
     </form>
 </section>

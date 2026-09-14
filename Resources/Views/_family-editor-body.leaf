@@ -62,7 +62,7 @@
                            placeholder="e.g. Re-check the boundary values in the spec.">
                 </label>
                 <label class="field-stack">
-                    Failure detail shown to students <span class="label-note">(staff always see everything)</span>
+                    Failure detail <span class="label-note">(staff always see everything)</span>
                     <select class="form-input editor-input" id="family-default-failure-detail">
                         <option value="">Full (default)</option>
                         <option value="actualOnly">Actual output only</option>

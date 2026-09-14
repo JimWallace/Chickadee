@@ -219,10 +219,10 @@ import {
             limitLabel.appendChild(timeLimitInput);
             metaRow.appendChild(limitLabel);
             var detailLabel = el('label', { 'class': 'field-stack field-stack--narrow' });
-            detailLabel.appendChild(document.createTextNode('Failure detail shown to students'));
+            detailLabel.appendChild(document.createTextNode('Failure detail'));
             failureDetailSelect = el('select', {
                 'class': 'form-input input-compact',
-                title: 'How much of a failing run the student sees. Staff always see everything.'
+                title: 'Detail a student sees on failure'
             });
             FAILURE_DETAIL_OPTIONS.forEach(function (opt) {
                 var o = el('option', { value: opt.value });
