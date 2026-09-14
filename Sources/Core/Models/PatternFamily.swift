@@ -101,6 +101,56 @@ public enum PatternKind: String, Codable, Sendable, Equatable, CaseIterable {
     /// the instructor's own solution against it, which catches disagreement
     /// between the two but cannot tell you which one is right.
     case differential
+    /// Runs the student's submission as a WHOLE PROGRAM — not a function
+    /// call — feeding each case's stdin text and comparing what the program
+    /// printed with the case's expected text under the family's
+    /// `ioComparison` (exact, included, or regex). The kind an intro course
+    /// reaches for when the assignment is "write a program that reads two
+    /// numbers and prints their sum": there is no function to call, only a
+    /// program to run.
+    ///
+    /// Per case, `args` holds exactly one string — the stdin text — and
+    /// `expected` the expected stdout. `functionName` and `paramNames` are
+    /// ignored, as for `.variableEquality`, so no existence guard is
+    /// generated. The program runs IN PROCESS on every kernel language
+    /// (Python via `runpy` with `sys.stdin` and `input()` fed from the case;
+    /// R with `readline` / `readLines("stdin")` / `scan()` masked; Lua with
+    /// `io.read` / `io.lines` proxied; Octave with `input()` shadowed; Racket
+    /// under a parameterized `current-input-port`), so it grades in the
+    /// browser as well as on the worker; C++ and Java compile the submission
+    /// and run the binary with the text on its real stdin. Output is
+    /// compared after trailing whitespace on each line and trailing blank
+    /// lines are dropped.
+    ///
+    /// Lua refuses `regex` at save time: Lua patterns are a different
+    /// language from PCRE, and a Python-authored pattern would quietly match
+    /// the wrong thing rather than erroring — the `cellContains` rule again.
+    case programIO = "program_io"
+}
+
+/// How a `.programIO` case's expected text is matched against what the
+/// program printed. Family-level: one program, many inputs, compared the
+/// same way — a family that needs two comparisons is two families.
+public enum ProgramIOComparison: String, Codable, Sendable, Equatable, CaseIterable {
+    /// The whole output, after normalisation, equals the expected text.
+    case exact
+    /// The expected text appears somewhere in the output.
+    case included
+    /// The expected text is a regular expression that matches somewhere in
+    /// the output (search, not full match; multi-line).
+    case regex
+
+    /// The comparison a family with no setting resolves to.
+    public static let `default`: ProgramIOComparison = .exact
+
+    /// Instructor-facing label for a select control.
+    public var displayName: String {
+        switch self {
+        case .exact: return "Exact match"
+        case .included: return "Contains"
+        case .regex: return "Matches regex"
+        }
+    }
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,
@@ -323,6 +373,10 @@ public struct PatternFamily: Codable, Equatable, Sendable {
     /// Chickadee translates. It must define the reference under a name the
     /// renderer can call — see `differentialReferenceName`.
     public let referenceImplementation: String?
+    /// How `.programIO` cases compare output; ignored by every other kind.
+    /// nil = exact. Family-level for the reason `referenceImplementation` is:
+    /// one program, many inputs, one way of reading the answer.
+    public let ioComparison: ProgramIOComparison?
 
     public init(
         id: String, name: String, kind: PatternKind,
@@ -331,7 +385,8 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         cases: [PatternCase] = [],
         variables: [FamilyVariable] = [],
         dependsOn: [String] = [],
-        referenceImplementation: String? = nil
+        referenceImplementation: String? = nil,
+        ioComparison: ProgramIOComparison? = nil
     ) {
         self.id = id
         self.name = name
@@ -343,6 +398,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         self.variables = variables
         self.dependsOn = dependsOn
         self.referenceImplementation = referenceImplementation
+        self.ioComparison = ioComparison
     }
 
     public init(from decoder: Decoder) throws {
@@ -358,6 +414,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         referenceImplementation = try c.decodeIfPresent(
             String.self, forKey: .referenceImplementation)
+        ioComparison = try c.decodeIfPresent(ProgramIOComparison.self, forKey: .ioComparison)
     }
 }
 
@@ -381,7 +438,13 @@ extension PatternFamily {
             defaults: defaults, cases: cases,
             variables: variables,
             dependsOn: newDependsOn,
-            referenceImplementation: referenceImplementation)
+            referenceImplementation: referenceImplementation,
+            ioComparison: ioComparison)
+    }
+
+    /// The comparison a `.programIO` case runs, defaulting to exact.
+    public var resolvedIOComparison: ProgramIOComparison {
+        ioComparison ?? .default
     }
 
     /// The name the generated `.differential` test binds the reference under,

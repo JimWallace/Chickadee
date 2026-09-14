@@ -161,7 +161,7 @@ private func kindSupportsPerStudentArgRefs(_ kind: PatternKind) -> Bool {
     // expected value rather than the author tabulating one per student.
     case .boundaryEquality, .approximateEquality, .unorderedEquality, .differential: return true
     case .variableEquality, .returnTypeCheck, .exceptionExpected,
-        .performanceThreshold, .stdoutEquality:
+        .performanceThreshold, .stdoutEquality, .programIO:
         return false
     }
 }
@@ -182,7 +182,7 @@ private func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
     // `.differential` authors no expected value at all — the reference
     // computes it — so there is nothing for a per-student expected ref to bind.
     case .returnTypeCheck, .exceptionExpected, .performanceThreshold, .stdoutEquality,
-        .differential:
+        .differential, .programIO:
         return false
     }
 }

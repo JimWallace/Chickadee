@@ -71,6 +71,10 @@ func renderCppPatternCase(
         body = cppStdoutBody(target: target, context: context, c: c)
     case .differential:
         body = cppDifferentialBody(family: family, context: context, c: c)
+    case .programIO:
+        // Its own wrapper: the submission IS the program, so nothing is
+        // included into a test translation unit.
+        return cppProgramIOCase(family: family, case: c, specHash: specHash)
     }
 
     let source = [

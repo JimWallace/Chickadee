@@ -107,6 +107,9 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// leave it untouched — an instructor fixing a broken reference edits it
         /// here rather than re-creating the family.
         let referenceImplementation: String?
+        /// Replaces a `program_io` family's output comparison
+        /// (`ProgramIOComparison` raw value). Omit (nil) to leave it untouched.
+        let ioComparison: String?
 
         init(
             assignmentPublicID: String, familyID: String, defaultTier: String? = nil,
@@ -115,7 +118,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             enableCases: [String]? = nil,
             disableCases: [String]? = nil, cases: [CaseEdit]? = nil,
             addCases: [CreatePatternFamilyTool.CaseInput]? = nil, dependsOn: [String]? = nil,
-            referenceImplementation: String? = nil
+            referenceImplementation: String? = nil, ioComparison: String? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.familyID = familyID
@@ -130,6 +133,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             self.addCases = addCases
             self.dependsOn = dependsOn
             self.referenceImplementation = referenceImplementation
+            self.ioComparison = ioComparison
         }
     }
 
@@ -278,6 +282,7 @@ struct UpdatePatternFamilyTool: ContentTool {
                     "Replace a kind=differential family's reference implementation "
                         + "(defines ck_ref_<function>); omit to leave unchanged."),
             ]),
+            "ioComparison": MCPProgramIOProse.schema,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("familyID")]),
         "additionalProperties": .bool(false),
@@ -319,15 +324,17 @@ struct UpdatePatternFamilyTool: ContentTool {
         let addCases = input.addCases ?? []
         guard
             newTier != nil || input.defaultPoints != nil || input.defaultHint != nil
-                || input.defaultTimeLimitSeconds != nil
+                || input.defaultTimeLimitSeconds != nil || input.defaultFailureDetail != nil
                 || !enable.isEmpty || !disable.isEmpty || !caseEdits.isEmpty
                 || !addCases.isEmpty || input.dependsOn != nil
+                || input.referenceImplementation != nil || input.ioComparison != nil
         else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail:
                     "Specify at least one of: defaultTier, defaultPoints, defaultHint, "
-                    + "defaultTimeLimitSeconds, enableCases, disableCases, cases, addCases, dependsOn.")
+                    + "defaultTimeLimitSeconds, defaultFailureDetail, enableCases, disableCases, "
+                    + "cases, addCases, dependsOn, referenceImplementation, ioComparison.")
         }
         guard enable.isDisjoint(with: disable) else {
             throw MCPToolError.invalidArguments(
@@ -399,7 +406,8 @@ struct UpdatePatternFamilyTool: ContentTool {
             changes: CaseChanges(
                 enable: enable, disable: disable, edits: editsByKey, newCases: newCases),
             dependsOn: input.dependsOn,
-            referenceImplementation: input.referenceImplementation)
+            referenceImplementation: input.referenceImplementation,
+            ioComparison: try MCPProgramIOProse.parse(input.ioComparison, tool: Self.name))
         payload.items[idx].family = updatedFamily
         // The family's row-level dependsOn wins over `family.dependsOn` in
         // applySuiteEdit, so when the caller replaces deps, mirror the new value
@@ -459,7 +467,8 @@ struct UpdatePatternFamilyTool: ContentTool {
     /// copied verbatim.
     private static func rebuild(
         _ family: PatternFamily, defaults: PatternDefaults,
-        changes: CaseChanges, dependsOn: [String]?, referenceImplementation: String?
+        changes: CaseChanges, dependsOn: [String]?, referenceImplementation: String?,
+        ioComparison: ProgramIOComparison?
     ) throws -> PatternFamily {
         let cases = try family.cases.map { caseSpec -> PatternCase in
             let enabled =
@@ -471,7 +480,8 @@ struct UpdatePatternFamilyTool: ContentTool {
             id: family.id, name: family.name, kind: family.kind, functionName: family.functionName,
             paramNames: family.paramNames, defaults: defaults, cases: cases + changes.newCases,
             variables: family.variables, dependsOn: dependsOn ?? family.dependsOn,
-            referenceImplementation: referenceImplementation ?? family.referenceImplementation)
+            referenceImplementation: referenceImplementation ?? family.referenceImplementation,
+            ioComparison: ioComparison ?? family.ioComparison)
     }
 
     /// Applies one case's arg/expected edit, keeping the parallel

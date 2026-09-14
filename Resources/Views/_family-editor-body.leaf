@@ -31,6 +31,15 @@
                         <option value="stdout_equality">Stdout equality (compare captured print output)</option>
                         <option value="unordered_equality">Unordered equality (list compare, ignore order)</option>
                         <option value="differential">Differential (compare against a reference implementation)</option>
+                        <option value="program_io">Program I/O (run the whole program with stdin, compare stdout)</option>
+                    </select>
+                </label>
+                <label id="family-io-comparison-label" class="field-stack" style="display:none">
+                    Output comparison
+                    <select class="form-input editor-input" id="family-io-comparison">
+                        <option value="exact">Exact (whole output, trailing whitespace ignored)</option>
+                        <option value="included">Contains the expected text</option>
+                        <option value="regex">Matches a regular expression</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" class="field-stack" style="display:none">

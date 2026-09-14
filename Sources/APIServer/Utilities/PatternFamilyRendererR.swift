@@ -62,6 +62,8 @@ func renderRPatternCase(
         return rStdoutCase(family: family, case: c, prelude: prelude)
     case .differential:
         return rDifferentialCase(family: family, case: c, prelude: prelude)
+    case .programIO:
+        return rProgramIOCase(family: family, case: c, prelude: prelude)
     }
 }
 

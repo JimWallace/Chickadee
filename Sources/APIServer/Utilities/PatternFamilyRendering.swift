@@ -19,7 +19,7 @@ struct RenderedFamilyArtifacts {
     /// One rendered script per enabled case, in render order.
     let caseScripts: [String: [GeneratedScript]]
     /// The auto existence guard (function-calling kinds only; absent for
-    /// `.variableEquality` / no-enabled-cases families).
+    /// `.variableEquality` / `.programIO` / no-enabled-cases families).
     let guardScripts: [String: GeneratedScript]
 }
 

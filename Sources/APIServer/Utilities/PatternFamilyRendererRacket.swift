@@ -144,6 +144,8 @@ func renderRacketPatternCase(
         return racketStdoutCase(family: family, case: c, prelude: prelude)
     case .differential:
         return racketDifferentialCase(family: family, case: c, prelude: prelude)
+    case .programIO:
+        return racketProgramIOCase(family: family, case: c, prelude: prelude)
     }
 }
 

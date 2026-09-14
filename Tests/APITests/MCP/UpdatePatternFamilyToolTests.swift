@@ -614,4 +614,36 @@ import Vapor
             }
         }
     }
+
+    /// `ioComparison` replaces a `program_io` family's comparison and is left
+    /// untouched when omitted.
+    @Test func setsAndKeepsTheProgramIOComparison() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let io = PatternFamily(
+                id: "io", name: "IO", kind: .programIO, functionName: "", paramNames: ["stdin"],
+                cases: [PatternCase(key: "01", label: "sum", args: [.string("3\n4\n")], expected: .string("7"))],
+                ioComparison: .included)
+            let assignment = try await fixture(on: app, family: io)
+            func reload() async throws -> PatternFamily {
+                let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+                let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+                return try #require(items.compactMap(\.family).first { $0.id == "io" })
+            }
+
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "io", ioComparison: "regex"),
+                context(app))
+            #expect(try await reload().ioComparison == .regex)
+
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "io", defaultPoints: 3),
+                context(app))
+            let after = try await reload()
+            #expect(after.ioComparison == .regex)
+            #expect(after.defaults.points == 3)
+        }
+    }
 }

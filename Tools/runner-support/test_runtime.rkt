@@ -39,6 +39,7 @@
 (require racket/list racket/string racket/path)
 
 (provide chickadee-load-student
+         chickadee-student-file
          chickadee-defined?
          chickadee-call
          chickadee-passed

@@ -1428,6 +1428,10 @@ def failed(message: str = "failed"):
     label = _first_comment_label()
     text = message if isinstance(message, str) else str(message)
     summary = _first_nonempty_line(text) or "failed"
+    # Rich multi-line messages are printed to stdout so they land in the
+    # outcome's longResult.  The JSON footer below remains the last line and
+    # is stripped by the runner.  Skip the print when the caller gave no
+    # detail beyond the default placeholder.
     if text.strip() and text.strip() != "failed":
         print(text)
     _emit({
@@ -1508,8 +1512,44 @@ def _module_name_for_path(path: Path) -> str:
     return f"student_{safe}"
 
 
+def _exec_student_module(spec, module) -> None:
+    # Importing a submission DEFINES its functions; it must not READ the test's
+    # stdin or WRITE the test's stdout.  A whole-program submission (\`a =
+    # int(input())\` at top level, the shape program_io grades) would otherwise
+    # block on a terminal, wait on a kernel that has no stdin channel, or print
+    # its banner into every test's longResult.  Stdin is empty -- an \`input()\`
+    # at import raises EOFError, recorded as this module's load error -- and
+    # both output streams are captured and discarded.
+    import builtins as _builtins
+    import io as _io
+
+    saved = (sys.stdin, sys.stdout, sys.stderr, _builtins.input)
+
+    def _no_input(prompt=""):
+        raise EOFError("EOF when reading a line")
+
+    try:
+        sys.stdin = _io.StringIO("")
+        sys.stdout = _io.StringIO()
+        sys.stderr = _io.StringIO()
+        _builtins.input = _no_input
+        spec.loader.exec_module(module)
+    except SystemExit as exit_request:
+        # \`sys.exit()\` at the top of a submission is a BaseException: left
+        # alone it ends the TEST process with the submission's status, which
+        # for \`sys.exit(0)\` reads as a pass with no output at all.
+        raise RuntimeError(
+            f"the submission exited during import (SystemExit: {exit_request.code!r})"
+        ) from None
+    finally:
+        sys.stdin, sys.stdout, sys.stderr, _builtins.input = saved
+
+
 def _ordered_student_files() -> List[Path]:
     preferred = _preferred_student_module()
+    # When a specific submission module is hinted, only evaluate that file.
+    # This avoids accidentally resolving functions from setup-side helpers
+    # like solution.py/assignment.py.
     if preferred is not None:
         return [preferred]
     return _candidate_student_files()
@@ -1539,7 +1579,7 @@ def load_student_modules(force_reload: bool = False) -> Dict[str, Any]:
                 continue
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
-            spec.loader.exec_module(module)
+            _exec_student_module(spec, module)
             modules[key] = module
             order.append(key)
         except Exception:
@@ -1570,9 +1610,18 @@ _student_main_state = None
 
 
 def student_main_state():
-    # The student notebook AS EXECUTED — runs quarantined top-level code once
-    # with run_name="__main__" and caches the namespace; falls back to the
-    # import-mode module when no student file exists or the run fails.
+    # The student notebook AS EXECUTED — top-level side effects included.
+    # The notebook extractor quarantines side-effecting top-level statements
+    # (bare calls, control flow, assignments whose RHS calls a function) into
+    # \`if __name__ == "__main__":\` so that *importing* a student module stays
+    # safe (issue #371).  Runtime-state checks (is \`df\` a DataFrame? did the
+    # notebook draw >= 2 figures?) need the opposite: the namespace as it
+    # exists after the notebook actually ran.  This executes the preferred
+    # student file once with run_name="__main__" — the extractor's per-cell
+    # try/except wrappers still isolate broken cells — caches the resulting
+    # namespace, and returns it as an attribute-readable object.  Falls back
+    # to the import-mode module (which may be None) when no student file
+    # exists or the run itself fails.
     global _student_main_state
     if _student_main_state is not None:
         return _student_main_state
@@ -1592,6 +1641,12 @@ def student_main_state():
 
 
 def student_source_raw() -> str:
+    # The full introspectable student source, exactly as the extractor wrote
+    # it (every cell, including any that do not parse). Written to a sidecar
+    # named by the \`.chickadee_student_source\` hint (both runners share one
+    # extractor); falls back to inspect.getsource on the loaded module. Use
+    # this for raw text inspection; use student_source() / student_ast() for
+    # parse-based checks.
     hint = Path(".chickadee_student_source")
     try:
         if hint.exists():
@@ -1612,6 +1667,10 @@ def student_source_raw() -> str:
 
 
 def student_cell_sources() -> List[Any]:
+    # Split the raw student source into (label, source) chunks on the
+    # \`# --- cell N ---\` markers the notebook extractor writes between cells,
+    # so each notebook cell can be parsed on its own. A raw .py submission has
+    # no markers and yields a single ("module", source) chunk.
     source = student_source_raw()
     chunks: List[Any] = []
     label = "module"
@@ -1633,6 +1692,12 @@ def student_cell_sources() -> List[Any]:
 
 
 def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    # Best-effort AST of the student's source: parse each notebook cell on its
+    # own and merge the parseable cells' top-level statements into one module.
+    # A single non-Python cell (Markdown pasted into a code cell, a half-written
+    # cell) is then skipped instead of blinding a style/structure check on every
+    # other cell -- mirroring the per-cell resilience of the executable module.
+    # \`skipped\`, if a list, receives an (label, message) tuple per dropped cell.
     import ast
     module = ast.parse("")
     for label, chunk in student_cell_sources():
@@ -1649,6 +1714,12 @@ def student_ast(skipped: Optional[List[Any]] = None) -> Any:
 
 
 def student_source() -> str:
+    # Best-effort *parseable* introspectable source: like student_source_raw(),
+    # but any single cell that does not parse on its own is dropped, so callers
+    # that do \`ast.parse(student_source())\` are not blinded by one non-Python
+    # cell (e.g. a Markdown cell saved as a code cell). When nothing needs
+    # dropping the raw source is returned verbatim. Use student_source_raw()
+    # for the unfiltered text.
     import ast
     parts: List[str] = []
     dropped = False
@@ -1692,6 +1763,7 @@ def _require_num_args(fn: Any, name: str, num_args: int) -> None:
     try:
         sig = inspect.signature(fn)
     except (TypeError, ValueError):
+        # Built-ins / C functions may not expose a signature; skip the check.
         return
     positional_kinds = {
         inspect.Parameter.POSITIONAL_ONLY,

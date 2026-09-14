@@ -494,4 +494,61 @@ import Testing
             inputs: inputs)
         #expect(good.code == 0, "\(good.stdout)")
     }
+
+    // MARK: - programIO
+
+    /// The submission is compiled as its own program and run with the case's
+    /// text on its real stdin; a second, checker translation unit grades what
+    /// came back.
+    @Test func programIOPassesAndFails() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
+        let good = try Self.execute(
+            script: script,
+            submission: """
+                #include <iostream>
+                int main() { int a, b; std::cin >> a >> b; std::cout << a + b << std::endl; return 0; }
+                """)
+        #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
+        let bad = try Self.execute(
+            script: script,
+            submission: """
+                #include <iostream>
+                int main() { int a, b; std::cin >> a >> b; std::cout << a * b << std::endl; return 0; }
+                """)
+        #expect(bad.code == 1)
+        #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
+        #expect(bad.stdout.contains("12"))
+    }
+
+    @Test func programIOIncludedAndRegexComparisons() throws {
+        guard Self.gppAvailable else { return }
+        let program = """
+            #include <iostream>
+            int main() { int a, b; std::cin >> a >> b; std::cout << "header\\nsum=" << a + b << "\\n"; return 0; }
+            """
+        for (comparison, expected) in [(ProgramIOComparison.included, "=7"), (.regex, "^sum=7$")] {
+            let family = PatternFamily(
+                id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
+                defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
+                cases: [PatternCase(key: "01", label: "case", args: [.string("3\n4\n")], expected: .string(expected))],
+                ioComparison: comparison)
+            let result = try Self.execute(script: Self.render(family), submission: program)
+            #expect(result.code == 0, "\(comparison): \(result.stdout) \(result.stderr)")
+        }
+    }
+
+    /// A non-zero exit from the program is a graded failure that names the
+    /// status, never a pass and never a harness error.
+    @Test func programIONonZeroExitIsAGradedFailure() throws {
+        guard Self.gppAvailable else { return }
+        let script = Self.render(
+            Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
+        let crashed = try Self.execute(
+            script: script, submission: "#include <cstdlib>\nint main() { std::exit(3); }\n")
+        #expect(crashed.code == 1)
+        #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
+        #expect(crashed.stdout.contains("status 3"))
+    }
 }

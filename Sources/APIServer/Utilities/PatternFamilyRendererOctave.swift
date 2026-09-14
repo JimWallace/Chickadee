@@ -75,6 +75,8 @@ func renderOctavePatternCase(
         return octaveStdoutCase(family: family, case: c, prelude: prelude)
     case .differential:
         return octaveDifferentialCase(family: family, case: c, prelude: prelude)
+    case .programIO:
+        return octaveProgramIOCase(family: family, case: c, prelude: prelude)
     }
 }
 

@@ -486,4 +486,71 @@ import Testing
         #expect(missing.code == 1, "a missing method did not FAIL the guard: \(missing.stdout)")
         #expect(missing.stdout.contains("not defined"))
     }
+
+    // MARK: - programIO
+
+    /// The submission runs in source-file mode with the case's text on its
+    /// stdin; the checker class grades what it printed.
+    @Test func programIOPassesAndFails() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(
+            Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
+        let good = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                """
+                public static void main(String[] args) {
+                    java.util.Scanner in = new java.util.Scanner(System.in);
+                    System.out.println(in.nextInt() + in.nextInt());
+                }
+                """))
+        #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
+        let bad = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                """
+                public static void main(String[] args) {
+                    java.util.Scanner in = new java.util.Scanner(System.in);
+                    System.out.println(in.nextInt() * in.nextInt());
+                }
+                """))
+        #expect(bad.code == 1)
+        #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
+    }
+
+    /// Regex anchors are line anchors, matched against the normalized output.
+    @Test func programIORegexMatchesALineOfTheOutput() throws {
+        guard Self.javacAvailable else { return }
+        let family = PatternFamily(
+            id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
+            defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
+            cases: [PatternCase(key: "01", label: "case", args: [.string("")], expected: .string("^sum=7$"))],
+            ioComparison: .regex)
+        let result = try Self.execute(
+            script: Self.render(family),
+            submission: Self.solution(
+                "public static void main(String[] a) { System.out.println(\"header\"); System.out.println(\"sum=7\"); }"
+            ))
+        #expect(result.code == 0, "\(result.stdout) \(result.stderr)")
+    }
+
+    /// `System.exit` from a whole program is the program ending, not the
+    /// test: a non-zero status is a graded failure, a zero one is graded on
+    /// the output.
+    @Test func programIOSystemExitIsGradedOnTheOutput() throws {
+        guard Self.javacAvailable else { return }
+        let script = Self.render(
+            Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
+        let good = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                "public static void main(String[] a) { System.out.println(7); System.exit(0); }"))
+        #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
+        let crashed = try Self.execute(
+            script: script,
+            submission: Self.solution(
+                "public static void main(String[] a) { System.out.println(7); System.exit(3); }"))
+        #expect(crashed.code == 1)
+        #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
+    }
 }

@@ -47,6 +47,12 @@
             ]
         },
         {
+            group: 'Test a whole program',
+            items: [
+                { value: 'program_io', mechanism: 'family', label: 'Prints the right output for given input' }
+            ]
+        },
+        {
             group: 'Test a value or data structure',
             items: [
                 { value: 'variable_exists',     mechanism: 'check',  label: 'Variable is defined' },
@@ -84,6 +90,7 @@
         stdout_equality:       'Check what the function prints to stdout for given inputs.',
         performance_threshold: 'Check that the function completes within a millisecond budget.',
         differential:          'Compare the student’s function against a reference implementation you write — you supply the inputs, the reference supplies each expected value.',
+        program_io:            'Run the whole submission as a program with a given standard input and check what it prints (exactly, containing, or matching a regex).',
         variable_exists:       'Check that a notebook variable is defined (optionally of a given type).',
         variable_equality:     'Check that a notebook variable equals an expected value.',
         function_exists:       'Check that a function is defined and callable (optionally with a given arity).',

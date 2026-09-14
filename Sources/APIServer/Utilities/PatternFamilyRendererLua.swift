@@ -77,6 +77,8 @@ func renderLuaPatternCase(
         return luaStdoutCase(family: family, case: c, prelude: prelude)
     case .differential:
         return luaDifferentialCase(family: family, case: c, prelude: prelude)
+    case .programIO:
+        return luaProgramIOCase(family: family, case: c, prelude: prelude)
     }
 }
 

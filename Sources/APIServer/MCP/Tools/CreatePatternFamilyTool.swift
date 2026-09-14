@@ -113,6 +113,10 @@ struct CreatePatternFamilyTool: ContentTool {
         /// Required by `differential`, ignored by every other kind: the
         /// instructor's reference implementation, in the assignment's language.
         let referenceImplementation: String?
+        /// Read by `program_io` only: how each case's expected text is matched
+        /// against the program's output (`ProgramIOComparison` raw value;
+        /// omitted = exact).
+        let ioComparison: String?
         let cases: [CaseInput]
 
         init(
@@ -122,7 +126,7 @@ struct CreatePatternFamilyTool: ContentTool {
             defaultTimeLimitSeconds: Int? = nil, defaultFailureDetail: String? = nil,
             tolerance: Double? = nil, sectionID: String? = nil, dependsOn: [String]? = nil,
             variables: [VariableInput]? = nil, referenceImplementation: String? = nil,
-            cases: [CaseInput]
+            ioComparison: String? = nil, cases: [CaseInput]
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.id = id
@@ -140,6 +144,7 @@ struct CreatePatternFamilyTool: ContentTool {
             self.dependsOn = dependsOn
             self.variables = variables
             self.referenceImplementation = referenceImplementation
+            self.ioComparison = ioComparison
             self.cases = cases
         }
     }
@@ -290,6 +295,7 @@ struct CreatePatternFamilyTool: ContentTool {
                         + "Note it is rendered into the generated test, which a browser-graded "
                         + "assignment downloads to the student's browser."),
             ]),
+            "ioComparison": MCPProgramIOProse.schema,
             "dependsOn": .object([
                 "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Prerequisite script names or family:<id> tokens."),
@@ -425,7 +431,8 @@ struct CreatePatternFamilyTool: ContentTool {
             paramNames: input.paramNames ?? [], defaults: defaults, cases: cases,
             variables: (input.variables ?? []).map { FamilyVariable(name: $0.name, value: $0.value) },
             dependsOn: input.dependsOn ?? [],
-            referenceImplementation: input.referenceImplementation)
+            referenceImplementation: input.referenceImplementation,
+            ioComparison: try MCPProgramIOProse.parse(input.ioComparison, tool: Self.name))
     }
 
     /// Builds one `PatternCase` from a case input, filling the parallel
