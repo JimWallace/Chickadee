@@ -122,6 +122,13 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         set { solutionVisibilityRaw = newValue.rawValue }
     }
 
+    /// Advisory passing threshold (1...100): the best-grade percentage at or
+    /// above which the instructor pages show a student as passing. nil = no
+    /// threshold (the default): the passing concept is off and no badge or
+    /// count renders. Display-only — it never changes a grade.
+    @OptionalField(key: "passing_threshold_percent")
+    var passingThresholdPercent: Int?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

@@ -160,6 +160,8 @@ enum AuditAction: String, Sendable, CaseIterable {
     // Solution reveal policy
     case solutionVisibilityChanged = "solution_visibility.changed"
     case leaderboardVisibilityChanged = "leaderboard_visibility.changed"
+    // Advisory passing threshold
+    case passingThresholdChanged = "passing_threshold.changed"
 
     // Slip days (#1228)
     case slipDaySpent = "slip_day.spent"
@@ -220,7 +222,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged,
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
             .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
@@ -261,7 +263,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .submissionRetestAll, .submissionRetestForStudent, .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .slipDaySpent, .slipDayRefunded,
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
+            .slipDaySpent, .slipDayRefunded,
             .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
             .brightspaceAccountConnected, .brightspaceAccountDisconnected,
@@ -317,6 +320,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .secretRevealRegranted: return "Reveal token re-granted"
         case .secretRevealToggled: return "Reveal token setting changed"
         case .solutionVisibilityChanged: return "Solution visibility changed"
+        case .passingThresholdChanged: return "Passing threshold changed"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"

@@ -488,4 +488,8 @@ func registerMigrations(on app: Application) {
     // Course-level opt-out for the release-output slip-day reveal hold.
     // Nullable column on `courses`; nil = hold on, the safe default.
     app.migrations.add(AddCourseSlipDayRevealHold())
+
+    // Per-assignment advisory passing threshold. Nullable column on
+    // `assignments`; nil = no threshold, the pre-existing behaviour.
+    app.migrations.add(AddAssignmentPassingThreshold())
 }

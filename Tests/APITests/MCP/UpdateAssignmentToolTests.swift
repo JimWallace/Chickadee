@@ -359,4 +359,46 @@ import Vapor
             }
         }
     }
+
+    // MARK: - passingThresholdPercent
+
+    @Test func setsAndClearsPassingThreshold() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            let set = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, passingThresholdPercent: 70),
+                context(app))
+            #expect(set.passingThresholdPercent == 70)
+            var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.passingThresholdPercent == 70)
+
+            // 0 turns the threshold off.
+            let cleared = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, passingThresholdPercent: 0),
+                context(app))
+            #expect(cleared.passingThresholdPercent == nil)
+            reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.passingThresholdPercent == nil)
+        }
+    }
+
+    @Test func rejectsOutOfRangePassingThreshold() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            for bad in [-5, 101] {
+                await #expect(throws: MCPToolError.self) {
+                    _ = try await UpdateAssignmentTool().execute(
+                        UpdateAssignmentTool.Input(
+                            assignmentPublicID: assignment.publicID, passingThresholdPercent: bad),
+                        context(app))
+                }
+            }
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.passingThresholdPercent == nil)
+        }
+    }
 }
