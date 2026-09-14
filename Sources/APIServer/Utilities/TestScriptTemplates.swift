@@ -200,24 +200,22 @@ func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage?)
 
 /// The shell lines that run the submission and leave its output in `$ACTUAL`.
 ///
-/// Three shapes. The two language ones are chosen by
-/// `capabilityRequiresExecutableOutput`, which is asked here rather than
-/// switching on `.cpp` — but note what that fact actually means, because the
-/// comment here used to overstate it. It means "grading EXECS a file it just
-/// produced", which is true of C++ alone: Java is compiled too, and answers
-/// `false`, because its `.class` files are READ by the JVM and `noexec` cannot
-/// bite them. So Java takes the interpreted branch, where `java solution.java`
-/// works only by single-file source mode and breaks the moment a submission
-/// needs a second file.
+/// Four shapes, and no language is named to pick one. The three language
+/// shapes are chosen by two descriptor facts: `gradingCompilesBeforeRunning`
+/// says whether a build step comes first at all, and
+/// `capabilityRequiresExecutableOutput` says whether that build produced a
+/// binary to exec (C++) or artefacts a runtime loads (Java). The scaffold used
+/// to ask only the second, which put Java in the interpreted branch as
+/// `java solution.java` — single-file source mode, which breaks the moment a
+/// submission needs a second file (#1394).
 ///
-/// A future compiled language therefore does NOT "get the compile form for
-/// free" — it gets whichever branch its exec answer happens to select. Making
-/// this correct needs a fact meaning "grading builds before running", which is
-/// a different question from the one `capabilityRequiresExecutableOutput`
-/// exists to answer (see #1352); it is left as one fact rather than guessed
-/// at here.
+/// The compiler is `interpreterProbe.command` for both compiled languages,
+/// because the compiler is the capability a host can genuinely lack, and the
+/// runtime is `scriptRunCommand`. The flags in each compiled shape belong to
+/// the one language that answers it today; a second language answering the
+/// same pair of facts is the moment to move them onto the descriptor.
 ///
-/// The third is for an assignment that declares no language, where there is no
+/// The fourth is for an assignment that declares no language, where there is no
 /// interpreter to name and guessing `python3` would be a guess the author has
 /// to catch. It spends two shell variables instead — the same currency the rest
 /// of the template is written in — so what has to be decided is visible as a
@@ -232,22 +230,38 @@ private func runSubmissionShellFragment(
             ACTUAL=$($RUN 2>&1)
             """
     }
-    // `scriptRunCommand`, not `interpreterProbe.command`. The two agree for
-    // every language but R, where the probe is `R` and the runner spawns
-    // `Rscript` — and `R solution.R` does not run the file, it warns that the
-    // argument is ignored and waits on stdin. So every R author's scaffold was
-    // a command that cannot work.
-    let interpreter = language.descriptor.scriptRunCommand
-    guard language.descriptor.capabilityRequiresExecutableOutput else {
+    let descriptor = language.descriptor
+    guard descriptor.gradingCompilesBeforeRunning else {
+        // `scriptRunCommand`, not `interpreterProbe.command`. The two agree
+        // for every interpreted language but R, where the probe is `R` and the
+        // runner spawns `Rscript` — and `R solution.R` does not run the file,
+        // it warns that the argument is ignored and waits on stdin. So every R
+        // author's scaffold was a command that cannot work.
+        //
         // Run the file directly. This replaced a Python-only
         // `python3 -c "import solution; print(solution.main())"`, which had no
         // general form — and running the submission and comparing its stdout is
         // the more common shape anyway.
-        return #"ACTUAL=$(\#(interpreter) \#(solutionFile) 2>&1)"#
+        return #"ACTUAL=$(\#(descriptor.scriptRunCommand) \#(solutionFile) 2>&1)"#
     }
+    let compiler = descriptor.interpreterProbe.command
+    if descriptor.capabilityRequiresExecutableOutput {
+        // Compile to a binary, then exec it. `-O0`, matching what the generated
+        // cases compile with (only `performanceThreshold` asks for `-O2`): a
+        // stdout comparison gains nothing from optimisation, and the compile
+        // time is charged against the same per-test limit.
+        return """
+            \(compiler) -std=c++20 -O0 -o ./ck_solution \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
+            ACTUAL=$(./ck_solution 2>&1)
+            """
+    }
+    // Compile to artefacts the runtime loads from the working directory, then
+    // run the class named after the file. Every file a real submission needs
+    // is visible to this shape, which is what source mode could not offer.
+    let className = String(solutionFile.dropLast(descriptor.sourceFileExtension.count + 1))
     return """
-        \(interpreter) -std=c++20 -O2 -o ./ck_solution \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
-        ACTUAL=$(./ck_solution 2>&1)
+        \(compiler) -encoding UTF-8 -d . \(solutionFile) || { echo "Compilation failed" >&2; exit 2; }
+        ACTUAL=$(\(descriptor.scriptRunCommand) -cp . \(className) 2>&1)
         """
 }
 

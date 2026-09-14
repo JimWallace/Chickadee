@@ -33,7 +33,6 @@ enum ObservabilityEvent: String, Sendable {
     case jobFinalised = "job_finalised"
     case assignmentResultSummary = "assignment_result_summary"
     case testResultSummary = "test_result_summary"
-    case jobRecovery = "job_recovery"
 }
 
 struct RunnerAverages: Sendable {

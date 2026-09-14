@@ -91,9 +91,8 @@ private func interpreterFromShebang(_ source: String) -> ScriptInterpreter? {
 /// Do the first few non-comment lines look like Python?
 private func looksLikePythonContent(_ source: String) -> Bool {
     let lines =
-        source
-        .split(separator: "\n" as Character, omittingEmptySubsequences: false)
-        .map { trimHorizontalWhitespace(String($0)) }
+        splitLines(source)
+        .map(trimHorizontalWhitespace)
         .filter { !$0.isEmpty && !$0.hasPrefix("#") }
         .prefix(5)
     guard !lines.isEmpty else { return false }
@@ -134,11 +133,9 @@ private func fileExtensionLowercased(_ name: String) -> String {
 
 /// First non-empty line with leading BOM/whitespace trimmed.
 private func firstNonEmptyTrimmedLine(_ source: String) -> String {
-    let isLeading: (Character) -> Bool = {
-        $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\u{feff}"
-    }
-    let trimmedLeading = source.drop(while: isLeading)
-    return String(trimmedLeading.prefix { $0 != "\n" })
+    let isLeading: (Character) -> Bool = { isWhitespaceOrLineBreak($0) || $0 == "\u{feff}" }
+    let trimmedLeading = String(source.drop(while: isLeading))
+    return splitLines(trimmedLeading).first ?? ""
 }
 
 private func trimHorizontalWhitespace(_ s: String) -> String {

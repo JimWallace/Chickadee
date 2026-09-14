@@ -450,8 +450,8 @@ aim for whenever an item can be moved.
 most of this is one struct to write rather than a dozen arms to find. The
 current fields: display name, script extensions, generated extension, **source
 file extension**, inputs filename, kernel aliases, `editorSupport`, interpreter
-probe, `moduleResolution`, `workingDirectoryIsOnDefaultSearchPath`, and
-`capabilityRequiresExecutableOutput`.
+probe, `moduleResolution`, `workingDirectoryIsOnDefaultSearchPath`,
+`capabilityRequiresExecutableOutput` and `gradingCompilesBeforeRunning`.
 
 Three of those are worth knowing before you write the literal, because each was
 added when a language broke on it:
@@ -468,6 +468,11 @@ added when a language broke on it:
 - **`capabilityRequiresExecutableOutput`** — true only when grading *executes*
   something it just built. `g++ --version` succeeds on a runner whose work
   directory is mounted `noexec`; the compile then works and the `exec` does not.
+- **`gradingCompilesBeforeRunning`** is the *other* build question — does a
+  compile step come first at all — and Java is why they are two: it compiles
+  (`true`) but its `.class` files are read by the JVM, never exec'd (`false`).
+  The custom-script scaffold keyed on the exec fact alone once handed Java the
+  interpreted shape (#1394).
 
 The count measured on the Lua run was 26 compiler-named sites. It is now **27
 switch arms across 17 files** — a bigger worklist, but a strictly safer one:

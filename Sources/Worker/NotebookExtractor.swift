@@ -26,7 +26,10 @@ struct NotebookExtractor {
     func isNotebookJSONObject(_ notebook: [String: Any]) -> Bool {
         guard notebook["metadata"] != nil,
             notebook["nbformat"] != nil,
-            notebook["cells"] is [[String: Any]] || notebook["cells"] is [Any]
+            // `[Any]` alone: every `[[String: Any]]` is an `[Any]`, so the
+            // former disjunct could never change the answer (a 2026-09 mutation
+            // survivor said as much — flipping the connector was undetectable).
+            notebook["cells"] is [Any]
         else {
             return false
         }

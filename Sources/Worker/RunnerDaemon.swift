@@ -473,7 +473,11 @@ actor WorkerDaemon {
             ])
     }
 
-    func inferredCollectionStatus(_ collection: TestOutcomeCollection) -> RunnerJobStatus {
+    /// The one-word status the server records for a finished job, derived
+    /// from the collection's counters: worst outcome wins, and a failed build
+    /// counts as a failure even with no outcomes to fail. Static because it
+    /// reads no daemon state, which also lets a test ask it directly.
+    static func inferredCollectionStatus(_ collection: TestOutcomeCollection) -> RunnerJobStatus {
         if collection.timeoutCount > 0 { return .timeout }
         if collection.errorCount > 0 { return .error }
         if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }

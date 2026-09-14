@@ -91,11 +91,6 @@ enum AssignmentVersionOutcome: Sendable, Equatable {
         case .skipped: return nil
         }
     }
-
-    var didRecord: Bool {
-        if case .recorded = self { return true }
-        return false
-    }
 }
 
 enum AssignmentVersionStore {
