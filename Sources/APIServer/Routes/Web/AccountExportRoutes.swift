@@ -134,16 +134,3 @@ private func downloadDateStamp(_ date: Date) -> String {
     formatter.dateFormat = "yyyy-MM-dd"
     return formatter.string(from: date)
 }
-
-/// Restricts a username to header-safe ASCII for the Content-Disposition
-/// filename; anything else becomes "-".
-private func sanitizedDownloadComponent(_ raw: String) -> String {
-    let mapped = raw.map { ch -> Character in
-        if ch.isASCII && (ch.isLetter || ch.isNumber || ch == "." || ch == "-" || ch == "_") {
-            return ch
-        }
-        return "-"
-    }
-    let cleaned = String(mapped)
-    return cleaned.isEmpty ? "user" : cleaned
-}

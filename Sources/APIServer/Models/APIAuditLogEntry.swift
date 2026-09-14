@@ -152,6 +152,9 @@ enum AuditAction: String, Sendable, CaseIterable {
     case gradeOverrideSet = "grade_override.set"
     case gradeOverrideCleared = "grade_override.cleared"
 
+    // Bulk download of an assignment's current submissions by course staff
+    case submissionsBulkDownloaded = "submission.bulk_downloaded"
+
     // Secret reveal tokens
     case secretRevealSpent = "secret_reveal.spent"
     case secretRevealRegranted = "secret_reveal.regranted"
@@ -218,7 +221,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged:
             return .assignments
-        case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
+        case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent,
+            .submissionsBulkDownloaded:
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
@@ -260,7 +264,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged,
             .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
-            .submissionRetestAll, .submissionRetestForStudent, .extensionGranted,
+            .submissionRetestAll, .submissionRetestForStudent, .submissionsBulkDownloaded,
+            .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
@@ -311,6 +316,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .assignmentDueDateChanged: return "Assignment due date changed"
         case .submissionsPurged: return "Submissions purged"
         case .submissionRetestAll: return "Retest all submissions"
+        case .submissionsBulkDownloaded: return "Submissions downloaded in bulk"
         case .submissionRetestForStudent: return "Retest student submissions"
         case .extensionGranted: return "Extension granted"
         case .extensionRevoked: return "Extension revoked"

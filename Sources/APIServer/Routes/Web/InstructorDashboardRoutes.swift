@@ -66,6 +66,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("slip-days", "refund", use: refundSlipDaySpendAction)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
+        r.get(":assignmentID", "submissions.zip", use: downloadAssignmentSubmissions)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.post(":assignmentID", "retest", use: retestAllSubmissions)

@@ -308,6 +308,7 @@ import VaporTesting
         // A per-student extension / grade override / retest is an individual
         // accommodation, sibling to grading, not a course-wide deadline change.
         "GET /instructor/:assignmentID/submissions": .ta,
+        "GET /instructor/:assignmentID/submissions.zip": .ta,
         "GET /instructor/:assignmentID/students/:studentID/history": .ta,
         "POST /instructor/:assignmentID/submissions/:submissionID/retest": .ta,
         "POST /instructor/:assignmentID/retest": .ta,

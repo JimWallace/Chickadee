@@ -122,6 +122,7 @@ extension InstructorDashboardRoutes {
                 assignmentTitle: assignment.title,
                 metrics: metrics,
                 rows: rows,
+                flashError: req.query[String.self, at: "error"],
                 secretRevealEnabled: secretRevealEnabled,
                 passingThresholdPercent: assignment.passingThresholdPercent,
                 coverageRows: coverageRows,

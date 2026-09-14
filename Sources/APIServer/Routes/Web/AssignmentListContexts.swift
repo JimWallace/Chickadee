@@ -362,6 +362,9 @@ struct AssignmentSubmissionsContext: Encodable {
     let assignmentTitle: String
     let metrics: [AssignmentStatCard]
     let rows: [AssignmentStudentRow]
+    /// One-shot error banner from a redirect back to this page (`?error=`),
+    /// rendered by the `_flash` partial in `base.leaf`.
+    let flashError: String?
     /// The assignment's secret-reveal toggle.  Gates the whole reveal-token
     /// affordance on this page (spent tag + re-grant action) — when off the
     /// page renders identically to the pre-feature layout.
