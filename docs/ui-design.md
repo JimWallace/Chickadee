@@ -539,15 +539,34 @@ Page behaviour belongs in a **`Public/*.js` file**, loaded with
 invisible to every tool (ESLint can't parse Leaf-interpolated JS), so the
 rule is **absolute** (guard 3b in `scripts/check-styles.sh`): no template
 may open a multi-line `<script>` body.  The 2026-08 conversion moved every
-page's blocks out; the one deliberate holdout is `base.leaf`'s
-multipart-CSRF interceptor, held by its own shrink-only line ratchet
-(`INLINE_SCRIPT_BASELINE`).
+page's blocks out, and #1516 retired the last holdout — `base.leaf`'s
+multipart-CSRF interceptor, now `/multipart-forms.js` — so the rule has no
+allowed file and no ratchet.
 
 The extraction pattern: the template carries page data — `data-*`
 attributes or a **single-line** `<script type="application/json">` island —
 and a per-page wiring file reads it (`assignment-edit-page.js` /
 `assignment-new-page.js` are the worked examples: shared editor modules,
 per-page URL builders).
+
+Since #1516 this is no longer only a tooling rule.  The CSP `script-src`
+carries no `'unsafe-inline'`, so **an inline script in a template does not
+run** and **an `onclick=` / `onchange=` attribute never fires** — and
+neither failure is loud: the control simply stops responding.  Two things
+follow.
+
+- A one-line `<script>` must be a **data** block.  Guard 3b skips one-line
+  elements because that is the shape of the JSON islands; written without a
+  `type`, the same shape is executed, slips past 3b, and is then blocked by
+  the browser.  Guard 3b-2 catches it.
+- An **event-handler attribute** is an inline script by another name, and the
+  one shape a CSP nonce cannot rescue.  The replacement is a data attribute
+  read by a delegated listener: `data-ck-click-target="<id>"`,
+  `data-ck-submit-on-change`, and `data-ck-select-all` are the three the
+  templates use, all handled in the declarative-control-behaviours block at
+  the foot of `Public/app.js`.  Delegation also means markup rendered later —
+  an in-place form swap, a row repainted by a poll — picks the behaviour up
+  with no rebinding.  Guard 3b-3 catches a new one.
 
 ### JS does not make styling decisions
 

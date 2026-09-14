@@ -101,20 +101,18 @@ elif [ "$js_alert_count" -lt "$JS_ALERT_BASELINE" ]; then
   echo "note: JS alert() count dropped to ${js_alert_count}; lower JS_ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
-# ── 3b. Inline <script> is closed (#1135; conversion completed 2026-08) ──────
+# ── 3b. Inline <script> is closed (#1135; last holdout retired by #1516) ────
 # JS inside a template <script> block is invisible to every tool — ESLint
 # can't parse Leaf-interpolated JS, CodeQL skips it, node --check can't run
 # it.  Page behaviour lives in Public/*.js files (loaded with <script src>);
 # a template carries data via data-* attributes or a single-line JSON island.
-# The 2026-08 pass externalized every page's blocks, so what was a
-# total-line ratchet is now an absolute rule: no template may open a
-# multi-line <script> body — except base.leaf, whose multipart-CSRF
-# interceptor is the one deliberate holdout (docs/ui-ratchet-handoff.md);
-# that block is held by its own shrink-only line ratchet below.
+# The 2026-08 pass externalized every page's blocks and left base.leaf's
+# multipart-CSRF interceptor as a line-ratcheted holdout; #1516 moved that to
+# /multipart-forms.js so 'unsafe-inline' could leave the CSP script-src.  The
+# rule is now absolute and has no allowed file: an inline script added to a
+# template would not merely be unlinted, it would NOT RUN.
 # <script src=…> includes and single-line <script …>…</script> elements
-# (the JSON seed islands) don't count.
-INLINE_SCRIPT_ALLOWED_FILE="Resources/Views/base.leaf"
-INLINE_SCRIPT_BASELINE=74
+# (the JSON seed islands) don't count here — rule 3b-2 covers those.
 count_inline_script() {
   # Non-blank lines inside multi-line <script> bodies.  A single-line
   # element must match on "<script" (not "<script>"): the JSON islands carry
@@ -131,7 +129,6 @@ count_inline_script() {
 }
 inline_script_offenders=""
 for f in "${views[@]}"; do
-  [ "$f" = "$INLINE_SCRIPT_ALLOWED_FILE" ] && continue
   n="$(count_inline_script "$f")"
   [ "$n" -gt 0 ] && inline_script_offenders+="  ${f} (${n} lines)"$'\n'
 done
@@ -144,13 +141,51 @@ if [ -n "$inline_script_offenders" ]; then
   printf '%s' "$inline_script_offenders"
   echo
 fi
-base_inline_count="$(count_inline_script "$INLINE_SCRIPT_ALLOWED_FILE")"
-if [ "$base_inline_count" -gt "$INLINE_SCRIPT_BASELINE" ]; then
+
+# ── 3b-2. A single-line inline <script> must be a DATA block ────────────────
+# Rule 3b skips one-line <script …>…</script> elements because that is the
+# shape of the JSON seed islands (`type="application/json"`), which are data,
+# never executed, and which `script-src` therefore does not govern.  Written
+# without a type — or with a JavaScript one — the same shape IS executed, slips
+# past 3b on a technicality, and is blocked at run time by the CSP with no
+# error a test would see.  So: a one-line inline script must declare a
+# non-JavaScript type.
+one_line_script_offenders="$(
+  grep -nE '<script[^>]*>[^<]*</script>' "${views[@]}" 2>/dev/null \
+    | grep -v 'src=' \
+    | grep -vE 'type="(application/json|application/ld\+json|text/template)"' \
+    || true
+)"
+if [ -n "$one_line_script_offenders" ]; then
   status=1
-  echo "ERROR: base.leaf's inline <script> grew (${base_inline_count} lines, baseline ${INLINE_SCRIPT_BASELINE})."
-  echo "       New behaviour belongs in a Public/*.js file, base.leaf included."
-elif [ "$base_inline_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
-  echo "note: base.leaf's inline <script> dropped to ${base_inline_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
+  echo "ERROR: executable single-line inline <script> in a template."
+  echo "       The CSP script-src carries no 'unsafe-inline', so this would not run."
+  echo "       Put the code in a Public/*.js file loaded with <script src>, or give"
+  echo "       the element a data type (application/json) if it is a seed island."
+  printf '%s\n' "$one_line_script_offenders"
+  echo
+fi
+
+# ── 3b-3. No inline event-handler attributes ────────────────────────────────
+# An onclick= / onchange= attribute is an inline script by another name, and
+# the one shape a CSP nonce cannot rescue — only 'unsafe-inline' (which #1516
+# removed) or 'unsafe-hashes' (which we do not grant) permits it.  A handler
+# added here does not fail loudly; the control simply stops responding.  The
+# replacement is a data attribute read by a delegated listener: see the
+# declarative control behaviours at the foot of Public/app.js.
+event_attr_offenders="$(
+  grep -nEo '<[a-zA-Z][^>]*[[:space:]]on[a-z]+="[^"]*"' "${views[@]}" 2>/dev/null \
+    | grep -oE '^[^:]+:[0-9]+:.*[[:space:]]on[a-z]+="[^"]*"' \
+    || true
+)"
+if [ -n "$event_attr_offenders" ]; then
+  status=1
+  echo "ERROR: inline event-handler attribute in a template."
+  echo "       The CSP script-src carries no 'unsafe-inline', so this handler would"
+  echo "       never fire.  Use a data-* attribute plus a delegated listener in"
+  echo "       Public/app.js — see the declarative control behaviours there."
+  printf '%s\n' "$event_attr_offenders"
+  echo
 fi
 
 # ── 3c. JS styling-decision ratchet ─────────────────────────────────────────

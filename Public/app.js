@@ -365,3 +365,50 @@ if (root) {
         if (e.key === 'Escape' && active) active.open = false;
     });
 }());
+
+// ── Declarative control behaviours (the former inline handlers) ──────────────
+// Three one-liner behaviours used to ride `onclick=` / `onchange=` attributes
+// in the templates.  Those attributes are what `'unsafe-inline'` in the CSP
+// script-src was largely buying (#1516), and a nonce does not cover them —
+// only the attribute's removal does.  Each is now a data attribute read by a
+// delegated listener, so markup rendered later (an in-place form swap, a row
+// repainted by a poll) picks the behaviour up with no rebinding.
+(function declarativeControlBehaviours() {
+    // The form a control belongs to.  `.form` covers a control nested anywhere
+    // inside its form as well as one associated by the `form=` attribute;
+    // `closest` is the fallback for a non-form element carrying the attribute.
+    const owningForm = (el) => el.form || el.closest('form');
+
+    // data-ck-click-target="<id>" — forward this element's click to another
+    // element.  The templates use it for a visible button that stands in for a
+    // hidden submit button carrying a `formaction`.
+    document.addEventListener('click', (e) => {
+        const source = e.target.closest('[data-ck-click-target]');
+        if (!source) return;
+        const target = document.getElementById(source.getAttribute('data-ck-click-target'));
+        if (target) target.click();
+    });
+
+    // data-ck-select-all — select this field's whole value on click, so a
+    // one-shot secret can be copied without dragging across four wrapped lines.
+    document.addEventListener('click', (e) => {
+        const field = e.target.closest('[data-ck-select-all]');
+        if (field && typeof field.select === 'function') field.select();
+    });
+
+    // data-ck-submit-on-change — submit the owning form as soon as the control
+    // changes, for the pickers that have no Save button (enrolment mode, a
+    // per-course role, an assignment's open/closed status, the CSV file input
+    // behind a styled label).
+    //
+    // `submit()` rather than `requestSubmit()`: the attribute form called
+    // `submit()`, which fires no submit event, and the in-place and multipart
+    // interceptors both hang off that event.  Switching to `requestSubmit()`
+    // would silently reroute these four forms through them.
+    document.addEventListener('change', (e) => {
+        const control = e.target.closest('[data-ck-submit-on-change]');
+        if (!control) return;
+        const form = owningForm(control);
+        if (form) form.submit();
+    });
+}());

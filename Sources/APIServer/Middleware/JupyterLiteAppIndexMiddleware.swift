@@ -17,7 +17,11 @@
 // SECOND full editor (which boots a second kernel and, on WebKit, contends with
 // the kernel already running in the iframe), this middleware returns a tiny
 // self-closing page: the stray tab was opened by `window.open`, so `window.close()`
-// closes it, and it never boots a kernel. (`notebook.js` also suppresses the
+// closes it, and it never boots a kernel.  The close call lives in
+// `/stray-editor-tab.js` rather than an inline script tag: this path is under
+// `/jupyterlite/`, where the CSP allows inline scripts only by the hashes
+// derived from the VENDORED tree, and a page Chickadee composes itself is not
+// in that tree (#1516). (`notebook.js` also suppresses the
 // stray `window.open` at the source; this is the server-side backstop.) Registered
 // just before `FileMiddleware`; `/jupyterlite/<app>/index.html` and deeper paths
 // (`…/api/contents/…`) are untouched — they already resolve, so the iframe editor
@@ -64,7 +68,7 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
             <title>Return to your assignment</title>
             </head>
             <body>
-            <script>try { window.close() } catch (e) { /* self-close may be blocked; the message below covers it */ }</script>
+            <script src="/stray-editor-tab.js"></script>
             <p>This notebook opened in an extra browser tab. You can close this tab and return to your assignment.</p>
             </body>
             </html>

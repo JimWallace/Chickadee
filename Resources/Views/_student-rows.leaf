@@ -27,7 +27,7 @@
                       class="inline-form form-flush">
                     #csrfFormField()
                     <select name="role" class="form-input students-role-select" aria-label="Per-course role"
-                            onchange="this.form.submit()">
+                            data-ck-submit-on-change>
                         <option value="student"#if(student.role == "student"): selected#endif>Student</option>
                         <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
                         <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>

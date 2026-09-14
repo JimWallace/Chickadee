@@ -95,7 +95,23 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         securityConfiguration.enforceHTTPS
         ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
         : nil
-    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
+    // The vendored JupyterLite entry points carry inline bootstrap scripts we
+    // do not author and must not hand-edit, so they ride the CSP by hash —
+    // derived here, once, from the bytes FileMiddleware will serve, and
+    // attached only to `/jupyterlite/` responses.  Nil (no vendored tree, e.g.
+    // a test app) means those responses get the same inline-free policy as
+    // every other page.  See EditorInlineScriptHashes.
+    let editorInlineScriptHashes =
+        EditorInlineScriptHashes.derive(publicDirectory: app.directory.publicDirectory) ?? []
+    if editorInlineScriptHashes.isEmpty {
+        app.logger.debug(
+            "No vendored editor inline scripts found; CSP script-src permits no inline execution anywhere."
+        )
+    }
+    app.middleware.use(
+        SecurityHeadersMiddleware(
+            editorInlineScriptHashes: editorInlineScriptHashes,
+            strictTransportSecurity: hstsValue))
 
     // Error page middleware sits beneath SecurityHeadersMiddleware so it
     // catches errors from all subsequent middleware and route handlers.

@@ -164,7 +164,7 @@
             <label class="form-label course-enroll-label">
                 Enrolment
                 <select name="enrollmentMode" class="form-input course-enroll-select"
-                        onchange="this.form.submit()">
+                        data-ck-submit-on-change>
                     <option value="open"   #if(course.enrollmentMode == "open"):selected#endif>Open enrolment</option>
                     <option value="auto"   #if(course.enrollmentMode == "auto"):selected#endif>Auto enrolment</option>
                     <option value="closed" #if(course.enrollmentMode == "closed"):selected#endif>Closed enrolment</option>
@@ -178,7 +178,7 @@
             <label class="btn btn-primary course-csv-label">
                 Enrol from CSV
                 <input type="file" name="file" accept=".csv,.txt" required
-                       style="display:none" onchange="this.closest('form').submit()">
+                       style="display:none" data-ck-submit-on-change>
             </label>
         </form>
         #endif
@@ -216,7 +216,7 @@
                           class="inline-form">
                         #csrfFormField()
                         <select name="role" class="form-input course-role-select"
-                                aria-label="Per-course role" onchange="this.form.submit()">
+                                aria-label="Per-course role" data-ck-submit-on-change>
                             <option value="student"#if(user.role == "student"): selected#endif>Student</option>
                             <option value="ta"#if(user.role == "ta"): selected#endif>TA</option>
                             <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
