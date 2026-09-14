@@ -363,9 +363,7 @@ private func applyNotebookSubstitutionsIfNeeded(
     // assignments substitute without one (and without an assignment lookup).
     var seedHex: String?
     if manifest.hasExpressions, let setupID = setup.id {
-        if let assignment = try? await APIAssignment.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .first(),
+        if let assignment = try? await assignmentByTestSetupID(setupID, on: db),
             let assignmentID = assignment.id
         {
             seedHex = try? await AssignmentSeedStore.ensureSeed(
@@ -625,9 +623,7 @@ func writeDatasetFiles(
     else { return }
 
     guard
-        let assignment = try? await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first(),
+        let assignment = try? await assignmentByTestSetupID(setupID, on: req.db),
         let assignmentID = assignment.id
     else { return }
 

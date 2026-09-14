@@ -54,6 +54,6 @@ func luaIdentifier(_ name: String) -> String {
 /// A newline would end the comment and leave the remainder of the instructor's
 /// text as executable Lua — the same reason `rComment` exists.
 func luaComment(_ text: String) -> String {
-    text.replacingOccurrences(of: "\n", with: " ")
+    lineCommentText(text)
         .replacingOccurrences(of: "\r", with: " ")
 }

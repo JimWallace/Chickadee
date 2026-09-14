@@ -39,7 +39,7 @@ func renderRPatternCase(
     perStudentNames: Set<String> = []
 ) -> String {
     let header = rGeneratedCaseHeader(family: family, case: c, specHash: specHash)
-    let variableBlock = rCombinedVariableDecls(sectionVariables: sectionVariables, family: family)
+    let variableBlock = combinedVariableDecls(sectionVariables: sectionVariables, family: family, language: .r)
     let preamble = rPersonalizationPreambleForCase(c, perStudentNames: perStudentNames)
     let prelude = [header, variableBlock, preamble].filter { !$0.isEmpty }.joined(separator: "\n\n")
 
@@ -115,18 +115,8 @@ struct RCallContext {
 }
 
 func rCallContext(for family: PatternFamily, case c: PatternCase) -> RCallContext {
-    let argNames: [String] = {
-        if !family.paramNames.isEmpty { return family.paramNames }
-        return c.args.indices.map { "arg_\($0 + 1)" }
-    }()
-    let provided: [Bool] = {
-        guard !c.argsProvided.isEmpty else { return Array(repeating: true, count: argNames.count) }
-        return (0..<argNames.count).map { i in i < c.argsProvided.count ? c.argsProvided[i] : true }
-    }()
-    let varRefs: [String?] = {
-        guard !c.argVarRefs.isEmpty else { return Array(repeating: nil, count: argNames.count) }
-        return (0..<argNames.count).map { i in i < c.argVarRefs.count ? c.argVarRefs[i] : nil }
-    }()
+    let slots = PatternArgumentSlots(family: family, case: c)
+    let (argNames, provided, varRefs) = (slots.names, slots.provided, slots.varRefs)
 
     var declLines: [String] = []
     var callParts: [String] = []
@@ -159,15 +149,6 @@ func rCallContext(for family: PatternFamily, case c: PatternCase) -> RCallContex
         callArgs: callParts.joined(separator: ", "),
         inputLine: inputLine
     )
-}
-
-/// Scope + family variables as `name <- <rLiteral>` lines. R evaluates top to
-/// bottom, so the family's own variables come last and shadow section/global
-/// ones — the same `family > section > global` precedence as Python.
-func rCombinedVariableDecls(sectionVariables: [FamilyVariable], family: PatternFamily) -> String {
-    let all = sectionVariables + family.variables
-    guard !all.isEmpty else { return "" }
-    return all.map { "\(rIdentifier($0.name)) <- \($0.value.rLiteral)" }.joined(separator: "\n")
 }
 
 /// Two-line provenance header plus the `source("test_runtime.R")` every
@@ -256,6 +237,6 @@ func rIdentifier(_ name: String) -> String {
 
 /// Flattens a string for safe use inside a one-line `#` comment.
 private func rComment(_ text: String) -> String {
-    text.replacingOccurrences(of: "\n", with: " ")
+    lineCommentText(text)
         .replacingOccurrences(of: "\r", with: " ")
 }

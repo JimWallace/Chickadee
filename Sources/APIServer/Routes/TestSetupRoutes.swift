@@ -282,9 +282,7 @@ struct TestSetupRoutes: RouteCollection {
         let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
         // Determine a safe filename from the assignment title (if present).
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let title = assignment?.title ?? setupID
         let safeName =
             title

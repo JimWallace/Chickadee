@@ -115,16 +115,11 @@ struct CreateAssignmentTool: ContentTool {
                 tool: Self.name, detail: unknownLanguageMessage(input.language))
         }
 
-        let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard
-            let course = try await APICourse.query(on: context.db).filter(\.$code == code).first()
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No course found with code \"\(code)\".")
-        }
-        let courseID = try course.requireID()
         // Creating an assignment is instructor-level (#417); archived is blocked too.
-        try await context.authorizeCourseWriteAccess(courseID, tool: Self.name, atLeast: .instructor)
+        // The lookup is an exact match, so `code` is the course's stored code.
+        let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let courseID = try await resolveCourseIDForWrite(
+            code: code, tool: Self.name, context: context, atLeast: .instructor)
 
         let data: Data
         do {
@@ -158,7 +153,7 @@ struct CreateAssignmentTool: ContentTool {
             publicID: created.assignment.publicID,
             title: created.assignment.title,
             slug: created.assignment.slug,
-            courseCode: course.code,
+            courseCode: code,
             cellCount: notebookCellCount(input.notebook),
             isOpen: created.assignment.isOpen)
     }

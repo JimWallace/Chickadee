@@ -156,12 +156,7 @@ private struct UWImportantDatesCacheKey: StorageKey {
 extension Application {
     var uwImportantDatesCache: UWImportantDatesCache {
         get {
-            if let existing = storage[UWImportantDatesCacheKey.self] {
-                return existing
-            }
-            let created = UWImportantDatesCache()
-            storage[UWImportantDatesCacheKey.self] = created
-            return created
+            lazyStored(UWImportantDatesCacheKey.self) { UWImportantDatesCache() }
         }
         set { storage[UWImportantDatesCacheKey.self] = newValue }
     }

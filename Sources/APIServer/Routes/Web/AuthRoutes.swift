@@ -440,13 +440,7 @@ func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response
     let autoCourses = allCourses.filter { $0.enrollmentMode == .auto }
     for course in autoCourses {
         guard let courseID = course.id else { continue }
-        let existing = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .count()
-        if existing == 0 {
-            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
-        }
+        try await ensureSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
     }
 
     let enrollmentCount = try await APICourseEnrollment.query(on: req.db)

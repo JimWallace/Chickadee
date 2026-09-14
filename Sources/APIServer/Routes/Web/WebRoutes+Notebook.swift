@@ -49,9 +49,7 @@ extension WebRoutes {
         // reference solution before its reveal, and who keeps an editable
         // editor on a closed assignment.
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         // The reference solution is staff-only until the assignment's reveal
         // policy and this student's own gate admit them
         // (`solutionVisibleToStudent`: policy on, published, no re-open
@@ -60,13 +58,8 @@ extension WebRoutes {
         // enrolled student (and, read-only, for closed assignments), so guard
         // the solution view here rather than relying on the absence of a UI
         // link — never serve the answer key early.
-        if fileKind == .solution, !isStaff {
-            guard let assignment,
-                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
-            else {
-                throw Abort(
-                    .forbidden, reason: "The solution to this assignment is not available.")
-            }
+        if fileKind == .solution {
+            try await requireSolutionVisible(assignment: assignment, user: user, isStaff: isStaff, on: req.db)
         }
         // An upload-only assignment has no notebook workflow: send students to
         // the upload form instead of scaffolding an empty editor (the vanity
@@ -630,9 +623,7 @@ extension WebRoutes {
         // row (or a submission), so this never fires on normal page loads.
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         if !isStaff,
-            let assignment = try await APIAssignment.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .first(),
+            let assignment = try await assignmentByTestSetupID(setupID, on: req.db),
             !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
             !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
         {
@@ -659,22 +650,15 @@ extension WebRoutes {
         }
 
         let fileKind = notebookFileKind(from: query.file)
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         // The reference solution stays gated on the raw content endpoint with
         // exactly the page's rule (`solutionVisibleToStudent` for students,
         // unconditional for staff).  This endpoint once had no guard at all, so
         // any enrolled student could fetch the answer key as JSON by asking for
         // `?file=solution` directly — the exact bypass the page's own comment
         // warns about ("never serve the answer key early").
-        if fileKind == .solution, !isStaff {
-            guard let assignment,
-                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
-            else {
-                throw Abort(
-                    .forbidden, reason: "The solution to this assignment is not available.")
-            }
+        if fileKind == .solution {
+            try await requireSolutionVisible(assignment: assignment, user: user, isStaff: isStaff, on: req.db)
         }
         // Same resolution as the page, so the editor's frame and its content
         // fetch never disagree about which copy is open — and so a student
@@ -726,17 +710,8 @@ extension WebRoutes {
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
-        if !isStaff {
-            guard let assignment,
-                try await solutionVisibleToStudent(assignment: assignment, user: user, on: req.db)
-            else {
-                throw Abort(
-                    .forbidden, reason: "The solution to this assignment is not available.")
-            }
-        }
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
+        try await requireSolutionVisible(assignment: assignment, user: user, isStaff: isStaff, on: req.db)
         return try await solutionFileDownloadResponse(req: req, assignment: assignment, setup: setup)
     }
 }

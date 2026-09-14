@@ -114,9 +114,7 @@ struct SubmissionQueryRoutes: RouteCollection {
         // only reach their own submission (`canViewSubmission`), so the caller
         // is the submission owner; for instructors the deadline is unused
         // (they see every tier).
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == submission.testSetupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(submission.testSetupID, on: req.db)
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: assignment, user: caller, on: req.db)
         let reveal = try await SecretRevealState.resolve(

@@ -64,11 +64,7 @@ struct GetServerInfoTool: ContentTool {
         + "live (a tool call hits the running process, unlike a cached tool list) or to check "
         + "whether write tools will work before calling them. Read-only; touches no course, "
         + "student, or database state."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

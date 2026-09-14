@@ -86,7 +86,7 @@ func javaQualifiedFunction(_ name: String) -> (className: String, methodName: St
 /// A single-line `//` comment carrying `text`, with newlines stripped so a
 /// multi-line value cannot break out of the comment and become code.
 func javaComment(_ text: String) -> String {
-    "// " + text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+    "// " + lineCommentText(text)
 }
 
 /// Escapes `s` for embedding inside a Java double-quoted string literal.
@@ -103,23 +103,7 @@ func javaComment(_ text: String) -> String {
 /// `JSONValueJavaLiteral` already documents. Control characters therefore use
 /// three-digit octal, which the lexer leaves alone.
 func escapeForJavaStringLiteral(_ s: String) -> String {
-    var out = ""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03o", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out
+    CStyleStringEscaping.java.escapedContents(of: s)
 }
 
 /// A Java class name derived from a generated test's filename stem.

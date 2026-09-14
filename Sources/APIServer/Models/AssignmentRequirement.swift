@@ -39,8 +39,8 @@ final class AssignmentRequirement: Model, Content, @unchecked Sendable {
         self.assignmentID = assignmentID
         self.requiredPlatform = specification.requiredPlatform
         self.requiredArchitecture = specification.requiredArchitecture
-        self.requiredLanguagesJSON = Self.encodeJSON(specification.requiredLanguages)
-        self.requiredCapabilitiesJSON = Self.encodeJSON(specification.requiredCapabilities)
+        self.requiredLanguagesJSON = JSONColumn.encode(specification.requiredLanguages)
+        self.requiredCapabilitiesJSON = JSONColumn.encode(specification.requiredCapabilities)
     }
 
     var requirementSpec: AssignmentRequirementSpec {
@@ -48,37 +48,15 @@ final class AssignmentRequirement: Model, Content, @unchecked Sendable {
             AssignmentRequirementSpec(
                 requiredPlatform: requiredPlatform,
                 requiredArchitecture: requiredArchitecture,
-                requiredLanguages: Self.decodeJSON(requiredLanguagesJSON, defaultValue: []),
-                requiredCapabilities: Self.decodeJSON(requiredCapabilitiesJSON, defaultValue: [])
+                requiredLanguages: JSONColumn.decode(requiredLanguagesJSON, defaultValue: []),
+                requiredCapabilities: JSONColumn.decode(requiredCapabilitiesJSON, defaultValue: [])
             )
         }
         set {
             requiredPlatform = newValue.requiredPlatform
             requiredArchitecture = newValue.requiredArchitecture
-            requiredLanguagesJSON = Self.encodeJSON(newValue.requiredLanguages)
-            requiredCapabilitiesJSON = Self.encodeJSON(newValue.requiredCapabilities)
+            requiredLanguagesJSON = JSONColumn.encode(newValue.requiredLanguages)
+            requiredCapabilitiesJSON = JSONColumn.encode(newValue.requiredCapabilities)
         }
-    }
-}
-
-private extension AssignmentRequirement {
-    static func encodeJSON<T: Encodable>(_ value: T) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(value),
-            let string = String(data: data, encoding: .utf8)
-        else {
-            return "[]"
-        }
-        return string
-    }
-
-    static func decodeJSON<T: Decodable>(_ raw: String, defaultValue: T) -> T {
-        guard let data = raw.data(using: .utf8),
-            let decoded = try? JSONDecoder().decode(T.self, from: data)
-        else {
-            return defaultValue
-        }
-        return decoded
     }
 }

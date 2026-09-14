@@ -34,14 +34,7 @@ struct GetNotebookTool: ContentTool {
         "Get an assignment's notebook (the starter notebook students open) as .ipynb JSON, by "
         + "assignment public ID. Returns the full notebook plus a cell count. Read-only; use it to "
         + "inspect an assignment's notebook before editing the suite or (later) the notebook itself."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

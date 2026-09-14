@@ -36,11 +36,7 @@ struct GetHealthAlertsTool: DiagnosticTool {
         + "oldest-pending age, system-failure rate, post-idle exec_hang count, configured "
         + "thresholds). Evaluated on demand, independent of whether alert delivery is enabled. "
         + "Read-only; counts and thresholds only — no student identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)

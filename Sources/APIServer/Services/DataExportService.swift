@@ -73,12 +73,7 @@ struct DataExportManagerKey: StorageKey {
 extension Application {
     var dataExportManager: DataExportManager {
         get {
-            if let existing = storage[DataExportManagerKey.self] {
-                return existing
-            }
-            let created = DataExportManager()
-            storage[DataExportManagerKey.self] = created
-            return created
+            lazyStored(DataExportManagerKey.self) { DataExportManager() }
         }
         set {
             storage[DataExportManagerKey.self] = newValue

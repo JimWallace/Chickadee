@@ -26,11 +26,7 @@ struct GetStorageUsageTool: DiagnosticTool {
         + "diagnose disk pressure (which causes job failures) and see which assignment is consuming "
         + "space. Read-only; assignment/course identifiers and byte/count aggregates only — no student "
         + "identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)

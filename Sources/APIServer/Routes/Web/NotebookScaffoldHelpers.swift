@@ -14,26 +14,19 @@ func minimalEmptyNotebookData() -> Data {
     Data(#"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
 }
 
+/// The uploaded notebook's name, made safe for storage and guaranteed to end
+/// in `.ipynb`.
 func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> String {
-    var fileName = uploadedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if fileName.isEmpty {
-        fileName = fallback
-    }
-    fileName = URL(fileURLWithPath: fileName).lastPathComponent
-    fileName =
-        fileName
-        .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r"))
-        .joined(separator: " ")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    if fileName.isEmpty {
-        fileName = fallback
-    }
+    var fileName = submissionFilenameForStorage(uploadedName: uploadedName, fallback: fallback)
     if !fileName.lowercased().hasSuffix(".ipynb") {
         fileName += ".ipynb"
     }
     return fileName
 }
 
+/// The uploaded file's name, made safe for storage: trimmed, reduced to its
+/// last path component, stripped of separator and control characters, and
+/// replaced by `fallback` when nothing usable is left.
 func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> String {
     var fileName = uploadedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if fileName.isEmpty {

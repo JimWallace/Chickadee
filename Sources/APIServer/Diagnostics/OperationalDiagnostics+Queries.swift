@@ -75,9 +75,7 @@ extension OperationalDiagnosticsService {
                 .first()?
                 .id
         } else {
-            assignmentID = try await APIAssignment.query(on: db)
-                .filter(\.$testSetupID == submission.testSetupID)
-                .first()?
+            assignmentID = try await assignmentByTestSetupID(submission.testSetupID, on: db)?
                 .id
         }
 

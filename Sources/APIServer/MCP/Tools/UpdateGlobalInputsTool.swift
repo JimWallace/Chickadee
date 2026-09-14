@@ -58,49 +58,8 @@ struct UpdateGlobalInputsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": MCPSchema.assignmentPublicID,
-            "variables": .object([
-                "type": .string("array"),
-                "description": .string("Replacement literal values; send [] to clear."),
-                "items": .object([
-                    "type": .string("object"),
-                    "properties": .object([
-                        "name": .object([
-                            "type": .string("string"),
-                            "description": .string(
-                                "Valid Python identifier (the rule in every language); not \"seed\"."),
-                        ]),
-                        "value": .object([
-                            "description": .string(
-                                "Any JSON value (scalar, list, object); rendered as a literal in the assignment's language."
-                            )
-                        ]),
-                    ]),
-                    "required": .array([.string("name"), .string("value")]),
-                    "additionalProperties": .bool(false),
-                ]),
-            ]),
-            "expressions": .object([
-                "type": .string("array"),
-                "description": .string("Replacement per-student expressions; omit or send [] to clear."),
-                "items": .object([
-                    "type": .string("object"),
-                    "properties": .object([
-                        "name": .object([
-                            "type": .string("string"),
-                            "description": .string(
-                                "Valid Python identifier (the rule in every language); not \"seed\"."),
-                        ]),
-                        "expression": .object([
-                            "type": .string("string"),
-                            "description": .string(
-                                "An expression in the assignment's own language; `seed` and every variable are in scope."
-                            ),
-                        ]),
-                    ]),
-                    "required": .array([.string("name"), .string("expression")]),
-                    "additionalProperties": .bool(false),
-                ]),
-            ]),
+            "variables": MCPSchema.personalizationVariables,
+            "expressions": MCPSchema.personalizationExpressions,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("variables")]),
         "additionalProperties": .bool(false),

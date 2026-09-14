@@ -24,11 +24,6 @@ import Core
 
 // MARK: - approximateEquality
 
-/// Default tolerance when the family spec leaves `defaults.tolerance` nil.
-/// 1e-6 matches Python's `math.isclose` default `abs_tol=0.0` / `rel_tol=1e-9`
-/// in spirit but is permissive enough for typical student arithmetic.
-private let defaultApproxTolerance: Double = 1e-6
-
 /// Renders an approximate-equality case.  Shape mirrors
 /// `renderBoundaryEquality` — same header, input echo, rich failure
 /// messages — with the comparison replaced by
@@ -45,7 +40,7 @@ func renderApproximateEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let tolerance = family.defaults.tolerance ?? defaultApproxTolerance
+    let tolerance = family.effectiveTolerance
     // Use JSONValue's Python rendering so whole-number tolerances come out
     // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
     let toleranceLiteral = JSONValue.double(tolerance).pythonLiteral
@@ -112,7 +107,7 @@ func renderApproximateEquality(
 /// actual delta so a student sees how far off they are.
 func rApproximateCase(family: PatternFamily, case c: PatternCase, prelude: String) -> String {
     let ctx = rCallContext(for: family, case: c)
-    let tolerance = JSONValue.double(family.defaults.tolerance ?? 1e-6).rLiteral
+    let tolerance = JSONValue.double(family.effectiveTolerance).rLiteral
     return """
         \(prelude)
 
@@ -161,7 +156,7 @@ func luaApproximateCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = luaCallContext(for: family, case: c)
-    let tolerance = JSONValue.double(family.defaults.tolerance ?? 1e-6).luaLiteral
+    let tolerance = JSONValue.double(family.effectiveTolerance).luaLiteral
     return """
         \(prelude)
 
@@ -213,7 +208,7 @@ func octaveApproximateCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = octaveCallContext(for: family, case: c)
-    let tolerance = JSONValue.double(family.defaults.tolerance ?? 1e-6).octaveLiteral
+    let tolerance = JSONValue.double(family.effectiveTolerance).octaveLiteral
     return """
         \(prelude)
 
@@ -257,7 +252,7 @@ func octaveApproximateCase(
 func cppApproximateBody(
     target: String, context: CppCallContext, c: PatternCase, family: PatternFamily
 ) -> String {
-    let tolerance = family.defaults.tolerance ?? 1e-6
+    let tolerance = family.effectiveTolerance
     return cppGuarded(
         """
         auto expected = \(context.expectedExpression);
@@ -278,7 +273,7 @@ func racketApproximateCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = racketCallContext(for: family, case: c)
-    let tolerance = JSONValue.double(family.defaults.tolerance ?? 1e-6).racketLiteral
+    let tolerance = JSONValue.double(family.effectiveTolerance).racketLiteral
     return """
         \(prelude)
 
@@ -311,7 +306,7 @@ func racketApproximateCase(
 func javaApproximateBody(
     target: String, context: JavaCallContext, c: PatternCase, family: PatternFamily
 ) -> String {
-    let tolerance = family.defaults.tolerance ?? 1e-6
+    let tolerance = family.effectiveTolerance
     return javaGuarded(
         """
         var expected = \(context.expectedExpression);

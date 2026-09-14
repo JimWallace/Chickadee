@@ -306,9 +306,7 @@ private func resolveAndCacheValidationMaterialization(
             // one.
             var resolved: String?
             if let userID = submission.userID,
-                let assignment = try await APIAssignment.query(on: db)
-                    .filter(\.$testSetupID == setupID)
-                    .first(),
+                let assignment = try await assignmentByTestSetupID(setupID, on: db),
                 let assignmentID = assignment.id
             {
                 resolved = try? await AssignmentSeedStore.ensureSeed(

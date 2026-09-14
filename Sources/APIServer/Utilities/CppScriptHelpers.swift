@@ -45,7 +45,7 @@ func isValidCppIdentifier(_ name: String) -> Bool {
 /// A `//` comment line with newlines stripped, so authored text (labels,
 /// hints) cannot break out of comment position in generated source.
 func cppComment(_ text: String) -> String {
-    "// " + text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+    "// " + lineCommentText(text)
 }
 
 /// Escapes `s` for embedding inside a C++ double-quoted string literal.
@@ -61,23 +61,7 @@ func cppComment(_ text: String) -> String {
 /// C++ has no length limit, so `\x1` followed by a literal `f` would be read as
 /// the single character `\x1f` rather than as two.
 func escapeForCppStringLiteral(_ s: String) -> String {
-    var out = ""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03o", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out
+    CStyleStringEscaping.cpp.escapedContents(of: s)
 }
 
 /// The heredoc delimiter every generated `.sh` wrapper uses to carry its

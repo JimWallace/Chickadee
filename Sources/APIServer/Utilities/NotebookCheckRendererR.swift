@@ -338,6 +338,6 @@ private func rUnsupportedCheck(_ check: NotebookCheck, specHash: String) -> Stri
 
 /// Flattens a string for safe use inside a one-line `#` comment.
 func rCheckComment(_ text: String) -> String {
-    text.replacingOccurrences(of: "\n", with: " ")
+    lineCommentText(text)
         .replacingOccurrences(of: "\r", with: " ")
 }

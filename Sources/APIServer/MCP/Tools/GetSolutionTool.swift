@@ -38,14 +38,7 @@ struct GetSolutionTool: ContentTool {
         + "resolved from the assignment's validation submission — never a student submission. Returns the "
         + "notebook, its filename, and a cell count. Read-only; use it to inspect the solution (for "
         + "example to confirm it computes a personalized answer) before editing it with update_solution."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

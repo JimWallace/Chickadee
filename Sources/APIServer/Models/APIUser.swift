@@ -281,6 +281,16 @@ extension Request {
     /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
     /// Cached per request (the underlying work, including its side effects, runs
     /// once); see `computeActiveCourse` for the resolution itself.
+    /// The active course's id, or `WebAssignmentError.noActiveCourse` naming
+    /// `action` when the viewer has none selected. The guard every
+    /// course-scoped instructor write starts with.
+    func requireActiveCourseID(for user: APIUser, action: String) async throws -> UUID {
+        guard let courseID = try await resolveActiveCourse(for: user).activeCourseUUID else {
+            throw WebAssignmentError.noActiveCourse(action: action)
+        }
+        return courseID
+    }
+
     func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
         if let cached = storage[ResolvedCourseStateStorageKey.self] { return cached }
         let state = try await computeActiveCourse(for: user)

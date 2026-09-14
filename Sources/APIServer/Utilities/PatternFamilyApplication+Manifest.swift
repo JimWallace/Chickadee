@@ -10,12 +10,11 @@ import Foundation
 
 /// Rebuilds the manifest and re-checks the post-expansion result.
 ///
-/// `makeWorkerManifestJSON` builds a fresh dictionary, so **anything not
-/// threaded through here is lost.** That is the failure mode this phase is
-/// most prone to: `submissionMode`, `requiredFiles`, `minimumRunnerVersion`,
-/// `activity`, achievements and datasets are all carried forward explicitly
-/// for that reason, and a new manifest field needs adding here as well as to the
-/// encoder.
+/// The base `makeWorkerManifestJSON` builds a fresh dictionary, so anything
+/// not threaded through is lost — the failure mode this phase was most prone
+/// to. The `preserving:` overload carries every field of the previous
+/// manifest forward by default, so only what this phase actually recomputes
+/// is passed.
 func rebuildPatternFamilyManifest(
     entries: [ConfiguredSuiteEntry],
     previousProps props: TestProperties,
@@ -24,42 +23,22 @@ func rebuildPatternFamilyManifest(
     language: AssignmentLanguage?
 ) throws -> String {
     let newManifest = try makeWorkerManifestJSON(
+        preserving: props,
         testSuites: entries,
-        includeMakefile: props.makefile != nil,
-        gradingMode: props.gradingMode.rawValue,
-        submissionMode: props.submissionMode.rawValue,
-        requiredFiles: props.requiredFiles,
-        timeLimitSeconds: props.timeLimitSeconds,
-        starterNotebook: props.starterNotebook,
         patternFamilies: families,
         notebookChecks: inputs.checks,
         sections: inputs.sections,
         globalVariables: inputs.globalVariables,
         globalExpressions: inputs.globalExpressions,
-        achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
-        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets,
         // Always record the language the author DECLARED, Python included —
         // and nil when they declared none. An explicit answer is the point: a
         // suite that later holds only pattern families has no `.R` script left
         // to sniff, and "we inferred Python" and "this is a Python assignment"
-        // should not be the same state. The first save of a pre-existing
-        // assignment therefore changes its manifest hash once, which re-keys
-        // the runner's TestSetupCache and triggers one revision-retest fan-out
-        // for that assignment — a bounded, one-time cost accepted in exchange
-        // for the language never being re-inferred.
-        //
-        // This used to be handed a non-optional that had already been
-        // `?? .python`'d, so reordering two `.sh` scripts on an assignment
-        // whose author chose "None" rewrote its declaration to Python.
-        language: language,
-        // Preserved, not recomputed: a rebuild must not un-declare an
-        // assignment, least of all one whose declaration is "none" — which is
-        // exactly the case where `language` alone carries no evidence.
-        languageDeclared: props.languageDeclared == true,
-        minimumRunnerVersion: props.minimumRunnerVersion,
-        activity: props.activity
+        // should not be the same state. This used to be handed a non-optional
+        // that had already been `?? .python`'d, so reordering two `.sh`
+        // scripts on an assignment whose author chose "None" rewrote its
+        // declaration to Python.
+        language: language
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner

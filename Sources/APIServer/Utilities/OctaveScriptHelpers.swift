@@ -56,7 +56,7 @@ func octaveIdentifier(_ name: String) -> String {
 /// text as executable Octave — the same reason `rComment` and `luaComment`
 /// exist.
 func octaveComment(_ text: String) -> String {
-    text.replacingOccurrences(of: "\n", with: " ")
+    lineCommentText(text)
         .replacingOccurrences(of: "\r", with: " ")
 }
 

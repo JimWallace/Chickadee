@@ -220,9 +220,7 @@ enum AssignmentVersionStore {
     private static func publishedAssignment(
         setupID: String, on db: any Database
     ) async throws -> APIAssignment? {
-        try await APIAssignment.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        try await assignmentByTestSetupID(setupID, on: db)
     }
 
     // MARK: - Insert

@@ -40,10 +40,7 @@ extension CourseAdminRoutes {
     @Sendable
     func createContentItem(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "managing content items")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "managing content items")
         try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
 
         let body = try req.content.decode(ContentItemFormBody.self)

@@ -25,11 +25,7 @@ struct ListCoursesTool: ContentTool {
         "List the courses this agent may act on: the courses its account is enrolled in. "
         + "This is the agent's full reach — no role widens it; enrolling the account in a course "
         + "adds it. Returns each course's code and name."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

@@ -69,29 +69,7 @@ extension JSONValue {
     }
 }
 
-/// Racket string syntax. The escape set is Racket's, not JSON's — they agree on
-/// the common cases but Racket has no `\/`, and a literal backslash must be
-/// doubled before anything else is considered.
+/// See `CStyleStringEscaping.racket` for the escape rules.
 private func encodeRacketString(_ s: String) -> String {
-    var out = "\""
-    for scalar in s.unicodeScalars {
-        switch scalar {
-        case "\\": out += "\\\\"
-        case "\"": out += "\\\""
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            // Racket source is UTF-8, so printable non-ASCII needs no escape.
-            // Control characters do: they would otherwise be embedded raw and
-            // make the generated file unreadable (and, for a stray NUL,
-            // unparseable).
-            if scalar.value < 0x20 || scalar.value == 0x7F {
-                out += String(format: "\\u%04X", scalar.value)
-            } else {
-                out.unicodeScalars.append(scalar)
-            }
-        }
-    }
-    return out + "\""
+    CStyleStringEscaping.racket.quotedLiteral(s)
 }

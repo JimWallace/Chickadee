@@ -14,6 +14,15 @@ func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> A
         .first()
 }
 
+/// The assignment whose test setup is `testSetupID`, or nil for a draft or
+/// orphaned setup. The twin of `assignmentByPublicID` for the setup-keyed
+/// student routes and services.
+func assignmentByTestSetupID(_ testSetupID: String, on db: Database) async throws -> APIAssignment? {
+    try await APIAssignment.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .first()
+}
+
 func uniqueAssignmentSlug(
     title: String,
     courseID: UUID,

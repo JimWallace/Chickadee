@@ -57,11 +57,7 @@ struct GetDeployStatusTool: DiagnosticTool {
         + "if the daemon is not running or its state dir is not mounted. Read-only; reads a small "
         + "JSON file the daemon owns and touches no course, student, or database state. Deploy "
         + "control (pause/approve/rollback) is a host-side action, not exposed here."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)

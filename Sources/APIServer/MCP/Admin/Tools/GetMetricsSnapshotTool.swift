@@ -25,11 +25,7 @@ struct GetMetricsSnapshotTool: DiagnosticTool {
         + "compatibility counters, over the server's recent window. Use it to diagnose runner "
         + "health, throughput, and queue pressure. Read-only; aggregates only — no student, "
         + "submission, course, or assignment identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)
