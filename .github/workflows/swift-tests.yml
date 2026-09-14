@@ -106,6 +106,9 @@ jobs:
       - name: Check the CI compose fixture covers every required variable
         run: scripts/ci-compose-env.sh --check
 
+      - name: Check the Docker compile stage carries every path the build needs
+        run: scripts/check-docker-build-context.sh
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles

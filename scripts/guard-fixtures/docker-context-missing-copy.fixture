@@ -1,0 +1,11 @@
+# A target path the Dockerfile's compile stage does not copy. SPM validates
+# every path in Package.swift, including targets it is not building, so the
+# image build dies for every product — and only the weekly ZAP run builds it.
+guard="scripts/check-docker-build-context.sh"
+files="Dockerfile"
+description="a manifest target path with no COPY in the compile stage"
+expect="does not copy"
+apply() {
+    grep -v '^COPY Plugins ' Dockerfile > Dockerfile.fixture-tmp \
+        && mv Dockerfile.fixture-tmp Dockerfile
+}

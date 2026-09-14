@@ -29,11 +29,19 @@ WORKDIR /build
 COPY Package.swift Package.resolved ./
 RUN swift package resolve --skip-update
 
-# Copy sources and tests.  Tests/ is never compiled in this step (we build
-# specific products only), but SPM validates all target paths in Package.swift
-# even for targets it isn't building — so the directories must exist.
+# Copy every directory a target declares a `path:` for.  Tests/ is never
+# compiled in this step (we build specific products only), but SPM validates all
+# target paths in Package.swift even for targets it isn't building — so the
+# directories must exist.  Plugins/ is there for the same reason and one more:
+# chickadee-runner applies the EmbedRunnerSupport build-tool plugin.
 COPY Sources ./Sources
 COPY Tests   ./Tests
+COPY Plugins ./Plugins
+
+# EmbedRunnerSupport reads these at build time and compiles them into the runner
+# binary.  The rest of Tools/ is the JupyterLite toolchain and stays out of the
+# context; .dockerignore re-includes this one subdirectory.
+COPY Tools/runner-support ./Tools/runner-support
 
 # Build products one at a time so each gets its own log output.
 # --static-swift-stdlib embeds the runtime so the runtime stage needs no Swift libs.
