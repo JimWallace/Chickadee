@@ -63,7 +63,7 @@ xeus kernel has no subprocess and the kind has to grade in the browser.
 | Python | swapping `sys.stdin` and `builtins.input` around `runpy.run_path(..., run_name="__main__")` | catching `SystemExit` |
 | R | `readline`, `readLines("stdin")` and `scan(file = "")` masked in the environment the file is sourced into (`file("stdin")` is not) | `quit`/`q` masked |
 | Lua | a proxied `io` (`read`, `lines`, `stdin`) beside the `print` capture the stdout kind already uses | `os.exit` masked |
-| Octave | a command-line `input()` that draws from the case's lines (`input(prompt, "s")` returns the line as text) | `exit`/`quit` masked while the program runs |
+| Octave | a command-line `input()` that draws from the case's lines (`input(prompt, "s")` returns the line as text) | `exit`/`quit` masked in the browser wrapper's own shape, and cleared after the run on the native worker |
 | Racket | `current-input-port` parameterized around `dynamic-require` of the module in a fresh namespace | `exit-handler` parameterized |
 | C++ | a shell wrapper compiles the submission to its own binary and runs it with the text on its real stdin; a checker translation unit grades the result | not needed: a real process |
 | Java | the wrapper runs the submission in source-file mode (`java Prog.java`) with the text on its real stdin | not needed: a real process |

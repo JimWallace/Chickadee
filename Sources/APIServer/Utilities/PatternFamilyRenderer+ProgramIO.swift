@@ -413,8 +413,13 @@ func luaProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: Strin
 
 /// The command-line functions that shadow `input`, `exit` and `quit` while
 /// the program runs. `input` draws from the global line cursor the case sets
-/// up; the exit masks raise `chickadee:exit` only while `ck_program_running`
-/// is set, and otherwise forward to the exit that was visible before them.
+/// up. The exit masks are the browser wrapper's own shape — an error whose
+/// IDENTIFIER is `chickadee:exit` and whose message is the status — so in the
+/// kernel they replace an equivalent mask with itself, and natively the case
+/// clears them again once the program has run so the runtime's verdict
+/// `exit` reaches the builtin. No handle to the previous `exit` is ever
+/// taken: a simple handle re-resolves by name, so once the mask exists such a
+/// handle would call the mask and recurse.
 private let octaveProgramIOMasks = """
     function r = input(prompt, varargin)
         global ck_stdin_lines ck_stdin_pos
@@ -434,26 +439,23 @@ private let octaveProgramIOMasks = """
         end
     end
     function exit(varargin)
-        global ck_program_running ck_prev_exit
-        if ck_program_running
-            error("chickadee:exit", "exit");
+        if nargin < 1 || !isnumeric(varargin{1})
+            code = 0;
+        else
+            code = varargin{1};
         end
-        ck_prev_exit(varargin{:});
+        error("chickadee:exit", "%d", code);
     end
     function quit(varargin)
-        global ck_program_running ck_prev_quit
-        if ck_program_running
-            error("chickadee:exit", "exit");
-        end
-        ck_prev_quit(varargin{:});
+        exit(varargin{:});
     end
     """
 
-/// Shadows `input` (and `exit` / `quit`) with command-line functions for the
-/// duration of the program run. Command-line functions shadow builtins, and
-/// the masks read the previously visible `exit` through a handle captured
-/// first, so the runtime's own verdict exits — the builtin natively, the
-/// browser wrapper's mask in the kernel — still reach the right place.
+/// Shadows `input`, `exit` and `quit` with command-line functions for the
+/// duration of the program run. `ck_native_exit` is read BEFORE the masks are
+/// defined: a builtin `exit` (5) means the native worker, where the masks are
+/// cleared after the run; a command-line one (103) means the browser wrapper's
+/// mask is already in force and stays.
 func octaveProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: String) -> String {
     let comparison = family.resolvedIOComparison
     let compare: String
@@ -484,30 +486,26 @@ func octaveProgramIOCase(family: PatternFamily, case c: PatternCase, prelude: St
             out = strjoin(lines, sprintf("\\n"));
         end
 
-        global ck_stdin_lines ck_stdin_pos ck_program_running ck_prev_exit ck_prev_quit
+        global ck_stdin_lines ck_stdin_pos
         ck_stdin_lines = strsplit(stdin_text, sprintf("\\n"), "CollapseDelimiters", false);
         if !isempty(ck_stdin_lines) && isempty(ck_stdin_lines{end})
             ck_stdin_lines(end) = [];
         end
         ck_stdin_pos = 1;
-        ck_program_running = false;
-        ck_prev_exit = @exit;
-        ck_prev_quit = @quit;
+        ck_native_exit = (exist("exit") == 5);
 
         \(octaveProgramIOMasks)
 
         ck_text = fileread(ck_file);
         ck_error = "";
-        ck_program_running = true;
-        try
-            captured = evalc("eval([\\"1;\\" sprintf(\\"\\\\n\\") ck_text]);");
-        catch err
-            captured = "";
-            if !strcmp(err.identifier, "chickadee:exit")
-                ck_error = err.message;
-            end
+        ck_run_err = [];
+        captured = evalc("try, eval([\\"1;\\" sprintf(\\"\\\\n\\") ck_text]); catch ck_run_err, end");
+        if !isempty(ck_run_err) && !strcmp(ck_run_err.identifier, "chickadee:exit")
+            ck_error = ck_run_err.message;
         end
-        ck_program_running = false;
+        if ck_native_exit
+            clear exit quit
+        end
 
         if !isempty(ck_error)
             chickadee.failed(["\(GeneratedMessage.unexpectedException)\\n" ...

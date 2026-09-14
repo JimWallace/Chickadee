@@ -21,15 +21,13 @@ function out = ck_normalize(text)
     out = strjoin(lines, sprintf("\n"));
 end
 
-global ck_stdin_lines ck_stdin_pos ck_program_running ck_prev_exit ck_prev_quit
+global ck_stdin_lines ck_stdin_pos
 ck_stdin_lines = strsplit(stdin_text, sprintf("\n"), "CollapseDelimiters", false);
 if !isempty(ck_stdin_lines) && isempty(ck_stdin_lines{end})
     ck_stdin_lines(end) = [];
 end
 ck_stdin_pos = 1;
-ck_program_running = false;
-ck_prev_exit = @exit;
-ck_prev_quit = @quit;
+ck_native_exit = (exist("exit") == 5);
 
 function r = input(prompt, varargin)
     global ck_stdin_lines ck_stdin_pos
@@ -49,32 +47,27 @@ function r = input(prompt, varargin)
     end
 end
 function exit(varargin)
-    global ck_program_running ck_prev_exit
-    if ck_program_running
-        error("chickadee:exit", "exit");
+    if nargin < 1 || !isnumeric(varargin{1})
+        code = 0;
+    else
+        code = varargin{1};
     end
-    ck_prev_exit(varargin{:});
+    error("chickadee:exit", "%d", code);
 end
 function quit(varargin)
-    global ck_program_running ck_prev_quit
-    if ck_program_running
-        error("chickadee:exit", "exit");
-    end
-    ck_prev_quit(varargin{:});
+    exit(varargin{:});
 end
 
 ck_text = fileread(ck_file);
 ck_error = "";
-ck_program_running = true;
-try
-    captured = evalc("eval([\"1;\" sprintf(\"\\n\") ck_text]);");
-catch err
-    captured = "";
-    if !strcmp(err.identifier, "chickadee:exit")
-        ck_error = err.message;
-    end
+ck_run_err = [];
+captured = evalc("try, eval([\"1;\" sprintf(\"\\n\") ck_text]); catch ck_run_err, end");
+if !isempty(ck_run_err) && !strcmp(ck_run_err.identifier, "chickadee:exit")
+    ck_error = ck_run_err.message;
 end
-ck_program_running = false;
+if ck_native_exit
+    clear exit quit
+end
 
 if !isempty(ck_error)
     chickadee.failed(["unexpected exception\n" ...
