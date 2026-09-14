@@ -100,6 +100,42 @@ import VaporTesting
         }
     }
 
+    @Test func strayEditorTabPageIsAdmittedByThePolicyItIsServedUnder() async throws {
+        // The one inline script Chickadee itself still serves. It stays inline
+        // because the page's only job is to close the tab the instant it
+        // paints — an external script adds a round trip before that and a
+        // failure mode where the tab stays open. So the hash and the page must
+        // be built from the same constant, and this proves they are: hash the
+        // script as it appears in the served body, and require the served
+        // policy to admit exactly that.
+        let hashes = [JupyterLiteAppIndexMiddleware.selfCloseScriptSourceExpression]
+        let app = try await Application.make(.testing)
+        app.middleware.use(SecurityHeadersMiddleware(editorInlineScriptHashes: hashes))
+        app.middleware.use(JupyterLiteAppIndexMiddleware())
+        try await withApp(app) { app in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks") { res in
+                #expect(res.status == .ok)
+                let inline =
+                    EditorInlineScriptHashes
+                    .executableInlineScriptBodies(inHTML: Data(res.body.string.utf8))
+                #expect(inline.count == 1, "the stray-tab page should carry one inline script")
+                let served = res.headers.first(name: "Content-Security-Policy") ?? ""
+                let directive = try #require(scriptSrc(in: served))
+                for body in inline {
+                    let expression = EditorInlineScriptHashes.sourceExpression(forScriptBody: body)
+                    #expect(
+                        directive.contains(expression),
+                        """
+                        the page's inline script is not admitted by its own \
+                        script-src — it would be blocked, and the tab would \
+                        never close. Got: \(directive)
+                        """
+                    )
+                }
+            }
+        }
+    }
+
     @Test func scriptSrcRendersHashesAfterTheKeywords() {
         let directive = SecurityHeadersMiddleware.scriptSrc(inlineScriptHashes: ["'sha256-a='"])
         #expect(directive == "script-src 'self' 'unsafe-eval' blob: 'sha256-a='")

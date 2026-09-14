@@ -95,19 +95,25 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         securityConfiguration.enforceHTTPS
         ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
         : nil
-    // The vendored JupyterLite entry points carry inline bootstrap scripts we
-    // do not author and must not hand-edit, so they ride the CSP by hash —
-    // derived here, once, from the bytes FileMiddleware will serve, and
-    // attached only to `/jupyterlite/` responses.  Nil (no vendored tree, e.g.
-    // a test app) means those responses get the same inline-free policy as
-    // every other page.  See EditorInlineScriptHashes.
-    let editorInlineScriptHashes =
-        EditorInlineScriptHashes.derive(publicDirectory: app.directory.publicDirectory) ?? []
-    if editorInlineScriptHashes.isEmpty {
+    // `script-src` permits no inline execution anywhere (#1516), with one
+    // narrow exception attached to `/jupyterlite/` responses only: sha256
+    // hashes for the inline bootstraps in the vendored editor's entry points,
+    // which we do not author and must not hand-edit.  They are DERIVED here,
+    // once, from the bytes FileMiddleware will serve, so re-vendoring a kernel
+    // carries its own allow-list.  See EditorInlineScriptHashes.
+    //
+    // The stray-tab page Chickadee composes itself is under the same prefix and
+    // is named rather than scanned; it stays inline because its only job is to
+    // close the tab the instant it paints.
+    let vendoredEditorHashes =
+        EditorInlineScriptHashes.derive(publicDirectory: app.directory.publicDirectory)
+    if vendoredEditorHashes == nil {
         app.logger.debug(
-            "No vendored editor inline scripts found; CSP script-src permits no inline execution anywhere."
+            "No vendored editor inline scripts found; only Chickadee's own /jupyterlite/ page is hashed."
         )
     }
+    let editorInlineScriptHashes =
+        (vendoredEditorHashes ?? []) + [JupyterLiteAppIndexMiddleware.selfCloseScriptSourceExpression]
     app.middleware.use(
         SecurityHeadersMiddleware(
             editorInlineScriptHashes: editorInlineScriptHashes,

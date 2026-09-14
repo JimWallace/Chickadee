@@ -10,8 +10,10 @@
   vendored JupyterLite entry points, whose inline bootstraps we do not author,
   are allowed by SHA-256 hash on `/jupyterlite/` responses only; the hashes
   are derived at startup from the bytes actually served, so re-vendoring a
-  kernel carries its own allow-list. `'unsafe-eval'` stays — JupyterLab
-  compiles JSON-schema validators at run time — and `style-src` is unchanged.
+  kernel carries its own allow-list. The stray-editor-tab page stays inline
+  under a named hash from the same constant, because its only job is to close
+  the tab the instant it paints. `'unsafe-eval'` stays — JupyterLab compiles
+  JSON-schema validators at run time — and `style-src` is unchanged.
 
 ### Changed
 

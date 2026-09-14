@@ -488,7 +488,11 @@ the moment a kernel is re-vendored, and the failure is upstream of everything
 the editor smoke test measures — the page breaks before a kernel is fetched.
 A nonce cannot do this job at all: those are static files, and the one script
 that would most want a nonce hands the document to `document.write`, which
-inherits the writing response's policy.
+inherits the writing response's policy. Chickadee's own stray-editor-tab page
+is the one inline script it still serves, under a hash named from the same
+constant that renders it — inline on purpose, since a page whose only job is to
+close the tab the instant it paints should not first wait on a fetch that can
+fail.
 
 The scan-side lesson is the more general one. **ZAP baseline had been running
 weekly the whole time and could not see this**, because `.zap/rules.tsv` sets a

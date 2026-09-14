@@ -17,11 +17,7 @@
 // SECOND full editor (which boots a second kernel and, on WebKit, contends with
 // the kernel already running in the iframe), this middleware returns a tiny
 // self-closing page: the stray tab was opened by `window.open`, so `window.close()`
-// closes it, and it never boots a kernel.  The close call lives in
-// `/stray-editor-tab.js` rather than an inline script tag: this path is under
-// `/jupyterlite/`, where the CSP allows inline scripts only by the hashes
-// derived from the VENDORED tree, and a page Chickadee composes itself is not
-// in that tree (#1516). (`notebook.js` also suppresses the
+// closes it, and it never boots a kernel. (`notebook.js` also suppresses the
 // stray `window.open` at the source; this is the server-side backstop.) Registered
 // just before `FileMiddleware`; `/jupyterlite/<app>/index.html` and deeper paths
 // (`…/api/contents/…`) are untouched — they already resolve, so the iframe editor
@@ -34,6 +30,25 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
     static let appDirectories: Set<String> = [
         "lab", "notebooks", "tree", "edit", "consoles", "repl",
     ]
+
+    /// The stray tab's whole behaviour, kept as a constant so the CSP hash that
+    /// admits it is derived from the same bytes the page carries.
+    ///
+    /// It stays INLINE under a `script-src` that permits no inline execution
+    /// (#1516), rather than moving to a file, because this page's only job is
+    /// to close itself the instant it paints: an external script adds a round
+    /// trip before that can happen and a failure mode where the fetch does not
+    /// land and the tab stays open forever. An inline script with a hash costs
+    /// neither. The vendored editor's bootstraps are allowed the same way, but
+    /// by a directory scan — this one is ours, so it is named.
+    static let selfCloseScript =
+        "try { window.close() } catch (e) { /* self-close may be blocked; the message below covers it */ }"
+
+    /// The CSP source expression admitting `selfCloseScript`.  Bootstrap adds
+    /// it to the `/jupyterlite/` allow-list beside the vendored hashes.
+    static var selfCloseScriptSourceExpression: String {
+        EditorInlineScriptHashes.sourceExpression(forScriptBody: selfCloseScript)
+    }
 
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard request.method == .GET || request.method == .HEAD,
@@ -68,7 +83,7 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
             <title>Return to your assignment</title>
             </head>
             <body>
-            <script src="/stray-editor-tab.js"></script>
+            <script>\(Self.selfCloseScript)</script>
             <p>This notebook opened in an extra browser tab. You can close this tab and return to your assignment.</p>
             </body>
             </html>
