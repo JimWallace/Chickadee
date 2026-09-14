@@ -232,51 +232,14 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
     }
 }
 
-/// Lua's string escapes are C-like and overlap Python's, but `\xNN` is a Lua
-/// 5.2+ feature and a literal newline inside a quoted string is a syntax error,
-/// so every control character is escaped rather than passed through.
+/// See `CStyleStringEscaping.lua` for the escape rules.
 private func encodeLuaString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03d", ch.value)  // decimal: works in 5.1+
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out + "\""
+    CStyleStringEscaping.lua.quotedLiteral(s)
 }
 
-/// Octave double-quoted strings take C-style escapes. Control characters use
-/// exactly-three-digit octal (`\011`) rather than `\x`, because Octave's `\x`
-/// consumes every hex digit that follows — `"\x0abc"` would swallow four
-/// characters of payload — while octal stops at three digits by rule.
+/// See `CStyleStringEscaping.octave` for the escape rules.
 private func encodeOctaveString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03o", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out + "\""
+    CStyleStringEscaping.octave.quotedLiteral(s)
 }
 
 /// True when every element is a numeric or boolean scalar (JSON null admitted
@@ -296,24 +259,7 @@ private func isOctaveNumericArray(_ items: [JSONValue]) -> Bool {
 }
 
 private func encodePythonString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 {
-                out += String(format: "\\x%02x", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    out += "\""
-    return out
+    CStyleStringEscaping.python.quotedLiteral(s)
 }
 
 /// True when every element is a scalar of the *same* R atomic kind (all
@@ -352,24 +298,7 @@ private func isHomogeneousScalarArray(_ items: [JSONValue]) -> Bool {
 }
 
 private func encodeRString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 {
-                out += String(format: "\\u%04x", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    out += "\""
-    return out
+    CStyleStringEscaping.r.quotedLiteral(s)
 }
 
 /// Renders an object key as an R `list(...)` name: bare when it is a simple

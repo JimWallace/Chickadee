@@ -156,13 +156,9 @@ struct AuthorNotebookCheckTool: ContentTool {
             ]),
             "kind": .object([
                 "type": .string("string"),
-                "enum": .array([
-                    .string("data_frame_shape"), .string("data_frame_columns"),
-                    .string("data_frame_equality"), .string("series_equality"),
-                    .string("numeric_array_close"), .string("figure_count"),
-                    .string("cell_contains"), .string("function_exists"),
-                    .string("variable_exists"), .string("ast_structure"),
-                ]),
+                // Derived, never listed: a hand-typed enum can offer a kind the
+                // parser refuses or omit one it accepts (see `TestTierValues`).
+                "enum": .array(NotebookCheckKind.allCases.map { .string($0.rawValue) }),
             ]),
             "name": .object([
                 "type": .string("string"),

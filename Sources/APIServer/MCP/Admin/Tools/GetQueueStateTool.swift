@@ -46,11 +46,7 @@ struct GetQueueStateTool: DiagnosticTool {
         + "peak queue depth over the recent window. This is the raw data behind the queueBackedUp "
         + "health alert (get_health_alerts only says whether it's firing). Read-only; counts and ages "
         + "only — no identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     private static let stuckThresholdSeconds = 600
 

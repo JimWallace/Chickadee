@@ -36,9 +36,7 @@ extension WebRoutes {
             guard activity.leaderboardVisibleToStudents else { throw Abort(.notFound) }
         }
 
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let rows = try await buildLeaderboardRows(
             setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
 

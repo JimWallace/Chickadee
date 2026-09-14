@@ -68,6 +68,24 @@ struct ConfiguredSuiteEntry {
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
     }
+
+    /// A manifest entry carried into a rebuild unchanged, apart from its
+    /// position and (optionally) its prerequisites.
+    init(_ entry: TestSuiteEntry, order: Int, dependsOn: [String]? = nil) {
+        self.init(
+            script: entry.script,
+            tier: entry.tier.rawValue,
+            order: order,
+            dependsOn: dependsOn ?? entry.dependsOn,
+            points: entry.points,
+            displayName: entry.name,
+            generatedBy: entry.generatedBy,
+            generatedByCheck: entry.generatedByCheck,
+            sectionID: entry.sectionID,
+            hint: entry.hint,
+            timeLimitSeconds: entry.timeLimitSeconds
+        )
+    }
 }
 
 // MARK: - Editor view row builders

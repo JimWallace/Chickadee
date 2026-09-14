@@ -167,6 +167,56 @@ struct CreatePatternFamilyTool: ContentTool {
         + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. It "
         + "also closes the assignment if it was open (reported as `assignmentClosed`; re-open with "
         + "update_assignment once validation passes). To edit a family afterwards use update_pattern_family."
+    /// JSON Schema for one `CaseInput`. Shared with `update_pattern_family`'s
+    /// `addCases`, which appends the same Swift type; one schema keeps the two
+    /// tools from describing one type two ways.
+    static let caseInputItemSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "key": .object([
+                "type": .string("string"),
+                "description": .string("Unique case key (also part of the generated filename)."),
+            ]),
+            "label": MCPSchema.string,
+            "args": .object([
+                "type": .string("array"),
+                "description": .string("Args in parameter order (raw JSON values)."),
+            ]),
+            "expected": .object([
+                "description": .string("Expected return (raw JSON), shape per kind.")
+            ]),
+            "argVarRefs": .object([
+                "type": .string("array"),
+                "description": .string("Parallel to args: \"name\" for a $var ref, or null."),
+            ]),
+            "argsProvided": .object([
+                "type": .string("array"),
+                "description": .string(
+                    "Parallel to args: false omits the arg, so the function's own default applies."),
+            ]),
+            "expectedVarRef": .object([
+                "type": .string("string"),
+                "description": .string("Per-student expected: name of a = expression."),
+            ]),
+            "hint": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
+            ]),
+            "points": MCPSchema.integer,
+            "tier": MCPSchema.tierEnum(),
+            "timeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Per-case execution time limit (seconds, 1–600), overriding the family "
+                        + "default. Omit / 0 for no per-case override."),
+            ]),
+            "enabled": MCPSchema.boolean,
+        ]),
+        "required": .array([.string("key")]),
+        "additionalProperties": .bool(false),
+    ])
+
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -242,52 +292,7 @@ struct CreatePatternFamilyTool: ContentTool {
             "cases": .object([
                 "type": .string("array"),
                 "description": .string("Non-empty list of cases."),
-                "items": .object([
-                    "type": .string("object"),
-                    "properties": .object([
-                        "key": .object([
-                            "type": .string("string"),
-                            "description": .string("Unique case key (also part of the generated filename)."),
-                        ]),
-                        "label": MCPSchema.string,
-                        "args": .object([
-                            "type": .string("array"),
-                            "description": .string("Args in parameter order (raw JSON values)."),
-                        ]),
-                        "expected": .object([
-                            "description": .string("Expected return (raw JSON), shape per kind.")
-                        ]),
-                        "argVarRefs": .object([
-                            "type": .string("array"),
-                            "description": .string("Parallel to args: \"name\" for a $var ref, or null."),
-                        ]),
-                        "argsProvided": .object([
-                            "type": .string("array"),
-                            "description": .string(
-                                "Parallel to args: false omits the arg, so the function's own default applies."),
-                        ]),
-                        "expectedVarRef": .object([
-                            "type": .string("string"),
-                            "description": .string("Per-student expected: name of a = expression."),
-                        ]),
-                        "hint": .object([
-                            "type": .string("string"),
-                            "description": .string(
-                                "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
-                        ]),
-                        "points": MCPSchema.integer,
-                        "tier": MCPSchema.tierEnum(),
-                        "timeLimitSeconds": .object([
-                            "type": .string("integer"),
-                            "description": .string(
-                                "Per-case execution time limit (seconds, 1–600), overriding the family "
-                                    + "default. Omit / 0 for no per-case override."),
-                        ]),
-                        "enabled": MCPSchema.boolean,
-                    ]),
-                    "required": .array([.string("key")]),
-                    "additionalProperties": .bool(false),
-                ]),
+                "items": caseInputItemSchema,
             ]),
         ]),
         "required": .array([

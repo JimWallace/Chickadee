@@ -173,28 +173,7 @@ private func cppVectorElementType(_ items: [JSONValue]) -> CppElementType? {
     }
 }
 
-/// C++ string literals take C escapes. Control characters use
-/// exactly-three-digit octal (`\011`) rather than `\x`, for the same reason
-/// Octave's encoder does: `\x` consumes every hex digit that follows, so
-/// `"\x0abc"` would swallow payload, while octal stops at three digits by
-/// rule. Non-ASCII passes through as UTF-8 source bytes, which C++ string
-/// literals carry verbatim.
+/// See `CStyleStringEscaping.cpp` for the escape rules.
 private func encodeCppString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03o", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out + "\""
+    CStyleStringEscaping.cpp.quotedLiteral(s)
 }

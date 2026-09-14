@@ -111,14 +111,7 @@ struct GetValidationResultTool: ContentTool {
         + "per-student seeds, each with its failing outcomes — a failed variant means a student holding "
         + "that seed would fail through no fault of their own, so fix the suite or solution until every "
         + "variant passes."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

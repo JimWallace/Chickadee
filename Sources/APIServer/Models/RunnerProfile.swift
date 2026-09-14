@@ -60,8 +60,8 @@ final class RunnerProfile: Model, Content, @unchecked Sendable {
         self.displayName = displayName
         self.platform = profile.platform
         self.architecture = profile.architecture
-        self.languageVersionsJSON = Self.encodeJSON(profile.languageVersions)
-        self.capabilitiesJSON = Self.encodeJSON(profile.capabilities)
+        self.languageVersionsJSON = JSONColumn.encode(profile.languageVersions)
+        self.capabilitiesJSON = JSONColumn.encode(profile.capabilities)
         self.profileHash = profileHash
         self.lastRegisteredAt = lastRegisteredAt
         self.lastSeenAt = lastSeenAt
@@ -73,37 +73,15 @@ final class RunnerProfile: Model, Content, @unchecked Sendable {
             RunnerCapabilityProfile(
                 platform: platform,
                 architecture: architecture,
-                languageVersions: Self.decodeJSON(languageVersionsJSON, defaultValue: []),
-                capabilities: Self.decodeJSON(capabilitiesJSON, defaultValue: [])
+                languageVersions: JSONColumn.decode(languageVersionsJSON, defaultValue: []),
+                capabilities: JSONColumn.decode(capabilitiesJSON, defaultValue: [])
             )
         }
         set {
             platform = newValue.platform
             architecture = newValue.architecture
-            languageVersionsJSON = Self.encodeJSON(newValue.languageVersions)
-            capabilitiesJSON = Self.encodeJSON(newValue.capabilities)
+            languageVersionsJSON = JSONColumn.encode(newValue.languageVersions)
+            capabilitiesJSON = JSONColumn.encode(newValue.capabilities)
         }
-    }
-}
-
-private extension RunnerProfile {
-    static func encodeJSON<T: Encodable>(_ value: T) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(value),
-            let string = String(data: data, encoding: .utf8)
-        else {
-            return "[]"
-        }
-        return string
-    }
-
-    static func decodeJSON<T: Decodable>(_ raw: String, defaultValue: T) -> T {
-        guard let data = raw.data(using: .utf8),
-            let decoded = try? JSONDecoder().decode(T.self, from: data)
-        else {
-            return defaultValue
-        }
-        return decoded
     }
 }

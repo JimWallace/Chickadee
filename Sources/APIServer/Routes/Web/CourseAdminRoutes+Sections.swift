@@ -36,10 +36,7 @@ extension CourseAdminRoutes {
             var defaultGradingMode: String
         }
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "managing sections")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         try await requireCourseWriteAccess(
             caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
         let body = try req.content.decode(CreateSectionBody.self)
@@ -110,10 +107,7 @@ extension CourseAdminRoutes {
             var defaultGradingMode: String
         }
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "managing sections")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
@@ -147,10 +141,7 @@ extension CourseAdminRoutes {
     @Sendable
     func deleteSection(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "managing sections")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
@@ -176,10 +167,7 @@ extension CourseAdminRoutes {
             var sectionID: String?  // UUID string, or "" / absent = ungrouped
         }
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "managing sections")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == courseID else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")

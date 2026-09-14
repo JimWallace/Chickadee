@@ -33,14 +33,7 @@ struct GetAchievementsTool: ContentTool {
         + "editable rows. Read-only — use it to inspect achievements before editing with "
         + "update_achievements. Achievements are server-evaluated and display-only: they never change "
         + "what the suite grades."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

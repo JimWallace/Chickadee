@@ -277,6 +277,21 @@ func saveSeededEnrollment(for user: APIUser, courseID: UUID, on db: Database) as
     ).save(on: db)
 }
 
+/// Enrolls `userID` in `courseID` unless an enrollment row already exists.
+/// Returns true when a row was created. The idempotent form every self-serve
+/// and admin enrollment path wants: a repeat request is a no-op, not a
+/// duplicate row.
+@discardableResult
+func ensureSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async throws -> Bool {
+    let existing = try await APICourseEnrollment.query(on: db)
+        .filter(\.$userID == userID)
+        .filter(\.$course.$id == courseID)
+        .count()
+    guard existing == 0 else { return false }
+    try await saveSeededEnrollment(userID: userID, courseID: courseID, on: db)
+    return true
+}
+
 /// `saveSeededEnrollment` for callers that hold only the user's ID; loads the
 /// user to read its deployment role. A missing user falls back to `.student`.
 func saveSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async throws {

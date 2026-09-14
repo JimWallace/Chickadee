@@ -28,10 +28,7 @@ func renderReturnTypeCheck(
     let ctx = callContext(for: family, case: c)
 
     // expected is a JSON string naming the type (e.g. "DataFrame").
-    let typeName: String = {
-        if case .string(let s) = c.expected { return s }
-        return "object"
-    }()
+    let typeName: String = c.expectedName(fallback: "object")
     let typeNameLiteral = "\"" + escapeForPythonStringLiteral(typeName) + "\""
     // Type-name → check-expression mapping is shared with the notebook-check
     // `.variableExists` renderer (PythonScriptHelpers.swift).
@@ -77,10 +74,7 @@ func renderReturnTypeCheck(
 /// `.returnTypeCheck` — the return value's type, not its value.
 func rReturnTypeCase(family: PatternFamily, case c: PatternCase, prelude: String) -> String {
     let ctx = rCallContext(for: family, case: c)
-    let typeName: String = {
-        if case .string(let s) = c.expected { return s }
-        return "any"
-    }()
+    let typeName: String = c.expectedName(fallback: "any")
     return """
         \(prelude)
 
@@ -117,10 +111,7 @@ func luaReturnTypeCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = luaCallContext(for: family, case: c)
-    let typeName: String = {
-        if case .string(let s) = c.expected { return s }
-        return "any"
-    }()
+    let typeName: String = c.expectedName(fallback: "any")
     return """
         \(prelude)
 
@@ -159,10 +150,7 @@ func octaveReturnTypeCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = octaveCallContext(for: family, case: c)
-    let typeName: String = {
-        if case .string(let s) = c.expected { return s }
-        return "any"
-    }()
+    let typeName: String = c.expectedName(fallback: "any")
     return """
         \(prelude)
 
@@ -196,10 +184,7 @@ func octaveReturnTypeCase(
 func cppReturnTypeBody(
     target: String, context: CppCallContext, c: PatternCase
 ) -> String {
-    let expectedType: String = {
-        if case .string(let s) = c.expected { return s }
-        return "int"
-    }()
+    let expectedType: String = c.expectedName(fallback: "int")
     // Escaped, not interpolated raw: the authored type name is free text, and
     // a quote or backslash in it broke the generated literal.
     let escaped = escapeForCppStringLiteral(expectedType)
@@ -222,10 +207,7 @@ func racketReturnTypeCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = racketCallContext(for: family, case: c)
-    let expectedType: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let expectedType: String = c.expectedName(fallback: "")
     return """
         \(prelude)
 
@@ -253,10 +235,7 @@ func racketReturnTypeCase(
 func javaReturnTypeBody(
     target: String, context: JavaCallContext, c: PatternCase
 ) -> String {
-    let expectedType: String = {
-        if case .string(let s) = c.expected { return s }
-        return "int"
-    }()
+    let expectedType: String = c.expectedName(fallback: "int")
     // The RUNTIME class of the boxed result, where C++ asks the static type via
     // decltype. Java cannot do the latter here: the result is bound with `var`
     // and handed to a helper taking `Object`, which erases it. For a boxed

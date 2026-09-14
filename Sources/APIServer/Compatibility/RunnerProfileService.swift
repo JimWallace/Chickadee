@@ -143,9 +143,7 @@ struct AssignmentRequirementService {
                 .filter(\.$validationSubmissionID == submissionID)
                 .first()
         } else {
-            assignment = try await APIAssignment.query(on: db)
-                .filter(\.$testSetupID == submission.testSetupID)
-                .first()
+            assignment = try await assignmentByTestSetupID(submission.testSetupID, on: db)
         }
 
         guard let assignment, let assignmentID = assignment.id else {

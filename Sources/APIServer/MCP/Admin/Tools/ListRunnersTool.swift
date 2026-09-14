@@ -27,11 +27,7 @@ struct ListRunnersTool: DiagnosticTool {
         + "they're performing; pair with get_runner_detail for one runner's capability profile and "
         + "per-stage timing breakdown. Read-only; operational runner state only — no student, "
         + "submission, course, or assignment identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)

@@ -46,40 +46,38 @@ struct CallContext {
     let callReprExpr: String
 }
 
+/// The per-parameter view of a case that every language renderer walks: the
+/// parameter names, whether each argument was provided, and which family
+/// variable (if any) each one references.
+///
+/// `argsProvided == []` means the pre-v0.4.94 shape where every arg was
+/// provided, and `argVarRefs == []` means every arg is a literal. A non-empty
+/// list must match `args.count` (the `PatternCase` initialiser enforces it),
+/// but both are padded to `names.count` defensively in case `paramNames` and
+/// `args` have drifted apart — failing closed is cheaper than crashing.
+struct PatternArgumentSlots {
+    let names: [String]
+    let provided: [Bool]
+    let varRefs: [String?]
+
+    /// - Parameter placeholder: the parameter name synthesised for position
+    ///   `i` (zero-based) when the family declares no `paramNames`. Every
+    ///   language but Racket uses `arg_1`; Racket identifiers take hyphens.
+    init(family: PatternFamily, case c: PatternCase, placeholder: (Int) -> String = { "arg_\($0 + 1)" }) {
+        let names = family.paramNames.isEmpty ? c.args.indices.map(placeholder) : family.paramNames
+        self.names = names
+        provided = (0..<names.count).map { i in
+            c.argsProvided.isEmpty || i >= c.argsProvided.count ? true : c.argsProvided[i]
+        }
+        varRefs = (0..<names.count).map { i in
+            c.argVarRefs.isEmpty || i >= c.argVarRefs.count ? nil : c.argVarRefs[i]
+        }
+    }
+}
+
 func callContext(for family: PatternFamily, case c: PatternCase) -> CallContext {
-    let argNames: [String] = {
-        if !family.paramNames.isEmpty { return family.paramNames }
-        return c.args.indices.map { "arg_\($0 + 1)" }
-    }()
-
-    // argsProvided == [] (empty) means pre-v0.4.94 behaviour: every arg
-    // was provided.  Non-empty must match args.count (enforced by the
-    // PatternCase initialiser).  Pad defensively to `argNames.count` in
-    // case paramNames and args have drifted apart (validation would
-    // normally catch that, but failing closed is cheaper than crashing).
-    let provided: [Bool] = {
-        guard !c.argsProvided.isEmpty else {
-            return Array(repeating: true, count: argNames.count)
-        }
-        if c.argsProvided.count == argNames.count { return c.argsProvided }
-        return (0..<argNames.count).map { i in
-            i < c.argsProvided.count ? c.argsProvided[i] : true
-        }
-    }()
-
-    // argVarRefs == [] (empty) means "no variable references" — the
-    // pre-v0.4.94 shape where every arg is a literal.  A non-nil entry
-    // at position `i` names a family variable to pass instead of the
-    // literal.  Padded defensively for the same reason as `provided`.
-    let varRefs: [String?] = {
-        guard !c.argVarRefs.isEmpty else {
-            return Array(repeating: nil, count: argNames.count)
-        }
-        if c.argVarRefs.count == argNames.count { return c.argVarRefs }
-        return (0..<argNames.count).map { i in
-            i < c.argVarRefs.count ? c.argVarRefs[i] : nil
-        }
-    }()
+    let slots = PatternArgumentSlots(family: family, case: c)
+    let (argNames, provided, varRefs) = (slots.names, slots.provided, slots.varRefs)
 
     var declLineList: [String] = []
     var callArgsParts: [String] = []

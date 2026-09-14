@@ -60,21 +60,7 @@ func updateManifestAddingScript(
     else {
         return nil
     }
-    let existing = props.testSuites.enumerated().map { idx, e in
-        ConfiguredSuiteEntry(
-            script: e.script,
-            tier: e.tier.rawValue,
-            order: idx + 1,
-            dependsOn: e.dependsOn,
-            points: e.points,
-            displayName: e.name,
-            generatedBy: e.generatedBy,
-            generatedByCheck: e.generatedByCheck,
-            sectionID: e.sectionID,
-            hint: e.hint,
-            timeLimitSeconds: e.timeLimitSeconds
-        )
-    }
+    let existing = props.testSuites.enumerated().map { idx, e in ConfiguredSuiteEntry(e, order: idx + 1) }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
     let newEntry = ConfiguredSuiteEntry(
         script: entry.script,
@@ -89,36 +75,8 @@ func updateManifestAddingScript(
         hint: entry.hint,
         timeLimitSeconds: entry.timeLimitSeconds
     )
-    let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
-        testSuites: updated,
-        includeMakefile: props.makefile != nil,
-        gradingMode: props.gradingMode.rawValue,
-        submissionMode: props.submissionMode.rawValue,
-        requiredFiles: props.requiredFiles,
-        timeLimitSeconds: props.timeLimitSeconds,
-        starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies,
-        notebookChecks: props.notebookChecks,
-        sections: props.sections,
-        globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions,
-        achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
-        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets,
-        // Preserve the recorded language AND the declared flag: rebuilding the
-        // manifest to add or remove one script must never silently drop the
-        // language back to "unrecorded", nor un-declare an assignment — least
-        // of all one whose declaration is "none", where `language` alone
-        // carries no evidence.
-        language: props.language,
-        languageDeclared: props.languageDeclared == true,
-        // Likewise preserve the minimum-runner-version gate across the rebuild.
-        minimumRunnerVersion: props.minimumRunnerVersion,
-        // And the class-activity block, which a script edit must not erase.
-        activity: props.activity
-    )
+        preserving: props, testSuites: existing + [newEntry], language: props.language)
 }
 
 /// Returns updated manifest JSON with the entry for `filename` removed.
@@ -137,50 +95,8 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
     let updated = props.testSuites
         .filter { $0.script != filename }
         .enumerated()
-        .map { idx, e in
-            ConfiguredSuiteEntry(
-                script: e.script,
-                tier: e.tier.rawValue,
-                order: idx + 1,
-                dependsOn: e.dependsOn.filter { $0 != filename },
-                points: e.points,
-                displayName: e.name,
-                generatedBy: e.generatedBy,
-                generatedByCheck: e.generatedByCheck,
-                sectionID: e.sectionID,
-                hint: e.hint,
-                timeLimitSeconds: e.timeLimitSeconds
-            )
-        }
-    return try? makeWorkerManifestJSON(
-        testSuites: updated,
-        includeMakefile: props.makefile != nil,
-        gradingMode: props.gradingMode.rawValue,
-        submissionMode: props.submissionMode.rawValue,
-        requiredFiles: props.requiredFiles,
-        timeLimitSeconds: props.timeLimitSeconds,
-        starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies,
-        notebookChecks: props.notebookChecks,
-        sections: props.sections,
-        globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions,
-        achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
-        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets,
-        // Preserve the recorded language AND the declared flag: rebuilding the
-        // manifest to add or remove one script must never silently drop the
-        // language back to "unrecorded", nor un-declare an assignment — least
-        // of all one whose declaration is "none", where `language` alone
-        // carries no evidence.
-        language: props.language,
-        languageDeclared: props.languageDeclared == true,
-        // Likewise preserve the minimum-runner-version gate across the rebuild.
-        minimumRunnerVersion: props.minimumRunnerVersion,
-        // And the class-activity block, which a script edit must not erase.
-        activity: props.activity
-    )
+        .map { idx, e in ConfiguredSuiteEntry(e, order: idx + 1, dependsOn: e.dependsOn.filter { $0 != filename }) }
+    return try? makeWorkerManifestJSON(preserving: props, testSuites: updated, language: props.language)
 }
 
 // `manifestWithRederivedLanguage` used to live here: on every starter-notebook
@@ -193,6 +109,51 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
 // converting a Python assignment to R changes the language in the dropdown that
 // exists for exactly that purpose, and uploading a notebook no longer rewrites
 // it underneath them.
+
+/// Rebuilds the manifest for `props` with a new suite list, carrying every
+/// other field forward.
+///
+/// This is the overload a suite edit should call. The base builder below
+/// writes a fresh dict, so a rebuild that threads the preserved fields by hand
+/// loses whichever one it forgets — `languageDeclared`, `minimumRunnerVersion`
+/// and `activity` were each lost that way once. Here a field is preserved by
+/// default and replaced only when the caller passes it. `language` is
+/// explicit because a rebuild may be the act of changing it.
+func makeWorkerManifestJSON(
+    preserving props: TestProperties,
+    testSuites: [ConfiguredSuiteEntry],
+    patternFamilies: [PatternFamily]? = nil,
+    notebookChecks: [NotebookCheck]? = nil,
+    sections: [TestSuiteSection]? = nil,
+    globalVariables: [FamilyVariable]? = nil,
+    globalExpressions: [PersonalizationExpression]? = nil,
+    language: AssignmentLanguage?
+) throws -> String {
+    try makeWorkerManifestJSON(
+        testSuites: testSuites,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        submissionMode: props.submissionMode.rawValue,
+        requiredFiles: props.requiredFiles,
+        timeLimitSeconds: props.timeLimitSeconds,
+        starterNotebook: props.starterNotebook,
+        patternFamilies: patternFamilies ?? props.patternFamilies,
+        notebookChecks: notebookChecks ?? props.notebookChecks,
+        sections: sections ?? props.sections,
+        globalVariables: globalVariables ?? props.globalVariables,
+        globalExpressions: globalExpressions ?? props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets,
+        language: language,
+        // The declared flag travels with the language: dropping it turns a
+        // deliberate "None" back into "nobody has been asked".
+        languageDeclared: props.languageDeclared == true,
+        minimumRunnerVersion: props.minimumRunnerVersion,
+        activity: props.activity
+    )
+}
 
 func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],

@@ -106,14 +106,7 @@ struct GetSuiteTool: ContentTool {
         + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated). Read-only — "
         + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
         + "points) before editing the suite."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

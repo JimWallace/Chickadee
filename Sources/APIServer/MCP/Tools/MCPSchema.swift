@@ -50,6 +50,61 @@ enum MCPSchema {
         return .object(fields)
     }
 
+    // MARK: - Whole input schemas
+
+    /// The input schema of a tool whose only argument is `assignmentPublicID`.
+    static let assignmentPublicIDOnlyInput: JSONValue = object(
+        properties: ["assignmentPublicID": assignmentPublicID],
+        required: ["assignmentPublicID"])
+
+    /// The input schema of a tool that takes no arguments.
+    static let noArgumentsInput: JSONValue = object(properties: [:])
+
+    // MARK: - Personalization inputs
+
+    /// The `variables` array a personalization-inputs write tool accepts:
+    /// replacement literal values, each `{ name, value }`.
+    static let personalizationVariables: JSONValue = .object([
+        "type": .string("array"),
+        "description": .string("Replacement literal values; send [] to clear."),
+        "items": object(
+            properties: [
+                "name": .object([
+                    "type": .string("string"),
+                    "description": .string(
+                        "Valid Python identifier (the rule in every language); not \"seed\"."),
+                ]),
+                "value": .object([
+                    "description": .string(
+                        "Any JSON value (scalar, list, object); rendered as a literal in the assignment's language."
+                    )
+                ]),
+            ],
+            required: ["name", "value"]),
+    ])
+
+    /// The `expressions` array a personalization-inputs write tool accepts:
+    /// replacement per-student expressions, each `{ name, expression }`.
+    static let personalizationExpressions: JSONValue = .object([
+        "type": .string("array"),
+        "description": .string("Replacement per-student expressions; omit or send [] to clear."),
+        "items": object(
+            properties: [
+                "name": .object([
+                    "type": .string("string"),
+                    "description": .string(
+                        "Valid Python identifier (the rule in every language); not \"seed\"."),
+                ]),
+                "expression": .object([
+                    "type": .string("string"),
+                    "description": .string(
+                        "An expression in the assignment's own language; `seed` and every variable are in scope."
+                    ),
+                ]),
+            ],
+            required: ["name", "expression"]),
+    ])
+
     // MARK: - Object builder
 
     /// A JSON-Schema object with the given properties.  `additionalProperties`

@@ -132,9 +132,7 @@ extension WebRoutes {
         if manifest?.effectiveGradingMode == .browser {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         // Mirror the notebook page's closed-assignment gate: a student who has
         // never opened this (now-closed) upload-mode assignment is sent to
         // their dashboard rather than shown an upload form they cannot submit.
@@ -287,9 +285,7 @@ extension WebRoutes {
 
         let fmt = waterlooDateTimeFormatter()
 
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let title = assignment?.title ?? setupID
 
         let submissions = try await APISubmission.query(on: req.db)
@@ -366,9 +362,7 @@ extension WebRoutes {
         // setup + decoded manifest ONCE — the page's helpers (manifest display
         // data, class-goal bonus, badges, class-goal views) all read them, and
         // each used to re-fetch and re-decode independently (#1128).
-        let submissionAssignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == submission.testSetupID)
-            .first()
+        let submissionAssignment = try await assignmentByTestSetupID(submission.testSetupID, on: req.db)
         let setup = try await APITestSetup.find(submission.testSetupID, on: req.db)
         let setupProps = setup?.decodedManifest()
         // Students see public + release rows itemized (release output is gated

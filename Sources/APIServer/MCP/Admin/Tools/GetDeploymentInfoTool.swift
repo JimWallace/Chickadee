@@ -36,11 +36,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
         + "content-authoring MCP mode. Use it to confirm a deploy is live (a tool call hits the "
         + "running process, unlike a cached tool list). Read-only; touches no course, student, or "
         + "database state."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

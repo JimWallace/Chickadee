@@ -114,6 +114,10 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
     /// still counts as a pass, for floating-point `.approximateEquality`
     /// families.  When nil the renderer uses a sensible default (1e-6).
     public let tolerance: Double?
+    /// The tolerance used when a family declares none. 1e-6 sits between
+    /// Python's `math.isclose` defaults (`abs_tol=0.0`, `rel_tol=1e-9`) and a
+    /// typical intro-course expectation.
+    public static let approximateTolerance: Double = 1e-6
     /// Family-level per-test execution time limit (seconds) applied to every
     /// generated entry in this family — the cases and the auto-existence
     /// guard.  A case may override it (`PatternCase.timeLimitSeconds`); when
@@ -426,5 +430,25 @@ extension PatternCase {
     /// assignment-wide default).
     public func resolvedTimeLimit(defaults: PatternDefaults) -> Int? {
         timeLimitSeconds ?? defaults.timeLimitSeconds
+    }
+}
+
+extension PatternCase {
+    /// The type or exception name a `returnTypeCheck` / `exceptionExpected`
+    /// case names in `expected`, or `fallback` when the author stored
+    /// something other than a string there.
+    public func expectedName(fallback: String) -> String {
+        if case .string(let s) = expected { return s }
+        return fallback
+    }
+}
+
+extension PatternFamily {
+    /// The tolerance an `approximateEquality` family compares with: the
+    /// authored default, else `PatternDefaults.approximateTolerance`.
+    /// Every language renderer reads this one value, so the languages cannot
+    /// drift apart on what "close" means.
+    public var effectiveTolerance: Double {
+        defaults.tolerance ?? PatternDefaults.approximateTolerance
     }
 }

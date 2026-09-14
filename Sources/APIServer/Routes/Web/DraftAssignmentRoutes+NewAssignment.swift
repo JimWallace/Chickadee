@@ -129,10 +129,7 @@ extension DraftAssignmentRoutes {
         guard let userID = user.id else {
             throw WebAssignmentError.forbidden(action: "edit a new-assignment draft")
         }
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "creating an assignment")
-        }
+        let courseID = try await req.requireActiveCourseID(for: user, action: "creating an assignment")
 
         let payload = try parseNewAssignmentDraftPayload(req: req)
 
@@ -288,10 +285,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func saveNewAssignment(req: Request) async throws -> Response {
         let saveUser = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: saveUser)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "creating an assignment")
-        }
+        let courseID = try await req.requireActiveCourseID(for: saveUser, action: "creating an assignment")
 
         let form = try parseSaveNewAssignmentForm(req: req)
         let validation = try await validateSaveNewAssignment(

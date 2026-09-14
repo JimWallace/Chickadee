@@ -275,6 +275,22 @@ func releaseVisibilityDeadline(
     return try await postDeadlineRevealDeadline(for: assignment, user: user, on: db)
 }
 
+/// The reveal gate for serving a reference solution to a non-staff viewer:
+/// throws 403 unless the assignment exists and its solution is visible to
+/// `user` right now. Staff always pass. One function, because the three
+/// solution-serving routes each carried their own copy of this guard and one
+/// of them once shipped with no guard at all.
+func requireSolutionVisible(
+    assignment: APIAssignment?, user: APIUser, isStaff: Bool, on db: Database
+) async throws {
+    guard !isStaff else { return }
+    guard let assignment,
+        try await solutionVisibleToStudent(assignment: assignment, user: user, on: db)
+    else {
+        throw Abort(.forbidden, reason: "The solution to this assignment is not available.")
+    }
+}
+
 /// Whether `user` (a student — staff callers bypass this) may currently view
 /// `assignment`'s reference solution.
 ///
@@ -433,9 +449,7 @@ func requireOpenStudentAssignment(
     now: Date = Date()
 ) async throws -> APIAssignment? {
     guard
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == testSetupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db)
     else {
         return nil
     }

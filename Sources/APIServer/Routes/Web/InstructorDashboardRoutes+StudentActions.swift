@@ -67,10 +67,6 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func retestSubmission(req: Request) async throws -> Response {
-        struct RetestBody: Content {
-            var returnTo: String?
-        }
-
         let user = try req.auth.require(APIUser.self)
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
@@ -95,14 +91,7 @@ extension InstructorDashboardRoutes {
             on: req.db
         )
 
-        let body = try? req.content.decode(RetestBody.self)
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/retest
@@ -146,15 +135,7 @@ extension InstructorDashboardRoutes {
             on: req
         )
 
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        struct RetestAllBody: Content { var returnTo: String? }
-        let body = try? req.content.decode(RetestAllBody.self)
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
@@ -177,10 +158,6 @@ extension InstructorDashboardRoutes {
     // visit for the reset to take effect end-to-end.
     @Sendable
     func resetStudentNotebook(req: Request) async throws -> Response {
-        struct ResetBody: Content {
-            var returnTo: String?
-        }
-
         let user = try req.auth.require(APIUser.self)
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
@@ -224,14 +201,7 @@ extension InstructorDashboardRoutes {
             "student_notebook_reset assignment=\(assignmentIDRaw) student=\(studentIDRaw) by=\(user.id?.uuidString ?? "nil")"
         )
 
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let body = try? req.content.decode(ResetBody.self)
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/grade-override
@@ -291,18 +261,13 @@ extension InstructorDashboardRoutes {
             on: req
         )
 
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw, returnTo: body.returnTo)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/grade-override/delete
 
     @Sendable
     func deleteStudentGradeOverride(req: Request) async throws -> Response {
-        struct DeleteBody: Content { var returnTo: String? }
-
         _ = try req.auth.require(APIUser.self)
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
@@ -326,11 +291,7 @@ extension InstructorDashboardRoutes {
             )
         }
 
-        let body = try? req.content.decode(DeleteBody.self)
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/regrant-reveal-token
@@ -341,8 +302,6 @@ extension InstructorDashboardRoutes {
     /// as reset-notebook and grade overrides.
     @Sendable
     func regrantSecretRevealToken(req: Request) async throws -> Response {
-        struct RegrantBody: Content { var returnTo: String? }
-
         _ = try req.auth.require(APIUser.self)
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
@@ -366,11 +325,7 @@ extension InstructorDashboardRoutes {
             )
         }
 
-        let body = try? req.content.decode(RegrantBody.self)
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
-        return req.redirect(to: redirectPath)
+        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     /// Resolves the `:studentID` UUID parameter to a `role == "student"` user

@@ -142,9 +142,7 @@ extension WebRoutes {
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
         guard
-            let assignment = try await APIAssignment.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .first(),
+            let assignment = try await assignmentByTestSetupID(setupID, on: req.db),
             let assignmentID = assignment.id,
             let course = try await APICourse.find(assignment.courseID, on: req.db),
             !course.isArchived

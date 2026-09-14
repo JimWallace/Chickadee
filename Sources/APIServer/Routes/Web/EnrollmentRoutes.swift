@@ -81,13 +81,7 @@ struct EnrollmentRoutes: RouteCollection {
 
         // Add new enrollments (ignore duplicates).
         for courseID in validIDs {
-            let existing = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$course.$id == courseID)
-                .count()
-            if existing == 0 {
-                try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
-            }
+            try await ensureSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
         }
 
         // If none selected → require at least one (stay on page).

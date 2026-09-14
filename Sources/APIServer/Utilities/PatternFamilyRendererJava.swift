@@ -274,18 +274,8 @@ struct JavaCallContext {
 private func javaCallContext(
     for family: PatternFamily, case c: PatternCase, perStudentNames: Set<String>
 ) -> JavaCallContext {
-    let argNames: [String] = {
-        if !family.paramNames.isEmpty { return family.paramNames }
-        return c.args.indices.map { "arg_\($0 + 1)" }
-    }()
-    let provided: [Bool] = {
-        guard !c.argsProvided.isEmpty else { return Array(repeating: true, count: argNames.count) }
-        return (0..<argNames.count).map { i in i < c.argsProvided.count ? c.argsProvided[i] : true }
-    }()
-    let varRefs: [String?] = {
-        guard !c.argVarRefs.isEmpty else { return Array(repeating: nil, count: argNames.count) }
-        return (0..<argNames.count).map { i in i < c.argVarRefs.count ? c.argVarRefs[i] : nil }
-    }()
+    let slots = PatternArgumentSlots(family: family, case: c)
+    let (argNames, provided, varRefs) = (slots.names, slots.provided, slots.varRefs)
 
     var usesInputs = false
     func reference(_ name: String) -> String {

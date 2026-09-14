@@ -123,9 +123,7 @@ func flagResultForBrightSpaceSync(
 ) async throws {
     guard application.brightSpaceAppCredentials != nil else { return }
     guard
-        let assignment = try await APIAssignment.query(on: db)
-            .filter(\.$testSetupID == testSetupID)
-            .first(),
+        let assignment = try await assignmentByTestSetupID(testSetupID, on: db),
         let gradeObjectID = assignment.brightspaceGradeObjectID,
         !gradeObjectID.isEmpty,
         let course = try await APICourse.find(assignment.courseID, on: db),

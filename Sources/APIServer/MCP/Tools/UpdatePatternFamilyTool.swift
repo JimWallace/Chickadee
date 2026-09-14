@@ -245,52 +245,7 @@ struct UpdatePatternFamilyTool: ContentTool {
                 "description": .string(
                     "New cases to append (keys must not already exist; use `cases` to edit an "
                         + "existing one)."),
-                "items": .object([
-                    "type": .string("object"),
-                    "properties": .object([
-                        "key": .object([
-                            "type": .string("string"),
-                            "description": .string("Unique case key (also part of the generated filename)."),
-                        ]),
-                        "label": MCPSchema.string,
-                        "args": .object([
-                            "type": .string("array"),
-                            "description": .string("Args in parameter order (raw JSON values)."),
-                        ]),
-                        "expected": .object([
-                            "description": .string("Expected return (raw JSON), shape per kind.")
-                        ]),
-                        "argVarRefs": .object([
-                            "type": .string("array"),
-                            "description": .string("Parallel to args: \"name\" for a $var ref, or null."),
-                        ]),
-                        "argsProvided": .object([
-                            "type": .string("array"),
-                            "description": .string(
-                                "Parallel to args: false omits the arg, so the function's own default applies."),
-                        ]),
-                        "expectedVarRef": .object([
-                            "type": .string("string"),
-                            "description": .string("Per-student expected: name of a = expression."),
-                        ]),
-                        "hint": .object([
-                            "type": .string("string"),
-                            "description": .string(
-                                "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
-                        ]),
-                        "points": MCPSchema.integer,
-                        "tier": MCPSchema.tierEnum(),
-                        "timeLimitSeconds": .object([
-                            "type": .string("integer"),
-                            "description": .string(
-                                "Per-case execution time limit (seconds, 1–600), overriding the family "
-                                    + "default. 0 means no override."),
-                        ]),
-                        "enabled": MCPSchema.boolean,
-                    ]),
-                    "required": .array([.string("key")]),
-                    "additionalProperties": .bool(false),
-                ]),
+                "items": CreatePatternFamilyTool.caseInputItemSchema,
             ]),
             "dependsOn": .object([
                 "type": .string("array"), "items": MCPSchema.string,

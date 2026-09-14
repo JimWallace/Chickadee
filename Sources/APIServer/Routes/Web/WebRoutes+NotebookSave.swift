@@ -99,9 +99,7 @@ extension WebRoutes {
         }
         let asEdited = normalizeNotebookForJupyterLite(raw)
 
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .first()
+        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
 
         // A save from the `.template` view is already template text — the
         // author typed the `{{name}}` themselves — and its cells carry no

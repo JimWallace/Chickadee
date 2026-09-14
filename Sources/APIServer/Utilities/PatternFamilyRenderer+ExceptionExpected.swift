@@ -27,10 +27,7 @@ func renderExceptionExpected(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let exceptionName: String = {
-        if case .string(let s) = c.expected { return s }
-        return "Exception"
-    }()
+    let exceptionName: String = c.expectedName(fallback: "Exception")
     let exceptionLiteral = "\"" + escapeForPythonStringLiteral(exceptionName) + "\""
 
     let variableDecls = combinedVariableDecls(
@@ -82,10 +79,7 @@ func renderExceptionExpected(
 /// both `stop("...")` and custom condition classes.
 func rExceptionCase(family: PatternFamily, case c: PatternCase, prelude: String) -> String {
     let ctx = rCallContext(for: family, case: c)
-    let expectedName: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let expectedName: String = c.expectedName(fallback: "")
     let matchBlock =
         expectedName.isEmpty
         ? ""
@@ -141,10 +135,7 @@ func luaExceptionCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = luaCallContext(for: family, case: c)
-    let expectedName: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let expectedName: String = c.expectedName(fallback: "")
     let matchBlock =
         expectedName.isEmpty
         ? ""
@@ -192,10 +183,7 @@ func octaveExceptionCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = octaveCallContext(for: family, case: c)
-    let expectedName: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let expectedName: String = c.expectedName(fallback: "")
     let matchBlock =
         expectedName.isEmpty
         ? ""
@@ -240,10 +228,7 @@ func octaveExceptionCase(
 func cppExceptionBody(
     target: String, context: CppCallContext, c: PatternCase
 ) -> String {
-    let substring: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let substring: String = c.expectedName(fallback: "")
     // Escaped, not interpolated raw — see the Java arm. An instructor writing
     // an `expected` of `must be "positive"` produced `"must be "positive""`,
     // a compile error that failed the whole family.
@@ -276,10 +261,7 @@ func racketExceptionCase(
     family: PatternFamily, case c: PatternCase, prelude: String
 ) -> String {
     let ctx = racketCallContext(for: family, case: c)
-    let expectedText: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let expectedText: String = c.expectedName(fallback: "")
     return """
         \(prelude)
 
@@ -311,10 +293,7 @@ func racketExceptionCase(
 func javaExceptionBody(
     target: String, context: JavaCallContext, c: PatternCase
 ) -> String {
-    let substring: String = {
-        if case .string(let s) = c.expected { return s }
-        return ""
-    }()
+    let substring: String = c.expectedName(fallback: "")
     // Escaped, not interpolated raw: the value is instructor-authored free
     // text, and a quote or a backslash in it used to break the generated
     // literal (`error: illegal escape character`) and fail the whole family.

@@ -29,11 +29,7 @@ struct GetMetricsCardSeriesTool: DiagnosticTool {
         + "series behind get_metrics_snapshot's point-in-time numbers — use it to see how throughput, "
         + "queue pressure, and latency trend over time. Read-only; aggregates only — no student, "
         + "submission, course, or assignment identifiers."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([:]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject(tool: Self.name)

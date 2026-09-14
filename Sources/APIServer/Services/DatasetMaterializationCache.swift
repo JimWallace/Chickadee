@@ -46,12 +46,7 @@ private struct DatasetMaterializationCacheKey: StorageKey {
 extension Application {
     var datasetMaterializationCache: DatasetMaterializationCache {
         get {
-            if let existing = storage[DatasetMaterializationCacheKey.self] {
-                return existing
-            }
-            let created = DatasetMaterializationCache()
-            storage[DatasetMaterializationCacheKey.self] = created
-            return created
+            lazyStored(DatasetMaterializationCacheKey.self) { DatasetMaterializationCache() }
         }
         set { storage[DatasetMaterializationCacheKey.self] = newValue }
     }

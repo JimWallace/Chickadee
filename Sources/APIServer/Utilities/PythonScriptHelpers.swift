@@ -11,23 +11,15 @@ import Core
 /// rendered source.  Handles the characters that appear in family/check
 /// metadata (backslash, double-quote, newline, control chars).
 func escapeForPythonStringLiteral(_ s: String) -> String {
-    var out = ""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 {
-                out += String(format: "\\x%02x", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out
+    CStyleStringEscaping.python.escapedContents(of: s)
+}
+
+/// `text` with line breaks replaced by spaces, so authored text (labels,
+/// hints, provenance) can sit inside a line comment without breaking out of
+/// comment position in generated source. Every language's comment helper
+/// delegates here.
+func lineCommentText(_ text: String) -> String {
+    text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
 }
 
 /// Tier → filename prefix.  `public`/`release`/`secret` are the prefixes

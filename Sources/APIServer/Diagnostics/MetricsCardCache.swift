@@ -10,24 +10,15 @@
 // requests stacked those long-held connections and exhausted the Fluent
 // pool (observed as `ConnectionPoolTimeoutError` + 500s on unrelated pages).
 //
-// This actor guarantees at most one in-flight computation at a time
-// (concurrent callers await the same task) and serves a cached result for
-// `ttl` seconds, so the expensive query runs at most once per TTL no matter
-// how many pollers or pages ask for it.
+// The coalescing itself is `SingleFlightCache`; this file names the
+// specialisation and its accessor.
 
 import Foundation
 import Vapor
 
-actor MetricsCardCache {
-    private var cached: MetricsCardSeriesResponse?
-    private var cachedAt: Date?
-    private var inFlight: Task<MetricsCardSeriesResponse, Error>?
-    private let ttl: TimeInterval
+typealias MetricsCardCache = SingleFlightCache<MetricsCardSeriesResponse>
 
-    init(ttl: TimeInterval = 60) {
-        self.ttl = ttl
-    }
-
+extension SingleFlightCache where Value == MetricsCardSeriesResponse {
     /// Returns a cached series if it is younger than the TTL, otherwise runs
     /// `compute` — coalescing concurrent callers onto a single execution so
     /// the heavy scan never stacks on the connection pool.
@@ -35,27 +26,7 @@ actor MetricsCardCache {
         now: Date = Date(),
         compute: @escaping @Sendable () async throws -> MetricsCardSeriesResponse
     ) async throws -> MetricsCardSeriesResponse {
-        if let cached, let cachedAt, now.timeIntervalSince(cachedAt) < ttl {
-            return cached
-        }
-        if let inFlight {
-            return try await inFlight.value
-        }
-
-        let task = Task { try await compute() }
-        inFlight = task
-        do {
-            let result = try await task.value
-            cached = result
-            cachedAt = now
-            inFlight = nil
-            return result
-        } catch {
-            // Don't cache failures, and clear the in-flight slot so the next
-            // caller retries rather than awaiting a dead task.
-            inFlight = nil
-            throw error
-        }
+        try await value(now: now, compute: compute)
     }
 }
 
@@ -69,12 +40,7 @@ extension Application {
     /// boot-time race just recomputes once.
     var metricsCardCache: MetricsCardCache {
         get {
-            if let existing = storage[MetricsCardCacheKey.self] {
-                return existing
-            }
-            let created = MetricsCardCache()
-            storage[MetricsCardCacheKey.self] = created
-            return created
+            lazyStored(MetricsCardCacheKey.self) { MetricsCardCache() }
         }
         set { storage[MetricsCardCacheKey.self] = newValue }
     }

@@ -101,6 +101,30 @@ func splitHumanName(_ raw: String?) -> (surname: String, givenNames: String)? {
     )
 }
 
+/// The optional `returnTo` field every per-student staff action form posts.
+struct AssignmentReturnTo: Content {
+    var returnTo: String?
+}
+
+extension Request {
+    /// Redirects to the form's `returnTo` when it points back inside this
+    /// assignment's instructor pages, else to the submissions list.
+    func redirectToAssignmentReturnPath(assignmentIDRaw: String, returnTo: String?) -> Response {
+        redirect(
+            to: sanitizedAssignmentReturnPath(
+                returnTo,
+                assignmentIDRaw: assignmentIDRaw,
+                fallbackPath: "/instructor/\(assignmentIDRaw)/submissions"))
+    }
+
+    /// `redirectToAssignmentReturnPath` for a handler that has not decoded
+    /// its form body: reads the `returnTo` field itself.
+    func redirectToAssignmentReturnPath(assignmentIDRaw: String) -> Response {
+        let body = try? content.decode(AssignmentReturnTo.self)
+        return redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw, returnTo: body?.returnTo)
+    }
+}
+
 func sanitizedAssignmentReturnPath(
     _ raw: String?,
     assignmentIDRaw: String,

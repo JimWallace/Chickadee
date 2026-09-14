@@ -604,14 +604,7 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/users/\(idString)?error=invalid_course")
         }
 
-        let existing = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .count()
-
-        if existing == 0 {
-            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
-        }
+        try await ensureSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
 
         return req.redirect(to: "/admin/users/\(idString)")
     }

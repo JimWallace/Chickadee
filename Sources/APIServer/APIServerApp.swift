@@ -245,12 +245,7 @@ extension Application {
 
     var workerSecretStore: WorkerSecretStore {
         get {
-            if let existing = storage[WorkerSecretStoreKey.self] {
-                return existing
-            }
-            let created = WorkerSecretStore()
-            storage[WorkerSecretStoreKey.self] = created
-            return created
+            lazyStored(WorkerSecretStoreKey.self) { WorkerSecretStore() }
         }
         set {
             storage[WorkerSecretStoreKey.self] = newValue
@@ -259,12 +254,7 @@ extension Application {
 
     var workerActivityStore: WorkerActivityStore {
         get {
-            if let existing = storage[WorkerActivityStoreKey.self] {
-                return existing
-            }
-            let created = WorkerActivityStore()
-            storage[WorkerActivityStoreKey.self] = created
-            return created
+            lazyStored(WorkerActivityStoreKey.self) { WorkerActivityStore() }
         }
         set {
             storage[WorkerActivityStoreKey.self] = newValue
@@ -289,24 +279,14 @@ extension Application {
 
     var localRunnerAutoStartStore: LocalRunnerAutoStartStore {
         get {
-            if let existing = storage[LocalRunnerAutoStartStoreKey.self] {
-                return existing
-            }
-            let created = LocalRunnerAutoStartStore(initialEnabled: false)
-            storage[LocalRunnerAutoStartStoreKey.self] = created
-            return created
+            lazyStored(LocalRunnerAutoStartStoreKey.self) { LocalRunnerAutoStartStore(initialEnabled: false) }
         }
         set { storage[LocalRunnerAutoStartStoreKey.self] = newValue }
     }
 
     var localRunnerManager: LocalRunnerManager {
         get {
-            if let existing = storage[LocalRunnerManagerKey.self] {
-                return existing
-            }
-            let created = LocalRunnerManager()
-            storage[LocalRunnerManagerKey.self] = created
-            return created
+            lazyStored(LocalRunnerManagerKey.self) { LocalRunnerManager() }
         }
         set { storage[LocalRunnerManagerKey.self] = newValue }
     }

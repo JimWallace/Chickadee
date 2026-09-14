@@ -130,38 +130,8 @@ public func javaDeclaredType(forLiteral literal: String) -> String {
     return "Object"
 }
 
-/// Java string literals take C-style escapes — with one rule that has no
-/// analogue in any other language here and breaks the source file when missed.
-///
-/// **Never emit a backslash-u escape.** Java processes unicode escapes in the
-/// *lexer*, before it knows what a string literal is, so the escape for a
-/// newline becomes an actual line break in the middle of a string and the file
-/// fails to compile with "unclosed string literal" — measured, not theorised.
-/// (This doc deliberately spells that escape out in words rather than writing
-/// it, because a Swift doc comment is no safer a place for it.) Control
-/// characters therefore use
-/// the named escapes where they exist and exactly-three-digit octal otherwise,
-/// which stops at three digits by rule (the same reason C++'s encoder avoids
-/// `\x`).
-///
-/// Non-ASCII passes through as UTF-8 source bytes; `javac` reads UTF-8 source
-/// by default on every platform Chickadee grades on.
+/// See `CStyleStringEscaping.java` for the escape rules — in particular
+/// why a backslash-u escape is never emitted.
 private func encodeJavaString(_ s: String) -> String {
-    var out = "\""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 || ch.value == 0x7F {
-                out += String(format: "\\%03o", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out + "\""
+    CStyleStringEscaping.java.quotedLiteral(s)
 }

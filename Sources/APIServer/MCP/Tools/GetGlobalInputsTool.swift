@@ -32,14 +32,7 @@ struct GetGlobalInputsTool: ContentTool {
         + "assignment's own language, evaluated against the student's seed). Read-only — use this to "
         + "inspect personalization "
         + "before editing it with update_global_inputs."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

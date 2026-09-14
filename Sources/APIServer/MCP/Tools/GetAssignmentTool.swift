@@ -102,14 +102,7 @@ struct GetAssignmentTool: ContentTool {
         + "(null for an ordinary assignment; otherwise the class-activity kind — "
         + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility and the "
         + "leaderboard path) — which together decide what may be authored here."
-    static let inputSchema: JSONValue = .object([
-        "type": .string("object"),
-        "properties": .object([
-            "assignmentPublicID": MCPSchema.assignmentPublicID
-        ]),
-        "required": .array([.string("assignmentPublicID")]),
-        "additionalProperties": .bool(false),
-    ])
+    static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
