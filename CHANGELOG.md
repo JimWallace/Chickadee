@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.183] - 2026-09-14
+
+### Changed
+
+- **Codebase audit: duplicate code folded into shared helpers.** A copy-paste scan and a semantic review of the route, MCP and renderer layers turned up the same procedure written by hand in many places. Each is now one definition: `CStyleStringEscaping` replaces the eleven per-language string escapers (byte-identical output, pinned by tests); `PatternArgumentSlots` replaces the seven renderer prologues that aligned a case's arguments; `MCPTransport` and `MCPBearerVerification` carry the transport and bearer-token mechanics both MCP endpoints used to duplicate; `SingleFlightCache` is the one actor behind `MetricsCardCache` and `StorageUsageCache`; `makeWorkerManifestJSON(preserving:)` carries every manifest field through a suite rebuild so a rebuild can no longer forget one; `JSONColumn`, `lazyStored`, `lineCommentText`, `assignmentByTestSetupID`, `ensureSeededEnrollment`, `requireSolutionVisible`, `requireActiveCourseID`, `redirectToAssignmentReturnPath`, `PatternCase.expectedName` and `PatternFamily.effectiveTolerance` replace the remaining small copies. The MCP schema fragments for personalization inputs, pattern-family cases and the two commonest input shapes are shared constants, and `author_notebook_check` derives its kind enum from `NotebookCheckKind.allCases` instead of listing it. Two behaviour notes: six of the seven approximate-equality renderers hardcoded the default tolerance and now read the one named constant, and the R, Lua, Octave and Racket comment helpers now flatten carriage returns as C++ and Java already did.
+
+
 ## [0.5.182] - 2026-09-14
 
 ### Fixed
