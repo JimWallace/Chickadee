@@ -58,6 +58,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 
 # Tools/mutation/verify-survivor.py -> three levels up is the repo root.
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -164,6 +165,32 @@ def locate_unique(text: str, needle: str, line: int) -> int | None:
     return exact[0] if len(exact) == 1 else None
 
 
+def mark_changed(path: str) -> None:
+    """Make an edit unmistakable to the build system.
+
+    SwiftPM decides what to recompile from mtimes, and this script rewrites the
+    same path over and over -- mutate, build, restore, mutate -- often several
+    times inside one timestamp tick. When two writes land in the same tick the
+    build is skipped and `swift test` runs the PREVIOUS binary. The mutation was
+    never compiled in, the suite passes, and the run is reported SURVIVED: a
+    real gap and an already-covered line become indistinguishable, in the
+    direction that makes you write a test for a hole that is not there.
+
+    MEASURED, because it reads as flakiness rather than as a bug. Sources/Worker
+    SubmissionStaging :431 and :433 are the same mutant recorded at two lines --
+    byte-identical `original` and `mutated` -- and four consecutive runs of that
+    one experiment returned KILLED, KILLED, SURVIVED, SURVIVED. Applying the
+    same mutation by hand and running the suite directly showed the test passing
+    against code that provably collides two cache keys; adding an unrelated file
+    to the target, which forces a rebuild, made the same suite fail at once.
+
+    Stamping the file a second into the future guarantees the next build sees an
+    mtime newer than whatever it last recorded.
+    """
+    stamp = time.time() + 1
+    os.utime(path, (stamp, stamp))
+
+
 def apply_mutation(source_path: str, line: int, mutated: str, original: str | None) -> str | None:
     """Apply the mutation to the file, returning the file's previous contents.
 
@@ -191,6 +218,7 @@ def apply_mutation(source_path: str, line: int, mutated: str, original: str | No
             return None
         with open(source_path, "w") as fh:
             fh.write(text[:at] + repl + text[at + len(want):])
+        mark_changed(source_path)
         return text
 
     lines = text.splitlines(keepends=True)
@@ -211,6 +239,7 @@ def apply_mutation(source_path: str, line: int, mutated: str, original: str | No
         return None
     with open(source_path, "w") as fh:
         fh.writelines(lines)
+    mark_changed(source_path)
     return text
 
 
@@ -324,6 +353,10 @@ def verify_one(survivor: dict, cmd: list[str], quiet: bool) -> int:
         finally:
             with open(source_path, "w") as fh:
                 fh.write(backup)
+            # The restore has to be as visible to the build as the mutation
+            # was, or the NEXT run measures against a binary still carrying
+            # this one.
+            mark_changed(source_path)
         if code != 0 and not tests_actually_ran(output):
             print(f"UNVERIFIABLE  {tag}")
             print(f"    applied: {shown}")
