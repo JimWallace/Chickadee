@@ -21,6 +21,27 @@
 // the test to still mean something; a pair states the property -- different
 // inputs, different key -- and survives the rewrite.
 //
+// TWO OF THESE DO NOT RELIABLY KILL THEIR MUTANT, and say so rather than
+// pretending otherwise. `ManifestCodec.encoder` does not encode equal manifests
+// to equal bytes: two `TestProperties()` values encoded back to back, serially,
+// in one process came out with different JSON key orders in 40 of 40 pairs on
+// one run and 0 of 40 on the next. `testSetupCacheKey` hashes those bytes, so
+// it is not a pure function of its Job.
+//
+// The consequence for the tests below is narrow but real. An assertion of the
+// form "these two jobs must hash differently" passes whenever the encoder
+// happens to disagree with itself, which is exactly when a mutant that drops a
+// field from the material would otherwise have been caught. So :432 and :431
+// verify KILLED only some of the time -- measured SURVIVED, KILLED, KILLED --
+// and are NOT recorded as closed. :434 and :78 do not depend on the encoding at
+// all and verify KILLED every time.
+//
+// The assertions stay because they are true and useful, and they never fail in
+// CI: the nondeterminism can only make them pass. They become reliable mutant
+// killers the day the encoder is fixed (`.sortedKeys`), which is a production
+// change with its own blast radius -- every stored manifest hash, `spec_hash`
+// included -- and is not made here.
+//
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
 import Core
@@ -78,11 +99,12 @@ import Testing
             "a suite edit must bust the cached test setup")
     }
 
-    /// Survivor: `:432 RemoveSideEffects` — deleting the test-setup URL from
-    /// the material.
+    /// Asserts: the same identifier pointing at a different artifact must not
+    /// reuse the cached directory.
     ///
-    /// Same identifier pointing at a different artifact must not reuse the
-    /// cached directory.
+    /// Aimed at `:432 RemoveSideEffects` (deleting the URL from the material)
+    /// but does not reliably kill it — see the file comment. The property is
+    /// worth pinning regardless.
     @Test func adifferentTestSetupURLChangesTheCacheKey() throws {
         let first = try Self.makeJob(testSetupURL: "https://server.test/ts.zip")
         let second = try Self.makeJob(testSetupURL: "https://server.test/other.zip")
@@ -90,8 +112,10 @@ import Testing
         #expect(testSetupCacheKey(for: first) != testSetupCacheKey(for: second))
     }
 
-    /// Survivor: `:431 RemoveSideEffects` — deleting the zero byte that
-    /// separates the test-setup id from the URL.
+    /// Asserts: the id/url boundary in the hashed material is unambiguous.
+    ///
+    /// Aimed at `:431 RemoveSideEffects` (deleting the separating zero byte)
+    /// but does not reliably kill it — see the file comment.
     ///
     /// Without it the material is a plain concatenation, so the boundary
     /// between the two fields can move without changing a single byte. The
