@@ -392,6 +392,22 @@ final class ScriptCapture: Sendable {
         (standardOutput.buffer.text(), standardError.buffer.text())
     }
 
+    /// The descriptors this capture owns, split by end.
+    ///
+    /// Exists for the descriptor-hygiene tests, which assert that every end is
+    /// created close-on-exec and that `discard()` releases both read ends.
+    /// They ask this type directly because the obvious alternative -- diffing
+    /// /proc/self/fd around the allocation -- races every other suite that
+    /// opens a pipe concurrently, and did: it reported five and eight new
+    /// descriptors where four were expected, failing 3 runs in 10 against
+    /// correct code. A narrow read-only accessor is the cheaper of the two.
+    var descriptorsForTesting: (readEnds: [Int32], writeEnds: [Int32]) {
+        (
+            [standardOutput.readEnd, standardError.readEnd],
+            [standardOutput.writeEnd, standardError.writeEnd]
+        )
+    }
+
     /// Releases the read ends on the path where the child never launched, so
     /// no drain thread was ever started. The write ends belong to Subprocess
     /// from the moment they are handed over.

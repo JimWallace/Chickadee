@@ -13,14 +13,19 @@
 // later and nowhere near this file -- so the guard has to be pinned where it is
 // cheap to see, not left to a timing test that would be flaky anyway.
 //
-// The assertions read the descriptor table directly instead of spawning a
-// child and inferring. `ScriptCapture` is internal, so a test can construct one
-// and ask the kernel what its descriptors actually are: deterministic, fast,
-// and it fails with the flag that is wrong rather than with a timeout.
+// THE FIRST CUT OF THIS FILE WAS ITSELF FLAKY, which is worth recording because
+// the shape is inviting. It diffed /proc/self/fd around the allocation and
+// asserted the four new descriptors were close-on-exec. That races every other
+// suite in the process: Swift Testing runs suites in parallel, so a pipe opened
+// elsewhere lands in the diff. Measured at 3 failures in 10 runs, reporting
+// five and eight new descriptors where four were expected -- and it was briefly
+// blamed on mutants in an unrelated file, since a flaky test reads as "killed"
+// to the mutation verifier. It also quietly swept in the directory handle that
+// listing /proc/self/fd opens, which appears in its own listing and is
+// legitimately not close-on-exec.
 //
-// Linux-only, because it reads /proc/self/fd. Everywhere else it stands down
-// silently -- the repo's "expected on this platform" idiom -- and the mutation
-// sweep runs on Linux.
+// So the capture is asked for its own descriptors instead. Deterministic, and
+// it fails naming the descriptor whose flag is wrong.
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
@@ -33,31 +38,7 @@ import Testing
 import Glibc
 #endif
 
-@Suite(.serialized, .timeLimit(.minutes(3))) struct ScriptExecutionGapTests {
-
-    /// Every PIPE descriptor the process currently holds.
-    ///
-    /// Filtered to pipes deliberately. Listing /proc/self/fd opens a directory
-    /// descriptor that appears in its own listing, so an unfiltered snapshot
-    /// reports that handle as a new descriptor -- which both hides a real pipe
-    /// end (the count still reached four) and adds one that is legitimately not
-    /// close-on-exec. A first cut of this file did exactly that and failed
-    /// against correct code.
-    private static func openPipeDescriptors() -> Set<Int32>? {
-        #if os(Linux)
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd")
-        else { return nil }
-        return Set(
-            entries.compactMap(Int32.init).filter { descriptor in
-                let target =
-                    (try? FileManager.default.destinationOfSymbolicLink(
-                        atPath: "/proc/self/fd/\(descriptor)")) ?? ""
-                return target.hasPrefix("pipe:")
-            })
-        #else
-        return nil
-        #endif
-    }
+@Suite(.timeLimit(.minutes(3))) struct ScriptExecutionGapTests {
 
     private static func isCloseOnExec(_ descriptor: Int32) -> Bool {
         let flags = fcntl(descriptor, F_GETFD)
@@ -74,21 +55,12 @@ import Glibc
     /// Either one produces pipe ends without `FD_CLOEXEC`. Nothing fails at the
     /// time; the cost lands later as an unrelated process holding a duplicate
     /// write end and a drain thread that never sees EOF.
-    @Test func everyPipeEndIsCreatedCloseOnExec() throws {
-        guard let before = Self.openPipeDescriptors() else { return }
-
+    @Test func everyPipeEndIsCreatedCloseOnExec() {
         let capture = ScriptCapture()
         defer { capture.discard() }
 
-        guard let after = Self.openPipeDescriptors() else { return }
-        let created = after.subtracting(before)
-
-        // Two pipes, two ends each. Asserted so that a future change to how
-        // many streams are captured fails here loudly rather than quietly
-        // reducing what the next expectation checks.
-        #expect(created.count == 4, "expected 4 new descriptors, got \(created.sorted())")
-
-        for descriptor in created.sorted() {
+        let (readEnds, writeEnds) = capture.descriptorsForTesting
+        for descriptor in readEnds + writeEnds {
             let note =
                 "descriptor \(descriptor) is not close-on-exec; it will survive an exec "
                 + "into an unrelated child and postpone EOF (issues #1233 / #1139)"
@@ -103,26 +75,22 @@ import Glibc
     /// `discard()` is the failed-launch path: no child started, so no drain
     /// thread will ever run and close these. Dropping either close leaks a
     /// descriptor per failed launch, and a runner that fails launches in a loop
-    /// walks into EMFILE.
-    @Test func discardReleasesBothReadEnds() throws {
-        guard let before = Self.openPipeDescriptors() else { return }
-
+    /// walks into EMFILE. Both ends are named individually so a mutant that
+    /// removes one close fails on that one rather than on a count.
+    @Test func discardReleasesBothReadEnds() {
         let capture = ScriptCapture()
+        let (readEnds, _) = capture.descriptorsForTesting
 
-        guard let afterInit = Self.openPipeDescriptors() else { return }
-        let created = afterInit.subtracting(before)
-        try #require(created.count == 4, "expected 4 new descriptors, got \(created.sorted())")
+        for descriptor in readEnds {
+            #expect(!Self.isClosed(descriptor), "read end \(descriptor) was closed before discard()")
+        }
 
         capture.discard()
 
-        // discard() owns the READ ends only -- the write ends belong to
-        // Subprocess from the moment they are handed over -- so exactly two of
-        // the four must now be closed. Asserting the count rather than naming
-        // which keeps this independent of the order makeStream() allocates in.
-        let closed = created.filter { Self.isClosed($0) }
-        let note =
-            "discard() must release both read ends; closed \(closed.count) of "
-            + "\(created.count) (\(created.sorted()))"
-        #expect(closed.count == 2, "\(note)")
+        for descriptor in readEnds {
+            #expect(
+                Self.isClosed(descriptor),
+                "discard() left read end \(descriptor) open; a failed launch leaks it")
+        }
     }
 }
