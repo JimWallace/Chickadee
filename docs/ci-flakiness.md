@@ -406,6 +406,62 @@ front of you, check the dump for `WedgeWatchdog.abortWedgedProcess` plus a
 `CancelState.cancel` / `withStatusRecordLock` pair; that combination is this
 family, not the change under test.
 
+### It reappeared (2026-09-15), at the site this entry predicted
+
+`Mutation testing (weekly)` run 34959089994, shard 0 of 12. The shard aborted
+at the watchdog's five-minute mark, in the **unmutated baseline**. It therefore
+measured nothing, and the workflow went red while the other eleven shards were
+green.
+
+The dump is this family. The canceller is the second of the three deliberate
+sites listed above: `TestSetupCache.detachWaiter`
+(`TestSetupCache.swift:318`, `population.task.cancel()`). It cancelled a
+populate task that was inside `RunnerDaemon.download`. The other half of the
+cycle was `URLSession.download(for:)` resuming its continuation on the session
+work queue. No change under test was involved. `main` was green on both sides.
+
+### What was tried, measured, and NOT shipped
+
+The obvious fix is to stop using Foundation's async `data(for:)` and
+`download(for:)`, and to drive the completion-handler API instead. Record why
+it works, because the first guess is wrong:
+
+- The async API resumes its continuation **on the session work queue**. That is
+  what puts `withStatusRecordLock` on the queue side of the cycle. A
+  completion-handler wrapper resumes from the **delegate queue**, so the work
+  queue never waits for the status-record lock. The cycle does not form.
+- The hazard is therefore not "blocking inside `swift_task_cancel`". A control
+  that cancelled synchronously from the cancellation handler also never wedged:
+  16 of 16 runs clean, against 6 of 6 wedged for the async API. Harness: 16 to
+  32 concurrent transfers, each cancelled at the moment it completes.
+
+**It was reverted, because it replaces the deadlock with a crash.**
+`URLSessionTask.cancel()` in swift-corelibs-foundation schedules work that
+later calls `URLSession.behaviour(for:)`. If the transfer completed and left
+the session's task registry first, that is a `fatalError`: "Trying to access a
+behaviour for a task that in not in the registry" (`TaskRegistry.swift:118`).
+It is a SIGILL, not a catchable error. With the wrapper, the logic-tier suite
+(`--skip APITests`) crashed in **7 of 12** runs. `main` was clean in 12 of 12.
+
+A `finished` flag set from the completion handler does not close the window. A
+`task.state` guard does not close it either. Neither can: the protection
+corelibs uses for that race is the `workQueue.sync` inside `cancel()`, and that
+is the call that deadlocks. **The deadlock and the fatalError are two halves of
+one upstream bug.** A later attempt must answer the crash, not only the wedge.
+
+The remaining options are all behavioural, and each one costs something:
+
+1. Re-run the shard and accept the rate. This is what the entry above says.
+2. Do not cancel in `detachWaiter`. A cancelled population then completes its
+   download instead of aborting it. This wastes one test-setup transfer, and it
+   weakens the #1233 property that existing tests assert.
+3. Shield the download from task cancellation in the primitive. This has the
+   same cost as option 2 at all three sites. A cancelled daemon also stays
+   alive until the transfer ends, or until its 600 s resource timeout.
+
+Each option changes behaviour that tests currently pin, so the maintainer
+chooses.
+
 ---
 
 ## Family 5 — `api-tests` starved past its 20-minute ceiling — OBSERVED ONCE (2026-08-09), root cause open
