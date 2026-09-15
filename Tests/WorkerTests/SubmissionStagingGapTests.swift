@@ -21,26 +21,23 @@
 // the test to still mean something; a pair states the property -- different
 // inputs, different key -- and survives the rewrite.
 //
-// TWO OF THESE DO NOT RELIABLY KILL THEIR MUTANT, and say so rather than
-// pretending otherwise. `ManifestCodec.encoder` does not encode equal manifests
-// to equal bytes: two `TestProperties()` values encoded back to back, serially,
-// in one process came out with different JSON key orders in 40 of 40 pairs on
-// one run and 0 of 40 on the next. `testSetupCacheKey` hashes those bytes, so
-// it is not a pure function of its Job.
+// THE MISSING HALF OF THE CACHE CONTRACT. CLAUDE.md states one direction --
+// "Cache key hashes manifest + zip content, so any suite edit busts the entry"
+// -- and that is what the assertions below started as. The converse went
+// unstated and unasserted: equal content must key IDENTICALLY, or the cache
+// never hits at all.
 //
-// The consequence for the tests below is narrow but real. An assertion of the
-// form "these two jobs must hash differently" passes whenever the encoder
-// happens to disagree with itself, which is exactly when a mutant that drops a
-// field from the material would otherwise have been caught. So :432 and :431
-// verify KILLED only some of the time -- measured SURVIVED, KILLED, KILLED --
-// and are NOT recorded as closed. :434 and :78 do not depend on the encoding at
-// all and verify KILLED every time.
+// It did not. `testSetupCacheKey` hashed `ManifestCodec.encoder`, whose key
+// order is not contractual, so the same job keyed two ways and every test setup
+// was re-downloaded and re-extracted with nothing in the logs to say why
+// (#1526). It also masked three mutants in this very file: an assertion of the
+// form "these two jobs must hash differently" passes for free whenever the
+// encoder disagrees with itself, which is exactly when a mutant that drops a
+// field from the hashed material would otherwise be caught. Measured for :432
+// as SURVIVED, KILLED, KILLED across three identical runs.
 //
-// The assertions stay because they are true and useful, and they never fail in
-// CI: the nondeterminism can only make them pass. They become reliable mutant
-// killers the day the encoder is fixed (`.sortedKeys`), which is a production
-// change with its own blast radius -- every stored manifest hash, `spec_hash`
-// included -- and is not made here.
+// `theSameJobAlwaysKeysTheSameWay` is the assertion that was missing. The other
+// three are now reliable killers because it holds.
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
@@ -99,12 +96,11 @@ import Testing
             "a suite edit must bust the cached test setup")
     }
 
-    /// Asserts: the same identifier pointing at a different artifact must not
-    /// reuse the cached directory.
+    /// Survivor: `:432 RemoveSideEffects` — deleting the test-setup URL from
+    /// the hashed material.
     ///
-    /// Aimed at `:432 RemoveSideEffects` (deleting the URL from the material)
-    /// but does not reliably kill it — see the file comment. The property is
-    /// worth pinning regardless.
+    /// The same identifier pointing at a different artifact must not reuse the
+    /// cached directory.
     @Test func adifferentTestSetupURLChangesTheCacheKey() throws {
         let first = try Self.makeJob(testSetupURL: "https://server.test/ts.zip")
         let second = try Self.makeJob(testSetupURL: "https://server.test/other.zip")
@@ -112,10 +108,8 @@ import Testing
         #expect(testSetupCacheKey(for: first) != testSetupCacheKey(for: second))
     }
 
-    /// Asserts: the id/url boundary in the hashed material is unambiguous.
-    ///
-    /// Aimed at `:431 RemoveSideEffects` (deleting the separating zero byte)
-    /// but does not reliably kill it — see the file comment.
+    /// Survivor: `:431 RemoveSideEffects` — deleting the zero byte separating
+    /// the test-setup id from the URL.
     ///
     /// Without it the material is a plain concatenation, so the boundary
     /// between the two fields can move without changing a single byte. The
@@ -139,6 +133,24 @@ import Testing
     /// The hash half of the key, with the `"\(testSetupID)-"` prefix removed.
     private static func digest(of job: Job) -> String {
         String(testSetupCacheKey(for: job).dropFirst(job.testSetupID.count + 1))
+    }
+
+    /// The property `testSetupCacheKey` lacked, and the reason #1526 existed:
+    /// the same job must always produce the same key.
+    ///
+    /// Repeated rather than compared once, because the failure was
+    /// intermittent — the shared encoder emitted a stable order on some runs
+    /// and alternating orders on others, so a single pair of calls agreed most
+    /// of the time. A one-shot assertion here would have passed against the
+    /// broken code roughly half the time, which is worse than not having it.
+    @Test func theSameJobAlwaysKeysTheSameWay() throws {
+        let job = try Self.makeJob(manifest: try Self.manifest(withScript: "test_public.py"))
+
+        let keys = Set((0..<200).map { _ in testSetupCacheKey(for: job) })
+
+        #expect(
+            keys.count == 1,
+            "one job must hash to one key; got \(keys.count) distinct: \(keys.sorted().prefix(3))")
     }
 
     /// Survivor: `:78 RemoveSideEffects` — dropping

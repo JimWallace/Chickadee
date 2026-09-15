@@ -424,8 +424,51 @@ func shouldNormalizePythonSubmission(
     ) == .pythonModule
 }
 
+/// A `JSONEncoder` whose output is stable for equal input.
+///
+/// `ManifestCodec.encoder` is NOT: it is a plain `JSONEncoder`, so the order of
+/// keys in its output is not contractual, and it was measured emitting two
+/// different orderings for two equal `TestProperties` values encoded back to
+/// back, serially, in one process -- 40 of 40 pairs on one run and 0 of 40 on
+/// the next. Anything that HASHES a manifest therefore needs its own canonical
+/// encoder; the shared one is for allocation reuse on decode-and-re-encode
+/// paths, where key order does not matter.
+private let canonicalManifestEncoder: JSONEncoder = {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return encoder
+}()
+
+/// The runner's key for a prepared test-setup directory.
+///
+/// Two properties matter and only one of them was ever asserted. Different
+/// content must key differently, so an edited suite busts the cached copy --
+/// that is the one CLAUDE.md states. Equal content must also key IDENTICALLY,
+/// or the cache simply never hits: the same job hashes one way now and another
+/// way after a restart, and every setup is re-downloaded and re-extracted with
+/// nothing in the logs to say why. The second property is why the encoder above
+/// exists (#1526).
+///
+/// TWO OF THE FIVE `append` CALLS BELOW CANNOT BE CAUGHT BY A TEST, and the
+/// arguments are recorded here so the next triage pass does not re-derive them
+/// or, worse, write a test asserting something that cannot vary. Both were
+/// measured by deleting the line and running the suite:
+///
+///   * `job.testSetupID` — the key carries the id VERBATIM in its prefix, so
+///     two jobs with different ids differ whether or not the id is also hashed,
+///     and two jobs with the same id contribute the same bytes here either way.
+///     Dropping it changes the digest's VALUE but not which pairs of jobs
+///     collide, and collision is the only property the cache reads. Only a
+///     golden-digest test could see it, and that would pin an implementation.
+///   * the second separator, between the URL and the manifest — for that
+///     boundary to move, one manifest's encoding would have to be a proper
+///     suffix of another's. `manifestBytes` is always a complete JSON object
+///     from the encoder, so it opens with `{` and closes with the matching `}`;
+///     no proper suffix of that is itself valid encoder output. The first
+///     separator IS reachable, because a test-setup id and a URL can be chosen
+///     to straddle it, and `SubmissionStagingGapTests` does exactly that.
 func testSetupCacheKey(for job: Job) -> String {
-    let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()
+    let manifestBytes = (try? canonicalManifestEncoder.encode(job.manifest)) ?? Data()
     var material = Data()
     material.append(Data(job.testSetupID.utf8))
     material.append(0)
