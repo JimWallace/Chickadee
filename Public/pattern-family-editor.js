@@ -712,7 +712,7 @@
                     ? 'pf-var-section-row is-shadowed'
                     : 'pf-var-section-row';
                 tr.setAttribute('data-section-var', '1');
-                var preview = '';
+                var preview;
                 try { preview = JSON.stringify(v.value); }
                 catch (_) { preview = String(v.value); }
                 var shadowNote = familyShadow
@@ -1159,7 +1159,7 @@
                     rawArgs = rawArgs.trim();
                     if (rawArgs !== '') {
                         try { args = JSON.parse(rawArgs); }
-                        catch (e) { throw new Error('Case ' + caseNum + ': args must be valid JSON (' + e.message + ')'); }
+                        catch (e) { throw new Error('Case ' + caseNum + ': args must be valid JSON (' + e.message + ')', { cause: e }); }
                         if (!Array.isArray(args)) throw new Error('Case ' + caseNum + ': args must be a JSON array');
                     }
                     argsProvided = args.map(function () { return true; });

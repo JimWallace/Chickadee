@@ -232,7 +232,7 @@
         // relative to cwd — installing from there fails inside the bundle with
         // a bare Error. Restore it afterwards so the running script still sees
         // the working directory the grading contract promises.
-        var cwd = null;
+        var cwd;
         try { cwd = _module.FS.cwd(); _module.FS.chdir('/'); } catch (_) { cwd = null; }
         var result;
         try {

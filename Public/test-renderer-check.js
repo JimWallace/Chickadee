@@ -114,7 +114,7 @@
         if (vt === 'numberList') {
             var rawArr = (control.value || '').trim(), values;
             if (rawArr.indexOf('[') === 0) {
-                try { values = JSON.parse(rawArr); } catch (e) { throw new Error('Expected array isn\'t valid JSON: ' + e.message); }
+                try { values = JSON.parse(rawArr); } catch (e) { throw new Error('Expected array isn\'t valid JSON: ' + e.message, { cause: e }); }
             } else {
                 values = rawArr.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; })
                     .map(function (x) { var num = parseFloat(x); if (isNaN(num)) throw new Error('Expected array contains a non-number: "' + x + '"'); return num; });
