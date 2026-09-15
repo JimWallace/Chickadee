@@ -42,12 +42,14 @@ var decode = (kind, payload1, payload2, objectSpace) => {
   }
 };
 var decodeArray = (ptr, length, memory, objectSpace) => {
-  if (length === 0) {
+  const basePtr = ptr >>> 0;
+  const count = length >>> 0;
+  if (count === 0) {
     return [];
   }
   let result = [];
-  for (let index = 0; index < length; index++) {
-    const base = ptr + 16 * index;
+  for (let index = 0; index < count; index++) {
+    const base = basePtr + 16 * index;
     const kind = memory.getUint32(base, true);
     const payload1 = memory.getUint32(base + 4, true);
     const payload2 = memory.getFloat64(base + 8, true);
@@ -57,25 +59,27 @@ var decodeArray = (ptr, length, memory, objectSpace) => {
 };
 var write = (value, kind_ptr, payload1_ptr, payload2_ptr, is_exception, memory, objectSpace) => {
   const kind = writeAndReturnKindBits(value, payload1_ptr, payload2_ptr, is_exception, memory, objectSpace);
-  memory.setUint32(kind_ptr, kind, true);
+  memory.setUint32(kind_ptr >>> 0, kind, true);
 };
 var writeAndReturnKindBits = (value, payload1_ptr, payload2_ptr, is_exception, memory, objectSpace) => {
   const exceptionBit = (is_exception ? 1 : 0) << 31;
+  const payload1Offset = payload1_ptr >>> 0;
+  const payload2Offset = payload2_ptr >>> 0;
   if (value === null) {
     return exceptionBit | 4;
   }
   const writeRef = (kind) => {
-    memory.setUint32(payload1_ptr, objectSpace.retain(value), true);
+    memory.setUint32(payload1Offset, objectSpace.retain(value), true);
     return exceptionBit | kind;
   };
   const type = typeof value;
   switch (type) {
     case "boolean": {
-      memory.setUint32(payload1_ptr, value ? 1 : 0, true);
+      memory.setUint32(payload1Offset, value ? 1 : 0, true);
       return exceptionBit | 0;
     }
     case "number": {
-      memory.setFloat64(payload2_ptr, value, true);
+      memory.setFloat64(payload2Offset, value, true);
       return exceptionBit | 2;
     }
     case "string": {
@@ -117,9 +121,11 @@ var writeAndReturnKindBits = (value, payload1_ptr, payload2_ptr, is_exception, m
   throw new Error("Unreachable");
 };
 function decodeObjectRefs(ptr, length, memory) {
-  const result = new Array(length);
-  for (let i = 0; i < length; i++) {
-    result[i] = memory.getUint32(ptr + 4 * i, true);
+  const basePtr = ptr >>> 0;
+  const count = length >>> 0;
+  const result = new Array(count);
+  for (let i = 0; i < count; i++) {
+    result[i] = memory.getUint32(basePtr + 4 * i, true);
   }
   return result;
 }
@@ -557,24 +563,28 @@ var SwiftRuntime = class {
         const memory = this.memory;
         const bytes = this.textEncoder.encode(memory.getObject(ref));
         const bytes_ptr = memory.retain(bytes);
-        this.getDataView().setUint32(bytes_ptr_result, bytes_ptr, true);
+        this.getDataView().setUint32(bytes_ptr_result >>> 0, bytes_ptr, true);
         return bytes.length;
       },
       swjs_decode_string: (
         // NOTE: TextDecoder can't decode typed arrays backed by SharedArrayBuffer
         this.options.sharedMemory == true ? (bytes_ptr, length) => {
-          const bytes = this.getUint8Array().slice(bytes_ptr, bytes_ptr + length);
+          const bytesOffset = bytes_ptr >>> 0;
+          const byteLength = length >>> 0;
+          const bytes = this.getUint8Array().slice(bytesOffset, bytesOffset + byteLength);
           const string = this.textDecoder.decode(bytes);
           return this.memory.retain(string);
         } : (bytes_ptr, length) => {
-          const bytes = this.getUint8Array().subarray(bytes_ptr, bytes_ptr + length);
+          const bytesOffset = bytes_ptr >>> 0;
+          const byteLength = length >>> 0;
+          const bytes = this.getUint8Array().subarray(bytesOffset, bytesOffset + byteLength);
           const string = this.textDecoder.decode(bytes);
           return this.memory.retain(string);
         }
       ),
       swjs_load_string: (ref, buffer) => {
         const bytes = this.memory.getObject(ref);
-        this.getUint8Array().set(bytes, buffer);
+        this.getUint8Array().set(bytes, buffer >>> 0);
       },
       swjs_call_function: (ref, argv, argc, payload1_ptr, payload2_ptr) => {
         const memory = this.memory;
@@ -669,7 +679,7 @@ var SwiftRuntime = class {
         if (length == 0) {
           return this.memory.retain(new ArrayType());
         }
-        const array = new ArrayType(this.wasmMemory.buffer, elementsPtr, length);
+        const array = new ArrayType(this.wasmMemory.buffer, elementsPtr >>> 0, length >>> 0);
         return this.memory.retain(array.slice());
       },
       swjs_create_object: () => {
@@ -679,7 +689,7 @@ var SwiftRuntime = class {
         const memory = this.memory;
         const typedArray = memory.getObject(ref);
         const bytes = new Uint8Array(typedArray.buffer);
-        this.getUint8Array().set(bytes, buffer);
+        this.getUint8Array().set(bytes, buffer >>> 0);
       },
       swjs_release: (ref) => {
         this.memory.release(ref);
@@ -888,7 +898,7 @@ var UnsafeEventLoopYield = class extends Error {
 };
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.636b95d04884.wasm";
+var MODULE_PATH = "RunnerWasm.e9fa8ab2dfd2.wasm";
 async function createInstantiator(options, swift) {
   return {
     /**
@@ -935,7 +945,8 @@ async function createInstantiator(options, swift) {
         swift_js_pop_i64: unexpectedBjsCall,
         swift_js_closure_unregister: unexpectedBjsCall,
         swift_js_push_typed_array: unexpectedBjsCall,
-        swift_js_make_promise: unexpectedBjsCall
+        swift_js_make_promise: unexpectedBjsCall,
+        bjs_core_register_type_handles: unexpectedBjsCall
       };
     },
     /** @param {WebAssembly.Instance} instance */
@@ -948,7 +959,7 @@ async function createInstantiator(options, swift) {
   };
 }
 async function instantiate(options) {
-  const result = await _instantiate(options);
+  const { instantiator, ...result } = await _instantiate(options);
   options.wasi.initialize(result.instance);
   result.swift.main();
   return result;
@@ -1000,7 +1011,8 @@ async function _instantiate(options) {
   return {
     instance,
     swift,
-    exports
+    exports,
+    instantiator
   };
 }
 
@@ -2343,7 +2355,7 @@ async function initBrowser(_options) {
   const options = _options || {};
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.636b95d04884.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.e9fa8ab2dfd2.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module
