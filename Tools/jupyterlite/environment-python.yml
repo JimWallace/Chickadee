@@ -21,7 +21,28 @@ channels:
   - https://repo.prefix.dev/conda-forge
 dependencies:
   - xeus-python
-  - numpy
+  # PINNED BELOW 2.5.3, and this is not conservatism — 2.5.3 does not work here.
+  #
+  # emscripten-forge rebuilt numpy 2.5.3 as build 3 with `openblas` in its
+  # depends (builds 0-2 of the same version do not have it). openblas ships
+  # libopenblas.so, which the on-demand install then dlopen()s — and
+  # Public/xeus-kernel-shared.js's `locateFile` only knows `libxeus.so`, so
+  # every other .so falls through to a bare filename, is fetched over HTTP, and
+  # 404s. Measured in Tools/browser-grading-smoke on a real kernel:
+  #
+  #   [server] 404: /libopenblas.so
+  #   [pageerror] Dynamic linking error: cannot resolve symbol cblas_sdot
+  #   FAIL boot — stage=worker
+  #
+  # That is browser-graded Python not starting at all, for every student, not a
+  # slow import. numpy 2.5.2 needs no openblas and is unaffected.
+  #
+  # LIFTING THIS PIN is a substrate change, not a version bump: teach
+  # `locateFile` to resolve dlopen'd libraries inside the kernel FS instead of
+  # falling back to a fetch, prove it with Tools/browser-grading-smoke, and the
+  # pin can go. Worth doing — the rebuilt numpy links real BLAS rather than its
+  # bundled fallback, which is faster and more accurate for linalg and matmul.
+  - numpy <2.5.3
   - pandas
   - matplotlib
   # Added when browser grading moved onto this env (#1271): the grader used to

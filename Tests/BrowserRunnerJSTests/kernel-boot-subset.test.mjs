@@ -73,23 +73,11 @@ test('each optional package can still be reached from the manifest', () => {
   }
 });
 
-test('numpy and scipy both drag openblas in, which is why neither is booted by default', () => {
+test('scipy drags openblas in, which is why it is not booted by default', () => {
   // Documents the measured cost that motivates the whole subset: openblas is
-  // 15.3 MB on disk against numpy's own 2.7 MB.
-  //
-  // numpy DID NOT used to need it. emscripten-forge's numpy 2.5.3 build 3
-  // added `openblas` to its depends (builds 0-2 of the same version do not
-  // have it), so `import numpy` went from a ~2.7 MB on-demand install to
-  // ~18 MB — charged against the default 10-second per-test limit, on the
-  // most common import in an intro Python course. That was taken knowingly:
-  // the rebuilt numpy links real BLAS instead of the bundled fallback, which
-  // is faster and more accurate for linalg and matmul.
-  //
-  // If this assertion ever flips back, upstream has reverted that decision and
-  // the numpy import got 6x cheaper — worth noticing rather than quietly
-  // passing, which is why numpy is asserted here rather than dropped.
+  // 16 MB, only scipy needs it, and numpy does not.
   assert.ok(kernel.packageClosure(meta, ['scipy']).includes('openblas'));
-  assert.ok(kernel.packageClosure(meta, ['numpy']).includes('openblas'));
+  assert.ok(!kernel.packageClosure(meta, ['numpy']).includes('openblas'));
 });
 
 test('every importable module resolves to a package the environment ships', () => {
