@@ -203,6 +203,18 @@ Confirm the first OK line lists your kernel alongside the others — e.g.
 is unguarded even though nothing failed. If yours is absent, the derivation is
 what to fix, not your env; see the trap below.
 
+Staying current afterwards is free, and this one really is discovery rather
+than a list. `scripts/check-kernel-currency.py` globs `environment-*.yml` and
+reads each file's own `name:` field to find the directory it vendors into, so
+**a fifth environment is picked up with no edit to the check** — the property
+the `chickadee-*` glob above notably does not have. `.github/workflows/
+kernel-currency.yml` runs it weekly and goes red when a re-vendor would change
+what ships, which is the only thing that ever says a kernel has moved: nothing
+in this repository changes when upstream publishes one, and Dependabot cannot
+watch the environments (its `conda` ecosystem needs a file named
+`environment.yml`, an anaconda.org channel, a host platform, and a pinned
+version — all four of which we are not).
+
 ### 5. Write the language module
 
 `Public/<lang>-grading-shared.js`, exporting:
@@ -288,6 +300,16 @@ an uncaught error with its message on stderr, and — if the language has packag
 - **A guard that compares the vendored tree to itself proves nothing about
   intent.** `check-env-vendored-sync.sh` is the one that compares declared YAML
   to shipped bytes. Keep your env in it.
+- **"Is a newer version published?" is the wrong question, and it answers
+  itself wrongly with total confidence.** The currency check was first written
+  to read repodata and compare versions. It reported three of the four
+  environments as stale, permanently, and all three were false: strict channel
+  priority means a conda-forge noarch `fonttools 4.65.0` never displaces the
+  compiled emscripten-forge build, and `python` is held at 3.13 through
+  `python_abi` rather than by any constraint that names `python`. Getting both
+  right means writing a solver. Ask the real one instead — a
+  `micromamba create --dry-run` costs minutes against the re-vendor's quarter
+  of an hour, and its answer is the one that ships.
 - **Installs must run from the environment prefix.** By the time a script
   triggers an on-demand install, the kernel has `chdir`'d into the student
   workspace, and the unpacker resolves relative to cwd. `addPackages` handles
