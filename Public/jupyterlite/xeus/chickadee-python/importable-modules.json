@@ -3,7 +3,7 @@
   "env": "chickadee-python",
   "specs": [
     "matplotlib",
-    "numpy",
+    "numpy <2.5.3",
     "pandas",
     "pillow",
     "scipy",

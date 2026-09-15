@@ -39,21 +39,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "numpy",
-      "version": "2.5.3",
-      "build": "py313h9242c33_3",
-      "filename_stem": "numpy-2.5.3-py313h9242c33_3",
-      "filename": "numpy-2.5.3-py313h9242c33_3.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "openblas",
-        "python",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "qhull",
       "version": "2020.2",
       "build": "h0b0027f_1",
@@ -168,6 +153,19 @@
         "python"
       ],
       "subdir": "noarch"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.2",
+      "build": "py313hcf5bae3_0",
+      "filename_stem": "numpy-2.5.2-py313hcf5bae3_0",
+      "filename": "numpy-2.5.2-py313hcf5bae3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "python_abi 3.13.* *_cp313"
+      ],
+      "subdir": "emscripten-wasm32"
     },
     {
       "name": "kiwisolver",
@@ -664,7 +662,7 @@
   ],
   "specs": [
     "xeus-python",
-    "numpy",
+    "numpy <2.5.3",
     "pandas",
     "matplotlib",
     "scipy",
