@@ -1,5 +1,5 @@
-jupyterlite==0.8.1
-jupyterlite-core==0.8.1
+jupyterlite==0.8.3
+jupyterlite-core==0.8.3
 # jupyter-iframe-commands — labextension running INSIDE the editor iframe that
 # exposes the JupyterLab command registry to the parent frame over postMessage.
 # Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),
@@ -13,7 +13,7 @@ jupyter-iframe-commands==0.3.0
 # repo.prefix.dev.  R is on xeus rather than
 # WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
 # docs/xeus-r-kernel-spike.md, #77).
-jupyterlite-xeus==5.0.0
+jupyterlite-xeus==5.1.0
 # The Pyodide kernel was retired in v0.5.19, and with it the ~465 MB vendored
 # Public/pyodide.  It had been kept as the parity anchor for those bytes and as
 # a revert path for xeus-python; once nothing loaded Pyodide it was a federated
