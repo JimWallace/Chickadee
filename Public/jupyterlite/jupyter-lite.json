@@ -14,7 +14,12 @@
     "federated_extensions": [
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.d7c4e2e310eb29cb.js?ck1",
+        "load": "static/remoteEntry.c8c9eed2cdefdeac.js",
+        "name": "@jupyter-widgets/jupyterlab-manager"
+      },
+      {
+        "extension": "./extension",
+        "load": "static/remoteEntry.245c3da0062ecbaa.js?ck1",
         "name": "@jupyterlite/xeus-extension",
         "style": "./style"
       },
@@ -22,6 +27,11 @@
         "extension": "./extension",
         "load": "static/remoteEntry.a4977091f52be18e7851.js",
         "name": "jupyter-iframe-commands"
+      },
+      {
+        "load": "static/remoteEntry.6f1030bf65ead662.js",
+        "mimeExtension": "./mimeExtension",
+        "name": "jupyterlab-plotly"
       }
     ],
     "fileTypes": {
@@ -404,11 +414,11 @@
     "versionInfo": {
       "@jupyter-notebook/application": {
         "label": "Jupyter Notebook",
-        "version": "7.6.0"
+        "version": "7.6.2"
       },
       "@jupyterlab/application": {
         "label": "JupyterLab",
-        "version": "4.6.0"
+        "version": "4.6.3"
       }
     }
   },
