@@ -49,7 +49,7 @@ jobs:
 
     steps:
       # Full (blobless) history so `git restore-mtime` can read commit times.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           filter: blob:none
@@ -67,7 +67,7 @@ jobs:
       # namespace, separate from the debug `-build-` cache.
       - name: Cache release build artifacts
         id: build-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
           key: ${{ runner.os }}-release-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
@@ -128,7 +128,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # The Chickadee image is large (~1.4 GB vendored Pyodide + full distro +
       # static binaries).  The build `load:true`s it into the local Docker

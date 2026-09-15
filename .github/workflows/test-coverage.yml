@@ -38,14 +38,14 @@ jobs:
       MIN_COVERAGE_PERCENT: "60.0"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Compute SPM cache key
         id: spm-cache-key
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}

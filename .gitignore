@@ -40,17 +40,23 @@ Public/jupyterlite/files/
 Public/jupyterlite/lab/files/
 Public/jupyterlite/notebooks/files/
 
-# CodeMirror bundling toolchain — only the entry point + package.json
-# are checked in; node_modules and lockfile regenerate via setup-vendor.sh.
+# Vendoring toolchain (Tools/vendor) — entry points, package.json and the
+# LOCKFILE are checked in. The lockfile used to be ignored "because it
+# regenerates via setup-vendor.sh", which is the problem rather than the
+# reason: the CodeMirror deps are declared as `^6.0.0`, so regenerating it is
+# exactly what lets two runs months apart bundle different bytes into
+# Public/vendor/codemirror.js with nothing in the diff to say so — and those
+# bytes are served to every student and instructor. The lockfile is the record
+# of which inputs produced the committed output.
 Tools/vendor/node_modules/
 # Root ESLint toolchain (package.json + package-lock.json are checked in).
 /node_modules/
-Tools/vendor/package-lock.json
 
 # Browser grading smoke probe toolchain (Tools/browser-grading-smoke) — the probe
-# script and its package.json are checked in; Playwright installs on demand in CI.
+# script, its package.json and its lockfile are checked in; Playwright installs
+# on demand in CI. The lockfile keeps the probe on one browser build, so a red
+# probe means the code changed rather than Playwright did.
 Tools/browser-grading-smoke/node_modules/
-Tools/browser-grading-smoke/package-lock.json
 
 # Visual-regression working dirs (Tools/visual-regression; committed baselines
 # live in Tools/visual-regression/baselines/).

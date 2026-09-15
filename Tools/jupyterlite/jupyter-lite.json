@@ -1,6 +1,6 @@
 {
   "jupyter-config-data": {
-    "appVersion": "0.8.1-chickadee.1",
+    "appVersion": "0.8.3-chickadee.1",
     "defaultKernelName": "xpython",
     "fullLabextensionsUrl": "./extensions",
     "disabledExtensions": [

@@ -64,7 +64,7 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Build once, then run the suite repeatedly
         env:

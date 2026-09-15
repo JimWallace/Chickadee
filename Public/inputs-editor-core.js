@@ -114,7 +114,7 @@
                 : '';
 
             var classified = classifyValue(rawVal);
-            var valueOk = false;
+            var valueOk;
             var hint = '';
             if (classified.kind === 'empty') {
                 valueOk = false;

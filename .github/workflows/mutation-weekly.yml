@@ -95,7 +95,7 @@ jobs:
       shards: ${{ steps.plan.outputs.shards }}
       count: ${{ steps.plan.outputs.count }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: plan
         env:
           OVERRIDE: ${{ inputs.shards }}
@@ -145,10 +145,10 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Cache the patched Muter build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /tmp/muter-src
           # Keyed on the pin AND the patch, so editing either rebuilds rather
@@ -187,7 +187,7 @@ jobs:
       issues: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
@@ -293,7 +293,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Merge the shards and file the issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');

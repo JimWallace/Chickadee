@@ -2,16 +2,6 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "python_abi",
-      "version": "3.13",
-      "build": "8_cp313",
-      "filename_stem": "python_abi-3.13-8_cp313",
-      "filename": "python_abi-3.13-8_cp313.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
       "name": "xwidgets",
       "version": "0.30.0",
       "build": "h0b0027f_1",
@@ -36,6 +26,19 @@
       "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "jupyterlab_widgets",
+      "version": "3.0.17",
+      "build": "pyhcf101f3_0",
+      "filename_stem": "jupyterlab_widgets-3.0.17-pyhcf101f3_0",
+      "filename": "jupyterlab_widgets-3.0.17-pyhcf101f3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
       "subdir": "noarch"
     },
     {
@@ -102,28 +105,25 @@
     },
     {
       "name": "python",
-      "version": "3.13.1",
-      "build": "h_2efca29_11_cp313",
-      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
-      "filename": "python-3.13.1-h_2efca29_11_cp313.tar.gz",
+      "version": "3.14.3",
+      "build": "h_7fd0122_0_cp314",
+      "filename_stem": "python-3.14.3-h_7fd0122_0_cp314",
+      "filename": "python-3.14.3-h_7fd0122_0_cp314.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "python_abi 3.13.* *_cp313",
+        "python_abi 3.14.* *_cp314",
         "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "jupyterlab_widgets",
-      "version": "3.0.16",
-      "build": "pyhcf101f3_1",
-      "filename_stem": "jupyterlab_widgets-3.0.16-pyhcf101f3_1",
-      "filename": "jupyterlab_widgets-3.0.16-pyhcf101f3_1.tar.gz",
+      "name": "python_abi",
+      "version": "3.14",
+      "build": "9_cp314",
+      "filename_stem": "python_abi-3.14-9_cp314",
+      "filename": "python_abi-3.14-9_cp314.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
+      "depends": [],
       "subdir": "noarch"
     }
   ],

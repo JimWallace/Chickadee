@@ -2,16 +2,6 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "python_abi",
-      "version": "3.13",
-      "build": "8_cp313",
-      "filename_stem": "python_abi-3.13-8_cp313",
-      "filename": "python_abi-3.13-8_cp313.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
       "name": "emscripten-abi",
       "version": "4.0.9",
       "build": "h267e887_9",
@@ -39,20 +29,6 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "plotly",
-      "version": "6.9.0",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "plotly-6.9.0-pyhd8ed1ab_0",
-      "filename": "plotly-6.9.0-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "narwhals >=1.15.1",
-        "packaging",
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "octave",
       "version": "10.3.0",
       "build": "pl5321h996e327_3",
@@ -63,6 +39,20 @@
         "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "plotly",
+      "version": "7.0.0",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "plotly-7.0.0-pyhd8ed1ab_0",
+      "filename": "plotly-7.0.0-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "narwhals >=1.15.1",
+        "packaging",
+        "python >=3.10"
+      ],
+      "subdir": "noarch"
     },
     {
       "name": "packaging",
@@ -78,6 +68,19 @@
       "subdir": "noarch"
     },
     {
+      "name": "narwhals",
+      "version": "2.26.0",
+      "build": "pyh5ded981_0",
+      "filename_stem": "narwhals-2.26.0-pyh5ded981_0",
+      "filename": "narwhals-2.26.0-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
       "name": "nlohmann_json-abi",
       "version": "3.12.0",
       "build": "h0f90c79_2",
@@ -85,19 +88,6 @@
       "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "narwhals",
-      "version": "2.24.0",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "narwhals-2.24.0-pyhcf101f3_0",
-      "filename": "narwhals-2.24.0-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
       "subdir": "noarch"
     },
     {
@@ -115,16 +105,26 @@
     },
     {
       "name": "python",
-      "version": "3.13.1",
-      "build": "h_2efca29_11_cp313",
-      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
-      "filename": "python-3.13.1-h_2efca29_11_cp313.tar.gz",
+      "version": "3.14.3",
+      "build": "h_7fd0122_0_cp314",
+      "filename_stem": "python-3.14.3-h_7fd0122_0_cp314",
+      "filename": "python-3.14.3-h_7fd0122_0_cp314.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "python_abi 3.13.* *_cp313",
+        "python_abi 3.14.* *_cp314",
         "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "python_abi",
+      "version": "3.14",
+      "build": "9_cp314",
+      "filename_stem": "python_abi-3.14-9_cp314",
+      "filename": "python_abi-3.14-9_cp314.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
     },
     {
       "name": "zlib",

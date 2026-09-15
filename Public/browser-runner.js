@@ -284,7 +284,7 @@
         try {
             JSZip = await loadJSZip();
         } catch (e) {
-            throw new Error('Failed to load ZIP library: ' + toMessage(e));
+            throw new Error('Failed to load ZIP library: ' + toMessage(e), { cause: e });
         }
 
         // The shared RunnerCore wasm must load before either executor: it both
@@ -313,13 +313,13 @@
         try {
             setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
         } catch (e) {
-            throw new Error('Failed to download test setup: ' + toMessage(e));
+            throw new Error('Failed to download test setup: ' + toMessage(e), { cause: e });
         }
         let zip;
         try {
             zip = await JSZip.loadAsync(setupZip);
         } catch (e) {
-            throw new Error('Failed to unpack test setup zip: ' + toMessage(e));
+            throw new Error('Failed to unpack test setup zip: ' + toMessage(e), { cause: e });
         }
 
         const files = {};  // relativePath -> string | Uint8Array
@@ -438,7 +438,7 @@
             const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
             manifest = JSON.parse(manifestText);
         } catch (e) {
-            throw new Error('Failed to load test configuration: ' + toMessage(e));
+            throw new Error('Failed to load test configuration: ' + toMessage(e), { cause: e });
         }
 
         const timeLimitSeconds = manifest.timeLimitSeconds || 10;
@@ -524,7 +524,7 @@
             try {
                 await executor.ensureReady();
             } catch (e) {
-                throw new Error('Browser grading runtime failed to initialize: ' + toMessage(e));
+                throw new Error('Browser grading runtime failed to initialize: ' + toMessage(e), { cause: e });
             }
 
             const outcomes = await globalThis.runnerExecuteSuites(
