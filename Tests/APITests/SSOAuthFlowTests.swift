@@ -15,6 +15,15 @@ import VaporTesting
 
 @testable import APIServer
 
+/// HMAC key the mock IdP signs its ID tokens with.
+///
+/// At least 32 bytes because that is the SHA-256 digest size, and JWTKit 5.7.1
+/// asserts on a shorter HS256 key ("This will become a precondition in a future
+/// release"). An 11-byte one used to sit here, and the assertion killed the
+/// whole test process — not just these tests — on the JWTKit bump. The value is
+/// a dummy; only its length carries meaning.
+private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signing-key-0123456789"
+
 @Suite(.timeLimit(.minutes(2))) struct SSOAuthFlowTests {
 
     private actor MockTokenEndpoint {
@@ -127,7 +136,7 @@ import VaporTesting
         )
 
         return try await JWTKeyCollection()
-            .add(hmac: "test-secret", digestAlgorithm: .sha256)
+            .add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
             .sign(claims)
     }
 
@@ -414,7 +423,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 let start = try await startSSOSession(on: app)
 
@@ -476,7 +485,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 let start = try await startSSOSession(on: app)
 
@@ -532,7 +541,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 let staleUser = APIUser(
                     username: "ff49217e4e656cb2a9a1d7017203ff74dd22b344e8fc3a845a026a58e23e30c6",
@@ -606,7 +615,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 // Manually-registered stub: duo-oidc, matching username, no subject.
                 let stub = APIUser(
@@ -679,7 +688,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 let staleUser = APIUser(
                     username: "ff49217e4e656cb2a9a1d7017203ff74dd22b344e8fc3a845a026a58e23e30c6",
@@ -747,7 +756,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 // Confirm no pre-existing record — this is a first-ever login
                 let existingCount = try await APIUser.query(on: app.db)
@@ -813,7 +822,7 @@ import VaporTesting
 
         try await withApp(provider.app) { _ in
             try await withApp(try await makeApp(oidcConfig: config)) { app in
-                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
 
                 let start = try await startSSOSession(on: app)
                 var authCookie = start.cookie
