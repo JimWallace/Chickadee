@@ -9,6 +9,56 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.189] - 2026-09-15
+
+### Fixed
+
+- **Closed five mutation survivors in the submission normalizer.** Each had
+  carried in every weekly sweep since `Sources/Worker` joined the scope. They
+  pin student-visible behaviour the suite could not previously see change: a
+  protected file being refused without the warning that names it (#1357), a
+  lone unsupported file being rejected as the generic "no sources found"
+  instead of by name, a compatibility copy repointing the preferred student
+  module away from the file the student actually wrote, and the file walk's
+  sort order — which decides which source becomes that preferred module.
+
+### Fixed
+
+- **Closed three mutation survivors in the runner capability detector.** What
+  this detector advertises is what the language gate matches a job against, and
+  a wrong answer there fails quietly in both directions — over-advertising
+  routes a job to a runner that dies at exit 127, under-advertising queues an
+  assignment's jobs forever. The tests pin that a probe's exit status is read
+  the right way round for both Python module imports and command existence, and
+  that languages are reported in a stable order.
+
+### Fixed
+
+- **Closed four mutation survivors on the runner's descriptor hygiene.** Every
+  captured pipe end is now asserted to be created close-on-exec, and the
+  failed-launch path is asserted to release both read ends. Both defend the
+  wedge class behind issues #1233 and #1139: a pipe end that survives an exec is
+  inherited by an unrelated child, which postpones EOF on the runner's read and
+  parks a pool thread until that unrelated process exits.
+
+### Fixed
+
+- **Closed four mutation survivors on the test-setup cache key and the
+  protected-filename set.** CLAUDE.md states the cache contract in one line —
+  any suite edit busts the entry — and nothing asserted it. The survivor that
+  drops the manifest from the hashed material makes an edited suite key to the
+  same cache entry as the suite it replaced, so every later submission grades
+  against a cached copy of the old tests, silently.
+
+### Fixed
+
+- **The mutation survivor verifier now forces a rebuild after applying a
+  mutation.** It rewrites the same source path repeatedly, and same-tick writes
+  could leave SwiftPM's incremental build skipping the recompile, so the suite
+  ran the previous binary and the mutant was reported as surviving code it had
+  never been compiled into.
+
+
 ## [0.5.188] - 2026-09-15
 
 ### Fixed
