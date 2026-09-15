@@ -80,24 +80,55 @@ runs:
     - name: Install Node and npm dependencies
       shell: bash
       working-directory: ${{ inputs.node-project }}
+      env:
+        # Keep NODE_VERSION in step with .github/docker/ci-image/Dockerfile's
+        # ARG NODE_VERSION. They are allowed to differ briefly — that is the
+        # point of this fallback — but a permanent gap means every probe job
+        # pays a ~40 MB download the image should have baked in.
+        NODE_VERSION: "24.21.0"
+        # Playwright's floor. Raise when Playwright raises its engine requirement.
+        MIN_NODE_MAJOR: "20"
       run: |
         set -eu
+
+        # The check is on the VERSION, not just presence. Ubuntu noble's node is
+        # 18.19.1 and Playwright dropped Node 18 at 1.63 — `npx playwright
+        # install` then exits 1 before any probe runs. A presence-only check
+        # said "already present — skipping apt" and walked straight into it.
+        node_major=0
         if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
-          echo "node $(node --version) and npm $(npm --version) already present — skipping apt"
+          node_major="$(node --version | sed 's/^v\([0-9]*\).*/\1/')"
+        fi
+
+        if [ "$node_major" -ge "$MIN_NODE_MAJOR" ]; then
+          echo "node $(node --version) and npm $(npm --version) already present — skipping install"
         else
-          echo "::warning::node/npm missing from the image; falling back to apt-get"
+          if [ "$node_major" = 0 ]; then
+            echo "::warning::node/npm missing from the image; installing Node ${NODE_VERSION}"
+          else
+            echo "::warning::image node is $(node --version), below v${MIN_NODE_MAJOR}; installing Node ${NODE_VERSION}"
+          fi
+          # From nodejs.org rather than apt: noble cannot offer >=20 at all, and
+          # archive.ubuntu.com is the least reliable thing in this action (on
+          # 2026-08-04 it was unreachable and took the required editor-smoke gate
+          # red with it). Retried for the same reason.
           for attempt in 1 2 3; do
-            if apt-get update -qq \
-              && apt-get install -y --no-install-recommends nodejs npm curl ca-certificates; then
+            if curl -fsSL --max-time 180 \
+                "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
+                -o /tmp/node.tar.gz \
+              && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
+                --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md; then
               break
             fi
             if [ "$attempt" = 3 ]; then
-              echo "::error::apt-get failed 3 times — archive.ubuntu.com is likely unreachable."
+              echo "::error::could not install Node ${NODE_VERSION} after 3 attempts."
               exit 1
             fi
-            echo "::warning::apt-get attempt ${attempt} failed; retrying in $((attempt * 15))s"
+            echo "::warning::node install attempt ${attempt} failed; retrying in $((attempt * 15))s"
             sleep $((attempt * 15))
           done
+          hash -r
+          echo "installed node $(node --version) and npm $(npm --version)"
         fi
         npm ci
 
