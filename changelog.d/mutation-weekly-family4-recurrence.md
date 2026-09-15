@@ -9,4 +9,6 @@
   measured reason a completion-handler rewrite removes the wedge, and the
   measured reason it was reverted rather than shipped: it replaces the deadlock
   with a `fatalError` in Foundation's task registry, which crashed the logic-tier
-  suite in 7 of 12 runs.
+  suite in 7 of 12 runs. The maintainer's decision is recorded
+  with it: accept the rate and re-run the shard, rather than weaken a
+  deliberately pinned cancellation property to work around a dependency bug.

@@ -459,8 +459,26 @@ The remaining options are all behavioural, and each one costs something:
    same cost as option 2 at all three sites. A cancelled daemon also stays
    alive until the transfer ends, or until its 600 s resource timeout.
 
-Each option changes behaviour that tests currently pin, so the maintainer
-chooses.
+### Decision (2026-09-15): option 1
+
+**Accept the rate. Do not change the runner to dodge this.** Options 2 and 3
+both weaken a property that was pinned on purpose, in order to work around a
+bug in a dependency that a later Foundation can fix. The measured rate does not
+justify that: one shard in twelve, once, against a weekly sweep that already
+reports per-shard and files from the shards that did run.
+
+So the handling is the paragraph above this section, unchanged: **re-run the
+shard.** A sweep that loses one shard to this is not a failed sweep. Read the
+other eleven and re-run the twelfth.
+
+Reopen the decision if any of these changes:
+
+- the rate rises above roughly one shard per sweep, or it starts hitting
+  `worker-tests` on ordinary PRs rather than only the mutation baseline;
+- it reaches a runner in production, where the wedge is a stuck job rather
+  than a red CI job;
+- swift-corelibs-foundation fixes either half, at which point the fix is to
+  take the new Foundation, not to write either workaround.
 
 ---
 
