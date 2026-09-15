@@ -33,7 +33,7 @@ runs:
     # building the server product is near-no-op; on a miss it builds cold.
     - name: Restore build artifacts
       id: shared-build-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: .build
         key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
@@ -56,7 +56,7 @@ runs:
     # rebuild the test targets — trading their time for ours.
     - name: Restore/save probe build cache
       if: steps.shared-build-cache.outputs.cache-hit != 'true'
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: .build
         key: ${{ runner.os }}-probebuild-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
@@ -106,7 +106,7 @@ runs:
     # re-downloading it every run. `--with-deps` still apt-installs the
     # engine's system libraries each run (not cacheable inside the container).
     - name: Cache Playwright ${{ inputs.browser }} download
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ inputs.browser }}-${{ hashFiles(format('{0}/package-lock.json', inputs.node-project)) }}
