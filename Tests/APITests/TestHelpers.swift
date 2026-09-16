@@ -138,21 +138,28 @@ struct TestSQLiteDatabaseFileKey: StorageKey {
 /// That is accepted rather than solved: those paths strand the whole temp tree
 /// anyway, and the runner is discarded after the job.
 private enum SQLiteTemplateCleanup {
-    private static let registered = Mutex<String?>(nil)
+    /// A list, not a single path. The builder above is meant to produce exactly
+    /// one template per process, but a cleanup that can only remember the last
+    /// path registered would quietly leak the rest if that ever stopped being
+    /// true — and it already did once (actor reentrancy, see above). Tracking
+    /// everything registered makes the cleanup correct independently of the
+    /// builder being correct.
+    private static let registered = Mutex<[String]>([])
 
     static func register(_ path: String) {
-        let isFirst = registered.withLock { current -> Bool in
-            defer { current = path }
-            return current == nil
+        let isFirst = registered.withLock { paths -> Bool in
+            defer { paths.append(path) }
+            return paths.isEmpty
         }
         guard isFirst else { return }
         atexit { SQLiteTemplateCleanup.removeNow() }
     }
 
     static func removeNow() {
-        guard let path = registered.withLock({ $0 }) else { return }
-        for suffix in ["", "-journal", "-wal", "-shm"] {
-            try? FileManager.default.removeItem(atPath: path + suffix)
+        for path in registered.withLock({ $0 }) {
+            for suffix in ["", "-journal", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: path + suffix)
+            }
         }
     }
 }
@@ -166,11 +173,35 @@ private enum SQLiteTemplateCleanup {
 private actor MigratedSQLiteTemplate {
     static let shared = MigratedSQLiteTemplate()
 
-    private var builtPath: String?
+    /// The single build, shared by every caller.
+    ///
+    /// Storing a `Task` rather than a `String?` is what makes this build ONCE.
+    /// Actors are reentrant across `await`, so a plain `if let builtPath` guard
+    /// followed by an async build has a window every concurrent first-caller
+    /// walks through: each sees nil, each builds its own template. That is not
+    /// theoretical — it shipped in the first draft of this file and showed up
+    /// as THREE template files left in the temp directory after a single run,
+    /// which is also three times the one-off migration cost. Assigning the task
+    /// before the first suspension closes the window; later callers await the
+    /// same task and get the same path.
+    private var buildTask: Task<String, Error>?
 
     /// Path to the template database, building it on first call.
     func templatePath(logLevel: Logger.Level) async throws -> String {
-        if let builtPath { return builtPath }
+        if let buildTask { return try await buildTask.value }
+        let task = Task { try await Self.build(logLevel: logLevel) }
+        buildTask = task
+        do {
+            return try await task.value
+        } catch {
+            // A failed build must not poison every later caller with the same
+            // error — the next one retries.
+            buildTask = nil
+            throw error
+        }
+    }
+
+    private static func build(logLevel: Logger.Level) async throws -> String {
         let path =
             FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-migrated-template-\(UUID().uuidString).sqlite")
@@ -192,7 +223,6 @@ private actor MigratedSQLiteTemplate {
             throw error
         }
         SQLiteTemplateCleanup.register(path)
-        builtPath = path
         return path
     }
 }
@@ -497,6 +527,23 @@ extension Application {
                 else { continue }
                 files.append(file.path)
             }
+        }
+        return files
+    }
+
+    /// Every real file backing this app's SQLite databases, whichever mechanism
+    /// put it there: the migrated-template copy that `configureTestDatabase`
+    /// hands out, or sqlite-kit's fake-memory file for an app configured with
+    /// `.sqliteInMemory()` directly.
+    ///
+    /// The leak guards assert against THIS rather than against either
+    /// mechanism, so that changing how a test database is materialized moves
+    /// one function instead of silently emptying the guard's input — which is
+    /// exactly what introducing the template did to it the first time.
+    func sqliteDatabaseFilesOnDisk() async -> [String] {
+        var files = await sqliteFakeMemoryDatabaseFiles()
+        if let templateCopy = storage[TestSQLiteDatabaseFileKey.self] {
+            files.append(templateCopy)
         }
         return files
     }
