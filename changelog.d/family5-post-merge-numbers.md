@@ -1,3 +1,0 @@
-### Changed
-
-- **Family 5's CI-cost entry now records what was measured rather than what was predicted.** The tmpfs note carried an expected median and an expected headroom multiplier, written before either change landed. Both are replaced with the figures from `main`: the `api-tests` step went 291 s → 185 s with the tmpfs alone and → 143 s with the migrated template as well, roughly halving the lane and about doubling the slowdown it can absorb before its ceiling. The entry also records that the lane is now CPU-bound rather than I/O-stalled, which inverts what a larger runner or sharding would buy, and states the outcome it must not confuse: a lane with more headroom can stop producing ceiling kills without the collapse ever being root-caused.
