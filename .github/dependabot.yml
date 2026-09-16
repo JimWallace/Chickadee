@@ -19,8 +19,51 @@ updates:
         exclude-patterns:
           - "github.com/simplydanny/swiftlintplugins"
 
+  # The WebAssembly package graph (wasm/Package.swift + wasm/Package.resolved),
+  # which the entry above does NOT cover: `directory` is not recursive, so a
+  # root-only Swift entry sees /Package.swift and nothing else.
+  #
+  # That gap has already cost us. JavaScriptKit 0.59.0 was needed to fix a
+  # `PackageToJS` bug that inferred the target triple from the build artifact's
+  # directory path — under Swift Build it inferred the literal string
+  # `Products`, so `IS_WASI` went false and the loader shipped without the WASI
+  # shim. It landed by hand in #1522. Dependabot never saw it and, pointed only
+  # at the root, never could.
+  #
+  # Deliberately NOT grouped, for the reason the SwiftLint plugin is excluded
+  # from the group above: JavaScriptKit sits under the browser grading runner,
+  # a bump there has broken the shipped artifact once already, and it needs to
+  # land as its own reviewable PR rather than inside a batch. A green build is
+  # not sufficient evidence here — verify the artifact still instantiates
+  # (`node --test Tests/BrowserRunnerJSTests/*.mjs`).
+  - package-ecosystem: "swift"
+    directory: "/wasm"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+
+  # Both Dockerfiles. `/` is the production image; `/.github/docker/ci-image`
+  # is the CI image, and it needs naming explicitly for the same reason the
+  # wasm graph does — `directory` does not recurse.
+  #
+  # Temper your expectations of the CI image entry, on two counts. Its base is
+  # `ghcr.io/jimwallace/chickadee/swift:<tag>`, our own mirror, so Dependabot
+  # can only ever offer a tag `mirror-images.yml` has already pushed — quiet by
+  # construction, and it cannot race the deliberate Swift-version migration
+  # driven from issue #1520. And the base arrives through an `ARG BASE_IMAGE`
+  # default rather than a literal `FROM`, which Dependabot reads less reliably
+  # than a plain tag. So this may well produce nothing. It is here because the
+  # file should be watched rather than silently outside the config, and because
+  # a later change to a literal tag or a digest pin is then covered already.
+  #
+  # NOT added: `docker-compose.yml`. Dependabot has a `docker-compose`
+  # ecosystem, but both services there run `ghcr.io/jimwallace/chickadee:latest`
+  # — our own image at a moving tag — so there is no version for it to bump.
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/docker/ci-image"
     schedule:
       interval: "weekly"
       day: "monday"
