@@ -920,6 +920,16 @@ note 1 (a larger runner) and note 4 (sharding) would both convert — where
 before the fix neither would have. Neither is needed at a 143 s median; this is
 recorded so the next person to price them starts from the right bottleneck.
 
+**Where the constraint sits now.** With note 6 merged, BOTH lanes are O(1) in
+the migration count, which is the property that matters as the suite grows: a
+new migration no longer taxes either. The postgres lane was briefly the
+binding constraint — ~430 s against a ~1,400 s budget, 3.3x, worse headroom
+than `api-tests` had when this investigation opened — and note 6 is what
+closed that gap rather than leaving the fix lopsided. Neither lane is near its
+ceiling now, so the next thing to watch is not a lane at all: it is whether
+the collapse recurs, which is still unexplained and is what the
+`[ci-pressure]` lines exist to name.
+
 **What this is NOT.** It is not proof the collapse is gone. Three green runs
 prove nothing about an 11 %-of-runs event; the honest acceptance test is the
 `main` population over the next few weeks, read against the table above. What
@@ -1100,6 +1110,41 @@ the recorder's `io_full`.
    and which a hand search had missed by not recursing into
    `Tests/APITests/MCP/`. The name-based list is now backed by a source scan
    that fails when the sources and the list disagree.
+
+   **The defect it surfaced is worth more than the number: `withApp` could
+   kill the whole test process, and had been able to for as long as it has
+   existed.** It was
+
+   ```swift
+   do { try await body(app); try await app.tearDownTestApp() }
+   catch { try? await app.tearDownTestApp(); throw error }
+   ```
+
+   which tears down TWICE when the tear-down inside the `do` is the thing that
+   throws. A second `tearDownTestApp` on an application that is already shut
+   down does not throw — it is `Vapor/Core.swift: Fatal error: Core not
+   configured`, which takes the process, not the test. Nothing in the suite
+   made teardown throw, so the path was never walked; a pool check-in can
+   throw, and it walked it on the first full run as a bare `signal 4`
+   mid-suite.
+
+   Note the shape, because it is the same one as Family 1 and #1233 and it is
+   the third time this file has recorded it: **a latent whole-process kill,
+   invisible while one precondition happened to hold, surfacing as an
+   unexplained signal rather than as a failing test.** The precondition here
+   was "teardown never throws", which nothing stated or guarded. Teardown now
+   runs exactly once however the body ends, and `tearDownTestApp` holds its
+   first error and completes every remaining cleanup step rather than
+   short-circuiting — a throwing `asyncShutdown()` used to skip every removal
+   below it, which was a leak before the pool and a run-stopper after it.
+
+   **Independently re-measured before merge** (a second machine-local A/B by
+   the reviewing session, not the authoring one): postgres lane
+   **391.0 s -> 119.3 s, −69 %**, zero schemas left behind; the sqlite lane
+   **91.8 s**, unchanged. The −72 % above is against a 418.9 s baseline and
+   −69 % against a 391.0 s one; the spread is that lane's own run-to-run
+   variance, which is the subject of this entry and is why both are quoted
+   rather than the better.
 
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
