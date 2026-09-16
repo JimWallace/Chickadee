@@ -12,6 +12,7 @@ import Foundation
 import Leaf
 import LeafKit
 import SQLKit
+import Synchronization
 import Testing
 import VaporTesting
 
@@ -124,6 +125,38 @@ struct TestSQLiteDatabaseFileKey: StorageKey {
     typealias Value = String
 }
 
+/// Removes the process's template database when the test process exits.
+///
+/// Without this the template is a leak — one file per test process, forever,
+/// which is the shape of defect `TestAppTempDirectoryTests` exists to catch
+/// and that issue #1298 already cost this project once. It is small (a schema
+/// with no rows) where #1298's was 1.4 GB, but "small leak" is still the
+/// argument that lost last time.
+///
+/// `atexit` does not run when the process is killed or aborts — a SIGILL from
+/// a leaked `Application`, or the CI job-level timeout, both strand the file.
+/// That is accepted rather than solved: those paths strand the whole temp tree
+/// anyway, and the runner is discarded after the job.
+private enum SQLiteTemplateCleanup {
+    private static let registered = Mutex<String?>(nil)
+
+    static func register(_ path: String) {
+        let isFirst = registered.withLock { current -> Bool in
+            defer { current = path }
+            return current == nil
+        }
+        guard isFirst else { return }
+        atexit { SQLiteTemplateCleanup.removeNow() }
+    }
+
+    static func removeNow() {
+        guard let path = registered.withLock({ $0 }) else { return }
+        for suffix in ["", "-journal", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(atPath: path + suffix)
+        }
+    }
+}
+
 /// Builds the migrated SQLite template once per test process, then hands out
 /// copies of it.
 ///
@@ -158,6 +191,7 @@ private actor MigratedSQLiteTemplate {
             try? FileManager.default.removeItem(atPath: path)
             throw error
         }
+        SQLiteTemplateCleanup.register(path)
         builtPath = path
         return path
     }
