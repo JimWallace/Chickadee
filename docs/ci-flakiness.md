@@ -788,15 +788,12 @@ on the `api-tests` and `api-tests-postgres` containers. `exec` is load-bearing
 — Docker defaults `--tmpfs` to `noexec` and the suite writes generated scripts
 into these directories and runs them.
 
-What it buys, on the numbers above: the median step goes from 291 s to an
-expected ~170 s, and the multiplier the lane can absorb before the ceiling
-kills it goes from **4.8× to ~8.2×**. Every excursion in the 213-run
-population is at or below 4.8× (censored by the kill), so this converts the
-whole observed distribution into passes. It is also the first change here that
-works on the *mechanism* rather than the budget: if the collapse is fsync
-latency, removing the fsyncs removes the exposure and not merely the size of
-the bill. If it is not, this is a 42 % cost cut and the recorder will name the
-real cause on the next occurrence.
+What it buys: see the measured figures in "Where the lane landed" below —
+this paragraph used to carry a prediction (an expected ~170 s median and a
+4.8× → ~8.2× absorbable multiplier) and the real numbers have replaced it. It
+is the first change here that works on the *mechanism* rather than the budget:
+if the collapse is fsync latency, removing the fsyncs removes the exposure and
+not merely the size of the bill.
 
 ### First CI measurements (2026-09-16, PR #1531)
 
@@ -877,12 +874,60 @@ and has never been killed, so it is not urgent — but it is now measured
 rather than assumed, and it is where that lane's excursions should be looked
 for first.
 
+### Where the lane landed (2026-09-16, both changes on `main`)
+
+Both changes are merged: #1531 (tmpfs `/tmp`, `StarvationRecorder`) and #1532
+(the migrated template, attack note 5). Measured on `main`, not predicted:
+
+| | `Run APITests` | against the 291 s baseline |
+|---|---|---|
+| baseline, 213 `main` runs | 291 s | — |
+| tmpfs only (`c8720254`) | **185 s** | −36 % |
+| tmpfs + template (`9a9c6372`) | **143 s** | **−51 %** |
+
+3,237 tests in 131.6 s of test time; the job is ~232 s against a 1,500 s
+ceiling. The absorbable collapse therefore goes from **4.8× to roughly 10×**,
+above every excursion in the 213-run population — all of which were censored
+at 4.8× by the kill, so "above every observed excursion" is a weaker statement
+than it sounds and is deliberately not phrased as "cannot happen again".
+
+The telemetry from that run is the more interesting half:
+
+```
+io_full=0.0%  mem_full=0.0%  steal=0.0%  throttled=+0
+busy=88-97%   self cpu=79-90%   scopes=728-1315/min
+cg_cpu_some=34.6%  vs  host cpu_some=35.5%
+```
+
+- **The I/O stall is gone** — `io_full` 0.0 % in every window, against the
+  20-27 % that opened this entry.
+- **The lane is now cleanly CPU-bound, and the CPU is ours.** `cg_cpu_some`
+  tracks host `cpu_some` almost exactly, so nothing else on that box is
+  competing. That is the self-versus-neighbour question answered directly,
+  which is what the recorder exists for.
+- **Throughput is ~730-1,315 finished tests/min**, against 400-500 before.
+
+One consequence worth stating because it changes what the OTHER attack notes
+buy: the lane used to sit with idle cores waiting on disk (`busy` 58-63 %), so
+a bigger runner would have bought nothing. It now saturates what it has, so
+note 1 (a larger runner) and note 4 (sharding) would both convert — where
+before the fix neither would have. Neither is needed at a 143 s median; this is
+recorded so the next person to price them starts from the right bottleneck.
+
 **What this is NOT.** It is not proof the collapse is gone. Three green runs
 prove nothing about an 11 %-of-runs event; the honest acceptance test is the
 `main` population over the next few weeks, read against the table above. What
 to look for there, in order: whether any `api-tests` run is killed at the
 ceiling at all; whether the fraction of runs at ≥2× the new median falls from
-10.8 %; and whether the median lands nearer 190 s or nearer 230 s.
+10.8 %; and where the median settles against the 143 s first measurement.
+
+**Say plainly which of two outcomes the data shows.** A lane with twice the
+headroom can stop producing kills without the collapse ever having been
+root-caused, and that is not the same result as fixing it. If excursions
+persist at a lower rate, the entry should say so rather than close. A slow run
+now carries `[ci-pressure]` lines, and a HINT on one of them names its own
+cause — that is the whole point of the instrument, and reading it is the first
+step, not another log tail.
 
 ---
 
