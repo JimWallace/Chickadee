@@ -798,9 +798,10 @@ latency, removing the fsyncs removes the exposure and not merely the size of
 the bill. If it is not, this is a 42 % cost cut and the recorder will name the
 real cause on the next occurrence.
 
-### First CI measurement (2026-09-16, PR #1531 head `193e4713`)
+### First CI measurements (2026-09-16, PR #1531)
 
-Both lanes green, and the recorder's first real hosted-runner artifact:
+Both lanes green on both heads, and the recorder's first real hosted-runner
+artifact:
 
 ```
 [ci-pressure] armed cpus=4 quota=none mem_avail=13.4GiB host_psi=yes cgroup_psi=yes interval=30s
@@ -809,17 +810,27 @@ Both lanes green, and the recorder's first real hosted-runner artifact:
   thr=22 procs=4 kids=0 rss=286.5MiB throttled=+0 cg_cpu_some=12.4% | load=4.6 runq=5/293
 ```
 
-| lane | this run | `main` median (213 runs) | change |
+| lane | head `193e4713` | head `475d770f` | `main` median (213 runs) |
 |---|---|---|---|
-| `api-tests` | **189 s** (test run 177.7 s) | 291 s | **−35 %** |
-| `api-tests-postgres` | 382 s (test run 373.2 s) | 391 s | −2 %, i.e. none |
+| `api-tests` | **189 s** | **230 s** | 291 s |
+| `api-tests-postgres` | 382 s | — | 391 s |
+
+**Two samples are two samples.** 189 s and 230 s are −35 % and −21 % against
+the `main` median, and the honest reading of n=2 is "materially cheaper, by
+somewhere in that range", not either endpoint. The lane's own spread is the
+whole subject of this entry, so quoting the better run would be the exact
+error the rest of the section is written to prevent. The claim that IS solid
+at n=2 is the mechanism rather than the magnitude: `io_full` was 0.0 % in
+every window of both runs, against 20–27 % on disk. The magnitude firms up
+with the `main` population, same as everything else here.
 
 Four things this settles, two of them against what was written above.
 
 1. **The tmpfs change works on the real runner.** `io_full` is **0.0 % in
-   every window** of the sqlite lane, against 20–27 % locally on disk. The
-   35 % here versus 42 % locally is the expected direction — the hosted
-   runner's disk was not the local NVMe.
+   every window** of the sqlite lane on both runs, against 20–27 % locally on
+   disk. The stall the change targets is gone; that part does not depend on
+   how the two duration samples land. Both being below the local 42 % is the
+   expected direction — the hosted runner's disk was never the local NVMe.
 2. **The runner is a 4-CPU box with ~13.4 GiB available and NO CPU quota**,
    not the 2-core runner this document and several workflow comments still
    assume. GitHub's standard `ubuntu-latest` was upgraded. Nothing in the
@@ -831,7 +842,8 @@ Four things this settles, two of them against what was written above.
    keep this change narrow.
 3. **The postgres lane got NO measurable benefit, and the doc predicted
    wrongly that it would get "part of the win".** 382 s against a 391 s
-   median is noise. The recorder says why, which is the point of having it:
+   median is noise (one sample, but a null result needs less of a sample than
+   a positive one). The recorder says why, which is the point of having it:
    that lane still runs at **`io_full` 10.5–14.7 %**, because its database is
    not in `/tmp` at all — it is in the postgres service container, writing to
    the runner's real disk. Moving our own `/tmp` to RAM cannot touch it. The
@@ -857,9 +869,12 @@ and has never been killed, so it is not urgent — but it is now measured
 rather than assumed, and it is where that lane's excursions should be looked
 for first.
 
-**What this is NOT.** It is not proof the collapse is gone. One green run
-proves nothing about an 11 %-of-runs event; the honest acceptance test is the
-`main` population over the next few weeks, read against the table above.
+**What this is NOT.** It is not proof the collapse is gone. Two green runs
+prove nothing about an 11 %-of-runs event; the honest acceptance test is the
+`main` population over the next few weeks, read against the table above. What
+to look for there, in order: whether any `api-tests` run is killed at the
+ceiling at all; whether the fraction of runs at ≥2× the new median falls from
+10.8 %; and whether the median lands nearer 190 s or nearer 230 s.
 
 ---
 

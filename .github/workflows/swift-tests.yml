@@ -249,6 +249,11 @@ jobs:
       # was 4 MiB, so the 2 GiB cap is three orders of magnitude of headroom,
       # not a budget — and tmpfs only occupies the RAM it actually holds.
       #
+      # On the runner itself the first two measured runs were 189 s and 230 s
+      # against a 291 s main median, with io_full 0.0 % in every window of
+      # both. The stall is reliably gone; the size of the saving is n=2 and
+      # firms up with the main population.
+      #
       # `exec` is load-bearing: Docker's --tmpfs defaults to noexec, and the
       # suite writes generated test scripts into these directories and then
       # runs them. Without it, every execution-path suite fails.
