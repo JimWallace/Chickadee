@@ -810,19 +810,22 @@ artifact:
   thr=22 procs=4 kids=0 rss=286.5MiB throttled=+0 cg_cpu_some=12.4% | load=4.6 runq=5/293
 ```
 
-| lane | head `193e4713` | head `475d770f` | `main` median (213 runs) |
-|---|---|---|---|
-| `api-tests` | **189 s** | **230 s** | 291 s |
-| `api-tests-postgres` | 382 s | — | 391 s |
+| lane | `193e4713` | `475d770f` | `c2be6d95` | `main` median (213 runs) |
+|---|---|---|---|---|
+| `api-tests` | 189 s | 230 s | 217 s | 291 s |
+| `api-tests-postgres` | 382 s | — | 342 s | 391 s |
 
-**Two samples are two samples.** 189 s and 230 s are −35 % and −21 % against
-the `main` median, and the honest reading of n=2 is "materially cheaper, by
-somewhere in that range", not either endpoint. The lane's own spread is the
-whole subject of this entry, so quoting the better run would be the exact
-error the rest of the section is written to prevent. The claim that IS solid
-at n=2 is the mechanism rather than the magnitude: `io_full` was 0.0 % in
-every window of both runs, against 20–27 % on disk. The magnitude firms up
-with the `main` population, same as everything else here.
+**These are three PR runs, not a population.** They accumulated while
+iterating on this branch, and the table stops here deliberately: appending a
+row per push is a regress, and the acceptance test is the `main` population,
+not this table.
+
+At n=3 the sqlite lane is **−25 % to −35 %**, and the honest statement is
+"materially cheaper, somewhere in that band" rather than any single figure.
+Quoting the best run of a lane whose run-to-run spread is the entire subject
+of this entry would be the exact error the rest of the section is written to
+prevent. What IS solid at n=3 is the mechanism rather than the magnitude:
+`io_full` was 0.0 % in every window of every run, against 20–27 % on disk.
 
 Four things this settles, two of them against what was written above.
 
@@ -840,16 +843,21 @@ Four things this settles, two of them against what was written above.
    `Tests/APITests/TestHelpers.swift`, `Tests/WorkerTests/Support/SubprocessThrottle.swift`
    and the `worker-tests` job comment; only the last is corrected here, to
    keep this change narrow.
-3. **The postgres lane got NO measurable benefit, and the doc predicted
-   wrongly that it would get "part of the win".** 382 s against a 391 s
-   median is noise (one sample, but a null result needs less of a sample than
-   a positive one). The recorder says why, which is the point of having it:
-   that lane still runs at **`io_full` 10.5–14.7 %**, because its database is
-   not in `/tmp` at all — it is in the postgres service container, writing to
-   the runner's real disk. Moving our own `/tmp` to RAM cannot touch it. The
-   tmpfs stays on that lane (it still takes the per-application temp trees
-   off disk, and identical lanes are worth more than a lane-specific
-   exception) but it is now recorded as **no measured win**.
+3. **The postgres lane benefits much less, and the doc predicted too
+   confidently that it would get "part of the win".** Its samples are 382 s
+   and 342 s against a 391 s median — a small win at most. An earlier
+   revision of this paragraph called it **no** win, on the strength of the
+   382 s sample alone; the 342 s one does not support a firm null either, and
+   asserting one from n=1 was the same error as quoting −35 % from n=1 two
+   paragraphs up. Both are corrected; neither is settled.
+
+   The recorder says why the lane is different, and that part does NOT rest
+   on durations: it still runs at **`io_full` 10.5–14.7 %**, because its
+   database is not in `/tmp` at all — it is in the postgres service
+   container, writing to the runner's real disk, where moving our own `/tmp`
+   to RAM cannot reach it. The tmpfs stays on that lane: it still takes the
+   per-application temp trees off disk, and two lanes running the same target
+   are worth more identical than micro-tuned.
 4. **The host-versus-cgroup PSI split works, and it is not theoretical.** On
    the sqlite lane `cg_cpu_some` tracks host `cpu_some` almost exactly
    (12.4 vs 13.2, 30.1 vs 30.5, 70.8 vs 71.9) — all the pressure is ours. On
@@ -869,7 +877,7 @@ and has never been killed, so it is not urgent — but it is now measured
 rather than assumed, and it is where that lane's excursions should be looked
 for first.
 
-**What this is NOT.** It is not proof the collapse is gone. Two green runs
+**What this is NOT.** It is not proof the collapse is gone. Three green runs
 prove nothing about an 11 %-of-runs event; the honest acceptance test is the
 `main` population over the next few weeks, read against the table above. What
 to look for there, in order: whether any `api-tests` run is killed at the

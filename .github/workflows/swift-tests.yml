@@ -249,10 +249,10 @@ jobs:
       # was 4 MiB, so the 2 GiB cap is three orders of magnitude of headroom,
       # not a budget — and tmpfs only occupies the RAM it actually holds.
       #
-      # On the runner itself the first two measured runs were 189 s and 230 s
-      # against a 291 s main median, with io_full 0.0 % in every window of
-      # both. The stall is reliably gone; the size of the saving is n=2 and
-      # firms up with the main population.
+      # On the runner itself the first three measured runs were 189 s, 230 s
+      # and 217 s against a 291 s main median, with io_full 0.0 % in every
+      # window of all three. The stall is reliably gone; the size of the
+      # saving is -25 % to -35 % at n=3 and firms up with the main population.
       #
       # `exec` is load-bearing: Docker's --tmpfs defaults to noexec, and the
       # suite writes generated test scripts into these directories and then
@@ -335,9 +335,10 @@ jobs:
       # Same tmpfs `/tmp` as the api-tests lane, for the same reason and with
       # the same `exec` requirement — see that job for the measurement.
       #
-      # On THIS lane it measured no win: 382 s against a 391 s main median,
-      # which is noise. The `[ci-pressure]` telemetry says why, and it is
-      # worth knowing — this lane still runs at io_full 10.5-14.7 %, because
+      # On THIS lane the win is much smaller and not yet established: 382 s
+      # and 342 s against a 391 s main median. The `[ci-pressure]` telemetry
+      # says why, and that part does not rest on durations — this lane still
+      # runs at io_full 10.5-14.7 %, because
       # its database is not in `/tmp` at all. It is in the postgres service
       # container, writing to the runner's real disk, where moving our own
       # temp directory to RAM cannot reach it. Kept anyway: it still takes the
