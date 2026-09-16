@@ -934,12 +934,61 @@ the recorder's `io_full`.
    shards' union is the whole target before it is worth doing. Revisit if the
    `main` population still shows kills once the tmpfs change has a few weeks
    of history.
-5. **Cut the ~3,200 per-test application builds.** The deepest fix and the
-   most invasive: 60 migrations per test body is the work the I/O was doing,
-   and tmpfs makes it cheap rather than absent. A migrated template database
-   copied per test would remove the work itself. Not attempted here; priced
-   as a separate piece of work, and only worth it if the population still
-   shows a problem after 4.
+5. **Cut the per-test application builds — DONE (PR #1532), and it was the
+   biggest single lever of the three.** This note used to say "only worth it
+   if the population still shows a problem after 4". That was the wrong test
+   to gate it on, because the measurement was cheap and settles it outright.
+
+   A throwaway probe split what building one test application costs:
+
+   ```
+   bare Application.make + shutdown    1.1 ms
+   + configureTestDatabase           357.8 ms   <- 60 migrations, ~5.9 ms each
+   full makeTestApp                  389.0 ms
+   ```
+
+   **`autoMigrate` is 92 % of it.** Against the ~1,100 per-test Applications
+   this suite's own helper documents, that is ~390 of the ~660 core-seconds a
+   width-4 run has — roughly **60 % of the lane re-deriving a schema that is
+   identical every time**.
+
+   And the cost is a PRODUCT, migrations x applications, with both terms
+   growing: since 2026-05 migrations went 28 -> 60 (one consolidation at the
+   0.5 boundary, `fe764cbb`) and APITests files 59 -> 375. Up ~13x. That is
+   the mechanism behind the median creep recorded in finding 9 — every new
+   migration taxes every existing test, and every new test pays for every
+   existing migration. It is also why items 1 and 4 are lesser levers: a
+   bigger runner and more shards both DIVIDE a number that keeps growing,
+   while migrating once per process into a template and copying the file per
+   test makes the per-test cost **O(1) in the migration count**. The next
+   migration anyone writes costs this suite nothing.
+
+   Measured, same machine, identical tree except `Tests/APITests/TestHelpers.swift`,
+   3,215 tests passing both ways: **277.6 s -> 91.9 s** (replicated:
+   91.9 / 89.0 / 91.2 / 97.7). No production code changed —
+   `DatabaseSettings.sqlite(path:)` already existed, and sqlite-kit's
+   `.memory` was itself a temp file on disk, so this swaps one file for
+   another rather than memory for disk.
+
+   **What it does NOT cover.** The postgres lane keeps its per-test schema: a
+   file copy has no analogue there (it would want
+   `CREATE DATABASE ... TEMPLATE`, a different mechanism), and that lane's
+   remaining `io_full` 10.5-14.7 % lives in the service container's disk
+   anyway — see the "First CI measurements" finding 3.
+
+   **Three defects it surfaced, which is the part worth keeping.** Skipping
+   `registerMigrations` alongside `autoMigrate` (only running is expensive;
+   registering builds a list) made `autoMigrate` a silent no-op, caught by
+   `MigrationNamespaceReconcilerTests` requiring a deliberately-reverted
+   `CreateSweepLeases` to be applied forward. Actor reentrancy across `await`
+   built the template three times per run — caught by counting leftover files,
+   not by any failing test. And the leak guard
+   `TestAppTempDirectoryTests.withAppLeavesNothingBehind` asserted on ONE
+   mechanism by name (`sqlite-kit_memorydb-*`), so adding a second emptied its
+   input: it now asks `sqliteDatabaseFilesOnDisk()`, which covers both. That
+   last one generalises, and belongs next to this file's other guard lessons:
+   **a guard pointed at a mechanism by name is a guard that changing the
+   mechanism silently empties.**
 
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the

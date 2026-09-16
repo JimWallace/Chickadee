@@ -12,6 +12,7 @@ import Foundation
 import Leaf
 import LeafKit
 import SQLKit
+import Synchronization
 import Testing
 import VaporTesting
 
@@ -67,6 +68,30 @@ func configureTestDatabase(_ app: Application) async throws {
         app.storage[TestPostgresSchemaKey.self] = schemaName
     }
 
+    // SQLite: copy a once-migrated template instead of migrating again.
+    //
+    // `autoMigrate` costs 357 ms per application (60 migrations at ~5.9 ms
+    // each), measured, and it is ~92 % of what building a test app costs at
+    // all. Multiplied by the suite's ~1,100 per-test Applications that is
+    // ~390 of the ~660 core-seconds a full `api-tests` run has — roughly 60 %
+    // of the lane spent re-deriving a schema that is identical every time.
+    //
+    // Worse, the cost is a PRODUCT: migrations x applications. Since
+    // 2026-05 the migration count went 28 -> 60 and the APITests file count
+    // 59 -> 375, so the term grew ~13x while no single change was to blame.
+    // Copying a template makes the per-test cost O(1) in the migration count:
+    // the next migration anyone writes costs this suite nothing.
+    //
+    // The copy is a real `.sqlite(path:)` database rather than sqlite-kit's
+    // `.memory`, which is itself a temp file on disk — so this swaps one file
+    // for another, not memory for disk. Postgres keeps the per-test-schema
+    // path below: a file copy has no analogue there (it would want
+    // `CREATE DATABASE ... TEMPLATE`, a different mechanism).
+    if settings.backend == .sqlite {
+        try await configureFromMigratedTemplate(app, logLevel: testLogLevel)
+        return
+    }
+
     try configureDatabase(app, settings: settings)
 
     if let schemaName = app.storage[TestPostgresSchemaKey.self] {
@@ -90,6 +115,147 @@ func configureTestDatabase(_ app: Application) async throws {
 
 struct TestPostgresSchemaKey: StorageKey {
     typealias Value = String
+}
+
+/// The per-test SQLite file copied from the migrated template, so teardown can
+/// remove it. Distinct from the `sqlite-kit_memorydb-*` files `.memory` leaves
+/// behind — both are cleaned, because a suite that opts out of the template
+/// (or a toolchain that changes sqlite-kit's behaviour) still produces those.
+struct TestSQLiteDatabaseFileKey: StorageKey {
+    typealias Value = String
+}
+
+/// Removes the process's template database when the test process exits.
+///
+/// Without this the template is a leak — one file per test process, forever,
+/// which is the shape of defect `TestAppTempDirectoryTests` exists to catch
+/// and that issue #1298 already cost this project once. It is small (a schema
+/// with no rows) where #1298's was 1.4 GB, but "small leak" is still the
+/// argument that lost last time.
+///
+/// `atexit` does not run when the process is killed or aborts — a SIGILL from
+/// a leaked `Application`, or the CI job-level timeout, both strand the file.
+/// That is accepted rather than solved: those paths strand the whole temp tree
+/// anyway, and the runner is discarded after the job.
+private enum SQLiteTemplateCleanup {
+    /// A list, not a single path. The builder above is meant to produce exactly
+    /// one template per process, but a cleanup that can only remember the last
+    /// path registered would quietly leak the rest if that ever stopped being
+    /// true — and it already did once (actor reentrancy, see above). Tracking
+    /// everything registered makes the cleanup correct independently of the
+    /// builder being correct.
+    private static let registered = Mutex<[String]>([])
+
+    static func register(_ path: String) {
+        let isFirst = registered.withLock { paths -> Bool in
+            defer { paths.append(path) }
+            return paths.isEmpty
+        }
+        guard isFirst else { return }
+        atexit { SQLiteTemplateCleanup.removeNow() }
+    }
+
+    static func removeNow() {
+        for path in registered.withLock({ $0 }) {
+            for suffix in ["", "-journal", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: path + suffix)
+            }
+        }
+    }
+}
+
+/// Builds the migrated SQLite template once per test process, then hands out
+/// copies of it.
+///
+/// An actor because the first caller pays for the whole migration run and
+/// every other concurrent test must wait for that one result rather than
+/// racing to build its own. After that the cost is a file copy.
+private actor MigratedSQLiteTemplate {
+    static let shared = MigratedSQLiteTemplate()
+
+    /// The single build, shared by every caller.
+    ///
+    /// Storing a `Task` rather than a `String?` is what makes this build ONCE.
+    /// Actors are reentrant across `await`, so a plain `if let builtPath` guard
+    /// followed by an async build has a window every concurrent first-caller
+    /// walks through: each sees nil, each builds its own template. That is not
+    /// theoretical — it shipped in the first draft of this file and showed up
+    /// as THREE template files left in the temp directory after a single run,
+    /// which is also three times the one-off migration cost. Assigning the task
+    /// before the first suspension closes the window; later callers await the
+    /// same task and get the same path.
+    private var buildTask: Task<String, Error>?
+
+    /// Path to the template database, building it on first call.
+    func templatePath(logLevel: Logger.Level) async throws -> String {
+        if let buildTask { return try await buildTask.value }
+        let task = Task { try await Self.build(logLevel: logLevel) }
+        buildTask = task
+        do {
+            return try await task.value
+        } catch {
+            // A failed build must not poison every later caller with the same
+            // error — the next one retries.
+            buildTask = nil
+            throw error
+        }
+    }
+
+    private static func build(logLevel: Logger.Level) async throws -> String {
+        let path =
+            FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-migrated-template-\(UUID().uuidString).sqlite")
+            .path
+        let app = try await Application.make(.testing)
+        do {
+            try configureDatabase(app, settings: .sqlite(path: path))
+            registerMigrations(on: app)
+            // Same log-level squelch as the old per-app path, for the same
+            // reason — except now it happens once instead of ~1,100 times.
+            let priorLogLevel = app.logger.logLevel
+            app.logger.logLevel = logLevel
+            try await app.autoMigrate()
+            app.logger.logLevel = priorLogLevel
+            try await app.asyncShutdown()
+        } catch {
+            try? await app.asyncShutdown()
+            try? FileManager.default.removeItem(atPath: path)
+            throw error
+        }
+        SQLiteTemplateCleanup.register(path)
+        return path
+    }
+}
+
+/// Points `app` at a fresh copy of the migrated template.
+///
+/// No `autoMigrate` runs here: the copy already carries the schema AND the
+/// populated `_fluent_migrations` table, so Fluent sees every migration as
+/// applied. That matters beyond speed — the suites that call `autoMigrate()`
+/// themselves (MigrationNamespaceReconcilerTests and five others) rely on a
+/// second call being a clean no-op, which is exactly what a complete
+/// migration log makes it.
+private func configureFromMigratedTemplate(_ app: Application, logLevel: Logger.Level) async throws {
+    let template = try await MigratedSQLiteTemplate.shared.templatePath(logLevel: logLevel)
+    let copy =
+        FileManager.default.temporaryDirectory
+        .appendingPathComponent("chickadee-testdb-\(UUID().uuidString).sqlite")
+        .path
+    try FileManager.default.copyItem(atPath: template, toPath: copy)
+    app.storage[TestSQLiteDatabaseFileKey.self] = copy
+    try configureDatabase(app, settings: .sqlite(path: copy))
+
+    // Registering is NOT the expensive part — running is. `registerMigrations`
+    // builds a list; `autoMigrate` executes 60 statements against a fresh file.
+    // So the registry still goes on, and only the execution is skipped.
+    //
+    // It is also load-bearing rather than tidy. Six suites call `autoMigrate()`
+    // themselves, and `MigrationNamespaceReconcilerTests` does the sharpest
+    // version: it reverts CreateSweepLeases, deletes its history row, and
+    // requires `autoMigrate` to apply exactly that one migration forward. With
+    // an empty registry that call silently does nothing and the test fails on
+    // `no such table: sweep_leases` — which is how this omission was caught.
+    registerMigrations(on: app)
 }
 
 /// Quotes an identifier for safe interpolation into raw SQL.  Test schema
@@ -365,6 +531,23 @@ extension Application {
         return files
     }
 
+    /// Every real file backing this app's SQLite databases, whichever mechanism
+    /// put it there: the migrated-template copy that `configureTestDatabase`
+    /// hands out, or sqlite-kit's fake-memory file for an app configured with
+    /// `.sqliteInMemory()` directly.
+    ///
+    /// The leak guards assert against THIS rather than against either
+    /// mechanism, so that changing how a test database is materialized moves
+    /// one function instead of silently emptying the guard's input — which is
+    /// exactly what introducing the template did to it the first time.
+    func sqliteDatabaseFilesOnDisk() async -> [String] {
+        var files = await sqliteFakeMemoryDatabaseFiles()
+        if let templateCopy = storage[TestSQLiteDatabaseFileKey.self] {
+            files.append(templateCopy)
+        }
+        return files
+    }
+
     /// Tears the app down completely: drops the per-test Postgres schema (if
     /// any), shuts the app down, and removes every piece of temp state created
     /// on its behalf — the `makeTestApp` directory tree, sqlite-kit's
@@ -377,8 +560,16 @@ extension Application {
         let dir = storage[TestDataDirectoryKey.self]
         let leafSymlink = storage[LeafViewsSymlinkKey.self]
         let sqliteFiles = await sqliteFakeMemoryDatabaseFiles()
+        let templateCopy = storage[TestSQLiteDatabaseFileKey.self]
         try? await dropPostgresTestSchema(self)
         try await asyncShutdown()
+        if let templateCopy {
+            // Same sidecar sweep as below: a crash mid-test can strand a
+            // journal even though the default rollback journal is transient.
+            for path in [templateCopy, templateCopy + "-journal", templateCopy + "-wal", templateCopy + "-shm"] {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
         if let dir {
             try? FileManager.default.removeItem(atPath: dir)
         }

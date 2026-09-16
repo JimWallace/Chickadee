@@ -17,6 +17,13 @@
 //   - sqlite-kit backs every `.memory` database with a real file in the
 //     system temp directory and never deletes it (~973 MB / ~1,566 entries).
 //
+// The sqlite lane's test databases are now copies of a once-migrated template
+// rather than `.memory` files, so the discovery these assert on runs through
+// `sqliteDatabaseFilesOnDisk()`, which covers BOTH mechanisms. That indirection
+// is the lesson from introducing the template: pointing the guard at one
+// mechanism by name meant changing the mechanism emptied its input, and an
+// emptied input is a guard that passes while watching nothing.
+//
 // These assert the OUTCOME (nothing survives) rather than that cleanup ran,
 // because "cleanup ran" is exactly what was true the whole time it was broken.
 
@@ -101,22 +108,22 @@ import VaporTesting
         let prefix = "chickadee-tmptest-\(UUID().uuidString)"
         let app = try await makeTestApp(prefix: prefix)
 
-        // In the sqlite lane the app's "in-memory" database is secretly a real
-        // file; require the discovery so a silent break (e.g. sqlite-kit
-        // renaming its temp files) fails here instead of quietly re-leaking.
+        // In the sqlite lane the app's database is a real file on disk, whether
+        // it is the migrated-template copy or sqlite-kit's fake-memory file;
+        // require the discovery so a silent break fails here instead of
+        // quietly re-leaking.
         let backend = try await withAsyncEnvLock {
             try testDatabaseSettingsFromEnvironment().backend
         }
         var sqliteFiles: [String] = []
         if backend == .sqlite {
-            sqliteFiles = await app.sqliteFakeMemoryDatabaseFiles()
+            sqliteFiles = await app.sqliteDatabaseFilesOnDisk()
             try #require(
                 !sqliteFiles.isEmpty,
                 """
-                could not locate the file backing the fake in-memory database. If sqlite-kit \
-                changed how `.memory` storage is materialized, update \
-                `sqliteFakeMemoryDatabaseFiles()` — until then every test app leaks that file \
-                again.
+                could not locate the file backing this app's database. If the harness changed \
+                how a test database is materialized, teach `sqliteDatabaseFilesOnDisk()` about \
+                the new mechanism — until then every test app leaks that file again.
                 """)
             for file in sqliteFiles {
                 #expect(FileManager.default.fileExists(atPath: file))
@@ -131,7 +138,7 @@ import VaporTesting
         for file in sqliteFiles {
             #expect(
                 !FileManager.default.fileExists(atPath: file),
-                "the sqlite-kit fake-memory database file survived withApp: \(file)")
+                "the file backing the app's database survived withApp: \(file)")
         }
     }
 
