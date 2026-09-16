@@ -885,6 +885,12 @@ Both changes are merged: #1531 (tmpfs `/tmp`, `StarvationRecorder`) and #1532
 | tmpfs only (`c8720254`) | **185 s** | −36 % |
 | tmpfs + template (`9a9c6372`) | **143 s** | **−51 %** |
 
+The postgres lane's equivalent is measured locally rather than on `main` and
+is recorded here so the two are read together: 418.9 s -> 117.9 s of test
+time on one machine, same command, 3,2xx tests green both ways (attack note 6).
+Its `main` population starts at the 391 s median in the table above, and that
+is the acceptance test for it too.
+
 3,237 tests in 131.6 s of test time; the job is ~232 s against a 1,500 s
 ceiling. The absorbable collapse therefore goes from **4.8× to roughly 10×**,
 above every excursion in the 213-run population — all of which were censored
@@ -913,6 +919,16 @@ a bigger runner would have bought nothing. It now saturates what it has, so
 note 1 (a larger runner) and note 4 (sharding) would both convert — where
 before the fix neither would have. Neither is needed at a 143 s median; this is
 recorded so the next person to price them starts from the right bottleneck.
+
+**Where the constraint sits now.** With note 6 merged, BOTH lanes are O(1) in
+the migration count, which is the property that matters as the suite grows: a
+new migration no longer taxes either. The postgres lane was briefly the
+binding constraint — ~430 s against a ~1,400 s budget, 3.3x, worse headroom
+than `api-tests` had when this investigation opened — and note 6 is what
+closed that gap rather than leaving the fix lopsided. Neither lane is near its
+ceiling now, so the next thing to watch is not a lane at all: it is whether
+the collapse recurs, which is still unexplained and is what the
+`[ci-pressure]` lines exist to name.
 
 **What this is NOT.** It is not proof the collapse is gone. Three green runs
 prove nothing about an 11 %-of-runs event; the honest acceptance test is the
@@ -1015,11 +1031,13 @@ the recorder's `io_full`.
    `.memory` was itself a temp file on disk, so this swaps one file for
    another rather than memory for disk.
 
-   **What it does NOT cover.** The postgres lane keeps its per-test schema: a
-   file copy has no analogue there (it would want
-   `CREATE DATABASE ... TEMPLATE`, a different mechanism), and that lane's
-   remaining `io_full` 10.5-14.7 % lives in the service container's disk
-   anyway — see the "First CI measurements" finding 3.
+   **What it did NOT cover, and what covers it now.** This note used to end
+   "the postgres lane keeps its per-test schema: a file copy has no analogue
+   there (it would want `CREATE DATABASE ... TEMPLATE`, a different
+   mechanism)". The first half was right and the second was the wrong
+   analogue. See item 6 below: the postgres lane gets the same O(1)-in-
+   migrations property from recycling a migrated SCHEMA, and
+   `CREATE DATABASE ... TEMPLATE` was measured and rejected on the way.
 
    **Three defects it surfaced, which is the part worth keeping.** Skipping
    `registerMigrations` alongside `autoMigrate` (only running is expensive;
@@ -1034,6 +1052,99 @@ the recorder's `io_full`.
    last one generalises, and belongs next to this file's other guard lessons:
    **a guard pointed at a mechanism by name is a guard that changing the
    mechanism silently empties.**
+
+6. **Give the postgres lane the same O(1) — DONE, by recycling schemas rather
+   than copying files.** Item 5 left that lane running 60 migrations per test
+   application, and it was then the lane with the least ceiling headroom:
+   ~391 s median against a ~1,400 s budget, 3.4x, against the sqlite lane's
+   ~10x.
+
+   The same probe, run against a local Postgres 16.13:
+
+   ```
+   bare Application.make + shutdown        0.9 ms
+   + connect and CREATE SCHEMA            11.0 ms
+   + autoMigrate                         450.6 ms   <- 98 % of the cost
+   ```
+
+   Three mechanisms were measured, not one:
+
+   | | cost | vs. 460 ms to migrate |
+   |---|---|---|
+   | `CREATE DATABASE ... TEMPLATE` | 195.8 ms create + 158.9 ms drop | **1.3x — rejected** |
+   | `TRUNCATE` all 44 tables | 139 ms | 3.0x |
+   | `DELETE` sweep, one `DO` block | **1.7 ms** | **244x** |
+
+   So the shipped mechanism is a process-wide pool of pre-migrated schemas
+   (`MigratedPostgresSchemaPool` in `Tests/APITests/TestHelpers.swift`), one
+   checked out per test application and DELETE-swept on return. Measured on
+   the same machine, same command, 3,2xx tests green both ways:
+   **`Run APITests` 418.9 s -> 117.9 s (-72 %)**, against a naive projection
+   of ~280 s — the same direction the sqlite change beat its own estimate in.
+
+   Three things are worth carrying forward from it more than the number.
+
+   *The `DELETE` sweep is one statement, not 44.* A plpgsql block runs each
+   statement separately and a foreign key's integrity trigger fires at the end
+   of the statement that armed it, so 44 `DELETE`s joined by 57 foreign keys
+   need a topological order and break on the first cycle. One data-modifying
+   `WITH` leaves every check to fire after all of them are already empty, and
+   no order exists to get wrong.
+
+   *`DELETE` does not reset sequences, and the answer was to refuse rather
+   than assume.* Every `@ID` in `Sources/APIServer/Models` is client-generated
+   and every `.identifier(` in `Sources/APIServer/Migrations` is
+   `auto: false`, so there is nothing to reset today — but the pool asks the
+   DATABASE for its sequences at migration time and refuses to recycle a
+   schema that has any, naming the fix in the message. A source scan states
+   the same claim in the other direction.
+
+   *The guard that names a suite is not the guard that holds.* One suite
+   (`MigrationNamespaceReconcilerTests`) rewrites the migration log on
+   purpose and must have a schema of its own, which means naming it — the
+   shape item 5's third defect warns about. So the pool also fingerprints
+   every schema on the way back in (relations plus migration-log rows, md5,
+   checked inside the same `DO` block) and drops and rebuilds any that came
+   back different, keyed on the damage rather than on who did it. That is
+   what found `MCPAuditFailClosedTests`, which drops the `audit_log` table
+   and which a hand search had missed by not recursing into
+   `Tests/APITests/MCP/`. The name-based list is now backed by a source scan
+   that fails when the sources and the list disagree.
+
+   **The defect it surfaced is worth more than the number: `withApp` could
+   kill the whole test process, and had been able to for as long as it has
+   existed.** It was
+
+   ```swift
+   do { try await body(app); try await app.tearDownTestApp() }
+   catch { try? await app.tearDownTestApp(); throw error }
+   ```
+
+   which tears down TWICE when the tear-down inside the `do` is the thing that
+   throws. A second `tearDownTestApp` on an application that is already shut
+   down does not throw — it is `Vapor/Core.swift: Fatal error: Core not
+   configured`, which takes the process, not the test. Nothing in the suite
+   made teardown throw, so the path was never walked; a pool check-in can
+   throw, and it walked it on the first full run as a bare `signal 4`
+   mid-suite.
+
+   Note the shape, because it is the same one as Family 1 and #1233 and it is
+   the third time this file has recorded it: **a latent whole-process kill,
+   invisible while one precondition happened to hold, surfacing as an
+   unexplained signal rather than as a failing test.** The precondition here
+   was "teardown never throws", which nothing stated or guarded. Teardown now
+   runs exactly once however the body ends, and `tearDownTestApp` holds its
+   first error and completes every remaining cleanup step rather than
+   short-circuiting — a throwing `asyncShutdown()` used to skip every removal
+   below it, which was a leak before the pool and a run-stopper after it.
+
+   **Independently re-measured before merge** (a second machine-local A/B by
+   the reviewing session, not the authoring one): postgres lane
+   **391.0 s -> 119.3 s, −69 %**, zero schemas left behind; the sqlite lane
+   **91.8 s**, unchanged. The −72 % above is against a 418.9 s baseline and
+   −69 % against a 391.0 s one; the spread is that lane's own run-to-run
+   variance, which is the subject of this entry and is why both are quoted
+   rather than the better.
 
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
