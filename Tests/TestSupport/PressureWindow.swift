@@ -135,8 +135,13 @@ public struct PressureWindow: Sendable {
     /// Ordered by how decisive the evidence is, not by severity: steal and
     /// quota throttling are unambiguous and name a cause outright, so they
     /// come first; the CPU-share split is a judgement and comes last. Only
-    /// the first matching rule is reported — a line with four hints on it is
-    /// a line nobody reads.
+    /// the first matching rule is reported — a line carrying six hints is a
+    /// line nobody reads.
+    ///
+    /// On CI the disk rule is expected to stay quiet, because both APITests
+    /// lanes now run with `/tmp` on a tmpfs. Running the suite locally on a
+    /// real filesystem trips it on nearly every window, and that is correct
+    /// rather than noise: it is the finding those lanes were changed for.
     public func hint() -> String? {
         if let steal = stealPercent, steal >= 10 {
             return "\(StarvationRecorder.percent(steal)) of this VM's CPU went to another tenant on the "
@@ -156,7 +161,7 @@ public struct PressureWindow: Sendable {
         }
         if let children = end.childCount, end.onlineCPUs > 0, children >= 4 * end.onlineCPUs {
             return "\(children) live child processes against \(end.onlineCPUs) CPU(s) — a subprocess "
-                + "storm, which is self-inflicted. 25 APITests files spawn real interpreters."
+                + "storm, which is self-inflicted. 21 APITests files spawn real interpreters."
         }
         guard let busy = busyPercent, let ours = selfCPUPercent, busy >= 60, ours <= 0.4 * busy else {
             // Deliberately silent for "the box is busy and the work is ours".

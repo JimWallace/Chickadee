@@ -38,10 +38,10 @@
 //     was waiting on disk or reclaiming memory — the two ways a job can crawl
 //     with plenty of idle CPU. This is the one that fires today: APITests
 //     spends 20-27 % of its wall clock there.
-//   * `kids` / `thr` / `procs` are the self-saturation shape: APITests spawns
-//     real interpreters (python3, Rscript, lua, octave-cli, racket, g++) from
-//     25 of its files, so a subprocess storm is a live hypothesis and a
-//     process census is what confirms or kills it.
+//   * `kids` / `thr` / `procs` are the self-saturation shape: 21 of APITests'
+//     376 files both spawn `Process()` and name a real interpreter (python3,
+//     Rscript, lua, octave-cli, racket, g++, javac), so a subprocess storm is
+//     a live hypothesis and a process census is what confirms or kills it.
 //   * `scopes/min` is the THROUGHPUT half, taken from
 //     `WedgeWatchdog.completedTrackedScopes` — finished test bodies. Without
 //     it every reading above is an unanchored number; with it, one line says

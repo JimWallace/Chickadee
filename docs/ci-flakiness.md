@@ -488,7 +488,7 @@ Reopen the decision if any of these changes:
 
 ---
 
-## Family 5 — `api-tests` killed at its ceiling during a throughput collapse — MEASURED (7 occurrences, 2026-08-09 → 2026-09-15); the COST is root-caused and fixed, the COLLAPSE is narrowed but open
+## Family 5 — `api-tests` killed at its ceiling during a throughput collapse — 7 occurrences (2026-08-09 → 2026-09-15); COST ROOT-CAUSED & FIXED, COLLAPSE NARROWED but open
 
 **Symptom.** `api-tests` reports **`cancelled`** and `swift-tests-gate` fails
 with `jobs not successful: api-tests`. It reads exactly like the Family 1 /
@@ -535,13 +535,26 @@ logs:
 | job 103822024167 (3.8× slow) | 1,249 s | 3,115 | 199.8 s | 776.4 s | 0.307 s |
 | job 104630832798 (healthy) | 347 s | 3,219 | 89.3 s | 221.4 s | — |
 
-A healthy run's *median* test reports 80 seconds. Incident 2's 107-second
-`slugify` was, for its run, a fast test. Two further facts fall out of the
-same table and are used below: 2,172 of 3,040 tests were "started"
-concurrently (the log line precedes the slot, so it is not 2,172 live Vapor
-apps), and **the fastest test costs the same on a slow run as on a fast one
-(0.307 s vs 0.325 s)** — so nothing about the machine's per-operation speed
-changes. What changes is throughput.
+A healthy run's *median* test reports 80 seconds, and its slowest reports
+205. Incident 2's 107-second `slugify` is below the maximum of a **healthy**
+run a third the length — so it is not evidence of anything, let alone of a
+5x event.
+
+There is a second, independent reason that example was misread.
+`slugify_handlesHyphensAndSlashes()` is not a pure string function's cost.
+`VanityURLRoutesTests` is a `final class` suite, so Swift Testing builds a new
+instance per test, and its `init` calls `makeTestApp` — a whole Vapor
+application with 60 migrations — which `withApp` then tears down. The
+assertion is one string comparison; the test is an application boot. That is
+true of most of this target, and it is the same fact that finding 5 below
+turns into the root cause of the cost.
+
+Two further facts fall out of the same logs and are used below: 2,172 of 3,040
+tests were "started" concurrently (the log line precedes the slot, so this is
+not 2,172 live Vapor apps — a 64-test probe at width 4 shows exactly 4 bodies
+executing at once), and **the fastest test costs the same on a slow run as on
+a fast one (0.307 s vs 0.325 s)** — so nothing about the machine's
+per-operation speed changes. What changes is throughput.
 
 **Tell 1 — "were tests still completing at the tail" — survives.** It is the
 only one of the three that distinguishes this from a wedge, and it is still
@@ -641,13 +654,18 @@ network were fine. The degradation is specific to the test step.
    recorder (below), on a 4-core NVMe box: **PSI `io_full` 20–27 % of wall
    clock** — a fifth to a quarter of the run with EVERY task on the machine
    blocked on disk — against `cpu_full` 0.0 % and `mem_full` 0.0 %.
-5. **The cause of that stall is the per-test database.** The suite builds
-   ~3,200 Vapor test applications per run, one per test body in a class suite.
-   Each gets a temp directory tree and — because sqlite-kit backs a `.memory`
-   database with a real on-disk temp file (`sqlite-kit_memorydb-*`, which
-   `tearDownTestApp` already knows about) — a real SQLite file, against which
-   `autoMigrate` then runs **60 migrations**. That is tens of thousands of
-   small transactional fsyncs per run.
+5. **The stall comes from the per-test temp state.** The suite builds ~3,200
+   Vapor test applications per run — one per test body in a class suite, since
+   Swift Testing makes a new instance per test and `init` calls `makeTestApp`.
+   Each application creates a five-directory temp tree AND, because sqlite-kit
+   backs a `.memory` database with a real on-disk temp file
+   (`sqlite-kit_memorydb-*`, which `tearDownTestApp` already knows about), a
+   real SQLite file, against which `autoMigrate` then runs **60 migrations**.
+   The database is the transactional half and therefore the likely dominant
+   one — tens of thousands of small fsyncs per run — but the measurement below
+   moves the whole of `/tmp`, so the two halves are NOT separated here. If
+   that distinction ever matters (e.g. for attack note 5), it needs its own
+   experiment.
 6. **Removing that I/O removes 42 % of the step.** Same machine, same build,
    same 3,2xx tests, `/tmp` on disk vs `/tmp` on tmpfs:
 
@@ -690,6 +708,13 @@ how well they fit:
 - **CPU steal from a co-tenant.** Poorly supported — `build` would show it —
   but it is the one cause nothing in this repository could fix, so it must be
   measured rather than argued away.
+- **A subprocess storm.** The lead this entry used to lead with, kept but
+  demoted: nothing measured supports it, and the recorder's process census is
+  what would. Re-counted 2026-09-16 — **21 of 376 `Tests/APITests/` files both
+  spawn `Process()` and name a real interpreter** (25 spawn a process at all;
+  36 name an interpreter somewhere). The entry's earlier figure, 35 of 314
+  files spawning and 29 naming an interpreter, no longer matches the tree: the
+  target grew and the spawn sites were partly consolidated into helpers.
 
 The recorder below reports all three directly. **Do not guess at this again
 from a log tail; read the `[ci-pressure]` lines.**
@@ -731,7 +756,7 @@ Reading it, in the order the hint rules fire:
 | `throttled` | the kernel stopped the container for exceeding its CPU quota. Ours. |
 | `io_full` | the machine did NO work because every task was blocked on disk. |
 | `mem_full` | the same, for memory reclaim. |
-| `kids` ≫ CPUs | a subprocess storm — 25 APITests files spawn real interpreters. |
+| `kids` ≫ CPUs | a subprocess storm — 21 APITests files spawn real interpreters. |
 | `busy` high, `self cpu` low | something else in this VM is using the machine. |
 
 A busy box doing our own work gets **no hint**: that is what a test suite is
@@ -749,13 +774,14 @@ honest. No new environment variable (CLAUDE.md's standing rule);
 and deliberately does NOT disable recording — a run debugged with the abort
 off is exactly a run somebody wants numbers from.
 
-**Seen to fire.** `StarvationRecorderTests` (18 tests) drives each of the four
-causes to its own verdict against synthesised counters, pins the arithmetic,
-parses captured `/proc` and cgroup text for both cgroup layouts, and then
-takes two real samples around a real CPU burn and asserts the recorder
-measured it. Beyond that, the lines above are from a full local `APITests`
-run: the instrument was watched diagnosing the real defect this PR fixes,
-before the fix was applied.
+**Seen to fire.** `StarvationRecorderTests` (18 tests) drives each of the six
+verdict rules to its own sentence against synthesised counters, pins the two
+cases that must stay SILENT (a healthy box, and a busy box doing our own
+work), pins the arithmetic, parses captured `/proc` and cgroup text for both
+cgroup layouts, and then takes two real samples around a real CPU burn and
+asserts the recorder measured it. Beyond that, the lines quoted above are
+from a full local `APITests` run: the instrument was watched diagnosing the
+real defect, before that defect was fixed.
 
 **2. The APITests lanes' `/tmp` is now a tmpfs.** `--tmpfs /tmp:rw,exec,size=2g`
 on the `api-tests` and `api-tests-postgres` containers. `exec` is load-bearing
