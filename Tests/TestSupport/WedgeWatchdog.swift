@@ -34,6 +34,13 @@
 // whole point: a starved-but-progressing job must stay a slow pass, and a
 // wedged one must become a fast failure carrying evidence.
 //
+// Family 5 therefore needs a DIFFERENT instrument, not a looser threshold
+// here: `StarvationRecorder`, which arms from this file's monitor seam and
+// records what the machine was doing rather than whether we were quiet. An
+// earlier revision of ci-flakiness.md listed arming this watchdog in APITests
+// as the thing that would settle Family 5's noisy-neighbour-versus-saturation
+// question; it cannot, and that note has been corrected.
+//
 // The stall limit (default 300 s) exceeds every legitimate quiet stretch by a
 // wide margin. Measured, not guessed: a full 2,732-test `APITests` run at CI's
 // parallelization width passes with the limit forced down to **30 s** — the
@@ -68,6 +75,7 @@ public enum WedgeWatchdog {
     private struct State {
         var monitorStarted = false
         var activeHelpers = 0
+        var completedScopes = 0
         var lastActivity = Date()
         var firing = false
     }
@@ -90,6 +98,19 @@ public enum WedgeWatchdog {
     /// floor (`>= 1` from inside a scope).
     public static var activeTrackedScopes: Int {
         state.withLock { $0.activeHelpers }
+    }
+
+    /// How many tracked scopes have RETURNED since the process started.
+    ///
+    /// Monotonic, so a difference across two reads is a throughput
+    /// measurement: in APITests a tracked scope is one test body, which makes
+    /// this "tests finished per minute" and gives `StarvationRecorder` the one
+    /// thing the kernel cannot tell it — whether the job is actually slow.
+    /// Without it every pressure reading is an unanchored number; with it, a
+    /// line says both that throughput collapsed and what the machine was doing
+    /// while it did.
+    public static var completedTrackedScopes: Int {
+        state.withLock { $0.completedScopes }
     }
 
     /// True while the current task is inside a `track` scope. Task-local, so
@@ -134,6 +155,7 @@ public enum WedgeWatchdog {
         defer {
             state.withLock { current in
                 current.activeHelpers -= 1
+                current.completedScopes += 1
                 current.lastActivity = Date()
             }
         }
@@ -143,6 +165,14 @@ public enum WedgeWatchdog {
     }
 
     private static func startMonitorIfNeeded(_ current: inout State) {
+        // The recorder arms unconditionally, BEFORE the stall-limit guard.
+        // `CHICKADEE_WORKERTESTS_STALL_SECONDS=0` disables aborting the
+        // process, which is a reasonable thing to want locally; it is not a
+        // request to stop recording what the machine was doing, and a run
+        // debugged with the abort off is exactly a run somebody wants numbers
+        // from. This is also the recorder's only arming seam — see its header
+        // for why it deliberately does not have one of its own.
+        StarvationRecorder.start()
         guard !current.monitorStarted, stallLimitSeconds > 0 else { return }
         current.monitorStarted = true
         Thread.detachNewThread {
@@ -208,7 +238,7 @@ public enum WedgeWatchdog {
             report += "(/proc/self/task unavailable on this platform — no per-thread table)\n"
         }
         report += "==== end thread dump ====\n"
-        writeToStandardError(report)
+        RawStandardError.write(report)
     }
 
     private static func readProcFile(_ path: String) -> String? {
@@ -228,16 +258,4 @@ public enum WedgeWatchdog {
         return tail.first.map(String.init) ?? "?"
     }
 
-    private static func writeToStandardError(_ text: String) {
-        let bytes = Array(text.utf8)
-        var offset = 0
-        while offset < bytes.count {
-            let written = bytes[offset...].withUnsafeBytes { buffer -> Int in
-                guard let base = buffer.baseAddress else { return -1 }
-                return write(2, base, buffer.count)
-            }
-            if written <= 0 { return }
-            offset += written
-        }
-    }
 }
