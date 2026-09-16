@@ -75,3 +75,32 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 2
+
+  # NOT HERE: the xeus kernel environments, and this is deliberate.
+  #
+  # Dependabot HAS a `conda` ecosystem, so the obvious move is to point it at
+  # Tools/jupyterlite/environment-*.yml and call the kernels covered. It does
+  # not work, for four independent reasons — any one of them fatal, and two of
+  # them would fail silently rather than loudly:
+  #
+  #   1. Its file fetcher matches `environment.yml` / `environment.yaml` and
+  #      nothing else. Ours are environment-python.yml, environment-r.yml,
+  #      environment-lua.yml and environment-octave.yml. They cannot be
+  #      collapsed into one file: a kernel fetches its whole environment at
+  #      boot, so a shared env makes every Python boot pull r-base and every R
+  #      boot pull numpy/pandas/matplotlib. That reason is written at the top
+  #      of each of the four files.
+  #   2. It resolves against `https://anaconda.org/<channel>/<package>`. Our
+  #      channel is https://repo.prefix.dev/emscripten-forge-4x, which is not
+  #      on anaconda.org. xeus-lua and xeus-octave do not exist there at all.
+  #   3. For a name conda-forge does carry, the versions published are for
+  #      linux-64 and friends, never emscripten-wasm32. A bump derived from
+  #      them would not merely be useless, it would be wrong.
+  #   4. Its update checker returns no candidate when every requirement is nil
+  #      or "*". Ours are deliberately bare names, so there would be nothing
+  #      for it to bump even if 1-3 were solved.
+  #
+  # The gap is real — the kernels move with no file in this repository
+  # changing — so it is closed elsewhere, by asking the solver that actually
+  # ships them: scripts/check-kernel-currency.py, run weekly by
+  # .github/workflows/kernel-currency.yml.

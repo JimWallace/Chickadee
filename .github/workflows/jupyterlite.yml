@@ -82,3 +82,11 @@ jobs:
       # while the kernel had none — see the script's header.
       - name: Environment files match the vendored kernels
         run: scripts/check-env-vendored-sync.sh
+
+      # Offline and instantaneous: proves the weekly currency check's
+      # comparator still reports a difference. That check runs on a schedule
+      # with network and micromamba, so nothing on the pull request path would
+      # otherwise notice it rotting into a no-op — and a currency check that
+      # always says "current" looks like good news while telling you nothing.
+      - name: The kernel-currency check can still fail
+        run: scripts/check-kernel-currency.py --self-test

@@ -1,0 +1,94 @@
+name: Kernel currency
+
+# Asks whether re-vendoring the xeus kernels would change what ships.
+#
+# WHY A WORKFLOW AND NOT DEPENDABOT. Everything else in this repository that
+# has a version is watched by Dependabot, including the JupyterLite pip pins
+# that build the bundle. The kernels are the one surface it cannot reach: our
+# environment files are not named `environment.yml`, our channel is
+# repo.prefix.dev rather than anaconda.org, our platform is emscripten-wasm32,
+# and our dependencies are deliberately unpinned bare names — and Dependabot's
+# conda ecosystem needs all four to be otherwise. The full reasoning is in the
+# header of scripts/check-kernel-currency.py and in .github/dependabot.yml.
+#
+# The consequence is that the kernels move with no file here changing. Nothing
+# in a diff, a PR or a Dependabot run would ever say that xeus-lua 0.11.0 had
+# shipped. This job is what says it.
+#
+# It does NOT rebuild anything. It runs the same solver `jupyter lite build`
+# uses, in dry-run, and compares the answer to the tarballs actually vendored.
+# That takes minutes rather than the re-vendor's quarter of an hour, and it
+# produces no bytes to review. When it goes red, dispatch
+# .github/workflows/revendor-kernels.yml and commit what that produces.
+#
+# Red here is a notification, not a broken build: this job is off the pull
+# request path entirely, so an upstream release can never block a merge.
+
+on:
+  schedule:
+    # Mondays, shortly before Dependabot's own weekly run, so both weeks'
+    # dependency news arrives together.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-currency
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  currency:
+    runs-on: ubuntu-latest
+    # Four environment solves against a remote channel, measured at a few
+    # minutes in total. The ceiling sits above 4 x the script's own 600s
+    # per-environment timeout on purpose, so a stalled solve fails with the
+    # script's explanation rather than being killed opaquely by the job.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # First, and before any network: prove the comparator still reports a
+      # difference. A currency check that has quietly become a no-op would
+      # otherwise report "current" forever, which is the exact failure it
+      # exists to prevent — and the most expensive kind, because it looks
+      # like good news. See scripts/check-guards.sh for the house rule.
+      - name: Prove the check can fail
+        run: scripts/check-kernel-currency.py --self-test
+
+      - name: Install micromamba
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL --max-time 180 \
+            https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/micromamba.tar.bz2
+          tar -xj -C /tmp -f /tmp/micromamba.tar.bz2 bin/micromamba
+          mv /tmp/bin/micromamba "$HOME/.local/bin/micromamba"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Are the vendored kernels current?
+        id: currency
+        run: |
+          set -o pipefail
+          scripts/check-kernel-currency.py 2>&1 | tee /tmp/currency.txt
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Kernel currency"
+            echo ""
+            echo '```'
+            cat /tmp/currency.txt 2>/dev/null || echo "the check produced no output"
+            echo '```'
+            if [ "${{ steps.currency.outcome }}" != "success" ]; then
+              echo ""
+              echo "Run the **Re-vendor xeus kernels** workflow on \`main\` and"
+              echo "commit what it produces."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
