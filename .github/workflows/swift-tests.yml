@@ -229,7 +229,35 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
+      # `/tmp` is a RAM disk for this job, and that is the single largest
+      # lever on `api-tests` cost. `FileManager.default.temporaryDirectory`
+      # resolves to `/tmp` here (the runner sets no TMPDIR in the container),
+      # and the suite builds ~3,200 Vapor test applications in it: each one
+      # gets a temp directory tree AND a real SQLite file, because sqlite-kit
+      # backs a `.memory` database with an on-disk temp file, then runs 60
+      # migrations against it. That is tens of thousands of small
+      # transactional fsyncs per run.
+      #
+      # Measured, full APITests at this job's parallelization width, same
+      # machine and build, `/tmp` on disk vs `/tmp` on tmpfs:
+      #
+      #   on disk  287.6 s / 274.9 s   PSI io_full 20-27 % of wall clock
+      #   on tmpfs 165.7 s / 162.1 s   PSI io_full  0.0-0.2 %
+      #
+      # 42 % off the step, and the "every task on the box is blocked on disk"
+      # stall that dominated it disappears. Peak tmpfs usage across a full run
+      # was 4 MiB, so the 2 GiB cap is three orders of magnitude of headroom,
+      # not a budget — and tmpfs only occupies the RAM it actually holds.
+      #
+      # `exec` is load-bearing: Docker's --tmpfs defaults to noexec, and the
+      # suite writes generated test scripts into these directories and then
+      # runs them. Without it, every execution-path suite fails.
+      #
+      # See docs/ci-flakiness.md Family 5 for why the cost matters beyond the
+      # cost: the lane's failure mode is being killed at the ceiling during a
+      # throughput collapse, and halving the ordinary cost doubles the
+      # collapse the lane can absorb.
+      options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
 
     steps:
       - uses: actions/checkout@v7
@@ -299,7 +327,12 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
+      # Same tmpfs `/tmp` as the api-tests lane, for the same reason and with
+      # the same `exec` requirement — see that job for the measurement. This
+      # lane keeps its per-test temp directory trees in `/tmp` even though its
+      # database lives in the postgres service, so it gets part of the win;
+      # only the sqlite lane's 42 % is measured.
+      options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
     services:
       postgres:
         image: ghcr.io/jimwallace/chickadee/postgres:16
