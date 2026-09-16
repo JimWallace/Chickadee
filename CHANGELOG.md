@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.194] - 2026-09-16
+
+### Fixed
+
+- **`api-tests` CI lane: the throughput collapse that was killing it at the job ceiling.** The lane was killed as `cancelled` seven times between 2026-08-09 and 2026-09-15 while still finishing tests. Measurement across 213 `main` runs rules out hosted-runner slowness — the longer, CPU-bound `build` lane has zero excursions in the same population — and shows the suite is I/O-stall-bound: a fifth to a quarter of its wall clock has every task on the machine blocked on disk, from ~3,200 per-test SQLite databases (sqlite-kit backs a `.memory` database with a real temp file) each running 60 migrations. The two APITests lanes now run with `/tmp` on a tmpfs, which removes that stall and cuts the step 42 % in measurement, doubling the slowdown the lane can absorb before its ceiling.
+
+### Added
+
+- **`StarvationRecorder`, in-job CI telemetry that separates "the machine was slow" from "we saturated ourselves."** A dedicated-thread sampler in the shared test-support target writes a `[ci-pressure]` line every 30 seconds carrying PSI CPU/IO/memory stall, hypervisor steal, cgroup quota throttling, load and run queue, our own CPU share, thread and process census, and finished-test throughput — each line cumulative as well as windowed, because the failure it exists for ends in a job kill and never runs an exit handler. `WedgeWatchdog` measures silence and by design cannot see this failure shape; this is the missing half, and it arms from the watchdog's existing seam rather than adding one of its own.
+
+
 ## [0.5.193] - 2026-09-16
 
 ### Added
