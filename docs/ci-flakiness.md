@@ -798,6 +798,65 @@ latency, removing the fsyncs removes the exposure and not merely the size of
 the bill. If it is not, this is a 42 % cost cut and the recorder will name the
 real cause on the next occurrence.
 
+### First CI measurement (2026-09-16, PR #1531 head `193e4713`)
+
+Both lanes green, and the recorder's first real hosted-runner artifact:
+
+```
+[ci-pressure] armed cpus=4 quota=none mem_avail=13.4GiB host_psi=yes cgroup_psi=yes interval=30s
+[ci-pressure] t=60s | win=30.0s cpu_some=13.2% cpu_full=0.0% io_some=0.0% io_full=0.0%
+  mem_full=0.0% steal=0.0% iowait=0.0% busy=91.8% | self cpu=91.2% scopes=430.0/min
+  thr=22 procs=4 kids=0 rss=286.5MiB throttled=+0 cg_cpu_some=12.4% | load=4.6 runq=5/293
+```
+
+| lane | this run | `main` median (213 runs) | change |
+|---|---|---|---|
+| `api-tests` | **189 s** (test run 177.7 s) | 291 s | **−35 %** |
+| `api-tests-postgres` | 382 s (test run 373.2 s) | 391 s | −2 %, i.e. none |
+
+Four things this settles, two of them against what was written above.
+
+1. **The tmpfs change works on the real runner.** `io_full` is **0.0 % in
+   every window** of the sqlite lane, against 20–27 % locally on disk. The
+   35 % here versus 42 % locally is the expected direction — the hosted
+   runner's disk was not the local NVMe.
+2. **The runner is a 4-CPU box with ~13.4 GiB available and NO CPU quota**,
+   not the 2-core runner this document and several workflow comments still
+   assume. GitHub's standard `ubuntu-latest` was upgraded. Nothing in the
+   analysis above depends on the core count, but anything reasoning about
+   "width 4 on 2 cores" is now reasoning about width 4 on 4 cores, which is a
+   different tuning question. Stale "2-core" claims survive in
+   `Tests/APITests/TestHelpers.swift`, `Tests/WorkerTests/Support/SubprocessThrottle.swift`
+   and the `worker-tests` job comment; only the last is corrected here, to
+   keep this change narrow.
+3. **The postgres lane got NO measurable benefit, and the doc predicted
+   wrongly that it would get "part of the win".** 382 s against a 391 s
+   median is noise. The recorder says why, which is the point of having it:
+   that lane still runs at **`io_full` 10.5–14.7 %**, because its database is
+   not in `/tmp` at all — it is in the postgres service container, writing to
+   the runner's real disk. Moving our own `/tmp` to RAM cannot touch it. The
+   tmpfs stays on that lane (it still takes the per-application temp trees
+   off disk, and identical lanes are worth more than a lane-specific
+   exception) but it is now recorded as **no measured win**.
+4. **The host-versus-cgroup PSI split works, and it is not theoretical.** On
+   the sqlite lane `cg_cpu_some` tracks host `cpu_some` almost exactly
+   (12.4 vs 13.2, 30.1 vs 30.5, 70.8 vs 71.9) — all the pressure is ours. On
+   the postgres lane they diverge hard: host `cpu_some` 21 % against
+   `cg_cpu_some` 10 %, and `self cpu` 28–33 % of a box that is 63–67 % busy.
+   Something else on that VM is using half the machine, and on that lane it
+   is our own postgres service container, which is expected. That is also
+   the one live near-miss on the verdict rules: `self cpu` 27.9 % sits just
+   above the `≤ 0.4 × busy` threshold, so the "something else in this VM"
+   hint did not fire. If it ever does on that lane, a service container is
+   the first thing to suspect and the hint text says so.
+
+A new lead falls out of (3): `api-tests-postgres` is I/O-stall-bound too, at
+half the sqlite lane's old rate, and its stall is in a container we do not
+configure the storage of. It has the narrower spread (3.39× against 4.80×)
+and has never been killed, so it is not urgent — but it is now measured
+rather than assumed, and it is where that lane's excursions should be looked
+for first.
+
 **What this is NOT.** It is not proof the collapse is gone. One green run
 proves nothing about an 11 %-of-runs event; the honest acceptance test is the
 `main` population over the next few weeks, read against the table above.

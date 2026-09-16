@@ -328,10 +328,16 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       # Same tmpfs `/tmp` as the api-tests lane, for the same reason and with
-      # the same `exec` requirement — see that job for the measurement. This
-      # lane keeps its per-test temp directory trees in `/tmp` even though its
-      # database lives in the postgres service, so it gets part of the win;
-      # only the sqlite lane's 42 % is measured.
+      # the same `exec` requirement — see that job for the measurement.
+      #
+      # On THIS lane it measured no win: 382 s against a 391 s main median,
+      # which is noise. The `[ci-pressure]` telemetry says why, and it is
+      # worth knowing — this lane still runs at io_full 10.5-14.7 %, because
+      # its database is not in `/tmp` at all. It is in the postgres service
+      # container, writing to the runner's real disk, where moving our own
+      # temp directory to RAM cannot reach it. Kept anyway: it still takes the
+      # per-application temp trees off disk, and two lanes running the same
+      # target are worth more identical than they are worth micro-tuned.
       options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
     services:
       postgres:
@@ -517,9 +523,16 @@ jobs:
         # Testing's in-process parallelism, matching the APITests jobs and
         # the nightly coverage run.  WorkerTests spawn real subprocesses
         # (/bin/sh scripts, python3 HTTP servers) and daemon Tasks that get
-        # starved when every test fires at once on a 2-core runner; the cap
-        # bounds that contention at the scheduler instead of relying solely
-        # on the in-suite throttles.
+        # starved when every test fires at once; the cap bounds that
+        # contention at the scheduler instead of relying solely on the
+        # in-suite throttles.
+        #
+        # This note used to say "on a 2-core runner". The runner is a 4-CPU
+        # box with no CPU quota — measured 2026-09-16 by the StarvationRecorder
+        # arming line, which reports `cpus=` every run. So the cap is now width
+        # == cores rather than 2x cores, which is a weaker constraint than it
+        # was when it was chosen. Nothing here depends on that; it is flagged
+        # so the next person to tune it knows what box they are tuning for.
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
