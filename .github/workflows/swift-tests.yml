@@ -109,6 +109,9 @@ jobs:
       - name: Check the Docker compile stage carries every path the build needs
         run: scripts/check-docker-build-context.sh
 
+      - name: Deployment-target resolution self-tests
+        run: scripts/deployment-target-tests.sh
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles
