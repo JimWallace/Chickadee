@@ -137,20 +137,24 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         beforeSend: (@Sendable (inout ClientRequest) throws -> Void)? = nil
     ) async throws -> ClientResponse {
         func attempt() async throws -> ClientResponse {
+            // Signing stays on the actor; only the network call is wrapped, so
+            // reachability records the transport outcome and nothing else.
             let uri = URI(string: signed(url: rawURL, method: method))
-            // The wire verb MUST match the verb inside the Valence signature —
-            // D2L verifies the method as part of the signature, so a mismatch
-            // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
-            // transmitted as a GET, so grade removal could never work).
-            switch method.uppercased() {
-            case "PUT":
-                return try await app.client.put(uri) { req in try beforeSend?(&req) }
-            case "POST":
-                return try await app.client.post(uri) { req in try beforeSend?(&req) }
-            case "DELETE":
-                return try await app.client.delete(uri) { req in try beforeSend?(&req) }
-            default:
-                return try await app.client.get(uri) { req in try beforeSend?(&req) }
+            return try await app.recordingReachability(.brightspace) {
+                // The wire verb MUST match the verb inside the Valence signature —
+                // D2L verifies the method as part of the signature, so a mismatch
+                // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
+                // transmitted as a GET, so grade removal could never work).
+                switch method.uppercased() {
+                case "PUT":
+                    return try await app.client.put(uri) { req in try beforeSend?(&req) }
+                case "POST":
+                    return try await app.client.post(uri) { req in try beforeSend?(&req) }
+                case "DELETE":
+                    return try await app.client.delete(uri) { req in try beforeSend?(&req) }
+                default:
+                    return try await app.client.get(uri) { req in try beforeSend?(&req) }
+                }
             }
         }
         let response = try await attempt()

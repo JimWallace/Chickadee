@@ -37,9 +37,28 @@ public func runAPIServer() async throws {
         try configure(app, cliWorkerSecret: cliWorkerSecret)
 
         // Load OIDC configuration after configure() so app.client is ready.
+        //
+        // The two halves fail differently on purpose. Validating the
+        // operator-supplied environment stays fatal, because a missing
+        // OIDC_CLIENT_ID is a deployment error that no retry corrects. The
+        // network fetch does not: an unreachable IdP must not stop the server
+        // from starting, or a new container never binds a port, never answers
+        // `/health`, and the blue-green gate refuses to deploy the very fix
+        // that would end the outage. SSO then resolves on first use instead.
         if app.authMode != .local {
-            let oidcConfig = try await OIDCConfiguration.load(from: app)
-            app.oidcConfig = oidcConfig
+            _ = try OIDCConfiguration.validateEnvironment(from: app)
+            // Resolve in the BACKGROUND. v0.5.198 made this fetch non-fatal but
+            // left it blocking, so an IdP that black-holes packets still held
+            // startup for the connect timeout before the port was bound — and
+            // the blue-green health gate has a deadline. Startup now waits on
+            // nothing outside this host.
+            Task {
+                if await app.resolvedOIDCConfiguration() == nil {
+                    app.logger.warning(
+                        "Starting without SSO: OIDC discovery is unavailable. Other authentication and all non-SSO routes are unaffected; discovery retries when an SSO route is next used."
+                    )
+                }
+            }
         }
 
         // Load the MCP signing-key authority (auto-generating it on first run)

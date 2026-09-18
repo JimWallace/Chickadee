@@ -9,6 +9,147 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.199] - 2026-09-18
+
+### Added
+
+- **A health rule for "the server cannot reach anything".** When the host's
+  Docker iptables chains were destroyed by an `iptables-restore` during an
+  unattended kernel upgrade, container egress died instantly: SSO token
+  exchanges and BrightSpace sweeps failed from the same moment, for two days,
+  while all seven existing health rules stayed green — they measure the
+  server's own internals, and internals were fine. `outboundEgressFailing`
+  fires when several outbound calls have failed in the window and none has
+  succeeded in it. The zero-successes clause is the judgement: a flaky far end
+  produces a mix of outcomes, a severed network path produces failures and
+  nothing else. A deployment that makes no outbound calls records nothing and
+  stays green.
+
+### Fixed
+
+- **The deployer reported a fixed failure string for every kind of deploy
+  failure.** `history.jsonl` recorded "swap aborted (new color unhealthy)" even
+  when the container never started and the health gate was never reached, which
+  sent an incident responder after the wrong subsystem for a day. It now records
+  what the deploy run actually printed, and escalates to a `stuck` state after
+  five consecutive failures of the same version — a condition nothing previously
+  distinguished from a single failure.
+- **Pre-deploy snapshot failures said only that they failed.** The snapshot
+  script's output went to `/dev/null`, so a snapshot failing on every deploy
+  reported no reason. The reason is now logged and recorded in the deploy
+  history.
+- **`bluegreen-deploy.sh` now refuses to deploy when Docker's `DOCKER` iptables
+  chain is missing**, naming both the recovery and the prevention rather than
+  failing with an error that names iptables and not the cause. Fails open where
+  iptables cannot be inspected.
+- **OIDC discovery no longer delays startup.** v0.5.198 made the fetch
+  non-fatal but left it blocking, so an identity provider that black-holes
+  packets still held the server before it bound its port — with a health gate
+  waiting on that port. The fetch now resolves in the background.
+
+
+## [0.5.198] - 2026-09-18
+
+### Fixed
+
+- **An unreachable identity provider no longer stops the server from starting.**
+  OIDC discovery ran before the server bound its port, and any failure was
+  fatal. During an IdP outage the running container kept serving on the
+  configuration it already held, but every newly built container died during
+  startup, never answered `/health`, and was rejected by the blue-green deploy
+  gate — so the deployment could not roll forward at the one moment a fix had to
+  ship. Startup now validates the OIDC environment, which stays fatal because no
+  retry supplies a missing `OIDC_CLIENT_ID`, and treats the network fetch as
+  best effort. A failed fetch is logged and retried when an SSO route is next
+  used, behind a short cooldown so an unreachable IdP is not dialled once per
+  request. SSO becomes unavailable during an outage; everything else keeps
+  serving, and the server stays deployable.
+
+
+## [0.5.197] - 2026-09-16
+
+### Changed
+
+- **`api-tests-postgres` recycles pre-migrated schemas instead of running 60
+  migrations per test.** The lane built a fresh schema and ran the full
+  migration list for every one of the suite's ~1,100 test applications;
+  measured locally, that is 450.6 ms of a 451.5 ms application, or ~98 % of
+  what a Postgres test application costs. A process-wide pool now migrates a
+  small number of schemas on demand and hands one to each test, emptying it
+  on return with a DELETE sweep in a single `DO` block — 1.7 ms against
+  ~460 ms to migrate. Per-test cost stops depending on the migration count,
+  the same property the SQLite lane's migrated template already had. A
+  returned schema is fingerprinted, and one that comes back structurally
+  changed is dropped and rebuilt rather than recycled, so a suite that
+  rewrites the migration log cannot poison the pool. No production code
+  changed.
+
+
+## [0.5.196] - 2026-09-16
+
+### Changed
+
+- **Family 5's CI-cost entry now records what was measured rather than what was predicted.** The tmpfs note carried an expected median and an expected headroom multiplier, written before either change landed. Both are replaced with the figures from `main`: the `api-tests` step went 291 s → 185 s with the tmpfs alone and → 143 s with the migrated template as well, roughly halving the lane and about doubling the slowdown it can absorb before its ceiling. The entry also records that the lane is now CPU-bound rather than I/O-stalled, which inverts what a larger runner or sharding would buy, and states the outcome it must not confuse: a lane with more headroom can stop producing ceiling kills without the collapse ever being root-caused.
+
+
+## [0.5.195] - 2026-09-16
+
+### Changed
+
+- **`api-tests` builds its test databases from a migrated template instead of migrating 3,200 times.** The suite creates roughly 1,100 Vapor applications per run and ran all 60 migrations against each one: measured, that is 357 ms of every 389 ms it costs to build a test application, and about 60 % of the whole lane. The cost was also a product — migrations x applications, both growing — so every new migration taxed every existing test and vice versa. The harness now migrates once per test process into a template database and copies the file per test, which makes the per-test cost independent of the migration count. Measured on one machine, same tree otherwise, 3,215 tests passing both ways: **277.6 s to 91.9 s**. No production code changed; the Postgres lane keeps its per-test schema, which a file copy has no analogue for.
+
+
+## [0.5.194] - 2026-09-16
+
+### Fixed
+
+- **`api-tests` CI lane: the throughput collapse that was killing it at the job ceiling.** The lane was killed as `cancelled` seven times between 2026-08-09 and 2026-09-15 while still finishing tests. Measurement across 213 `main` runs rules out hosted-runner slowness — the longer, CPU-bound `build` lane has zero excursions in the same population — and shows the suite is I/O-stall-bound: a fifth to a quarter of its wall clock has every task on the machine blocked on disk, from ~3,200 per-test SQLite databases (sqlite-kit backs a `.memory` database with a real temp file) each running 60 migrations. The two APITests lanes now run with `/tmp` on a tmpfs, which removes that stall and cuts the step 42 % in measurement, doubling the slowdown the lane can absorb before its ceiling.
+
+### Added
+
+- **`StarvationRecorder`, in-job CI telemetry that separates "the machine was slow" from "we saturated ourselves."** A dedicated-thread sampler in the shared test-support target writes a `[ci-pressure]` line every 30 seconds carrying PSI CPU/IO/memory stall, hypervisor steal, cgroup quota throttling, load and run queue, our own CPU share, thread and process census, and finished-test throughput — each line cumulative as well as windowed, because the failure it exists for ends in a job kill and never runs an exit handler. `WedgeWatchdog` measures silence and by design cannot see this failure shape; this is the missing half, and it arms from the watchdog's existing seam rather than adding one of its own.
+
+
+## [0.5.193] - 2026-09-16
+
+### Added
+
+- **Dependabot now watches the WebAssembly package graph and the CI image.**
+  Both `swift` and `docker` were configured with `directory: "/"`, which does
+  not recurse, so `wasm/Package.swift` and `.github/docker/ci-image/Dockerfile`
+  sat outside the config entirely. The wasm gap had already cost something
+  real: JavaScriptKit 0.59.0 was needed to fix a `PackageToJS` bug that shipped
+  the browser-runner artifact without its WASI shim, and it landed by hand in
+  #1522 because nothing was watching. The wasm entry is deliberately ungrouped,
+  for the reason the SwiftLint plugin is excluded from the Swift group: a
+  JavaScriptKit bump has broken the shipped artifact once and needs its own
+  reviewable PR. `docker-compose.yml` stays out on purpose — both services run
+  our own image at `:latest`, so there is no version to bump.
+
+
+## [0.5.192] - 2026-09-16
+
+### Added
+
+- **A weekly check that the vendored xeus kernels are still current.**
+  Dependabot watches every other dependency here, including the JupyterLite
+  pip pins, but it cannot watch the kernels: its `conda` ecosystem matches only
+  `environment.yml`, resolves against anaconda.org rather than
+  `repo.prefix.dev`, reads versions for the wrong platform, and yields nothing
+  for an unpinned dependency — and ours are unpinned on purpose. The kernels
+  therefore moved with no file in the repository changing, and nothing said so.
+  `scripts/check-kernel-currency.py` asks the solver that actually builds them
+  (`micromamba create --dry-run`, `emscripten-wasm32`) and compares its answer
+  to the tarballs vendored under `Public/jupyterlite/xeus/`, so a difference
+  means exactly that a re-vendor would change the shipped bytes.
+  `.github/workflows/kernel-currency.yml` runs it weekly, off the pull-request
+  path so an upstream release can never block a merge. Why the check asks a
+  solver instead of reading published versions is recorded in its header: the
+  simpler approach reports three of the four environments as stale forever,
+  because strict channel priority and transitive ABI pins both have to be
+  honoured to get the answer right.
+
+
 ## [0.5.191] - 2026-09-15
 
 ### Changed

@@ -188,7 +188,8 @@ extension AppConfig {
         authMode: AuthMode = .local,
         database: DatabaseSettings = .sqliteInMemory(),
         mcp: MCPConfig = .default,
-        uwDates: UWDatesConfig = .default
+        uwDates: UWDatesConfig = .default,
+        oidc: OIDCEnvConfig = .default
     ) -> AppConfig {
         let auth = AuthConfig(
             mode: authMode,
@@ -198,7 +199,7 @@ extension AppConfig {
         )
         return AppConfig(
             auth: auth,
-            oidc: .default,
+            oidc: oidc,
             security: .default,
             scanMode: .default,
             database: database,

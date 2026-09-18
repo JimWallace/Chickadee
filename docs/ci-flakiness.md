@@ -1,9 +1,15 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-08-22)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-16)
 
 Handoff document for the flakiness work. Families 1–3 are the original
 2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
 later**, so the header date is where this started, not where it ends. Check
 the newest families first — they are the ones still open.
+
+Family 5 was rewritten on 2026-09-16 against a 213-run population rather than
+a single log tail. Two of the three tells it used to carry turned out to be
+artifacts of Swift Testing's reporting, so if you are working from a copy of
+this file older than that date, re-read that entry before you conclude
+anything from a per-test duration.
 
 The first snapshot (earlier on
 2026-07-02) was written while landing PRs #1138–#1142; the headline then:
@@ -482,148 +488,663 @@ Reopen the decision if any of these changes:
 
 ---
 
-## Family 5 — `api-tests` starved past its 20-minute ceiling — OBSERVED ONCE (2026-08-09), root cause open
+## Family 5 — `api-tests` killed at its ceiling during a throughput collapse — 7 occurrences (2026-08-09 → 2026-09-15); COST ROOT-CAUSED & FIXED, COLLAPSE NARROWED but open
 
 **Symptom.** `api-tests` reports **`cancelled`** and `swift-tests-gate` fails
 with `jobs not successful: api-tests`. It reads exactly like the Family 1 /
-#1233 wedge — same conclusion string, same 20-minute burn — and it is **not
-one**.
+#1233 wedge — same conclusion string, same burn to the ceiling — and it is
+**not one**. The job is still finishing tests at the moment of the kill.
 
-**What distinguishes it from a wedge: the job was still making progress at
-the moment of the kill.** The last seconds of log show tests *completing*,
-not silence:
+Everything below the next heading is new work (2026-09-16). The entry used to
+say "observed once, root cause open". It was observed seven times, the
+population is now measured rather than sampled, and two of the three tells it
+recorded are artifacts of the test harness rather than evidence of anything.
+
+---
+
+### Correction: two of this entry's three original tells are not evidence
+
+This matters more than the incidents, because both were used to diagnose both
+incidents by hand.
+
+**Tell 2 — "three unrelated suites reported near-identical totals" — is true
+of every run, healthy or not.** So is **tell 3, the inflated per-test
+durations** added from incident 2 (`slugify_handlesHyphensAndSlashes()`, a
+string function, "passed after 106.949 seconds").
+
+Swift Testing starts the clock for a test when the test is **scheduled**, not
+when it gets a parallelization slot. `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`
+gates the body, not the timer, so a test's reported duration is mostly the
+queue it waited in. Reproduced directly on Swift 6.3 with a 64-test package
+whose every body is a 400 ms sleep:
 
 ```
-✔ Test requestJob_concurrentClaims_onlyOneSucceeds() passed after 10.517 seconds.
-✔ Test getResultsReturnsCollection() passed after 10.015 seconds.
+SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4 swift test
+  peak bodies executing concurrently: 4      <- the cap DOES work
+  ✔ Test t51() passed after 6.408 seconds.   <- for a 400 ms body
+  ✔ Test run with 64 tests in 1 suite passed after 6.411 seconds.
 ```
 
-A wedge produces ~18 minutes of total process silence (#1233: 254 tests
-started, 55 completed). This produced steady completions at roughly 10×
-their normal cost. The distinguishing question is therefore **"is anything
-still finishing?"**, not "did the job hit its ceiling?" — both shapes hit the
-ceiling.
+The last test to finish always reports approximately the whole run. Every
+suite therefore always ends at approximately the run's total. In the real CI
+logs:
 
-The second tell is in the suite wall-clocks. Three unrelated suites reported
-near-identical totals:
-
-```
-✔ Suite DraftSuiteSectionRoutesTests passed after 1083.174 seconds.
-✔ Suite OctavePatternFamilyExecutionTests passed after 1086.623 seconds.
-✔ Suite AuthModeGatingTests passed after 1086.744 seconds.
-```
-
-Every suite starting at ~t=0 and ending at ~t=1085 is one contended parallel
-pool draining, not three suites that each took 18 minutes.
-
-**The measurement.** PR #1308 (`07efab8`), both attempts of the same job on
-the same commit, ~25 minutes apart:
-
-| | attempt 1 | attempt 2 (`rerun-failed-jobs`) |
-|---|---|---|
-| `Run APITests` | **1107 s** — killed at the ceiling | **216 s** |
-| conclusion | `cancelled` | `success` |
-| runner | `GitHub Actions 1000033632` | `GitHub Actions 1000033636` |
-| setup before the step | 93 s | 92 s |
-
-No code changed between them. **216 s is below the main median**, so attempt 2
-was not a lucky fast run — attempt 1 was a >5× outlier.
-
-**Baseline** (`Run APITests` step, last 18 completed `main` runs, 2026-08-08
-to 2026-08-09):
-
-| lane | ceiling | min | median | max | spread |
+| `api-tests` run | wall clock | tests | reported per-test median | max | fastest test |
 |---|---|---|---|---|---|
-| `api-tests` (sqlite) | 20 min | 204 s | 236 s | 441 s | **2.2×** |
-| `api-tests-postgres` | 25 min | 257 s | 330 s | 351 s | 1.4× |
+| job 104001398957 (healthy) | 328 s | 3,131 | **80.4 s** | 205.1 s | 0.325 s |
+| job 103822024167 (3.8× slow) | 1,249 s | 3,115 | 199.8 s | 776.4 s | 0.307 s |
+| job 104630832798 (healthy) | 347 s | 3,219 | 89.3 s | 221.4 s | — |
 
-Two things fall out of that table:
+A healthy run's *median* test reports 80 seconds, and its slowest reports
+205. Incident 2's 107-second `slugify` is below the maximum of a **healthy**
+run a third the length — so it is not evidence of anything, let alone of a
+5x event.
 
-1. **The effective budget is the ceiling minus setup**, not the ceiling.
-   Container init + checkout + artifact restore cost ~93 s, so `Run APITests`
-   gets ~1107 s of a 1200 s job — which is exactly where attempt 1 was
-   killed.
-2. **The more variable lane has the tighter ceiling.** The sqlite lane swings
-   2.2× run-to-run and is capped at 20 min; the postgres lane is far steadier
-   and gets 25. That inversion is not deliberate, and it means the lane most
-   likely to spike is the one with the least room to.
+There is a second, independent reason that example was misread.
+`slugify_handlesHyphensAndSlashes()` is not a pure string function's cost.
+`VanityURLRoutesTests` is a `final class` suite, so Swift Testing builds a new
+instance per test, and its `init` calls `makeTestApp` — a whole Vapor
+application with 60 migrations — which `withApp` then tears down. The
+assertion is one string comparison; the test is an application boot. That is
+true of most of this target, and it is the same fact that finding 5 below
+turns into the root cause of the cost.
 
-**What is NOT established.** A single observation cannot separate these, and
-the entry is written so nobody later mistakes the hypothesis for the finding:
+Two further facts fall out of the same logs and are used below: 2,172 of 3,040
+tests were "started" concurrently (the log line precedes the slot, so this is
+not 2,172 live Vapor apps — a 64-test probe at width 4 shows exactly 4 bodies
+executing at once), and **the fastest test costs the same on a slow run as on
+a fast one (0.307 s vs 0.325 s)** — so nothing about the machine's
+per-operation speed changes. What changes is throughput.
 
-- *Ambient runner slowness / noisy neighbour.* Not excluded. The two attempts
-  ran on different runners, and 4.7× is a lot but hosted runners do vary.
-- *A saturation event of the #1233 kind that happened to recover.* The
-  identical-wall-clock signature is consistent with the pool filling; the fact
-  that tests kept completing says it never became self-sustaining. #1233's
-  analysis is explicit that the permanent form needs leaked pipe write ends to
-  postpone EOF forever — so a transient version that drains is the *expected*
-  benign relative of that bug, not evidence of it.
+**Tell 1 — "were tests still completing at the tail" — survives.** It is the
+only one of the three that distinguishes this from a wedge, and it is still
+the first thing to check.
 
-**Why APITests is the plausible host if it is the second one.** The exposure
-that made `WorkerTests` wedge is present here and has never had the same
-treatment:
+---
 
-- **35 of 314 `Tests/APITests/` files spawn `Process()`; 29 name a real
-  interpreter** (`python3`, `Rscript`, `lua`, `octave-cli`, `racket`, `g++`).
-  That surface grew through the 0.5.3x language work, and recently: the log
-  excerpt above shows `OctavePatternFamilyExecutionTests`, added
-  **2026-08-07** — two days before this incident.
-- **`WedgeWatchdog` is `WorkerTests`-local.** It lives in
-  `Tests/WorkerTests/Support/WedgeWatchdog.swift`; `Tests/APITests/`
-  references it **0 times** against `WorkerTests`' 6. It is the one mechanism
-  that survives pool saturation, because it runs on a dedicated OS thread.
-- **APITests has 32 files carrying `.timeLimit`** — and per #1233 that is
-  precisely the protection that *cannot* fire under saturation, since the
-  trait needs a pool thread to run. So APITests currently holds the guard
-  that doesn't work in this scenario and lacks the one that does.
+### The occurrences
 
-The CLOEXEC residual noted in "Remaining attack order" item 3 is on this
-side of the tree too: `Core/ZipArchiver`, `TestSetupZipHelpers` and
-`NotebookContentHelpers` read before waiting (the safe order) but their pipes
-still aren't CLOEXEC.
+Seven, not one. Five of them are on `main`, where the concurrency group never
+cancels a run, so `cancelled` there can only be the job's own
+`timeout-minutes`.
 
-**Handling for now.** Re-run the job (`/rerun-failed`, or
+| date | ref | `Run APITests` | conclusion |
+|---|---|---|---|
+| 2026-08-09 | PR #1308 `07efab8` attempt 1 | 1107 s | `cancelled` (20-min ceiling) |
+| 2026-08-18 20:07 | `main`, job 95852055877 | 1386 s | `cancelled` |
+| 2026-08-19 19:56 | `main`, job 96206596827 | 1373 s | `cancelled` |
+| 2026-08-19 20:36 | `main`, job 96218450897 | 1382 s | `cancelled` |
+| 2026-08-20 16:53 | `main`, job 96508206917 | 1389 s | `cancelled` |
+| 2026-08-25 20:43 | `main`, job 97961643124 | 1398 s | `cancelled` |
+| 2026-09-15 | PR #1529 `f8ffb34` | ~1500 s (job) | `cancelled` (25-min ceiling) |
+
+**Incident 1 (2026-08-09, PR #1308, `07efab8`).** Two attempts of the same job
+on the same commit, ~25 minutes apart: attempt 1 `Run APITests` **1107 s,
+killed at the ceiling**; attempt 2 **216 s, success**. No code changed.
+Different runners (`1000033632` vs `1000033636`), setup ~93 s both. 216 s was
+below the then-median, so attempt 1 was the outlier.
+
+**Incident 2 (2026-09-15, PR #1529, `f8ffb34`).** `api-tests` `cancelled`
+after ~25 minutes (22:49:46 → 23:14:50) against the *raised* ceiling;
+`swift-tests-gate` failed with it. **966 tests completed**, the last at
+23:14:44 — three seconds before the cancel. Completions per minute at the
+tail: 23:09→171, 23:10→125, 23:11→81, 23:12→83, 23:13→40, 23:14→35. Progress
+the whole way, so not a wedge. `api-tests-postgres` **passed on the same
+commit in 11 minutes**; `rerun-failed-jobs` passed in **7 m 43 s**; the diff
+contained **zero Swift** (two workflow YAMLs, dependabot.yml, a doc, a
+changelog fragment, a standalone Python script); `api-tests` on PR #1530 the
+same night took **7 m 25 s**. The "inflated durations" also recorded for this
+incident are the harness artifact corrected above, and are not evidence.
+
+---
+
+### The population, and what it excludes
+
+`swift-tests.yml` on `main`, **213 completed runs**, 2026-08-10 → 2026-09-16,
+per-step durations from the Actions API. Every job in a run is a DIFFERENT
+hosted runner, so this is five independent samples of the fleet per run.
+
+| lane | step median | p90 | p99 | max | max/median | runs ≥2× median |
+|---|---|---|---|---|---|---|
+| `build` | 597 s | 675 s | 697 s | 704 s | **1.18×** | **0 / 213 (0.0 %)** |
+| `api-tests` | 291 s | 599 s | 1386 s | 1398 s | 4.80× | **23 / 213 (10.8 %)** |
+| `api-tests-postgres` | 391 s | 541 s | 1066 s | 1327 s | 3.39× | 8 / 213 (3.8 %) |
+| `worker-tests` | 20 s | 22 s | 30 s | 607 s | 30.4× | 1 / 213 (0.5 %) |
+| `core-tests` | 14 s | 15 s | 19 s | 391 s | 27.9× | 1 / 213 (0.5 %) |
+
+`worker-tests` and `core-tests` share their single excursion: run
+31560614917 (2026-08-12 03:36) was slow in all four test lanes at once, the
+only run-wide event in the window. Every other excursion is confined to ONE
+lane while the other four in the same run sit at 0.9–1.1× their medians.
+
+**`build` is the control, and it settles the ambient-slowness hypothesis.** It
+is a ten-minute, CPU-saturating compile on the same fleet, same image family,
+same hour — longer exposure than `api-tests` and more sensitive to lost CPU,
+not less. Across 213 runs its worst run is 1.18× its median and it has never
+been 2× anything. A fleet that varies by 3–5× would show up there first.
+
+Two more controls, inside the slow jobs themselves. Comparing the 23 slow
+`api-tests` jobs against the 176 fast ones, step by step:
+
+| step | fast median | slow median | ratio |
+|---|---|---|---|
+| `Initialize containers` | 66 s | 77 s | 1.17 |
+| `actions/checkout` | 9 s | 10 s | 1.11 |
+| `Restore build artifacts` (multi-GB untar) | 23 s | **21 s** | **0.91** |
+| `Run APITests` | 285 s | 920 s | **3.23** |
+
+On the very machines that then ran the tests 3.2× slow, a multi-gigabyte
+archive extracted at full speed, minutes earlier. Bulk disk throughput and
+network were fine. The degradation is specific to the test step.
+
+---
+
+### What is now ESTABLISHED
+
+1. **It is not ambient hosted-runner slowness.** `build` — longer, CPU-bound,
+   same fleet — has zero excursions in 213 runs. The APITests lanes have 31
+   between them.
+2. **It is not a slower machine.** The fastest test in a 1,249 s run costs
+   0.307 s against 0.325 s in a 328 s run. Per-operation speed is unchanged;
+   only throughput falls.
+3. **It is not the machine's disk throughput or its network.** The cache
+   restore on the slow jobs is, if anything, marginally faster.
+4. **`api-tests` is I/O-STALL-bound, not CPU-bound, even on healthy
+   hardware.** Measured locally at CI's parallelization width with the new
+   recorder (below), on a 4-core NVMe box: **PSI `io_full` 20–27 % of wall
+   clock** — a fifth to a quarter of the run with EVERY task on the machine
+   blocked on disk — against `cpu_full` 0.0 % and `mem_full` 0.0 %.
+5. **The stall comes from the per-test temp state.** The suite builds ~3,200
+   Vapor test applications per run — one per test body in a class suite, since
+   Swift Testing makes a new instance per test and `init` calls `makeTestApp`.
+   Each application creates a five-directory temp tree AND, because sqlite-kit
+   backs a `.memory` database with a real on-disk temp file
+   (`sqlite-kit_memorydb-*`, which `tearDownTestApp` already knows about), a
+   real SQLite file, against which `autoMigrate` then runs **60 migrations**.
+   The database is the transactional half and therefore the likely dominant
+   one — tens of thousands of small fsyncs per run — but the measurement below
+   moves the whole of `/tmp`, so the two halves are NOT separated here. If
+   that distinction ever matters (e.g. for attack note 5), it needs its own
+   experiment.
+6. **Removing that I/O removes 42 % of the step.** Same machine, same build,
+   same 3,2xx tests, `/tmp` on disk vs `/tmp` on tmpfs:
+
+   | `/tmp` | run 1 | run 2 | PSI `io_full` |
+   |---|---|---|---|
+   | disk | 287.6 s | 274.9 s | 20–27 % |
+   | tmpfs | 165.7 s | 162.1 s | **0.0–0.2 %** |
+
+   Peak tmpfs occupancy across a full run: **4 MiB**.
+7. **Two of this entry's three original tells are harness artifacts** — see
+   the correction above. This is why the family needed an instrument and not
+   another log tail.
+8. **`WedgeWatchdog` cannot detect this, by design.** Its header says so:
+   it measures silence, and a lane running at 4× cost keeps starting and
+   finishing tests, which resets its clock continuously. Attack note 1 below
+   used to claim the watchdog would settle this family's open question. It
+   cannot, and that note is corrected.
+9. **The 20 → 25 minute ceiling raise bought nothing net.** Under the old
+   ceiling the step had ~1107 s of budget against a 236 s median: 4.69×. Under
+   the new one it has ~1400 s against a 291 s median: 4.81×. Suite growth
+   consumed the headroom as it arrived. The five `main` kills all sit at
+   1373–1398 s — exactly the new budget — so the real multiplier on those runs
+   is censored at ≥4.8× and is not known.
+
+### What is still OPEN
+
+**Why throughput collapses 3–5× on ~11 % of runs.** Ruled out above: the
+fleet, CPU speed, bulk disk throughput, network. Not ruled out, in order of
+how well they fit:
+
+- **fsync latency variance.** Throughput and latency are different properties.
+  A machine that untars gigabytes at full speed can still have 3–5× worse
+  commit latency, and this workload is bound by commit latency rather than
+  bandwidth (finding 4). This fits every control.
+- **Something inside our own process** — the Swift Testing scheduler, the NIO
+  event-loop group, or the SQLite connection pools — degrading under an
+  unlucky ordering. The excursions are bimodal (ratios cluster near 1.0 or
+  near 3–4.8, with little between), which reads more like a latch than like a
+  continuum of machine speeds.
+- **CPU steal from a co-tenant.** Poorly supported — `build` would show it —
+  but it is the one cause nothing in this repository could fix, so it must be
+  measured rather than argued away.
+- **A subprocess storm.** The lead this entry used to lead with, kept but
+  demoted: nothing measured supports it, and the recorder's process census is
+  what would. Re-counted 2026-09-16 — **21 of 376 `Tests/APITests/` files both
+  spawn `Process()` and name a real interpreter** (25 spawn a process at all;
+  36 name an interpreter somewhere). The entry's earlier figure, 35 of 314
+  files spawning and 29 naming an interpreter, no longer matches the tree: the
+  target grew and the spawn sites were partly consolidated into helpers.
+
+The recorder below reports all three directly. **Do not guess at this again
+from a log tail; read the `[ci-pressure]` lines.**
+
+---
+
+### What shipped
+
+**1. `StarvationRecorder` — the instrument this family never had.**
+`Tests/TestSupport/StarvationRecorder.swift`, with `HostCounters`,
+`HostCounters+Capture` and `PressureWindow` beside it. It runs on a dedicated
+OS thread, like the wedge watchdog and for the same reason, and writes one
+line to stderr every 30 seconds:
+
+```
+[ci-pressure] t=60s | win=30.0s cpu_some=20.0% cpu_full=0.0% io_some=26.8% io_full=21.4%
+  mem_full=0.0% steal=0.0% iowait=20.1% busy=62.3% | self cpu=55.2% scopes=483.9/min thr=18
+  procs=77 kids=0 rss=291.0MiB throttled=+0 cg_cpu_some=- | load=3.1 runq=4/130
+  | run(60.0s) cpu_some=19.1% io_full=24.0% steal=0.0% self_cpu=53.3% scopes=491.9/min
+[ci-pressure] HINT the machine was fully stalled on disk for 21.4% of this window.
+  Throughput is bound by I/O latency, not CPU.
+```
+
+Each line carries both the last window and the cumulative totals since
+arming, because **the failure being investigated ends in a kill** — the
+process never runs an exit handler, so whatever the last line to reach the log
+is, it must also be the summary. That is the design's load-bearing decision.
+
+`scopes/min` is completed `WedgeWatchdog.track` scopes — in APITests, finished
+test bodies. It is the throughput half: without it every pressure reading is
+an unanchored number, and with it one line says both that throughput collapsed
+and what the machine was doing while it did.
+
+Reading it, in the order the hint rules fire:
+
+| field | non-zero means |
+|---|---|
+| `steal` | the hypervisor gave this VM's CPU to another tenant. Nothing here can fix it. |
+| `throttled` | the kernel stopped the container for exceeding its CPU quota. Ours. |
+| `io_full` | the machine did NO work because every task was blocked on disk. |
+| `mem_full` | the same, for memory reclaim. |
+| `kids` ≫ CPUs | a subprocess storm — 21 APITests files spawn real interpreters. |
+| `busy` high, `self cpu` low | something else in this VM is using the machine. |
+
+A busy box doing our own work gets **no hint**: that is what a test suite is
+for, it is true of every healthy run (measured: `busy` 69.8–90.9 %, `self cpu`
+68.9–92.2 %), and a hint on every line of a green log is a hint nobody reads
+on the one line that mattered.
+
+**Arming is the watchdog's seam, deliberately.** The recorder has no arming
+call of its own; it starts with `WedgeWatchdog`'s monitor, which APITests arms
+at `withApp` and WorkerTests arms at its helper scopes. That reuses a seam
+that is already guarded rather than adding a second one that could rot.
+`StarvationRecorderTests.theWatchdogSeamArmsTheRecorder` keeps the borrowing
+honest. No new environment variable (CLAUDE.md's standing rule);
+`CHICKADEE_WORKERTESTS_STALL_SECONDS=0` still disables the watchdog's abort
+and deliberately does NOT disable recording — a run debugged with the abort
+off is exactly a run somebody wants numbers from.
+
+**Seen to fire.** `StarvationRecorderTests` (18 tests) drives each of the six
+verdict rules to its own sentence against synthesised counters, pins the two
+cases that must stay SILENT (a healthy box, and a busy box doing our own
+work), pins the arithmetic, parses captured `/proc` and cgroup text for both
+cgroup layouts, and then takes two real samples around a real CPU burn and
+asserts the recorder measured it. Beyond that, the lines quoted above are
+from a full local `APITests` run: the instrument was watched diagnosing the
+real defect, before that defect was fixed.
+
+**2. The APITests lanes' `/tmp` is now a tmpfs.** `--tmpfs /tmp:rw,exec,size=2g`
+on the `api-tests` and `api-tests-postgres` containers. `exec` is load-bearing
+— Docker defaults `--tmpfs` to `noexec` and the suite writes generated scripts
+into these directories and runs them.
+
+What it buys: see the measured figures in "Where the lane landed" below —
+this paragraph used to carry a prediction (an expected ~170 s median and a
+4.8× → ~8.2× absorbable multiplier) and the real numbers have replaced it. It
+is the first change here that works on the *mechanism* rather than the budget:
+if the collapse is fsync latency, removing the fsyncs removes the exposure and
+not merely the size of the bill.
+
+### First CI measurements (2026-09-16, PR #1531)
+
+Both lanes green on both heads, and the recorder's first real hosted-runner
+artifact:
+
+```
+[ci-pressure] armed cpus=4 quota=none mem_avail=13.4GiB host_psi=yes cgroup_psi=yes interval=30s
+[ci-pressure] t=60s | win=30.0s cpu_some=13.2% cpu_full=0.0% io_some=0.0% io_full=0.0%
+  mem_full=0.0% steal=0.0% iowait=0.0% busy=91.8% | self cpu=91.2% scopes=430.0/min
+  thr=22 procs=4 kids=0 rss=286.5MiB throttled=+0 cg_cpu_some=12.4% | load=4.6 runq=5/293
+```
+
+| lane | `193e4713` | `475d770f` | `c2be6d95` | `main` median (213 runs) |
+|---|---|---|---|---|
+| `api-tests` | 189 s | 230 s | 217 s | 291 s |
+| `api-tests-postgres` | 382 s | — | 342 s | 391 s |
+
+**These are three PR runs, not a population.** They accumulated while
+iterating on this branch, and the table stops here deliberately: appending a
+row per push is a regress, and the acceptance test is the `main` population,
+not this table.
+
+At n=3 the sqlite lane is **−25 % to −35 %**, and the honest statement is
+"materially cheaper, somewhere in that band" rather than any single figure.
+Quoting the best run of a lane whose run-to-run spread is the entire subject
+of this entry would be the exact error the rest of the section is written to
+prevent. What IS solid at n=3 is the mechanism rather than the magnitude:
+`io_full` was 0.0 % in every window of every run, against 20–27 % on disk.
+
+Four things this settles, two of them against what was written above.
+
+1. **The tmpfs change works on the real runner.** `io_full` is **0.0 % in
+   every window** of the sqlite lane on both runs, against 20–27 % locally on
+   disk. The stall the change targets is gone; that part does not depend on
+   how the two duration samples land. Both being below the local 42 % is the
+   expected direction — the hosted runner's disk was never the local NVMe.
+2. **The runner is a 4-CPU box with ~13.4 GiB available and NO CPU quota**,
+   not the 2-core runner this document and several workflow comments still
+   assume. GitHub's standard `ubuntu-latest` was upgraded. Nothing in the
+   analysis above depends on the core count, but anything reasoning about
+   "width 4 on 2 cores" is now reasoning about width 4 on 4 cores, which is a
+   different tuning question. Stale "2-core" claims survive in
+   `Tests/APITests/TestHelpers.swift`, `Tests/WorkerTests/Support/SubprocessThrottle.swift`
+   and the `worker-tests` job comment; only the last is corrected here, to
+   keep this change narrow.
+3. **The postgres lane benefits much less, and the doc predicted too
+   confidently that it would get "part of the win".** Its samples are 382 s
+   and 342 s against a 391 s median — a small win at most. An earlier
+   revision of this paragraph called it **no** win, on the strength of the
+   382 s sample alone; the 342 s one does not support a firm null either, and
+   asserting one from n=1 was the same error as quoting −35 % from n=1 two
+   paragraphs up. Both are corrected; neither is settled.
+
+   The recorder says why the lane is different, and that part does NOT rest
+   on durations: it still runs at **`io_full` 10.5–14.7 %**, because its
+   database is not in `/tmp` at all — it is in the postgres service
+   container, writing to the runner's real disk, where moving our own `/tmp`
+   to RAM cannot reach it. The tmpfs stays on that lane: it still takes the
+   per-application temp trees off disk, and two lanes running the same target
+   are worth more identical than micro-tuned.
+4. **The host-versus-cgroup PSI split works, and it is not theoretical.** On
+   the sqlite lane `cg_cpu_some` tracks host `cpu_some` almost exactly
+   (12.4 vs 13.2, 30.1 vs 30.5, 70.8 vs 71.9) — all the pressure is ours. On
+   the postgres lane they diverge hard: host `cpu_some` 21 % against
+   `cg_cpu_some` 10 %, and `self cpu` 28–33 % of a box that is 63–67 % busy.
+   Something else on that VM is using half the machine, and on that lane it
+   is our own postgres service container, which is expected. That is also
+   the one live near-miss on the verdict rules: `self cpu` 27.9 % sits just
+   above the `≤ 0.4 × busy` threshold, so the "something else in this VM"
+   hint did not fire. If it ever does on that lane, a service container is
+   the first thing to suspect and the hint text says so.
+
+A new lead falls out of (3): `api-tests-postgres` is I/O-stall-bound too, at
+half the sqlite lane's old rate, and its stall is in a container we do not
+configure the storage of. It has the narrower spread (3.39× against 4.80×)
+and has never been killed, so it is not urgent — but it is now measured
+rather than assumed, and it is where that lane's excursions should be looked
+for first.
+
+### Where the lane landed (2026-09-16, both changes on `main`)
+
+Both changes are merged: #1531 (tmpfs `/tmp`, `StarvationRecorder`) and #1532
+(the migrated template, attack note 5). Measured on `main`, not predicted:
+
+| | `Run APITests` | against the 291 s baseline |
+|---|---|---|
+| baseline, 213 `main` runs | 291 s | — |
+| tmpfs only (`c8720254`) | **185 s** | −36 % |
+| tmpfs + template (`9a9c6372`) | **143 s** | **−51 %** |
+
+The postgres lane's equivalent is measured locally rather than on `main` and
+is recorded here so the two are read together: 418.9 s -> 117.9 s of test
+time on one machine, same command, 3,2xx tests green both ways (attack note 6).
+Its `main` population starts at the 391 s median in the table above, and that
+is the acceptance test for it too.
+
+3,237 tests in 131.6 s of test time; the job is ~232 s against a 1,500 s
+ceiling. The absorbable collapse therefore goes from **4.8× to roughly 10×**,
+above every excursion in the 213-run population — all of which were censored
+at 4.8× by the kill, so "above every observed excursion" is a weaker statement
+than it sounds and is deliberately not phrased as "cannot happen again".
+
+The telemetry from that run is the more interesting half:
+
+```
+io_full=0.0%  mem_full=0.0%  steal=0.0%  throttled=+0
+busy=88-97%   self cpu=79-90%   scopes=728-1315/min
+cg_cpu_some=34.6%  vs  host cpu_some=35.5%
+```
+
+- **The I/O stall is gone** — `io_full` 0.0 % in every window, against the
+  20-27 % that opened this entry.
+- **The lane is now cleanly CPU-bound, and the CPU is ours.** `cg_cpu_some`
+  tracks host `cpu_some` almost exactly, so nothing else on that box is
+  competing. That is the self-versus-neighbour question answered directly,
+  which is what the recorder exists for.
+- **Throughput is ~730-1,315 finished tests/min**, against 400-500 before.
+
+One consequence worth stating because it changes what the OTHER attack notes
+buy: the lane used to sit with idle cores waiting on disk (`busy` 58-63 %), so
+a bigger runner would have bought nothing. It now saturates what it has, so
+note 1 (a larger runner) and note 4 (sharding) would both convert — where
+before the fix neither would have. Neither is needed at a 143 s median; this is
+recorded so the next person to price them starts from the right bottleneck.
+
+**Where the constraint sits now.** With note 6 merged, BOTH lanes are O(1) in
+the migration count, which is the property that matters as the suite grows: a
+new migration no longer taxes either. The postgres lane was briefly the
+binding constraint — ~430 s against a ~1,400 s budget, 3.3x, worse headroom
+than `api-tests` had when this investigation opened — and note 6 is what
+closed that gap rather than leaving the fix lopsided. Neither lane is near its
+ceiling now, so the next thing to watch is not a lane at all: it is whether
+the collapse recurs, which is still unexplained and is what the
+`[ci-pressure]` lines exist to name.
+
+**What this is NOT.** It is not proof the collapse is gone. Three green runs
+prove nothing about an 11 %-of-runs event; the honest acceptance test is the
+`main` population over the next few weeks, read against the table above. What
+to look for there, in order: whether any `api-tests` run is killed at the
+ceiling at all; whether the fraction of runs at ≥2× the new median falls from
+10.8 %; and where the median settles against the 143 s first measurement.
+
+**Say plainly which of two outcomes the data shows.** A lane with twice the
+headroom can stop producing kills without the collapse ever having been
+root-caused, and that is not the same result as fixing it. If excursions
+persist at a lower rate, the entry should say so rather than close. A slow run
+now carries `[ci-pressure]` lines, and a HINT on one of them names its own
+cause — that is the whole point of the instrument, and reading it is the first
+step, not another log tail.
+
+---
+
+**Handling while this is open.** Re-run the job (`/rerun-failed`, or
 `rerun-failed-jobs`). Before blaming a `cancelled` `api-tests` on the diff in
-front of you, check three things, in order: does the diff touch
-`Sources/APIServer/` or `Tests/APITests/` at all; did `api-tests-postgres`
-pass on the same commit (it runs the *same target*, and did here); and were
-tests still completing at the tail of the log. All three pointed away from the
-diff on #1308, and the rerun confirmed it.
+front of you, check, in order: does the diff touch `Sources/APIServer/` or
+`Tests/APITests/` at all; did `api-tests-postgres` pass on the same commit (it
+runs the *same target*); were tests still completing at the tail of the log;
+and now — **what do the `[ci-pressure]` lines say**. Do NOT use the per-test or
+per-suite durations; they are the harness artifact corrected above.
 
 **Reproducing `APITests` locally.** Set
 `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`, as CI does. Unbounded
 Swift Testing parallelism **SIGSEGVs** this target locally with a flood of
 AsyncKit "Connection request timed out" — a crash that looks exactly like a
-regression in the change under test and is not one.
+regression in the change under test and is not one. To reproduce the I/O
+finding, run it once normally and once with `TMPDIR` on a tmpfs and compare
+the recorder's `io_full`.
 
 **Attack notes.** In rough order of cost:
 
-1. **Promote `WedgeWatchdog` to shared test support and arm it in APITests.**
-   **DONE** — see attack-order item 4 for what shipped and the measurements
-   behind the threshold. Turns a silent 20-minute burn into a bounded failure
-   carrying a `/proc/self/task` thread table, which is what will settle the
-   noisy-neighbour-vs-saturation question the *next* time this happens rather
-   than requiring another lucky log tail.
-2. **Re-tune the ceiling — but do not expect it to have saved this run.**
-   **DONE** — `api-tests` carries `timeout-minutes: 25` in
-   `swift-tests.yml`, equal to the postgres lane (verified 2026-08-22; the
-   change itself predates the current history graft and was never marked
-   here). The caveats below stand as written: headroom for the ordinary
-   tail, not a rescue for a 5× starvation event.
-   The sqlite lane is capped at 20 min against postgres' 25 despite carrying
-   the wider spread, and equalising them is defensible on the baseline alone:
-   the ordinary tail is 441 s, and 20 min leaves ~1107 s of test budget after
-   setup. What the bump does **not** do is rescue attempt 1 — that job was
-   killed at 1107 s *while still running*, so nothing establishes it would
-   have finished inside a 25-minute budget (~1407 s of test time) either. An
-   earlier draft of this note asserted it would have passed; that was
-   unsupported, and the correction is the point: this buys headroom for the
-   ordinary tail, not for a 5× starvation event. It also buys a genuine wedge
-   five more minutes of silence, which is why it belongs after (1) rather
-   than instead of it.
-3. **Finish the CLOEXEC sweep** on the three helpers above, closing the
-   mechanism that turns a transient overload into a permanent one.
+1. ~~**Promote `WedgeWatchdog` to shared test support and arm it in
+   APITests.**~~ **DONE, and the claim attached to it was WRONG.** The
+   promotion shipped and is worth keeping — APITests genuinely lacked a
+   stall guard that survives pool saturation. But this note asserted it
+   "will settle the noisy-neighbour-vs-saturation question the next time
+   this happens", and it cannot: the watchdog measures silence, and a
+   Family 5 lane is never silent. Incident 2 proved it — the watchdog was
+   armed, the job burned 25 minutes, and it correctly stayed quiet while
+   the job was killed with no evidence. That gap is what
+   `StarvationRecorder` closes. Leaving this note as written was worse
+   than the gap: it read as though the question were instrumented.
+2. **Re-tune the ceiling.** **DONE (25 min) AND SUPERSEDED.** See established
+   finding 9: the raise bought nothing net, because suite growth consumed it
+   as it arrived. Raising it again would buy a genuine wedge five more minutes
+   of silence and would still not rescue a 5× collapse. The lever that works
+   is the median, not the ceiling — which is what the tmpfs change pulls.
+3. ~~**Finish the CLOEXEC sweep.**~~ **DONE**, and measured not to be
+   reachable — see "Remaining attack order" item 3. The leaked-write-end
+   mechanism cannot be the cause of a Family 5 event.
+4. **Shard `api-tests` — NOT DONE, and now second in line.** Splitting the
+   target across N jobs divides the median by ~N and multiplies the absorbable
+   collapse by ~N, the same lever the tmpfs change pulls and stackable with
+   it. It is second because Swift Testing has no sharding primitive: it would
+   be `--filter` regexes over suite names, and a new suite landing outside
+   every shard's filter would never run and never fail — the silent-skip trap
+   this repository has been burned by repeatedly (see the `browser-runner-tests`
+   and Rscript notes in `swift-tests.yml`). It needs a guard proving the
+   shards' union is the whole target before it is worth doing. Revisit if the
+   `main` population still shows kills once the tmpfs change has a few weeks
+   of history.
+5. **Cut the per-test application builds — DONE (PR #1532), and it was the
+   biggest single lever of the three.** This note used to say "only worth it
+   if the population still shows a problem after 4". That was the wrong test
+   to gate it on, because the measurement was cheap and settles it outright.
+
+   A throwaway probe split what building one test application costs:
+
+   ```
+   bare Application.make + shutdown    1.1 ms
+   + configureTestDatabase           357.8 ms   <- 60 migrations, ~5.9 ms each
+   full makeTestApp                  389.0 ms
+   ```
+
+   **`autoMigrate` is 92 % of it.** Against the ~1,100 per-test Applications
+   this suite's own helper documents, that is ~390 of the ~660 core-seconds a
+   width-4 run has — roughly **60 % of the lane re-deriving a schema that is
+   identical every time**.
+
+   And the cost is a PRODUCT, migrations x applications, with both terms
+   growing: since 2026-05 migrations went 28 -> 60 (one consolidation at the
+   0.5 boundary, `fe764cbb`) and APITests files 59 -> 375. Up ~13x. That is
+   the mechanism behind the median creep recorded in finding 9 — every new
+   migration taxes every existing test, and every new test pays for every
+   existing migration. It is also why items 1 and 4 are lesser levers: a
+   bigger runner and more shards both DIVIDE a number that keeps growing,
+   while migrating once per process into a template and copying the file per
+   test makes the per-test cost **O(1) in the migration count**. The next
+   migration anyone writes costs this suite nothing.
+
+   Measured, same machine, identical tree except `Tests/APITests/TestHelpers.swift`,
+   3,215 tests passing both ways: **277.6 s -> 91.9 s** (replicated:
+   91.9 / 89.0 / 91.2 / 97.7). No production code changed —
+   `DatabaseSettings.sqlite(path:)` already existed, and sqlite-kit's
+   `.memory` was itself a temp file on disk, so this swaps one file for
+   another rather than memory for disk.
+
+   **What it did NOT cover, and what covers it now.** This note used to end
+   "the postgres lane keeps its per-test schema: a file copy has no analogue
+   there (it would want `CREATE DATABASE ... TEMPLATE`, a different
+   mechanism)". The first half was right and the second was the wrong
+   analogue. See item 6 below: the postgres lane gets the same O(1)-in-
+   migrations property from recycling a migrated SCHEMA, and
+   `CREATE DATABASE ... TEMPLATE` was measured and rejected on the way.
+
+   **Three defects it surfaced, which is the part worth keeping.** Skipping
+   `registerMigrations` alongside `autoMigrate` (only running is expensive;
+   registering builds a list) made `autoMigrate` a silent no-op, caught by
+   `MigrationNamespaceReconcilerTests` requiring a deliberately-reverted
+   `CreateSweepLeases` to be applied forward. Actor reentrancy across `await`
+   built the template three times per run — caught by counting leftover files,
+   not by any failing test. And the leak guard
+   `TestAppTempDirectoryTests.withAppLeavesNothingBehind` asserted on ONE
+   mechanism by name (`sqlite-kit_memorydb-*`), so adding a second emptied its
+   input: it now asks `sqliteDatabaseFilesOnDisk()`, which covers both. That
+   last one generalises, and belongs next to this file's other guard lessons:
+   **a guard pointed at a mechanism by name is a guard that changing the
+   mechanism silently empties.**
+
+6. **Give the postgres lane the same O(1) — DONE, by recycling schemas rather
+   than copying files.** Item 5 left that lane running 60 migrations per test
+   application, and it was then the lane with the least ceiling headroom:
+   ~391 s median against a ~1,400 s budget, 3.4x, against the sqlite lane's
+   ~10x.
+
+   The same probe, run against a local Postgres 16.13:
+
+   ```
+   bare Application.make + shutdown        0.9 ms
+   + connect and CREATE SCHEMA            11.0 ms
+   + autoMigrate                         450.6 ms   <- 98 % of the cost
+   ```
+
+   Three mechanisms were measured, not one:
+
+   | | cost | vs. 460 ms to migrate |
+   |---|---|---|
+   | `CREATE DATABASE ... TEMPLATE` | 195.8 ms create + 158.9 ms drop | **1.3x — rejected** |
+   | `TRUNCATE` all 44 tables | 139 ms | 3.0x |
+   | `DELETE` sweep, one `DO` block | **1.7 ms** | **244x** |
+
+   So the shipped mechanism is a process-wide pool of pre-migrated schemas
+   (`MigratedPostgresSchemaPool` in `Tests/APITests/TestHelpers.swift`), one
+   checked out per test application and DELETE-swept on return. Measured on
+   the same machine, same command, 3,2xx tests green both ways:
+   **`Run APITests` 418.9 s -> 117.9 s (-72 %)**, against a naive projection
+   of ~280 s — the same direction the sqlite change beat its own estimate in.
+
+   Three things are worth carrying forward from it more than the number.
+
+   *The `DELETE` sweep is one statement, not 44.* A plpgsql block runs each
+   statement separately and a foreign key's integrity trigger fires at the end
+   of the statement that armed it, so 44 `DELETE`s joined by 57 foreign keys
+   need a topological order and break on the first cycle. One data-modifying
+   `WITH` leaves every check to fire after all of them are already empty, and
+   no order exists to get wrong.
+
+   *`DELETE` does not reset sequences, and the answer was to refuse rather
+   than assume.* Every `@ID` in `Sources/APIServer/Models` is client-generated
+   and every `.identifier(` in `Sources/APIServer/Migrations` is
+   `auto: false`, so there is nothing to reset today — but the pool asks the
+   DATABASE for its sequences at migration time and refuses to recycle a
+   schema that has any, naming the fix in the message. A source scan states
+   the same claim in the other direction.
+
+   *The guard that names a suite is not the guard that holds.* One suite
+   (`MigrationNamespaceReconcilerTests`) rewrites the migration log on
+   purpose and must have a schema of its own, which means naming it — the
+   shape item 5's third defect warns about. So the pool also fingerprints
+   every schema on the way back in (relations plus migration-log rows, md5,
+   checked inside the same `DO` block) and drops and rebuilds any that came
+   back different, keyed on the damage rather than on who did it. That is
+   what found `MCPAuditFailClosedTests`, which drops the `audit_log` table
+   and which a hand search had missed by not recursing into
+   `Tests/APITests/MCP/`. The name-based list is now backed by a source scan
+   that fails when the sources and the list disagree.
+
+   **The defect it surfaced is worth more than the number: `withApp` could
+   kill the whole test process, and had been able to for as long as it has
+   existed.** It was
+
+   ```swift
+   do { try await body(app); try await app.tearDownTestApp() }
+   catch { try? await app.tearDownTestApp(); throw error }
+   ```
+
+   which tears down TWICE when the tear-down inside the `do` is the thing that
+   throws. A second `tearDownTestApp` on an application that is already shut
+   down does not throw — it is `Vapor/Core.swift: Fatal error: Core not
+   configured`, which takes the process, not the test. Nothing in the suite
+   made teardown throw, so the path was never walked; a pool check-in can
+   throw, and it walked it on the first full run as a bare `signal 4`
+   mid-suite.
+
+   Note the shape, because it is the same one as Family 1 and #1233 and it is
+   the third time this file has recorded it: **a latent whole-process kill,
+   invisible while one precondition happened to hold, surfacing as an
+   unexplained signal rather than as a failing test.** The precondition here
+   was "teardown never throws", which nothing stated or guarded. Teardown now
+   runs exactly once however the body ends, and `tearDownTestApp` holds its
+   first error and completes every remaining cleanup step rather than
+   short-circuiting — a throwing `asyncShutdown()` used to skip every removal
+   below it, which was a leak before the pool and a run-stopper after it.
+
+   **Independently re-measured before merge** (a second machine-local A/B by
+   the reviewing session, not the authoring one): postgres lane
+   **391.0 s -> 119.3 s, −69 %**, zero schemas left behind; the sqlite lane
+   **91.8 s**, unchanged. The −72 % above is against a 418.9 s baseline and
+   −69 % against a 391.0 s one; the spread is that lane's own run-to-run
+   variance, which is the subject of this entry and is why both are quoted
+   rather than the better.
 
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
@@ -648,6 +1169,7 @@ scopes draining concurrently) — strictly stronger than the counter delta and
 race-free. The global counter keeps its job as the monitor's arming signal;
 the test still pins a same-instant floor (`activeTrackedScopes >= 1` from
 inside the scope, which concurrent activity can only raise).
+
 
 ---
 
@@ -858,7 +1380,8 @@ inside the scope, which concurrent activity can only raise).
    wedged job. Note the precise claim: *our pipe's write end* does not reach
    the child. Other inherited descriptors do — "the child holds only fds
    0/1/2" is too strong and measures false.
-4. **Stall visibility in `api-tests`** (Family 5) — **DONE.**
+4. **Stall visibility in `api-tests`** (Family 5) — **DONE, and the
+   Family 5 half of the claim was wrong; see that entry.**
    `WedgeWatchdog` moved to a shared `ChickadeeTestSupport` target (a plain
    `.target`, because a `.testTarget` cannot be depended on and SwiftPM
    assigns each source file to exactly one target, so there is no
@@ -867,22 +1390,34 @@ inside the scope, which concurrent activity can only raise).
    target's 315 files call it directly, and `withWebRoutesApp` /
    `withAssignmentRoutesApp` funnel into it; `withPatternFamilyFixture`
    builds its app directly and so arms itself. `WedgeWatchdogArmingTests`
-   guards against silently losing the arming.
+   guards against silently losing the arming. All of that is worth keeping:
+   APITests genuinely lacked a stall guard that survives pool saturation, and
+   now has one.
+
+   What it does NOT do is give Family 5 an instrument. The watchdog measures
+   silence; a Family 5 lane is never silent. Incident 2 (2026-09-15) is the
+   demonstration — armed watchdog, 25 minutes burned, watchdog correctly
+   quiet, job killed with no evidence. `StarvationRecorder` is the half that
+   was missing, and it arms from this same seam.
 
    **The 300 s threshold is measurement-backed, not guessed.** A full
    `APITests` run at CI's `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4`
    passes with the limit forced to **30 s** — 10× tighter than shipped — while
    individual tests in that same run reported up to **131 s of wall clock**.
    That is the design's central distinction demonstrated: a long test is not a
-   silent process, and Family 5's steady-progress-at-10×-cost would not trip
-   it. Verified to fire by pinning every cooperative-pool thread in a blocking
-   `read(2)` inside an armed scope: the process aborted on the watchdog's own
-   thread with a `/proc/self/task` table showing four
-   `state=S wchan=anon_pipe_read` pool threads.
+   silent process, and Family 5's steady-progress-at-high-cost would not trip
+   it. (Those reported per-test wall clocks are mostly queueing rather than
+   work — see the Family 5 correction — which makes the threshold if anything
+   more conservative than it looked.) Verified to fire by pinning every
+   cooperative-pool thread in a blocking `read(2)` inside an armed scope: the
+   process aborted on the watchdog's own thread with a `/proc/self/task` table
+   showing four `state=S wchan=anon_pipe_read` pool threads.
 
    No new environment variable: `CHICKADEE_WORKERTESTS_STALL_SECONDS` keeps
    its name and 300 s default even though it now covers two targets, because
-   renaming it would silently drop an existing override.
+   renaming it would silently drop an existing override. `StarvationRecorder`
+   adds none either, and deliberately keeps recording when that variable is
+   set to 0 to disable the abort.
 
 ## Evidence index
 
@@ -899,4 +1434,22 @@ inside the scope, which concurrent activity can only raise).
   93255901938 (`success`, 216 s) on the same commit `07efab8`.
 - `swift-tests.yml` run history on `main`, 2026-08-08 → 2026-08-09 (Family 5
   baseline) — 18 runs, `api-tests` 204/236/441 s min/median/max against
-  `api-tests-postgres` 257/330/351 s.
+  `api-tests-postgres` 257/330/351 s. Superseded as a baseline by the
+  213-run population below; kept because the comparison between the two is
+  what shows the suite's cost creep.
+- PR #1529 (Family 5 incident 2) — `api-tests` `cancelled` at the 25-minute
+  ceiling on `f8ffb34`, 966 tests completed, last completion 3 s before the
+  kill; `api-tests-postgres` green on the same commit in 11 min;
+  `rerun-failed-jobs` green in 7 m 43 s; diff contained no Swift.
+- `swift-tests.yml` run history on `main`, 2026-08-10 → 2026-09-16 (Family 5
+  population) — 213 runs × 5 lanes, per-step durations from the Actions API.
+  `build` 0/213 runs ≥2× its median; `api-tests` 23/213. Five `main`
+  ceiling kills: jobs 95852055877, 96206596827, 96218450897, 96508206917,
+  97961643124.
+- Family 5 harness-artifact repro — 64-test package, every body a 400 ms
+  sleep, `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` on Swift 6.3:
+  4 concurrent bodies, last test reports "passed after 6.408 seconds".
+- Family 5 tmpfs measurement — full `APITests` at CI's parallelization width,
+  same machine and build: `/tmp` on disk 287.6 s / 274.9 s with PSI
+  `io_full` 20-27 %; `/tmp` on tmpfs 165.7 s / 162.1 s with `io_full`
+  0.0-0.2 %; peak tmpfs occupancy 4 MiB.
