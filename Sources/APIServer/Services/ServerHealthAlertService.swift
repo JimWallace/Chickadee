@@ -21,6 +21,15 @@ func evaluateHealthRules(
     var results: [HealthRule: RuleEvaluation] = [:]
     for rule in HealthRule.allCases { results[rule] = .ok }
 
+    // Evaluated before the database check, and never skipped: it reads an
+    // in-process store rather than the database, and it is precisely the rule
+    // you want answered when other things have gone quiet.
+    results[.outboundEgressFailing] = await evaluateOutboundEgressFailing(
+        on: application,
+        configuration: configuration,
+        now: now
+    )
+
     let dbResult = await evaluateDatabaseUnreachable(on: application)
     results[.databaseUnreachable] = dbResult
     if dbResult.isFiring {
@@ -68,6 +77,60 @@ func evaluateHealthRules(
 }
 
 // MARK: - Per-rule evaluators
+
+/// Fires when several outbound calls have failed in the window and none has
+/// succeeded in it.
+///
+/// The zero-successes clause carries the whole judgement. A flaky IdP or a slow
+/// LMS produces a mix of outcomes; a severed egress path produces failures and
+/// nothing else. Requiring the mix to be absent is what keeps this from paging
+/// on an ordinary bad afternoon at the far end.
+///
+/// Silence is not a firing condition: a deployment that makes no outbound calls
+/// (local auth, no BrightSpace) records nothing and this stays green, which is
+/// the correct answer rather than an unfalsifiable one.
+func evaluateOutboundEgressFailing(
+    on application: Application,
+    configuration: ServerHealthAlertConfiguration,
+    now: Date = Date()
+) async -> RuleEvaluation {
+    let window = TimeInterval(configuration.outboundFailureWindowMinutes * 60)
+    let snapshot = await application.outboundReachability.snapshot(window: window, now: now)
+
+    var details: [String: String] = [
+        "failuresInWindow": String(snapshot.failuresInWindow),
+        "successesInWindow": String(snapshot.successesInWindow),
+        "windowMinutes": String(configuration.outboundFailureWindowMinutes),
+        "threshold": String(configuration.outboundFailureThreshold),
+    ]
+    if !snapshot.destinationsFailing.isEmpty {
+        details["destinations"] = snapshot.destinationsFailing.joined(separator: ", ")
+    }
+    if let lastSuccess = snapshot.lastSuccessAt {
+        details["secondsSinceLastSuccess"] = String(Int(now.timeIntervalSince(lastSuccess)))
+    }
+
+    let firing =
+        snapshot.failuresInWindow >= configuration.outboundFailureThreshold
+        && snapshot.successesInWindow == 0
+    guard firing else {
+        return RuleEvaluation(isFiring: false, summary: "ok", details: details)
+    }
+
+    let destinations =
+        snapshot.destinationsFailing.isEmpty
+        ? "every destination tried"
+        : snapshot.destinationsFailing.joined(separator: " and ")
+    return RuleEvaluation(
+        isFiring: true,
+        summary: """
+            \(snapshot.failuresInWindow) outbound calls failed in the last \
+            \(configuration.outboundFailureWindowMinutes) minutes with none succeeding \
+            (\(destinations)). The server may have no outbound network path.
+            """,
+        details: details
+    )
+}
 
 struct PendingQueueState: Sendable {
     let pendingCount: Int

@@ -348,3 +348,59 @@ design.
   ops commands use `sudo`).
 - Decide where the legacy `:8080` compose server is retired once colors are
   trusted (it is harmless to leave running in the meantime).
+
+---
+
+## The host's iptables state is a deploy dependency (Sept 2026 postmortem)
+
+Docker creates its iptables chains (`DOCKER`, `DOCKER-USER`,
+`DOCKER-ISOLATION-STAGE-1/2`) when the daemon starts, and **never rebuilds them
+if something removes them**. `iptables-restore` replaces whole tables, so any
+service running it after `dockerd` started destroys those chains.
+`netfilter-persistent` does precisely this on restart — and an unattended kernel
+upgrade restarts it.
+
+On 2026-09-16 that happened at 11:37:59 UTC, 40 seconds after the last
+successful outbound call. The consequences, in the order they were noticed —
+which is the reverse of the order they are explicable:
+
+| Observed | Actual cause |
+|---|---|
+| SSO logins failing with `connectTimeout` | Container egress had no NAT rule |
+| BrightSpace roster sweeps timing out | Same |
+| Every deploy failing "new color unhealthy" | `docker run -p` could not program the port rule |
+| Site still serving, all health rules green | The live container's **established** connections survived |
+
+**Recovery** is `sudo systemctl restart docker`, which recreates the chains.
+
+**Prevention** is the drop-in at
+[`deploy/docker-restart-after-netfilter.conf`](../deploy/docker-restart-after-netfilter.conf),
+which ties Docker's lifecycle to netfilter-persistent's.
+
+Three guards were added after this incident:
+
+- `bluegreen-deploy.sh` refuses to deploy when the `DOCKER` chain is absent, and
+  names both the recovery and the prevention in the error. It fails open when
+  iptables cannot be inspected at all.
+- `chickadee-deployer.sh` records **what the deploy actually printed** in
+  `history.jsonl` instead of a fixed string, and escalates to a `stuck` state
+  after five consecutive failures of the same version.
+- The server's `outboundEgressFailing` health rule fires when several outbound
+  calls have failed in the window and none has succeeded in it.
+
+### The deploy scripts run from a git clone, not from the image
+
+`chickadee-deployer.service` runs `deploy/chickadee-deployer.sh` from a checkout
+on the host. **Nothing in the pipeline updates that checkout.** The container
+image rolls forward on every release; the deploy scripts do not. A fix committed
+here reaches production only when somebody pulls on the host:
+
+```
+cd /home/jrwallac/Chickadee
+git log --oneline -1
+git pull
+```
+
+This is worth checking during any deploy-path investigation: the script that ran
+may not be the script in this repository. The Sept 2026 investigation lost time
+to exactly that, chasing a shell-quoting bug that had already been fixed here.

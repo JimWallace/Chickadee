@@ -47,10 +47,17 @@ public func runAPIServer() async throws {
         // that would end the outage. SSO then resolves on first use instead.
         if app.authMode != .local {
             _ = try OIDCConfiguration.validateEnvironment(from: app)
-            if await app.resolvedOIDCConfiguration() == nil {
-                app.logger.warning(
-                    "Starting without SSO: OIDC discovery is unavailable. Other authentication and all non-SSO routes are unaffected; discovery retries when an SSO route is next used."
-                )
+            // Resolve in the BACKGROUND. v0.5.198 made this fetch non-fatal but
+            // left it blocking, so an IdP that black-holes packets still held
+            // startup for the connect timeout before the port was bound — and
+            // the blue-green health gate has a deadline. Startup now waits on
+            // nothing outside this host.
+            Task {
+                if await app.resolvedOIDCConfiguration() == nil {
+                    app.logger.warning(
+                        "Starting without SSO: OIDC discovery is unavailable. Other authentication and all non-SSO routes are unaffected; discovery retries when an SSO route is next used."
+                    )
+                }
             }
         }
 
