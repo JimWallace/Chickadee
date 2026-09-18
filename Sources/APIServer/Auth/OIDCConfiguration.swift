@@ -178,7 +178,9 @@ struct OIDCConfiguration: Sendable {
         inputs: EnvironmentInputs
     ) async throws -> OIDCConfiguration {
         app.logger.info("Fetching OIDC discovery document: \(inputs.discoveryURL)")
-        let discoveryResponse = try await app.client.get(URI(string: inputs.discoveryURL))
+        let discoveryResponse = try await app.recordingReachability(.identityProvider) {
+            try await app.client.get(URI(string: inputs.discoveryURL))
+        }
         guard discoveryResponse.status == .ok else {
             throw Abort(
                 .internalServerError,
@@ -189,7 +191,9 @@ struct OIDCConfiguration: Sendable {
 
         // Fetch JWKS and register keys for JWT verification
         app.logger.info("Fetching OIDC JWKS: \(discovery.jwksURI)")
-        let jwksResponse = try await app.client.get(URI(string: discovery.jwksURI))
+        let jwksResponse = try await app.recordingReachability(.identityProvider) {
+            try await app.client.get(URI(string: discovery.jwksURI))
+        }
         guard jwksResponse.status == .ok else {
             throw Abort(
                 .internalServerError,

@@ -40,6 +40,17 @@ struct ServerHealthAlertConfiguration: Sendable {
     /// — grades have stopped flowing to LEARN and need a human to look.
     let brightspaceSyncFailureThreshold: Int
     let brightspaceSyncFailureWindowMinutes: Int
+    /// Outbound-egress rule: fire when at least `outboundFailureThreshold`
+    /// outbound calls have failed within the last `outboundFailureWindowMinutes`
+    /// AND none has succeeded in that window. The zero-successes clause is what
+    /// separates "the far end is having a bad day" from "we cannot reach
+    /// anything", which is the condition worth paging on.
+    ///
+    /// Unlike its neighbours these are NOT environment-readable, per the
+    /// standing rule against new environment variables. Both are deliberate
+    /// constants; change them here.
+    let outboundFailureThreshold: Int
+    let outboundFailureWindowMinutes: Int
     let webhookURLFromEnvironment: String?
 
     static let `default` = ServerHealthAlertConfiguration(
@@ -57,6 +68,8 @@ struct ServerHealthAlertConfiguration: Sendable {
         editorUnrecoverableWindowMinutes: 60,
         brightspaceSyncFailureThreshold: 3,
         brightspaceSyncFailureWindowMinutes: 60,
+        outboundFailureThreshold: 3,
+        outboundFailureWindowMinutes: 30,
         webhookURLFromEnvironment: nil
     )
 
@@ -80,6 +93,8 @@ struct ServerHealthAlertConfiguration: Sendable {
             brightspaceSyncFailureThreshold: environmentInt("ALERT_BRIGHTSPACE_SYNC_FAILURE_THRESHOLD") ?? 3,
             brightspaceSyncFailureWindowMinutes: environmentInt(
                 "ALERT_BRIGHTSPACE_SYNC_FAILURE_WINDOW_MINUTES") ?? 60,
+            outboundFailureThreshold: 3,
+            outboundFailureWindowMinutes: 30,
             webhookURLFromEnvironment: trimmedEnv("ALERT_WEBHOOK_URL")
         )
     }

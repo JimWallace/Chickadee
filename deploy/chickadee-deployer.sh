@@ -55,6 +55,14 @@ COMMAND_FILE="$STATE_DIR/command.json"
 DEPLOYED_VERSION_FILE="$STATE_DIR/deployed_version"
 
 PAUSED=0
+
+# Consecutive failed deploys of the same version. A deploy that fails once is
+# ordinary; one that fails identically for hours is a condition no rule here used
+# to name, so the daemon retried ~500 times over two days while every status read
+# "error" and nothing escalated. Past this count the state becomes `stuck`, which
+# the admin diagnostics surface reports distinctly from a single failure.
+CONSECUTIVE_DEPLOY_FAILURES=0
+STUCK_AFTER_FAILURES=5
 APPROVED_VERSION=""
 DEPLOYED_VERSION="0.0.0"
 LATEST_SEEN=""
@@ -129,6 +137,20 @@ line = json.dumps({
 })
 open(path, "a").write(line + "\n")
 PY
+}
+
+# Pulls the most informative line out of a failed deploy run, for the history
+# detail. The daemon used to record a fixed "new color unhealthy" string for
+# EVERY non-zero exit — including runs where the container never started, so the
+# health gate was never reached. That message sent an incident responder after
+# the wrong subsystem for a day. Whatever the deploy actually printed is better
+# than a guess, so record that.
+deploy_failure_reason() {  # $1 = captured output file
+  local line
+  line="$(grep -aiE 'error|cannot|refused|denied|no such|not found|failed' "$1" 2>/dev/null | tail -1)"
+  line="$(printf '%s' "$line" | tr -d '\r' | sed 's/\x1b\[[0-9;]*m//g')"
+  [ -n "$line" ] || line="deploy script exited non-zero with no recognisable error line"
+  printf '%s' "${line:0:400}"
 }
 
 json_field() {  # $1=file $2=key
@@ -224,15 +246,23 @@ do_deploy() {  # $1 = version tag
 
   if [ "$SNAPSHOT_BEFORE_DEPLOY" = "1" ] && [ -x "$SNAPSHOT_SCRIPT" ]; then
     log "snapshotting before deploy..."
-    if ! "$SNAPSHOT_SCRIPT" --label "predeploy-$(strip_v "$ver")" >/dev/null 2>&1; then
+    # Output was sent to /dev/null here, so a snapshot that failed on every
+    # single deploy for months said only "snapshot failed" and never why.
+    local snap_log snap_reason
+    snap_log="$(mktemp)"
+    if ! "$SNAPSHOT_SCRIPT" --label "predeploy-$(strip_v "$ver")" >"$snap_log" 2>&1; then
+      snap_reason="$(deploy_failure_reason "$snap_log")"
       if [ "$SNAPSHOT_REQUIRED" = "1" ]; then
-        append_history "$ver" deploy abort "snapshot failed (required)"
+        append_history "$ver" deploy abort "snapshot failed (required): $snap_reason"
         write_status error "snapshot failed; deploy of $ver aborted"
-        log "snapshot failed and SNAPSHOT_REQUIRED=1 — aborting"
+        log "snapshot failed and SNAPSHOT_REQUIRED=1 — aborting: $snap_reason"
+        rm -f "$snap_log"
         return 1
       fi
-      log "snapshot failed; continuing (SNAPSHOT_REQUIRED=0)"
+      append_history "$ver" snapshot failed "$snap_reason"
+      log "snapshot failed; continuing (SNAPSHOT_REQUIRED=0): $snap_reason"
     fi
+    rm -f "$snap_log"
   fi
 
   # We deploy :latest, not :vX.Y.Z. The build only publishes per-release image
@@ -242,7 +272,11 @@ do_deploy() {  # $1 = version tag
   # version we just gated on via the Releases API. After the swap we record the
   # ACTUAL running version so the deployed-version bookkeeping stays accurate even
   # if :latest moved between the release check and the pull.
-  if CHICKADEE_IMAGE="$IMAGE_REPO:latest" "$DEPLOY_SCRIPT" deploy --yes; then
+  local deploy_log; deploy_log="$(mktemp)"
+  # `tee` keeps the deploy output in the journal AND captures it, so the history
+  # detail can say what actually went wrong. `pipefail` is set at the top of this
+  # file, so the `if` still tests the deploy script rather than tee.
+  if CHICKADEE_IMAGE="$IMAGE_REPO:latest" "$DEPLOY_SCRIPT" deploy --yes 2>&1 | tee "$deploy_log"; then
     if verify_post_deploy; then
       local running; running="$(read_running_version)"
       DEPLOYED_VERSION="${running:-$(strip_v "$ver")}"
@@ -251,20 +285,34 @@ do_deploy() {  # $1 = version tag
       refresh_runner "$ver"
       write_status idle "deployed $DEPLOYED_VERSION (release $ver)"
       log "deploy complete; running version now $DEPLOYED_VERSION (target release $ver)"
+      CONSECUTIVE_DEPLOY_FAILURES=0
+      rm -f "$deploy_log"
       return 0
     fi
     log "post-deploy health degraded — rolling back $ver"
     "$DEPLOY_SCRIPT" rollback --yes || log "rollback command failed"
     append_history "$ver" deploy rolledback "post-deploy health degraded"
     write_status error "rolled back $ver (post-deploy health degraded)"
+    rm -f "$deploy_log"
     return 1
   fi
 
   # bluegreen-deploy.sh health-gates the new color BEFORE flipping nginx, so an
   # aborted swap means traffic never moved — the previous version is still live.
-  append_history "$ver" deploy failed "swap aborted (new color unhealthy); previous version still live"
-  write_status error "deploy of $ver aborted; previous version still live"
-  log "deploy of $ver aborted; previous version still serving"
+  # What FAILED, though, varies: the swap may have been refused, or the container
+  # may never have started at all. Report what the run printed rather than
+  # asserting a cause.
+  local reason; reason="$(deploy_failure_reason "$deploy_log")"
+  rm -f "$deploy_log"
+  CONSECUTIVE_DEPLOY_FAILURES=$(( CONSECUTIVE_DEPLOY_FAILURES + 1 ))
+  append_history "$ver" deploy failed "$reason"
+  if [ "$CONSECUTIVE_DEPLOY_FAILURES" -ge "$STUCK_AFTER_FAILURES" ]; then
+    write_status stuck "deploy of $ver has failed $CONSECUTIVE_DEPLOY_FAILURES times in a row; previous version still live: $reason"
+    log "deploy of $ver STUCK after $CONSECUTIVE_DEPLOY_FAILURES consecutive failures: $reason"
+  else
+    write_status error "deploy of $ver aborted; previous version still live: $reason"
+    log "deploy of $ver aborted; previous version still serving: $reason"
+  fi
   return 1
 }
 

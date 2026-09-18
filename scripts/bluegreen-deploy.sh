@@ -188,8 +188,34 @@ cmd_status() {
   done
 }
 
+# Docker programs its port-publishing rules into an iptables chain it creates at
+# daemon start, and it does NOT rebuild that chain if something removes it.
+# `iptables-restore` replaces whole tables, so anything that runs it after
+# dockerd started — netfilter-persistent on restart, which an unattended kernel
+# upgrade triggers — silently takes Docker's chains with it. Every subsequent
+# `docker run -p` then fails with an error naming iptables rather than the cause,
+# and container egress is dead too, which reads as an unrelated network outage.
+# That combination cost a two-day production outage in Sept 2026.
+#
+# Fails open when iptables cannot be inspected at all (not installed, or no
+# privileges), so this never blocks a deploy over a question it cannot answer.
+require_docker_iptables_chain() {
+  (( DRY_RUN )) && return 0
+  command -v iptables >/dev/null 2>&1 || return 0
+  iptables -t filter -L DOCKER -n >/dev/null 2>&1 && return 0
+  iptables -t filter -L -n >/dev/null 2>&1 || return 0
+  die "Docker's DOCKER iptables chain is missing, so no container can publish a port.
+     Something replaced the iptables tables after dockerd started (commonly
+     netfilter-persistent during an unattended kernel upgrade).
+     Recover:    systemctl restart docker
+     Prevent it: a docker.service drop-in with
+                 After=netfilter-persistent.service and
+                 PartOf=netfilter-persistent.service"
+}
+
 cmd_deploy() {
   require docker; require curl; require python3; require nginx
+  require_docker_iptables_chain
   ensure_dirs
 
   # Bootstrap the upstream include if a previous run never created it.

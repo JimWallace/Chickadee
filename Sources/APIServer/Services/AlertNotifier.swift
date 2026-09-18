@@ -9,6 +9,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case editorKernelUnrecoverable
     case databaseUnreachable
     case brightspaceSyncFailing
+    case outboundEgressFailing
 
     var humanReadable: String {
         switch self {
@@ -19,12 +20,17 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .editorKernelUnrecoverable: return "Editor kernel unrecoverable"
         case .databaseUnreachable: return "Database unreachable"
         case .brightspaceSyncFailing: return "BrightSpace grade sync failing"
+        case .outboundEgressFailing: return "Outbound network unreachable"
         }
     }
 
     var severity: String {
         switch self {
         case .databaseUnreachable: return "critical"
+        // Critical because it is an outage the running process hides: the
+        // server keeps serving on established connections while every new
+        // outbound call fails, so nothing else here goes red.
+        case .outboundEgressFailing: return "critical"
         case .runnerOffline: return "warning"
         // Advisory, not an outage: a runner a release behind is already protected
         // by the #1210 minimum-runner-version gate (it queues rather than
