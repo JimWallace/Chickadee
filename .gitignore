@@ -9,6 +9,10 @@
 .claude/*
 !.claude/hooks/
 !.claude/settings.json
+# Agent guidance that is meant to be shared, not local state. An agent driving
+# a PR reads skills/steward/SKILL.md from the repository's head branch, so it
+# only has an effect once committed.
+!.claude/skills/
 .venv-jlite/
 .jupyterlite.doit.db
 Tools/jupyterlite/.jupyterlite.doit.db
