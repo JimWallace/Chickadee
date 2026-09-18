@@ -49,6 +49,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_DIR="${CHICKADEE_COMPOSE_DIR:-$REPO_ROOT}"
 COMPOSE_FILE="${CHICKADEE_COMPOSE_FILE:-$COMPOSE_DIR/docker-compose.yml}"
+# shellcheck source=lib/deployment-target.sh
+. "$SCRIPT_DIR/lib/deployment-target.sh"
+# Passing -f explicitly suppresses Compose's automatic loading of
+# docker-compose.override.yml, and this script must pass it: it runs from a
+# daemon with an arbitrary working directory. A deployment that put its
+# host-specific configuration in an override file would therefore have had it
+# ignored here — and since resolve_env_file below is what supplies the new
+# container's entire environment, that means booting the server on the base
+# file's defaults. On a Postgres host, that is SQLite.
+mapfile -t COMPOSE_FILES < <(chickadee_compose_file_args "$COMPOSE_DIR" "$COMPOSE_FILE")
 IMAGE="${CHICKADEE_IMAGE:-ghcr.io/jimwallace/chickadee:latest}"
 
 DOCKER_NETWORK="${CHICKADEE_NETWORK:-chickadee_chickadee}"
@@ -123,7 +133,7 @@ reload_nginx() {
 # Keeps compose as the single source of truth for configuration.
 resolve_env_file() {
   local out; out="$(mktemp)"; chmod 600 "$out"
-  docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_FILE" config --format json \
+  docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" config --format json \
     | python3 -c '
 import json, sys
 svc = json.load(sys.stdin)["services"]["server"]

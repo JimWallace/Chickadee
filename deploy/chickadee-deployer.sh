@@ -37,6 +37,12 @@ SNAPSHOT_SCRIPT="${CHICKADEE_SNAPSHOT_SCRIPT:-$REPO_ROOT/scripts/snapshot.sh}"
 # uses, so an operator override applies to both scripts.
 COMPOSE_DIR="${CHICKADEE_COMPOSE_DIR:-$REPO_ROOT}"
 COMPOSE_FILE="${CHICKADEE_COMPOSE_FILE:-$COMPOSE_DIR/docker-compose.yml}"
+# shellcheck source=../scripts/lib/deployment-target.sh
+. "$REPO_ROOT/scripts/lib/deployment-target.sh"
+# See the note in bluegreen-deploy.sh: an explicit -f suppresses
+# docker-compose.override.yml, so it is added by hand or the runner refresh
+# below recreates the runner from the base file alone.
+mapfile -t COMPOSE_FILES < <(chickadee_compose_file_args "$COMPOSE_DIR" "$COMPOSE_FILE")
 
 STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
 PUBLIC_HEALTH_URL="${CHICKADEE_PUBLIC_HEALTH_URL:-https://chickadee.uwaterloo.ca/health}"
@@ -227,8 +233,8 @@ refresh_runner() {  # $1 = version tag (history label only)
   fi
 
   log "refreshing Compose runner '$RUNNER_SERVICE' onto the new image..."
-  if docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_FILE" pull "$RUNNER_SERVICE" >/dev/null 2>&1 \
-     && docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_FILE" up -d --no-deps "$RUNNER_SERVICE" >/dev/null 2>&1; then
+  if docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" pull "$RUNNER_SERVICE" >/dev/null 2>&1 \
+     && docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" up -d --no-deps "$RUNNER_SERVICE" >/dev/null 2>&1; then
     append_history "$ver" runner-refresh ok "runner '$RUNNER_SERVICE' recreated on new image"
     log "runner refresh complete."
   else

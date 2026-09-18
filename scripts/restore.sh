@@ -28,8 +28,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COMPOSE="docker compose -f $REPO_ROOT/docker-compose.yml"
-HEALTH_URL="http://localhost:8080/health"
+# shellcheck source=lib/deployment-target.sh
+. "$SCRIPT_DIR/lib/deployment-target.sh"
+COMPOSE="docker compose $(chickadee_compose_file_args "$REPO_ROOT" | tr '\n' ' ')"
+# Resolved from the live deployment further down, once we know whether this host
+# runs a compose `server` service or blue-green colour containers.
+HEALTH_URL=""
 
 # ----------------------------------------------------------------
 # Parse args
@@ -115,12 +119,18 @@ CURRENT_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')"
 # Note: this MUST happen before we stop the server below, otherwise
 # the container env is gone.
 # ----------------------------------------------------------------
+read -r SERVER_MODE SERVER_NAME SERVER_PORT \
+  <<<"$(chickadee_server_target "$COMPOSE")"
+HEALTH_URL="http://127.0.0.1:${SERVER_PORT:-8080}/health"
+
 DB_VARS_FROM_CONTAINER=0
-while IFS='=' read -r k v; do
-  case "$k" in
-    DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
-  esac
-done < <($COMPOSE exec -T server env 2>/dev/null || true)
+if [[ -n "$SERVER_NAME" ]]; then
+  while IFS='=' read -r k v; do
+    case "$k" in
+      DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
+    esac
+  done < <(docker exec "$SERVER_NAME" env 2>/dev/null || true)
+fi
 
 if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   set -a
@@ -154,10 +164,42 @@ fi
 # ----------------------------------------------------------------
 TARGET_BUILD_VERSION="$(curl -sf "$HEALTH_URL" 2>/dev/null \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
-TARGET_SERVER_CID="$($COMPOSE ps -q server 2>/dev/null | head -n1 || true)"
 TARGET_IMAGE_DIGEST=""
-if [[ -n "$TARGET_SERVER_CID" ]]; then
-  TARGET_IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$TARGET_SERVER_CID" 2>/dev/null || true)"
+if [[ -n "$SERVER_NAME" ]]; then
+  TARGET_IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$SERVER_NAME" 2>/dev/null || true)"
+fi
+
+# Every server container that could still write to the database during the
+# reload. Deliberately broader than the single container read above: during a
+# blue-green swap both colours run, and the drained one is kept running for
+# fast rollback, so stopping only the colour nginx points at would leave a
+# second server writing into a database being dropped and reloaded underneath
+# it. Ambiguity is a reason to stop more and to read less.
+STOP_TARGETS=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && STOP_TARGETS+=("$line")
+done < <(chickadee_all_running_servers "$COMPOSE")
+
+# Which version actually migrates the restored schema is the version of the
+# RUNNING BUILD, not the version in the checkout's VERSION file. On a
+# blue-green host those diverge as a matter of course: the deployer pulls
+# `:latest` while the git clone follows main, so a snapshot taken minutes
+# before a release records the clone's newer VERSION beside the older image
+# that produced the schema. Prefer the recorded/observed build versions and
+# fall back to the VERSION files only when a build version is unavailable —
+# saying which source was used, because a version gate that silently reads the
+# wrong thing is worse than no gate.
+SNAPSHOT_VERSION="$MANIFEST_VERSION"
+SNAPSHOT_VERSION_SOURCE="VERSION file at capture"
+if [[ -n "$MANIFEST_BUILD_VERSION" ]]; then
+  SNAPSHOT_VERSION="$MANIFEST_BUILD_VERSION"
+  SNAPSHOT_VERSION_SOURCE="running build at capture"
+fi
+TARGET_VERSION="$CURRENT_VERSION"
+TARGET_VERSION_SOURCE="VERSION file in this checkout"
+if [[ -n "$TARGET_BUILD_VERSION" ]]; then
+  TARGET_VERSION="$TARGET_BUILD_VERSION"
+  TARGET_VERSION_SOURCE="running build"
 fi
 
 # Prefer the image digest (exact identity); fall back to the /health build
@@ -186,8 +228,8 @@ cat <<EOF
   Snapshot dir:      $SNAPSHOT_DIR
   Taken at:          $MANIFEST_TS
   Label:             $MANIFEST_LABEL
-  Snapshot version:  $MANIFEST_VERSION
-  Current version:   $CURRENT_VERSION
+  Snapshot version:  $SNAPSHOT_VERSION  ($SNAPSHOT_VERSION_SOURCE)
+  Current version:   $TARGET_VERSION  ($TARGET_VERSION_SOURCE)
   Snapshot build:    ${MANIFEST_BUILD_VERSION:-(unknown)}
   Snapshot image:    ${MANIFEST_IMAGE_DIGEST:-(unknown)}
   Running build:     ${TARGET_BUILD_VERSION:-(unknown)}
@@ -209,10 +251,11 @@ This will:
 
 EOF
 
-if [[ "$MANIFEST_VERSION" != "$CURRENT_VERSION" ]]; then
+if [[ "$SNAPSHOT_VERSION" != "$TARGET_VERSION" ]]; then
   cat <<EOF
-WARNING: snapshot was taken at chickadee $MANIFEST_VERSION but the current
-         code is $CURRENT_VERSION. Fluent migrations will run on startup
+WARNING: snapshot was taken at chickadee $SNAPSHOT_VERSION ($SNAPSHOT_VERSION_SOURCE)
+         but the target is $TARGET_VERSION ($TARGET_VERSION_SOURCE).
+         Fluent migrations will run on startup
          after restore. If any migration between those versions is
          destructive (drops columns/tables), this is NOT safe to roll
          forward through.
@@ -251,7 +294,17 @@ fi
 # 1. Stop server + runner (leave db running)
 # ----------------------------------------------------------------
 echo "==> Stopping server and runner ..."
-$COMPOSE stop server runner
+if [[ ${#STOP_TARGETS[@]} -eq 0 ]]; then
+  echo "    No running server container found — nothing to stop."
+  echo "    (If a server IS running, restoring under it will corrupt the reload."
+  echo "     Stop it by hand and re-run.)"
+else
+  for target in "${STOP_TARGETS[@]}"; do
+    echo "    Stopping $target ..."
+    docker stop "$target" >/dev/null
+  done
+fi
+$COMPOSE stop runner
 
 # ----------------------------------------------------------------
 # 2. Reset schema, then restore
@@ -335,7 +388,15 @@ fi
 # 6. Restart server + runner
 # ----------------------------------------------------------------
 echo "==> Restarting server and runner ..."
-$COMPOSE up -d server runner
+# `docker start`, not `compose up -d server`: on a blue-green host the latter
+# would CREATE a compose-managed server container, which binds the compose port
+# and races the colour containers that nginx is actually routing to. Starting
+# exactly what we stopped is correct in both deployment shapes.
+for target in "${STOP_TARGETS[@]}"; do
+  echo "    Starting $target ..."
+  docker start "$target" >/dev/null
+done
+$COMPOSE up -d runner
 
 # ----------------------------------------------------------------
 # 7. Wait for health

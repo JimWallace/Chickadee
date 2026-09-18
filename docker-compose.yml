@@ -131,6 +131,16 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    # The image carries one HEALTHCHECK, and it curls the server's /health on
+    # :8080. The runner serves no HTTP at all, so that check fails every 15s
+    # forever and the container reports `unhealthy` while polling and grading
+    # perfectly well. A permanently-red health flag beside a working service is
+    # worse than none: it trains an operator to discount the column that is
+    # supposed to tell them something is wrong. The runner reports its liveness
+    # to the server by heartbeat, which is what the runnerOffline health rule
+    # and the admin runner dashboard actually read.
+    healthcheck:
+      disable: true
 
   # ----------------------------------------------------------------
   # db — optional PostgreSQL service

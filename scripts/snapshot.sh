@@ -22,7 +22,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COMPOSE="docker compose -f $REPO_ROOT/docker-compose.yml"
+# shellcheck source=lib/deployment-target.sh
+. "$SCRIPT_DIR/lib/deployment-target.sh"
+COMPOSE="docker compose $(chickadee_compose_file_args "$REPO_ROOT" | tr '\n' ' ')"
 BACKUP_DIR="$REPO_ROOT/backups"
 RETENTION_DAYS=7
 
@@ -58,13 +60,27 @@ fi
 # This is authoritative — it covers every place compose looks
 # (.env, docker-compose.override.yml, exported shell env, etc.).
 # Fall back to .env only if the server isn't running yet.
+#
+# Resolved through deployment-target.sh rather than `compose exec server`,
+# because under blue-green there is no compose `server` service: the live
+# server is a colour container started by `docker run`. That lookup returned
+# nothing silently, so this fell through to .env — and on a host that declares
+# DATABASE_BACKEND in compose rather than .env, the default below resolved to
+# `sqlite` and the script refused to run. Eighty-two consecutive nightly
+# backups were lost to exactly that.
 # ----------------------------------------------------------------
+read -r SERVER_MODE SERVER_NAME SERVER_PORT \
+  <<<"$(chickadee_server_target "$COMPOSE")"
+SERVER_HEALTH_URL="http://127.0.0.1:${SERVER_PORT:-8080}/health"
+
 DB_VARS_FROM_CONTAINER=0
-while IFS='=' read -r k v; do
-  case "$k" in
-    DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
-  esac
-done < <($COMPOSE exec -T server env 2>/dev/null || true)
+if [[ -n "$SERVER_NAME" ]]; then
+  while IFS='=' read -r k v; do
+    case "$k" in
+      DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
+    esac
+  done < <(docker exec "$SERVER_NAME" env 2>/dev/null || true)
+fi
 
 if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   set -a
@@ -159,14 +175,22 @@ NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # image actually deployed (a stale `:latest`, a cloned VM, etc.). Recording the
 # running build's version (from /health) and its image digest lets restore.sh
 # detect a real version skew instead of being fooled by a matching VERSION file.
-BUILD_VERSION="$(curl -sf http://localhost:8080/health 2>/dev/null \
+BUILD_VERSION="$(curl -sf "$SERVER_HEALTH_URL" 2>/dev/null \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
-SERVER_CID="$($COMPOSE ps -q server 2>/dev/null | head -n1 || true)"
 IMAGE_REF=""
 IMAGE_DIGEST=""
-if [[ -n "$SERVER_CID" ]]; then
-  IMAGE_REF="$(docker inspect --format '{{.Config.Image}}' "$SERVER_CID" 2>/dev/null || true)"
-  IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$SERVER_CID" 2>/dev/null || true)"
+if [[ -n "$SERVER_NAME" ]]; then
+  IMAGE_REF="$(docker inspect --format '{{.Config.Image}}' "$SERVER_NAME" 2>/dev/null || true)"
+  IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$SERVER_NAME" 2>/dev/null || true)"
+fi
+if [[ -z "$BUILD_VERSION" || -z "$IMAGE_DIGEST" ]]; then
+  # Not fatal — an old snapshot with unknown identity is still restorable, and
+  # restore.sh treats a blank field as "unknown" rather than as a mismatch. But
+  # it means restore.sh falls back to comparing VERSION files, which track the
+  # git checkout rather than the deployed image, so say so at capture time
+  # instead of leaving it to be discovered during a restore.
+  echo "    WARN: could not identify the running build (server_mode=$SERVER_MODE)." >&2
+  echo "          restore.sh will have no image digest to compare against." >&2
 fi
 
 cat > "$DIR/manifest.json" <<EOF

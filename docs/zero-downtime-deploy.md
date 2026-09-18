@@ -404,3 +404,57 @@ git pull
 This is worth checking during any deploy-path investigation: the script that ran
 may not be the script in this repository. The Sept 2026 investigation lost time
 to exactly that, chasing a shell-quoting bug that had already been fixed here.
+
+## Blue-green removed the Compose `server` service, and four scripts did not notice
+
+Blue-green does not run the server through Compose. `bluegreen-deploy.sh` starts
+it with a plain `docker run` under a colour name (`chickadee-server-blue` /
+`-green`) on `127.0.0.1:8081` / `:8082`, and flips an nginx upstream between
+them. The Compose stack keeps `db` and `runner`; it has no `server` container at
+all.
+
+Every script that asked Compose for the server therefore got nothing back, and
+**none of them treated that as an error** — each had a fallback that looked
+like it worked:
+
+| Script | Asked Compose for | What it silently did instead |
+|---|---|---|
+| `snapshot.sh` | `exec server env` → `DATABASE_*` | Sourced `.env`; on a host that declares `DATABASE_BACKEND` in compose rather than `.env`, resolved the `sqlite` default and refused to run |
+| `snapshot.sh` | `ps -q server` → image identity | Wrote blank `build_version` / `image_digest` into the manifest |
+| `restore.sh` | `ps -q server` → image identity | Fell back to comparing `VERSION` files |
+| `restore.sh` | `stop server` | Nothing — the live server kept running through the reload |
+| `bluegreen-deploy.sh` | `-f` suppresses the override file | Resolved the new container's whole environment from the base file |
+| `chickadee-deployer.sh` | same | Recreated the runner from the base file |
+
+The cost was not hypothetical. One deployment took **no backup for 82
+consecutive nights**, writing the same refusal into
+`/var/log/chickadee-snapshot.log` each time. It was found by accident, from a
+prune list printed while chasing an unrelated outage.
+
+Three rules came out of it.
+
+**A fallback must not be able to succeed with the wrong answer.** Every one of
+these had a sensible-looking second path, and every second path produced a
+plausible value. `DATABASE_BACKEND` defaulting to `sqlite` is the sharpest
+case: the default is correct for a fresh checkout and catastrophic for a
+Postgres host, and nothing distinguishes them at the point of the read.
+
+**A version gate must name its source.** `restore.sh` compared `VERSION` files,
+which track the git checkout. What migrates a restored schema is the running
+image. On a host whose deployer pulls `:latest` while its clone follows `main`,
+those diverge as a matter of course — the first repaired snapshot recorded
+`0.5.199` from the clone beside a deployment running `0.5.198`. The banner now
+prints which source each side came from.
+
+**Ambiguity is a reason to stop more and to read less.** Mid-swap both colours
+run, and the drained one is deliberately kept for rollback. Reading identity
+from the wrong colour puts a false value into a manifest that `restore.sh` will
+trust; stopping only one leaves a second server writing into a database being
+dropped and reloaded. So `chickadee_resolve_server_target` refuses to guess when
+nginx does not say which colour is live, while `chickadee_running_server_names`
+returns every running one.
+
+`scripts/lib/deployment-target.sh` holds the resolution for all four scripts,
+split so that every decision is a pure function over observations.
+`scripts/deployment-target-tests.sh` covers them in `format-lint`, with no
+Docker required.
