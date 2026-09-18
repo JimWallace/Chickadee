@@ -65,8 +65,8 @@ struct SSOAuthRoutes: RouteCollection {
 
     @Sendable
     func ssoStart(req: Request) async throws -> Response {
-        guard let config = req.application.oidcConfig else {
-            req.logger.error("SSO start called but oidcConfig is not loaded")
+        guard let config = await req.application.resolvedOIDCConfiguration() else {
+            req.logger.error("SSO start called but OIDC discovery has not succeeded")
             return req.redirect(to: "/login?error=sso_not_configured")
         }
 
@@ -130,8 +130,8 @@ struct SSOAuthRoutes: RouteCollection {
 
     @Sendable
     func ssoCallback(req: Request) async throws -> Response {
-        guard let config = req.application.oidcConfig else {
-            req.logger.error("SSO callback called but oidcConfig is not loaded")
+        guard let config = await req.application.resolvedOIDCConfiguration() else {
+            req.logger.error("SSO callback called but OIDC discovery has not succeeded")
             return req.redirect(to: "/login?error=sso_not_configured")
         }
 

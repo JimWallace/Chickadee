@@ -93,15 +93,23 @@ struct OIDCConfiguration: Sendable {
     let discovery: OIDCDiscovery
     let claimConfig: OIDCClaimConfig
 
-    // MARK: Startup loader
+    // MARK: Startup loading
 
-    /// Reads env vars, fetches the DUO OIDC discovery document, loads JWKS into
-    /// app.jwt.keys, and returns a ready-to-use configuration.
+    /// Everything the discovery fetch needs, taken from configuration alone.
+    struct EnvironmentInputs: Sendable {
+        let clientID: String
+        let clientSecret: String
+        let redirectURI: String
+        let discoveryURL: String
+        let claimConfig: OIDCClaimConfig
+    }
+
+    /// Validates the operator-supplied OIDC settings. Touches no network.
     ///
-    /// Throws `Abort(.internalServerError)` if required env vars are missing or
-    /// if either network request fails. Intended to be called once from `main()`
-    /// before the server begins serving requests.
-    static func load(from app: Application) async throws -> OIDCConfiguration {
+    /// Throws when a required variable is missing, or when the discovery URL is
+    /// unusable. Startup treats these as fatal, because no retry corrects a
+    /// deployment that has no client ID.
+    static func validateEnvironment(from app: Application) throws -> EnvironmentInputs {
         let env = app.appConfig.oidc
         guard let clientID = env.clientID else {
             throw Abort(
@@ -145,9 +153,32 @@ struct OIDCConfiguration: Sendable {
         // http://localhost:6379) is bad enough that failing loud at
         // startup beats a confusing runtime error.
         try validateOIDCDiscoveryURL(discoveryURL, allowInsecure: env.allowInsecure)
+        let claimConfig = OIDCClaimConfig(
+            usernameClaim: env.usernameClaim,
+            emailClaim: env.emailClaim
+        )
 
-        app.logger.info("Fetching OIDC discovery document: \(discoveryURL)")
-        let discoveryResponse = try await app.client.get(URI(string: discoveryURL))
+        return EnvironmentInputs(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            redirectURI: redirectURI,
+            discoveryURL: discoveryURL,
+            claimConfig: claimConfig
+        )
+    }
+
+    /// Fetches the discovery document, loads the JWKS into `app.jwt.keys`, and
+    /// returns a ready-to-use configuration.
+    ///
+    /// Throws when either network request fails. The caller decides how serious
+    /// that is: `OIDCConfigurationProvider` logs it and retries later, so an
+    /// unreachable IdP makes SSO unavailable without stopping the server.
+    static func fetch(
+        from app: Application,
+        inputs: EnvironmentInputs
+    ) async throws -> OIDCConfiguration {
+        app.logger.info("Fetching OIDC discovery document: \(inputs.discoveryURL)")
+        let discoveryResponse = try await app.client.get(URI(string: inputs.discoveryURL))
         guard discoveryResponse.status == .ok else {
             throw Abort(
                 .internalServerError,
@@ -169,21 +200,22 @@ struct OIDCConfiguration: Sendable {
         let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
 
-        let claimConfig = OIDCClaimConfig(
-            usernameClaim: env.usernameClaim,
-            emailClaim: env.emailClaim
-        )
         app.logger.info(
-            "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
+            "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(inputs.redirectURI), usernameClaim=\(inputs.claimConfig.usernameClaim), emailClaim=\(inputs.claimConfig.emailClaim)"
         )
 
         return OIDCConfiguration(
-            clientID: clientID,
-            clientSecret: clientSecret,
-            redirectURI: redirectURI,
+            clientID: inputs.clientID,
+            clientSecret: inputs.clientSecret,
+            redirectURI: inputs.redirectURI,
             discovery: discovery,
-            claimConfig: claimConfig
+            claimConfig: inputs.claimConfig
         )
+    }
+
+    /// Validates the environment and then fetches, in one step.
+    static func load(from app: Application) async throws -> OIDCConfiguration {
+        try await fetch(from: app, inputs: validateEnvironment(from: app))
     }
 }
 
@@ -257,14 +289,30 @@ private func isPrivateOrLoopbackHost(_ host: String) -> Bool {
 
 // MARK: - Application Storage
 
-private struct OIDCConfigurationKey: StorageKey {
-    typealias Value = OIDCConfiguration
+private struct OIDCConfigurationProviderKey: StorageKey {
+    typealias Value = OIDCConfigurationProvider
 }
 
 extension Application {
-    /// The active OIDC configuration. Nil when AUTH_MODE is `.local` or before startup loading.
+    /// Holds the resolved configuration and owns the retry behind it.
+    var oidcConfigurationProvider: OIDCConfigurationProvider {
+        lazyStored(OIDCConfigurationProviderKey.self) { OIDCConfigurationProvider() }
+    }
+
+    /// The OIDC configuration resolved so far. Nil when AUTH_MODE is `.local`,
+    /// or when discovery has not yet succeeded.
+    ///
+    /// Reads a cached value and performs no I/O, so it is safe on the response
+    /// path. Call `resolvedOIDCConfiguration()` where a fetch is acceptable.
     var oidcConfig: OIDCConfiguration? {
-        get { storage[OIDCConfigurationKey.self] }
-        set { storage[OIDCConfigurationKey.self] = newValue }
+        get { oidcConfigurationProvider.current }
+        set { oidcConfigurationProvider.store(newValue) }
+    }
+
+    /// The OIDC configuration, fetching it once when startup could not.
+    ///
+    /// Returns nil while the IdP is unreachable. SSO routes degrade on nil.
+    func resolvedOIDCConfiguration() async -> OIDCConfiguration? {
+        await oidcConfigurationProvider.resolve(app: self)
     }
 }
