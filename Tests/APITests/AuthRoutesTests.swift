@@ -398,8 +398,12 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = res.body.string
-                    #expect(body.contains("class=\"auth-logo\""))
-                    #expect(body.contains("/images/chickadee-icon-alt.png"))
+                    // Anchored to the auth logo, not merely to "some chickadee
+                    // image": base.leaf renders the nav brand mark on this page
+                    // too, so a bare /images/chickadee- substring would pass
+                    // with the auth logo deleted. Image-name-agnostic so a
+                    // future mascot swap needs no test edit.
+                    #expect(body.contains("class=\"auth-logo\" src=\"/images/chickadee-"))
                 })
         }
     }

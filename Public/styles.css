@@ -1000,9 +1000,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 
 /* Chickadee mascot above the login heading. The PNG is transparent, so it sits
-   cleanly on the card surface in both light and dark mode. Sized as a mark
-   rather than as art: the sign-in controls are the job of this page, and the
-   logo should not compete with them for the first screenful. */
+   cleanly on the card surface in both light and dark mode. This is a pose
+   illustration, deliberately held at mark scale: the sign-in controls are the
+   job of this page, and the mascot should not compete with them for the first
+   screenful. Do not grow the box to suit the art. */
 .auth-logo {
     display: block;
     width: 72px;

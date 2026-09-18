@@ -374,6 +374,15 @@ duplicate.
   caret and menu follow from that one class.  This is the only pop-out menu
   shape outside `.popover-panel` and the modal shell — a page needing a third
   is a conversation, not a new rule.
+- **Mascot imagery** — `.nav-brand-logo` (site chrome), `.auth-logo` (sign-in),
+  `.error-bird` (error page).  The nav mark is the NEUTRAL bird and is never a
+  pose: chrome must not say anything about the page it frames.  A pose belongs
+  only on a page whose whole job is one state.  A pose keeps `alt=""` where
+  adjacent text already states that state — the error page's `.error-code` and
+  `.error-title` do — but where nothing else states it the image is the only
+  carrier and needs an accessible name.  `Assets/` holds the 384x384 source; the
+  copy served from `Public/images/` is sized to its display box, not shipped at
+  source size.
 - **Drag to reorder** — one vocabulary, two surfaces.  The grip is
   `.section-drag-handle` (course sections, test sections) or
   `.suite-drag-handle` (suite rows); the row in flight takes
