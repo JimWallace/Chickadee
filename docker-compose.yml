@@ -141,6 +141,31 @@ services:
     # and the admin runner dashboard actually read.
     healthcheck:
       disable: true
+    # Least privilege. This container executes untrusted student code, so it
+    # gets no capabilities, cannot acquire new ones, and cannot fork without
+    # bound. None of the three costs anything a test script legitimately needs.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    read_only: true
+    # The runner's work root — where it stages a test setup, and where a
+    # compiled language writes a binary and then EXECUTES it — defaults to
+    # /tmp/chickadee-runner-cache (`--test-setup-cache-dir`). So this tmpfs
+    # must NOT carry `noexec`: a C++ assignment compiles with g++ and execs the
+    # result from here, and `noexec` turns that into a "Permission denied" the
+    # student sees as a broken test. See the work-root comment in
+    # RunnerDaemon+JobProcessing.swift.
+    tmpfs:
+      - /tmp:size=1g
+    # Resource ceilings are deployment-specific and deliberately unset: 256 MB
+    # is ample for Python and R and will not compile a C++ or Java assignment.
+    # Note that tmpfs pages count against the memory cgroup, so whatever you
+    # set here must exceed the tmpfs size above.
+    # mem_limit: 2g
+    # memswap_limit: 2g
+    # cpus: "1.0"
 
   # ----------------------------------------------------------------
   # db — optional PostgreSQL service
