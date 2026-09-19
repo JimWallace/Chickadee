@@ -65,7 +65,7 @@ import VaporTesting
         let big = Data(repeating: 0x41, count: 5_000)
         let zipPath = try await makeZip(named: "big-entry.zip", entries: [("big.bin", big)])
 
-        #expect { try validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
+        await #expect { try await validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
             guard case ZipUploadValidationError.entrySizeExceeded(let name, _, _) = error else {
                 Issue.record("Expected entrySizeExceeded, got \(error)")
                 return false
@@ -95,7 +95,7 @@ import VaporTesting
                 ("c.bin", chunk),
             ])
 
-        #expect { try validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
+        await #expect { try await validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
             guard case ZipUploadValidationError.totalSizeExceeded = error else {
                 Issue.record("Expected totalSizeExceeded, got \(error)")
                 return false
@@ -112,7 +112,7 @@ import VaporTesting
         let badPath = tmpDir.appendingPathComponent("not-a-zip.zip").path
         try Data("definitely not a zip".utf8).write(to: URL(fileURLWithPath: badPath))
 
-        #expect { try validateZipUploadSize(zipPath: badPath) } throws: { error in
+        await #expect { try await validateZipUploadSize(zipPath: badPath) } throws: { error in
             guard case ZipUploadValidationError.inspectionFailed = error else {
                 Issue.record("Expected inspectionFailed for a corrupt zip, got \(error)")
                 return false

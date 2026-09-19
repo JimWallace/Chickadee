@@ -49,7 +49,12 @@ extension DraftAssignmentRoutes {
             storedState: storedState
         )
 
-        let suiteRows = setup == nil ? [] : await editableSuiteRowsForSetup(setup!)
+        let suiteRows: [EditableSuiteRow]
+        if let setup {
+            suiteRows = await editableSuiteRowsForSetup(setup)
+        } else {
+            suiteRows = []
+        }
         // Resolved once and handed to both language-bearing seeds below.
         let resolvedLanguage = setup.flatMap { s in
             s.decodedManifest().flatMap { AssignmentLanguage.resolve(for: s, manifest: $0) }

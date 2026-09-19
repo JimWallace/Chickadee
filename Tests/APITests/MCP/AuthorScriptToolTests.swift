@@ -103,7 +103,8 @@ import Vapor
             #expect(row.script?.displayName == "Marker")
             #expect(row.script?.dependsOn == ["test_a.sh"])
             // The body landed in the zip verbatim.
-            let body = try #require(await readScriptFromZip(zipPath: reloaded.zipPath, filename: "secrettest_marker.py"))
+            let body = try #require(
+                await readScriptFromZip(zipPath: reloaded.zipPath, filename: "secrettest_marker.py"))
             #expect(body.contains("print('ok')"))
         }
     }

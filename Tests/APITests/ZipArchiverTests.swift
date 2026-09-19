@@ -60,17 +60,17 @@ final class ZipArchiverTests {
 
     // MARK: - Error descriptions
 
-    @Test func errorDescriptionProcessFailed() {
+    @Test func errorDescriptionProcessFailed() async {
         let e = ZipArchiverError.processFailed("/usr/bin/zip", 1)
         #expect(e.description == "/usr/bin/zip exited with status 1")
     }
 
-    @Test func errorDescriptionExecutableNotFound() {
+    @Test func errorDescriptionExecutableNotFound() async {
         let e = ZipArchiverError.executableNotFound("/usr/bin/zip")
         #expect(e.description == "Executable not found: /usr/bin/zip")
     }
 
-    @Test func errorDescriptionPathTraversalDetected() {
+    @Test func errorDescriptionPathTraversalDetected() async {
         let e = ZipArchiverError.pathTraversalDetected("../evil.txt")
         #expect(e.description == "Zip entry would escape destination directory: ../evil.txt")
     }
@@ -223,7 +223,7 @@ final class ZipArchiverTests {
 
     // MARK: - readScriptFromZip
 
-    @Test func readScriptFromZipReturnsCorrectContent() throws {
+    @Test func readScriptFromZipReturnsCorrectContent() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_test.zip").path
         guard
             try makePythonZip(
@@ -236,7 +236,7 @@ final class ZipArchiverTests {
         #expect(await readScriptFromZip(zipPath: zipPath, filename: "test_foo.py") == "def foo():\n    pass\n")
     }
 
-    @Test func readScriptFromZipReturnsNilForMissingEntry() throws {
+    @Test func readScriptFromZipReturnsNilForMissingEntry() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_missing.zip").path
         guard
             try makePythonZip(
@@ -332,7 +332,7 @@ final class ZipArchiverTests {
         await #expect(readScriptFromZip(zipPath: zipPath, filename: "keep.py") != nil)
     }
 
-    @Test func removeScriptFromZipThrowsForMissingFile() throws {
+    @Test func removeScriptFromZipThrowsForMissingFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
         else { return }
@@ -345,7 +345,7 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        let error = try #require(throws: ScriptZipError.self) {
+        let error = try await #require(throws: ScriptZipError.self) {
             try await removeScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")
         }
         guard case .fileNotFound(let name) = error else {

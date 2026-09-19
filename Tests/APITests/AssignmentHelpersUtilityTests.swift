@@ -268,10 +268,10 @@ final class AssignmentHelpersUtilityTests {
             zipPath: zipPath
         )
 
-        let entries = await Set(await listZipEntries(zipPath: zipPath))
+        let entries = Set(await listZipEntries(zipPath: zipPath))
         #expect(entries == ["keep.py"])
-        await #expect(extractZipEntry(zipPath: zipPath, entryName: "remove.py") == nil)
-        let keepData = try #require(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
+        #expect(await extractZipEntry(zipPath: zipPath, entryName: "remove.py") == nil)
+        let keepData = try #require(await extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
         #expect(String(data: keepData, encoding: .utf8) == "print('keep-updated')")
     }
 

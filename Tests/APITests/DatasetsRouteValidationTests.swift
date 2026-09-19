@@ -32,7 +32,8 @@ import VaporTesting
 
         let setupID = "dsv_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [("cases.csv", "id\n1\n2\n3\n"), ("publictest_a.py", "passed('ok')\n")])
+        try await writeZip(
+            at: zipPath, entries: [("cases.csv", "id\n1\n2\n3\n"), ("publictest_a.py", "passed('ok')\n")])
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
             """
