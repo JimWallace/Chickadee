@@ -18,7 +18,7 @@ enum ScriptZipError: Error {
 }
 
 /// Packs `sourceDir` into `zipPath` via `/usr/bin/zip -q -r`, spawned
-/// under the shared zip process lock (see `ZipProcessSerialization.swift`)
+/// under the shared zip subprocess helper (see `Core/ZipSubprocess.swift`)
 /// so it can't race the async helpers in `ZipArchiver.swift` or the
 /// other sync zip helpers in this file.  Throws `ScriptZipError.zipFailed`
 /// on any failure — caller decides whether to translate to a higher-level

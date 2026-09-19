@@ -1380,6 +1380,16 @@ inside the scope, which concurrent activity can only raise).
    wedged job. Note the precise claim: *our pipe's write end* does not reach
    the child. Other inherited descriptors do — "the child holds only fds
    0/1/2" is too strong and measures false.
+
+   **Superseded by the swift-subprocess migration.** `Core/PipeCloseOnExec.swift` and its test are
+   gone, and so is the worker's `boundedReadToEOF`. The swift-subprocess
+   migration removed every hand-built `Pipe` those helpers guarded: the three
+   zip/notebook helpers spawn through `Core/ZipSubprocess.swift`, and
+   `ScriptExecution` builds its own CLOEXEC pipes inline because Subprocess's
+   pipes do not set the flag. The measurement above still holds — it is simply
+   no longer pinned by a test, because the code it measured no longer exists.
+   One hand-built `Pipe` remains, in `LocalHTTPTestServer`, and it sets the
+   flag itself.
 4. **Stall visibility in `api-tests`** (Family 5) — **DONE, and the
    Family 5 half of the claim was wrong; see that entry.**
    `WedgeWatchdog` moved to a shared `ChickadeeTestSupport` target (a plain
