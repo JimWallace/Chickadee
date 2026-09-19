@@ -90,7 +90,7 @@ import Testing
     /// would be read as a function file and nothing in it would run. Parsing
     /// cannot show the difference; running it can.
     @Test func differentialGradesAgainstTheReference() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .null,
@@ -109,7 +109,7 @@ import Testing
     /// instructor chose, and "your function is wrong" would send them to debug
     /// the wrong code.
     @Test func differentialBlamesTheReferenceWhenTheReferenceRaises() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .null,
@@ -121,7 +121,7 @@ import Testing
     }
 
     @Test func boundaryEqualityPassesAndFails() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .boundaryEquality, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .int(42))
@@ -141,7 +141,7 @@ import Testing
     /// one who returns the silently-coerced char array fails, rather than the
     /// other way round.
     @Test func mixedExpectedValuesAreCellsNotCharCoercion() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .boundaryEquality, functionName: "mixed", paramNames: ["x"],
             args: [.int(1)], expected: .array([.int(65), .string("bc")]))
@@ -158,7 +158,7 @@ import Testing
     /// isequaln-based equality is what lets `[60, NA, 20]` match itself while
     /// plain isequal would fail it (NA is NaN-flavoured).
     @Test func nullArgsAndExpectationsBecomeNAs() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .boundaryEquality, functionName: "stage_of", paramNames: ["e"],
             args: [.array([.double(60), .null, .double(20)])],
@@ -178,7 +178,7 @@ import Testing
     /// students' arithmetic freely produces columns, and `chickadee.equal`
     /// compares numeric values shape-blind (as R's recycling `==` does).
     @Test func aColumnResultMatchesARowExpectation() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .boundaryEquality, functionName: "sorted_of", paramNames: ["x"],
             args: [.array([.int(3), .int(1), .int(2)])],
@@ -190,7 +190,7 @@ import Testing
     }
 
     @Test func unorderedEqualityIgnoresOrderOnly() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .unorderedEquality, functionName: "factors_of", paramNames: ["n"],
             args: [.int(6)], expected: .array([.int(1), .int(2), .int(3), .int(6)]))
@@ -205,7 +205,7 @@ import Testing
     }
 
     @Test func approximateEqualityHonoursTolerance() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .approximateEquality, functionName: "circle_area", paramNames: ["r"],
             args: [.int(2)], expected: .double(12.566),
@@ -221,7 +221,7 @@ import Testing
     }
 
     @Test func variableEqualityChecksAWorkspaceVariable() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .variableEquality, functionName: "", paramNames: [],
             args: [.string("threshold")], expected: .int(42))
@@ -231,7 +231,7 @@ import Testing
     }
 
     @Test func returnTypeCheckAcceptsCrossLanguageTypeNames() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         // "str" is a Python spelling; the mapping accepts it so a converted
         // family keeps working.
         let script = try single(
@@ -247,7 +247,7 @@ import Testing
     }
 
     @Test func exceptionExpectedRequiresTheError() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .exceptionExpected, functionName: "must_throw", paramNames: ["x"],
             args: [.int(-1)], expected: .string("negative"))
@@ -270,7 +270,7 @@ import Testing
     }
 
     @Test func performanceThresholdFailsTheSlow() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .performanceThreshold, functionName: "quick", paramNames: ["n"],
             args: [.int(1000)], expected: .int(2000))
@@ -293,7 +293,7 @@ import Testing
     }
 
     @Test func stdoutEqualityCapturesPrintedOutput() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .stdoutEquality, functionName: "greet", paramNames: ["name"],
             args: [.string("Ada")], expected: .string("Hello, Ada!"))
@@ -316,7 +316,7 @@ import Testing
     /// The existence guard the cases depend on: fail (exit 1), not error, so
     /// the runner's dependency gate skips the cases.
     @Test func existenceGuardFailsWhenTheFunctionIsMissing() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .boundaryEquality, functionName: "double_it",
             paramNames: ["x"], defaults: PatternDefaults(),
@@ -336,7 +336,7 @@ import Testing
     /// whole `expectedVarRef` path executed, including the fail-closed message
     /// when the input is missing.
     @Test func perStudentExpectedValuesResolveFromTheInputsFile() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .boundaryEquality, functionName: "double_it",
             paramNames: ["x"], defaults: PatternDefaults(),
@@ -367,7 +367,7 @@ import Testing
     /// the program's `exit` is masked, so a script that reads two numbers,
     /// prints their sum and exits grades on the sum.
     @Test func programIOPassesAndFails() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let script = try single(
             kind: .programIO, functionName: "", paramNames: ["stdin"],
             args: [.string("3\n4\n")], expected: .string("7"))
@@ -384,7 +384,7 @@ import Testing
 
     /// Regex anchors are line anchors, matched against the normalized output.
     @Test func programIORegexMatchesALineOfTheOutput() async throws {
-        guard Self.hasOctave else { return }
+        guard await Self.hasOctave else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .programIO, functionName: "", paramNames: ["stdin"],
             cases: [PatternCase(key: "01", label: "Case 1", args: [.string("")], expected: .string("^sum=7$"))],

@@ -101,7 +101,7 @@ import Testing
     // MARK: - The property the design rests on
 
     @Test func oneRenderedTestGradesBothDialects() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
             let result = try Self.execute(script: script, submission: submission)
@@ -112,7 +112,7 @@ import Testing
     // MARK: - Per-kind, pass AND fail
 
     @Test func boundaryEqualityPassesAndFails() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
             #expect(try Self.execute(script: script, submission: submission).code == 0)
@@ -128,7 +128,7 @@ import Testing
     /// so `equal?` would answer #f against a rendered flonum and mark a correct
     /// student wrong. The runtime compares numbers with `=` for this reason.
     @Test func exactAndInexactNumbersCompareEqual() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(.boundaryEquality, expected: .double(18.5), args: [.int(1)]))
         for submission in Self.bothDialects("(define (f x) 18.5)") {
@@ -140,7 +140,7 @@ import Testing
     /// A list argument is what BSL's `quote` refusal would have broken — the
     /// runtime binds arguments into the namespace instead.
     @Test func listArgumentsSurviveTheBSLQuoteRestriction() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(
                 .boundaryEquality, function: "total", expected: .int(6),
@@ -156,7 +156,7 @@ import Testing
     }
 
     @Test func unorderedEqualityIgnoresOrderOnly() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(
                 .unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
@@ -169,7 +169,7 @@ import Testing
     }
 
     @Test func approximateEqualityHonoursTolerance() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
         let close = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 1.0000001)\n")
@@ -180,7 +180,7 @@ import Testing
     }
 
     @Test func variableEqualityReadsAModuleLevelValue() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(.variableEquality, function: "threshold", expected: .int(42), args: []))
         for submission in Self.bothDialects("(define threshold 42)") {
@@ -193,7 +193,7 @@ import Testing
     }
 
     @Test func returnTypeCheckNamesTheNeutralType() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
         let good = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) \"hello\")\n")
@@ -204,7 +204,7 @@ import Testing
     }
 
     @Test func exceptionExpectedMatchesTheMessage() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.exceptionExpected, expected: .string("boom")))
         let raises = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (error \"boom\"))\n")
@@ -215,7 +215,7 @@ import Testing
     }
 
     @Test func performanceThresholdBoundsRuntime() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
         let fast = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) x)\n")
@@ -223,7 +223,7 @@ import Testing
     }
 
     @Test func stdoutEqualityComparesPrintedOutput() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hi")))
         let good = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (display \"hi\"))\n")
@@ -236,7 +236,7 @@ import Testing
     // MARK: - Existence guard
 
     @Test func existenceGuardFailsRatherThanErrors() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = renderRacketExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(1)), specHash: "h")
         let present = try Self.execute(
@@ -252,7 +252,7 @@ import Testing
     /// A submission that does not compile is the STUDENT's finding, so it is a
     /// failure of the test rather than a runner error.
     @Test func aBrokenSubmissionFailsWithAReadableMessage() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let broken = try Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (+ x\n")
@@ -266,7 +266,7 @@ import Testing
     /// port, so a `#lang racket` program's `read-line` reads the case text,
     /// and an `(exit)` after the answer is still graded.
     @Test func programIOPassesAndFails() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let good = try Self.execute(
@@ -298,7 +298,7 @@ import Testing
 
     /// Regex anchors are line anchors, matched against the normalized output.
     @Test func programIORegexMatchesALineOfTheOutput() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),

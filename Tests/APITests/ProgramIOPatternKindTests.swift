@@ -204,7 +204,7 @@ import Vapor
     private static let unguardedSum = "a = int(input())\nb = int(input())\nprint(a + b)\n"
 
     @Test func anUnguardedProgramReadingInputPassesAndFails() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let good = try Self.grade(family, program: Self.unguardedSum)
         #expect(good.code == 0, Comment(rawValue: good.stdout))
@@ -219,7 +219,7 @@ import Vapor
     /// the test's — the first line of stdout is the verdict's, not the
     /// program's.
     @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("8"))
         let result = try Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
         #expect(result.code == 1)
@@ -228,7 +228,7 @@ import Vapor
     }
 
     @Test func aMainGuardedProgramRuns() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let program = """
             def main():
@@ -244,7 +244,7 @@ import Vapor
     }
 
     @Test func promptsArePartOfTheOutputAsOnATerminal() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let program = "a = int(input('A: '))\nb = int(input('B: '))\nprint(a + b)\n"
         let exact = ProgramIOPatternKindTests.family(expected: .string("A: B: 7"))
         #expect(try Self.grade(exact, program: program).code == 0)
@@ -253,7 +253,7 @@ import Vapor
     }
 
     @Test func regexComparisonMatchesAcrossLines() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("^sum=7$"), comparison: .regex)
         let program = "a = int(input())\nb = int(input())\nprint('header')\nprint(f'sum={a + b}')\n"
         #expect(try Self.grade(family, program: program).code == 0)
@@ -261,7 +261,7 @@ import Vapor
     }
 
     @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let good = try Self.grade(
             family, program: "import sys\nprint(int(input()) + int(input()))\nsys.exit(0)\n")
@@ -271,7 +271,7 @@ import Vapor
     }
 
     @Test func aCrashIsAGradedFailureCarryingTheError() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let crashed = try Self.grade(family, program: "print(1 / 0)\n")
         #expect(crashed.code == 1)
@@ -280,7 +280,7 @@ import Vapor
     }
 
     @Test func readingPastTheInputIsAGradedFailure() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(stdin: "3\n")
         let starved = try Self.grade(family, program: Self.unguardedSum)
         #expect(starved.code == 1)
@@ -288,7 +288,7 @@ import Vapor
     }
 
     @Test func trailingWhitespaceIsIgnoredUnderExact() async throws {
-        guard Self.pythonAvailable else { return }
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("7"))
         #expect(try Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
     }

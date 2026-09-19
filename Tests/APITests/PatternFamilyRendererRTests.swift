@@ -219,7 +219,7 @@ import Testing
 
     /// `.differential` end to end: the reference computes each expected value.
     @Test func differentialGradesAgainstTheReference() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .null,
@@ -233,7 +233,7 @@ import Testing
     /// chose, and "your function is wrong" would send them to debug the wrong
     /// code.
     @Test func differentialBlamesTheReferenceWhenTheReferenceStops() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .null,
@@ -243,7 +243,7 @@ import Testing
     }
 
     @Test func boundaryEqualityPassesAndFails() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .int(42))
@@ -254,7 +254,7 @@ import Testing
     }
 
     @Test func boundaryEqualityComparesCollections() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "letters_of", paramNames: ["s"],
             args: [.string("ab")], expected: .array([.string("a"), .string("b")]))
@@ -272,7 +272,7 @@ import Testing
     /// "'list' object cannot be coerced to type 'double'" before the student's
     /// function was ever really exercised.
     @Test func nullArgsAndExpectationsBecomeRNAs() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let stage =
             "egfr_stage <- function(e) ifelse(e >= 60, \"G2\", \"G4\")\n"
         let script = single(
@@ -297,7 +297,7 @@ import Testing
 
     /// A lone NA argument is still an atomic vector, not a list.
     @Test func aLoneNullArgIsAnAtomicNA() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "is_missing", paramNames: ["x"],
             args: [.array([.null])], expected: .array([.bool(true)]))
@@ -307,7 +307,7 @@ import Testing
     /// An integer return against a JSON-decoded double expectation must pass —
     /// the reason `chickadee_equal` compares numerics by value.
     @Test func integerReturnMatchesDoubleExpectation() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "count", paramNames: ["x"],
             args: [.int(3)], expected: .int(3))
@@ -315,7 +315,7 @@ import Testing
     }
 
     @Test func approximateEqualityHonoursTolerance() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .approximateEquality, functionName: "ratio", paramNames: ["x"],
             args: [.int(3)], expected: .double(0.3333333),
@@ -327,7 +327,7 @@ import Testing
     }
 
     @Test func unorderedEqualityIgnoresOrder() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .unorderedEquality, functionName: "tags", paramNames: ["x"],
             args: [.int(1)], expected: .array([.string("a"), .string("b"), .string("c")]))
@@ -336,7 +336,7 @@ import Testing
     }
 
     @Test func variableEqualityChecksModuleLevelValue() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .variableEquality, functionName: "",
             cases: [
@@ -349,7 +349,7 @@ import Testing
     }
 
     @Test func returnTypeCheckAcceptsRAndPythonTypeNames() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let rName = single(
             kind: .returnTypeCheck, functionName: "label", paramNames: ["x"],
             args: [.int(1)], expected: .string("character"))
@@ -364,7 +364,7 @@ import Testing
     }
 
     @Test func exceptionExpectedRequiresAnError() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .exceptionExpected, functionName: "boom", paramNames: ["x"],
             args: [.int(-1)], expected: .string("negative"))
@@ -379,7 +379,7 @@ import Testing
     }
 
     @Test func performanceThresholdBoundsRuntime() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         // A tight budget keeps the over-budget case cheap: sleeping just past
         // it costs a fraction of a second rather than seconds of extra load on
         // a parallel test run (docs/ci-flakiness.md — subprocess-spawning
@@ -392,7 +392,7 @@ import Testing
     }
 
     @Test func stdoutEqualityComparesPrintedOutput() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .stdoutEquality, functionName: "greet", paramNames: ["name"],
             args: [.string("Ada")], expected: .string("Hello, Ada!"))
@@ -409,7 +409,7 @@ import Testing
     }
 
     @Test func existenceGuardRunsForReal() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .boundaryEquality, functionName: "solve",
             paramNames: ["x"],
@@ -423,7 +423,7 @@ import Testing
     /// End-to-end personalization: the value the server resolved lands in
     /// `_ck_inputs.R`, and the generated case binds it as `expected`.
     @Test func perStudentExpectedComesFromInputsFile() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let c = PatternCase(
             key: "01", label: "personalized", args: [.int(1)], expected: .null,
             expectedVarRef: "target")
@@ -462,7 +462,7 @@ import Testing
     /// shape a recap exercise takes ("your sd_systolic equals your value"), and
     /// it was rejected outright before.
     @Test func variableEqualityPerStudentExpectedRunsForReal() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let c = PatternCase(
             key: "01", label: "sd_systolic", args: [.string("sd_systolic")], expected: .null,
             expectedVarRef: "sd_expected")
@@ -510,7 +510,7 @@ import Testing
     /// / `scan()` masked to the case's lines, and `quit()` masked so a script
     /// that quits after its answer is still graded.
     @Test func programIOPassesAndFails() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let script = single(
             kind: .programIO, functionName: "", paramNames: ["stdin"],
             args: [.string("3\n4\n")], expected: .string("7"))
@@ -537,7 +537,7 @@ import Testing
 
     /// Regex anchors are line anchors, matched against the normalized output.
     @Test func programIORegexMatchesALineOfTheOutput() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .programIO, functionName: "", paramNames: ["stdin"],
             cases: [PatternCase(key: "01", label: "Case 1", args: [.string("")], expected: .string("^sum=7$"))],

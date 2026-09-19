@@ -240,11 +240,11 @@ import Testing
     }
 
     @Test(arguments: AssignmentLanguage.allCases)
-    func theInlinedScriptRunsInItsOwnInterpreter(_ language: AssignmentLanguage) throws {
+    func theInlinedScriptRunsInItsOwnInterpreter(_ language: AssignmentLanguage) async throws {
         guard let argv = Self.interpreter(for: language), let command = argv.first else { return }
         // Not "expected on this platform" as a failure: a dev box has neither
         // octave-cli nor racket, and a silent skip is the house rule for that.
-        guard Self.isAvailable(command) else { return }
+        guard await Self.isAvailable(command) else { return }
 
         let manifest = TestProperties(
             requiredFiles: [], testSuites: [], timeLimitSeconds: 10,

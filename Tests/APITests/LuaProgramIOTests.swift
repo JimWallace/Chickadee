@@ -13,7 +13,9 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaProgramIOTests {
 
-    static var luaAvailable: Bool { LuaStdoutCaptureTests.luaAvailable }
+    static var luaAvailable: Bool {
+        get async { await LuaStdoutCaptureTests.luaAvailable }
+    }
 
     private static var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
@@ -61,13 +63,13 @@ import Testing
         return "error"
     }
 
-    @Test func numberReadsPassAndFail() throws {
+    @Test func numberReadsPassAndFail() async throws {
         guard Self.luaAvailable else { return }
         #expect(try grade("local a = io.read(\"n\")\nlocal b = io.read(\"n\")\nprint(a + b)\n") == "pass")
         #expect(try grade("local a = io.read(\"*n\")\nlocal b = io.read(\"*n\")\nprint(a * b)\n") == "fail")
     }
 
-    @Test func lineReadsAndIoLinesIterate() throws {
+    @Test func lineReadsAndIoLinesIterate() async throws {
         guard Self.luaAvailable else { return }
         #expect(
             try grade("local a = io.read()\nlocal b = io.read(\"l\")\nprint(tonumber(a) + tonumber(b))\n") == "pass")
@@ -77,19 +79,19 @@ import Testing
                 == "pass")
     }
 
-    @Test func wholeInputReadAndIncludedComparison() throws {
+    @Test func wholeInputReadAndIncludedComparison() async throws {
         guard Self.luaAvailable else { return }
         #expect(try grade("io.write(\"got: \", io.read(\"a\"))\n", expected: "got: 3\n4") == "pass")
         #expect(try grade("print(\"answer is 7\")\n", comparison: .included) == "pass")
     }
 
-    @Test func anOsExitAfterTheAnswerIsStillGraded() throws {
+    @Test func anOsExitAfterTheAnswerIsStillGraded() async throws {
         guard Self.luaAvailable else { return }
         #expect(try grade("print(io.read(\"n\") + io.read(\"n\"))\nos.exit(0)\n") == "pass")
         #expect(try grade("print(0)\nos.exit(0)\n") == "fail")
     }
 
-    @Test func aCrashIsAGradedFailure() throws {
+    @Test func aCrashIsAGradedFailure() async throws {
         guard Self.luaAvailable else { return }
         #expect(try grade("error(\"boom\")\n") == "fail")
     }

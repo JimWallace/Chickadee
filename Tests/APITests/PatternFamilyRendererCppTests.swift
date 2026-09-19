@@ -111,7 +111,7 @@ import Testing
     // One test per kind, pass AND fail against real submissions.
 
     @Test func boundaryEqualityPassesAndFails() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let good = try Self.execute(
             script: script, submission: "int f(int x) { return x * x; }\n")
@@ -127,7 +127,7 @@ import Testing
     /// where a reference that does not compile is a build failure rather than a
     /// per-case result — worth executing rather than assuming.
     @Test func differentialGradesAgainstTheReference() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(
                 .differential, expected: .null,
@@ -147,7 +147,7 @@ import Testing
     /// five languages avoid, which is why C++ gives the reference call its own
     /// handler.
     @Test func differentialBlamesTheReferenceWhenTheReferenceThrows() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(
                 .differential, expected: .null,
@@ -161,7 +161,7 @@ import Testing
     }
 
     @Test func unorderedEqualityIgnoresOrderOnly() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(
                 .unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
@@ -176,7 +176,7 @@ import Testing
     }
 
     @Test func approximateEqualityUsesTheTolerance() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         var family = Self.family(.approximateEquality, expected: .double(0.3))
         family = PatternFamily(
             id: family.id, name: family.name, kind: family.kind,
@@ -193,7 +193,7 @@ import Testing
     }
 
     @Test func variableEqualityReadsAGlobal() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.variableEquality, function: "threshold", expected: .int(7), args: []))
         let good = try Self.execute(script: script, submission: "int threshold = 7;\n")
@@ -203,7 +203,7 @@ import Testing
     }
 
     @Test func returnTypeCheckMatchesTheNeutralTypeNames() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
         let good = try Self.execute(
             script: script,
@@ -215,7 +215,7 @@ import Testing
     }
 
     @Test func exceptionExpectedMatchesTheSubstring() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.exceptionExpected, expected: .string("negative")))
         let throwing = try Self.execute(
             script: script,
@@ -230,7 +230,7 @@ import Testing
     }
 
     @Test func performanceThresholdTimesTheCall() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(2000)))
         // A trivial function is far under a 2s budget.
         let fast = try Self.execute(script: script, submission: "int f(int x) { return x; }\n")
@@ -240,7 +240,7 @@ import Testing
     }
 
     @Test func stdoutEqualityCapturesPrintfAndCout() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.stdoutEquality, expected: .string("hello 3\nvia cout\n")))
         let good = try Self.execute(
@@ -270,7 +270,7 @@ import Testing
     /// exited 0 and every case in the assignment passed silently, with no
     /// verdict JSON at all (#1345).
     @Test func aSubmissionCallingExitIsAnErrorNotAPass() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let sneaky = try Self.execute(
             script: script,
@@ -300,7 +300,7 @@ import Testing
     /// `error` because its no-submission check runs before the compile step
     /// (#1349).
     @Test func theExistenceGuardFailsRatherThanErrorsOnAMissingSubmission() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = renderCppExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(9)), specHash: "h")
         // An upload with no C++ in it at all: the wrapper finds no candidate.
@@ -314,7 +314,7 @@ import Testing
     /// A successful compile's warnings must not ride into a PASSING test's
     /// `longResult` (#1349).
     @Test func compilerWarningsDoNotReachAPassingResult() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let good = try Self.execute(
             script: script,
@@ -336,7 +336,7 @@ import Testing
     /// `invalid_argument` was marked "wrong error raised" (#1347). Java and
     /// Python both match the type; this is C++ catching up.
     @Test func exceptionExpectedMatchesTheExceptionType() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let byType = Self.render(
             Self.family(.exceptionExpected, expected: .string("invalid_argument")))
         let good = try Self.execute(
@@ -376,7 +376,7 @@ import Testing
     /// and aborted the process (SIGABRT → status `error`), where the same
     /// submission in Java has always been a graded fail (#1347).
     @Test func aNonStdThrowIsAGradedFailureNotACrash() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let thrown = try Self.execute(
             script: script, submission: #"int f(int) { throw "negative input"; }"#)
@@ -392,7 +392,7 @@ import Testing
     /// the family reported `error` while the 0-point existence guard, which
     /// only takes the function's address, still passed (#1346).
     @Test func performanceThresholdAcceptsAVoidTarget() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
         let good = try Self.execute(script: script, submission: "void f(int) { }\n")
         #expect(
@@ -406,7 +406,7 @@ import Testing
     /// Round-trips through the match, proving the escaping is correct rather
     /// than merely compilable.
     @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
         let good = try Self.execute(
@@ -431,7 +431,7 @@ import Testing
     /// the exit code is what makes this a regression test — the status was
     /// always 1.
     @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.stdoutEquality, expected: .string("hello")))
         let thrown = try Self.execute(
@@ -451,7 +451,7 @@ import Testing
     /// A throwing submission on a guarded kind is a graded FAIL with the
     /// shared first line, never a crash.
     @Test func anUnexpectedThrowIsAGradedFailure() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let throwing = try Self.execute(
             script: script,
@@ -464,7 +464,7 @@ import Testing
     /// Per-student values flow: argVarRefs and expectedVarRef resolve through
     /// _ck_inputs.hpp when their names are per-student.
     @Test func perStudentReferencesResolveThroughTheInputsHeader() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let psCase = PatternCase(
             key: "01", label: "ps", args: [.int(0)], expected: .int(0),
             argVarRefs: ["threshold"], expectedVarRef: "want")
@@ -495,7 +495,7 @@ import Testing
     /// text on its real stdin; a second, checker translation unit grades what
     /// came back.
     @Test func programIOPassesAndFails() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let good = try Self.execute(
@@ -517,7 +517,7 @@ import Testing
     }
 
     @Test func programIOIncludedAndRegexComparisons() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let program = """
             #include <iostream>
             int main() { int a, b; std::cin >> a >> b; std::cout << "header\\nsum=" << a + b << "\\n"; return 0; }
@@ -536,7 +536,7 @@ import Testing
     /// A non-zero exit from the program is a graded failure that names the
     /// status, never a pass and never a harness error.
     @Test func programIONonZeroExitIsAGradedFailure() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let crashed = try Self.execute(

@@ -132,7 +132,7 @@ final class ZipArchiverTests {
     @Test func dotDotTraversalThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("traversal.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "../evil.txt", content: "pwned"),
@@ -154,7 +154,7 @@ final class ZipArchiverTests {
     @Test func deepDotDotTraversalThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("deep_traversal.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "subdir/../../evil.txt", content: "pwned")
@@ -175,7 +175,7 @@ final class ZipArchiverTests {
     @Test func absolutePathEntryThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("absolute.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "/etc/evil.txt", content: "pwned")
@@ -221,7 +221,7 @@ final class ZipArchiverTests {
     @Test func readScriptFromZipReturnsCorrectContent() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_test.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "test_foo.py", content: "def foo():\n    pass\n")
@@ -234,7 +234,7 @@ final class ZipArchiverTests {
     @Test func readScriptFromZipReturnsNilForMissingEntry() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_missing.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "test_a.py", content: "pass\n")
@@ -252,7 +252,7 @@ final class ZipArchiverTests {
         else { return }
         let zipPath = tmpDir.appendingPathComponent("update_test.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "test_bar.py", content: "# old\n")
@@ -270,7 +270,7 @@ final class ZipArchiverTests {
         else { return }
         let zipPath = tmpDir.appendingPathComponent("add_test.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "existing.py", content: "pass\n")
@@ -289,7 +289,7 @@ final class ZipArchiverTests {
         else { return }
         let zipPath = tmpDir.appendingPathComponent("preserve_test.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "a.py", content: "# a\n"),
@@ -313,7 +313,7 @@ final class ZipArchiverTests {
         else { return }
         let zipPath = tmpDir.appendingPathComponent("remove_test.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "keep.py", content: "pass\n"),
@@ -333,7 +333,7 @@ final class ZipArchiverTests {
         else { return }
         let zipPath = tmpDir.appendingPathComponent("remove_missing.zip").path
         guard
-            try makePythonZip(
+            await makePythonZip(
                 at: zipPath,
                 entries: [
                     (name: "test_a.py", content: "pass\n")
