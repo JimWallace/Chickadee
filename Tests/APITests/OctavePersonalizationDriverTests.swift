@@ -74,8 +74,8 @@ import Testing
         )
     }
 
-    @Test func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [FamilyVariable(name: "base", value: .int(10))],
@@ -106,8 +106,8 @@ import Testing
     }
 
     /// The emitted literals must be *parseable Octave*, not merely plausible.
-    @Test func everyEmittedValueParsesBackAsOctave() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func everyEmittedValueParsesBackAsOctave() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [],
@@ -135,8 +135,8 @@ import Testing
 
     /// One seed, two implementations — both run on the same env var and
     /// compared, across a realistic 64-hex seed and the edge cases.
-    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let runtime = try OctavePatternFamilyExecutionTests.canonicalRuntime()
         for seed in [String(repeating: "9f3c", count: 16), "", "ff", "0"] {
@@ -173,8 +173,8 @@ import Testing
     /// The seed must also match every other language's, so a student's seed is
     /// one number whatever the assignment's language. Asserted against the fold
     /// computed independently in Swift.
-    @Test func theOctaveSeedMatchesTheDocumentedHornerFold() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theOctaveSeedMatchesTheDocumentedHornerFold() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let seed = "abc123"
         let source = """
