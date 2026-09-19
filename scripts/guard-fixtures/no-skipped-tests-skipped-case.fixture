@@ -1,0 +1,11 @@
+# A skipped execution test used to be invisible: the job stayed green having
+# run nothing in that language. The trait makes it a skip in the report, and
+# this guard makes the skip a red job on the CI image.
+guard="scripts/check-no-skipped-tests.sh"
+files="scripts/guard-fixtures/samples/xunit-swift-testing.xml"
+description="a skipped test in the xUnit report"
+expect="skipped test"
+apply() {
+    sed -i 's|skipped="0"|skipped="1"|' scripts/guard-fixtures/samples/xunit-swift-testing.xml
+    sed -i 's|  </testsuite>|    <testcase classname="APITests.LuaProgramIOTests" name="programWritesItsStdout()" >\n      <skipped>requires lua on PATH</skipped>\n    </testcase>\n  </testsuite>|' scripts/guard-fixtures/samples/xunit-swift-testing.xml
+}

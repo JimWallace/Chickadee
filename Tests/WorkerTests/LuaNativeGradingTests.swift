@@ -27,6 +27,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct LuaNativeGradingTests {
 
+    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") { await Self.luaAvailable }
+
     static var luaAvailable: Bool {
         get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
@@ -37,8 +39,7 @@ import Testing
     /// being added to the CI image, so this whole suite skipped while reporting
     /// green. Under `CI`, Lua MUST be present; this cannot be satisfied by
     /// skipping.
-    @Test func luaIsPresentInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func luaIsPresentInCI() async {
         let isAvailable = await Self.luaAvailable
         #expect(
             isAvailable,
@@ -89,9 +90,7 @@ import Testing
 
     /// The regression test for the defect: a `.lua` test is dispatched to a real
     /// interpreter and comes back with a status, not a command-not-found error.
-    @Test func aLuaTestIsGradedByTheNativeWorker() async throws {
-        guard await Self.luaAvailable else { return }
-
+    @Test(Self.requiresLua) func aLuaTestIsGradedByTheNativeWorker() async throws {
         let passing = """
             local chickadee = require("test_runtime")
             local student = chickadee.load_student()
@@ -123,9 +122,7 @@ import Testing
     /// Exit 1 is a fail and exit 2 is an error, through the real subprocess
     /// boundary rather than a stubbed runner — the mapping generated Lua relies
     /// on when it calls `chickadee.failed` / `chickadee.errored`.
-    @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard await Self.luaAvailable else { return }
-
+    @Test(Self.requiresLua) func exitCodesMapToOutcomeStatuses() async throws {
         let dir = try Self.makeWorkspace(
             submission: "function double(x) return x end\n",
             scripts: [
@@ -154,9 +151,7 @@ import Testing
     /// graded — `chickadee.load_student()` swallows the runtime error
     /// deliberately, matching test_runtime.R. Worth pinning natively because it
     /// is the difference between one failing test and a whole suite of errors.
-    @Test func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
-        guard await Self.luaAvailable else { return }
-
+    @Test(Self.requiresLua) func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
         let script = """
             local chickadee = require("test_runtime")
             local student = chickadee.load_student()
@@ -181,9 +176,7 @@ import Testing
     /// The per-student inputs file, written and read on the native path. The
     /// browser smoke supplies one as a fixture, which proves the reader and says
     /// nothing about the worker.
-    @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard await Self.luaAvailable else { return }
-
+    @Test(Self.requiresLua) func perStudentInputsAreReadableOnTheNativePath() async throws {
         let script = """
             local chickadee = require("test_runtime")
             local values = chickadee.inputs()

@@ -106,7 +106,8 @@ jobs:
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
-          run_tests() { swift test --enable-code-coverage; }
+          mkdir -p "${RUNNER_TEMP}/xunit"
+          run_tests() { swift test --enable-code-coverage --xunit-output "${RUNNER_TEMP}/xunit/all-targets.xml"; }
           if run_tests; then
             exit 0
           fi
@@ -117,6 +118,11 @@ jobs:
           fi
           echo "::error::Nightly clean-build tests failed on both attempts — treating as a real failure."
           exit 1
+
+      # See the same step in swift-tests.yml: a ConditionTrait skip on the CI
+      # image is a missing interpreter, and the run must say so in red.
+      - name: No test was skipped
+        run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
 
       - name: Export coverage to lcov
         run: |

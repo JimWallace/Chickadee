@@ -57,8 +57,7 @@ import Testing
 
     /// The regression that surfaced it: a regex in the message. Before the fix
     /// this printed invalid JSON and the student saw the raw blob.
-    @Test func backslashesSurviveAsValidJSON() async throws {
-        guard await rscriptIsAvailable() else { return }
+    @Test(.requiresRscript) func backslashesSurviveAsValidJSON() async throws {
         let decoded = try #require(try await emit(#""Found 1 cell(s) containing `is\\.numeric|summary\\s*\\(`""#))
         #expect(
             decoded["shortResult"] as? String
@@ -66,8 +65,7 @@ import Testing
     }
 
     /// A quote used to emit `\\"`, which closes the JSON string early.
-    @Test func embeddedQuotesDoNotTerminateTheString() async throws {
-        guard await rscriptIsAvailable() else { return }
+    @Test(.requiresRscript) func embeddedQuotesDoNotTerminateTheString() async throws {
         let decoded = try #require(try await emit(#""expected \"underweight\" here""#))
         #expect(decoded["shortResult"] as? String == #"expected "underweight" here"#)
     }
@@ -75,8 +73,7 @@ import Testing
     /// A newline used to emit `\\n` — valid JSON, but the student saw a literal
     /// backslash-n instead of a line break. Most R failure messages are
     /// multi-line, so this was visible on nearly every failure.
-    @Test func newlinesTabsAndCarriageReturnsDecodeToRealControlCharacters() async throws {
-        guard await rscriptIsAvailable() else { return }
+    @Test(.requiresRscript) func newlinesTabsAndCarriageReturnsDecodeToRealControlCharacters() async throws {
         let decoded = try #require(try await emit(#""line one\n  indented\ttabbed\r""#))
         let result = try #require(decoded["shortResult"] as? String)
         #expect(result.contains("\n"))
@@ -88,8 +85,7 @@ import Testing
 
     /// Everything at once, since the passes run in sequence and an ordering
     /// mistake (escaping quotes before backslashes) only shows when combined.
-    @Test func allEscapesCompose() async throws {
-        guard await rscriptIsAvailable() else { return }
+    @Test(.requiresRscript) func allEscapesCompose() async throws {
         let decoded = try #require(try await emit(#""a\\b \"q\" \n\t end""#))
         #expect(decoded["shortResult"] as? String == "a\\b \"q\" \n\t end")
         #expect(decoded["status"] as? String == "pass")

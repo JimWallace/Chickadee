@@ -19,6 +19,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(5))) struct RacketRendererExecutionTests {
 
+    static let requiresRacket: ConditionTrait = .enabled("requires racket on PATH") { await Self.racketAvailable }
+
     static var racketAvailable: Bool {
         get async { await toolIsAvailable("racket", arguments: ["--version"]) }
     }
@@ -26,8 +28,7 @@ import Testing
     /// The did-not-skip proof for the APITests job. Without it, a CI image
     /// missing `racket` turns every test below into a silent pass — the exact
     /// shape that let R's suites skip everywhere for a whole release series.
-    @Test func racketIsPresentInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func racketIsPresentInCI() async {
         let isAvailable = await Self.racketAvailable
         #expect(
             isAvailable,
@@ -92,8 +93,7 @@ import Testing
 
     // MARK: - The property the design rests on
 
-    @Test func oneRenderedTestGradesBothDialects() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func oneRenderedTestGradesBothDialects() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
             let result = try await Self.execute(script: script, submission: submission)
@@ -103,8 +103,7 @@ import Testing
 
     // MARK: - Per-kind, pass AND fail
 
-    @Test func boundaryEqualityPassesAndFails() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func boundaryEqualityPassesAndFails() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
             #expect(try await Self.execute(script: script, submission: submission).code == 0)
@@ -119,8 +118,7 @@ import Testing
     /// The exact-vs-inexact trap: BSL reads `18.5` as the exact rational 37/2,
     /// so `equal?` would answer #f against a rendered flonum and mark a correct
     /// student wrong. The runtime compares numbers with `=` for this reason.
-    @Test func exactAndInexactNumbersCompareEqual() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func exactAndInexactNumbersCompareEqual() async throws {
         let script = Self.render(
             Self.family(.boundaryEquality, expected: .double(18.5), args: [.int(1)]))
         for submission in Self.bothDialects("(define (f x) 18.5)") {
@@ -131,8 +129,7 @@ import Testing
 
     /// A list argument is what BSL's `quote` refusal would have broken — the
     /// runtime binds arguments into the namespace instead.
-    @Test func listArgumentsSurviveTheBSLQuoteRestriction() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func listArgumentsSurviveTheBSLQuoteRestriction() async throws {
         let script = Self.render(
             Self.family(
                 .boundaryEquality, function: "total", expected: .int(6),
@@ -147,8 +144,7 @@ import Testing
         }
     }
 
-    @Test func unorderedEqualityIgnoresOrderOnly() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func unorderedEqualityIgnoresOrderOnly() async throws {
         let script = Self.render(
             Self.family(
                 .unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
@@ -160,8 +156,7 @@ import Testing
         #expect(wrong.code == 1)
     }
 
-    @Test func approximateEqualityHonoursTolerance() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func approximateEqualityHonoursTolerance() async throws {
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
         let close = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 1.0000001)\n")
@@ -171,8 +166,7 @@ import Testing
         #expect(far.code == 1)
     }
 
-    @Test func variableEqualityReadsAModuleLevelValue() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func variableEqualityReadsAModuleLevelValue() async throws {
         let script = Self.render(
             Self.family(.variableEquality, function: "threshold", expected: .int(42), args: []))
         for submission in Self.bothDialects("(define threshold 42)") {
@@ -184,8 +178,7 @@ import Testing
         #expect(wrong.code == 1)
     }
 
-    @Test func returnTypeCheckNamesTheNeutralType() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func returnTypeCheckNamesTheNeutralType() async throws {
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
         let good = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) \"hello\")\n")
@@ -195,8 +188,7 @@ import Testing
         #expect(bad.code == 1)
     }
 
-    @Test func exceptionExpectedMatchesTheMessage() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func exceptionExpectedMatchesTheMessage() async throws {
         let script = Self.render(Self.family(.exceptionExpected, expected: .string("boom")))
         let raises = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (error \"boom\"))\n")
@@ -206,16 +198,14 @@ import Testing
         #expect(returns.code == 1)
     }
 
-    @Test func performanceThresholdBoundsRuntime() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func performanceThresholdBoundsRuntime() async throws {
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
         let fast = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) x)\n")
         #expect(fast.code == 0, "\(fast.stdout)")
     }
 
-    @Test func stdoutEqualityComparesPrintedOutput() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func stdoutEqualityComparesPrintedOutput() async throws {
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hi")))
         let good = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (display \"hi\"))\n")
@@ -227,8 +217,7 @@ import Testing
 
     // MARK: - Existence guard
 
-    @Test func existenceGuardFailsRatherThanErrors() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func existenceGuardFailsRatherThanErrors() async throws {
         let script = renderRacketExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(1)), specHash: "h")
         let present = try await Self.execute(
@@ -243,8 +232,7 @@ import Testing
 
     /// A submission that does not compile is the STUDENT's finding, so it is a
     /// failure of the test rather than a runner error.
-    @Test func aBrokenSubmissionFailsWithAReadableMessage() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func aBrokenSubmissionFailsWithAReadableMessage() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         let broken = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (+ x\n")
@@ -257,8 +245,7 @@ import Testing
     /// `.programIO`: the module is instantiated under a parameterized input
     /// port, so a `#lang racket` program's `read-line` reads the case text,
     /// and an `(exit)` after the answer is still graded.
-    @Test func programIOPassesAndFails() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func programIOPassesAndFails() async throws {
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let good = try await Self.execute(
@@ -289,8 +276,7 @@ import Testing
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
-    @Test func programIORegexMatchesALineOfTheOutput() async throws {
-        guard await Self.racketAvailable else { return }
+    @Test(Self.requiresRacket) func programIORegexMatchesALineOfTheOutput() async throws {
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),

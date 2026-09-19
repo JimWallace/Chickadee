@@ -242,8 +242,10 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theInlinedScriptRunsInItsOwnInterpreter(_ language: AssignmentLanguage) async throws {
         guard let argv = Self.interpreter(for: language), let command = argv.first else { return }
-        // Not "expected on this platform" as a failure: a dev box has neither
-        // octave-cli nor racket, and a silent skip is the house rule for that.
+        // A `ConditionTrait` skips a whole test, and this one is parameterized
+        // over languages whose interpreters are absent one at a time on a dev
+        // box. The guard is the per-argument form of the same skip; on the CI
+        // image every interpreter is present and the guard never fires.
         guard await Self.isAvailable(command) else { return }
 
         let manifest = TestProperties(

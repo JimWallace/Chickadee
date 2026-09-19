@@ -88,8 +88,7 @@ import Testing
     /// probe and have that answer parse — the two-step the original guard only
     /// checked the first half of. On a laptop a missing interpreter is not a
     /// defect, so absence is skipped there.
-    @Test func everyProbeOutputParsesInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func everyProbeOutputParsesInCI() async {
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
             guard let run = try? await runTool([probe.command] + probe.versionArguments) else {
@@ -118,6 +117,8 @@ import Testing
 /// `exec`; failing closed advertises nothing and every C++ job queues forever.
 @Suite struct RunnerExecProbeTests {
 
+    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppIsAvailable() }
+
     /// The probe program is answered per language, exhaustively — the guard
     /// against an eighth compiled language reaching the probe with C++'s source.
     @Test func onlyCppSuppliesAnExecProbeProgram() {
@@ -135,9 +136,7 @@ import Testing
 
     /// A work root that permits exec advertises C++; the same probe against a
     /// directory it cannot write to does not.
-    @Test func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
-        guard await gppIsAvailable() else { return }
-
+    @Test(Self.requiresGpp) func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
         let usable = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: usable, withIntermediateDirectories: true)
@@ -164,7 +163,7 @@ import Testing
             "an unusable work root withheld python too, which needs no exec probe")
     }
 
-    private func gppIsAvailable() async -> Bool {
+    private static func gppIsAvailable() async -> Bool {
         return await toolIsAvailable("g++", arguments: ["--version"])
     }
 }

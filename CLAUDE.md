@@ -1320,8 +1320,8 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
   completion (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
-  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`,
-  `@Test(arguments:)`, and `.timeLimit(.minutes(n))` (put it on any suite
+  `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
+  `.disabled(if:)`, `@Test(arguments:)`, and `.timeLimit(.minutes(n))` (put it on any suite
   that spawns subprocesses or awaits daemons/network, so a stall fails
   with a named test instead of holding the CI job to its 20-minute kill —
   see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid
@@ -1354,10 +1354,20 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
   `try #require(value)` — the idiomatic Swift Testing replacement for
   `XCTUnwrap`.
 - **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
-  records a failure. Either `guard condition else { return }` (silent)
-  or `throw IssueRecorded("...")` (fails with a clear message) — pick
-  based on whether the unmet condition is "expected on this platform"
-  (silent) or "test setup is broken" (failure).
+  records a failure. A condition the host may not meet (an interpreter on
+  PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
+  `@Test(Self.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`,
+  each a `static let` built with `.enabled("requires lua on PATH") { await
+  Self.luaAvailable }`. Swift Testing then reports the test as skipped with
+  that reason, in the log and in the xUnit report, and
+  `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
+  because the CI image carries every interpreter. That closed the silent-skip
+  trap: a `guard condition else { return }` kept a lane green having executed
+  nothing in a language, three times. The guard form survives only where a
+  trait cannot express the condition — per-argument availability in a
+  parameterized test, or a body whose first half runs without the tool — and
+  each such site says so in a comment. "Test setup is broken" is still
+  `throw IssueRecorded("...")`, which fails with a clear message.
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/COEPMiddlewareTests.swift](Tests/APITests/COEPMiddlewareTests.swift)

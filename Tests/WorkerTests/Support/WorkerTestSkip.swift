@@ -1,12 +1,30 @@
 // Tests/WorkerTests/Support/WorkerTestSkip.swift
 //
-// Worker-test-side helpers: an IssueRecorded error for clean skips,
-// a `withMockURLProtocolLock` actor-backed serializer for
-// `MockURLProtocol`'s process-global state, and a `testURL` builder
-// that centralizes the unavoidable force-unwrap of hardcoded test
-// fixture URLs.
+// Worker-test-side helpers: the two shared `ConditionTrait`s that make a
+// skip visible (`.ciOnly`, `.requiresRscript`), an IssueRecorded error for
+// clean failures, a `withMockURLProtocolLock` actor-backed serializer for
+// `MockURLProtocol`'s process-global state, and a `testURL` builder that
+// centralizes the unavoidable force-unwrap of hardcoded test fixture URLs.
 
 import Foundation
+import Testing
+
+extension ConditionTrait {
+    /// Runs the test only in CI, where every grading interpreter must be
+    /// present (`.github/docker/ci-image/Dockerfile`). Everywhere else the test
+    /// reads as skipped, with this reason, instead of returning early in
+    /// silence. `scripts/check-no-skipped-tests.sh` turns a skip on the CI
+    /// image into a red job.
+    static let ciOnly: ConditionTrait = .enabled(
+        if: ProcessInfo.processInfo.environment["CI"] != nil,
+        "runs only in CI, where every interpreter must be present")
+
+    /// Skips, visibly, when `Rscript` does not answer `--version`. Backed by
+    /// the cached probe in ScriptRunnerTestSupport.swift.
+    static let requiresRscript: ConditionTrait = .enabled("requires Rscript on PATH") {
+        await rscriptIsAvailable()
+    }
+}
 
 struct IssueRecorded: Error, CustomStringConvertible {
     let message: String
@@ -66,4 +84,12 @@ private actor MockURLProtocolLock {
             locked = false
         }
     }
+}
+
+/// `@Test(.ciOnly)` resolves through `any TestTrait`, so the implicit-member
+/// spelling needs the same `Trait where Self == ConditionTrait` extension the
+/// built-in `.enabled(if:)` uses.
+extension Trait where Self == ConditionTrait {
+    static var ciOnly: Self { ConditionTrait.ciOnly }
+    static var requiresRscript: Self { ConditionTrait.requiresRscript }
 }

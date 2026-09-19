@@ -101,6 +101,9 @@ import Testing
         for line in extracted.split(separator: "\n") where line.hasPrefix("# ---- chickadee") {
             #expect(line.hasPrefix("#"))
         }
+        // The assertions above run on every host; only the execution below
+        // needs Rscript, so this stays a guard rather than a trait that would
+        // skip the whole test.
         guard await rscriptIsAvailable() else { return }
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("ck-rcells-run-\(UUID().uuidString)")
