@@ -1321,7 +1321,12 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
-  `.disabled(if:)`, `@Test(arguments:)`, and `.timeLimit(.minutes(n))` (put it on any suite
+  `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
+  test: the body runs in a child process, for a path that ends the process or
+  writes process-global state such as `setenv` — see
+  `WedgeWatchdogAbortTests` and the WorkerTests env tests; the body cannot
+  capture `self`, so the helpers it calls are static or file-scope), and
+  `.timeLimit(.minutes(n))` (put it on any suite
   that spawns subprocesses or awaits daemons/network, so a stall fails
   with a named test instead of holding the CI job to its 20-minute kill —
   see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid

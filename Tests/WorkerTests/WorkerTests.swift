@@ -26,7 +26,21 @@ import Testing
     }
 
     private func writeScript(_ body: String, name: String = "test.sh") throws -> URL {
-        let url = tmpDir.appendingPathComponent(name)
+        try Self.writeScript(body, name: name, in: tmpDir)
+    }
+
+    /// The instance helpers above need `self`, which an exit-test body cannot
+    /// capture; these two static forms serve the tests that run in a child
+    /// process.
+    private static func makeScratchDirectory() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-worker-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func writeScript(_ body: String, name: String = "test.sh", in dir: URL) throws -> URL {
+        let url = dir.appendingPathComponent(name)
         try body.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
             [.posixPermissions: NSNumber(value: 0o755)],
@@ -117,18 +131,16 @@ import Testing
         let runner = UnsandboxedScriptRunner()
         let workDir = tmpDir
         // `runner.run` reads `ProcessInfo.processInfo.environment` (walking the
-        // C `environ` array) to build the child env. Run it under the env lock
-        // so a concurrent `unsetenv` in another test can't mutate `environ`
-        // mid-read.
-        let output = try await withEnvLock {
-            await runScriptRobustly(
-                runner,
-                script: script,
-                workDir: workDir,
-                timeLimitSeconds: 60,
-                env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
-            )
-        }
+        // C `environ` array) to build the child env. No test in this process
+        // writes `environ` any more — the two below run in child processes —
+        // so the read needs no lock.
+        let output = await runScriptRobustly(
+            runner,
+            script: script,
+            workDir: workDir,
+            timeLimitSeconds: 60,
+            env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
+        )
         #expect(output.exitCode == 0)
         #expect(
             output.stderr.contains("seed=deadbeef"),
@@ -139,41 +151,36 @@ import Testing
     @Test func scriptEnvVarUnsetWhenNoOverride() async throws {
         // Sanity check: empty env override = no var set. The script prints the
         // raw env-var expansion; an unset var expands to an empty string.
-        let script = try writeScript(
-            """
-            #!/bin/sh
-            echo "seed=[$CHICKADEE_ASSIGNMENT_SEED]" >&2
-            exit 0
-            """)
-        let runner = UnsandboxedScriptRunner()
-        let workDir = tmpDir
-        // Mutating + reading `environ` runs under the env lock so it never
-        // overlaps another env-touching test; the prior value is restored on
-        // exit rather than left cleared.
-        let output = try await withEnvLock {
-            let original = ProcessInfo.processInfo.environment["CHICKADEE_ASSIGNMENT_SEED"]
-            defer {
-                if let original {
-                    setenv("CHICKADEE_ASSIGNMENT_SEED", original, 1)
-                } else {
-                    unsetenv("CHICKADEE_ASSIGNMENT_SEED")
-                }
-            }
+        //
+        // An exit test: the body runs in a child process, so the `unsetenv`
+        // reaches no other test's `environ` — nothing to lock, nothing to
+        // restore. A child cannot use this instance's `tmpDir`, so it makes
+        // its own scratch directory.
+        await #expect(processExitsWith: .success) {
+            let workDir = try WorkerTests.makeScratchDirectory()
+            defer { try? FileManager.default.removeItem(at: workDir) }
+            let script = try WorkerTests.writeScript(
+                """
+                #!/bin/sh
+                echo "seed=[$CHICKADEE_ASSIGNMENT_SEED]" >&2
+                exit 0
+                """, in: workDir)
+            let runner = UnsandboxedScriptRunner()
             // Ensure parent doesn't have the var set in this test's environment.
             unsetenv("CHICKADEE_ASSIGNMENT_SEED")
-            return await runScriptRobustly(
+            let output = await runScriptRobustly(
                 runner,
                 script: script,
                 workDir: workDir,
                 timeLimitSeconds: 60,
                 env: [:]
             )
+            #expect(output.exitCode == 0)
+            #expect(
+                output.stderr.contains("seed=[]"),
+                "Expected unset env var when overrides is empty and parent didn't set it; got: \(output.stderr)"
+            )
         }
-        #expect(output.exitCode == 0)
-        #expect(
-            output.stderr.contains("seed=[]"),
-            "Expected unset env var when overrides is empty and parent didn't set it; got: \(output.stderr)"
-        )
     }
 
     @Test func scriptDoesNotInheritNonAllowlistedParentEnv() async throws {
@@ -182,37 +189,33 @@ import Testing
         // parent environment — so non-allowlisted worker vars (the shape
         // RUNNER_SHARED_SECRET arrives in) leaked into student scripts.
         // execve() with a parent-built envp replaces the environment outright.
-        let script = try writeScript(
-            """
-            #!/bin/sh
-            echo "canary=[$WORKER_SECRET_CANARY]" >&2
-            exit 0
-            """)
-        let runner = UnsandboxedScriptRunner()
-        let workDir = tmpDir
-        let output = try await withEnvLock {
-            let original = ProcessInfo.processInfo.environment["WORKER_SECRET_CANARY"]
-            defer {
-                if let original {
-                    setenv("WORKER_SECRET_CANARY", original, 1)
-                } else {
-                    unsetenv("WORKER_SECRET_CANARY")
-                }
-            }
+        //
+        // An exit test, for the same reason as `scriptEnvVarUnsetWhenNoOverride`:
+        // the `setenv` happens in a child process of the test runner.
+        await #expect(processExitsWith: .success) {
+            let workDir = try WorkerTests.makeScratchDirectory()
+            defer { try? FileManager.default.removeItem(at: workDir) }
+            let script = try WorkerTests.writeScript(
+                """
+                #!/bin/sh
+                echo "canary=[$WORKER_SECRET_CANARY]" >&2
+                exit 0
+                """, in: workDir)
+            let runner = UnsandboxedScriptRunner()
             setenv("WORKER_SECRET_CANARY", "leaked-worker-secret", 1)
-            return await runScriptRobustly(
+            let output = await runScriptRobustly(
                 runner,
                 script: script,
                 workDir: workDir,
                 timeLimitSeconds: 60,
                 env: [:]
             )
+            #expect(output.exitCode == 0)
+            #expect(
+                output.stderr.contains("canary=[]"),
+                "Non-allowlisted parent env vars must not reach the script; got: \(output.stderr)"
+            )
         }
-        #expect(output.exitCode == 0)
-        #expect(
-            output.stderr.contains("canary=[]"),
-            "Non-allowlisted parent env vars must not reach the script; got: \(output.stderr)"
-        )
     }
 
     // MARK: - UnsandboxedScriptRunner: timeout

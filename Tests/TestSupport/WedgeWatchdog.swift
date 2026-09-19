@@ -41,6 +41,11 @@
 // as the thing that would settle Family 5's noisy-neighbour-versus-saturation
 // question; it cannot, and that note has been corrected.
 //
+// The abort path itself is proven by `WedgeWatchdogAbortTests` (APITests):
+// an exit test runs a silent tracked scope in a child process and asserts the
+// SIGABRT and the thread table on its stderr. The `0` override is proven the
+// same way.
+//
 // The stall limit (default 300 s) exceeds every legitimate quiet stretch by a
 // wide margin. Measured, not guessed: a full 2,732-test `APITests` run at CI's
 // parallelization width passes with the limit forced down to **30 s** — the
