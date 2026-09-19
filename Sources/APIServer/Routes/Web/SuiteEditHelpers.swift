@@ -277,7 +277,7 @@ func applySuiteEdit(
     // failing those would make an unrelated save impossible to complete.
     for item in body.items where item.kind == "script" {
         guard let s = item.script, let content = s.content else { continue }
-        try KernelImportGuard.check(
+        try await KernelImportGuard.check(
             filename: s.script, content: content, setup: setup, environments: kernelEnvironments)
     }
 

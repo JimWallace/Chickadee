@@ -265,14 +265,14 @@ struct NotebookSourceRef: Sendable {
     }
 }
 
-func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
-    try notebookData(from: NotebookSourceRef(setup))
+func notebookData(for setup: APITestSetup) async throws(NotebookLookupError) -> Data {
+    try await notebookData(from: NotebookSourceRef(setup))
 }
 
 /// Primitive-driven variant of `notebookData(for:)`, safe to call from a
 /// `@Sendable` thread-pool closure. Behaviour is identical to the model-based
 /// overload.
-func notebookData(from source: NotebookSourceRef) throws(NotebookLookupError) -> Data {
+func notebookData(from source: NotebookSourceRef) async throws(NotebookLookupError) -> Data {
     if let path = source.notebookPath,
         let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !data.isEmpty
@@ -280,11 +280,11 @@ func notebookData(from source: NotebookSourceRef) throws(NotebookLookupError) ->
         return normalizeNotebookForJupyterLite(data)
     }
 
-    let entries = listZipEntries(zipPath: source.zipPath)
+    let entries = await listZipEntries(zipPath: source.zipPath)
     let preferredEntryNames = notebookCandidateEntryNames(
         starterNotebook: source.starterNotebook, entries: entries)
     for entryName in preferredEntryNames {
-        guard let data = extractZipEntry(zipPath: source.zipPath, entryName: entryName),
+        guard let data = await extractZipEntry(zipPath: source.zipPath, entryName: entryName),
             !data.isEmpty
         else { continue }
         return normalizeNotebookForJupyterLite(data)
@@ -330,18 +330,18 @@ private func notebookCandidateEntryNames(starterNotebook: String?, entries: [Str
 
 /// Returns true if the zip archive contains at least one `.ipynb` file.
 /// Uses `unzip -l` (list mode) so no files are extracted.
-func zipContainsNotebook(_ zipData: Data) -> Bool {
+func zipContainsNotebook(_ zipData: Data) async -> Bool {
     let tmp = FileManager.default.temporaryDirectory
         .appendingPathComponent("chickadee_zip_check_\(UUID().uuidString).zip")
     defer { try? FileManager.default.removeItem(at: tmp) }
 
     guard (try? zipData.write(to: tmp)) != nil else { return false }
 
-    // Must go through the shared helper: a naked `run()` here races every
-    // lock-serialized zip spawn in the codebase (Foundation's EFAULT race —
-    // see ZipProcessSerialization.swift).
+    // Must go through the shared helper: it carries the one-shot environment
+    // snapshot and the bounded capture every zip spawn needs
+    // (see ZipSubprocess.swift).
     guard
-        let result = try? runZipProcessCapturingStdout(
+        let result = try? await runZipProcess(
             executablePath: "/usr/bin/unzip",
             arguments: ["-l", tmp.path]
         )
@@ -352,8 +352,8 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 
 /// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,
 /// or nil if the file is not present or unzip fails.
-func extractNotebookFromZip(zipPath: String) -> Data? {
-    let entries = listZipEntries(zipPath: zipPath)
+func extractNotebookFromZip(zipPath: String) async -> Data? {
+    let entries = await listZipEntries(zipPath: zipPath)
     let candidate =
         entries.first {
             ($0 as NSString).lastPathComponent == "assignment.ipynb"
@@ -362,5 +362,5 @@ func extractNotebookFromZip(zipPath: String) -> Data? {
             URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"
         }
     guard let candidate else { return nil }
-    return extractZipEntry(zipPath: zipPath, entryName: candidate)
+    return await extractZipEntry(zipPath: zipPath, entryName: candidate)
 }

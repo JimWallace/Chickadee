@@ -75,16 +75,14 @@ actor ZipEntryListCache {
             return await pending.value
         }
 
-        let threadPool = threadPool
-        let eventLoop = eventLoopGroup?.next()
+        // No thread-pool offload any more. It existed because listing a zip
+        // was a BLOCKING spawn taken under the process-wide zip lock, so a
+        // caller parked a cooperative-pool thread for the spawn and for every
+        // other caller queued ahead of it. `listZipEntries` now suspends
+        // instead of blocking, and the lock is gone with Foundation's
+        // `Process`, so the offload would only add a hop.
         let listing = Task<[String], Never> {
-            if let threadPool, let eventLoop {
-                return
-                    (try? await threadPool.runIfActive(eventLoop: eventLoop) {
-                        listZipEntries(zipPath: zipPath)
-                    }.get()) ?? []
-            }
-            return listZipEntries(zipPath: zipPath)
+            await listZipEntries(zipPath: zipPath)
         }
         inFlight[zipPath] = listing
         let entries = await listing.value

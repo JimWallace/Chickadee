@@ -62,7 +62,7 @@ func rawScriptOverlayWrites(
     zipPath: String,
     globalVariables: [FamilyVariable],
     sectionVarsByID: [String: [FamilyVariable]]
-) -> [String: String] {
+) async -> [String: String] {
     var writes: [String: String] = [:]
     for item in items {
         guard case .script(let s) = item else { continue }
@@ -105,7 +105,7 @@ func rawScriptOverlayWrites(
             // No content provided — preserve the existing file, re-inlining
             // the current global + section variables (idempotent prepend).
             guard
-                let existing = readScriptFromZip(
+                let existing = await readScriptFromZip(
                     zipPath: zipPath,
                     filename: filename)
             else { continue }

@@ -2,33 +2,27 @@
 //
 // The one place tests shell out to `/usr/bin/zip`.
 //
-// WHY IT IS A HELPER AND NOT SEVENTEEN COPIES. Foundation's `Process` has a
-// known race under concurrent invocation — documented, and already mitigated in
-// production, by `Core/ZipProcessSerialization.swift`:
-//
-//     The race spans more than just `posix_spawn` itself — Pipe allocation,
-//     child fd setup, and spawn all share global state — and reaches across the
-//     whole Process API surface.
-//
-// That file exists because naked `Process.run()` calls once raced against
-// `ZipArchiver`'s lock-protected ones "and against each other". Seventeen test
-// fixtures then reintroduced exactly that, each building its own `Process` and
-// spawning it unlocked, and under `swift test --parallel` they crashed the test
-// process inside `Process.run()`:
+// WHY IT IS A HELPER AND NOT SEVENTEEN COPIES. Foundation's `Process` had a
+// race under concurrent invocation that spanned the whole API surface — Pipe
+// allocation, child fd setup and spawn all share global state — not just
+// `posix_spawn`. Seventeen test fixtures each built their own `Process` and
+// spawned it, and under `swift test --parallel` they crashed the test process
+// inside `Process.run()`:
 //
 //     Thread 1 crashed: __memmove_evex_unaligned_erms
 //       Process.run()
 //       AuthorScriptToolTests.writeZip(at:entries:)
 //
-// It looked like the environment race that shared these symptoms, and it is a
+// It looked like the environment race that shared these symptoms, and it was a
 // separate bug with a separate cause: it survived the removal of every `setenv`
 // in the suite.
 //
-// The lock has to cover CONSTRUCTION, not just the spawn — that is what the
-// header above means by "the whole Process API surface".
-// `runZipProcessCapturingStdout` builds the `Process` and its `Pipe` inside
-// the locked window, so routing through it is what keeps this fixture inside
-// the serialization regime.
+// Production answered that race with a process-wide lock around construction
+// and spawn, and this helper existed to keep the fixtures inside that regime.
+// The lock is gone now: zip spawns run on `swift-subprocess`, which does not
+// share the global state the race lived in. One helper is still the right
+// shape — it asserts the exit status, which most of the seventeen did and a
+// few silently skipped — but it no longer carries a serialization contract.
 
 import Core
 import Foundation
@@ -44,8 +38,8 @@ func writeZipFixture(
     of directory: URL,
     to zipPath: String,
     sourceLocation: SourceLocation = #_sourceLocation
-) throws {
-    let result = try runZipProcessCapturingStdout(
+) async throws {
+    let result = try await runZipProcess(
         executablePath: "/usr/bin/zip",
         arguments: ["-q", "-r", zipPath, "."],
         workingDirectory: directory

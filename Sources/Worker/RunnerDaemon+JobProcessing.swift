@@ -67,9 +67,20 @@ extension WorkerDaemon {
         let heartbeatTask = startHeartbeatLoop()
         defer {
             heartbeatTask.cancel()
-            // Fire-and-forget end-of-job heartbeat so the server's
-            // last-seen timestamp advances even if this job took >30s.
-            Task { try? await self.sendHeartbeat() }
+            // End-of-job heartbeat so the server's last-seen timestamp
+            // advances even if this job took >30s.
+            //
+            // Awaited in the defer (SE-0493) rather than fired into an
+            // unstructured Task: the old shape raced `process()` returning,
+            // so the heartbeat could still be in flight while the worker
+            // loop claimed the next job. Shielded (SE-0504) because an async
+            // defer still observes cancellation, and the detached Task it
+            // replaces did not inherit it -- without the shield, the one path
+            // that most needs a final heartbeat (the cancelled worker loop)
+            // would be the one path that skipped it.
+            await withTaskCancellationShield {
+                try? await self.sendHeartbeat()
+            }
         }
 
         // The configured work root, not the system temp dir: a test script's
@@ -440,7 +451,7 @@ extension WorkerDaemon {
                 stageTimings: &stageTimings
             )
 
-            let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
+            let (normalizationWarnings, preferredStudentModule) = try await normalizeSubmission(
                 job: job,
                 manifest: manifest,
                 paths: paths,
@@ -602,8 +613,8 @@ extension WorkerDaemon {
         paths: JobWorkspacePaths,
         testSetupDir: URL,
         stageTimings: inout JobStageTimings
-    ) throws -> ([String], String?) {
-        try stageTimings.measureSync("submission_prepare") {
+    ) async throws -> ([String], String?) {
+        try await stageTimings.measure("submission_prepare") {
             // A `switch` rather than `if …== .pythonModule`, so the extraction
             // language is BOUND by the routing decision instead of re-derived
             // here. This block used to re-ask the question twice —
@@ -618,7 +629,7 @@ extension WorkerDaemon {
             {
             case .pythonModule:
                 let normalizer = SubmissionNormalizer()
-                let normalization = try normalizer.normalizePythonSubmission(
+                let normalization = try await normalizer.normalizePythonSubmission(
                     manifest: manifest,
                     submissionDirectory: paths.submissionDir,
                     workspaceDirectory: testSetupDir,
@@ -682,7 +693,19 @@ extension WorkerDaemon {
     ) async throws {
         do {
             let resultReportStartedAt = Date()
-            try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
+            // Shielded from cancellation (SE-0504). `run()` fans the slots out
+            // under `withThrowingDiscardingTaskGroup`, so one slot throwing a
+            // non-retryable error cancels its siblings mid-job. Before the
+            // shield that cancelled this call, and the grading work was simply
+            // discarded: the submission stayed `assigned` until
+            // `reapStuckAssignedSubmissions` aged it out, which is a ten-minute
+            // wait for a student whose result the runner was already holding.
+            // The report is bounded by the reporter's own network timeouts, so
+            // shielding it delays shutdown by that much at most.
+            try await withTaskCancellationShield {
+                try await reporter.report(
+                    WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
+            }
             stageTimings.record(
                 "result_report",
                 milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000)

@@ -80,7 +80,7 @@ import VaporTesting
         // all) — the two sides of the stratum rule, in one fixture.
         try Data("id,ward\n1,3A\n2,3B\n3,3A\n".utf8).write(to: root.appendingPathComponent("cases.csv"))
         try Data("notes".utf8).write(to: root.appendingPathComponent("notes.txt"))
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
     }

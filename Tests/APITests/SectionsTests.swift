@@ -91,7 +91,7 @@ import Testing
 
     // MARK: - buildSuitePayload
 
-    @Test func buildSuitePayloadEmitsSectionsAndStampsSectionIDs() throws {
+    @Test func buildSuitePayloadEmitsSectionsAndStampsSectionIDs() async throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let props = TestProperties(
@@ -107,7 +107,7 @@ import Testing
         )
         let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
-        let payload = buildSuitePayload(fromManifest: manifest)
+        let payload = await buildSuitePayload(fromManifest: manifest)
         #expect(payload.sections.map(\.id) == ["s1", "s2"])
         #expect(payload.sections.map(\.name) == ["One", "Two"])
         #expect(payload.items.count == 3)
@@ -121,7 +121,7 @@ import Testing
     // which made the suite-editor drag-and-drop round-trip fail with a
     // bogus "hand-written file already exists" collision.  After the fix
     // they emit as kind:"check" rows carrying the check spec + sectionID.
-    @Test func buildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() throws {
+    @Test func buildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() async throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let check = NotebookCheck(
@@ -148,7 +148,7 @@ import Testing
         )
         let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
-        let payload = buildSuitePayload(fromManifest: manifest)
+        let payload = await buildSuitePayload(fromManifest: manifest)
         #expect(payload.items.count == 2)
         #expect(payload.items[0].kind == "script")
         #expect(payload.items[0].sectionID == "s1")
@@ -160,14 +160,14 @@ import Testing
         #expect(payload.items[1].script == nil)
     }
 
-    @Test func buildSuitePayloadLegacyManifestReturnsEmptySections() throws {
+    @Test func buildSuitePayloadLegacyManifestReturnsEmptySections() async throws {
         let legacyJSON = """
             {
               "schemaVersion": 1,
               "testSuites": [{ "tier": "public", "script": "a.py" }]
             }
             """
-        let payload = buildSuitePayload(fromManifest: legacyJSON)
+        let payload = await buildSuitePayload(fromManifest: legacyJSON)
         #expect(payload.sections.isEmpty)
         #expect(payload.items.count == 1)
         #expect(payload.items.first?.sectionID == nil)

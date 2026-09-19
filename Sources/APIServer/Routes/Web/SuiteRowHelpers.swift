@@ -96,7 +96,7 @@ struct ConfiguredSuiteEntry {
 
 func currentSetupFiles(
     for setup: APITestSetup, assignmentID: String, solutionFilename: String?
-) -> (
+) async -> (
     assignmentFile: CurrentFileLink,
     solutionFile: CurrentFileLink?,
     existingSuiteRows: [EditableSuiteRow]
@@ -140,7 +140,7 @@ func currentSetupFiles(
     }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
 
-    let archiveFiles = listZipEntries(zipPath: setup.zipPath)
+    let archiveFiles = await listZipEntries(zipPath: setup.zipPath)
     let solutionFile: CurrentFileLink? = {
         if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }) {
             return CurrentFileLink(
@@ -194,8 +194,8 @@ func currentSetupFiles(
     return (assignmentFile, solutionFile, existingSuiteRows)
 }
 
-func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
-    let entries = listZipEntries(zipPath: setup.zipPath)
+func editableSuiteRowsForSetup(_ setup: APITestSetup) async -> [EditableSuiteRow] {
+    let entries = await listZipEntries(zipPath: setup.zipPath)
         .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
         .sorted()
 
@@ -377,7 +377,7 @@ func mergeExistingFilesIntoSuiteFiles(
     suiteFiles: [File],
     suiteConfigJSON: String?,
     draftZipPath: String?
-) -> ([File], String?) {
+) async -> ([File], String?) {
     guard let configJSON = suiteConfigJSON,
         let configData = configJSON.data(using: .utf8),
         var rows = (try? JSONSerialization.jsonObject(with: configData)) as? [[String: Any]]
@@ -397,7 +397,7 @@ func mergeExistingFilesIntoSuiteFiles(
             fileIndex = existing
         } else if let zipPath = draftZipPath,
             !uploadedNames.contains(name),
-            let data = extractZipEntry(zipPath: zipPath, entryName: name)
+            let data = await extractZipEntry(zipPath: zipPath, entryName: name)
         {
             var buf = ByteBufferAllocator().buffer(capacity: data.count)
             buf.writeBytes(data)

@@ -63,6 +63,11 @@ let package = Package(
             dependencies: [
                 .target(name: "RunnerCore"),
                 .product(name: "Crypto", package: "swift-crypto"),
+                // Every zip/unzip spawn runs here. Replaces Foundation's
+                // Process, whose concurrent-spawn races needed a process-wide
+                // lock and an EFAULT retry to contain.
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/Core",
             exclude: ["README.md"],
@@ -88,6 +93,12 @@ let package = Package(
                 .product(name: "JWT", package: "jwt"),
                 .product(name: "CSRF", package: "CSRF"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                // The server's own interpreter spawn (PersonalizationEvaluator)
+                // runs from the multithreaded Vapor process — the shape
+                // Foundation's Process deadlocked in (#1139), which is why the
+                // runner already spawns through Subprocess.
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/APIServer",
             exclude: ["README.md"],

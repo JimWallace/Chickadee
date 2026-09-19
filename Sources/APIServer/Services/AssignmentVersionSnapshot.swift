@@ -110,8 +110,8 @@ enum AssignmentVersionSnapshotBuilder {
     /// Sized against the canonical 22-byte end-of-central-directory record
     /// `writeEmptyZip` emits; the small slack allows a trailing comment without
     /// admitting anything that could hold real entries.
-    private static func isEmptyArchive(zipPath: String) -> Bool {
-        guard listZipEntries(zipPath: zipPath).isEmpty else { return false }
+    private static func isEmptyArchive(zipPath: String) async -> Bool {
+        guard await listZipEntries(zipPath: zipPath).isEmpty else { return false }
         let size =
             (try? FileManager.default.attributesOfItem(atPath: zipPath))?[.size] as? Int ?? .max
         return size <= 64
@@ -141,7 +141,7 @@ enum AssignmentVersionSnapshotBuilder {
             // genuinely corrupt archive: `writeEmptyZip` emits exactly the
             // 22-byte end-of-central-directory record, and no real archive
             // fits in that.
-            guard isEmptyArchive(zipPath: zipPath) else {
+            guard await isEmptyArchive(zipPath: zipPath) else {
                 throw AssignmentVersionSnapshotError.zipUnreadable(
                     path: zipPath, reason: "\(error)")
             }

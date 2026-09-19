@@ -50,7 +50,7 @@ func renderAndApplyZipMutations(
     plan: GeneratedArtifactPlan,
     previousProps: TestProperties,
     zipPath: String
-) throws -> AppliedZipMutations {
+) async throws -> AppliedZipMutations {
     // Old-side filenames for both generators are pooled into one set so
     // the deletion diff is computed in one shot.  Notebook checks may
     // produce sidecar files (e.g. `_expected_<id>.csv` for
@@ -142,7 +142,7 @@ func renderAndApplyZipMutations(
 
     // Re-inline global + section variables into every raw (non-generated)
     // test script (idempotent; see the helper).
-    for (filename, content) in rawScriptOverlayWrites(
+    for (filename, content) in await rawScriptOverlayWrites(
         items: plan.itemsForOrdering,
         generatedFilenames: Set(renderedByFilename.keys),
         zipPath: zipPath,
@@ -152,7 +152,7 @@ func renderAndApplyZipMutations(
         toWrite[filename] = content
     }
 
-    try applyScriptChangesToZip(
+    try await applyScriptChangesToZip(
         zipPath: zipPath,
         writes: toWrite,
         deletions: Array(toDelete)

@@ -59,7 +59,7 @@ import Vapor
     /// declaration exactly as the author left it.
     @Test func aScriptOnlySaveIsAllowedAndLeavesTheDeclarationAlone() async throws {
         try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_handmade.sh",
                 content: "#!/bin/sh\nexit 0\n"
@@ -106,7 +106,7 @@ import Vapor
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: id, courseID: courseID, manifest: undeclaredManifest)
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "\(id).zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "\(id).zip")
         return try await makeTestAssignment(
             on: app, testSetupID: id, courseID: courseID, title: "Lab")
     }

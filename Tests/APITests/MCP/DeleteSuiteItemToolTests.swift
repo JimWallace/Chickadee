@@ -32,7 +32,7 @@ import Vapor
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         let setup = try await makeTestSetup(
             on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
         var families: [PatternFamily] = []
         var authored: [AuthoredSuiteItem] = []
         if seedFamily {
@@ -57,7 +57,7 @@ import Vapor
 
     private func reloadItems(_ assignment: APIAssignment, on db: Database) async throws -> [SuiteItemDTO] {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).items
+        return await buildSuitePayload(fromManifest: reloaded.manifest).items
     }
 
     @Test func deletesAHandWrittenScript() async throws {
@@ -191,7 +191,7 @@ import Vapor
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             _ = try await makeTestSetup(
                 on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {

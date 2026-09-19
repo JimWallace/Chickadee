@@ -63,7 +63,7 @@ struct SubmissionNormalizer {
         submissionDirectory: URL,
         workspaceDirectory: URL,
         submissionFilename: String?
-    ) throws -> NormalizationResult {
+    ) async throws -> NormalizationResult {
         let submissionFiles = regularFiles(in: submissionDirectory)
         var progress = NormalizationProgress()
         // The student's own files must not be able to replace the tests they
@@ -92,7 +92,7 @@ struct SubmissionNormalizer {
                     ])
                 continue
             }
-            try processSubmissionFile(
+            try await processSubmissionFile(
                 fileURL: fileURL,
                 submissionDirectory: submissionDirectory,
                 workspaceDirectory: workspaceDirectory,
@@ -134,9 +134,9 @@ struct SubmissionNormalizer {
         submissionDirectory: URL,
         workspaceDirectory: URL,
         progress: inout NormalizationProgress
-    ) throws {
+    ) async throws {
         let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
-        let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)
+        let mimeType = try await mimeTypeDetector.detectMimeType(for: fileURL)
         writeStructuredRunnerLog(
             event: "submission_file_mime_detected",
             fields: [

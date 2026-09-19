@@ -11,14 +11,10 @@
 // on the server side.
 //
 // All functions are free (not methods) to keep callsites clean.
-// Process execution uses withCheckedThrowingContinuation + terminationHandler;
-// no DispatchQueue bridging is needed because process setup is non-blocking
-// and Foundation calls terminationHandler from its own internal monitoring queue.
-//
-// The two mitigations against the Foundation Process EFAULT race
-// (process-wide lock + run-with-retry) live in
-// `ZipProcessSerialization.swift` so every zip subprocess in the
-// codebase shares the same lock.
+// Every spawn goes through `runZipProcess` in `ZipSubprocess.swift`, which
+// runs on swift-subprocess. The process-wide lock and the EFAULT retry that
+// used to guard these calls are gone with Foundation's `Process`; see that
+// file for what remains and why.
 
 import Foundation
 
@@ -51,10 +47,10 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
 /// `-q` (quiet) matters: without it `zip` prints one "adding: …" line per
 /// file, and for a large tree (e.g. a data-heavy personal-data export) that
 /// output is what used to overflow the discarded-output buffer.  The real
-/// deadlock guard is `runZipProcess` writing child output to the null device,
+/// deadlock guard is `runZipProcess` capturing and bounding child output,
 /// but staying quiet avoids generating megabytes of output nobody reads.
 public func createZipArchive(sourceDir: URL, outputPath: String) async throws {
-    try await runZipProcess(
+    try await runZipProcessExpectingSuccess(
         executablePath: "/usr/bin/zip",
         arguments: ["-q", "-r", outputPath, "."],
         workingDirectory: sourceDir
@@ -71,7 +67,7 @@ public func extractZipArchive(zipPath: String, into destinationDir: URL) async t
     // --- Zip-slip guard ---
     // List all entries first and reject any that would land outside destinationDir
     // after resolving ".."-style components or absolute paths.
-    let entries = try listZipContents(zipPath: zipPath)
+    let entries = try await listZipContents(zipPath: zipPath)
     let destStandardized = destinationDir.standardized
     // Canonical prefix with trailing slash so "/tmp/destfoo" ≠ "/tmp/dest".
     let destPrefix =
@@ -95,7 +91,7 @@ public func extractZipArchive(zipPath: String, into destinationDir: URL) async t
     try FileManager.default.createDirectory(
         at: destinationDir,
         withIntermediateDirectories: true)
-    try await runZipProcess(
+    try await runZipProcessExpectingSuccess(
         executablePath: "/usr/bin/unzip",
         arguments: ["-q", zipPath, "-d", destinationDir.path]
     )
@@ -103,12 +99,8 @@ public func extractZipArchive(zipPath: String, into destinationDir: URL) async t
 
 /// Returns the list of filenames inside a ZIP archive.
 /// Uses `unzip -Z1` (zipinfo one-name-per-line format).
-public func listZipContents(zipPath: String) throws -> [String] {
-    guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
-        throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
-    }
-    // Spawn serialized, drain + wait overlapped (see ZipProcessSerialization.swift).
-    let result = try runZipProcessCapturingStdout(
+public func listZipContents(zipPath: String) async throws -> [String] {
+    let result = try await runZipProcess(
         executablePath: "/usr/bin/unzip",
         arguments: ["-Z1", zipPath]
     )
@@ -116,60 +108,4 @@ public func listZipContents(zipPath: String) throws -> [String] {
     let output = String(data: result.stdout, encoding: .utf8) ?? ""
     return output.split(separator: "\n", omittingEmptySubsequences: true)
         .map(String.init)
-}
-
-// MARK: - Private helper
-
-/// Runs an executable asynchronously. Errors if exit status != 0.
-///
-/// Process setup (property assignment + `run()`) is cheap and non-blocking.
-/// The continuation is resumed by Foundation's `terminationHandler`, which is
-/// called from Foundation's internal process-monitoring queue — no
-/// DispatchQueue offloading is required.
-private func runZipProcess(
-    executablePath: String,
-    arguments: [String],
-    workingDirectory: URL? = nil
-) async throws {
-    guard FileManager.default.fileExists(atPath: executablePath) else {
-        throw ZipArchiverError.executableNotFound(executablePath)
-    }
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        // Serialize Process / Pipe construction + setup + spawn (see
-        // ZipProcessSerialization.swift).  Released after spawn;
-        // terminationHandler runs on Foundation's queue and resumes the
-        // continuation independently.
-        acquireZipProcessLock()
-        let proc = makeZipProcess()
-        proc.executableURL = URL(fileURLWithPath: executablePath)
-        proc.arguments = arguments
-        if let dir = workingDirectory {
-            proc.currentDirectoryURL = dir
-        }
-        // Discard child output to the NULL DEVICE, not an in-memory Pipe.
-        // A Pipe we never drain deadlocks once the child writes more than the
-        // OS pipe buffer (~64 KB): the child blocks on write, so it never
-        // exits, so `terminationHandler` never fires and this continuation
-        // never resumes. `zip -r` emits one line per file, so a large archive
-        // (a data-heavy personal-data export) hit exactly this and hung the
-        // export forever. `/dev/null` sinks any volume without blocking.
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
-        proc.terminationHandler = { process in
-            if process.terminationStatus == 0 {
-                continuation.resume()
-            } else {
-                continuation.resume(
-                    throwing: ZipArchiverError.processFailed(
-                        executablePath, process.terminationStatus))
-            }
-        }
-        do {
-            try runProcessWithEFAULTRetry(proc)
-            releaseZipProcessLock()
-        } catch {
-            releaseZipProcessLock()
-            continuation.resume(throwing: error)
-        }
-    }
 }

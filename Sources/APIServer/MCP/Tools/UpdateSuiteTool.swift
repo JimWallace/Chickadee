@@ -147,7 +147,7 @@ struct UpdateSuiteTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // Load the full authored suite with script bodies preserved from the zip.
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         var updated: [String] = []
         for edit in input.edits {
             let tier = try parseOptionalTier(edit.tier, tool: Self.name)

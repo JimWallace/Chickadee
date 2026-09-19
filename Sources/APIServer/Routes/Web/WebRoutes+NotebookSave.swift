@@ -198,7 +198,7 @@ extension WebRoutes {
     ) async throws -> Data? {
         switch fileKind {
         case .assignment:
-            return try? notebookData(for: setup)
+            return try? await notebookData(for: setup)
         case .solution:
             return try? await solutionNotebookData(
                 for: assignment, setup: setup, db: req.db,

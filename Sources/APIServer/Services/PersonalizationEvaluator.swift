@@ -22,6 +22,8 @@
 
 import Core
 import Foundation
+import Subprocess
+import SystemPackage
 
 #if canImport(Glibc)
 import Glibc
@@ -677,9 +679,15 @@ enum PersonalizationEvaluator {
         "'\(s)'"
     }
 
-    /// Spawns a subprocess with the given env (merged with the parent's
-    /// env), captures stdout/stderr, kills + reports timeout if it
-    /// outruns `timeoutSeconds`.
+    /// Spawns a subprocess with the given env, captures stdout/stderr, and
+    /// reports a timeout if it outruns `timeoutSeconds`.
+    ///
+    /// Runs on `swift-subprocess` rather than Foundation's `Process`. This is
+    /// the server's own interpreter spawn, made from the multithreaded Vapor
+    /// process -- the shape `Process` deadlocked in (issue #1139), which is
+    /// why the worker moved off it. Subprocess also owns the capture pipes and
+    /// drains them itself, which is the job the hand-rolled deadline-bounded
+    /// reader here used to do.
     private static func spawnAndCapture(
         executableURL: URL,
         arguments: [String],
@@ -687,10 +695,6 @@ enum PersonalizationEvaluator {
         env: [String: String],
         timeoutSeconds: Int
     ) async throws -> (stdout: String, stderr: String, exitCode: Int32) {
-        let proc = Process()
-        proc.executableURL = executableURL
-        proc.arguments = arguments
-        proc.currentDirectoryURL = cwd
         // SECURITY: do NOT inherit the parent process environment.  This
         // subprocess runs instructor-authored expressions, and the server
         // process holds secrets (RUNNER_SHARED_SECRET, database credentials,
@@ -700,103 +704,116 @@ enum PersonalizationEvaluator {
         // `python3`, plus HOME / locale / PYTHONHOME for the runtime), then
         // overlay the caller-supplied vars (the assignment seed and an optional
         // PYTHONPATH into the support-files dir).
+        //
+        // `.custom` is what carries that guarantee to Subprocess: its default
+        // is `.inherit`, so this must never be left off.
         let parentEnv = EnvironmentSource.all
         var mergedEnv: [String: String] = [:]
         for key in ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHOME"] {
             if let value = parentEnv[key] { mergedEnv[key] = value }
         }
         for (k, v) in env { mergedEnv[k] = v }
-        proc.environment = mergedEnv
+        // Bound as a `let` before the task group: the group's closure is a
+        // `sending` parameter, so capturing the mutable locals directly is a
+        // data race the compiler rejects.
+        let childEnvironment = subprocessEnvironment(mergedEnv)
 
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = errPipe
+        var options = PlatformOptions()
+        // setsid(2) in the child: its own session and process group, so the
+        // group-wide teardown below reaches anything the expression
+        // backgrounded and nothing else.
+        options.createSession = true
+        // SIGTERM first so the interpreter can unwind, then the SIGKILL
+        // `teardownSequence` always appends — the escalation the old
+        // terminate/sleep/kill ladder performed by hand. It runs on
+        // cancellation, which is how the watchdog below stops the child.
+        options.teardownSequence = [
+            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .seconds(2))
+        ]
+        let platformOptions = options
 
-        do {
-            try proc.run()
-        } catch {
-            throw PersonalizationEvaluatorError.spawnFailed(String(describing: error))
-        }
-
-        let timeoutTask = Task<Bool, Never> {
-            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
-            if proc.isRunning {
-                proc.terminate()
-                // SIGTERM can be caught or ignored by the expression's
-                // interpreter; escalate so the waitUntilExit below is
-                // actually bounded.
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                if proc.isRunning {
-                    kill(proc.processIdentifier, SIGKILL)
-                }
-                return true
+        let outcome = try await withThrowingTaskGroup(of: SpawnOutcome.self) { group in
+            group.addTask {
+                let result = try await Subprocess.run(
+                    .path(FilePath(executableURL.path)),
+                    arguments: Arguments(arguments),
+                    environment: .custom(childEnvironment),
+                    workingDirectory: FilePath(cwd.path),
+                    platformOptions: platformOptions,
+                    output: .string(limit: outputCaptureLimitBytes),
+                    error: .string(limit: outputCaptureLimitBytes)
+                )
+                return .finished(
+                    stdout: result.standardOutput,
+                    stderr: result.standardError,
+                    exitCode: exitCode(of: result.terminationStatus)
+                )
             }
-            return false
+            group.addTask {
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+                return .timedOut
+            }
+            let first = try await group.next()
+            // Cancelling the run task is what runs `teardownSequence` against
+            // the child; cancelling the sleep merely ends it. The drain below
+            // swallows the cancelled sibling's error so it cannot surface as
+            // the result of a run that already finished.
+            group.cancelAll()
+            while (try? await group.next()) != nil {}
+            return first ?? .timedOut
         }
 
-        // Drain both pipes BEFORE waiting for exit, concurrently and with a
-        // deadline. Reading after waitUntilExit() deadlocked once the child
-        // filled a 64 KiB pipe buffer (a long expression output became a
-        // spurious .timedOut plus a blocked thread), and draining the pipes
-        // sequentially just moves the same deadlock to the other pipe. EOF
-        // normally arrives when the child exits or the timeout terminates
-        // it; the deadline covers an expression that leaks a grandchild
-        // holding the pipe open (docs/ci-flakiness.md, remaining attack
-        // order).
-        let drainDeadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds) + 2)
-        async let stdoutBytes = Self.readToEnd(
-            fileDescriptor: outPipe.fileHandleForReading.fileDescriptor, deadline: drainDeadline)
-        async let stderrBytes = Self.readToEnd(
-            fileDescriptor: errPipe.fileHandleForReading.fileDescriptor, deadline: drainDeadline)
-        let stdoutData = await stdoutBytes
-        let stderrData = await stderrBytes
-        proc.waitUntilExit()
-        // Wake the timeout task now instead of letting its full sleep gate
-        // the return path: a cancelled sleep falls through to the same
-        // isRunning check, which is false for a normally-exited child.
-        timeoutTask.cancel()
-        let didTimeOut = await timeoutTask.value
-
-        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-
-        if didTimeOut {
+        switch outcome {
+        case .timedOut:
             throw PersonalizationEvaluatorError.timedOut
+        case .finished(let stdout, let stderr, let exitCode):
+            return (stdout, stderr, exitCode)
         }
-        return (stdout, stderr, proc.terminationStatus)
     }
 
-    /// Reads a pipe descriptor toward EOF on a dedicated thread, keeping the
-    /// blocking reads (and the pipe-buffer backpressure) off the cooperative
-    /// pool. Bounded by `deadline`: if a leaked grandchild still holds the
-    /// write end after the child is gone, we return what we have instead of
-    /// stalling a server thread indefinitely.
-    private static func readToEnd(fileDescriptor: Int32, deadline: Date) async -> Data {
-        await withCheckedContinuation { continuation in
-            Thread.detachNewThread {
-                var collected = Data()
-                var chunk = [UInt8](repeating: 0, count: 65_536)
-                while true {
-                    var pollDescriptor = pollfd(fd: fileDescriptor, events: Int16(POLLIN), revents: 0)
-                    let readyCount = poll(&pollDescriptor, 1, 100)
-                    if readyCount == -1 {
-                        if errno == EINTR { continue }
-                        break
-                    }
-                    if readyCount > 0 {
-                        let bytesRead = read(fileDescriptor, &chunk, chunk.count)
-                        if bytesRead > 0 {
-                            collected.append(contentsOf: chunk[0..<bytesRead])
-                            continue
-                        }
-                        if bytesRead == -1 && errno == EINTR { continue }
-                        break  // 0 = EOF (all write ends closed); -1 = unrecoverable.
-                    }
-                    if Date() >= deadline { break }
-                }
-                continuation.resume(returning: collected)
-            }
+    /// Which of the two racers finished first.  A flat enum rather than the
+    /// generic `ExecutionResult`, so the task group has one concrete element
+    /// type to be generic over.
+    private enum SpawnOutcome: Sendable {
+        case finished(stdout: String, stderr: String, exitCode: Int32)
+        case timedOut
+    }
+
+    /// Hard cap on captured output.  `Subprocess.string(limit:)` throws once a
+    /// child exceeds it, which is the right answer here: an expression that
+    /// prints unboundedly is an authoring error, and the alternative is the
+    /// server buying its memory.  Generous enough that no honest `repr` of a
+    /// personalized value comes close.
+    private static let outputCaptureLimitBytes = 4 * 1024 * 1024
+
+    /// Bridges Chickadee's `[String: String]` environment to Subprocess's
+    /// keyed form.  `Environment.Key` has no public non-failable initializer;
+    /// the failable one never actually fails, so a `nil` key is unreachable
+    /// rather than a silent drop worth reporting.
+    ///
+    /// The module selector (SE-0491) is load-bearing: `Environment` is also a
+    /// Vapor type, and this file imports both.
+    private static func subprocessEnvironment(
+        _ env: [String: String]
+    ) -> [Subprocess::Environment.Key: String] {
+        var custom: [Subprocess::Environment.Key: String] = [:]
+        for (key, value) in env {
+            guard let environmentKey = Subprocess::Environment.Key(rawValue: key) else { continue }
+            custom[environmentKey] = value
+        }
+        return custom
+    }
+
+    /// Flattens a `TerminationStatus` to the `Int32` the caller compares
+    /// against 0.  A signalled child reports `128 + signal`, the shell
+    /// convention, so a killed interpreter is distinguishable in the
+    /// `nonZeroExit` error rather than colliding with a real exit code.
+    private static func exitCode(of status: TerminationStatus) -> Int32 {
+        switch status {
+        case .exited(let code):
+            return Int32(code)
+        case .signaled(let signal):
+            return 128 + Int32(signal)
         }
     }
 }

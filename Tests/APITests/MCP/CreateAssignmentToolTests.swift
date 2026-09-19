@@ -60,7 +60,7 @@ import Vapor
             let props = try #require(setup.decodedManifest())
             #expect(props.testSuites.isEmpty)
 
-            let data = try notebookData(for: setup)
+            let data = try await notebookData(for: setup)
             let reloaded = try JSONDecoder().decode(JSONValue.self, from: data)
             guard case .object(let root) = reloaded, case .array(let cells)? = root["cells"] else {
                 Issue.record("persisted notebook was not a JSON object with a cells array")

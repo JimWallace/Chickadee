@@ -35,14 +35,14 @@ import Vapor
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: "setup_ss", courseID: courseID, manifest: manifest)
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + "setup_ss.zip",
             entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_b.sh", "exit 0\n")])
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_ss", courseID: courseID, title: "Lab")
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ss-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -54,7 +54,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func sections(
@@ -63,12 +63,12 @@ import Vapor
         -> [TestSuiteSectionDTO]
     {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).sections
+        return await buildSuitePayload(fromManifest: reloaded.manifest).sections
     }
 
     private func items(of assignment: APIAssignment, on app: Application) async throws -> [SuiteItemDTO] {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).items
+        return await buildSuitePayload(fromManifest: reloaded.manifest).items
     }
 
     // MARK: - create / rename / delete

@@ -34,7 +34,7 @@ import Vapor
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: "setup_sf", courseID: courseID, manifest: manifest)
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + "setup_sf.zip",
             entries: [
                 ("test_a.sh", "exit 0\n"),
@@ -47,7 +47,7 @@ import Vapor
             on: app, testSetupID: "setup_sf", courseID: courseID, title: "Lab")
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("sf-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -59,7 +59,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func run(
@@ -120,7 +120,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             // "é" is 2 bytes in UTF-8; a 5-byte cap lands mid-character and
             // must back off to the previous boundary ("abcd", 4 bytes).
-            try writeZip(
+            try await writeZip(
                 at: app.testSetupsDirectory + "setup_sf.zip",
                 entries: [("test_a.sh", "exit 0\n"), ("note.txt", "abcdé and more")])
 

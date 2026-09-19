@@ -49,13 +49,18 @@ extension DraftAssignmentRoutes {
             storedState: storedState
         )
 
-        let suiteRows = setup.map(editableSuiteRowsForSetup) ?? []
+        let suiteRows: [EditableSuiteRow]
+        if let setup {
+            suiteRows = await editableSuiteRowsForSetup(setup)
+        } else {
+            suiteRows = []
+        }
         // Resolved once and handed to both language-bearing seeds below.
         let resolvedLanguage = setup.flatMap { s in
             s.decodedManifest().flatMap { AssignmentLanguage.resolve(for: s, manifest: $0) }
         }
         let supportFileRows = newAssignmentSupportFileRows(setup: setup, suiteRows: suiteRows)
-        let detected = newAssignmentRequirementSuggestions(req: req, userID: userID, setup: setup)
+        let detected = await newAssignmentRequirementSuggestions(req: req, userID: userID, setup: setup)
 
         let assignmentName = (q?.assignmentName ?? storedState.assignmentName).trimmingCharacters(
             in: .whitespacesAndNewlines)
@@ -63,7 +68,7 @@ extension DraftAssignmentRoutes {
         let startsAt = q?.startsAt ?? storedState.startsAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
 
-        let ctx = NewAssignmentContext(
+        let ctx = await NewAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentName: assignmentName,
             dueAt: dueAt,
@@ -301,7 +306,7 @@ extension DraftAssignmentRoutes {
 
         let paths = try await writeNewAssignmentNotebookAndPlanPaths(req: req, validated: validated)
 
-        let setupPackage = try rebuildNewAssignmentSuiteZip(
+        let setupPackage = try await rebuildNewAssignmentSuiteZip(
             validated: validated,
             zipPath: paths.zipPath
         )
@@ -350,7 +355,7 @@ extension DraftAssignmentRoutes {
             preserved: preserved,
             setupPackage: setupPackage
         )
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: paths.zipPath,
             setupID: paths.setupID,
             testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
@@ -467,17 +472,21 @@ extension DraftAssignmentRoutes {
     fileprivate func rebuildNewAssignmentSuiteZip(
         validated: ValidatedSaveNewAssignment,
         zipPath: String
-    ) throws -> RunnerSetupPackage {
-        let resolvedSuiteFiles: [File] = {
-            if !validated.suiteFiles.isEmpty { return validated.suiteFiles }
-            guard let draftSetup = validated.draftSetup else { return [] }
-            return editableSuiteRowsForSetup(draftSetup).compactMap { row in
-                guard let data = extractZipEntry(zipPath: draftSetup.zipPath, entryName: row.name) else { return nil }
+    ) async throws -> RunnerSetupPackage {
+        // Straight-line rather than an immediately-invoked closure: both zip
+        // reads suspend now.
+        var resolvedSuiteFiles: [File] = validated.suiteFiles
+        if resolvedSuiteFiles.isEmpty, let draftSetup = validated.draftSetup {
+            for row in await editableSuiteRowsForSetup(draftSetup) {
+                guard
+                    let data = await extractZipEntry(
+                        zipPath: draftSetup.zipPath, entryName: row.name)
+                else { continue }
                 var buffer = ByteBufferAllocator().buffer(capacity: data.count)
                 buffer.writeBytes(data)
-                return File(data: buffer, filename: row.name)
+                resolvedSuiteFiles.append(File(data: buffer, filename: row.name))
             }
-        }()
+        }
         let resolvedSuiteConfigJSON: String? = {
             if let suiteConfigRaw = validated.suiteConfigRaw,
                 !suiteConfigRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -503,12 +512,12 @@ extension DraftAssignmentRoutes {
         }()
         // Merge 'existing' (name-based) config rows with files from the draft ZIP so
         // buildSuiteEntries can decode every row using its required `index` field.
-        let (mergedSuiteFiles, mergedConfigJSON) = mergeExistingFilesIntoSuiteFiles(
+        let (mergedSuiteFiles, mergedConfigJSON) = await mergeExistingFilesIntoSuiteFiles(
             suiteFiles: resolvedSuiteFiles,
             suiteConfigJSON: resolvedSuiteConfigJSON,
             draftZipPath: validated.draftSetup?.zipPath
         )
-        return try createRunnerSetupZip(
+        return try await createRunnerSetupZip(
             suiteFiles: mergedSuiteFiles,
             suiteConfigJSON: mergedConfigJSON,
             zipPath: zipPath
@@ -698,7 +707,7 @@ extension DraftAssignmentRoutes {
 
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
-        _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+        _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let gradingMode = try await newAssignmentSectionGradingMode(
             req: req,
             courseID: courseID,

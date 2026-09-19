@@ -36,7 +36,7 @@ import Vapor
             on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
         // The fixture's empty-bytes zip can't be rebuilt; replace it with a
         // valid (placeholder-only) archive so applyPatternFamilies can re-save.
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
         try await applyPatternFamilies(
             to: setup, nextFamilies: [family],
             authoredItems: [.family(id: family.id, sectionID: nil)], on: app.db)
@@ -50,7 +50,7 @@ import Vapor
         -> PatternFamily
     {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
-        let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+        let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
         return try #require(items.compactMap(\.family).first { $0.id == "bmi_category" })
     }
 
@@ -243,7 +243,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily()],
                 authoredItems: [.family(id: "bmi_category", sectionID: nil)],
@@ -436,7 +436,7 @@ import Vapor
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily()],
                 authoredItems: [.family(id: "bmi_category", sectionID: nil)], on: app.db)
@@ -532,7 +532,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily(), pfApproxFamily()],
                 authoredItems: [
@@ -627,7 +627,7 @@ import Vapor
             let assignment = try await fixture(on: app, family: io)
             func reload() async throws -> PatternFamily {
                 let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-                let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+                let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
                 return try #require(items.compactMap(\.family).first { $0.id == "io" })
             }
 

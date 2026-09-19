@@ -45,7 +45,7 @@ import Vapor
             #expect(result.deletedFiles.isEmpty)
 
             // Zip actually contains the generated files.
-            let entries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let entries = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
             for f in result.writtenFiles {
                 #expect(entries.contains(f), "Zip missing generated file \(f)")
             }
@@ -81,7 +81,7 @@ import Vapor
         try await withPatternFamilyFixture { fixture in
 
             // Seed: one raw script + one family.
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_handmade.py",
                 content: "# handmade\npassed('ok')\n"
@@ -100,7 +100,7 @@ import Vapor
             )
 
             // Sanity: both raw + generated present before the rebuild.
-            let beforeEntries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let beforeEntries = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
             #expect(beforeEntries.contains("publictest_handmade.py"))
             #expect(beforeEntries.contains("publictest_bmi_category_01.py"))
 
@@ -114,7 +114,7 @@ import Vapor
 
             // Nuke generated files from the zip (simulating the full zip rewrite).
             for f in patternFamilyAllGeneratedFilenames(existingFamilies[0], language: .python) {
-                try? removeScriptFromZip(zipPath: fixture.setup.zipPath, filename: f)
+                try? await removeScriptFromZip(zipPath: fixture.setup.zipPath, filename: f)
             }
             fixture.setup.manifest = try makeWorkerManifestJSON(
                 testSuites: [rawEntry], includeMakefile: false,
@@ -130,7 +130,7 @@ import Vapor
 
             // After the simulated save: raw + generated both present, family
             // spec persisted, testSuites entries carry generatedBy tags.
-            let afterEntries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let afterEntries = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
             #expect(
                 afterEntries.contains("publictest_handmade.py"),
                 "Raw script must survive")
@@ -175,7 +175,7 @@ import Vapor
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [reduced], on: fixture.app.db)
             #expect(result.deletedFiles == ["publictest_bmi_category_02.py"])
-            let entries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let entries = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
             #expect(entries.contains("publictest_bmi_category_02.py") == false)
             #expect(entries.contains("publictest_bmi_category_01.py"))
 
@@ -205,7 +205,7 @@ import Vapor
         try await withPatternFamilyFixture { fixture in
 
             // Pre-seed a hand-written script before applying a family.
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_handmade.py",
                 content: "# handmade\npassed('ok')\n"
@@ -223,7 +223,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
 
-            let entries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let entries = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
             #expect(
                 entries.contains("publictest_handmade.py"),
                 "Hand-written scripts must survive a family apply")
@@ -238,7 +238,7 @@ import Vapor
         try await withPatternFamilyFixture { fixture in
 
             // Create a hand-written file that will collide with a generated name.
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_bmi_category_01.py",
                 content: "# handmade clash\npassed('ok')\n"
@@ -253,7 +253,7 @@ import Vapor
                 ))
             try await fixture.setup.save(on: fixture.app.db)
             let manifestBefore = fixture.setup.manifest
-            let zipEntriesBefore = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+            let zipEntriesBefore = await Set(listZipEntries(zipPath: fixture.setup.zipPath))
 
             do {
                 _ = try await applyPatternFamilies(
@@ -263,7 +263,7 @@ import Vapor
                 #expect("\(abort.reason)".contains("hand-written script"))
             }
             #expect(fixture.setup.manifest == manifestBefore, "Failed validation must not mutate the manifest")
-            #expect(
+            await #expect(
                 Set(listZipEntries(zipPath: fixture.setup.zipPath)) == zipEntriesBefore,
                 "Failed validation must not mutate the zip")
 
@@ -309,7 +309,7 @@ import Vapor
             try await fixture.setup.save(on: fixture.app.db)
 
             let followup = "publictest_followup.\(language.generatedScriptExtension)"
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath, filename: followup,
                 content: "\(language.lineCommentPrefix) followup\n")
 
@@ -359,7 +359,7 @@ import Vapor
     @Test func apply_expandsFamilyRefOnRawScriptDep() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_followup.py",
                 content: "# followup\npassed('ok')\n"
@@ -403,7 +403,7 @@ import Vapor
     @Test func apply_rawScriptTimeLimitPersistsAndSurvivesReapply() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_slow.py",
                 content: "# slow\npassed('ok')\n"
@@ -548,7 +548,7 @@ import Vapor
         try await withPatternFamilyFixture { fixture in
 
             // Seed a prereq raw script.
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_prereq.py",
                 content: "# prereq\npassed('ok')\n"
@@ -601,7 +601,7 @@ import Vapor
     /// deleted (its generated rows still depended on it → dangling reference).
     @Test func apply_clearingFamilyDepsDropsThemFromGeneratedCasesAndUnblocksDelete() async throws {
         try await withPatternFamilyFixture { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_prereq.py",
                 content: "# prereq\npassed('ok')\n"
@@ -671,7 +671,7 @@ import Vapor
     @Test func apply_removingFamilyClearsFamilyRefsFromOtherEntries() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_followup.py",
                 content: "# followup\npassed('ok')\n"
@@ -712,7 +712,7 @@ import Vapor
     @Test func apply_rejectsScriptFamilyScriptCycle() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_a.py", content: "passed('ok')\n"
             )
@@ -804,7 +804,7 @@ import Vapor
     @Test func apply_rejectsUnknownFamilyRef() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_a.py", content: "passed('ok')\n"
             )
@@ -870,11 +870,11 @@ import Vapor
     @Test func apply_authoredOrderPreservedInManifestAndOutcomes() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_a.py", content: "passed('a')\n"
             )
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_b.py", content: "passed('b')\n"
             )
@@ -918,11 +918,11 @@ import Vapor
     @Test func apply_familyWithDependencyStaysInlineAfterPrereq() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_prereq.py", content: "passed('prereq')\n"
             )
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_tail.py", content: "passed('tail')\n"
             )
@@ -980,11 +980,11 @@ import Vapor
     @Test func apply_editingExistingFamilyPreservesMiddlePosition() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_a.py", content: "passed('a')\n"
             )
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_b.py", content: "passed('b')\n"
             )
@@ -1056,11 +1056,11 @@ import Vapor
     @Test func apply_createPublishPreservesFamilyPosition() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_a.py", content: "passed('a')\n"
             )
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_b.py", content: "passed('b')\n"
             )

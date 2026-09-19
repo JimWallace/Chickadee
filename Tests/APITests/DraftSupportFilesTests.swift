@@ -39,7 +39,7 @@ import VaporTesting
         _ = FileManager.default.createFile(atPath: zipPath, contents: Data())
 
         if let f = withSupportFile {
-            try updateScriptInZip(zipPath: zipPath, filename: f.name, content: f.contents)
+            try await updateScriptInZip(zipPath: zipPath, filename: f.name, content: f.contents)
         }
 
         let manifestDict: [String: Any] = [

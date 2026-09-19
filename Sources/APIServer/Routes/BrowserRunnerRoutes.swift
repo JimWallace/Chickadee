@@ -79,7 +79,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         let tempZip = tempDir.appendingPathComponent("setup.zip").path
         try fm.copyItem(atPath: setup.zipPath, toPath: tempZip)
         // writes:[:] — pure deletion of the grader-only entries from the copy.
-        try applyScriptChangesToZip(zipPath: tempZip, writes: [:], deletions: graderOnly)
+        try await applyScriptChangesToZip(zipPath: tempZip, writes: [:], deletions: graderOnly)
         let filtered = try Data(contentsOf: URL(fileURLWithPath: tempZip))
         var headers = HTTPHeaders()
         headers.contentType = HTTPMediaType(type: "application", subType: "zip")

@@ -73,10 +73,10 @@ import Testing
 
     private func normalize(
         manifest: TestProperties, submissionFilename: String?
-    ) throws
+    ) async throws
         -> NormalizationResult
     {
-        try SubmissionNormalizer().normalizePythonSubmission(
+        try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: manifest,
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -92,11 +92,11 @@ import Testing
     /// they submitted is not there (#1357). Skipping silently is the exact
     /// outcome `protectedFileSkippedWarning` exists to prevent, so the warning
     /// is the behaviour under test, not the refusal.
-    @Test func aProtectedFileIsRefusedWithAWarningThatNamesIt() throws {
+    @Test func aProtectedFileIsRefusedWithAWarningThatNamesIt() async throws {
         try writeSubmissionFile(name: "test_public.py", contents: "print('not mine to write')\n")
         try writeSubmissionFile(name: "solution.py", contents: "print('hello')\n")
 
-        let result = try normalize(manifest: makeManifest(), submissionFilename: "solution.py")
+        let result = try await normalize(manifest: makeManifest(), submissionFilename: "solution.py")
 
         #expect(
             result.warnings.contains { $0.contains("test_public.py") },
@@ -112,15 +112,15 @@ import Testing
     /// rather than as the generic "no sources found". Either mutant downgrades
     /// the specific error to the generic one, so asserting the error's
     /// associated filename pins both.
-    @Test func aLoneUnsupportedFileIsRejectedByNameNotAsNoSources() throws {
+    @Test func aLoneUnsupportedFileIsRejectedByNameNotAsNoSources() async throws {
         try writeBinarySubmissionFile(name: "diagram.png")
 
         // Matched structurally rather than with `#expect(throws:)`: the error
         // type is not Equatable, and the associated filename is the whole
         // point of the assertion.
         var thrown: (any Error)?
-        #expect(throws: (any Error).self) {
-            do { _ = try normalize(manifest: makeManifest(), submissionFilename: "diagram.png") } catch {
+        await #expect(throws: (any Error).self) {
+            do { _ = try await normalize(manifest: makeManifest(), submissionFilename: "diagram.png") } catch {
                 thrown = error; throw error
             }
         }
@@ -143,10 +143,10 @@ import Testing
     /// to the expected filename. The preferred student module must stay the
     /// file the student actually wrote: the mutant repoints it at the
     /// compatibility copy, which is the name the student did NOT use.
-    @Test func aCompatibilityCopyDoesNotRepointThePreferredStudentModule() throws {
+    @Test func aCompatibilityCopyDoesNotRepointThePreferredStudentModule() async throws {
         try writeSubmissionFile(name: "solution.py", contents: "def area(r):\n    return r\n")
 
-        let result = try normalize(
+        let result = try await normalize(
             manifest: makeManifest(requiredFiles: ["warmup.py"]),
             submissionFilename: "solution.py"
         )
@@ -164,11 +164,11 @@ import Testing
     /// processed becomes `preferredStudentModule`, which is what notebook
     /// checks introspect. Reversing the sort silently changes which of a
     /// student's files is treated as their submission.
-    @Test func theFirstRootLevelSourceInSortedOrderBecomesThePreferredModule() throws {
+    @Test func theFirstRootLevelSourceInSortedOrderBecomesThePreferredModule() async throws {
         try writeSubmissionFile(name: "aaa_first.py", contents: "def f():\n    return 1\n")
         try writeSubmissionFile(name: "zzz_last.py", contents: "def g():\n    return 2\n")
 
-        let result = try normalize(manifest: makeManifest(), submissionFilename: nil)
+        let result = try await normalize(manifest: makeManifest(), submissionFilename: nil)
 
         #expect(
             result.preferredStudentModule == "aaa_first.py",
