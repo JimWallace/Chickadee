@@ -11,6 +11,7 @@
 // did-not-skip proof that keeps this meaningful where it gates a merge.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -22,18 +23,7 @@ import Testing
 @Suite(.serialized, .timeLimit(.minutes(3))) struct OctavePatternFamilyExecutionTests {
 
     static var hasOctave: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["octave-cli", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
+        get async { await toolIsAvailable("octave-cli", arguments: ["--version"]) }
     }
 
     /// The canonical Octave runtime, read from the repo so the test exercises

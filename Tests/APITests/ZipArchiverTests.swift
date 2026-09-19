@@ -13,6 +13,7 @@
 
 import Core
 import Fluent
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -48,14 +49,7 @@ final class ZipArchiverTests {
             with zipfile.ZipFile('\(zipPath)', 'w') as z:
                 \(entriesCode)
             """
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["python3", "-c", script]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do { try proc.run() } catch { return false }
-        proc.waitUntilExit()
-        return proc.terminationStatus == 0
+        return await toolIsAvailable("python3", arguments: ["-c"])
     }
 
     // MARK: - Error descriptions

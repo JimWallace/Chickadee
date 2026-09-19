@@ -11,6 +11,7 @@
 // one (CS 136+). Every kind below is exercised against both dialects.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -19,14 +20,7 @@ import Testing
 @Suite(.timeLimit(.minutes(5))) struct RacketRendererExecutionTests {
 
     static var racketAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["racket", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("racket", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the APITests job. Without it, a CI image

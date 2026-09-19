@@ -12,6 +12,7 @@
 //      produce the expected R literals. Silently skipped where `Rscript` is
 //      absent (most CI hosts); it runs in the r-base container and locally.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -69,18 +70,7 @@ import Testing
     /// True when `Rscript` is on PATH. The evaluator spawns via `/usr/bin/env`,
     /// so this probe uses the same resolution.
     private static var hasRscript: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
+        get async { await toolIsAvailable("Rscript", arguments: ["--version"]) }
     }
 
     /// The base-R seed reduction, mirrored in Swift so the test pins the exact

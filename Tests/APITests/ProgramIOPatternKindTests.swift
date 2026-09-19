@@ -8,6 +8,7 @@
 // their answer, and programs that crash.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 import Vapor
@@ -137,14 +138,7 @@ import Vapor
 @Suite(.timeLimit(.minutes(3))) struct ProgramIOPythonExecutionTests {
 
     static var pythonAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("python3", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the APITests job.

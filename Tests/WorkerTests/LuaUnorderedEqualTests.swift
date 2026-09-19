@@ -7,6 +7,7 @@
 // true whenever equal is — plus it accepts genuine reorderings. Run rather than
 // inspected, because the defect was a wrong mark, not a compile error.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -15,14 +16,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct LuaUnorderedEqualTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     /// Runs `program` with the embedded `test_runtime.lua` on `package.path`,

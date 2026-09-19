@@ -9,6 +9,7 @@
 // assignment can be validated at all (the exit-127 class).
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import RunnerCore
 import Testing
@@ -18,14 +19,7 @@ import Testing
 @Suite(.timeLimit(.minutes(3))) struct OctaveNativeGradingTests {
 
     static var octaveAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["octave-cli", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("octave-cli", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the WorkerTests job (audit F2). Every test

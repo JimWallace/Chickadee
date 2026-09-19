@@ -18,6 +18,7 @@
 // codes map to outcome statuses, and the JSON footer becomes the shortResult.
 // Skipped silently when `lua` is absent, matching the conformance matrix.
 
+import ChickadeeTestSupport
 import Foundation
 import RunnerCore
 import Testing
@@ -27,14 +28,7 @@ import Testing
 @Suite(.timeLimit(.minutes(3))) struct LuaNativeGradingTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     /// The did-not-skip proof for the WorkerTests job (audit F2). Every test

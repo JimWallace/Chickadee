@@ -12,6 +12,7 @@
 // worker chain with wrappers of the same shape.)
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import RunnerCore
 import Testing
@@ -21,14 +22,7 @@ import Testing
 @Suite(.timeLimit(.minutes(3))) struct CppNativeGradingTests {
 
     static var gppAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["g++", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("g++", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof (audit F2). Every test below guards

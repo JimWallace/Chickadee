@@ -11,6 +11,7 @@
 //      Silently skipped where `Rscript` is absent; runs in the r-base
 //      container and locally.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -163,18 +164,7 @@ import Testing
 @Suite(.serialized, .timeLimit(.minutes(3))) struct PatternFamilyRendererRExecutionTests {
 
     private static var hasRscript: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
+        get async { await toolIsAvailable("Rscript", arguments: ["--version"]) }
     }
 
     /// The canonical R runtime, read from the repo so the test exercises the

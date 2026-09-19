@@ -164,6 +164,15 @@ let package = Package(
         // as one file.
         .target(
             name: "ChickadeeTestSupport",
+            dependencies: [
+                // The one spawn primitive the test suites share. Replaces the
+                // hand-rolled Foundation Process spawns that made 21 of
+                // APITests' files both spawn a process and name a real
+                // interpreter — the subprocess-storm lead Family 5 still
+                // carries in docs/ci-flakiness.md.
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
+            ],
             path: "Tests/TestSupport",
             swiftSettings: strictWarnings
         ),

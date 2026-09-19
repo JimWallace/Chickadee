@@ -22,6 +22,7 @@
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -32,14 +33,7 @@ import Testing
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
     private static func hostHasCommand(_ command: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["which", command]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        return await toolIsAvailable("which")
     }
 
     private static func detectProfile() async throws -> RunnerCapabilityProfile {
@@ -124,13 +118,6 @@ import Testing
     }
 
     private static func hostCanImportPythonModule(_ module: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", "import \(module)"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        return await toolIsAvailable("python3", arguments: ["-c", "import \\(module)"])
     }
 }

@@ -8,6 +8,7 @@
 // to the wrong status, and stay green.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -16,14 +17,7 @@ import Testing
 @Suite(.timeLimit(.minutes(5))) struct CppRendererExecutionTests {
 
     static var gppAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["g++", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("g++", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the APITests job.

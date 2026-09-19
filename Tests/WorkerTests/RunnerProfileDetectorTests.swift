@@ -16,6 +16,7 @@
 // and parse are different questions, and this file asks the second one.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -175,14 +176,7 @@ import Testing
             "an unusable work root withheld python too, which needs no exec probe")
     }
 
-    private func gppIsAvailable() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["g++", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+    private func gppIsAvailable() async -> Bool {
+        return await toolIsAvailable("g++", arguments: ["--version"])
     }
 }

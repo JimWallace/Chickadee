@@ -5,6 +5,7 @@
 // `Rscript` execution of every supported kind against a passing and a failing
 // student notebook — silently skipped where `Rscript` is absent.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -120,18 +121,7 @@ import Testing
 @Suite(.serialized, .timeLimit(.minutes(3))) struct NotebookCheckRendererRExecutionTests {
 
     private static var hasRscript: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
+        get async { await toolIsAvailable("Rscript", arguments: ["--version"]) }
     }
 
     private static func canonicalRuntime() throws -> String {

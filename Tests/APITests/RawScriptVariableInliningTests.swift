@@ -21,6 +21,7 @@
 // (1): it writes the emitted file and runs it.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -235,14 +236,7 @@ import Testing
     }
 
     private static func isAvailable(_ command: String) -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["which", command]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do { try proc.run() } catch { return false }
-        proc.waitUntilExit()
-        return proc.terminationStatus == 0
+        return await toolIsAvailable("which")
     }
 
     @Test(arguments: AssignmentLanguage.allCases)

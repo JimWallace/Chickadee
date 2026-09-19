@@ -9,6 +9,7 @@
 // wrong mark rather than a compile error.
 
 import Core
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -17,14 +18,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct LuaStdoutCaptureTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     private static var repoRoot: URL {
