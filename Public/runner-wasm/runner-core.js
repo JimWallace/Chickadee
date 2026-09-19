@@ -897,67 +897,1089 @@ var SwiftRuntime = class {
 var UnsafeEventLoopYield = class extends Error {
 };
 
-// .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.453fa0db873e.wasm";
+// .build/plugins/PackageToJS/outputs/Package/bridge-js.js
 async function createInstantiator(options, swift) {
+  let instance;
+  let memory;
+  let setException;
+  let decodeString;
+  const textDecoder = new TextDecoder("utf-8");
+  const textEncoder = new TextEncoder("utf-8");
+  let tmpRetString;
+  let tmpRetBytes;
+  let tmpRetException;
+  let tmpRetOptionalBool;
+  let tmpRetOptionalInt;
+  let tmpRetOptionalFloat;
+  let tmpRetOptionalDouble;
+  let tmpRetOptionalHeapObject;
+  let strStack = [];
+  let i32Stack = [];
+  let i64Stack = [];
+  let f32Stack = [];
+  let f64Stack = [];
+  let ptrStack = [];
+  let taStack = [];
+  const enumHelpers = {};
+  const structHelpers = {};
+  let _exports = null;
+  let bjs = null;
+  const __bjs_arrayCodecCache = /* @__PURE__ */ new WeakMap();
+  function __bjs_arrayCodec(elementCodec) {
+    let codec = __bjs_arrayCodecCache.get(elementCodec);
+    if (codec !== void 0) {
+      return codec;
+    }
+    codec = {
+      lower(value) {
+        for (let i = 0; i < value.length; i++) {
+          elementCodec.lower(value[i]);
+        }
+        i32Stack.push(value.length);
+      },
+      lift() {
+        const count = i32Stack.pop();
+        if (count === -1) {
+          return taStack.pop();
+        }
+        const result = new Array(count);
+        for (let i = count - 1; i >= 0; i--) {
+          result[i] = elementCodec.lift();
+        }
+        return result;
+      }
+    };
+    __bjs_arrayCodecCache.set(elementCodec, codec);
+    return codec;
+  }
+  const __bjs_optionalCodecCache = /* @__PURE__ */ new WeakMap();
+  const __bjs_optionalCodecUndefinedOrCache = /* @__PURE__ */ new WeakMap();
+  function __bjs_optionalCodec(elementCodec, isUndefinedOr = false) {
+    const cache = isUndefinedOr ? __bjs_optionalCodecUndefinedOrCache : __bjs_optionalCodecCache;
+    let codec = cache.get(elementCodec);
+    if (codec !== void 0) {
+      return codec;
+    }
+    codec = {
+      lower(value) {
+        const isSome = isUndefinedOr ? value !== void 0 : value != null;
+        if (isSome) {
+          elementCodec.lower(value);
+          i32Stack.push(1);
+        } else {
+          i32Stack.push(0);
+        }
+      },
+      lift() {
+        if (i32Stack.pop() === 0) {
+          return isUndefinedOr ? void 0 : null;
+        }
+        return elementCodec.lift();
+      }
+    };
+    cache.set(elementCodec, codec);
+    return codec;
+  }
+  const __bjs_dictCodecCache = /* @__PURE__ */ new WeakMap();
+  function __bjs_dictCodec(valueCodec) {
+    let codec = __bjs_dictCodecCache.get(valueCodec);
+    if (codec !== void 0) {
+      return codec;
+    }
+    codec = {
+      lower(value) {
+        const keys = Object.keys(value);
+        for (let i = 0; i < keys.length; i++) {
+          __bjs_stringCodec.lower(keys[i]);
+          valueCodec.lower(value[keys[i]]);
+        }
+        i32Stack.push(keys.length);
+      },
+      lift() {
+        const count = i32Stack.pop();
+        const result = {};
+        for (let i = 0; i < count; i++) {
+          const value = valueCodec.lift();
+          const key = __bjs_stringCodec.lift();
+          result[key] = value;
+        }
+        return result;
+      }
+    };
+    __bjs_dictCodecCache.set(valueCodec, codec);
+    return codec;
+  }
+  const __bjs_stringCodec = {
+    lower: (v) => {
+      const bytes = textEncoder.encode(v);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+    },
+    lift: () => {
+      const string = strStack.pop();
+      return string;
+    }
+  };
+  const __bjs_primitiveCodecs = {
+    Bool: {
+      lower: (v) => {
+        i32Stack.push(v ? 1 : 0);
+      },
+      lift: () => {
+        const bool = i32Stack.pop() !== 0;
+        return bool;
+      }
+    },
+    Int: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop();
+        return int;
+      }
+    },
+    Int8: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop();
+        return int;
+      }
+    },
+    UInt8: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop() >>> 0;
+        return int;
+      }
+    },
+    Int16: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop();
+        return int;
+      }
+    },
+    UInt16: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop() >>> 0;
+        return int;
+      }
+    },
+    Int32: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop();
+        return int;
+      }
+    },
+    UInt32: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop() >>> 0;
+        return int;
+      }
+    },
+    UInt: {
+      lower: (v) => {
+        i32Stack.push(v | 0);
+      },
+      lift: () => {
+        const int = i32Stack.pop() >>> 0;
+        return int;
+      }
+    },
+    Int64: {
+      lower: (v) => {
+        i64Stack.push(v);
+      },
+      lift: () => {
+        const int = i64Stack.pop();
+        return int;
+      }
+    },
+    UInt64: {
+      lower: (v) => {
+        i64Stack.push(v);
+      },
+      lift: () => {
+        const int = i64Stack.pop();
+        return int;
+      }
+    },
+    Float: {
+      lower: (v) => {
+        f32Stack.push(Math.fround(v));
+      },
+      lift: () => {
+        const f32 = f32Stack.pop();
+        return f32;
+      }
+    },
+    Double: {
+      lower: (v) => {
+        f64Stack.push(v);
+      },
+      lift: () => {
+        const f64 = f64Stack.pop();
+        return f64;
+      }
+    },
+    String: __bjs_stringCodec,
+    JSValue: {
+      lower: (v) => {
+        const [vKind, vPayload1, vPayload2] = __bjs_jsValueLower(v);
+        i32Stack.push(vKind);
+        i32Stack.push(vPayload1);
+        f64Stack.push(vPayload2);
+      },
+      lift: () => {
+        const jsValuePayload2 = f64Stack.pop();
+        const jsValuePayload1 = i32Stack.pop();
+        const jsValueKind = i32Stack.pop();
+        const jsValue = __bjs_jsValueLift(jsValueKind, jsValuePayload1, jsValuePayload2);
+        return jsValue;
+      }
+    }
+  };
+  function __bjs_jsValueLower(value) {
+    let kind;
+    let payload1;
+    let payload2;
+    if (value === null) {
+      kind = 4;
+      payload1 = 0;
+      payload2 = 0;
+    } else {
+      switch (typeof value) {
+        case "boolean":
+          kind = 0;
+          payload1 = value ? 1 : 0;
+          payload2 = 0;
+          break;
+        case "number":
+          kind = 2;
+          payload1 = 0;
+          payload2 = value;
+          break;
+        case "string":
+          kind = 1;
+          payload1 = swift.memory.retain(value);
+          payload2 = 0;
+          break;
+        case "undefined":
+          kind = 5;
+          payload1 = 0;
+          payload2 = 0;
+          break;
+        case "object":
+          kind = 3;
+          payload1 = swift.memory.retain(value);
+          payload2 = 0;
+          break;
+        case "function":
+          kind = 3;
+          payload1 = swift.memory.retain(value);
+          payload2 = 0;
+          break;
+        case "symbol":
+          kind = 7;
+          payload1 = swift.memory.retain(value);
+          payload2 = 0;
+          break;
+        case "bigint":
+          kind = 8;
+          payload1 = swift.memory.retain(value);
+          payload2 = 0;
+          break;
+        default:
+          throw new TypeError("Unsupported JSValue type");
+      }
+    }
+    return [kind, payload1, payload2];
+  }
+  function __bjs_jsValueLift(kind, payload1, payload2) {
+    let jsValue;
+    switch (kind) {
+      case 0:
+        jsValue = payload1 !== 0;
+        break;
+      case 1:
+        jsValue = swift.memory.getObject(payload1);
+        break;
+      case 2:
+        jsValue = payload2;
+        break;
+      case 3:
+        jsValue = swift.memory.getObject(payload1);
+        break;
+      case 4:
+        jsValue = null;
+        break;
+      case 5:
+        jsValue = void 0;
+        break;
+      case 7:
+        jsValue = swift.memory.getObject(payload1);
+        break;
+      case 8:
+        jsValue = swift.memory.getObject(payload1);
+        break;
+      default:
+        throw new TypeError("Unsupported JSValue kind " + kind);
+    }
+    return jsValue;
+  }
+  const swiftClosureRegistry = typeof FinalizationRegistry === "undefined" ? { register: () => {
+  }, unregister: () => {
+  } } : new FinalizationRegistry((state) => {
+    if (state.unregistered) {
+      return;
+    }
+    instance?.exports?.bjs_release_swift_closure(state.pointer);
+  });
+  const makeClosure = (pointer, file, line, func) => {
+    const state = { pointer, file, line, unregistered: false };
+    const real = (...args) => {
+      if (state.unregistered) {
+        const bytes = new Uint8Array(memory.buffer, state.file >>> 0);
+        let length = 0;
+        while (bytes[length] !== 0) {
+          length += 1;
+        }
+        const fileID = decodeString(state.file, length);
+        throw new Error(`Attempted to call a released JSTypedClosure created at ${fileID}:${state.line}`);
+      }
+      return func(...args);
+    };
+    real.__unregister = () => {
+      if (state.unregistered) {
+        return;
+      }
+      state.unregistered = true;
+      swiftClosureRegistry.unregister(state);
+    };
+    swiftClosureRegistry.register(real, state, state);
+    return swift.memory.retain(real);
+  };
+  const __bjs_codec_M10RunnerWasmT14JSNotebookCell = {
+    lower: (v) => {
+      structHelpers.M10RunnerWasmT14JSNotebookCell.lower(v);
+    },
+    lift: () => {
+      const struct = structHelpers.M10RunnerWasmT14JSNotebookCell.lift();
+      return struct;
+    }
+  };
+  const __bjs_codec_Array_M10RunnerWasmT14JSNotebookCell = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT14JSNotebookCell);
+  const __bjs_codec_M10RunnerWasmT11JSSuiteItem = {
+    lower: (v) => {
+      structHelpers.M10RunnerWasmT11JSSuiteItem.lower(v);
+    },
+    lift: () => {
+      const struct = structHelpers.M10RunnerWasmT11JSSuiteItem.lift();
+      return struct;
+    }
+  };
+  const __bjs_codec_Array_M10RunnerWasmT11JSSuiteItem = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT11JSSuiteItem);
+  const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
+  const __bjs_codec_Optional_String = __bjs_optionalCodec(__bjs_stringCodec);
+  const __bjs_codec_Optional_Double = __bjs_optionalCodec(__bjs_primitiveCodecs.Double);
+  const __bjs_codec_Optional_Int = __bjs_optionalCodec(__bjs_primitiveCodecs.Int);
+  const __bjs_codec_M10RunnerWasmT13JSTestOutcome = {
+    lower: (v) => {
+      structHelpers.M10RunnerWasmT13JSTestOutcome.lower(v);
+    },
+    lift: () => {
+      const struct = structHelpers.M10RunnerWasmT13JSTestOutcome.lift();
+      return struct;
+    }
+  };
+  const __bjs_codec_Array_M10RunnerWasmT13JSTestOutcome = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT13JSTestOutcome);
+  const __bjs_createStructHelpers_M10RunnerWasmT14JSNotebookCell = () => ({
+    lower: (value) => {
+      const bytes = textEncoder.encode(value.cellType);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      const bytes1 = textEncoder.encode(value.source);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+    },
+    lift: () => {
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      return { cellType: string1, source: string };
+    }
+  });
+  const __bjs_createStructHelpers_M10RunnerWasmT17JSExtractedPython = () => ({
+    lower: (value) => {
+      const bytes = textEncoder.encode(value.executableModule);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      const bytes1 = textEncoder.encode(value.introspectableSource);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+      i32Stack.push(value.codeCellCount | 0);
+    },
+    lift: () => {
+      const int = i32Stack.pop();
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      return { executableModule: string1, introspectableSource: string, codeCellCount: int };
+    }
+  });
+  const __bjs_createStructHelpers_M10RunnerWasmT17JSExtractedSource = () => ({
+    lower: (value) => {
+      const bytes = textEncoder.encode(value.source);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      i32Stack.push(value.codeCellCount | 0);
+    },
+    lift: () => {
+      const int = i32Stack.pop();
+      const string = strStack.pop();
+      return { source: string, codeCellCount: int };
+    }
+  });
+  const __bjs_createStructHelpers_M10RunnerWasmT11JSSuiteItem = () => ({
+    lower: (value) => {
+      const bytes = textEncoder.encode(value.script);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      const bytes1 = textEncoder.encode(value.tier);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+      __bjs_codec_Optional_String.lower(value.displayName);
+      __bjs_codec_Array_String.lower(value.dependsOn);
+      i32Stack.push(value.points | 0);
+    },
+    lift: () => {
+      const int = i32Stack.pop();
+      const arrayResult = __bjs_codec_Array_String.lift();
+      const optValue = __bjs_codec_Optional_String.lift();
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      return { script: string1, tier: string, displayName: optValue, dependsOn: arrayResult, points: int };
+    }
+  });
+  const __bjs_createStructHelpers_M10RunnerWasmT14JSScriptOutput = () => ({
+    lower: (value) => {
+      i32Stack.push(value.exitCode | 0);
+      const bytes = textEncoder.encode(value.stdout);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      const bytes1 = textEncoder.encode(value.stderr);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+      i32Stack.push(value.executionTimeMs | 0);
+      i32Stack.push(value.timedOut ? 1 : 0);
+    },
+    lift: () => {
+      const bool = i32Stack.pop() !== 0;
+      const int = i32Stack.pop();
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      const int1 = i32Stack.pop();
+      return { exitCode: int1, stdout: string1, stderr: string, executionTimeMs: int, timedOut: bool };
+    }
+  });
+  const __bjs_createStructHelpers_M10RunnerWasmT13JSTestOutcome = () => ({
+    lower: (value) => {
+      const bytes = textEncoder.encode(value.testName);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      __bjs_codec_Optional_String.lower(value.testClass);
+      const bytes1 = textEncoder.encode(value.tier);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+      const bytes2 = textEncoder.encode(value.status);
+      const id2 = swift.memory.retain(bytes2);
+      i32Stack.push(bytes2.length);
+      i32Stack.push(id2);
+      const bytes3 = textEncoder.encode(value.shortResult);
+      const id3 = swift.memory.retain(bytes3);
+      i32Stack.push(bytes3.length);
+      i32Stack.push(id3);
+      __bjs_codec_Optional_String.lower(value.longResult);
+      f64Stack.push(value.score);
+      i32Stack.push(value.points | 0);
+      __bjs_codec_Optional_Double.lower(value.metric);
+      i32Stack.push(value.executionTimeMs | 0);
+      __bjs_codec_Optional_Int.lower(value.memoryUsageBytes);
+      i32Stack.push(value.attemptNumber | 0);
+      i32Stack.push(value.isFirstPassSuccess ? 1 : 0);
+    },
+    lift: () => {
+      const bool = i32Stack.pop() !== 0;
+      const int = i32Stack.pop();
+      const optValue = __bjs_codec_Optional_Int.lift();
+      const int1 = i32Stack.pop();
+      const optValue1 = __bjs_codec_Optional_Double.lift();
+      const int2 = i32Stack.pop();
+      const f64 = f64Stack.pop();
+      const optValue2 = __bjs_codec_Optional_String.lift();
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      const string2 = strStack.pop();
+      const optValue3 = __bjs_codec_Optional_String.lift();
+      const string3 = strStack.pop();
+      return { testName: string3, testClass: optValue3, tier: string2, status: string1, shortResult: string, longResult: optValue2, score: f64, points: int2, metric: optValue1, executionTimeMs: int1, memoryUsageBytes: optValue, attemptNumber: int, isFirstPassSuccess: bool };
+    }
+  });
   return {
     /**
      * @param {WebAssembly.Imports} importObject
-     * @param {unknown} importsContext
      */
     addImports: (importObject, importsContext) => {
-      const unexpectedBjsCall = () => {
-        throw new Error("Unexpected call to BridgeJS function");
+      bjs = {};
+      importObject["bjs"] = bjs;
+      bjs["swift_js_return_string"] = function(ptr, len) {
+        tmpRetString = decodeString(ptr, len);
       };
-      importObject["bjs"] = {
-        swift_js_return_string: unexpectedBjsCall,
-        swift_js_init_memory: unexpectedBjsCall,
-        swift_js_make_js_string: unexpectedBjsCall,
-        swift_js_init_memory_with_result: unexpectedBjsCall,
-        swift_js_throw: unexpectedBjsCall,
-        swift_js_retain: unexpectedBjsCall,
-        swift_js_release: unexpectedBjsCall,
-        swift_js_push_i32: unexpectedBjsCall,
-        swift_js_push_f32: unexpectedBjsCall,
-        swift_js_push_f64: unexpectedBjsCall,
-        swift_js_push_string: unexpectedBjsCall,
-        swift_js_pop_i32: unexpectedBjsCall,
-        swift_js_pop_f32: unexpectedBjsCall,
-        swift_js_pop_f64: unexpectedBjsCall,
-        swift_js_return_optional_bool: unexpectedBjsCall,
-        swift_js_return_optional_int: unexpectedBjsCall,
-        swift_js_return_optional_string: unexpectedBjsCall,
-        swift_js_return_optional_double: unexpectedBjsCall,
-        swift_js_return_optional_float: unexpectedBjsCall,
-        swift_js_return_optional_heap_object: unexpectedBjsCall,
-        swift_js_return_optional_object: unexpectedBjsCall,
-        swift_js_get_optional_int_presence: unexpectedBjsCall,
-        swift_js_get_optional_int_value: unexpectedBjsCall,
-        swift_js_get_optional_string: unexpectedBjsCall,
-        swift_js_get_optional_float_presence: unexpectedBjsCall,
-        swift_js_get_optional_float_value: unexpectedBjsCall,
-        swift_js_get_optional_double_presence: unexpectedBjsCall,
-        swift_js_get_optional_double_value: unexpectedBjsCall,
-        swift_js_get_optional_heap_object_pointer: unexpectedBjsCall,
-        swift_js_push_pointer: unexpectedBjsCall,
-        swift_js_pop_pointer: unexpectedBjsCall,
-        swift_js_push_i64: unexpectedBjsCall,
-        swift_js_pop_i64: unexpectedBjsCall,
-        swift_js_closure_unregister: unexpectedBjsCall,
-        swift_js_push_typed_array: unexpectedBjsCall,
-        swift_js_make_promise: unexpectedBjsCall,
-        bjs_core_register_type_handles: unexpectedBjsCall
+      bjs["swift_js_init_memory"] = function(sourceId, bytesPtr) {
+        const source = swift.memory.getObject(sourceId);
+        swift.memory.release(sourceId);
+        const bytes = new Uint8Array(memory.buffer, bytesPtr >>> 0);
+        bytes.set(source);
+      };
+      bjs["swift_js_make_js_string"] = function(ptr, len) {
+        return swift.memory.retain(decodeString(ptr, len));
+      };
+      bjs["swift_js_init_memory_with_result"] = function(ptr, len) {
+        const target = new Uint8Array(memory.buffer, ptr >>> 0, len >>> 0);
+        target.set(tmpRetBytes);
+        tmpRetBytes = void 0;
+      };
+      bjs["swift_js_throw"] = function(id) {
+        tmpRetException = swift.memory.retainByRef(id);
+      };
+      bjs["swift_js_retain"] = function(id) {
+        return swift.memory.retainByRef(id);
+      };
+      bjs["swift_js_release"] = function(id) {
+        swift.memory.release(id);
+      };
+      bjs["swift_js_push_i32"] = function(v) {
+        i32Stack.push(v | 0);
+      };
+      bjs["swift_js_push_f32"] = function(v) {
+        f32Stack.push(Math.fround(v));
+      };
+      bjs["swift_js_push_f64"] = function(v) {
+        f64Stack.push(v);
+      };
+      bjs["swift_js_push_string"] = function(ptr, len) {
+        const value = decodeString(ptr, len);
+        strStack.push(value);
+      };
+      bjs["swift_js_pop_i32"] = function() {
+        return i32Stack.pop();
+      };
+      bjs["swift_js_pop_f32"] = function() {
+        return f32Stack.pop();
+      };
+      bjs["swift_js_pop_f64"] = function() {
+        return f64Stack.pop();
+      };
+      bjs["swift_js_push_pointer"] = function(pointer) {
+        ptrStack.push(pointer);
+      };
+      bjs["swift_js_pop_pointer"] = function() {
+        return ptrStack.pop();
+      };
+      bjs["swift_js_push_i64"] = function(v) {
+        i64Stack.push(v);
+      };
+      bjs["swift_js_pop_i64"] = function() {
+        return i64Stack.pop();
+      };
+      const taCtors = [Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array];
+      bjs["swift_js_push_typed_array"] = function(kind, ptr, count) {
+        const Ctor = taCtors[kind];
+        const byteLen = count * Ctor.BYTES_PER_ELEMENT;
+        const copy = memory.buffer.slice(ptr, ptr + byteLen);
+        taStack.push(Array.from(new Ctor(copy)));
+      };
+      bjs["swift_js_struct_lower_JSNotebookCell"] = function(objectId) {
+        structHelpers.M10RunnerWasmT14JSNotebookCell.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSNotebookCell"] = function() {
+        const value = structHelpers.M10RunnerWasmT14JSNotebookCell.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSExtractedPython"] = function(objectId) {
+        structHelpers.M10RunnerWasmT17JSExtractedPython.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSExtractedPython"] = function() {
+        const value = structHelpers.M10RunnerWasmT17JSExtractedPython.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSExtractedSource"] = function(objectId) {
+        structHelpers.M10RunnerWasmT17JSExtractedSource.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSExtractedSource"] = function() {
+        const value = structHelpers.M10RunnerWasmT17JSExtractedSource.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSSuiteItem"] = function(objectId) {
+        structHelpers.M10RunnerWasmT11JSSuiteItem.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSSuiteItem"] = function() {
+        const value = structHelpers.M10RunnerWasmT11JSSuiteItem.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSScriptOutput"] = function(objectId) {
+        structHelpers.M10RunnerWasmT14JSScriptOutput.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSScriptOutput"] = function() {
+        const value = structHelpers.M10RunnerWasmT14JSScriptOutput.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSTestOutcome"] = function(objectId) {
+        structHelpers.M10RunnerWasmT13JSTestOutcome.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSTestOutcome"] = function() {
+        const value = structHelpers.M10RunnerWasmT13JSTestOutcome.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["bjs_core_register_type_handles"] = function() {
+      };
+      bjs["bjs_RunnerWasm_register_type_handles"] = function() {
+      };
+      const __bjs_promiseSettlers = /* @__PURE__ */ Symbol("JavaScriptKit.promiseSettlers");
+      bjs["swift_js_make_promise"] = function() {
+        let resolve, reject;
+        const promise = new Promise((res, rej) => {
+          resolve = res;
+          reject = rej;
+        });
+        promise[__bjs_promiseSettlers] = { resolve, reject };
+        return swift.memory.retain(promise);
+      };
+      bjs["promise_resolve_RunnerWasm_Sa13JSTestOutcomeV"] = function(promise) {
+        try {
+          const arrayResult = __bjs_codec_Array_M10RunnerWasmT13JSTestOutcome.lift();
+          swift.memory.getObject(promise)[__bjs_promiseSettlers].resolve(arrayResult);
+        } catch (error) {
+          setException(error);
+        }
+      };
+      bjs["promise_resolve_RunnerWasm_14JSScriptOutputV"] = function(promise) {
+        try {
+          const structValue = structHelpers.M10RunnerWasmT14JSScriptOutput.lift();
+          swift.memory.getObject(promise)[__bjs_promiseSettlers].resolve(structValue);
+        } catch (error) {
+          setException(error);
+        }
+      };
+      bjs["promise_reject_RunnerWasm"] = function(promise, valueKind, valuePayload1, valuePayload2) {
+        try {
+          const jsValue = __bjs_jsValueLift(valueKind, valuePayload1, valuePayload2);
+          swift.memory.getObject(promise)[__bjs_promiseSettlers].reject(jsValue);
+        } catch (error) {
+          setException(error);
+        }
+      };
+      bjs["swift_js_return_optional_bool"] = function(isSome, value) {
+        if (isSome === 0) {
+          tmpRetOptionalBool = null;
+        } else {
+          tmpRetOptionalBool = value !== 0;
+        }
+      };
+      bjs["swift_js_return_optional_int"] = function(isSome, value) {
+        if (isSome === 0) {
+          tmpRetOptionalInt = null;
+        } else {
+          tmpRetOptionalInt = value | 0;
+        }
+      };
+      bjs["swift_js_return_optional_float"] = function(isSome, value) {
+        if (isSome === 0) {
+          tmpRetOptionalFloat = null;
+        } else {
+          tmpRetOptionalFloat = Math.fround(value);
+        }
+      };
+      bjs["swift_js_return_optional_double"] = function(isSome, value) {
+        if (isSome === 0) {
+          tmpRetOptionalDouble = null;
+        } else {
+          tmpRetOptionalDouble = value;
+        }
+      };
+      bjs["swift_js_return_optional_string"] = function(isSome, ptr, len) {
+        if (isSome === 0) {
+          tmpRetString = null;
+        } else {
+          tmpRetString = decodeString(ptr, len);
+        }
+      };
+      bjs["swift_js_return_optional_object"] = function(isSome, objectId) {
+        if (isSome === 0) {
+          tmpRetString = null;
+        } else {
+          tmpRetString = swift.memory.getObject(objectId);
+        }
+      };
+      bjs["swift_js_return_optional_heap_object"] = function(isSome, pointer) {
+        if (isSome === 0) {
+          tmpRetOptionalHeapObject = null;
+        } else {
+          tmpRetOptionalHeapObject = pointer;
+        }
+      };
+      bjs["swift_js_get_optional_int_presence"] = function() {
+        return tmpRetOptionalInt != null ? 1 : 0;
+      };
+      bjs["swift_js_get_optional_int_value"] = function() {
+        const value = tmpRetOptionalInt;
+        tmpRetOptionalInt = void 0;
+        return value;
+      };
+      bjs["swift_js_get_optional_string"] = function() {
+        const str = tmpRetString;
+        tmpRetString = void 0;
+        if (str == null) {
+          return -1;
+        } else {
+          const bytes = textEncoder.encode(str);
+          tmpRetBytes = bytes;
+          return bytes.length;
+        }
+      };
+      bjs["swift_js_get_optional_float_presence"] = function() {
+        return tmpRetOptionalFloat != null ? 1 : 0;
+      };
+      bjs["swift_js_get_optional_float_value"] = function() {
+        const value = tmpRetOptionalFloat;
+        tmpRetOptionalFloat = void 0;
+        return value;
+      };
+      bjs["swift_js_get_optional_double_presence"] = function() {
+        return tmpRetOptionalDouble != null ? 1 : 0;
+      };
+      bjs["swift_js_get_optional_double_value"] = function() {
+        const value = tmpRetOptionalDouble;
+        tmpRetOptionalDouble = void 0;
+        return value;
+      };
+      bjs["swift_js_get_optional_heap_object_pointer"] = function() {
+        const pointer = tmpRetOptionalHeapObject;
+        tmpRetOptionalHeapObject = void 0;
+        return pointer || 0;
+      };
+      bjs["swift_js_closure_unregister"] = function(funcRef) {
+      };
+      bjs["swift_js_closure_unregister"] = function(funcRef) {
+        const func = swift.memory.getObject(funcRef);
+        func.__unregister();
+      };
+      bjs["invoke_js_callback_RunnerWasm_10RunnerWasmSS_Sb"] = function(callbackId, param0Bytes, param0Count) {
+        try {
+          const callback = swift.memory.getObject(callbackId);
+          const string = decodeString(param0Bytes, param0Count);
+          let ret = callback(string);
+          return ret ? 1 : 0;
+        } catch (error) {
+          setException(error);
+          return 0;
+        }
+      };
+      bjs["make_swift_closure_RunnerWasm_10RunnerWasmSS_Sb"] = function(boxPtr, file, line) {
+        const lower_closure_RunnerWasm_10RunnerWasmSS_Sb = function(param0) {
+          const param0Bytes = textEncoder.encode(param0);
+          const param0Id = swift.memory.retain(param0Bytes);
+          const ret = instance.exports.invoke_swift_closure_RunnerWasm_10RunnerWasmSS_Sb(boxPtr, param0Id, param0Bytes.length);
+          if (tmpRetException) {
+            const error = swift.memory.getObject(tmpRetException);
+            swift.memory.release(tmpRetException);
+            tmpRetException = void 0;
+            throw error;
+          }
+          return ret !== 0;
+        };
+        return makeClosure(boxPtr, file, line, lower_closure_RunnerWasm_10RunnerWasmSS_Sb);
+      };
+      bjs["invoke_js_callback_RunnerWasm_10RunnerWasmYaSSSi_14JSScriptOutputV"] = function(resolveRef, rejectRef, callbackId, param0Bytes, param0Count, param1) {
+        const resolve = swift.memory.getObject(resolveRef);
+        const reject = swift.memory.getObject(rejectRef);
+        const callback = swift.memory.getObject(callbackId);
+        const string = decodeString(param0Bytes, param0Count);
+        callback(string, param1).then(resolve, reject);
+      };
+      bjs["make_swift_closure_RunnerWasm_10RunnerWasmYaSSSi_14JSScriptOutputV"] = function(boxPtr, file, line) {
+        const lower_closure_RunnerWasm_10RunnerWasmYaSSSi_14JSScriptOutputV = function(param0, param1) {
+          const param0Bytes = textEncoder.encode(param0);
+          const param0Id = swift.memory.retain(param0Bytes);
+          const ret = instance.exports.invoke_swift_closure_RunnerWasm_10RunnerWasmYaSSSi_14JSScriptOutputV(boxPtr, param0Id, param0Bytes.length, param1);
+          const ret1 = swift.memory.getObject(ret);
+          swift.memory.release(ret);
+          return ret1;
+        };
+        return makeClosure(boxPtr, file, line, lower_closure_RunnerWasm_10RunnerWasmYaSSSi_14JSScriptOutputV);
+      };
+      bjs["invoke_js_callback_RunnerWasm_10RunnerWasms14JSScriptOutputV_y"] = function(callbackId) {
+        try {
+          const callback = swift.memory.getObject(callbackId);
+          const structValue = structHelpers.M10RunnerWasmT14JSScriptOutput.lift();
+          callback(structValue);
+        } catch (error) {
+          setException(error);
+        }
+      };
+      bjs["make_swift_closure_RunnerWasm_10RunnerWasms14JSScriptOutputV_y"] = function(boxPtr, file, line) {
+        const lower_closure_RunnerWasm_10RunnerWasms14JSScriptOutputV_y = function(param0) {
+          structHelpers.M10RunnerWasmT14JSScriptOutput.lower(param0);
+          instance.exports.invoke_swift_closure_RunnerWasm_10RunnerWasms14JSScriptOutputV_y(boxPtr);
+          if (tmpRetException) {
+            const error = swift.memory.getObject(tmpRetException);
+            swift.memory.release(tmpRetException);
+            tmpRetException = void 0;
+            throw error;
+          }
+        };
+        return makeClosure(boxPtr, file, line, lower_closure_RunnerWasm_10RunnerWasms14JSScriptOutputV_y);
+      };
+      bjs["invoke_js_callback_RunnerWasm_10RunnerWasms7JSValueV_y"] = function(callbackId, param0Kind, param0Payload1, param0Payload2) {
+        try {
+          const callback = swift.memory.getObject(callbackId);
+          const jsValue = __bjs_jsValueLift(param0Kind, param0Payload1, param0Payload2);
+          callback(jsValue);
+        } catch (error) {
+          setException(error);
+        }
+      };
+      bjs["make_swift_closure_RunnerWasm_10RunnerWasms7JSValueV_y"] = function(boxPtr, file, line) {
+        const lower_closure_RunnerWasm_10RunnerWasms7JSValueV_y = function(param0) {
+          const [param0Kind, param0Payload1, param0Payload2] = __bjs_jsValueLower(param0);
+          instance.exports.invoke_swift_closure_RunnerWasm_10RunnerWasms7JSValueV_y(boxPtr, param0Kind, param0Payload1, param0Payload2);
+          if (tmpRetException) {
+            const error = swift.memory.getObject(tmpRetException);
+            swift.memory.release(tmpRetException);
+            tmpRetException = void 0;
+            throw error;
+          }
+        };
+        return makeClosure(boxPtr, file, line, lower_closure_RunnerWasm_10RunnerWasms7JSValueV_y);
+      };
+    },
+    setInstance: (i) => {
+      instance = i;
+      memory = instance.exports.memory;
+      decodeString = (ptr, len) => {
+        const bytes = new Uint8Array(memory.buffer, ptr >>> 0, len >>> 0);
+        return textDecoder.decode(bytes);
+      };
+      setException = (error) => {
+        instance.exports._swift_js_exception.value = swift.memory.retain(error);
       };
     },
     /** @param {WebAssembly.Instance} instance */
-    setInstance: (instance) => {
-    },
-    /** @param {WebAssembly.Instance} instance */
-    createExports: (instance) => {
-      return {};
+    createExports: (instance2) => {
+      const js = swift.memory.heap;
+      const __bjs_helpers_M10RunnerWasmT14JSNotebookCell = __bjs_createStructHelpers_M10RunnerWasmT14JSNotebookCell();
+      structHelpers.M10RunnerWasmT14JSNotebookCell = __bjs_helpers_M10RunnerWasmT14JSNotebookCell;
+      const __bjs_helpers_M10RunnerWasmT17JSExtractedPython = __bjs_createStructHelpers_M10RunnerWasmT17JSExtractedPython();
+      structHelpers.M10RunnerWasmT17JSExtractedPython = __bjs_helpers_M10RunnerWasmT17JSExtractedPython;
+      const __bjs_helpers_M10RunnerWasmT17JSExtractedSource = __bjs_createStructHelpers_M10RunnerWasmT17JSExtractedSource();
+      structHelpers.M10RunnerWasmT17JSExtractedSource = __bjs_helpers_M10RunnerWasmT17JSExtractedSource;
+      const __bjs_helpers_M10RunnerWasmT11JSSuiteItem = __bjs_createStructHelpers_M10RunnerWasmT11JSSuiteItem();
+      structHelpers.M10RunnerWasmT11JSSuiteItem = __bjs_helpers_M10RunnerWasmT11JSSuiteItem;
+      const __bjs_helpers_M10RunnerWasmT14JSScriptOutput = __bjs_createStructHelpers_M10RunnerWasmT14JSScriptOutput();
+      structHelpers.M10RunnerWasmT14JSScriptOutput = __bjs_helpers_M10RunnerWasmT14JSScriptOutput;
+      const __bjs_helpers_M10RunnerWasmT13JSTestOutcome = __bjs_createStructHelpers_M10RunnerWasmT13JSTestOutcome();
+      structHelpers.M10RunnerWasmT13JSTestOutcome = __bjs_helpers_M10RunnerWasmT13JSTestOutcome;
+      const exports = {
+        extractPython: function bjs_extractPython(cells, filename) {
+          __bjs_codec_Array_M10RunnerWasmT14JSNotebookCell.lower(cells);
+          const filenameBytes = textEncoder.encode(filename);
+          const filenameId = swift.memory.retain(filenameBytes);
+          instance2.exports.bjs_extractPython(filenameId, filenameBytes.length);
+          const structValue = structHelpers.M10RunnerWasmT17JSExtractedPython.lift();
+          return structValue;
+        },
+        extractR: function bjs_extractR(cells, filename) {
+          __bjs_codec_Array_M10RunnerWasmT14JSNotebookCell.lower(cells);
+          const filenameBytes = textEncoder.encode(filename);
+          const filenameId = swift.memory.retain(filenameBytes);
+          instance2.exports.bjs_extractR(filenameId, filenameBytes.length);
+          const structValue = structHelpers.M10RunnerWasmT17JSExtractedSource.lift();
+          return structValue;
+        },
+        extractLua: function bjs_extractLua(cells, filename) {
+          __bjs_codec_Array_M10RunnerWasmT14JSNotebookCell.lower(cells);
+          const filenameBytes = textEncoder.encode(filename);
+          const filenameId = swift.memory.retain(filenameBytes);
+          instance2.exports.bjs_extractLua(filenameId, filenameBytes.length);
+          const structValue = structHelpers.M10RunnerWasmT17JSExtractedSource.lift();
+          return structValue;
+        },
+        extractOctave: function bjs_extractOctave(cells, filename) {
+          __bjs_codec_Array_M10RunnerWasmT14JSNotebookCell.lower(cells);
+          const filenameBytes = textEncoder.encode(filename);
+          const filenameId = swift.memory.retain(filenameBytes);
+          instance2.exports.bjs_extractOctave(filenameId, filenameBytes.length);
+          const structValue = structHelpers.M10RunnerWasmT17JSExtractedSource.lift();
+          return structValue;
+        },
+        classifyScript: function bjs_classifyScript(name, source) {
+          const nameBytes = textEncoder.encode(name);
+          const nameId = swift.memory.retain(nameBytes);
+          const sourceBytes = textEncoder.encode(source);
+          const sourceId = swift.memory.retain(sourceBytes);
+          instance2.exports.bjs_classifyScript(nameId, nameBytes.length, sourceId, sourceBytes.length);
+          const ret = tmpRetString;
+          tmpRetString = void 0;
+          return ret;
+        },
+        executeSuites: function bjs_executeSuites(suites, timeLimitSeconds, attemptNumber, scriptExists, run) {
+          __bjs_codec_Array_M10RunnerWasmT11JSSuiteItem.lower(suites);
+          const callbackId = swift.memory.retain(scriptExists);
+          const callbackId1 = swift.memory.retain(run);
+          const ret = instance2.exports.bjs_executeSuites(timeLimitSeconds, attemptNumber, callbackId, callbackId1);
+          const ret1 = swift.memory.getObject(ret);
+          swift.memory.release(ret);
+          return ret1;
+        },
+        JSExtractedPython: {
+          init: function(executableModule, introspectableSource, codeCellCount) {
+            const executableModuleBytes = textEncoder.encode(executableModule);
+            const executableModuleId = swift.memory.retain(executableModuleBytes);
+            const introspectableSourceBytes = textEncoder.encode(introspectableSource);
+            const introspectableSourceId = swift.memory.retain(introspectableSourceBytes);
+            instance2.exports.bjs_JSExtractedPython_init(executableModuleId, executableModuleBytes.length, introspectableSourceId, introspectableSourceBytes.length, codeCellCount);
+            const structValue = structHelpers.M10RunnerWasmT17JSExtractedPython.lift();
+            return structValue;
+          }
+        },
+        JSExtractedSource: {
+          init: function(source, codeCellCount) {
+            const sourceBytes = textEncoder.encode(source);
+            const sourceId = swift.memory.retain(sourceBytes);
+            instance2.exports.bjs_JSExtractedSource_init(sourceId, sourceBytes.length, codeCellCount);
+            const structValue = structHelpers.M10RunnerWasmT17JSExtractedSource.lift();
+            return structValue;
+          }
+        },
+        JSNotebookCell: {
+          init: function(cellType, source) {
+            const cellTypeBytes = textEncoder.encode(cellType);
+            const cellTypeId = swift.memory.retain(cellTypeBytes);
+            const sourceBytes = textEncoder.encode(source);
+            const sourceId = swift.memory.retain(sourceBytes);
+            instance2.exports.bjs_JSNotebookCell_init(cellTypeId, cellTypeBytes.length, sourceId, sourceBytes.length);
+            const structValue = structHelpers.M10RunnerWasmT14JSNotebookCell.lift();
+            return structValue;
+          }
+        },
+        JSScriptOutput: {
+          init: function(exitCode, stdout, stderr, executionTimeMs, timedOut) {
+            const stdoutBytes = textEncoder.encode(stdout);
+            const stdoutId = swift.memory.retain(stdoutBytes);
+            const stderrBytes = textEncoder.encode(stderr);
+            const stderrId = swift.memory.retain(stderrBytes);
+            instance2.exports.bjs_JSScriptOutput_init(exitCode, stdoutId, stdoutBytes.length, stderrId, stderrBytes.length, executionTimeMs, timedOut);
+            const structValue = structHelpers.M10RunnerWasmT14JSScriptOutput.lift();
+            return structValue;
+          }
+        },
+        JSSuiteItem: {
+          init: function(script, tier, displayName, dependsOn, points) {
+            const scriptBytes = textEncoder.encode(script);
+            const scriptId = swift.memory.retain(scriptBytes);
+            const tierBytes = textEncoder.encode(tier);
+            const tierId = swift.memory.retain(tierBytes);
+            const isSome = displayName != null;
+            let result, result1;
+            if (isSome) {
+              const displayNameBytes = textEncoder.encode(displayName);
+              const displayNameId = swift.memory.retain(displayNameBytes);
+              result = displayNameId;
+              result1 = displayNameBytes.length;
+            } else {
+              result = 0;
+              result1 = 0;
+            }
+            __bjs_codec_Array_String.lower(dependsOn);
+            instance2.exports.bjs_JSSuiteItem_init(scriptId, scriptBytes.length, tierId, tierBytes.length, +isSome, result, result1, points);
+            const structValue = structHelpers.M10RunnerWasmT11JSSuiteItem.lift();
+            return structValue;
+          }
+        },
+        JSTestOutcome: {
+          init: function(testName, testClass, tier, status, shortResult, longResult, score, points, metric, executionTimeMs, memoryUsageBytes, attemptNumber, isFirstPassSuccess) {
+            const testNameBytes = textEncoder.encode(testName);
+            const testNameId = swift.memory.retain(testNameBytes);
+            const isSome = testClass != null;
+            let result, result1;
+            if (isSome) {
+              const testClassBytes = textEncoder.encode(testClass);
+              const testClassId = swift.memory.retain(testClassBytes);
+              result = testClassId;
+              result1 = testClassBytes.length;
+            } else {
+              result = 0;
+              result1 = 0;
+            }
+            const tierBytes = textEncoder.encode(tier);
+            const tierId = swift.memory.retain(tierBytes);
+            const statusBytes = textEncoder.encode(status);
+            const statusId = swift.memory.retain(statusBytes);
+            const shortResultBytes = textEncoder.encode(shortResult);
+            const shortResultId = swift.memory.retain(shortResultBytes);
+            const isSome1 = longResult != null;
+            let result2, result3;
+            if (isSome1) {
+              const longResultBytes = textEncoder.encode(longResult);
+              const longResultId = swift.memory.retain(longResultBytes);
+              result2 = longResultId;
+              result3 = longResultBytes.length;
+            } else {
+              result2 = 0;
+              result3 = 0;
+            }
+            const isSome2 = metric != null;
+            const isSome3 = memoryUsageBytes != null;
+            instance2.exports.bjs_JSTestOutcome_init(testNameId, testNameBytes.length, +isSome, result, result1, tierId, tierBytes.length, statusId, statusBytes.length, shortResultId, shortResultBytes.length, +isSome1, result2, result3, score, points, +isSome2, isSome2 ? metric : 0, executionTimeMs, +isSome3, isSome3 ? memoryUsageBytes : 0, attemptNumber, isFirstPassSuccess);
+            const structValue = structHelpers.M10RunnerWasmT13JSTestOutcome.lift();
+            return structValue;
+          }
+        }
+      };
+      _exports = exports;
+      return exports;
     }
   };
 }
+
+// .build/plugins/PackageToJS/outputs/Package/instantiate.js
+var MODULE_PATH = "RunnerWasm.7a6e938e50c7.wasm";
 async function instantiate(options) {
   const { instantiator, ...result } = await _instantiate(options);
   options.wasi.initialize(result.instance);
@@ -2342,6 +3364,9 @@ async function defaultBrowserSetup(options) {
   );
   return {
     module: options.module,
+    getImports() {
+      return options.getImports();
+    },
     wasi: Object.assign(wasi, {
       setInstance(instance) {
         wasi.inst = instance;
@@ -2352,19 +3377,87 @@ async function defaultBrowserSetup(options) {
 
 // .build/plugins/PackageToJS/outputs/Package/index.js
 async function initBrowser(_options) {
-  const options = _options || {};
+  const options = _options || {
+    /** @returns {import('./instantiate.d').Imports} */
+    getImports() {
+      (() => {
+        throw new Error("No imports provided");
+      })();
+    }
+  };
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.453fa0db873e.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.7a6e938e50c7.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
-    module
+    module,
+    getImports: () => options.getImports()
   });
   return await instantiate(instantiateOptions);
 }
 async function init(options) {
   return initBrowser(options);
 }
+
+// loader/runner-core-entry.js
+var REJECTED_RUN_STDERR = "browser executor: script run rejected";
+var NON_OBJECT_RUN_STDERR = "browser executor: non-object run result";
+function toCells(cells) {
+  return (Array.isArray(cells) ? cells : []).map((cell) => ({
+    cellType: String(cell?.cell_type ?? cell?.cellType ?? ""),
+    source: String(cell?.source ?? "")
+  }));
+}
+function toSuiteItems(suites) {
+  return (Array.isArray(suites) ? suites : []).map((entry) => ({
+    script: String(entry?.script ?? ""),
+    tier: String(entry?.tier ?? "public"),
+    displayName: typeof entry?.displayName === "string" ? entry.displayName : null,
+    dependsOn: Array.isArray(entry?.dependsOn) ? entry.dependsOn.map(String) : [],
+    points: typeof entry?.points === "number" ? entry.points : 1
+  }));
+}
+function toScriptOutput(value, fallbackStderr) {
+  if (value === null || typeof value !== "object") {
+    return { exitCode: 2, stdout: "", stderr: fallbackStderr, executionTimeMs: 0, timedOut: false };
+  }
+  return {
+    exitCode: typeof value.exitCode === "number" ? value.exitCode : 2,
+    stdout: typeof value.stdout === "string" ? value.stdout : "",
+    stderr: typeof value.stderr === "string" ? value.stderr : "",
+    executionTimeMs: typeof value.executionTimeMs === "number" ? value.executionTimeMs : 0,
+    timedOut: value.timedOut === true
+  };
+}
+function registerLegacyGlobals(exports, target = globalThis) {
+  target.runnerExtractPython = (cells, filename) => exports.extractPython(toCells(cells), String(filename ?? ""));
+  target.runnerExtractR = (cells, filename) => exports.extractR(toCells(cells), String(filename ?? ""));
+  target.runnerExtractLua = (cells, filename) => exports.extractLua(toCells(cells), String(filename ?? ""));
+  target.runnerExtractOctave = (cells, filename) => exports.extractOctave(toCells(cells), String(filename ?? ""));
+  target.runnerClassifyScript = (name, source) => exports.classifyScript(String(name ?? ""), String(source ?? ""));
+  target.runnerExecuteSuites = (suites, timeLimitSeconds, attemptNumber, scriptExists, run) => exports.executeSuites(
+    toSuiteItems(suites),
+    typeof timeLimitSeconds === "number" ? timeLimitSeconds : 10,
+    typeof attemptNumber === "number" ? attemptNumber : 1,
+    (name) => Boolean(scriptExists(name)),
+    async (name, limit) => {
+      let result;
+      try {
+        result = await run(name, limit);
+      } catch (_) {
+        return toScriptOutput(null, REJECTED_RUN_STDERR);
+      }
+      return toScriptOutput(result, NON_OBJECT_RUN_STDERR);
+    }
+  );
+  return target;
+}
+async function init2(options) {
+  const result = await init(options);
+  registerLegacyGlobals(result.exports);
+  return result;
+}
 export {
-  init
+  init2 as init,
+  registerLegacyGlobals
 };

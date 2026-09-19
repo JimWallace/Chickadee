@@ -37,6 +37,7 @@ on:
     paths:
       - 'Sources/RunnerCore/**'
       - 'wasm/Sources/**'
+      - 'wasm/loader/**'
       - 'wasm/Package.swift'
       - 'wasm/Package.resolved'
       - 'wasm/wasm-sdk.pin'

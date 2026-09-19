@@ -166,8 +166,9 @@ compiler chases every `import`, and we never create a type we later discard.
 
 - **Stage 4 — thin the shell. DONE (#772).** `browser-runner.js` no longer
   contains a suite loop or output interpretation: it calls `runnerExecuteSuites`
-  in the wasm bridge (`JavaScriptEventLoop` + `JSPromise.async` +
-  `BrowserScriptExecutor`), which drives the SAME `executeSuites` +
+  in the wasm bridge (since the BridgeJS move, a typed `executeSuites` export
+  plus `BrowserScriptExecutor`; before it, `JSPromise.async` over a hand-built
+  `JSClosure`), which drives the SAME `executeSuites` +
   `interpretScriptOutput` the worker runs. JS supplies only the substrate — a
   `run` callback that executes a script in Pyodide and returns raw
   `ScriptOutput`. The dead JS interpretation cluster (8 functions) was deleted;
@@ -190,8 +191,10 @@ compiler chases every `import`, and we never create a type we later discard.
   five times its real size); a per-PR Embedded compile of RunnerCore now runs
   on the host toolchain with no wasm SDK
   (`scripts/check-runnercore-embedded.sh`); and BridgeJS is no longer
-  incompatible with Embedded Swift, so the dynamic interop is a choice rather
-  than a constraint, with the typed migration scoped as the next slice.
+  incompatible with Embedded Swift, so the bridge is now `@JS` exports
+  (`wasm/Sources/RunnerWasm/Bridge.swift`) with the generated `.d.ts` as its
+  contract and a JS adapter (`wasm/loader/runner-core-entry.js`) serving the
+  legacy `globalThis.runner*` entry points over them.
 
 ## What stays JS forever
 

@@ -21,5 +21,5 @@ if [ ! -x node_modules/.bin/eslint ]; then
   npm ci --no-audit --no-fund
 fi
 
-node_modules/.bin/eslint --max-warnings 0 Public/*.js Tests/BrowserRunnerJSTests/*.mjs
-echo "eslint: OK (Public/*.js + Tests/BrowserRunnerJSTests clean)"
+node_modules/.bin/eslint --max-warnings 0 Public/*.js wasm/loader/*.js Tests/BrowserRunnerJSTests/*.mjs
+echo "eslint: OK (Public/*.js + wasm/loader + Tests/BrowserRunnerJSTests clean)"

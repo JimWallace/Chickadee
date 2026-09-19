@@ -128,6 +128,14 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
+    // The browser wasm loader's entry (bundled into Public/runner-wasm/runner-core.js).
+    files: ['wasm/loader/*.js'],
+    languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...browserGlobals } },
+    rules: {
+      'no-unused-vars': ['error', { args: 'after-used', argsIgnorePattern: '^_', caughtErrors: 'none' }],
+    },
+  },
+  {
     // Node test suite.
     files: ['Tests/BrowserRunnerJSTests/**/*.mjs'],
     languageOptions: {

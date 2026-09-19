@@ -11,9 +11,13 @@ Reported by `scripts/build-runner-wasm.sh` on every re-vendor:
 
 | stage | bytes |
 |---|---|
-| as linked (`-O`/`-Osize`, `-g`) | 1,679,573 |
-| `wasm-opt -Oz --strip-debug` | 272,554 |
-| gzip -9 | 134,050 |
+| as linked (`-Osize`, `-g`) | ~1.7 MB |
+| `wasm-opt -Oz --strip-debug` | 281,578 |
+| gzip -9 | 138,181 |
+
+Plus the loader, `runner-core.js`: 126 KB raw / 21 KB gzip, of which ~40 KB
+raw is the BridgeJS glue (struct codecs for the typed exports) and the rest
+the JavaScriptKit runtime and the WASI shim.
 
 `wasm-opt -Oz --strip-debug` runs in the build via `npx` (binaryen — same
 no-install mechanism as esbuild); if unavailable it falls back to the
@@ -85,11 +89,11 @@ binaryen) and additionally reports **brotli**:
   unstripped module first (the likeliest cause: `wasm-opt` missing when the
   vendor job ran), and otherwise on a true balloon (the signature of
   Embedded-Swift generic-specialization explosion).
-- prints the **delta from `runner-size-baseline.txt`** (currently 134,050) so a
+- prints the **delta from `runner-size-baseline.txt`** (currently 138,181) so a
   disproportionate jump is visible in the build log. Update the baseline when a
   re-vendor legitimately changes the size.
 
-Current: gzip 134,050 — **OK, within budget.** (The audit's 300 KB brotli
+Current: gzip 138,181 — **OK, within budget.** (The audit's 300 KB brotli
 target, once dismissed as unreachable for a module bundling the Embedded Swift
 runtime + JavaScriptKit + JavaScriptEventLoop, was never the module's floor;
 it was the DWARF's. The gate stays set to catch a *balloon*, which is the real
