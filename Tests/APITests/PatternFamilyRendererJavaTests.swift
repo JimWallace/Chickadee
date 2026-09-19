@@ -12,6 +12,7 @@
 // that reads as a PASS — every case in the assignment, silently — so it is
 // asserted here rather than trusted.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -21,21 +22,15 @@ import Testing
 @Suite(.timeLimit(.minutes(5))) struct JavaRendererExecutionTests {
 
     static var javacAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["javac", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("javac", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the APITests job.
-    @Test func javacIsPresentInCI() {
+    @Test func javacIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.javacAvailable
         #expect(
-            Self.javacAvailable,
+            isAvailable,
             "javac absent: every Java renderer execution test skipped silently")
     }
 
@@ -51,7 +46,7 @@ import Testing
     /// sourcepath on demand.
     static func execute(
         script: String, submission: String, inputs: String? = nil
-    ) throws -> (code: Int32, stdout: String, stderr: String) {
+    ) async throws -> (code: Int32, stdout: String, stderr: String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-javarender-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -70,23 +65,8 @@ import Testing
         try script.write(
             to: dir.appendingPathComponent("test.sh"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["test.sh"]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(data: data, encoding: .utf8) ?? "",
-            String(data: errData, encoding: .utf8) ?? ""
-        )
+        let run = try await runTool(["sh"] + ["test.sh"], workingDirectory: dir)
+        return (run.exitCode, run.stdout, run.stderr)
     }
 
     static func family(
@@ -114,17 +94,17 @@ import Testing
 
     // MARK: - boundaryEquality
 
-    @Test func boundaryEqualityPassesAndFails() throws {
-        guard Self.javacAvailable else { return }
+    @Test func boundaryEqualityPassesAndFails() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
 
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x * 2; }"))
         #expect(good.code == 0, "correct submission did not pass: \(good.stdout) \(good.stderr)")
         #expect(good.stdout.contains("Returned 6"))
         #expect(!good.stdout.contains("CK_SENTINEL"), "the sentinel leaked into the result line")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return 99; }"))
         #expect(bad.code == 1, "wrong submission did not fail: \(bad.stdout) \(bad.stderr)")
         #expect(bad.stdout.contains("wrong value"))
@@ -135,10 +115,10 @@ import Testing
     /// An authored `6` is an `Integer`; a student returning `long` boxes to
     /// `Long`, and `Integer.valueOf(6).equals(Long.valueOf(6L))` is FALSE. A
     /// runtime that trusted `equals` would mark this correct submission wrong.
-    @Test func aWiderReturnTypeStillMatchesAnAuthoredInteger() throws {
-        guard Self.javacAvailable else { return }
+    @Test func aWiderReturnTypeStillMatchesAnAuthoredInteger() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: script, submission: Self.solution("static long f(int x) { return x * 2L; }"))
         #expect(
             result.code == 0,
@@ -154,10 +134,10 @@ import Testing
     /// calling `System.exit(0)` in their own code exits the JVM with status 0;
     /// without the sentinel the wrapper checks for, the case — and every case in
     /// the assignment — reads as a PASS.
-    @Test func aSubmissionCallingSystemExitIsAnErrorNotAPass() throws {
-        guard Self.javacAvailable else { return }
+    @Test func aSubmissionCallingSystemExitIsAnErrorNotAPass() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: script,
             submission: Self.solution("static int f(int x) { System.exit(0); return 0; }"))
         #expect(
@@ -171,10 +151,10 @@ import Testing
 
     // MARK: - A submission that does not compile
 
-    @Test func aNonCompilingSubmissionIsAnError() throws {
-        guard Self.javacAvailable else { return }
+    @Test func aNonCompilingSubmissionIsAnError() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return \"oops\"; }"))
         #expect(result.code == 2, "a build failure must be an error, not a fail")
         #expect(result.stderr.contains("error"), "javac's diagnostic did not reach longResult")
@@ -182,33 +162,33 @@ import Testing
 
     // MARK: - approximateEquality
 
-    @Test func approximateEqualityHonoursTolerance() throws {
-        guard Self.javacAvailable else { return }
+    @Test func approximateEqualityHonoursTolerance() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution("static double f(int x) { return 1.0000001; }"))
         #expect(good.code == 0, "inside tolerance failed: \(good.stdout) \(good.stderr)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: Self.solution("static double f(int x) { return 2.0; }"))
         #expect(bad.code == 1, "outside tolerance passed: \(bad.stdout)")
     }
 
     // MARK: - unorderedEquality
 
-    @Test func unorderedEqualityIgnoresOrder() throws {
-        guard Self.javacAvailable else { return }
+    @Test func unorderedEqualityIgnoresOrder() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "static java.util.List<Integer> f(int x) { return java.util.Arrays.asList(3, 1, 2); }"
             ))
         #expect(good.code == 0, "reordered list failed: \(good.stdout) \(good.stderr)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "static java.util.List<Integer> f(int x) { return java.util.Arrays.asList(1, 2); }"))
@@ -217,14 +197,14 @@ import Testing
 
     // MARK: - returnTypeCheck
 
-    @Test func returnTypeCheckMatchesNeutralNames() throws {
-        guard Self.javacAvailable else { return }
+    @Test func returnTypeCheckMatchesNeutralNames() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static String f(int x) { return \"ok\"; }"))
         #expect(good.code == 0, "a String return did not match \"str\": \(good.stdout)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return 1; }"))
         #expect(bad.code == 1, "an int return matched \"str\": \(bad.stdout)")
         #expect(bad.stdout.contains("int"), "the failure did not name the type it got")
@@ -232,22 +212,22 @@ import Testing
 
     // MARK: - exceptionExpected
 
-    @Test func exceptionExpectedMatchesOnTypeAndMessage() throws {
-        guard Self.javacAvailable else { return }
+    @Test func exceptionExpectedMatchesOnTypeAndMessage() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "static int f(int x) { throw new IllegalArgumentException(\"bad\"); }"))
         #expect(good.code == 0, "the expected exception did not pass: \(good.stdout) \(good.stderr)")
 
-        let wrongKind = try Self.execute(
+        let wrongKind = try await Self.execute(
             script: script,
             submission: Self.solution("static int f(int x) { throw new IllegalStateException(\"x\"); }"))
         #expect(wrongKind.code == 1, "the wrong exception passed: \(wrongKind.stdout)")
 
-        let noThrow = try Self.execute(
+        let noThrow = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return 1; }"))
         #expect(noThrow.code == 1, "returning normally passed an exceptionExpected case")
         #expect(noThrow.stdout.contains("no error raised"))
@@ -258,11 +238,11 @@ import Testing
     /// static context" — so the one test whose job is to explain the problem
     /// said everything was fine (#1349). Forgetting `static` is the most common
     /// Java intro mistake.
-    @Test func theExistenceGuardRejectsANonStaticMethod() throws {
-        guard Self.javacAvailable else { return }
+    @Test func theExistenceGuardRejectsANonStaticMethod() async throws {
+        guard await Self.javacAvailable else { return }
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
-        let nonStatic = try Self.execute(
+        let nonStatic = try await Self.execute(
             script: script, submission: Self.solution("public int f(int x) { return x * 2; }"))
         #expect(nonStatic.code == 1, "a non-static method passed the guard: \(nonStatic.stdout)")
         #expect(
@@ -271,13 +251,13 @@ import Testing
 
         // A private static method is equally uncallable, and equally confusing
         // to be told "is not defined" about.
-        let priv = try Self.execute(
+        let priv = try await Self.execute(
             script: script,
             submission: Self.solution("private static int f(int x) { return x * 2; }"))
         #expect(priv.code == 1, "a private method passed the guard: \(priv.stdout)")
 
         // And the ordinary case still passes.
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x * 2; }"))
         #expect(good.code == 0, "a correct submission failed the guard: \(good.stdout)")
     }
@@ -285,10 +265,10 @@ import Testing
     /// A successful compile's warnings must not ride into a PASSING test's
     /// `longResult` (#1349). Raw types produce javac's "unchecked or unsafe
     /// operations" note, which is the everyday way a student trips this.
-    @Test func compilerWarningsDoNotReachAPassingResult() throws {
-        guard Self.javacAvailable else { return }
+    @Test func compilerWarningsDoNotReachAPassingResult() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(1)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 """
@@ -306,11 +286,11 @@ import Testing
     /// emitted an EXPRESSION lambda, and `ck.Thunk.run()` returns `Object`, so
     /// javac refused it with "void cannot be converted to Object" and every
     /// case in the family reported `error` (#1346).
-    @Test func exceptionExpectedAcceptsAVoidTarget() throws {
-        guard Self.javacAvailable else { return }
+    @Test func exceptionExpectedAcceptsAVoidTarget() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "static void f(int x) { throw new IllegalArgumentException(\"bad\"); }"))
@@ -324,11 +304,11 @@ import Testing
     /// was an illegal escape, erroring the whole family (#1346). Round-trips
     /// through the match, so it proves the escaping is correct and not merely
     /// compilable.
-    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() throws {
-        guard Self.javacAvailable else { return }
+    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 #"static void f(int x) { throw new IllegalStateException("must be \"positive\" (C:\\in)"); }"#
@@ -341,15 +321,15 @@ import Testing
 
     // MARK: - performanceThreshold
 
-    @Test func performanceThresholdTimesTheCall() throws {
-        guard Self.javacAvailable else { return }
+    @Test func performanceThresholdTimesTheCall() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x; }"))
         #expect(good.code == 0, "a fast method failed its budget: \(good.stdout) \(good.stderr)")
 
         let slow = Self.render(Self.family(.performanceThreshold, expected: .int(1)))
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: slow,
             submission: Self.solution(
                 "static int f(int x) { try { Thread.sleep(200); } catch (Exception e) {} return x; }"
@@ -359,15 +339,15 @@ import Testing
 
     // MARK: - stdoutEquality
 
-    @Test func stdoutEqualityComparesPrintedText() throws {
-        guard Self.javacAvailable else { return }
+    @Test func stdoutEqualityComparesPrintedText() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution("static void f(int x) { System.out.println(\"hello\"); }"))
         #expect(good.code == 0, "matching output failed: \(good.stdout) \(good.stderr)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: Self.solution("static void f(int x) { System.out.println(\"nope\"); }"))
         #expect(bad.code == 1, "mismatched output passed: \(bad.stdout)")
@@ -382,10 +362,10 @@ import Testing
     /// found no sentinel, and an ordinary exception was reported as exit 2
     /// "Does the submission call System.exit?" (#1344). The exit code is the
     /// regression: it must be 1 (a graded fail), not 2.
-    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() throws {
-        guard Self.javacAvailable else { return }
+    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
-        let thrown = try Self.execute(
+        let thrown = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "static void f(int x) { throw new IllegalStateException(\"boom\"); }"))
@@ -402,24 +382,24 @@ import Testing
 
     // MARK: - variableEquality
 
-    @Test func variableEqualityReadsAStaticField() throws {
-        guard Self.javacAvailable else { return }
+    @Test func variableEqualityReadsAStaticField() async throws {
+        guard await Self.javacAvailable else { return }
         let family = Self.family(
             .variableEquality, function: "Solution.LIMIT", expected: .int(42))
         let script = Self.render(family)
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static final int LIMIT = 42;"))
         #expect(good.code == 0, "the right value failed: \(good.stdout) \(good.stderr)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: Self.solution("static final int LIMIT = 7;"))
         #expect(bad.code == 1, "the wrong value passed: \(bad.stdout)")
     }
 
     // MARK: - differential
 
-    @Test func differentialComparesAgainstTheReference() throws {
-        guard Self.javacAvailable else { return }
+    @Test func differentialComparesAgainstTheReference() async throws {
+        guard await Self.javacAvailable else { return }
         let family = Self.family(
             .differential, expected: .null,
             // `ck_ref_Solution_f`, not `ck_ref_Solution.f`: the qualified target
@@ -427,11 +407,11 @@ import Testing
             // `PatternFamily.differentialReferenceName`.
             reference: "static int ck_ref_Solution_f(int x) { return x * 2; }")
         let script = Self.render(family)
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x + x; }"))
         #expect(good.code == 0, "an equivalent method failed: \(good.stdout) \(good.stderr)")
 
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x; }"))
         #expect(bad.code == 1, "a divergent method passed: \(bad.stdout)")
     }
@@ -442,8 +422,8 @@ import Testing
     /// test — the leg the runbook warns is usually proved only in one
     /// direction. The file here is the real `renderInputsFile` output, not a
     /// fixture.
-    @Test func aPerStudentInputReachesTheGeneratedTest() throws {
-        guard Self.javacAvailable else { return }
+    @Test func aPerStudentInputReachesTheGeneratedTest() async throws {
+        guard await Self.javacAvailable else { return }
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .boundaryEquality,
             functionName: "Solution.f", paramNames: ["x"],
@@ -458,7 +438,7 @@ import Testing
         let inputs = AssignmentLanguage.java.renderInputsFile([
             "threshold": AssignmentLanguage.java.literal(.int(5))
         ])
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: script,
             submission: Self.solution("static int f(int x) { return x * 2; }"),
             inputs: inputs)
@@ -472,16 +452,16 @@ import Testing
 
     // MARK: - The existence guard
 
-    @Test func theExistenceGuardFailsOnAMissingMethod() throws {
-        guard Self.javacAvailable else { return }
+    @Test func theExistenceGuardFailsOnAMissingMethod() async throws {
+        guard await Self.javacAvailable else { return }
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
 
-        let present = try Self.execute(
+        let present = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return 1; }"))
         #expect(present.code == 0, "a defined method failed the guard: \(present.stdout)")
 
-        let missing = try Self.execute(
+        let missing = try await Self.execute(
             script: script, submission: Self.solution("static int other(int x) { return 1; }"))
         #expect(missing.code == 1, "a missing method did not FAIL the guard: \(missing.stdout)")
         #expect(missing.stdout.contains("not defined"))
@@ -491,11 +471,11 @@ import Testing
 
     /// The submission runs in source-file mode with the case's text on its
     /// stdin; the checker class grades what it printed.
-    @Test func programIOPassesAndFails() throws {
-        guard Self.javacAvailable else { return }
+    @Test func programIOPassesAndFails() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 """
@@ -505,7 +485,7 @@ import Testing
                 }
                 """))
         #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: Self.solution(
                 """
@@ -519,14 +499,14 @@ import Testing
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
-    @Test func programIORegexMatchesALineOfTheOutput() throws {
-        guard Self.javacAvailable else { return }
+    @Test func programIORegexMatchesALineOfTheOutput() async throws {
+        guard await Self.javacAvailable else { return }
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
             cases: [PatternCase(key: "01", label: "case", args: [.string("")], expected: .string("^sum=7$"))],
             ioComparison: .regex)
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: Self.render(family),
             submission: Self.solution(
                 "public static void main(String[] a) { System.out.println(\"header\"); System.out.println(\"sum=7\"); }"
@@ -537,16 +517,16 @@ import Testing
     /// `System.exit` from a whole program is the program ending, not the
     /// test: a non-zero status is a graded failure, a zero one is graded on
     /// the output.
-    @Test func programIOSystemExitIsGradedOnTheOutput() throws {
-        guard Self.javacAvailable else { return }
+    @Test func programIOSystemExitIsGradedOnTheOutput() async throws {
+        guard await Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "public static void main(String[] a) { System.out.println(7); System.exit(0); }"))
         #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
-        let crashed = try Self.execute(
+        let crashed = try await Self.execute(
             script: script,
             submission: Self.solution(
                 "public static void main(String[] a) { System.out.println(7); System.exit(3); }"))

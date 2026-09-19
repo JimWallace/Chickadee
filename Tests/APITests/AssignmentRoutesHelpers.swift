@@ -3,6 +3,7 @@
 // Free-function helpers replacing AssignmentRoutesTestCase.  Tests opt
 // in by wrapping their body in `try await withAssignmentRoutesApp { app in ... }`.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -271,7 +272,7 @@ func arMultipartBody(
 
 // MARK: - Zip + notebook fixtures
 
-func arMakeZip(at path: String, entries: [(String, String)]) throws {
+func arMakeZip(at path: String, entries: [(String, String)]) async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("assignment-routes-zip-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -286,13 +287,8 @@ func arMakeZip(at path: String, entries: [(String, String)]) throws {
         try Data(contents.utf8).write(to: fileURL)
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    process.currentDirectoryURL = root
-    process.arguments = ["-q", "-r", path, "."]
-    try process.run()
-    process.waitUntilExit()
-    #expect(process.terminationStatus == 0)
+    let run = try await runTool(["zip", "-q", "-r", path, "."], workingDirectory: root)
+    #expect(run.exitCode == 0)
 }
 
 @discardableResult

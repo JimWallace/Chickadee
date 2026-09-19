@@ -12,6 +12,7 @@
 //      produce the expected R literals. Silently skipped where `Rscript` is
 //      absent (most CI hosts); it runs in the r-base container and locally.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -69,18 +70,7 @@ import Testing
     /// True when `Rscript` is on PATH. The evaluator spawns via `/usr/bin/env`,
     /// so this probe uses the same resolution.
     private static var hasRscript: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
+        get async { await toolIsAvailable("Rscript", arguments: ["--version"]) }
     }
 
     /// The base-R seed reduction, mirrored in Swift so the test pins the exact
@@ -97,7 +87,7 @@ import Testing
     }
 
     @Test func evaluatesRotationExpressionForSeed() async throws {
-        guard Self.hasRscript else { return }  // silent skip where R is absent
+        guard await Self.hasRscript else { return }  // silent skip where R is absent
 
         let poolStrings = ["AACGT", "GGTTA", "CCGAT", "TTAGC"]
         let pool = FamilyVariable(name: "pool", value: .array(poolStrings.map(JSONValue.string)))
@@ -120,7 +110,7 @@ import Testing
     /// A value with quotes, a newline, a tab and a backslash must survive
     /// `deparse` → JSON → `JSONSerialization` intact as a re-parseable R literal.
     @Test func escapesNastyStringValues() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
 
         let expr = PersonalizationExpression(
             name: "note", expression: #"paste0("q:\"x\"", "\n\t", "b \\ c")"#)

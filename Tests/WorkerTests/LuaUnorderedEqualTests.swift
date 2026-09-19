@@ -7,6 +7,7 @@
 // true whenever equal is — plus it accepts genuine reorderings. Run rather than
 // inspected, because the defect was a wrong mark, not a compile error.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -15,19 +16,12 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct LuaUnorderedEqualTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     /// Runs `program` with the embedded `test_runtime.lua` on `package.path`,
     /// returning trimmed stdout.
-    private func runLua(_ program: String) throws -> String {
+    private func runLua(_ program: String) async throws -> String {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-unordered-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -35,24 +29,14 @@ import Testing
         try testRuntimeSource(for: .lua).write(
             to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-e", program]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(
-            in: .whitespacesAndNewlines)
+        let run = try await runTool(["lua", "-e", program], workingDirectory: dir)
+        return run.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The eight values from the audit table where the old string-keyed
     /// implementation disagreed with `equal`. Every one must now agree.
-    @Test func unorderedEqualNeverDisagreesWithEqual() throws {
-        guard Self.luaAvailable else { return }
+    @Test func unorderedEqualNeverDisagreesWithEqual() async throws {
+        guard await Self.luaAvailable else { return }
         // Each pair is `{ actual, expected }` as Lua source; the harness reports
         // any pair whose equal / unordered_equal verdicts differ.
         let pairs = [
@@ -77,7 +61,7 @@ import Testing
             end
             io.write(#disagreements == 0 and "OK" or ("DISAGREE:" .. table.concat(disagreements, ",")))
             """
-        let result = try runLua(program)
+        let result = try await runLua(program)
         #expect(
             result == "OK",
             "equal and unordered_equal disagree on case(s) \(result) — the F3 regression is back")
@@ -86,8 +70,8 @@ import Testing
     /// The other half of the contract: a genuine reordering (and correct
     /// multiset semantics) must still be accepted, so the fix did not make
     /// unordered_equal a synonym for equal.
-    @Test func unorderedEqualStillAcceptsReorderings() throws {
-        guard Self.luaAvailable else { return }
+    @Test func unorderedEqualStillAcceptsReorderings() async throws {
+        guard await Self.luaAvailable else { return }
         let program = """
             local chickadee = require("test_runtime")
             local ok = chickadee.unordered_equal({1,2,3}, {3,1,2})
@@ -97,6 +81,6 @@ import Testing
                 and not chickadee.unordered_equal({1,2,3}, {1,2})
             io.write(ok and "OK" or "WRONG")
             """
-        #expect(try runLua(program) == "OK")
+        #expect(try await runLua(program) == "OK")
     }
 }

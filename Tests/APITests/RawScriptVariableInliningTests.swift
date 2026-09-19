@@ -20,6 +20,7 @@
 // The execution suite at the bottom is the part that would actually have caught
 // (1): it writes the emitted file and runs it.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -234,23 +235,16 @@ import Testing
         }
     }
 
-    private static func isAvailable(_ command: String) -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["which", command]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do { try proc.run() } catch { return false }
-        proc.waitUntilExit()
-        return proc.terminationStatus == 0
+    private static func isAvailable(_ command: String) async -> Bool {
+        return await toolIsAvailable("which", arguments: [command])
     }
 
     @Test(arguments: AssignmentLanguage.allCases)
-    func theInlinedScriptRunsInItsOwnInterpreter(_ language: AssignmentLanguage) throws {
+    func theInlinedScriptRunsInItsOwnInterpreter(_ language: AssignmentLanguage) async throws {
         guard let argv = Self.interpreter(for: language), let command = argv.first else { return }
         // Not "expected on this platform" as a failure: a dev box has neither
         // octave-cli nor racket, and a silent skip is the house rule for that.
-        guard Self.isAvailable(command) else { return }
+        guard await Self.isAvailable(command) else { return }
 
         let manifest = TestProperties(
             requiredFiles: [], testSuites: [], timeLimitSeconds: 10,
@@ -266,23 +260,14 @@ import Testing
         let path = dir.appendingPathComponent(name)
         try source.write(to: path, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = argv + [path.path]
-        proc.currentDirectoryURL = dir
-        let errPipe = Pipe()
-        proc.standardOutput = Pipe()
-        proc.standardError = errPipe
-        try proc.run()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
+        let run = try await runTool(argv + [path.path], workingDirectory: dir)
 
         #expect(
-            proc.terminationStatus == 0,
+            run.exitCode == 0,
             """
             The inlined \(language.displayName) script did not run cleanly \
-            (exit \(proc.terminationStatus)). stderr:
-            \(String(data: errData, encoding: .utf8) ?? "")
+            (exit \(run.exitCode)). stderr:
+            \(run.stderr)
             Source:
             \(source)
             """)

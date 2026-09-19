@@ -17,6 +17,7 @@
 // Modelled on `RacketNativeGradingTests` deliberately — same workspace shape,
 // same did-not-skip proof — so the five read as one family.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import RunnerCore
@@ -27,23 +28,17 @@ import Testing
 @Suite(.timeLimit(.minutes(5))) struct JavaNativeGradingTests {
 
     static var javacAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["javac", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("javac", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof. Every test below returns silently when the JDK is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
-    @Test func javacIsPresentInCI() {
+    @Test func javacIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.javacAvailable
         #expect(
-            Self.javacAvailable,
+            isAvailable,
             """
             javac is absent in the CI image, so every native Java grading test skipped \
             silently. Note the probe is `javac`, not `java`: a JRE-only image passes the \
@@ -92,7 +87,7 @@ import Testing
     /// wrapper's compile-and-run round trip survives the worker's dispatch —
     /// the thing `generatedScriptExtension: "sh"` makes true and no test said.
     @Test func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         // Written out rather than produced by `renderJavaPatternCase`: that
         // renderer lives in APIServer, which WorkerTests cannot import. The
@@ -147,7 +142,7 @@ import Testing
     /// The exit-code contract holds through javac + java + the wrapper's
     /// sentinel check, not just through the classifier.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         func wrapper(_ verdict: String) -> String {
             """
@@ -195,7 +190,7 @@ import Testing
     /// (`docs/java-support.md`), and nothing pinned that it dispatches to `java`
     /// single-file source mode rather than falling through to `/bin/sh`.
     @Test func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x; } }\n",

@@ -8,6 +8,7 @@
 // browser-graded assignments, so a broken native path means no Octave
 // assignment can be validated at all (the exit-127 class).
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import RunnerCore
@@ -18,24 +19,18 @@ import Testing
 @Suite(.timeLimit(.minutes(3))) struct OctaveNativeGradingTests {
 
     static var octaveAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["octave-cli", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("octave-cli", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the WorkerTests job (audit F2). Every test
     /// below guards `octaveAvailable` and returns silently when Octave is
     /// absent — right on a laptop, a silent hole in CI. Under `CI`, Octave MUST
     /// be present; this cannot be satisfied by skipping.
-    @Test func octaveIsPresentInCI() {
+    @Test func octaveIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.octaveAvailable
         #expect(
-            Self.octaveAvailable,
+            isAvailable,
             """
             octave is absent in the CI image, so every native Octave grading test skipped \
             silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt \
@@ -83,7 +78,7 @@ import Testing
     /// A `.m` test is dispatched to a real interpreter and comes back with a
     /// status, not a command-not-found error.
     @Test func anOctaveTestIsGradedByTheNativeWorker() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let passing = """
             chickadee = test_runtime();
@@ -117,7 +112,7 @@ import Testing
     /// boundary — the mapping generated Octave relies on when it calls
     /// `chickadee.failed` / `chickadee.errored`.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "x = 1;\n",
@@ -150,7 +145,7 @@ import Testing
     /// expression-by-expression loader, which also keeps definitions after the
     /// error; the runtime's header states the difference.)
     @Test func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let script = """
             chickadee = test_runtime();
@@ -181,7 +176,7 @@ import Testing
     /// the real interpreter, because the two live in different files (Swift
     /// and test_runtime.m) with only this to hold them together.
     @Test func extractedNotebookCellsRoundTripThroughStudentCells() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let extracted = extractOctave(
             cells: [
@@ -216,7 +211,7 @@ import Testing
     /// The per-student inputs file, written and read on the native path — with
     /// a null inside a collection, the case that needs `NA` to occupy its slot.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let script = """
             chickadee = test_runtime();

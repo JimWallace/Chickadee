@@ -43,10 +43,10 @@ import Vapor
             "Default tolerance (1e-6) missing from: \(src)")
     }
 
-    @Test func renderer_approxEquality_isValidPython() throws {
+    @Test func renderer_approxEquality_isValidPython() async throws {
         let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.01), language: .python)
         for g in rendered {
-            try pfAssertValidPythonSyntax(g.source, label: g.filename)
+            try await pfAssertValidPythonSyntax(g.source, label: g.filename)
         }
     }
 
@@ -109,10 +109,10 @@ import Vapor
         #expect(rendered[1].filename == "publictest_notebook_variables_02.py")
     }
 
-    @Test func variableEqualityRenderedSourceIsValidPython() throws {
+    @Test func variableEqualityRenderedSourceIsValidPython() async throws {
         let rendered = renderPatternFamily(pfNotebookVariablesFamily(), language: .python)
         for script in rendered {
-            try pfAssertValidPythonSyntax(script.source, label: script.filename)
+            try await pfAssertValidPythonSyntax(script.source, label: script.filename)
         }
     }
 
@@ -192,7 +192,7 @@ import Vapor
 
     // MARK: - stdoutEquality
 
-    @Test func stdoutEqualityRendererBasicShape() throws {
+    @Test func stdoutEqualityRendererBasicShape() async throws {
         let rendered = renderPatternFamily(pfHelloPrintsFamily(), language: .python)
         #expect(rendered.count == 1)
         let src = rendered[0].source
@@ -203,7 +203,7 @@ import Vapor
         #expect(src.contains("expected = \"hi world\""))
         #expect(src.contains("wrong stdout"))
         #expect(src.contains("Printed"))
-        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
+        try await pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     @Test func stdoutEqualityRendererFilenameFormat() throws {
@@ -211,7 +211,7 @@ import Vapor
         #expect(rendered[0].filename == "publictest_hello_prints_01.py")
     }
 
-    @Test func stdoutEqualityRendererPreservesMultilineExpected() throws {
+    @Test func stdoutEqualityRendererPreservesMultilineExpected() async throws {
         // A multi-line Expected (the natural shape for two `print()`
         // calls) must round-trip through the Python literal without
         // breaking the source.  The single-trailing-newline trim is
@@ -222,7 +222,7 @@ import Vapor
         let rendered = renderPatternFamily(fam, language: .python)
         let src = rendered[0].source
         #expect(src.contains(#"expected = "a\nb\n""#))
-        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
+        try await pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     @Test func stdoutEqualityValidationAllowsEmptyExpected() throws {

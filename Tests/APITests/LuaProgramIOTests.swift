@@ -5,6 +5,7 @@
 // `io.lines()`, and an `os.exit` after the answer — every one of which the
 // generated script proxies in the environment the submission runs in.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -13,7 +14,9 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaProgramIOTests {
 
-    static var luaAvailable: Bool { LuaStdoutCaptureTests.luaAvailable }
+    static var luaAvailable: Bool {
+        get async { await LuaStdoutCaptureTests.luaAvailable }
+    }
 
     private static var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
@@ -25,7 +28,7 @@ import Testing
     private func grade(
         _ submission: String, stdin: String = "3\n4\n", expected: String = "7",
         comparison: ProgramIOComparison? = nil
-    ) throws -> String {
+    ) async throws -> String {
         let family = PatternFamily(
             id: "io", name: "IO", kind: .programIO, functionName: "", paramNames: ["stdin"],
             cases: [PatternCase(key: "01", label: "sum", args: [.string(stdin)], expected: .string(expected))],
@@ -45,52 +48,44 @@ import Testing
         try "solution.lua".write(
             to: dir.appendingPathComponent(".chickadee_student_module"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", script.filename]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let lastLine = text.split(separator: "\n").last.map(String.init) ?? ""
+        let run = try await runTool(["lua", script.filename], workingDirectory: dir)
+        let lastLine = run.stdout.split(separator: "\n").last.map(String.init) ?? ""
         if lastLine.contains("\"status\":\"pass\"") { return "pass" }
         if lastLine.contains("\"status\":\"fail\"") { return "fail" }
         return "error"
     }
 
-    @Test func numberReadsPassAndFail() throws {
-        guard Self.luaAvailable else { return }
-        #expect(try grade("local a = io.read(\"n\")\nlocal b = io.read(\"n\")\nprint(a + b)\n") == "pass")
-        #expect(try grade("local a = io.read(\"*n\")\nlocal b = io.read(\"*n\")\nprint(a * b)\n") == "fail")
+    @Test func numberReadsPassAndFail() async throws {
+        guard await Self.luaAvailable else { return }
+        #expect(try await grade("local a = io.read(\"n\")\nlocal b = io.read(\"n\")\nprint(a + b)\n") == "pass")
+        #expect(try await grade("local a = io.read(\"*n\")\nlocal b = io.read(\"*n\")\nprint(a * b)\n") == "fail")
     }
 
-    @Test func lineReadsAndIoLinesIterate() throws {
-        guard Self.luaAvailable else { return }
-        #expect(
+    @Test func lineReadsAndIoLinesIterate() async throws {
+        guard await Self.luaAvailable else { return }
+        await #expect(
             try grade("local a = io.read()\nlocal b = io.read(\"l\")\nprint(tonumber(a) + tonumber(b))\n") == "pass")
-        #expect(try grade("local t = 0\nfor line in io.lines() do t = t + tonumber(line) end\nprint(t)\n") == "pass")
         #expect(
+            try await grade("local t = 0\nfor line in io.lines() do t = t + tonumber(line) end\nprint(t)\n") == "pass")
+        await #expect(
             try grade("local t = 0\nfor line in io.stdin:lines() do t = t + tonumber(line) end\nio.write(t, \"\\n\")\n")
                 == "pass")
     }
 
-    @Test func wholeInputReadAndIncludedComparison() throws {
-        guard Self.luaAvailable else { return }
-        #expect(try grade("io.write(\"got: \", io.read(\"a\"))\n", expected: "got: 3\n4") == "pass")
-        #expect(try grade("print(\"answer is 7\")\n", comparison: .included) == "pass")
+    @Test func wholeInputReadAndIncludedComparison() async throws {
+        guard await Self.luaAvailable else { return }
+        #expect(try await grade("io.write(\"got: \", io.read(\"a\"))\n", expected: "got: 3\n4") == "pass")
+        #expect(try await grade("print(\"answer is 7\")\n", comparison: .included) == "pass")
     }
 
-    @Test func anOsExitAfterTheAnswerIsStillGraded() throws {
-        guard Self.luaAvailable else { return }
-        #expect(try grade("print(io.read(\"n\") + io.read(\"n\"))\nos.exit(0)\n") == "pass")
-        #expect(try grade("print(0)\nos.exit(0)\n") == "fail")
+    @Test func anOsExitAfterTheAnswerIsStillGraded() async throws {
+        guard await Self.luaAvailable else { return }
+        #expect(try await grade("print(io.read(\"n\") + io.read(\"n\"))\nos.exit(0)\n") == "pass")
+        #expect(try await grade("print(0)\nos.exit(0)\n") == "fail")
     }
 
-    @Test func aCrashIsAGradedFailure() throws {
-        guard Self.luaAvailable else { return }
-        #expect(try grade("error(\"boom\")\n") == "fail")
+    @Test func aCrashIsAGradedFailure() async throws {
+        guard await Self.luaAvailable else { return }
+        #expect(try await grade("error(\"boom\")\n") == "fail")
     }
 }

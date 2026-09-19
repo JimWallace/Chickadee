@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -124,7 +125,7 @@ import VaporTesting
         let zipPath = tmpDir + "testsetups/\(id).zip"
         let notebookPath = tmpDir + "testsetups/\(id).ipynb"
         let entries = zipEntries.isEmpty ? [("assignment.ipynb", notebookJSON)] : zipEntries
-        try makeZipAt(zipPath: zipPath, entries: entries)
+        try await makeZipAt(zipPath: zipPath, entries: entries)
         try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
 
         let setup = APITestSetup(
@@ -200,7 +201,7 @@ import VaporTesting
         """
     }
 
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
+    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
             throw IssueRecorded("env not available")
         }
@@ -214,14 +215,8 @@ import VaporTesting
                 \(entriesCode)
             """
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", script]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let run = try await runTool(["python3", "-c", script])
+        guard run.exitCode == 0 else {
             throw IssueRecorded("python3 not available or failed to create zip")
         }
     }
@@ -1836,7 +1831,7 @@ import VaporTesting
 
             let setupID = "setup_nb_empty_seed"
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
+            try await makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
 
             let setup = APITestSetup(
                 id: setupID,
@@ -1869,7 +1864,7 @@ import VaporTesting
             let setupID = "setup_nb_nested_manifest"
             let nestedNotebook = notebookJSON(markdown: "Nested manifest starter")
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try makeZipAt(
+            try await makeZipAt(
                 zipPath: zipPath,
                 entries: [
                     ("materials/starter.ipynb", nestedNotebook),
@@ -2001,7 +1996,7 @@ import VaporTesting
             let setupID = "setup_nb_nested_first"
             let nestedNotebook = notebookJSON(markdown: "First nested notebook")
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try makeZipAt(
+            try await makeZipAt(
                 zipPath: zipPath,
                 entries: [
                     ("nested/assignment.ipynb", nestedNotebook),

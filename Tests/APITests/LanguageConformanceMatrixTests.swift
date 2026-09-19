@@ -38,6 +38,7 @@
 // it. Neither can drift; this comment deliberately names no package list,
 // because a list in prose is the thing that was wrong.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -507,10 +508,10 @@ import Testing
     /// Runs the real probe for whichever interpreters this machine has. The
     /// point is the ARGUMENTS: `lua --version` exits 1, and a hardcoded
     /// `--version` is what made Lua invisible to capability detection.
-    @Test func everyLanguageProbeActuallyReportsAVersion() {
+    @Test func everyLanguageProbeActuallyReportsAVersion() async {
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let (code, _) = Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
             // The interpreter simply not being on this machine is not a defect,
             // and it is **exit 127** — `/usr/bin/env` reports command-not-found
             // that way, the same code the original Lua defect surfaced as. (-1
@@ -542,11 +543,11 @@ import Testing
     /// MUST answer its probe. It runs only in CI (a laptop legitimately lacks
     /// R or Lua), so it never blocks local work — but it cannot be satisfied by
     /// skipping.
-    @Test func noInterpreterIsSilentlyAbsentInCI() {
+    @Test func noInterpreterIsSilentlyAbsentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let (code, _) = Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
             #expect(
                 code == 0,
                 """
@@ -640,9 +641,9 @@ import Testing
     /// generated script that is not even syntactically valid in its own
     /// language. Cheap, and it needs no submission beside it.
     @Test(arguments: AssignmentLanguage.allCases)
-    func everyGeneratedScriptParsesInItsOwnLanguage(_ language: AssignmentLanguage) throws {
+    func everyGeneratedScriptParsesInItsOwnLanguage(_ language: AssignmentLanguage) async throws {
         let adapter = Self.adapter(for: language)
-        guard Self.isAvailable(adapter) else { return }
+        guard await Self.isAvailable(adapter) else { return }
 
         let dir = try Self.scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -663,7 +664,7 @@ import Testing
             for script in scripts {
                 let url = dir.appendingPathComponent(script.filename)
                 try script.source.write(to: url, atomically: true, encoding: .utf8)
-                let (code, err) = Self.run(
+                let (code, err) = await Self.run(
                     adapter.interpreter, [adapter.evalFlag, adapter.parseOnlyProgram(url.path)],
                     in: dir)
                 #expect(code == 0, "\(language)/\(kind) generated unparseable source: \(err)")
@@ -675,7 +676,7 @@ import Testing
             let generated = renderNotebookCheck(GeneratedSourceFixtures.check(kind: kind), language: language)
             let url = dir.appendingPathComponent(generated.script.filename)
             try generated.script.source.write(to: url, atomically: true, encoding: .utf8)
-            let (code, err) = Self.run(
+            let (code, err) = await Self.run(
                 adapter.interpreter, [adapter.evalFlag, adapter.parseOnlyProgram(url.path)],
                 in: dir)
             #expect(code == 0, "\(language)/\(kind) generated unparseable source: \(err)")
@@ -693,9 +694,9 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theInputsFileTheServerWritesIsTheOneTheLanguageReads(
         _ language: AssignmentLanguage
-    ) throws {
+    ) async throws {
         let adapter = Self.adapter(for: language)
-        guard Self.isAvailable(adapter) else { return }
+        guard await Self.isAvailable(adapter) else { return }
 
         let dir = try Self.scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -731,7 +732,7 @@ import Testing
             to: dir.appendingPathComponent(language.inputsFileName),
             atomically: true, encoding: .utf8)
 
-        let (code, err) = Self.run(
+        let (code, err) = await Self.run(
             adapter.interpreter, [adapter.evalFlag, adapter.readInputsProgram("threshold")],
             in: dir)
         #expect(code == 0, "\(language) could not read its own inputs file: \(err)")
@@ -754,29 +755,17 @@ import Testing
 
     /// Spawned through `/usr/bin/env`, the same way the runner resolves an
     /// interpreter, so "available here" means the same thing it means there.
-    static func run(_ interpreter: String, _ args: [String], in dir: URL) -> (Int32, String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [interpreter] + args
-        process.currentDirectoryURL = dir
-        let errPipe = Pipe()
-        process.standardError = errPipe
-        process.standardOutput = Pipe()
-        do { try process.run() } catch { return (-1, String(describing: error)) }
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: errData, encoding: .utf8) ?? "")
+    static func run(_ interpreter: String, _ args: [String], in dir: URL) async -> (Int32, String) {
+        do {
+            let run = try await runTool([interpreter] + args, workingDirectory: dir)
+            return (run.exitCode, run.stderr)
+        } catch {
+            return (-1, String(describing: error))
+        }
     }
 
-    static func isAvailable(_ adapter: Adapter) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [adapter.interpreter] + adapter.versionArguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+    static func isAvailable(_ adapter: Adapter) async -> Bool {
+        return await toolIsAvailable(adapter.interpreter, arguments: adapter.versionArguments)
     }
 
     static func pythonString(_ s: String) -> String { JSONValue.string(s).pythonLiteral }

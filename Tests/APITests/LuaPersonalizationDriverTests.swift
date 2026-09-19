@@ -20,6 +20,7 @@
 // missing interpreter on a contributor's laptop is not a defect. CI has
 // lua5.4 on the image.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -29,14 +30,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct LuaPersonalizationDriverTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     /// Runs `source` as a Lua script in a fresh directory, returning
@@ -45,7 +39,7 @@ import Testing
         _ source: String,
         extraFiles: [String: String] = [:],
         seed: String? = nil
-    ) throws -> (Int32, String, String) {
+    ) async throws -> (Int32, String, String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-luadriver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -58,28 +52,12 @@ import Testing
         let script = dir.appendingPathComponent("driver.lua")
         try source.write(to: script, atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", script.path]
-        process.currentDirectoryURL = dir
-        if let seed {
-            var env = ProcessInfo.processInfo.environment
-            env["CHICKADEE_ASSIGNMENT_SEED"] = seed
-            process.environment = env
-        }
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(data: outData, encoding: .utf8) ?? "",
-            String(data: errData, encoding: .utf8) ?? ""
-        )
+        var extraEnvironment: [String: String] = [:]
+        if let seed { extraEnvironment["CHICKADEE_ASSIGNMENT_SEED"] = seed }
+        let run = try await runTool(
+            ["lua", script.path], workingDirectory: dir,
+            extraEnvironment: extraEnvironment)
+        return (run.exitCode, run.stdout, run.stderr)
     }
 
     /// The canonical grading runtime, so a test can require it the way a
@@ -91,8 +69,8 @@ import Testing
             encoding: .utf8)
     }
 
-    @Test func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() throws {
-        guard Self.luaAvailable else { return }
+    @Test func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() async throws {
+        guard await Self.luaAvailable else { return }
 
         let source = PersonalizationEvaluator.renderLuaDriverScript(
             staticVariables: [FamilyVariable(name: "base", value: .int(10))],
@@ -106,7 +84,7 @@ import Testing
                 PersonalizationExpression(name: "values", expression: "{1, 2.5, \"three\"}"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runLua(source, seed: String(repeating: "a", count: 64))
+        let (code, stdout, stderr) = try await Self.runLua(source, seed: String(repeating: "a", count: 64))
         #expect(code == 0, "driver failed: \(stderr)")
 
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
@@ -125,8 +103,8 @@ import Testing
     /// The emitted literals must be *parseable Lua*, not merely plausible. This
     /// is the property that makes the driver's output safe to write verbatim
     /// into the inputs file.
-    @Test func everyEmittedValueParsesBackAsLua() throws {
-        guard Self.luaAvailable else { return }
+    @Test func everyEmittedValueParsesBackAsLua() async throws {
+        guard await Self.luaAvailable else { return }
 
         let source = PersonalizationEvaluator.renderLuaDriverScript(
             staticVariables: [],
@@ -138,7 +116,7 @@ import Testing
                 PersonalizationExpression(name: "b", expression: "true"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runLua(source, seed: "ff")
+        let (code, stdout, stderr) = try await Self.runLua(source, seed: "ff")
         #expect(code == 0, "driver failed: \(stderr)")
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
         let values = try #require(
@@ -146,15 +124,15 @@ import Testing
 
         for (name, literal) in values {
             let probe = "local v = \(literal)\n"
-            let (rc, _, err) = try Self.runLua(probe)
+            let (rc, _, err) = try await Self.runLua(probe)
             #expect(rc == 0, "the driver emitted unparseable Lua for `\(name)`: \(literal) — \(err)")
         }
     }
 
     /// The done-test item that has no other guard: one seed, two
     /// implementations. Both are run here on the same env var and compared.
-    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() throws {
-        guard Self.luaAvailable else { return }
+    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
+        guard await Self.luaAvailable else { return }
 
         // A realistic 64-hex-char assignment seed, plus edge cases: empty (no
         // seed set) and a short value.
@@ -163,14 +141,14 @@ import Testing
                 \(LuaPersonalizationRuntime.chickadeeSeedLuaSource)
                 io.write(tostring(chickadee_seed()), "\\n")
                 """
-            let (dcode, dout, derr) = try Self.runLua(driverSource, seed: seed)
+            let (dcode, dout, derr) = try await Self.runLua(driverSource, seed: seed)
             #expect(dcode == 0, "driver seed failed: \(derr)")
 
             let runtimeSource = """
                 local chickadee = require("test_runtime")
                 io.write(tostring(chickadee.seed()), "\\n")
                 """
-            let (rcode, rout, rerr) = try Self.runLua(
+            let (rcode, rout, rerr) = try await Self.runLua(
                 runtimeSource,
                 extraFiles: ["test_runtime.lua": try Self.testRuntimeLuaSource()],
                 seed: seed)
@@ -193,15 +171,15 @@ import Testing
     /// The seed is also supposed to match R's, so a student's seed is one number
     /// whichever non-Python language the assignment is in. Both fold the same
     /// hex with Horner's method modulo 2^31-1.
-    @Test func theLuaSeedMatchesTheDocumentedHornerFold() throws {
-        guard Self.luaAvailable else { return }
+    @Test func theLuaSeedMatchesTheDocumentedHornerFold() async throws {
+        guard await Self.luaAvailable else { return }
 
         let seed = "abc123"
         let source = """
             \(LuaPersonalizationRuntime.chickadeeSeedLuaSource)
             io.write(tostring(chickadee_seed()), "\\n")
             """
-        let (code, out, err) = try Self.runLua(source, seed: seed)
+        let (code, out, err) = try await Self.runLua(source, seed: seed)
         #expect(code == 0, "driver failed: \(err)")
 
         // Computed here independently rather than by re-running the Lua, so

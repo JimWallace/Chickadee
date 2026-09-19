@@ -55,25 +55,25 @@ import Vapor
 
     // MARK: - Generated guard actually grades
 
-    @Test func existenceGuard_sourceIsValidPython() throws {
+    @Test func existenceGuard_sourceIsValidPython() async throws {
         let g = try #require(existenceGuard(for: pfBMIFamily(), language: .python))
-        try pfAssertValidPythonSyntax(g.source, label: "existence guard")
+        try await pfAssertValidPythonSyntax(g.source, label: "existence guard")
     }
 
-    @Test func existenceGuard_passesWhenDefinedFailsOtherwise() throws {
+    @Test func existenceGuard_passesWhenDefinedFailsOtherwise() async throws {
         let body = try #require(existenceGuard(for: pfBMIFamily(), language: .python)).source
         // Defined + callable → pass.
         #expect(
-            try pfRunGeneratedCase(
+            try await pfRunGeneratedCase(
                 body: body, ckInputs: nil,
                 student: "def bmi_category(x):\n    return 'underweight'\n") == .pass)
         // Not defined → fail (the one clear message; cases would skip).
         #expect(
-            try pfRunGeneratedCase(
+            try await pfRunGeneratedCase(
                 body: body, ckInputs: nil, student: "answer = 1\n") == .fail)
         // Defined but not callable (shadowed by a value) → fail.
         #expect(
-            try pfRunGeneratedCase(
+            try await pfRunGeneratedCase(
                 body: body, ckInputs: nil, student: "bmi_category = 42\n") == .fail)
     }
 

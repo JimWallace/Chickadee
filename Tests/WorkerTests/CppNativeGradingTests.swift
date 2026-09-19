@@ -11,6 +11,7 @@
 // Tests/APITests/PatternFamilyRendererCppTests.swift — this suite pins the
 // worker chain with wrappers of the same shape.)
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import RunnerCore
@@ -21,23 +22,17 @@ import Testing
 @Suite(.timeLimit(.minutes(3))) struct CppNativeGradingTests {
 
     static var gppAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["g++", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("g++", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof (audit F2). Every test below guards
     /// `gppAvailable` and returns silently when g++ is absent — right on a
     /// laptop, a silent hole in CI. Under `CI`, g++ MUST be present.
-    @Test func gppIsPresentInCI() {
+    @Test func gppIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.gppAvailable
         #expect(
-            Self.gppAvailable,
+            isAvailable,
             """
             g++ is absent in the CI image, so every native C++ grading test skipped \
             silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests \
@@ -111,7 +106,7 @@ import Testing
     /// The whole chain, pass case: compile the runtime + submission + test
     /// as one TU, run the binary, read the shortResult JSON off stdout.
     @Test func aCppTestIsGradedByTheNativeWorker() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "dbl",
@@ -142,7 +137,7 @@ import Testing
     /// Exit 1 is a fail; a submission that does not compile is an error with
     /// the g++ diagnostic captured as longResult.
     @Test func failAndErrorMapThroughTheWrapper() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "dbl",
@@ -176,7 +171,7 @@ import Testing
     /// A main-bearing submission (an intro "write a program" file) still has
     /// its functions graded — the wrapper's `#define main` rename.
     @Test func aMainBearingSubmissionStillExposesItsFunctions() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "m",
@@ -205,7 +200,7 @@ import Testing
     /// with a beyond-int32 value so the LL suffix is exercised — reads back
     /// through `ck_inputs::` in the same TU.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "thr",

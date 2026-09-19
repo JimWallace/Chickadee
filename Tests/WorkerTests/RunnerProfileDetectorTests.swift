@@ -15,6 +15,7 @@
 // real probe and asserts it EXITS 0, which `racket --version` does. Exit code
 // and parse are different questions, and this file asks the second one.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -87,27 +88,15 @@ import Testing
     /// probe and have that answer parse — the two-step the original guard only
     /// checked the first half of. On a laptop a missing interpreter is not a
     /// defect, so absence is skipped there.
-    @Test func everyProbeOutputParsesInCI() {
+    @Test func everyProbeOutputParsesInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [probe.command] + probe.versionArguments
-            let out = Pipe()
-            let err = Pipe()
-            process.standardOutput = out
-            process.standardError = err
-            guard (try? process.run()) != nil else {
+            guard let run = try? await runTool([probe.command] + probe.versionArguments) else {
                 Issue.record("\(language): could not spawn \(probe.command)")
                 continue
             }
-            let stdout = out.fileHandleForReading.readDataToEndOfFile()
-            let stderr = err.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let combined =
-                (String(data: stdout, encoding: .utf8) ?? "") + "\n"
-                + (String(data: stderr, encoding: .utf8) ?? "")
+            let combined = run.stdout + "\n" + run.stderr
             #expect(
                 RunnerProfileDetector.firstNumericVersion(in: combined) != nil,
                 """
@@ -147,7 +136,7 @@ import Testing
     /// A work root that permits exec advertises C++; the same probe against a
     /// directory it cannot write to does not.
     @Test func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
-        guard gppIsAvailable() else { return }
+        guard await gppIsAvailable() else { return }
 
         let usable = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")
@@ -175,14 +164,7 @@ import Testing
             "an unusable work root withheld python too, which needs no exec probe")
     }
 
-    private func gppIsAvailable() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["g++", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+    private func gppIsAvailable() async -> Bool {
+        return await toolIsAvailable("g++", arguments: ["--version"])
     }
 }

@@ -21,6 +21,7 @@
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -31,15 +32,8 @@ import Testing
 
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
-    private static func hostHasCommand(_ command: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["which", command]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+    private static func hostHasCommand(_ command: String) async -> Bool {
+        return await toolIsAvailable("which", arguments: [command])
     }
 
     private static func detectProfile() async throws -> RunnerCapabilityProfile {
@@ -94,7 +88,7 @@ import Testing
 
         for (command, capability) in [("bash", "shell-bash"), ("zsh", "shell-zsh")] {
             let advertised = names.contains(capability)
-            let onHost = Self.hostHasCommand(command)
+            let onHost = await Self.hostHasCommand(command)
             #expect(
                 advertised == onHost,
                 "\(capability) advertised: \(advertised), \(command) on host: \(onHost)")
@@ -111,26 +105,20 @@ import Testing
     /// Only meaningful where python3 exists; where it does not, the detector
     /// never runs these probes and there is nothing to assert.
     @Test func pythonModuleCapabilitiesMatchWhatTheHostCanImport() async throws {
-        try #require(Self.hostHasCommand("python3"), "no python3 on this host")
+        let hasPython = await Self.hostHasCommand("python3")
+        try #require(hasPython, "no python3 on this host")
         let profile = try await Self.detectProfile()
         let names = Set(profile.capabilities.map(\.name))
 
         for module in ["numpy", "pandas", "scipy", "matplotlib"] {
-            let importable = Self.hostCanImportPythonModule(module)
+            let importable = await Self.hostCanImportPythonModule(module)
             #expect(
                 names.contains(module) == importable,
                 "\(module) advertised: \(names.contains(module)), importable on host: \(importable)")
         }
     }
 
-    private static func hostCanImportPythonModule(_ module: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", "import \(module)"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+    private static func hostCanImportPythonModule(_ module: String) async -> Bool {
+        return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 }

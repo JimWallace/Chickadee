@@ -47,6 +47,7 @@
 // without Octave is not a defect — so this only fully means anything in CI,
 // which is where the language matrix already relies on the image.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -60,30 +61,18 @@ import Testing
     private static func run(
         _ command: String, _ arguments: [String],
         in directory: URL? = nil, removingEnvironment: [String] = []
-    ) -> (status: Int32, output: String)? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
-        if let directory { process.currentDirectoryURL = directory }
-        var environment = ProcessInfo.processInfo.environment
-        for key in removingEnvironment { environment.removeValue(forKey: key) }
-        process.environment = environment
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+    ) async -> (status: Int32, output: String)? {
+        guard
+            let run = try? await runToolCombiningStreams(
+                [command] + arguments, workingDirectory: directory,
+                removingEnvironment: removingEnvironment)
+        else { return nil }
+        return (run.exitCode, run.stdout)
     }
 
-    private static func isPresent(_ language: AssignmentLanguage) -> Bool {
+    private static func isPresent(_ language: AssignmentLanguage) async -> Bool {
         let probe = language.descriptor.interpreterProbe
-        return run(probe.command, probe.versionArguments)?.status == 0
+        return await run(probe.command, probe.versionArguments)?.status == 0
     }
 
     // MARK: - interpreterProbe
@@ -100,9 +89,9 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theInterpreterProbeSucceedsWhereTheToolIsInstalled(
         _ language: AssignmentLanguage
-    ) throws {
+    ) async throws {
         let probe = language.descriptor.interpreterProbe
-        guard let result = Self.run(probe.command, probe.versionArguments) else { return }
+        guard let result = await Self.run(probe.command, probe.versionArguments) else { return }
         // A shell reports 127 for "command not found"; that is absence, not a
         // broken probe.
         guard result.status != 127 else { return }
@@ -226,9 +215,9 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theWorkingDirectoryClaimMatchesTheInterpreter(
         _ language: AssignmentLanguage
-    ) throws {
+    ) async throws {
         guard let probe = Self.searchPathProbe(for: language) else { return }
-        guard Self.isPresent(language) else { return }
+        guard await Self.isPresent(language) else { return }
 
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-searchpath-\(UUID().uuidString)")
@@ -260,7 +249,7 @@ import Testing
 
         let interpreter = language.descriptor.interpreterProbe.command
         let result = try #require(
-            Self.run(
+            await Self.run(
                 interpreter,
                 [driverDirectory.appendingPathComponent(probe.runnerFileName).path],
                 in: directory, removingEnvironment: scrubbed),

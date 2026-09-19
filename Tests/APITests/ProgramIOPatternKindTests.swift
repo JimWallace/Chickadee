@@ -7,6 +7,7 @@
 // against unguarded scripts, `__main__`-guarded ones, programs that exit after
 // their answer, and programs that crash.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -88,7 +89,7 @@ import Vapor
 
     // MARK: - Shape
 
-    @Test func rendersOneRunnableScriptPerCase() throws {
+    @Test func rendersOneRunnableScriptPerCase() async throws {
         let rendered = renderPatternFamily(Self.family(), language: .python)
         #expect(rendered.count == 1)
         let script = try #require(rendered.first)
@@ -97,7 +98,7 @@ import Vapor
         #expect(script.source.contains("_runpy.run_path("))
         #expect(script.source.contains("_builtins.input = _fed_input"))
         #expect(script.source.contains("stdin_text = \"3\\n4\\n\""))
-        try pfAssertValidPythonSyntax(script.source, label: script.filename)
+        try await pfAssertValidPythonSyntax(script.source, label: script.filename)
     }
 
     @Test func comparisonSelectsTheCheckAndNamesItselfToTheStudent() throws {
@@ -137,20 +138,14 @@ import Vapor
 @Suite(.timeLimit(.minutes(3))) struct ProgramIOPythonExecutionTests {
 
     static var pythonAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "--version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("python3", arguments: ["--version"]) }
     }
 
     /// The did-not-skip proof for the APITests job.
-    @Test func pythonIsPresentInCI() {
+    @Test func pythonIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
-        #expect(Self.pythonAvailable, "python3 absent: every program-I/O execution test skipped silently")
+        let isAvailable = await Self.pythonAvailable
+        #expect(isAvailable, "python3 absent: every program-I/O execution test skipped silently")
     }
 
     private static var repoRoot: URL {
@@ -177,7 +172,7 @@ import Vapor
 
     static func grade(
         _ family: PatternFamily, program: String
-    ) throws -> (code: Int32, stdout: String) {
+    ) async throws -> (code: Int32, stdout: String) {
         let script = try #require(renderPatternFamily(family, language: .python).first)
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-programio-\(UUID().uuidString)")
@@ -194,27 +189,18 @@ import Vapor
         try script.source.write(
             to: dir.appendingPathComponent(script.filename), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", bootstrap, script.filename]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        let run = try await runTool(["python3", "-c", bootstrap, script.filename], workingDirectory: dir)
+        return (run.exitCode, run.stdout)
     }
 
     private static let unguardedSum = "a = int(input())\nb = int(input())\nprint(a + b)\n"
 
-    @Test func anUnguardedProgramReadingInputPassesAndFails() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func anUnguardedProgramReadingInputPassesAndFails() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let good = try Self.grade(family, program: Self.unguardedSum)
+        let good = try await Self.grade(family, program: Self.unguardedSum)
         #expect(good.code == 0, Comment(rawValue: good.stdout))
-        let bad = try Self.grade(family, program: "a = int(input())\nb = int(input())\nprint(a * b)\n")
+        let bad = try await Self.grade(family, program: "a = int(input())\nb = int(input())\nprint(a * b)\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
         #expect(bad.stdout.contains("'12'"))
@@ -224,17 +210,17 @@ import Vapor
     /// must neither block on the real stdin nor leak the program's output into
     /// the test's — the first line of stdout is the verdict's, not the
     /// program's.
-    @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("8"))
-        let result = try Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
+        let result = try await Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
         #expect(result.code == 1)
         #expect(result.stdout.hasPrefix(GeneratedMessage.wrongOutput), Comment(rawValue: result.stdout))
         #expect(result.stdout.contains("'banner\\n7'"))
     }
 
-    @Test func aMainGuardedProgramRuns() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func aMainGuardedProgramRuns() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let program = """
             def main():
@@ -246,56 +232,56 @@ import Vapor
                 main()
 
             """
-        #expect(try Self.grade(family, program: program).code == 0)
+        #expect(try await Self.grade(family, program: program).code == 0)
     }
 
-    @Test func promptsArePartOfTheOutputAsOnATerminal() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func promptsArePartOfTheOutputAsOnATerminal() async throws {
+        guard await Self.pythonAvailable else { return }
         let program = "a = int(input('A: '))\nb = int(input('B: '))\nprint(a + b)\n"
         let exact = ProgramIOPatternKindTests.family(expected: .string("A: B: 7"))
-        #expect(try Self.grade(exact, program: program).code == 0)
+        #expect(try await Self.grade(exact, program: program).code == 0)
         let included = ProgramIOPatternKindTests.family(expected: .string("7"), comparison: .included)
-        #expect(try Self.grade(included, program: program).code == 0)
+        #expect(try await Self.grade(included, program: program).code == 0)
     }
 
-    @Test func regexComparisonMatchesAcrossLines() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func regexComparisonMatchesAcrossLines() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("^sum=7$"), comparison: .regex)
         let program = "a = int(input())\nb = int(input())\nprint('header')\nprint(f'sum={a + b}')\n"
-        #expect(try Self.grade(family, program: program).code == 0)
-        #expect(try Self.grade(family, program: "print('sum=8')\n").code == 1)
+        #expect(try await Self.grade(family, program: program).code == 0)
+        #expect(try await Self.grade(family, program: "print('sum=8')\n").code == 1)
     }
 
-    @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let good = try Self.grade(
+        let good = try await Self.grade(
             family, program: "import sys\nprint(int(input()) + int(input()))\nsys.exit(0)\n")
         #expect(good.code == 0, Comment(rawValue: good.stdout))
-        let bad = try Self.grade(family, program: "import sys\nprint(0)\nsys.exit(0)\n")
+        let bad = try await Self.grade(family, program: "import sys\nprint(0)\nsys.exit(0)\n")
         #expect(bad.code == 1, "a sys.exit(0) after a wrong answer read as a pass: \(bad.stdout)")
     }
 
-    @Test func aCrashIsAGradedFailureCarryingTheError() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func aCrashIsAGradedFailureCarryingTheError() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let crashed = try Self.grade(family, program: "print(1 / 0)\n")
+        let crashed = try await Self.grade(family, program: "print(1 / 0)\n")
         #expect(crashed.code == 1)
         #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
         #expect(crashed.stdout.contains("ZeroDivisionError"))
     }
 
-    @Test func readingPastTheInputIsAGradedFailure() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func readingPastTheInputIsAGradedFailure() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(stdin: "3\n")
-        let starved = try Self.grade(family, program: Self.unguardedSum)
+        let starved = try await Self.grade(family, program: Self.unguardedSum)
         #expect(starved.code == 1)
         #expect(starved.stdout.contains("EOFError"))
     }
 
-    @Test func trailingWhitespaceIsIgnoredUnderExact() throws {
-        guard Self.pythonAvailable else { return }
+    @Test func trailingWhitespaceIsIgnoredUnderExact() async throws {
+        guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("7"))
-        #expect(try Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
+        #expect(try await Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
     }
 }

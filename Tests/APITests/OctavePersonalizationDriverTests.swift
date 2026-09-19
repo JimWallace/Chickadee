@@ -19,6 +19,7 @@
 // Skipped silently when `octave-cli` is absent, matching the conformance
 // matrix; `octaveIsPresentInCI` is the did-not-skip proof.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -28,7 +29,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct OctavePersonalizationDriverTests {
 
     static var octaveAvailable: Bool {
-        OctavePatternFamilyExecutionTests.hasOctave
+        get async { await OctavePatternFamilyExecutionTests.hasOctave }
     }
 
     /// Runs `source` as an Octave script in a fresh directory, returning
@@ -37,7 +38,7 @@ import Testing
         _ source: String,
         extraFiles: [String: String] = [:],
         seed: String? = nil
-    ) throws -> (Int32, String, String) {
+    ) async throws -> (Int32, String, String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-octdriver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -50,32 +51,16 @@ import Testing
         let script = dir.appendingPathComponent("driver.m")
         try source.write(to: script, atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["octave-cli", script.path]
-        process.currentDirectoryURL = dir
-        if let seed {
-            var env = ProcessInfo.processInfo.environment
-            env["CHICKADEE_ASSIGNMENT_SEED"] = seed
-            process.environment = env
-        }
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(data: outData, encoding: .utf8) ?? "",
-            String(data: errData, encoding: .utf8) ?? ""
-        )
+        var extraEnvironment: [String: String] = [:]
+        if let seed { extraEnvironment["CHICKADEE_ASSIGNMENT_SEED"] = seed }
+        let run = try await runTool(
+            ["octave-cli", script.path], workingDirectory: dir,
+            extraEnvironment: extraEnvironment)
+        return (run.exitCode, run.stdout, run.stderr)
     }
 
-    @Test func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [FamilyVariable(name: "base", value: .int(10))],
@@ -88,7 +73,7 @@ import Testing
                 PersonalizationExpression(name: "values", expression: "[1, 2.5, 4]"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runOctave(
+        let (code, stdout, stderr) = try await Self.runOctave(
             source, seed: String(repeating: "a", count: 64))
         #expect(code == 0, "driver failed: \(stderr)")
 
@@ -106,8 +91,8 @@ import Testing
     }
 
     /// The emitted literals must be *parseable Octave*, not merely plausible.
-    @Test func everyEmittedValueParsesBackAsOctave() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func everyEmittedValueParsesBackAsOctave() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [],
@@ -119,7 +104,7 @@ import Testing
                 PersonalizationExpression(name: "b", expression: "true"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runOctave(source, seed: "ff")
+        let (code, stdout, stderr) = try await Self.runOctave(source, seed: "ff")
         #expect(code == 0, "driver failed: \(stderr)")
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
         let values = try #require(
@@ -127,7 +112,7 @@ import Testing
 
         for (name, literal) in values {
             let probe = "v = \(literal);\ndisp(\"parsed\");\n"
-            let (rc, _, err) = try Self.runOctave(probe)
+            let (rc, _, err) = try await Self.runOctave(probe)
             #expect(
                 rc == 0, "the driver emitted unparseable Octave for `\(name)`: \(literal) — \(err)")
         }
@@ -135,8 +120,8 @@ import Testing
 
     /// One seed, two implementations — both run on the same env var and
     /// compared, across a realistic 64-hex seed and the edge cases.
-    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let runtime = try OctavePatternFamilyExecutionTests.canonicalRuntime()
         for seed in [String(repeating: "9f3c", count: 16), "", "ff", "0"] {
@@ -145,14 +130,14 @@ import Testing
                 \(OctavePersonalizationRuntime.chickadeeSeedOctaveSource)
                 printf("%d\\n", chickadee_seed());
                 """
-            let (dcode, dout, derr) = try Self.runOctave(driverSource, seed: seed)
+            let (dcode, dout, derr) = try await Self.runOctave(driverSource, seed: seed)
             #expect(dcode == 0, "driver seed failed: \(derr)")
 
             let runtimeSource = """
                 chickadee = test_runtime();
                 printf("%d\\n", chickadee.seed());
                 """
-            let (rcode, rout, rerr) = try Self.runOctave(
+            let (rcode, rout, rerr) = try await Self.runOctave(
                 runtimeSource, extraFiles: ["test_runtime.m": runtime], seed: seed)
             #expect(rcode == 0, "runtime seed failed: \(rerr)")
 
@@ -173,8 +158,8 @@ import Testing
     /// The seed must also match every other language's, so a student's seed is
     /// one number whatever the assignment's language. Asserted against the fold
     /// computed independently in Swift.
-    @Test func theOctaveSeedMatchesTheDocumentedHornerFold() throws {
-        guard Self.octaveAvailable else { return }
+    @Test func theOctaveSeedMatchesTheDocumentedHornerFold() async throws {
+        guard await Self.octaveAvailable else { return }
 
         let seed = "abc123"
         let source = """
@@ -182,7 +167,7 @@ import Testing
             \(OctavePersonalizationRuntime.chickadeeSeedOctaveSource)
             printf("%d\\n", chickadee_seed());
             """
-        let (code, out, err) = try Self.runOctave(source, seed: seed)
+        let (code, out, err) = try await Self.runOctave(source, seed: seed)
         #expect(code == 0, "driver failed: \(err)")
 
         var expected = 0

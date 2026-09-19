@@ -12,6 +12,7 @@
 //   GET  /instructor/:assignmentID/files/solution
 //   POST /instructor/:assignmentID/create-solution
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Testing
@@ -74,7 +75,7 @@ import VaporTesting
     /// Creates a zip at `zipPath` via the system `zip` CLI (matches the
     /// pattern in ScriptEditRoutesTests so the same skip-on-missing-tooling
     /// guard applies).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) throws {
+    private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) async throws {
         // Missing zip/unzip is platform-expected -> silent skip (the testing
         // conventions reserve Issue.record for broken setup, not this).
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
@@ -89,13 +90,8 @@ import VaporTesting
         for entry in entries {
             try entry.content.write(to: tempDir.appendingPathComponent(entry.name))
         }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        proc.currentDirectoryURL = tempDir
-        proc.arguments = ["-q", "-r", zipPath, "."]
-        try proc.run()
-        proc.waitUntilExit()
-        #expect(proc.terminationStatus == 0, "zip should succeed")
+        let run = try await runTool(["zip", "-q", "-r", zipPath, "."], workingDirectory: tempDir)
+        #expect(run.exitCode == 0, "zip should succeed")
     }
 
     @discardableResult
@@ -113,7 +109,7 @@ import VaporTesting
             zipEntries.isEmpty
             ? [("placeholder.txt", Data("placeholder\n".utf8))]
             : zipEntries
-        try makeZipAt(zipPath: zipPath, entries: starter)
+        try await makeZipAt(zipPath: zipPath, entries: starter)
 
         var notebookPath: String?
         if let nb = notebookOnDisk {

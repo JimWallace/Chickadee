@@ -197,7 +197,7 @@ import VaporTesting
 
             let setupID = "setup_putsuite_regrade"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            try await arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
             let manifest = """
                 {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py","points":1}],"timeLimitSeconds":10,"makefile":null}
                 """
@@ -305,7 +305,7 @@ import VaporTesting
 
             let setupID = "setup_no_runner"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            try await arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
             let manifest = """
                 {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
                 """

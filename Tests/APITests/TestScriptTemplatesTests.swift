@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Fluent
 // Tests/CoreTests/TestScriptTemplatesTests.swift
@@ -128,7 +129,7 @@ import Testing
     /// any indentation / syntax regression in the generated source.  Silently
     /// skipped on machines with no `python3` (expected on a bare dev laptop;
     /// CI images always install it, so the check runs everywhere it matters).
-    @Test func allPythonTemplateTypes_parseAsValidPython() throws {
+    @Test func allPythonTemplateTypes_parseAsValidPython() async throws {
         guard
             FileManager.default.fileExists(atPath: "/usr/bin/python3")
                 || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
@@ -138,21 +139,12 @@ import Testing
         }
         for type in PythonTestTemplateType.allCases {
             let source = pythonTestScript(type: type, functionName: "sample_fn", paramNames: ["x", "y"])
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            p.arguments = ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"]
-            let stdin = Pipe()
-            let stderr = Pipe()
-            p.standardInput = stdin
-            p.standardError = stderr
-            p.standardOutput = Pipe()
-            try p.run()
-            stdin.fileHandleForWriting.write(Data(source.utf8))
-            try stdin.fileHandleForWriting.close()
-            p.waitUntilExit()
-            if p.terminationStatus != 0 {
-                let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                Issue.record("Template \(type.rawValue) generated invalid Python:\n\(err)\n--- source ---\n\(source)")
+            let run = try await runTool(
+                ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"],
+                standardInput: source)
+            if run.exitCode != 0 {
+                Issue.record(
+                    "Template \(type.rawValue) generated invalid Python:\n\(run.stderr)\n--- source ---\n\(source)")
             }
         }
 

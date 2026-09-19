@@ -8,6 +8,7 @@
 // empty output. Verified by running, not reading, because the defect was a
 // wrong mark rather than a compile error.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -17,14 +18,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct LuaStdoutCaptureTests {
 
     static var luaAvailable: Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-v"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
 
     private static var repoRoot: URL {
@@ -44,8 +38,8 @@ import Testing
 
     /// Grade `submission` with the generated script + the canonical runtime,
     /// returning the outcome status parsed from the last JSON line.
-    private func grade(_ submission: String) throws -> String {
-        guard Self.luaAvailable else { return "pass" }  // skip: treated as no-op
+    private func grade(_ submission: String) async throws -> String {
+        guard await Self.luaAvailable else { return "pass" }  // skip: treated as no-op
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-luastdout-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -65,19 +59,8 @@ import Testing
             to: dir.appendingPathComponent(".chickadee_student_module"), atomically: true,
             encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "publictest_fam_01.lua"]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let text =
-            String(
-                data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let lastLine = text.split(separator: "\n").last.map(String.init) ?? ""
+        let run = try await runTool(["lua", "publictest_fam_01.lua"], workingDirectory: dir)
+        let lastLine = run.stdout.split(separator: "\n").last.map(String.init) ?? ""
         if lastLine.contains("\"status\":\"pass\"") { return "pass" }
         if lastLine.contains("\"status\":\"fail\"") { return "fail" }
         return "error"
@@ -85,27 +68,27 @@ import Testing
 
     // The fixture family prints the string "hello" for `classify`.
 
-    @Test func printIsCaptured() throws {
-        guard Self.luaAvailable else { return }
-        #expect(try grade(#"function classify(x) print("hello") end"#) == "pass")
+    @Test func printIsCaptured() async throws {
+        guard await Self.luaAvailable else { return }
+        #expect(try await grade(#"function classify(x) print("hello") end"#) == "pass")
     }
 
-    @Test func ioStdoutWriteIsCaptured() throws {
-        guard Self.luaAvailable else { return }
+    @Test func ioStdoutWriteIsCaptured() async throws {
+        guard await Self.luaAvailable else { return }
         // The regression: this escaped the old bare-io.write swap and failed a
         // correct submission with empty output.
-        #expect(try grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
+        #expect(try await grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
     }
 
-    @Test func chainedIoWriteIsCaptured() throws {
-        guard Self.luaAvailable else { return }
+    @Test func chainedIoWriteIsCaptured() async throws {
+        guard await Self.luaAvailable else { return }
         // Chained writes used to crash on the collector returning nil.
-        #expect(try grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
+        #expect(try await grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
     }
 
-    @Test func wrongOutputStillFails() throws {
-        guard Self.luaAvailable else { return }
+    @Test func wrongOutputStillFails() async throws {
+        guard await Self.luaAvailable else { return }
         // The capture is stronger, but the check still bites.
-        #expect(try grade(#"function classify(x) print("goodbye") end"#) == "fail")
+        #expect(try await grade(#"function classify(x) print("goodbye") end"#) == "fail")
     }
 }
