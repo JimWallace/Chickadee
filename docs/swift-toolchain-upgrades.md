@@ -23,9 +23,16 @@ The Swift 6.3 to 6.4 upgrade is the model. Read
 
 ## The schedule
 
-The Routine fires on 15 March and 15 September, at 09:00 Eastern. Swift ships a
-release in approximately March and approximately September. The Routine fires
-after the release, and after the Docker images are usually available.
+The Routine fires on 15 March and 15 September, at 09:00 Eastern (cron
+`0 13 15 3,9 *`, UTC). Swift ships a release in approximately March and
+approximately September. The Routine fires after the release, and after the
+Docker images are usually available.
+
+The Routine is `trig_019sGYKbtBnvE9pxg4LTqLpQ`, named "Swift toolchain upgrade
+check (semi-annual)". It starts a new session on each fire, and it reports by
+push and by email. Change the schedule or the prompt on the Routine itself. Do
+not make a second Routine, because two of them will open two pull requests for
+the same release.
 
 A **minor** release (6.4 to 6.5, or 6.x to 7.0) starts the full two-pull-request
 work.
@@ -326,6 +333,10 @@ If there is a newer minor release and the images are published:
 If the newer release is a patch release, move only the three sites that name
 the patch number, as the runbook Schedule section says. There is no feature
 scan for a patch release.
+
+The Routine carries no connector grants. Load the GitHub tools with ToolSearch.
+If they are absent, push the work to the branch and report that you could not
+open the pull request. Do not stop with the work unpushed.
 ```
 
 ---
