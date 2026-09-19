@@ -171,7 +171,7 @@ final class AssignmentHelpersUtilityTests {
             courseID: UUID()
         )
 
-        let result = currentSetupFiles(
+        let result = await currentSetupFiles(
             for: setup,
             assignmentID: "asg123",
             solutionFilename: "BMI Boundary Cases.ipynb"
@@ -224,7 +224,7 @@ final class AssignmentHelpersUtilityTests {
             ]
             """
 
-        let setupZip = try createRunnerSetupZip(
+        let setupZip = try await createRunnerSetupZip(
             suiteFiles: suiteFiles,
             suiteConfigJSON: configJSON,
             zipPath: zipPath
@@ -242,7 +242,7 @@ final class AssignmentHelpersUtilityTests {
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
 
-        _ = try createRunnerSetupZip(
+        _ = try await createRunnerSetupZip(
             suiteFiles: [
                 ahMakeFile(named: "keep.py", contents: "print('keep')"),
                 ahMakeFile(named: "remove.py", contents: "print('remove')"),
@@ -256,7 +256,7 @@ final class AssignmentHelpersUtilityTests {
             zipPath: zipPath
         )
 
-        _ = try createRunnerSetupZip(
+        _ = try await createRunnerSetupZip(
             suiteFiles: [
                 ahMakeFile(named: "keep.py", contents: "print('keep-updated')")
             ],
@@ -268,9 +268,9 @@ final class AssignmentHelpersUtilityTests {
             zipPath: zipPath
         )
 
-        let entries = Set(listZipEntries(zipPath: zipPath))
+        let entries = await Set(await listZipEntries(zipPath: zipPath))
         #expect(entries == ["keep.py"])
-        #expect(extractZipEntry(zipPath: zipPath, entryName: "remove.py") == nil)
+        await #expect(extractZipEntry(zipPath: zipPath, entryName: "remove.py") == nil)
         let keepData = try #require(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
         #expect(String(data: keepData, encoding: .utf8) == "print('keep-updated')")
     }
@@ -302,7 +302,7 @@ final class AssignmentHelpersUtilityTests {
             """
         let uploadedFile = ahMakeFile(named: "test_generated.py", contents: "print('generated')")
 
-        let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
+        let (merged, updatedJSON) = await mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [uploadedFile],
             suiteConfigJSON: configJSON,
             draftZipPath: zipPath
@@ -330,7 +330,7 @@ final class AssignmentHelpersUtilityTests {
             """
         let file = ahMakeFile(named: "test.py", contents: "pass")
 
-        let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
+        let (merged, updatedJSON) = await mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [file],
             suiteConfigJSON: configJSON,
             draftZipPath: nil
@@ -372,12 +372,12 @@ final class AssignmentHelpersUtilityTests {
             """
         let generatedFile = ahMakeFile(named: "test_generated.py", contents: "print('generated test')")
 
-        let (mergedFiles, mergedConfig) = mergeExistingFilesIntoSuiteFiles(
+        let (mergedFiles, mergedConfig) = await mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [generatedFile],
             suiteConfigJSON: configJSON,
             draftZipPath: draftZipPath
         )
-        let package = try createRunnerSetupZip(
+        let package = try await createRunnerSetupZip(
             suiteFiles: mergedFiles,
             suiteConfigJSON: mergedConfig,
             zipPath: outputZipPath

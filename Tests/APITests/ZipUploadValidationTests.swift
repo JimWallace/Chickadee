@@ -36,7 +36,7 @@ import VaporTesting
             try data.write(to: fileURL)
         }
         let zipPath = tmpDir.appendingPathComponent(named).path
-        try writeZipFixture(of: workDir, to: zipPath)
+        try await writeZipFixture(of: workDir, to: zipPath)
         try FileManager.default.removeItem(at: workDir)
         return zipPath
     }
@@ -44,7 +44,7 @@ import VaporTesting
     // MARK: - Happy path
 
     @Test func validateZipUploadSize_acceptsNormalZip() async throws {
-        let zipPath = try makeZip(
+        let zipPath = try await makeZip(
             named: "ok.zip",
             entries: [
                 ("readme.txt", Data("hello world".utf8)),
@@ -63,7 +63,7 @@ import VaporTesting
             maxEntryUncompressedBytes: 1024
         )
         let big = Data(repeating: 0x41, count: 5_000)
-        let zipPath = try makeZip(named: "big-entry.zip", entries: [("big.bin", big)])
+        let zipPath = try await makeZip(named: "big-entry.zip", entries: [("big.bin", big)])
 
         #expect { try validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
             guard case ZipUploadValidationError.entrySizeExceeded(let name, _, _) = error else {
@@ -87,7 +87,7 @@ import VaporTesting
             maxEntryUncompressedBytes: 10 * 1024 * 1024
         )
         let chunk = Data(repeating: 0x41, count: 2_000)
-        let zipPath = try makeZip(
+        let zipPath = try await makeZip(
             named: "many.zip",
             entries: [
                 ("a.bin", chunk),

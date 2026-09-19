@@ -233,7 +233,7 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "test_foo.py") == "def foo():\n    pass\n")
+        #expect(await readScriptFromZip(zipPath: zipPath, filename: "test_foo.py") == "def foo():\n    pass\n")
     }
 
     @Test func readScriptFromZipReturnsNilForMissingEntry() throws {
@@ -246,7 +246,7 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py") == nil)
+        #expect(await readScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py") == nil)
     }
 
     // MARK: - updateScriptInZip
@@ -264,9 +264,9 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        try updateScriptInZip(zipPath: zipPath, filename: "test_bar.py", content: "# new\n")
+        try await updateScriptInZip(zipPath: zipPath, filename: "test_bar.py", content: "# new\n")
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "test_bar.py") == "# new\n")
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "test_bar.py") == "# new\n")
     }
 
     @Test func updateScriptInZipAddsNewFile() async throws {
@@ -282,10 +282,10 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        try updateScriptInZip(zipPath: zipPath, filename: "new_file.py", content: "# added\n")
+        try await updateScriptInZip(zipPath: zipPath, filename: "new_file.py", content: "# added\n")
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "existing.py") != nil)
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "new_file.py") == "# added\n")
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "existing.py") != nil)
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "new_file.py") == "# added\n")
     }
 
     @Test func updateScriptInZipPreservesOtherFiles() async throws {
@@ -303,11 +303,11 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        try updateScriptInZip(zipPath: zipPath, filename: "b.py", content: "# b updated\n")
+        try await updateScriptInZip(zipPath: zipPath, filename: "b.py", content: "# b updated\n")
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "a.py") == "# a\n")
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "b.py") == "# b updated\n")
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "c.py") == "# c\n")
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "a.py") == "# a\n")
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "b.py") == "# b updated\n")
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "c.py") == "# c\n")
     }
 
     // MARK: - removeScriptFromZip
@@ -326,10 +326,10 @@ final class ZipArchiverTests {
                 ])
         else { return }
 
-        try removeScriptFromZip(zipPath: zipPath, filename: "remove_me.py")
+        try await removeScriptFromZip(zipPath: zipPath, filename: "remove_me.py")
 
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "remove_me.py") == nil)
-        #expect(readScriptFromZip(zipPath: zipPath, filename: "keep.py") != nil)
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "remove_me.py") == nil)
+        await #expect(readScriptFromZip(zipPath: zipPath, filename: "keep.py") != nil)
     }
 
     @Test func removeScriptFromZipThrowsForMissingFile() throws {
@@ -346,7 +346,7 @@ final class ZipArchiverTests {
         else { return }
 
         let error = try #require(throws: ScriptZipError.self) {
-            try removeScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")
+            try await removeScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")
         }
         guard case .fileNotFound(let name) = error else {
             Issue.record("Expected fileNotFound, got \(error)")

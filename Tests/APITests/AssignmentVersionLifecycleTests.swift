@@ -43,7 +43,7 @@ import Vapor
     ) async throws -> (assignment: APIAssignment, setup: APITestSetup) {
         let setupID = "vl_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
             """
@@ -68,7 +68,7 @@ import Vapor
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try content.data(using: .utf8)?.write(to: url)
         }
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func versions(

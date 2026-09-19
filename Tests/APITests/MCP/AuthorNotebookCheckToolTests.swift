@@ -28,7 +28,7 @@ import Vapor
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         _ = try await makeTestSetup(
             on: app, id: "setup_nc", courseID: courseID, manifest: emptyManifest)
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_nc.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_nc.zip")
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_nc", courseID: courseID, title: "Lab")
     }

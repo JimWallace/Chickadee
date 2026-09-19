@@ -36,7 +36,7 @@ import Vapor
             on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
         // The fixture's empty-bytes zip can't be rebuilt; replace it with a
         // valid (placeholder-only) archive so applyPatternFamilies can re-save.
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
         try await applyPatternFamilies(
             to: setup, nextFamilies: [family],
             authoredItems: [.family(id: family.id, sectionID: nil)], on: app.db)
@@ -243,7 +243,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily()],
                 authoredItems: [.family(id: "bmi_category", sectionID: nil)],
@@ -436,7 +436,7 @@ import Vapor
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily()],
                 authoredItems: [.family(id: "bmi_category", sectionID: nil)], on: app.db)
@@ -532,7 +532,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             let setup = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [pfBMIFamily(), pfApproxFamily()],
                 authoredItems: [

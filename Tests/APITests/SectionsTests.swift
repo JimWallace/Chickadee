@@ -107,7 +107,7 @@ import Testing
         )
         let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
-        let payload = buildSuitePayload(fromManifest: manifest)
+        let payload = await buildSuitePayload(fromManifest: manifest)
         #expect(payload.sections.map(\.id) == ["s1", "s2"])
         #expect(payload.sections.map(\.name) == ["One", "Two"])
         #expect(payload.items.count == 3)
@@ -148,7 +148,7 @@ import Testing
         )
         let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
-        let payload = buildSuitePayload(fromManifest: manifest)
+        let payload = await buildSuitePayload(fromManifest: manifest)
         #expect(payload.items.count == 2)
         #expect(payload.items[0].kind == "script")
         #expect(payload.items[0].sectionID == "s1")
@@ -167,7 +167,7 @@ import Testing
               "testSuites": [{ "tier": "public", "script": "a.py" }]
             }
             """
-        let payload = buildSuitePayload(fromManifest: legacyJSON)
+        let payload = await buildSuitePayload(fromManifest: legacyJSON)
         #expect(payload.sections.isEmpty)
         #expect(payload.items.count == 1)
         #expect(payload.items.first?.sectionID == nil)

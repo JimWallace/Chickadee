@@ -35,7 +35,7 @@ import Vapor
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: "setup_ss", courseID: courseID, manifest: manifest)
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + "setup_ss.zip",
             entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_b.sh", "exit 0\n")])
         return try await makeTestAssignment(
@@ -54,7 +54,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func sections(

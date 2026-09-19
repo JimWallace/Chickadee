@@ -48,19 +48,19 @@ import Testing
             courseID: UUID())
     }
 
-    private func withSetup(_ body: (APITestSetup) throws -> Void) throws {
+    private func withSetup(_ body: (APITestSetup) async throws -> Void) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("support-file-dataset-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        try body(try makeSetup(in: root))
+        try await body(try makeSetup(in: root))
     }
 
     // MARK: - The edit page's rows
 
     @Test func currentSetupFilesMarksTheDatasetRowOnly() async throws {
-        try withSetup { setup in
-            let rows = currentSetupFiles(
+        try await withSetup { setup in
+            let rows = await currentSetupFiles(
                 for: setup, assignmentID: "asg123", solutionFilename: nil
             ).existingSuiteRows
 
@@ -83,8 +83,8 @@ import Testing
     // MARK: - The create page's rows
 
     @Test func draftRowsCarryTheMarkThroughTheURLRewrite() async throws {
-        try withSetup { setup in
-            let base = editableSuiteRowsForSetup(setup)
+        try await withSetup { setup in
+            let base = await editableSuiteRowsForSetup(setup)
             let baseDataset = try #require(base.first { $0.name == "cases.csv" })
             #expect(baseDataset.isDataset)
             #expect(baseDataset.datasetSampleSize == 25)

@@ -32,7 +32,7 @@ import Vapor
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: emptyManifest)
         // applyPatternFamilies rebuilds the zip, so it must be a valid archive.
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
     }
@@ -133,7 +133,7 @@ import Vapor
             let courseID = try course.requireID()
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {

@@ -38,7 +38,7 @@ import Vapor
         let setup = try await makeTestSetup(
             on: app, id: "setup_sup", courseID: courseID, manifest: manifest ?? emptyManifest)
         let zipPath = app.testSetupsDirectory + "setup_sup.zip"
-        try pfWriteEmptyZip(at: zipPath)
+        try await pfWriteEmptyZip(at: zipPath)
         for (name, body) in support.sorted(by: { $0.key < $1.key }) {
             try await updateScriptInZip(zipPath: zipPath, filename: name, content: body)
         }
@@ -58,7 +58,7 @@ import Vapor
     }
 
     private func entries(_ app: Application) async -> [String] {
-        listZipEntries(zipPath: app.testSetupsDirectory + "setup_sup.zip")
+        await listZipEntries(zipPath: app.testSetupsDirectory + "setup_sup.zip")
     }
 
     private func run(
@@ -77,14 +77,14 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(
                 on: app, support: ["helpers.R": "f <- function() 1\n", "keep.R": "g <- function() 2\n"])
-            #expect(entries(app).contains("helpers.R"))
+            await #expect(entries(app).contains("helpers.R"))
 
             let output = try await run(app, assignment, "helpers.R")
             #expect(output.removed == "helpers.R")
             #expect(!output.clearedManifestMarks)
 
-            #expect(!entries(app).contains("helpers.R"))
-            #expect(entries(app).contains("keep.R"), "an unrelated support file must survive")
+            await #expect(!entries(app).contains("helpers.R"))
+            await #expect(entries(app).contains("keep.R"), "an unrelated support file must survive")
         }
     }
 
@@ -97,7 +97,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 try await run(app, assignment, "publictest_thing.py")
             }
-            #expect(entries(app).contains("publictest_thing.py"), "the graded test must survive")
+            await #expect(entries(app).contains("publictest_thing.py"), "the graded test must survive")
         }
     }
 
@@ -113,7 +113,7 @@ import Vapor
                 await #expect(throws: MCPToolError.self) {
                     try await run(app, assignment, reserved)
                 }
-                #expect(entries(app).contains(reserved))
+                await #expect(entries(app).contains(reserved))
             }
         }
     }
@@ -135,7 +135,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 try await run(app, assignment, "../helpers.R")
             }
-            #expect(entries(app).contains("helpers.R"))
+            await #expect(entries(app).contains("helpers.R"))
         }
     }
 
@@ -189,7 +189,7 @@ import Vapor
                 on: app, support: ["a.R": "1\n", "b.R": "2\n", "c.R": "3\n"])
             let output = try await run(app, assignment, "a.R")
 
-            let listed = entries(app).filter { !GetSupportFilesTool.reservedNames.contains($0) }
+            let listed = await entries(app).filter { !GetSupportFilesTool.reservedNames.contains($0) }
             #expect(output.remainingSupportFileCount == listed.count)
             #expect(listed.sorted() == [".placeholder", "b.R", "c.R"])
         }

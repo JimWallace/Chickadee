@@ -36,7 +36,7 @@ import Vapor
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         let setup = try await makeTestSetup(
             on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-        try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+        try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
         if !expressions.isEmpty {
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [], authoredItems: [],
@@ -369,7 +369,7 @@ import Vapor
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             _ = try await makeTestSetup(
                 on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {

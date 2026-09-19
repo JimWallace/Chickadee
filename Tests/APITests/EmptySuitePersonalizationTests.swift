@@ -35,14 +35,14 @@ import Vapor
         defer { try? fm.removeItem(atPath: zipPath) }
 
         // Previously threw ScriptZipError.zipFailed (zip "Nothing to do!").
-        try repackZipFromDirectory(zipPath: zipPath, sourceDir: dir)
+        try await repackZipFromDirectory(zipPath: zipPath, sourceDir: dir)
 
         #expect(fm.fileExists(atPath: zipPath))
-        #expect(listZipEntries(zipPath: zipPath).isEmpty)
+        await #expect(listZipEntries(zipPath: zipPath).isEmpty)
 
         // The empty archive is still usable: a later add round-trips.
-        try applyScriptChangesToZip(zipPath: zipPath, writes: ["t.sh": "exit 0\n"], deletions: [])
-        #expect(listZipEntries(zipPath: zipPath) == ["t.sh"])
+        try await applyScriptChangesToZip(zipPath: zipPath, writes: ["t.sh": "exit 0\n"], deletions: [])
+        await #expect(listZipEntries(zipPath: zipPath) == ["t.sh"])
     }
 
     // MARK: - Integration: global inputs on an empty suite

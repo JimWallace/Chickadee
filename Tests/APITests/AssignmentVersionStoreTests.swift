@@ -50,7 +50,7 @@ import VaporTesting
 
         let setupID = "av_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try writeZip(at: zipPath, entries: entries)
+        try await writeZip(at: zipPath, entries: entries)
 
         var notebookPath: String?
         if let notebook {
@@ -98,7 +98,7 @@ import VaporTesting
             }
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func record(
@@ -178,7 +178,7 @@ import VaporTesting
             #expect(try await record(app, fx.setup) == .recorded(version: 1))
 
             let before = try #require(FileManager.default.contents(atPath: fx.setup.zipPath))
-            try writeZip(
+            try await writeZip(
                 at: fx.setup.zipPath, entries: [("publictest_a.py", "passed('ok')\n")],
                 modified: Date(timeIntervalSince1970: 1_600_000_000))
             let after = try #require(FileManager.default.contents(atPath: fx.setup.zipPath))
@@ -195,7 +195,7 @@ import VaporTesting
             let fx = try await fixture(app)
             #expect(try await record(app, fx.setup) == .recorded(version: 1))
 
-            try writeZip(
+            try await writeZip(
                 at: fx.setup.zipPath, entries: [("publictest_a.py", "failed('nope')\n")])
             #expect(try await record(app, fx.setup) == .recorded(version: 2))
         }
@@ -259,7 +259,7 @@ import VaporTesting
             #expect(version.origin == AssignmentVersionOrigin.baseline)
 
             // Even after the content moves on, a baseline is never seeded twice.
-            try writeZip(at: fx.setup.zipPath, entries: [("publictest_a.py", "changed\n")])
+            try await writeZip(at: fx.setup.zipPath, entries: [("publictest_a.py", "changed\n")])
             let second = try await AssignmentVersionStore.ensureBaseline(
                 setup: fx.setup, testSetupsDirectory: app.testSetupsDirectory, on: app.db)
             #expect(second == .skipped(reason: .historyExists))

@@ -35,7 +35,7 @@ import VaporTesting
 
         let setupID = "srt_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
 
         var entries: [ConfiguredSuiteEntry] = []
         for (i, (name, _)) in scripts.enumerated() {
@@ -71,7 +71,7 @@ import VaporTesting
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try content.data(using: .utf8)?.write(to: url)
         }
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func csrfPair(for id: String, cookie: String) async throws -> (String, String) {
@@ -582,7 +582,7 @@ import VaporTesting
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             // The generated .py must contain the approx-kind comparison.
             let source = try #require(
-                readScriptFromZip(
+                await readScriptFromZip(
                     zipPath: setup.zipPath,
                     filename: "publictest_bmi_01.py"
                 ))

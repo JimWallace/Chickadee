@@ -51,7 +51,7 @@ import Vapor
         let setupID = "vt_setup"
         try await makeTestSetup(
             on: app, id: setupID, courseID: courseID, manifest: manifest(timeLimit: 10))
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + setupID + ".zip",
             entries: [(".placeholder", "x")] + scripts)
         let assignment = try await makeTestAssignment(
@@ -72,7 +72,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func record(
@@ -216,7 +216,7 @@ import Vapor
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
             // Break the script, and record that too.
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath,
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 1  # broken\n")])
             try await record(app, setup, origin: "mcp:author_script")
@@ -244,7 +244,7 @@ import Vapor
                 on: app, scripts: [("test_a.sh", "exit 0\n"), ("helper.py", "x = 1\n")])
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath,
                 entries: [
                     (".placeholder", "x"), ("test_a.sh", "exit 1\n"), ("helper.py", "x = 1\n"),

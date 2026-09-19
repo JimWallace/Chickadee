@@ -393,7 +393,7 @@ final class AssignmentHelpersManifestTests {
             courseID: UUID()
         )
 
-        let suggestions = detectRequirementSuggestions(
+        let suggestions = await detectRequirementSuggestions(
             assignmentNotebookData: try ahNotebookData(source: "import pandas\n"),
             solutionNotebookData: try ahNotebookData(source: "import scipy\nimport matplotlib\n"),
             setup: setup
@@ -491,7 +491,7 @@ final class AssignmentHelpersManifestTests {
               ]
             }
             """
-        let payload = buildSuitePayload(fromManifest: manifest)
+        let payload = await buildSuitePayload(fromManifest: manifest)
         #expect(payload.items.count == 2)
         #expect(payload.items[0].script?.hint == "mind the boundary")
         #expect(payload.items[1].script?.hint == nil)
@@ -625,7 +625,7 @@ final class AssignmentHelpersManifestTests {
             ]
             """
 
-        let package = try createRunnerSetupZip(
+        let package = try await createRunnerSetupZip(
             suiteFiles: suiteFiles,
             suiteConfigJSON: configJSON,
             zipPath: zipPath
@@ -635,7 +635,7 @@ final class AssignmentHelpersManifestTests {
         #expect(package.testSuites.map(\.script) == ["tests.py", "tests-2.py"])
         #expect(package.testSuites.map(\.tier) == ["public", "secret"])
 
-        let zipEntries = Set(listZipEntries(zipPath: zipPath))
+        let zipEntries = await Set(listZipEntries(zipPath: zipPath))
         #expect(zipEntries.contains("tests.py"))
         #expect(zipEntries.contains("tests-2.py"))
         #expect(zipEntries.contains("Makefile"))
@@ -663,7 +663,7 @@ final class AssignmentHelpersManifestTests {
         try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         try "stale".write(toFile: sharedDir + "stale.txt", atomically: true, encoding: .utf8)
 
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: zipPath,
             setupID: "setup_123",
             testSuiteScripts: ["tests.py"],
@@ -704,7 +704,7 @@ final class AssignmentHelpersManifestTests {
 
         // An edit triggers a shared-dir rebuild (wipe + re-extract). solution.py
         // is not in the zip, so without preservation the wipe would drop it.
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: zipPath,
             setupID: "setup_sol",
             testSuiteScripts: ["tests.py"],
@@ -740,14 +740,14 @@ final class AssignmentHelpersManifestTests {
 
         let copyPath = tempRoot.appendingPathComponent("filtered.zip").path
         try FileManager.default.copyItem(atPath: zipPath, toPath: copyPath)
-        try applyScriptChangesToZip(zipPath: copyPath, writes: [:], deletions: ["dbgen.py"])
+        try await applyScriptChangesToZip(zipPath: copyPath, writes: [:], deletions: ["dbgen.py"])
 
-        let remaining = Set(listZipEntries(zipPath: copyPath))
+        let remaining = await Set(listZipEntries(zipPath: copyPath))
         #expect(remaining.contains("dbgen.py") == false)  // grader-only entry removed
         #expect(remaining.contains("tests.py"))  // others kept
         #expect(remaining.contains("data.csv"))
         // The stored zip (what the trusted worker download streams) is untouched.
-        #expect(Set(listZipEntries(zipPath: zipPath)).contains("dbgen.py"))
+        await #expect(Set(listZipEntries(zipPath: zipPath)).contains("dbgen.py"))
     }
 
     @Test func removeMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {

@@ -43,7 +43,7 @@ import Vapor
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
         try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         try await makeTestSetup(on: app, id: "setup_as", courseID: courseID, manifest: manifest)
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + "setup_as.zip",
             entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n")])
         return try await makeTestAssignment(
@@ -62,7 +62,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func input(
@@ -103,7 +103,7 @@ import Vapor
             #expect(row.script?.displayName == "Marker")
             #expect(row.script?.dependsOn == ["test_a.sh"])
             // The body landed in the zip verbatim.
-            let body = try #require(readScriptFromZip(zipPath: reloaded.zipPath, filename: "secrettest_marker.py"))
+            let body = try #require(await readScriptFromZip(zipPath: reloaded.zipPath, filename: "secrettest_marker.py"))
             #expect(body.contains("print('ok')"))
         }
     }
@@ -159,7 +159,7 @@ import Vapor
             let items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             let row = try #require(items.first { $0.script?.script == "t.py" })
             #expect(row.script?.tier == .secret)
-            let body = try #require(readScriptFromZip(zipPath: reloaded.zipPath, filename: "t.py"))
+            let body = try #require(await readScriptFromZip(zipPath: reloaded.zipPath, filename: "t.py"))
             #expect(body.contains("x=2"))
         }
     }
@@ -224,7 +224,7 @@ import Vapor
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             // tester NOT enrolled.
             try await makeTestSetup(on: app, id: "setup_as", courseID: courseID, manifest: manifest)
-            try writeZip(
+            try await writeZip(
                 at: app.testSetupsDirectory + "setup_as.zip",
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n")])
             let assignment = try await makeTestAssignment(
