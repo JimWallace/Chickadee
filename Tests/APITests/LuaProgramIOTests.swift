@@ -64,13 +64,13 @@ import Testing
     }
 
     @Test func numberReadsPassAndFail() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
         #expect(try grade("local a = io.read(\"n\")\nlocal b = io.read(\"n\")\nprint(a + b)\n") == "pass")
         #expect(try grade("local a = io.read(\"*n\")\nlocal b = io.read(\"*n\")\nprint(a * b)\n") == "fail")
     }
 
     @Test func lineReadsAndIoLinesIterate() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
         #expect(
             try grade("local a = io.read()\nlocal b = io.read(\"l\")\nprint(tonumber(a) + tonumber(b))\n") == "pass")
         #expect(try grade("local t = 0\nfor line in io.lines() do t = t + tonumber(line) end\nprint(t)\n") == "pass")
@@ -80,19 +80,19 @@ import Testing
     }
 
     @Test func wholeInputReadAndIncludedComparison() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
         #expect(try grade("io.write(\"got: \", io.read(\"a\"))\n", expected: "got: 3\n4") == "pass")
         #expect(try grade("print(\"answer is 7\")\n", comparison: .included) == "pass")
     }
 
     @Test func anOsExitAfterTheAnswerIsStillGraded() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
         #expect(try grade("print(io.read(\"n\") + io.read(\"n\"))\nos.exit(0)\n") == "pass")
         #expect(try grade("print(0)\nos.exit(0)\n") == "fail")
     }
 
     @Test func aCrashIsAGradedFailure() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
         #expect(try grade("error(\"boom\")\n") == "fail")
     }
 }

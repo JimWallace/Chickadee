@@ -41,7 +41,7 @@ import Testing
             script: generated.script, submission: submission)
     }
 
-    @Test func variableExistsPassesAndFails() throws {
+    @Test func variableExistsPassesAndFails() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let existence = check(kind: .variableExists, variable: "total")
         #expect(try run(existence, submission: "total = 10;\n") == 0)
@@ -52,7 +52,7 @@ import Testing
         #expect(try run(typed, submission: "total = \"ten\";\n") == 1)
     }
 
-    @Test func functionExistsHonoursArity() throws {
+    @Test func functionExistsHonoursArity() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let bare = check(kind: .functionExists, variable: "combine")
         #expect(
@@ -69,7 +69,7 @@ import Testing
             try run(arity, submission: "function r = combine(varargin)\n  r = 0;\nend\n") == 0)
     }
 
-    @Test func numericArrayClosePassesAndFails() throws {
+    @Test func numericArrayClosePassesAndFails() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let close = check(
             kind: .numericArrayClose, variable: "results", expectedArray: [1.0, 2.5, 4.0])
@@ -80,7 +80,7 @@ import Testing
         #expect(try run(close, submission: "results = [1.0, 2.5];\n") == 1)
     }
 
-    @Test func cellContainsMatchesLiterallyAndByRegex() throws {
+    @Test func cellContainsMatchesLiterallyAndByRegex() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let literal = check(kind: .cellContains, containsText: "for i = 1:10")
         #expect(try run(literal, submission: "for i = 1:10\n  disp(i);\nend\n") == 0)
@@ -92,7 +92,7 @@ import Testing
         #expect(try run(pcre, submission: "disp(\"no loop here\");\n") == 1)
     }
 
-    @Test func figureCountCountsHeadlessFigures() throws {
+    @Test func figureCountCountsHeadlessFigures() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let figures = check(kind: .figureCount, minFigures: 2)
         let plotting = """
@@ -118,7 +118,7 @@ import Testing
 
     /// A kind with no Octave renderer must error (exit 2) with a message naming
     /// the kind — never trap, never quietly pass.
-    @Test func unsupportedKindsErrorExplicitly() throws {
+    @Test func unsupportedKindsErrorExplicitly() async throws {
         guard OctavePatternFamilyExecutionTests.hasOctave else { return }
         let refused = check(kind: .dataFrameShape, variable: "df")
         #expect(try run(refused, submission: "df = 1;\n") == 2)

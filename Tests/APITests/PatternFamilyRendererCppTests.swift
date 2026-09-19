@@ -21,9 +21,10 @@ import Testing
     }
 
     /// The did-not-skip proof for the APITests job.
-    @Test func gppIsPresentInCI() {
+    @Test func gppIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
-        #expect(Self.gppAvailable, "g++ absent: every C++ renderer execution test skipped silently")
+        let isAvailable = await Self.gppAvailable
+        #expect(isAvailable, "g++ absent: every C++ renderer execution test skipped silently")
     }
 
     /// Stages a workspace with the runtime but NO C++ file and no student hint

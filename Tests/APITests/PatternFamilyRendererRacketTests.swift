@@ -26,10 +26,11 @@ import Testing
     /// The did-not-skip proof for the APITests job. Without it, a CI image
     /// missing `racket` turns every test below into a silent pass — the exact
     /// shape that let R's suites skip everywhere for a whole release series.
-    @Test func racketIsPresentInCI() {
+    @Test func racketIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.racketAvailable
         #expect(
-            Self.racketAvailable,
+            isAvailable,
             "racket absent: every Racket renderer execution test skipped silently")
     }
 

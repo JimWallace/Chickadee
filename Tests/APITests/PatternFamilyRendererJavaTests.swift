@@ -26,10 +26,11 @@ import Testing
     }
 
     /// The did-not-skip proof for the APITests job.
-    @Test func javacIsPresentInCI() {
+    @Test func javacIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.javacAvailable
         #expect(
-            Self.javacAvailable,
+            isAvailable,
             "javac absent: every Java renderer execution test skipped silently")
     }
 

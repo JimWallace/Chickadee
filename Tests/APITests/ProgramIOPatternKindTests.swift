@@ -142,9 +142,10 @@ import Vapor
     }
 
     /// The did-not-skip proof for the APITests job.
-    @Test func pythonIsPresentInCI() {
+    @Test func pythonIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
-        #expect(Self.pythonAvailable, "python3 absent: every program-I/O execution test skipped silently")
+        let isAvailable = await Self.pythonAvailable
+        #expect(isAvailable, "python3 absent: every program-I/O execution test skipped silently")
     }
 
     private static var repoRoot: URL {
