@@ -9,7 +9,10 @@ JavaScriptEventLoop.installGlobalExecutor()
 
 // Embedded-Swift bridge over the pure RunnerCore extractors. Registers
 // JS-callable globals, marshalling cells in / results out via JavaScriptKit JS
-// values — no Foundation, no BridgeJS (both incompatible with Embedded Swift).
+// values — no Foundation (unavailable in Embedded Swift) and, for now, no
+// BridgeJS: it was incompatible with Embedded Swift when this was written, and
+// is not any more (see wasm/Package.swift). Replacing the hand-marshalled
+// closures below with typed `@JS` exports is the planned follow-up.
 //
 // Exposed to JS as `globalThis.runnerExtractPython(cells, filename)`:
 //   cells    — array of { cell_type: string, source: string }

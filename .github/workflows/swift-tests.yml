@@ -103,6 +103,9 @@ jobs:
       - name: Check runner wasm size budget
         run: scripts/check-runner-wasm-size.sh
 
+      - name: Check RunnerCore compiles as Embedded Swift
+        run: scripts/check-runnercore-embedded.sh
+
       - name: Check the CI compose fixture covers every required variable
         run: scripts/ci-compose-env.sh --check
 

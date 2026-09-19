@@ -162,88 +162,34 @@ private struct JSONParser {
         return .number(value)
     }
 
-    /// Parse a JSON number literal to `Double` WITHOUT `Double(String)`: the
-    /// latter lowers to `_swift_stdlib_strtod_clocale`, which the Embedded Swift
-    /// wasm runtime does not provide (it becomes a link error the moment the
-    /// browser bridge reaches this path via `executeSuites`). The footer's
-    /// `score` is now read by `interpretScriptOutput` for partial credit, so the
-    /// value has to be accurate — not merely finite. Shared by the native and
-    /// embedded builds (one implementation, no drift); precise to full `Double`
-    /// for typical inputs via an integer mantissa + decimal scale.
+    /// Parse a JSON number literal to `Double`.
+    ///
+    /// `Double(String)` is the whole implementation. It used to be a hand-rolled
+    /// mantissa-times-power-of-ten fold, because `Double(String)` lowered to
+    /// `_swift_stdlib_strtod_clocale`, which the Embedded Swift runtime did not
+    /// provide, and the browser bridge hit that as a link error the moment
+    /// `executeSuites` reached this path. Swift 6.4 reimplemented string-to-
+    /// double parsing for Embedded Swift, so the initializer links in the wasm
+    /// build again (measured: it links, and returns correct values when the
+    /// Embedded wasm build is driven from Node).
+    ///
+    /// The fold was not merely longer; it was WRONG by one unit in the last
+    /// place for ordinary inputs, because each `mantissa * 10` and the final
+    /// multiply by a repeated-product power of ten each round separately.
+    /// `"0.7"` parsed to `0.7000000000000001`, `"0.3"` to `0.30000000000000004`,
+    /// `"1e308"` to `9.999999999999998e+307`, `"1.7976931348623157e308"` to
+    /// `inf`, and the smallest normal double to `0`. A footer's `score` is
+    /// multiplied by `points` and a `metric` is compared for ranking, so the
+    /// error was observable in a grade. `Double(String)` is correctly rounded.
+    /// `JSONFooterNumberExactnessTests` pins the cases above.
+    ///
+    /// `parseNumber` has already restricted the slice to `[0-9.eE+-]`, so none
+    /// of the spellings `Double(String)` accepts beyond JSON's grammar (`inf`,
+    /// `nan`, hexadecimal floats) can reach here. A leading `+` still parses,
+    /// as it always did; `JSONFooterGrammarTests` pins that tolerance.
     static func parseDoubleLiteral(_ slice: ArraySlice<Character>) -> Double? {
-        let chars = Array(slice)
-        let count = chars.count
-        var index = 0
-        guard count > 0 else { return nil }
-
-        var sign = 1.0
-        if chars[index] == "-" {
-            sign = -1.0
-            index += 1
-        } else if chars[index] == "+" {
-            index += 1
-        }
-
-        var mantissa = 0.0
-        var fractionDigits = 0
-        var sawDigit = false
-        while index < count, let digit = asciiDigit(chars[index]) {
-            mantissa = mantissa * 10 + Double(digit)
-            index += 1
-            sawDigit = true
-        }
-        if index < count, chars[index] == "." {
-            index += 1
-            while index < count, let digit = asciiDigit(chars[index]) {
-                mantissa = mantissa * 10 + Double(digit)
-                fractionDigits += 1
-                index += 1
-                sawDigit = true
-            }
-        }
-        guard sawDigit else { return nil }
-
-        var exponent = 0
-        if index < count, chars[index] == "e" || chars[index] == "E" {
-            index += 1
-            var exponentSign = 1
-            if index < count, chars[index] == "-" {
-                exponentSign = -1
-                index += 1
-            } else if index < count, chars[index] == "+" {
-                index += 1
-            }
-            var sawExponentDigit = false
-            while index < count, let digit = asciiDigit(chars[index]) {
-                exponent = exponent * 10 + digit
-                index += 1
-                sawExponentDigit = true
-            }
-            guard sawExponentDigit else { return nil }
-            exponent *= exponentSign
-        }
-        guard index == count else { return nil }
-
-        return sign * mantissa * powerOfTen(exponent - fractionDigits)
-    }
-
-    /// ASCII digit value (0–9) or nil — avoids `wholeNumberValue` (Unicode
-    /// tables) and force-unwrapping, keeping number parsing embedded-clean.
-    private static func asciiDigit(_ c: Character) -> Int? {
-        guard let ascii = c.asciiValue, ascii >= 48, ascii <= 57 else { return nil }
-        return Int(ascii - 48)
-    }
-
-    /// `10` raised to an integer power via repeated f64 multiply/divide — no
-    /// `pow` (libm) dependency.
-    private static func powerOfTen(_ exponent: Int) -> Double {
-        var result = 1.0
-        var remaining = exponent >= 0 ? exponent : -exponent
-        while remaining > 0 {
-            result *= 10
-            remaining -= 1
-        }
-        return exponent >= 0 ? result : 1.0 / result
+        guard !slice.isEmpty else { return nil }
+        return Double(String(slice))
     }
 
     private mutating func parseBool() -> JSONValue? {

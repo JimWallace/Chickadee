@@ -1,0 +1,10 @@
+# Reflection is unavailable in Embedded Swift. A `Mirror` in RunnerCore
+# compiles natively, passes every native test, and breaks the browser wasm
+# build after merge — the exact shape this guard exists to catch before it.
+guard="scripts/check-runnercore-embedded.sh"
+files="Sources/RunnerCore/TestTier.swift"
+description="a Mirror(reflecting:) call in RunnerCore"
+expect="does not compile as Embedded Swift"
+apply() {
+    printf '\npublic func ckGuardFixtureReflect() -> Int { Mirror(reflecting: TestTier.pub).children.count }\n' >> Sources/RunnerCore/TestTier.swift
+}

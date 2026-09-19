@@ -6,9 +6,9 @@
 # RunnerCore is the substrate-free grading logic shared with the native worker.
 # This compiles it (plus the manual JavaScriptKit bridge in
 # wasm/Sources/RunnerWasm/main.swift) to wasm with the EMBEDDED Swift SDK — a
-# ~350 KB-gzipped artifact, ~60x smaller than the standard wasm runtime — so the
-# browser runner can call the SAME extraction code instead of a hand-written JS
-# copy.
+# ~270 KB artifact (~130 KB gzipped), far smaller than the standard wasm
+# runtime — so the browser runner can call the SAME extraction code instead of
+# a hand-written JS copy.
 #
 # Prerequisites (one-time, see docs/runner-wasm-migration.md):
 #   * Swift toolchain matching the wasm SDK (6.4.0 — pinned by the swiftly
@@ -36,10 +36,19 @@ cd "$repo_root/wasm"
 # `_initialize`) to a *command* (`_start`), which JavaScriptKit's runtime
 # rejects ("supports only WASI reactor ABI").
 
+pkg=".build/plugins/PackageToJS/outputs/Package"
+
+# Start from empty plugin output directories. PackageToJS refreshes the files
+# it writes but never removes ones it no longer would, and it bundles BridgeJS
+# glue whenever it finds some under `.build/plugins/outputs` — so a
+# `bridge-js.js` left over from a BridgeJS trial build rides into `index.js`,
+# and esbuild below bundles whatever `index.js` imports. A stale file therefore
+# ships inside the vendored loader without a warning, which is how one
+# experiment's glue added 23 KB to `runner-core.js` before these lines existed.
+rm -rf "$pkg" .build/plugins/outputs
+
 echo "Building RunnerWasm (Embedded Swift, SDK: $sdk)…"
 swift package --swift-sdk "$sdk" js -c release
-
-pkg=".build/plugins/PackageToJS/outputs/Package"
 
 echo "Bundling a self-contained, no-CDN browser ESM with esbuild…"
 ( cd "$pkg" && npm install --silent )
@@ -55,15 +64,30 @@ unopt_size=$(wc -c < "$pkg/RunnerWasm.wasm")
 # is needed (same mechanism as esbuild above). If it's unavailable (offline),
 # fall back to the unoptimized module with a warning — the build still produces
 # a correct, working artifact.
+#
+# --strip-debug is load-bearing, and the reason is worth keeping. The release
+# build links with `-g`, so the module the PackageToJS plugin hands over
+# carries full DWARF (.debug_info, .debug_names, .debug_str, .debug_line, …).
+# The plugin's own "Stripping DWARF debug info…" step runs THROUGH wasm-opt,
+# which it looks up on PATH — and on a CI runner there is none, so it warns and
+# copies the module unstripped, DWARF and all. This script then ran wasm-opt
+# via npx, which keeps unknown custom sections unless told otherwise. Result:
+# for every re-vendor before this flag, ~1.2 MB of the ~1.5 MB artifact
+# (~360 KB of the ~490 KB gzipped) was debug data no browser reads. Measured:
+# the same module strips to ~270 KB raw / ~130 KB gzip with byte-identical
+# grading output (the Node output-contract harness runs against it).
 opt_wasm="$out_dir/.RunnerWasm.opt.wasm"
 if npx --yes wasm-opt --version >/dev/null 2>&1; then
-    echo "Optimizing with wasm-opt -Oz --converge --strip-producers…"
+    echo "Optimizing with wasm-opt -Oz --converge --strip-debug --strip-producers…"
     # --converge: re-run passes to fixpoint for a little extra size.
+    # --strip-debug: drop the DWARF sections and the name section (see above).
     # --strip-producers: drop the toolchain "producers" metadata section (the
     # exported grading functions the JS loader calls are unaffected).
-    npx --yes wasm-opt -Oz --converge --strip-producers "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
+    npx --yes wasm-opt -Oz --converge --strip-debug --strip-producers \
+        "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
 else
-    echo "WARNING: wasm-opt unavailable — vendoring the UNOPTIMIZED module."
+    echo "WARNING: wasm-opt unavailable — vendoring the UNOPTIMIZED, UNSTRIPPED module."
+    echo "         Expect a ~1.7 MB artifact (~620 KB gzip) that fails the size ceiling."
     cp "$pkg/RunnerWasm.wasm" "$opt_wasm"
 fi
 opt_size=$(wc -c < "$opt_wasm")

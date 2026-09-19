@@ -23,11 +23,16 @@ gzip_size=$(gzip -9 -c "$wasm" | wc -c | tr -d ' ')
 baseline=$(cat "$repo_root/runner-size-baseline.txt" 2>/dev/null | tr -dc '0-9' || echo 0)
 baseline=${baseline:-0}
 
-# gzip-byte thresholds. Current artifact is ~0.5 MB gzip (Embedded Swift runtime
-# + JavaScriptKit + JavaScriptEventLoop + the grading core). Budget warns on
-# creep; the ceiling only trips on a ~35% balloon over today's size.
-BUDGET=540672   # 528 KB gzip — warn above
-CEILING=688128  # 672 KB gzip — fail above
+# gzip-byte thresholds. Current artifact is ~130 KB gzip (Embedded Swift
+# runtime + JavaScriptKit + JavaScriptEventLoop + the grading core, DWARF
+# stripped). Budget warns on creep; the ceiling only trips on a ~35% balloon
+# over today's size. Before the build script stripped debug info the artifact
+# was ~490 KB gzip, so the old thresholds (528 KB / 672 KB) would let the
+# DWARF quietly come back — an artifact over the ceiling now is most likely an
+# unstripped one (wasm-opt missing when the vendor job ran; see
+# scripts/build-runner-wasm.sh), and only then a genuine balloon.
+BUDGET=147456   # 144 KB gzip — warn above
+CEILING=180224  # 176 KB gzip — fail above
 
 brotli_note=""
 if command -v brotli >/dev/null 2>&1; then
@@ -45,8 +50,10 @@ echo "  $(basename "$wasm"): gzip ${gzip_size} bytes${brotli_note}${delta_note}"
 echo "  budget ${BUDGET} (warn) / ceiling ${CEILING} (fail)"
 
 if [ "$gzip_size" -gt "$CEILING" ]; then
-    echo "  FAIL: runner wasm exceeds the hard ceiling — likely generic-specialization"
-    echo "        explosion or an accidental heavy dependency. Investigate before merging."
+    echo "  FAIL: runner wasm exceeds the hard ceiling — most likely an UNSTRIPPED module"
+    echo "        (DWARF kept because wasm-opt was unavailable at vendor time), else a"
+    echo "        generic-specialization explosion or an accidental heavy dependency."
+    echo "        Investigate before merging."
     exit 1
 elif [ "$gzip_size" -gt "$BUDGET" ]; then
     echo "  WARN: runner wasm over budget — review the size delta before merging."
