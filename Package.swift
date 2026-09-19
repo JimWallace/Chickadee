@@ -63,6 +63,11 @@ let package = Package(
             dependencies: [
                 .target(name: "RunnerCore"),
                 .product(name: "Crypto", package: "swift-crypto"),
+                // Every zip/unzip spawn runs here. Replaces Foundation's
+                // Process, whose concurrent-spawn races needed a process-wide
+                // lock and an EFAULT retry to contain.
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/Core",
             exclude: ["README.md"],

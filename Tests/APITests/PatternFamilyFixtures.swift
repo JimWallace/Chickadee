@@ -197,7 +197,7 @@ private func runPatternFamilyFixture(
     }
 }
 
-func pfWriteEmptyZip(at path: String) throws {
+func pfWriteEmptyZip(at path: String) async throws {
     let fm = FileManager.default
     let stagingDir = fm.temporaryDirectory
         .appendingPathComponent("empty-zip-staging-\(UUID().uuidString)")

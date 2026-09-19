@@ -58,7 +58,7 @@ import Testing
 
     // MARK: - The edit page's rows
 
-    @Test func currentSetupFilesMarksTheDatasetRowOnly() throws {
+    @Test func currentSetupFilesMarksTheDatasetRowOnly() async throws {
         try withSetup { setup in
             let rows = currentSetupFiles(
                 for: setup, assignmentID: "asg123", solutionFilename: nil
@@ -82,7 +82,7 @@ import Testing
 
     // MARK: - The create page's rows
 
-    @Test func draftRowsCarryTheMarkThroughTheURLRewrite() throws {
+    @Test func draftRowsCarryTheMarkThroughTheURLRewrite() async throws {
         try withSetup { setup in
             let base = editableSuiteRowsForSetup(setup)
             let baseDataset = try #require(base.first { $0.name == "cases.csv" })

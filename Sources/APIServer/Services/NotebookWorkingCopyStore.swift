@@ -210,7 +210,7 @@ func ensureUserNotebookWorkingCopy(
     let seedData: Data
     if let defaultData {
         seedData = defaultData
-    } else if viewMode == .template, let starter = try? notebookData(for: fallbackSetup) {
+    } else if viewMode == .template, let starter = try? await notebookData(for: fallbackSetup) {
         // A template copy is a view of the *assignment*, not of this viewer's
         // work, so it seeds from the stored starter.  Without this an author
         // who had also submitted would open their own submission and save it
@@ -432,8 +432,8 @@ func solutionNotebookData(
     db: Database,
     testSetupsDirectory: String
 ) async throws -> Data {
-    if let entryName = listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
-        let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
+    if let entryName = await listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
+        let data = await extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
         !data.isEmpty
     {
         return normalizeNotebookForJupyterLite(data)

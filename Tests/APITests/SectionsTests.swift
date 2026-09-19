@@ -91,7 +91,7 @@ import Testing
 
     // MARK: - buildSuitePayload
 
-    @Test func buildSuitePayloadEmitsSectionsAndStampsSectionIDs() throws {
+    @Test func buildSuitePayloadEmitsSectionsAndStampsSectionIDs() async throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let props = TestProperties(
@@ -121,7 +121,7 @@ import Testing
     // which made the suite-editor drag-and-drop round-trip fail with a
     // bogus "hand-written file already exists" collision.  After the fix
     // they emit as kind:"check" rows carrying the check spec + sectionID.
-    @Test func buildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() throws {
+    @Test func buildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() async throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let check = NotebookCheck(
@@ -160,7 +160,7 @@ import Testing
         #expect(payload.items[1].script == nil)
     }
 
-    @Test func buildSuitePayloadLegacyManifestReturnsEmptySections() throws {
+    @Test func buildSuitePayloadLegacyManifestReturnsEmptySections() async throws {
         let legacyJSON = """
             {
               "schemaVersion": 1,

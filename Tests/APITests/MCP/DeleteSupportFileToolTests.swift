@@ -40,7 +40,7 @@ import Vapor
         let zipPath = app.testSetupsDirectory + "setup_sup.zip"
         try pfWriteEmptyZip(at: zipPath)
         for (name, body) in support.sorted(by: { $0.key < $1.key }) {
-            try updateScriptInZip(zipPath: zipPath, filename: name, content: body)
+            try await updateScriptInZip(zipPath: zipPath, filename: name, content: body)
         }
         if let name = seedScript {
             try await applyPatternFamilies(
@@ -57,7 +57,7 @@ import Vapor
             on: app, testSetupID: "setup_sup", courseID: courseID, title: "Lab")
     }
 
-    private func entries(_ app: Application) -> [String] {
+    private func entries(_ app: Application) async -> [String] {
         listZipEntries(zipPath: app.testSetupsDirectory + "setup_sup.zip")
     }
 

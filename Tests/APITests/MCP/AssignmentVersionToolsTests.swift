@@ -60,7 +60,7 @@ import Vapor
         return (assignment, setup)
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("vt-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -231,7 +231,7 @@ import Vapor
             #expect(output.truncated == false)
             // The live zip still holds the broken script — reading is not
             // restoring.
-            let live = extractZipEntry(zipPath: setup.zipPath, entryName: "test_a.sh")
+            let live = await extractZipEntry(zipPath: setup.zipPath, entryName: "test_a.sh")
             #expect(String(bytes: live ?? Data(), encoding: .utf8)?.contains("broken") == true)
         }
     }

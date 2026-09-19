@@ -134,7 +134,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
                 titleAtVersion: nil)
         }
 
-        try Self.materialize(
+        try await Self.materialize(
             target: target, fileMap: fileMap, setup: setup, blobs: blobs,
             testSetupsDirectory: directory)
         try await setup.save(on: context.db)
@@ -143,7 +143,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // directory the runner and personalization read, and the generated
         // solution.py. Skipping this would leave the previous version's support
         // files on disk beside the restored suite.
-        Self.rederiveZipDerivedContent(setup: setup, testSetupsDirectory: directory)
+        await Self.rederiveZipDerivedContent(setup: setup, testSetupsDirectory: directory)
 
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -190,7 +190,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         setup: APITestSetup,
         blobs: AssignmentVersionBlobStore,
         testSetupsDirectory: String
-    ) throws {
+    ) async throws {
         let fileManager = FileManager.default
         let workDir = fileManager.temporaryDirectory
             .appendingPathComponent("chickadee-version-restore-\(UUID().uuidString)")
@@ -201,7 +201,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
             try blobs.materialize(hash, to: workDir.appendingPathComponent(path))
         }
         try? fileManager.removeItem(atPath: setup.zipPath)
-        try repackZipFromDirectory(zipPath: setup.zipPath, sourceDir: workDir)
+        try await repackZipFromDirectory(zipPath: setup.zipPath, sourceDir: workDir)
 
         if let notebookHash = target.notebookHash {
             let path =
@@ -220,17 +220,17 @@ struct RestoreAssignmentVersionTool: ContentTool {
     /// Re-runs the derivations that hang off the zip's contents. (Named to
     /// stay clear of `AssignmentLanguage.rederive`, which re-derives the
     /// assignment *language* — an unrelated operation.)
-    private static func rederiveZipDerivedContent(setup: APITestSetup, testSetupsDirectory: String) {
+    private static func rederiveZipDerivedContent(setup: APITestSetup, testSetupsDirectory: String) async {
         let setupID = setup.id ?? ""
         let props = setup.decodedManifest()
         let scripts = Set((props?.testSuites ?? []).map(\.script))
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: setupID,
             testSuiteScripts: scripts,
             testSetupsDirectory: testSetupsDirectory)
 
-        if let solution = extractZipEntry(zipPath: setup.zipPath, entryName: "solution.ipynb") {
+        if let solution = await extractZipEntry(zipPath: setup.zipPath, entryName: "solution.ipynb") {
             SolutionNotebookExtractor.writeSolutionPy(
                 notebookData: solution,
                 sharedDirectory: testSetupsDirectory + "shared/\(setupID)/",

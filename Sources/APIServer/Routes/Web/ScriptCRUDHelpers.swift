@@ -46,7 +46,7 @@ func createScriptInSetup(
     }
 
     // Reject duplicate filenames.
-    if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
+    if await listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
         throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
     }
 
@@ -62,9 +62,9 @@ func createScriptInSetup(
     }()
     // Refuse a browser-graded Python script whose imports the grading kernel
     // cannot satisfy — checked on the INLINED text, since that is what runs.
-    try KernelImportGuard.check(
+    try await KernelImportGuard.check(
         filename: cleaned, content: inlined, setup: setup, environments: kernelEnvironments)
-    try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlined)
+    try await updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlined)
 
     let tier = normalizeTier(body.tier, isTest: body.isTest)
     // v0.4.105: allow 0-mark tests (e.g. function-existence guards that only
@@ -89,7 +89,7 @@ func createScriptInSetup(
 /// prerequisite of another script, then removes it from the setup zip and drops
 /// its manifest entry.
 func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Database) async throws {
-    guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
+    guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
         throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
     }
 
@@ -109,7 +109,7 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
     }
 
     do {
-        try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
+        try await removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
     } catch ScriptZipError.zipFailed {
         throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
     }

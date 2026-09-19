@@ -133,7 +133,7 @@ final class AssignmentHelpersUtilityTests {
         #expect(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: false) == false)
     }
 
-    @Test func currentSetupFilesUsesManifestOrderingAndSolutionFallbacks() throws {
+    @Test func currentSetupFilesUsesManifestOrderingAndSolutionFallbacks() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("current-setup-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -203,7 +203,7 @@ final class AssignmentHelpersUtilityTests {
         #expect(inferredOrder(from: "notes.txt") == nil)
     }
 
-    @Test func createRunnerSetupZipAllowsConfigsWithoutSelectedTests() throws {
+    @Test func createRunnerSetupZipAllowsConfigsWithoutSelectedTests() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-empty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -234,7 +234,7 @@ final class AssignmentHelpersUtilityTests {
         #expect(FileManager.default.fileExists(atPath: zipPath))
     }
 
-    @Test func createRunnerSetupZipReplacesExistingArchiveInsteadOfMergingRemovedFiles() throws {
+    @Test func createRunnerSetupZipReplacesExistingArchiveInsteadOfMergingRemovedFiles() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-replace-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -277,7 +277,7 @@ final class AssignmentHelpersUtilityTests {
 
     // MARK: - mergeExistingFilesIntoSuiteFiles
 
-    @Test func mergeExistingFilesAddsNamedDraftFilesAndRewritesRowsWithIndices() throws {
+    @Test func mergeExistingFilesAddsNamedDraftFilesAndRewritesRowsWithIndices() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("merge-existing-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -323,7 +323,7 @@ final class AssignmentHelpersUtilityTests {
         }
     }
 
-    @Test func mergeExistingFilesPassesThroughPureUploadConfig() throws {
+    @Test func mergeExistingFilesPassesThroughPureUploadConfig() async throws {
         // When no 'existing' rows are present the file list and row count should be unchanged.
         let configJSON = """
             [{"source":"upload","index":0,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1}]
@@ -345,7 +345,7 @@ final class AssignmentHelpersUtilityTests {
         #expect(rows[0]["name"] == nil)
     }
 
-    @Test func detectFunctionsRoundTripIncludesBothExistingAndGeneratedTests() throws {
+    @Test func detectFunctionsRoundTripIncludesBothExistingAndGeneratedTests() async throws {
         // Full integration of the detect-functions save path: an assignment draft has an existing
         // test file; the instructor generates an additional test via "Detect Functions"; on save the
         // manifest must include BOTH the existing test and the newly generated one.

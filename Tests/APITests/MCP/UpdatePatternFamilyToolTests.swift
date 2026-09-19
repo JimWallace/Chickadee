@@ -50,7 +50,7 @@ import Vapor
         -> PatternFamily
     {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
-        let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+        let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
         return try #require(items.compactMap(\.family).first { $0.id == "bmi_category" })
     }
 
@@ -627,7 +627,7 @@ import Vapor
             let assignment = try await fixture(on: app, family: io)
             func reload() async throws -> PatternFamily {
                 let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-                let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+                let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
                 return try #require(items.compactMap(\.family).first { $0.id == "io" })
             }
 

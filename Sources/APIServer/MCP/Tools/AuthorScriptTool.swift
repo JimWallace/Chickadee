@@ -264,7 +264,7 @@ struct AuthorScriptTool: ContentTool {
 
         let manifest = setup.decodedManifest()
         let existingTestEntry = manifest?.testSuites.first { $0.script == cleaned }
-        let existedInZip = listZipEntries(zipPath: setup.zipPath).contains(cleaned)
+        let existedInZip = await listZipEntries(zipPath: setup.zipPath).contains(cleaned)
 
         // Resolve the effective kind/tier: explicit input wins; otherwise keep
         // an existing test's tier, treat an existing non-suite file as support,
@@ -306,7 +306,7 @@ struct AuthorScriptTool: ContentTool {
                     detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
                         + "Switch it with set_grading_mode(\"worker\") first.")
             }
-            try authorSupportFile(
+            try await authorSupportFile(
                 filename: cleaned, content: content, setup: setup, assignment: assignment, context: context)
             if let graderOnly = input.graderOnly {
                 try await setManifestGraderOnly(
@@ -389,7 +389,7 @@ struct AuthorScriptTool: ContentTool {
         // Load the full authored suite (script bodies preserved from the zip)
         // so applySuiteEdit rewrites the whole list without dropping the other
         // scripts — exactly the channel UpdateSuiteTool uses.
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let normalizedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         let displayName = input.displayName.flatMap { $0.isEmpty ? nil : $0 }
         let points = max(0, input.points ?? 1)
@@ -447,7 +447,7 @@ struct AuthorScriptTool: ContentTool {
     private func authorSupportFile(
         filename: String, content: String, setup: APITestSetup,
         assignment: APIAssignment, context: ToolContext
-    ) throws {
+    ) async throws {
         // Inline global + section variables into a `.py` helper (no-op for
         // other extensions or an undecodable manifest), matching the web
         // POST /scripts support path.
@@ -457,12 +457,12 @@ struct AuthorScriptTool: ContentTool {
                 filename: filename, content: content, manifest: manifest)
         }()
 
-        try KernelImportGuard.check(
+        try await KernelImportGuard.check(
             filename: filename, content: toWrite, setup: setup,
             environments: context.request.application.kernelEnvironments)
 
         do {
-            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: toWrite)
+            try await updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: toWrite)
         } catch {
             throw MCPToolError.executionFailed(
                 tool: Self.name, detail: "Failed to write \"\(filename)\" into the setup zip.")
@@ -474,7 +474,7 @@ struct AuthorScriptTool: ContentTool {
             guard let props = setup.decodedManifest() else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: assignment.testSetupID,
             testSuiteScripts: testSuiteScripts,

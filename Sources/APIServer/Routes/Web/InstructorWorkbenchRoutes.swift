@@ -72,7 +72,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         // template and its rendering are actually different documents. When
         // they are not, offering a view switch would just be two tabs onto
         // identical bytes, so the control is omitted per file.
-        let assignmentHasTemplate = hasPlaceholders(try? notebookData(for: setup))
+        let assignmentHasTemplate = await hasPlaceholders(try? notebookData(for: setup))
         // Not folded into an `&&`: the right-hand side of `&&` is a
         // non-async autoclosure, so the await has to stand on its own.
         var solutionHasTemplate = false

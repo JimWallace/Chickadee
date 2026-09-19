@@ -303,7 +303,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let existingIndex = payload.items.firstIndex { $0.kind == "check" && $0.check?.id == checkID }
 
         // A provided section must exist; on replace, omitting it keeps the row's

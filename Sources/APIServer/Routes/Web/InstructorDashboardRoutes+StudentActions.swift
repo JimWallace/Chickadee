@@ -181,7 +181,7 @@ extension InstructorDashboardRoutes {
 
         let starter: Data
         do {
-            starter = try notebookData(for: setup)
+            starter = try await notebookData(for: setup)
         } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "setup",

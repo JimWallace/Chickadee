@@ -24,7 +24,7 @@ import VaporTesting
     }
 
     /// Builds a zip on disk with the given entries (name → content bytes).
-    private func makeZip(named: String, entries: [(String, Data)]) throws -> String {
+    private func makeZip(named: String, entries: [(String, Data)]) async throws -> String {
         let workDir = tmpDir.appendingPathComponent("work-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
         for (name, data) in entries {
@@ -50,7 +50,7 @@ import VaporTesting
                 ("readme.txt", Data("hello world".utf8)),
                 ("nested/a.py", Data("print('a')".utf8)),
             ])
-        try validateZipUploadSize(zipPath: zipPath)
+        try await validateZipUploadSize(zipPath: zipPath)
 
     }
 

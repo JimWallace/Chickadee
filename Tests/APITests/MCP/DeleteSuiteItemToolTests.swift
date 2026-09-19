@@ -57,7 +57,7 @@ import Vapor
 
     private func reloadItems(_ assignment: APIAssignment, on db: Database) async throws -> [SuiteItemDTO] {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).items
+        return await buildSuitePayload(fromManifest: reloaded.manifest).items
     }
 
     @Test func deletesAHandWrittenScript() async throws {

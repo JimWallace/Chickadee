@@ -37,7 +37,7 @@ import Vapor
         _ assignment: APIAssignment, id: String, on db: Database
     ) async throws -> NotebookCheck {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
-        let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+        let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
         return try #require(items.compactMap(\.check).first { $0.id == id })
     }
 
@@ -89,7 +89,7 @@ import Vapor
 
             // Replace, not append: still exactly one check row.
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            #expect(buildSuitePayload(fromManifest: setup.manifest).items.compactMap(\.check).count == 1)
+            await #expect(buildSuitePayload(fromManifest: setup.manifest).items.compactMap(\.check).count == 1)
         }
     }
 

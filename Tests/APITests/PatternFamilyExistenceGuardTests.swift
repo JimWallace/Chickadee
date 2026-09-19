@@ -159,7 +159,7 @@ import Vapor
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
 
-            let payload = buildSuitePayload(fromManifest: result.manifestAfter)
+            let payload = await buildSuitePayload(fromManifest: result.manifestAfter)
             #expect(payload.items.count == 1, "guard collapses into the family row — no extra item")
             let family = try #require(payload.items.first)
             #expect(family.kind == "family")

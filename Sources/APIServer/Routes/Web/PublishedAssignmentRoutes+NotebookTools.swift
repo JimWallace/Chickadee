@@ -182,7 +182,7 @@ extension PublishedAssignmentRoutes {
             AssignmentLanguage.resolve(for: setup, manifest: $0)
         }
         guard
-            let sourceData = (try? notebookData(for: setup))
+            let sourceData = await (try? notebookData(for: setup))
                 ?? defaultNotebookData(title: "\(assignment.title) Solution", language: language)
         else {
             throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage)

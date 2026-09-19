@@ -43,7 +43,7 @@ import Vapor
             #expect(!generatedBefore.isEmpty)
 
             // Now the author adds a hand-written R helper beside it.
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "helper_test.R",
                 content: "cat(\"ok\\n\")\n"
@@ -92,7 +92,7 @@ import Vapor
     /// name. Both directions are inert now, for the same reason.
     @Test func aPythonHelperDoesNotMigrateAnRAssignment() async throws {
         try await withPatternFamilyFixture(declaredLanguage: .r) { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath, filename: "helper_test.py",
                 content: "print('ok')\n")
             let authored: [AuthoredSuiteItem] = [
@@ -114,7 +114,7 @@ import Vapor
     /// redundant".
     @Test func generatedScriptsFollowTheDeclarationNotTheSuite() async throws {
         try await withPatternFamilyFixture(declaredLanguage: .python) { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath, filename: "helper_test.lua",
                 content: "print('ok')\n")
             let authored: [AuthoredSuiteItem] = [

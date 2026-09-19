@@ -128,7 +128,7 @@ final class ZipArchiverTests {
         try await createZipArchive(sourceDir: srcDir, outputPath: zipPath)
         #expect(FileManager.default.fileExists(atPath: zipPath))
 
-        let entries = try listZipContents(zipPath: zipPath)
+        let entries = try await listZipContents(zipPath: zipPath)
         #expect(entries.count >= fileCount, "every file should be archived")
     }
 
@@ -216,7 +216,7 @@ final class ZipArchiverTests {
         let zipPath = tmpDir.appendingPathComponent("list.zip").path
         try await createZipArchive(sourceDir: srcDir, outputPath: zipPath)
 
-        let entries = try listZipContents(zipPath: zipPath)
+        let entries = try await listZipContents(zipPath: zipPath)
         #expect(entries.contains { $0.hasSuffix("alpha.txt") })
         #expect(entries.contains { $0.hasSuffix("beta.txt") })
     }
@@ -251,7 +251,7 @@ final class ZipArchiverTests {
 
     // MARK: - updateScriptInZip
 
-    @Test func updateScriptInZipReplacesExistingFile() throws {
+    @Test func updateScriptInZipReplacesExistingFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
         else { return }
@@ -269,7 +269,7 @@ final class ZipArchiverTests {
         #expect(readScriptFromZip(zipPath: zipPath, filename: "test_bar.py") == "# new\n")
     }
 
-    @Test func updateScriptInZipAddsNewFile() throws {
+    @Test func updateScriptInZipAddsNewFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
         else { return }
@@ -288,7 +288,7 @@ final class ZipArchiverTests {
         #expect(readScriptFromZip(zipPath: zipPath, filename: "new_file.py") == "# added\n")
     }
 
-    @Test func updateScriptInZipPreservesOtherFiles() throws {
+    @Test func updateScriptInZipPreservesOtherFiles() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
         else { return }
@@ -312,7 +312,7 @@ final class ZipArchiverTests {
 
     // MARK: - removeScriptFromZip
 
-    @Test func removeScriptFromZipRemovesFile() throws {
+    @Test func removeScriptFromZipRemovesFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
         else { return }

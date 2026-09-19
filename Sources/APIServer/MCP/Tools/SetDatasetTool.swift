@@ -175,7 +175,7 @@ struct SetDatasetTool: ContentTool {
             // The file must be a bundled *support* file: a dataset marks
             // existing data as per-student, it never introduces a file, and a
             // graded script or canonical notebook can't be one.
-            let zipEntries = Set(
+            let zipEntries = await Set(
                 listZipEntries(zipPath: setup.zipPath).map { entry in
                     entry.hasPrefix("./") ? String(entry.dropFirst(2)) : entry
                 })
@@ -200,7 +200,7 @@ struct SetDatasetTool: ContentTool {
             // categories than the sample has rows. The materializer degrades
             // quietly on both at delivery time, so this is where an agent finds
             // out — with the file's real column names in the message.
-            if let issue = DatasetSpecValidation.issue(
+            if let issue = await DatasetSpecValidation.issue(
                 with: written,
                 sourceCSV: extractZipEntry(zipPath: setup.zipPath, entryName: cleaned)
                     .flatMap { String(data: $0, encoding: .utf8) })

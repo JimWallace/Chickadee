@@ -126,7 +126,7 @@ struct GetSupportFilesTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name)
 
         let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
-        let supportNames = listZipEntries(zipPath: setup.zipPath).filter {
+        let supportNames = await listZipEntries(zipPath: setup.zipPath).filter {
             !suiteScripts.contains($0) && !Self.reservedNames.contains($0)
         }
 
@@ -134,14 +134,18 @@ struct GetSupportFilesTool: ContentTool {
             // The same lookup the authoring pages' Files panel reads, so this
             // listing and that control cannot disagree about a file's mark.
             let datasetSpecs = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
-            let entries = supportNames.sorted().map { name in
-                FileEntry(
-                    filename: name,
-                    sizeBytes: extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0,
-                    datasetSampleSize: datasetSpecs[name]?.sampleSize,
-                    isDataset: datasetSpecs[name] != nil,
-                    datasetKind: datasetSpecs[name]?.kind.rawValue,
-                    datasetStratumColumn: datasetSpecs[name]?.stratumColumn)
+            var entries: [FileEntry] = []
+            for name in supportNames.sorted() {
+                let sizeBytes =
+                    await extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0
+                entries.append(
+                    FileEntry(
+                        filename: name,
+                        sizeBytes: sizeBytes,
+                        datasetSampleSize: datasetSpecs[name]?.sampleSize,
+                        isDataset: datasetSpecs[name] != nil,
+                        datasetKind: datasetSpecs[name]?.kind.rawValue,
+                        datasetStratumColumn: datasetSpecs[name]?.stratumColumn))
             }
             return Output(
                 assignmentPublicID: assignment.publicID,
@@ -168,7 +172,7 @@ struct GetSupportFilesTool: ContentTool {
                 detail: "No support file named \"\(filename)\" in this assignment's setup "
                     + "(call without filename to list them).")
         }
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
+        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
             throw MCPToolError.executionFailed(
                 tool: Self.name, detail: "Failed to extract \"\(filename)\" from the setup zip.")
         }

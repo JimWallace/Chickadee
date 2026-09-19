@@ -74,15 +74,20 @@ private let datasetDivergenceByteCeiling = 4 << 20
 /// event loop.
 func datasetDiagnosticsReports(
     zipPath: String, datasets: [DatasetSpec]
-) -> [DatasetFileDiagnostics] {
-    datasets.compactMap { spec in
-        guard let data = extractZipEntry(zipPath: zipPath, entryName: spec.file),
+) async -> [DatasetFileDiagnostics] {
+    var reports: [DatasetFileDiagnostics] = []
+    for spec in datasets {
+        guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file),
             let text = String(data: data, encoding: .utf8)
-        else { return nil }
-        return datasetEstimateSummary(
-            for: spec, sourceCSV: text,
-            divergenceMeasurable: data.count <= datasetDivergenceByteCeiling)
+        else { continue }
+        guard
+            let summary = datasetEstimateSummary(
+                for: spec, sourceCSV: text,
+                divergenceMeasurable: data.count <= datasetDivergenceByteCeiling)
+        else { continue }
+        reports.append(summary)
     }
+    return reports
 }
 
 /// Builds one file's two chips from its spec and source text, or nil when
@@ -192,9 +197,7 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
     let specs = datasetSpecs(inManifest: setup.manifest)
     guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
     let zipPath = setup.zipPath
-    let diagnostics = try await runBlocking(on: req) {
-        datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
-    }
+    let diagnostics = await datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
 
@@ -234,7 +237,7 @@ func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: Database
 ) async throws {
-    let zipEntries = Set(
+    let zipEntries = await Set(
         listZipEntries(zipPath: setup.zipPath).map { entry in
             entry.hasPrefix("./") ? String(entry.dropFirst(2)) : entry
         })
@@ -263,7 +266,7 @@ func applyDatasetsEdit(
         // transform naming a column the file does not have is absorbed silently
         // at delivery, so this is the only place it can be reported.
         if spec.kind == .stratifiedSample || spec.stratumColumn != nil || !spec.transforms.isEmpty {
-            let text = extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)
+            let text = await extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)
                 .flatMap { String(data: $0, encoding: .utf8) }
             if let issue = DatasetSpecValidation.issue(with: spec, sourceCSV: text) {
                 throw Abort(.badRequest, reason: issue)

@@ -231,7 +231,7 @@ enum AssignmentAuthoringService {
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let zipPath = setupsDirectory + "\(setupID).zip"
         do {
-            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+            _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         } catch {
             throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
         }

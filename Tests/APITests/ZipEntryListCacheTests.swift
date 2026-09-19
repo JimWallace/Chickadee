@@ -18,7 +18,7 @@ import Testing
     }
 
     /// Builds (or rebuilds) `name`.zip from the given entries and returns its path.
-    private func writeZip(name: String, entries: [String: String]) throws -> String {
+    private func writeZip(name: String, entries: [String: String]) async throws -> String {
         let sourceDir = tempDir.appendingPathComponent("\(name)-src-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         for (entryName, content) in entries {

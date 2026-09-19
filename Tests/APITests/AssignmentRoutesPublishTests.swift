@@ -222,7 +222,7 @@ import VaporTesting
             )
             #expect(props.testSuites.map(\.script) == ["test_q1.py", "test_q2.py"])
 
-            let zipEntries = Set(listZipEntries(zipPath: try #require(setup?.zipPath)))
+            let zipEntries = await Set(listZipEntries(zipPath: try #require(setup?.zipPath)))
             #expect(zipEntries.contains("test_q1.py"))
             #expect(zipEntries.contains("test_q2.py"))
             #expect(zipEntries.contains("test.properties.json"))
@@ -469,7 +469,7 @@ import VaporTesting
 
             let setupID = "setup_draft_finalize"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+            _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
             let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
@@ -558,7 +558,7 @@ import VaporTesting
 
             let setupID = "setup_generated_suite_finalize"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+            _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
             let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
@@ -630,7 +630,7 @@ import VaporTesting
             )
             #expect(props.testSuites.map(\.script) == ["test_alpha.py", "test_beta.py"])
 
-            let zipEntries = Set(listZipEntries(zipPath: try #require(savedSetup?.zipPath)))
+            let zipEntries = await Set(listZipEntries(zipPath: try #require(savedSetup?.zipPath)))
             #expect(zipEntries.contains("test_alpha.py"), "test_alpha.py missing from zip; entries: \(zipEntries)")
             #expect(zipEntries.contains("test_beta.py"), "test_beta.py missing from zip; entries: \(zipEntries)")
 
@@ -662,7 +662,7 @@ import VaporTesting
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
             var suiteBuffer = ByteBufferAllocator().buffer(capacity: 16)
             suiteBuffer.writeString("print('ok')\n")
-            _ = try createRunnerSetupZip(
+            _ = try await createRunnerSetupZip(
                 suiteFiles: [File(data: suiteBuffer, filename: "test_public.py")],
                 suiteConfigJSON: nil,
                 zipPath: zipPath
@@ -834,7 +834,7 @@ import VaporTesting
                 "test_bmi.py must be the only test suite entry in manifest")
 
             // Both files must be present in the zip (support files are stored even if not in manifest).
-            let zipEntries = Set(listZipEntries(zipPath: try #require(setup?.zipPath)))
+            let zipEntries = await Set(listZipEntries(zipPath: try #require(setup?.zipPath)))
             #expect(zipEntries.contains("test_bmi.py"), "test_bmi.py missing from zip; entries: \(zipEntries)")
             #expect(zipEntries.contains("helpers.py"), "helpers.py missing from zip; entries: \(zipEntries)")
 

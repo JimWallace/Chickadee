@@ -54,7 +54,7 @@ struct GetNotebookTool: ContentTool {
 
         let data: Data
         do {
-            data = try notebookData(for: setup)
+            data = try await notebookData(for: setup)
         } catch {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "This assignment has no notebook to return.")

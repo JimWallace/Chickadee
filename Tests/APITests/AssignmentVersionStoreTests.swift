@@ -82,7 +82,7 @@ import VaporTesting
     /// depending on how fast the machine is.
     private func writeZip(
         at zipPath: String, entries: [(String, String)], modified: Date? = nil
-    ) throws {
+    ) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("av-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

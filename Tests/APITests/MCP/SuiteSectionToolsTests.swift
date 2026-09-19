@@ -42,7 +42,7 @@ import Vapor
             on: app, testSetupID: "setup_ss", courseID: courseID, title: "Lab")
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ss-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -63,12 +63,12 @@ import Vapor
         -> [TestSuiteSectionDTO]
     {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).sections
+        return await buildSuitePayload(fromManifest: reloaded.manifest).sections
     }
 
     private func items(of assignment: APIAssignment, on app: Application) async throws -> [SuiteItemDTO] {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-        return buildSuitePayload(fromManifest: reloaded.manifest).items
+        return await buildSuitePayload(fromManifest: reloaded.manifest).items
     }
 
     // MARK: - create / rename / delete

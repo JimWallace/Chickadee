@@ -42,7 +42,7 @@ import Vapor
             on: app, testSetupID: "setup_us", courseID: courseID, title: "Lab")
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("us-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -74,7 +74,7 @@ import Vapor
 
             // Reload the persisted manifest and confirm the edit stuck.
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let a = try #require(items.first { $0.script?.script == "test_a.sh" })
             #expect(a.script?.tier == .secret)
             #expect(a.script?.points == 5)
@@ -100,7 +100,7 @@ import Vapor
                     ]),
                 context(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let b = try #require(items.first { $0.script?.script == "test_b.sh" })
             #expect(b.script?.dependsOn == ["test_a.sh"])
         }
@@ -116,7 +116,7 @@ import Vapor
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 30)]),
                 context(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let a = try #require(items.first { $0.script?.script == "test_a.sh" })
             #expect(a.script?.timeLimitSeconds == 30)
             // The untouched script keeps no override (inherits the default).
@@ -141,7 +141,7 @@ import Vapor
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 0)]),
                 context(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let a = try #require(items.first { $0.script?.script == "test_a.sh" })
             #expect(a.script?.timeLimitSeconds == nil)
         }
@@ -283,7 +283,7 @@ import Vapor
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "verdictOnly")]),
                 context(app))
             var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            var items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            var items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == "verdictOnly")
             #expect(items.first { $0.script?.script == "test_b.sh" }?.script?.failureDetail == nil)
 
@@ -293,7 +293,7 @@ import Vapor
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "")]),
                 context(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == nil)
         }
     }

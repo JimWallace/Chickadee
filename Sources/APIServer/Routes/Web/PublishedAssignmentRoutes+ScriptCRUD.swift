@@ -27,7 +27,7 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let filename = try safeScriptFilename(from: req)
 
-        guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
+        guard let content = await readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
             throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
         var headers = HTTPHeaders()
@@ -49,7 +49,7 @@ extension PublishedAssignmentRoutes {
         let body = try req.content.decode(UpdateBody.self)
 
         // Verify the file exists before writing.
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
+        guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
             throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
@@ -75,12 +75,12 @@ extension PublishedAssignmentRoutes {
             )
         }()
 
-        try KernelImportGuard.check(
+        try await KernelImportGuard.check(
             filename: filename, content: inlinedContent, setup: setup,
             environments: req.application.kernelEnvironments)
 
         do {
-            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
+            try await updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
         } catch ScriptZipError.zipFailed {
             throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
@@ -114,7 +114,7 @@ extension PublishedAssignmentRoutes {
                 guard let props = setup.decodedManifest() else { return [] }
                 return Set(props.testSuites.map(\.script))
             }()
-            extractSupportFilesToSharedDirectory(
+            await extractSupportFilesToSharedDirectory(
                 zipPath: setup.zipPath,
                 setupID: assignment.testSetupID,
                 testSuiteScripts: activeTestSuiteScripts,
@@ -161,7 +161,7 @@ extension PublishedAssignmentRoutes {
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: assignment.testSetupID,
             testSuiteScripts: activeTestSuiteScripts,

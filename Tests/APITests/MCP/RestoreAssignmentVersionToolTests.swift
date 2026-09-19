@@ -63,7 +63,7 @@ import Vapor
         return (assignment, setup)
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("vr-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -86,7 +86,7 @@ import Vapor
             on: app.db)
     }
 
-    private func entry(_ setup: APITestSetup, _ name: String) -> String {
+    private func entry(_ setup: APITestSetup, _ name: String) async -> String {
         String(
             bytes: extractZipEntry(zipPath: setup.zipPath, entryName: name) ?? Data(),
             encoding: .utf8) ?? ""
@@ -173,7 +173,7 @@ import Vapor
             _ = try await restore(app, assignment, version: 1)
 
             let live = try #require(try await APITestSetup.find(setup.id ?? "", on: app.db))
-            let names = listZipEntries(zipPath: live.zipPath)
+            let names = await listZipEntries(zipPath: live.zipPath)
             #expect(!names.contains("test_extra.sh"))
             #expect(names.contains("test_a.sh"))
         }

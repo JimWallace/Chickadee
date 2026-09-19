@@ -20,8 +20,8 @@ extension PublishedAssignmentRoutes {
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
-        let data = try notebookData(for: setup)
-        let downloadName = currentSetupFiles(
+        let data = try await notebookData(for: setup)
+        let downloadName = await currentSetupFiles(
             for: setup,
             assignmentID: assignment.publicID,
             solutionFilename: nil
@@ -44,7 +44,7 @@ extension PublishedAssignmentRoutes {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
+        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
             throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)
@@ -78,7 +78,7 @@ func solutionFileDownloadResponse(
     let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
         .first(where: { $0.hasPrefix("solution.") })
     if let entryName = solutionZipEntry,
-        let data = try await runBlocking(on: req, { extractZipEntry(zipPath: zipPath, entryName: entryName) })
+        let data = await extractZipEntry(zipPath: zipPath, entryName: entryName)
     {
         return buildFileResponse(data: data, filename: entryName)
     }

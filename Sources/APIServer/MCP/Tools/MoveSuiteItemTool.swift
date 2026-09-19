@@ -108,7 +108,7 @@ struct MoveSuiteItemTool: ContentTool {
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
-        var payload = buildSuitePayload(fromManifest: resolved.setup.manifest, zipPath: resolved.setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: resolved.setup.manifest, zipPath: resolved.setup.zipPath)
 
         // Resolve which single item is targeted.
         let target = try Self.resolveTarget(input: input, items: payload.items)

@@ -29,7 +29,7 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func getSuite(req: Request) async throws -> Response {
         let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
-        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -70,7 +70,7 @@ extension PublishedAssignmentRoutes {
         // Debounced: a no-op when a pending validation already exists.
         await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
 
-        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -113,7 +113,7 @@ extension PublishedAssignmentRoutes {
 /// Reads a persisted manifest and builds the author-facing view of the
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
-func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) -> SuitePayload {
+func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) async -> SuitePayload {
     guard let props = decodeManifest(fromJSON: manifest)
 
     else {
@@ -147,7 +147,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
     }
 
     // Collapse expanded family-filename subsets back into family: tokens.
-    func collapseDeps(_ deps: [String]) -> [String] {
+    func collapseDeps(_ deps: [String]) async -> [String] {
         var remaining = deps
         var collapsed: [String] = []
         for (fid, filenames) in familyFilenames {
@@ -196,7 +196,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
                     sectionID: entry.sectionID
                 ))
         } else {
-            items.append(
+            await items.append(
                 SuiteItemDTO(
                     kind: "script",
                     script: ScriptDTO(
@@ -225,7 +225,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
     if let zipPath {
         for i in items.indices where items[i].kind == "script" {
             if let name = items[i].script?.script,
-                let body = readScriptFromZip(zipPath: zipPath, filename: name)
+                let body = await readScriptFromZip(zipPath: zipPath, filename: name)
             {
                 items[i].script?.content = body
             }
@@ -241,8 +241,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
 /// Convenience: full `GET /suite` payload as sorted-keys JSON string.
 /// Pass `zipPath` to embed raw-script bodies in the seed (the editor reads
 /// them directly instead of a per-file fetch).
-func suiteStateJSON(fromManifest manifest: String, zipPath: String? = nil) -> String {
-    let payload = buildSuitePayload(fromManifest: manifest, zipPath: zipPath)
+func suiteStateJSON(fromManifest manifest: String, zipPath: String? = nil) async -> String {
+    let payload = await buildSuitePayload(fromManifest: manifest, zipPath: zipPath)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     guard let data = try? encoder.encode(payload),

@@ -88,7 +88,7 @@ enum GlobalInputsService {
         // 2. Cross-list: no clash with any section variable name.
         try validateAgainstSections(seenNames: seenNames, manifest: manifest)
         // 3. Starter-notebook `{{undeclared}}` scan.
-        try validateStarterNotebookPlaceholders(seenNames: seenNames, manifest: manifest, setup: setup)
+        try await validateStarterNotebookPlaceholders(seenNames: seenNames, manifest: manifest, setup: setup)
         // 4. Save-time eval check against the acting user's own seed. The seed
         // lookup/insert runs on `pools.seed` (the owner pool on the MCP path),
         // not the content pool, so it never needs a grant on the `.mcp` role.
@@ -185,13 +185,13 @@ enum GlobalInputsService {
         seenNames: Set<String>,
         manifest: TestProperties,
         setup: APITestSetup
-    ) throws {
+    ) async throws {
         var declared: Set<String> = seenNames
         for section in manifest.sections {
             for sv in section.variables { declared.insert(sv.name) }
         }
         guard let starterName = manifest.starterNotebook,
-            let notebookData = extractZipEntry(zipPath: setup.zipPath, entryName: starterName)
+            let notebookData = await extractZipEntry(zipPath: setup.zipPath, entryName: starterName)
         else { return }
         let used = NotebookSubstitution.placeholderNames(in: notebookData)
         let unknown = used.filter { !declared.contains($0) }

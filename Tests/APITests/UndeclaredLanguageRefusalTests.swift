@@ -59,7 +59,7 @@ import Vapor
     /// declaration exactly as the author left it.
     @Test func aScriptOnlySaveIsAllowedAndLeavesTheDeclarationAlone() async throws {
         try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath,
                 filename: "publictest_handmade.sh",
                 content: "#!/bin/sh\nexit 0\n"

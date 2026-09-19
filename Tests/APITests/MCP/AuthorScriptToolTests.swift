@@ -50,7 +50,7 @@ import Vapor
             on: app, testSetupID: "setup_as", courseID: courseID, title: "Lab")
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("as-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -96,7 +96,7 @@ import Vapor
             #expect(output.tier == "secret")
 
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             let row = try #require(items.first { $0.script?.script == "secrettest_marker.py" })
             #expect(row.script?.tier == .secret)
             #expect(row.script?.points == 3)
@@ -119,7 +119,7 @@ import Vapor
                     tier: "secret", timeLimitSeconds: 45),
                 context(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             let row = try #require(items.first { $0.script?.script == "secrettest_slow.py" })
             #expect(row.script?.timeLimitSeconds == 45)
         }
@@ -156,7 +156,7 @@ import Vapor
             #expect(output.tier == "secret")
 
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            let items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             let row = try #require(items.first { $0.script?.script == "t.py" })
             #expect(row.script?.tier == .secret)
             let body = try #require(readScriptFromZip(zipPath: reloaded.zipPath, filename: "t.py"))
@@ -177,7 +177,7 @@ import Vapor
 
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             // The file is in the zip but NOT a suite entry.
-            #expect(listZipEntries(zipPath: reloaded.zipPath).contains("helpers.py"))
+            await #expect(listZipEntries(zipPath: reloaded.zipPath).contains("helpers.py"))
             let props = try #require(reloaded.decodedManifest())
             #expect(!props.testSuites.contains { $0.script == "helpers.py" })
         }
@@ -249,7 +249,7 @@ import Vapor
                     tier: "public", failureDetail: "actualOnly"),
                 context(app))
             var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            var items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            var items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
 
             // Replacing the body without mentioning the field leaves it alone.
@@ -259,7 +259,7 @@ import Vapor
                     content: "#!/usr/bin/env python3\nprint('still ok')\n"),
                 context(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
 
             // "full" reverts to the default, stored as absence.
@@ -269,7 +269,7 @@ import Vapor
                     content: "#!/usr/bin/env python3\nprint('ok')\n", failureDetail: "full"),
                 context(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == nil)
         }
     }

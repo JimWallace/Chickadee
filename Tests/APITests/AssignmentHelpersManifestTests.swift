@@ -375,7 +375,7 @@ final class AssignmentHelpersManifestTests {
         #expect(addedRProps.languageDeclared == true)
     }
 
-    @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
+    @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() async throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
             .path
@@ -481,7 +481,7 @@ final class AssignmentHelpersManifestTests {
 
     // PR4: `GET /suite` (buildSuitePayload) reads a raw script's hint back off
     // the manifest so the editor round-trips it.
-    @Test func buildSuitePayloadPopulatesScriptHintFromManifest() throws {
+    @Test func buildSuitePayloadPopulatesScriptHintFromManifest() async throws {
         let manifest = """
             {
               "schemaVersion": 1,
@@ -605,7 +605,7 @@ final class AssignmentHelpersManifestTests {
         #expect(entries.first?.points == 2)
     }
 
-    @Test func createRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() throws {
+    @Test func createRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -641,7 +641,7 @@ final class AssignmentHelpersManifestTests {
         #expect(zipEntries.contains("Makefile"))
     }
 
-    @Test func extractSupportFilesToSharedDirectoryRefreshesAndFiltersReservedEntries() throws {
+    @Test func extractSupportFilesToSharedDirectoryRefreshesAndFiltersReservedEntries() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("support-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -679,7 +679,7 @@ final class AssignmentHelpersManifestTests {
         #expect(extracted.contains("stale.txt") == false)
     }
 
-    @Test func extractSupportFiles_preservesServerSideSolutionPyAcrossRebuild() throws {
+    @Test func extractSupportFiles_preservesServerSideSolutionPyAcrossRebuild() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("preserve-solpy-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -718,7 +718,7 @@ final class AssignmentHelpersManifestTests {
         #expect(FileManager.default.fileExists(atPath: sharedDir + "tests.py") == false)
     }
 
-    @Test func applyScriptChanges_filtersGraderOnlyEntryFromZipCopy() throws {
+    @Test func applyScriptChanges_filtersGraderOnlyEntryFromZipCopy() async throws {
         // The browser-runner download withholds grader-only files by streaming a
         // COPY of the stored zip with those entries deleted (via
         // applyScriptChangesToZip(deletions:)). Pin that primitive: it removes

@@ -312,7 +312,7 @@ struct NewAssignmentDraftService {
     // MARK: - Suite-file actions
 
     mutating func replaceSuiteFiles() async throws {
-        let setupPackage = try createRunnerSetupZip(
+        let setupPackage = try await createRunnerSetupZip(
             suiteFiles: payload.suiteFiles,
             suiteConfigJSON: payload.suiteConfigRaw,
             zipPath: setup.zipPath
@@ -340,7 +340,7 @@ struct NewAssignmentDraftService {
             activity: setup.decodedManifest()?.activity
         )
         try await setup.save(on: req.db)
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: setupID,
             testSuiteScripts: Set(setupPackage.testSuites.map(\.script)),
@@ -352,7 +352,7 @@ struct NewAssignmentDraftService {
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
-        _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
+        _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
         // Clearing the suite empties the test files, not the author's choice of
         // language — see `replaceSuiteFiles`.
         let declared = declaredLanguage()
