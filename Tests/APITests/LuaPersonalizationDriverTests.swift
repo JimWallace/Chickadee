@@ -20,8 +20,8 @@
 // missing interpreter on a contributor's laptop is not a defect. CI has
 // lua5.4 on the image.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 
@@ -54,7 +54,8 @@ import Testing
 
         var extraEnvironment: [String: String] = [:]
         if let seed { extraEnvironment["CHICKADEE_ASSIGNMENT_SEED"] = seed }
-        let run = try await runTool(["lua", script.path], workingDirectory: dir,
+        let run = try await runTool(
+            ["lua", script.path], workingDirectory: dir,
             extraEnvironment: extraEnvironment)
         return (run.exitCode, run.stdout, run.stderr)
     }

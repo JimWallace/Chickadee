@@ -8,8 +8,8 @@
 // browser-graded assignments, so a broken native path means no Octave
 // assignment can be validated at all (the exit-127 class).
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing

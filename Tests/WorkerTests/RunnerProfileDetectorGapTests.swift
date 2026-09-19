@@ -21,8 +21,8 @@
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

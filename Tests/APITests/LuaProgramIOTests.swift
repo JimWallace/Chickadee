@@ -65,7 +65,8 @@ import Testing
         guard await Self.luaAvailable else { return }
         await #expect(
             try grade("local a = io.read()\nlocal b = io.read(\"l\")\nprint(tonumber(a) + tonumber(b))\n") == "pass")
-        #expect(try await grade("local t = 0\nfor line in io.lines() do t = t + tonumber(line) end\nprint(t)\n") == "pass")
+        #expect(
+            try await grade("local t = 0\nfor line in io.lines() do t = t + tonumber(line) end\nprint(t)\n") == "pass")
         await #expect(
             try grade("local t = 0\nfor line in io.stdin:lines() do t = t + tonumber(line) end\nio.write(t, \"\\n\")\n")
                 == "pass")

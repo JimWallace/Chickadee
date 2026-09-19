@@ -11,8 +11,8 @@
 // Tests/APITests/PatternFamilyRendererCppTests.swift — this suite pins the
 // worker chain with wrappers of the same shape.)
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing

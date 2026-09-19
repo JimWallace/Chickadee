@@ -53,7 +53,8 @@ import Testing
 
         var extraEnvironment: [String: String] = [:]
         if let seed { extraEnvironment["CHICKADEE_ASSIGNMENT_SEED"] = seed }
-        let run = try await runTool(["octave-cli", script.path], workingDirectory: dir,
+        let run = try await runTool(
+            ["octave-cli", script.path], workingDirectory: dir,
             extraEnvironment: extraEnvironment)
         return (run.exitCode, run.stdout, run.stderr)
     }

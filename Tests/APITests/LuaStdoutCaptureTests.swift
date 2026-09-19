@@ -8,8 +8,8 @@
 // empty output. Verified by running, not reading, because the defect was a
 // wrong mark rather than a compile error.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

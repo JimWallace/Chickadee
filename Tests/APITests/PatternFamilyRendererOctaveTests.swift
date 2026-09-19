@@ -10,8 +10,8 @@
 // defect); `octaveIsPresentInCI` in OctaveNativeGradingTests is the
 // did-not-skip proof that keeps this meaningful where it gates a merge.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

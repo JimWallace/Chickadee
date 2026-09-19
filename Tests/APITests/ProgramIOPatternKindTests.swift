@@ -7,8 +7,8 @@
 // against unguarded scripts, `__main__`-guarded ones, programs that exit after
 // their answer, and programs that crash.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 import Vapor

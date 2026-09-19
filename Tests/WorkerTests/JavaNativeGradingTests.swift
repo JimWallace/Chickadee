@@ -17,8 +17,8 @@
 // Modelled on `RacketNativeGradingTests` deliberately — same workspace shape,
 // same did-not-skip proof — so the five read as one family.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing

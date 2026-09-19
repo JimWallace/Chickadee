@@ -12,8 +12,8 @@
 // that reads as a PASS — every case in the assignment, silently — so it is
 // asserted here rather than trusted.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

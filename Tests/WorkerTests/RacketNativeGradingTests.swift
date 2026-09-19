@@ -14,8 +14,8 @@
 // did-not-skip proof — so the four read as one family rather than four
 // inventions.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing

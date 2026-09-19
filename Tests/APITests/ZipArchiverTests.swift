@@ -11,9 +11,9 @@
 // Serializing the suite eliminates the within-suite race while still
 // allowing other suites to run in parallel.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
-import ChickadeeTestSupport
 import Foundation
 import Testing
 

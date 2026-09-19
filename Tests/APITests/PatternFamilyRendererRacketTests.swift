@@ -10,8 +10,8 @@
 // bytes grade a `#lang htdp/bsl` submission (CS 135/115) and a `#lang racket`
 // one (CS 136+). Every kind below is exercised against both dialects.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

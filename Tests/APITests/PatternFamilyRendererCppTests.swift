@@ -7,8 +7,8 @@
 // compiles, a comparison that answers backwards, or an exit code that maps
 // to the wrong status, and stay green.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

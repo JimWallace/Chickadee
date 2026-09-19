@@ -15,8 +15,8 @@
 // real probe and asserts it EXITS 0, which `racket --version` does. Exit code
 // and parse are different questions, and this file asks the second one.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

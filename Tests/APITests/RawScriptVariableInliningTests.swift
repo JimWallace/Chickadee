@@ -20,8 +20,8 @@
 // The execution suite at the bottom is the part that would actually have caught
 // (1): it writes the emitted file and runs it.
 
-import Core
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 
