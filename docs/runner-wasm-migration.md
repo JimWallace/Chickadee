@@ -184,6 +184,14 @@ compiler chases every `import`, and we never create a type we later discard.
   per-PR wasm-SDK CI build [artifact vendored], no WasmKit test run) are
   documented trade-offs/follow-ups. The `JSFunction`-deprecation warning was
   fixed (unified `JSObject`) so the release build is warning-clean.
+  Three of those four concerns have since moved, all measured in
+  [runner-wasm-swift-6-4-review.md](runner-wasm-swift-6-4-review.md):
+  `wasm-opt` runs (and, from Swift 6.4, strips the DWARF that made the artifact
+  five times its real size); a per-PR Embedded compile of RunnerCore now runs
+  on the host toolchain with no wasm SDK
+  (`scripts/check-runnercore-embedded.sh`); and BridgeJS is no longer
+  incompatible with Embedded Swift, so the dynamic interop is a choice rather
+  than a constraint, with the typed migration scoped as the next slice.
 
 ## What stays JS forever
 

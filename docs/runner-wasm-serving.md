@@ -11,14 +11,33 @@ Reported by `scripts/build-runner-wasm.sh` on every re-vendor:
 
 | stage | bytes |
 |---|---|
-| unoptimized | 1,742,845 |
-| `wasm-opt -Oz` | 1,522,732 |
-| gzip -9 | 493,864 |
-| **brotli -q11 (on the wire)** | **403,345 (~394 KB)** |
+| as linked (`-O`/`-Osize`, `-g`) | 1,679,573 |
+| `wasm-opt -Oz --strip-debug` | 272,554 |
+| gzip -9 | 134,050 |
 
-`wasm-opt -Oz` runs in the build via `npx` (binaryen — same no-install mechanism
-as esbuild); if unavailable it falls back to the unoptimized module with a
-warning. `-Oz` (size) not `-O` (speed), since this is browser-delivered.
+`wasm-opt -Oz --strip-debug` runs in the build via `npx` (binaryen — same
+no-install mechanism as esbuild); if unavailable it falls back to the
+unoptimized, unstripped module with a warning, and that module fails the size
+ceiling. `-Oz` (size) not `-O` (speed), since this is browser-delivered.
+
+**Until Swift 6.4 the table above read 1,742,845 → 1,522,732 → 493,864 gzip,
+and ~80 % of that was DWARF.** The release build links with `-g`; the
+PackageToJS plugin's "Stripping DWARF debug info" step runs through a
+`wasm-opt` it looks up on `PATH`, which the vendor job's runner does not have,
+so it warned and copied the module unstripped; and the build script's own
+`wasm-opt -Oz` kept the `.debug_*` custom sections because nothing asked it to
+drop them. The three facts were each individually documented and jointly
+invisible: the size guard measured the whole file, so a module that was 1.2 MB
+of debug data read as "within budget". Section-by-section it was
+`.debug_info` 407 KB, `.debug_names` 294 KB, `.debug_str` 202 KB,
+`.debug_line`/`.debug_ranges`/`.debug_loc` ~115 KB each, `.debug_abbrev` 45 KB
+— against 207 KB of code and 64 KB of data. The remaining ~270 KB is, by
+symbol: the Swift standard library's String/Unicode machinery ~94 KB (the
+grapheme-stride and NFC-normalisation paths that `Character` iteration and
+`String ==` pull in), RunnerCore ~68 KB, wasi-libc and the Swift runtime
+~43 KB (`printf_core` 9 KB, `dlmalloc` 7 KB), JavaScriptKit ~31 KB, the
+bridge ~6 KB. See `docs/runner-wasm-swift-6-4-review.md` for the measurements
+and what each remaining slice would cost to remove.
 
 ## 2. Caching
 
@@ -61,18 +80,20 @@ during download) with a `WebAssembly.instantiate` fallback (PackageToJS runtime,
 job). It gates on **gzip** (universally available, incl. CI runners without
 binaryen) and additionally reports **brotli**:
 
-- **budget 528 KB gzip** (warn) — creep check.
-- **ceiling 672 KB gzip** (fail) — ~35 % over today's size; trips only on a true
-  balloon (the signature of Embedded-Swift generic-specialization explosion).
-- prints the **delta from `runner-size-baseline.txt`** (currently 493,864) so a
+- **budget 144 KB gzip** (warn) — creep check.
+- **ceiling 176 KB gzip** (fail) — ~35 % over today's size; trips on an
+  unstripped module first (the likeliest cause: `wasm-opt` missing when the
+  vendor job ran), and otherwise on a true balloon (the signature of
+  Embedded-Swift generic-specialization explosion).
+- prints the **delta from `runner-size-baseline.txt`** (currently 134,050) so a
   disproportionate jump is visible in the build log. Update the baseline when a
   re-vendor legitimately changes the size.
 
-Current: gzip 493,864 — **OK, within budget.** (The audit's 300 KB brotli target
-isn't realistic for a module that legitimately bundles the Embedded Swift
-runtime + JavaScriptKit + JavaScriptEventLoop; 394 KB brotli is the floor. The
-gate is set to catch a *balloon*, which is the real risk, not to chase an
-unreachable absolute.)
+Current: gzip 134,050 — **OK, within budget.** (The audit's 300 KB brotli
+target, once dismissed as unreachable for a module bundling the Embedded Swift
+runtime + JavaScriptKit + JavaScriptEventLoop, was never the module's floor;
+it was the DWARF's. The gate stays set to catch a *balloon*, which is the real
+risk, not to chase an absolute.)
 
 ## 5. Size audit (bloat vectors)
 
@@ -82,6 +103,7 @@ unreachable absolute.)
 | Foundation pull-in | **none** in `Sources/RunnerCore/` or `wasm/Sources/` (`rg 'import Foundation'` clean) — `JSONLite` + hand-rolled string/number helpers keep it out | none |
 | Large static data | none in the wasm graph; the embedded `test_runtime.py` blobs live in `Sources/Worker/` (native only) | none |
 | Unused dependencies | wasm graph = `RunnerCore` (leaf), `JavaScriptKit`, `JavaScriptEventLoop` — all used | none |
+| Debug info | **was the whole story** — DWARF from the `-g` release link, kept because the plugin's strip step needs a `wasm-opt` on `PATH` and the script's `wasm-opt` call had no `--strip-debug`; ~1.2 MB of a ~1.5 MB module, for every re-vendor before Swift 6.4 | stripped in the build; the size ceiling now sits below an unstripped module |
 
 ## 6. Recommendation
 
