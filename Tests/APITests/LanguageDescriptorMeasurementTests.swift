@@ -249,7 +249,7 @@ import Testing
 
         let interpreter = language.descriptor.interpreterProbe.command
         let result = try #require(
-            Self.run(
+            await Self.run(
                 interpreter,
                 [driverDirectory.appendingPathComponent(probe.runnerFileName).path],
                 in: directory, removingEnvironment: scrubbed),
