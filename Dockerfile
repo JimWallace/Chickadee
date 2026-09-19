@@ -55,12 +55,7 @@ COPY Tools/runner-support ./Tools/runner-support
 # and the whole test suite are clean on the default engine. `native` is
 # deprecated and warns; drop this flag once the default engine links statically.
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
-#
-# chickadee-runner additionally needs -lcurl. It uses URLSession to poll the
-# server, so it links lib_CFURLSessionInterface.a, and 6.4 drops libcurl from
-# the link line the same way it drops lib_FoundationICU.a. Neither static SDK
-# has ever bundled curl; on 6.3 it arrived through autolink.
-RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner -Xlinker -lcurl
+RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
 RUN mkdir -p /out \
     && cp .build/release/chickadee-server .build/release/chickadee-runner /out/
 
