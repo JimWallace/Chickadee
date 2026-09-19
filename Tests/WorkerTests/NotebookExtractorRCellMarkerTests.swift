@@ -109,15 +109,8 @@ import Testing
         let script = dir.appendingPathComponent("flattened.R")
         try (extracted + "\nstopifnot(total == 2)\n").write(
             to: script, atomically: true, encoding: .utf8)
-        let proc = try await runProcessRobustly {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            proc.arguments = ["Rscript", script.path]
-            proc.standardOutput = makeCloexecPipe()
-            proc.standardError = makeCloexecPipe()
-            return proc
-        }
-        #expect(proc.terminationStatus == 0, "flattened R with cell markers must still run")
+        let run = try await runToolThrottled(["Rscript", script.path])
+        #expect(run.succeeded, "flattened R with cell markers must still run")
     }
 
     /// Python's extraction is untouched — it already labels cells through

@@ -18,15 +18,22 @@
 // allocation, child fd setup and spawn, which is the race the zip path needed
 // a process-wide lock and an EFAULT retry to contain.
 //
-// Three spawns are deliberately NOT here, because migrating them would delete
-// what they exist to do:
+// Foundation `Process` survives in exactly three places across the whole
+// repository, and each one is here because migrating it would delete what it
+// exists to do. If you add a fourth, add it to this list.
 //
 //   * `Tests/CoreTests/PipeCloseOnExecTests.swift` — its subject IS Foundation
 //     `Pipe` inheritance across a real `exec`.
 //   * `Tests/WorkerTests/Support/LocalHTTPTestServer.swift` — a long-lived
 //     server held past one call, which the collected API does not model.
-//   * `Tests/WorkerTests/Support/ScriptRunnerTestSupport.swift` — the
-//     spawn-retry harness, which takes a `Process` factory by design.
+//   * `Sources/APIServer/APIServerApp+Stores.swift` — the local-runner
+//     autostart, which is the same long-lived shape: the server keeps the
+//     child for its own lifetime rather than collecting a result.
+//
+// `ScriptRunnerTestSupport`'s spawn-retry harness used to be on this list.
+// It is not any more: its retry absorbed a `posix_spawn` EAGAIN that only
+// Foundation's `Process` surfaces, so the retry went and the throttle stayed
+// (`runToolThrottled`).
 
 import Foundation
 import Subprocess

@@ -432,20 +432,10 @@ import Testing
     // MARK: - R runtime helpers
 
     private func rscriptAvailable() async -> Bool {
-        // Probed via `runProcessRobustly` so the availability check can't
-        // join the suite's fork storm under parallel CI load, and a transient
-        // spawn failure (posix_spawn EAGAIN) is retried instead of silently
-        // mis-reporting Rscript as unavailable.
-        let proc = try? await runProcessRobustly {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            proc.arguments = ["Rscript", "--version"]
-            proc.standardOutput = FileHandle.nullDevice
-            proc.standardError = FileHandle.nullDevice
-            return proc
-        }
-        guard let proc else { return false }
-        return proc.terminationStatus == 0
+        // Probed through the shared throttle so the availability check can't
+        // join the suite's spawn storm under parallel CI load.
+        guard let run = try? await runToolThrottled(["Rscript", "--version"]) else { return false }
+        return run.succeeded
     }
 
     private func writeRRuntime() throws {
