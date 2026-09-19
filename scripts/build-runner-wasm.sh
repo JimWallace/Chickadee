@@ -11,9 +11,10 @@
 # copy.
 #
 # Prerequisites (one-time, see docs/runner-wasm-migration.md):
-#   * Swift toolchain matching the wasm SDK (6.3.2 — see .swift-version)
+#   * Swift toolchain matching the wasm SDK (6.4.0 — pinned by the swiftly
+#     version in .github/workflows/runner-wasm-vendor.yml)
 #   * The Embedded Swift WebAssembly SDK installed and named via SWIFT_WASM_SDK
-#     (defaults to swift-6.3.2-RELEASE_wasm-embedded).
+#     (defaults to swift-6.4.0-RELEASE_wasm-embedded).
 #   * Node + npx (for esbuild) to bundle the WASI shim locally (no CDN: FIPPA).
 #
 # Output (checked in, like Public/pyodide / Public/vendor — CI and contributors
@@ -23,7 +24,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sdk="${SWIFT_WASM_SDK:-swift-6.3.2-RELEASE_wasm-embedded}"
+sdk="${SWIFT_WASM_SDK:-swift-6.4.0-RELEASE_wasm-embedded}"
 out_dir="$repo_root/Public/runner-wasm"
 
 cd "$repo_root/wasm"

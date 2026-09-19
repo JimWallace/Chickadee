@@ -75,7 +75,7 @@ jobs:
             echo "::notice::RunnerCore wasm inputs changed ($recorded -> $current) — re-vendoring."
           fi
 
-      - name: Install Swift 6.3.2 + Embedded Wasm SDK
+      - name: Install Swift 6.4.0 + Embedded Wasm SDK
         if: steps.gate.outputs.changed == 'true'
         run: |
           set -euxo pipefail
@@ -96,8 +96,8 @@ jobs:
           tar zxf "swiftly-${arch}.tar.gz"
           ./swiftly init -y --skip-install --quiet-shell-followup
           . "$HOME/.local/share/swiftly/env.sh"
-          swiftly install 6.3.2
-          swiftly use 6.3.2
+          swiftly install 6.4.0
+          swiftly use 6.4.0
           hash -r
           swift --version
           url="$(grep '^url=' wasm/wasm-sdk.pin | cut -d= -f2-)"

@@ -67,7 +67,7 @@ jobs:
       # the test packages), so the probe harness does not apt-get them at job
       # start. Toolchain-identical to the mirror, so the shared .build cache
       # keys still match — see .github/docker/ci-image/Dockerfile.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

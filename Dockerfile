@@ -19,7 +19,7 @@
 ARG BINARIES=compile
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.3-noble AS compile
+FROM swift:6.4-noble AS compile
 
 WORKDIR /build
 

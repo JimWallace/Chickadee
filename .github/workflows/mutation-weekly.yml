@@ -133,7 +133,7 @@ jobs:
       # missing interpreters anyway: a missing interpreter makes its tests SKIP
       # rather than fail, so every mutant they covered survives and reads as a
       # hole that is not there.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

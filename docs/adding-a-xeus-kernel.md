@@ -613,7 +613,7 @@ additions, because prose is the surface no guard reaches.
    ```
 
    It IS buildable on a normal machine, contrary to how this once read: swiftly
-   installs Swift 6.3.2 and `swift sdk install` takes the bundle pinned in
+   installs Swift 6.4.0 and `swift sdk install` takes the bundle pinned in
    `wasm/wasm-sdk.pin`, both over ordinary network. Budget ~20 minutes.
 
    Beware the window: `runner-wasm-vendor.yml` only re-vendors on **main**, so a

@@ -73,7 +73,7 @@ jobs:
       # swift-CI, not plain swift: the -ci image carries python3, lua5.4, octave
       # and r-base. The plain one is the toolchain alone, and the failure is
       # quiet — spawnSync simply cannot find the interpreter.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
