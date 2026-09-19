@@ -21,6 +21,7 @@ cd "$repo_root"
 {
     find Sources/RunnerCore -type f -name '*.swift'
     find wasm/Sources -type f -name '*.swift'
+    find wasm/loader -type f -name '*.js'
     printf '%s\n' \
         wasm/Package.swift \
         wasm/Package.resolved \
