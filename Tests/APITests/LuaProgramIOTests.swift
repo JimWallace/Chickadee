@@ -47,17 +47,8 @@ import Testing
         try "solution.lua".write(
             to: dir.appendingPathComponent(".chickadee_student_module"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", script.filename]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let lastLine = text.split(separator: "\n").last.map(String.init) ?? ""
+        let run = try await runTool(["lua", script.filename], workingDirectory: dir)
+        let lastLine = run.stdout.split(separator: "\n").last.map(String.init) ?? ""
         if lastLine.contains("\"status\":\"pass\"") { return "pass" }
         if lastLine.contains("\"status\":\"fail\"") { return "fail" }
         return "error"

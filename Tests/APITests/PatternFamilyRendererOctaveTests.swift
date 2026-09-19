@@ -57,15 +57,8 @@ import Testing
         let scriptURL = dir.appendingPathComponent(script.filename)
         try script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["octave-cli", scriptURL.path]
-        proc.currentDirectoryURL = dir
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
-        return proc.terminationStatus
+        let run = try await runTool(["octave-cli", scriptURL.path], workingDirectory: dir)
+        return run.exitCode
     }
 
     private func single(

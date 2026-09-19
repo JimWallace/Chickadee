@@ -50,28 +50,11 @@ import Testing
         let script = dir.appendingPathComponent("driver.m")
         try source.write(to: script, atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["octave-cli", script.path]
-        process.currentDirectoryURL = dir
-        if let seed {
-            var env = ProcessInfo.processInfo.environment
-            env["CHICKADEE_ASSIGNMENT_SEED"] = seed
-            process.environment = env
-        }
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(data: outData, encoding: .utf8) ?? "",
-            String(data: errData, encoding: .utf8) ?? ""
-        )
+        var extraEnvironment: [String: String] = [:]
+        if let seed { extraEnvironment["CHICKADEE_ASSIGNMENT_SEED"] = seed }
+        let run = try await runTool(["octave-cli", script.path], workingDirectory: dir,
+            extraEnvironment: extraEnvironment)
+        return (run.exitCode, run.stdout, run.stderr)
     }
 
     @Test func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() async throws {

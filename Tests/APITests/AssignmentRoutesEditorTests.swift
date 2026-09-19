@@ -89,13 +89,8 @@ import VaporTesting
         for entry in entries {
             try entry.content.write(to: tempDir.appendingPathComponent(entry.name))
         }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        proc.currentDirectoryURL = tempDir
-        proc.arguments = ["-q", "-r", zipPath, "."]
-        try proc.run()
-        proc.waitUntilExit()
-        #expect(proc.terminationStatus == 0, "zip should succeed")
+        let run = try await runTool(["zip", "-q", "-r", zipPath, "."], workingDirectory: tempDir)
+        #expect(run.exitCode == 0, "zip should succeed")
     }
 
     @discardableResult

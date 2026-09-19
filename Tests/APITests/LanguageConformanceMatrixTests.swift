@@ -755,28 +755,16 @@ import Testing
     /// Spawned through `/usr/bin/env`, the same way the runner resolves an
     /// interpreter, so "available here" means the same thing it means there.
     static func run(_ interpreter: String, _ args: [String], in dir: URL) -> (Int32, String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [interpreter] + args
-        process.currentDirectoryURL = dir
-        let errPipe = Pipe()
-        process.standardError = errPipe
-        process.standardOutput = Pipe()
-        do { try process.run() } catch { return (-1, String(describing: error)) }
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: errData, encoding: .utf8) ?? "")
+        do {
+            let run = try await runTool([interpreter] + args, workingDirectory: dir)
+            return (run.exitCode, run.stderr)
+        } catch {
+            return (-1, String(describing: error))
+        }
     }
 
     static func isAvailable(_ adapter: Adapter) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [adapter.interpreter] + adapter.versionArguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        return await toolIsAvailable(adapter.interpreter, arguments: adapter.versionArguments)
     }
 
     static func pythonString(_ s: String) -> String { JSONValue.string(s).pythonLiteral }

@@ -214,14 +214,8 @@ import VaporTesting
                 \(entriesCode)
             """
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", script]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let run = try await runTool(["python3", "-c", script])
+        guard run.exitCode == 0 else {
             throw IssueRecorded("python3 not available or failed to create zip")
         }
     }

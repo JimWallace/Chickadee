@@ -63,17 +63,8 @@ import Testing
         try script.write(
             to: dir.appendingPathComponent("case.rkt"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["racket", "case.rkt"]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        let run = try await runTool(["racket", "case.rkt"], workingDirectory: dir)
+        return (run.exitCode, run.stdout)
     }
 
     static func family(

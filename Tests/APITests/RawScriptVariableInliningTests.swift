@@ -260,23 +260,14 @@ import Testing
         let path = dir.appendingPathComponent(name)
         try source.write(to: path, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = argv + [path.path]
-        proc.currentDirectoryURL = dir
-        let errPipe = Pipe()
-        proc.standardOutput = Pipe()
-        proc.standardError = errPipe
-        try proc.run()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
+        let run = try await runTool(argv + [path.path], workingDirectory: dir)
 
         #expect(
-            proc.terminationStatus == 0,
+            run.exitCode == 0,
             """
             The inlined \(language.displayName) script did not run cleanly \
-            (exit \(proc.terminationStatus)). stderr:
-            \(String(data: errData, encoding: .utf8) ?? "")
+            (exit \(run.exitCode)). stderr:
+            \(run.stderr)
             Source:
             \(source)
             """)

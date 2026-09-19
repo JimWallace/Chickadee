@@ -239,24 +239,12 @@ func pfAssertValidPythonSyntax(_ source: String, label: String) throws {
         return  // python3 unavailable on this platform — skip the syntax check
     }
 
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"]
-    let stdin = Pipe()
-    let stderr = Pipe()
-    p.standardInput = stdin
-    p.standardError = stderr
-    p.standardOutput = Pipe()
-    try p.run()
-    // Throwing write/close (not the non-throwing `write(_:)`, whose internal
-    // `try!` traps on a broken pipe) so a failed subprocess surfaces as a
-    // thrown error instead of a SIGILL.
-    try stdin.fileHandleForWriting.write(contentsOf: Data(source.utf8))
-    try stdin.fileHandleForWriting.close()
-    p.waitUntilExit()
-    if p.terminationStatus != 0 {
-        let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        Issue.record("Generated source for \(label) is not valid Python:\n\(err)\n--- source ---\n\(source)")
+    let run = try await runTool(
+        ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"],
+        standardInput: source)
+    if run.exitCode != 0 {
+        Issue.record(
+            "Generated source for \(label) is not valid Python:\n\(run.stderr)\n--- source ---\n\(source)")
     }
 }
 
@@ -305,21 +293,10 @@ func pfRunGeneratedCase(
             pass
         """
 
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["python3", "-c", driver]
-    p.currentDirectoryURL = dir
-    let out = Pipe()
-    let err = Pipe()
-    p.standardOutput = out
-    p.standardError = err
-    try p.run()
-    p.waitUntilExit()
-    let stdout = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    if stdout.contains("OUTCOME:PASS") { return .pass }
-    if stdout.contains("OUTCOME:FAIL") { return .fail }
-    let stderrText = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let run = try await runTool(["python3", "-c", driver], workingDirectory: dir)
+    if run.stdout.contains("OUTCOME:PASS") { return .pass }
+    if run.stdout.contains("OUTCOME:FAIL") { return .fail }
     Issue.record(
-        "Generated case neither passed nor failed:\nstdout=\(stdout)\nstderr=\(stderrText)\n--- body ---\n\(body)")
+        "Generated case neither passed nor failed:\nstdout=\(run.stdout)\nstderr=\(run.stderr)\n--- body ---\n\(body)")
     return .error
 }

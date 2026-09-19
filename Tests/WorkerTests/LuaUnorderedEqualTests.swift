@@ -29,18 +29,8 @@ import Testing
         try testRuntimeSource(for: .lua).write(
             to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["lua", "-e", program]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(
-            in: .whitespacesAndNewlines)
+        let run = try await runTool(["lua", "-e", program], workingDirectory: dir)
+        return run.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The eight values from the audit table where the old string-keyed

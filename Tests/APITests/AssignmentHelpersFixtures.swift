@@ -42,13 +42,8 @@ func ahMakeZip(at zipPath: String, entries: [(name: String, content: String)]) t
         try Data(entry.content.utf8).write(to: path)
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    process.currentDirectoryURL = tempDir
-    process.arguments = ["-q", "-r", zipPath, "."]
-    try process.run()
-    process.waitUntilExit()
-    #expect(process.terminationStatus == 0, "zip should succeed")
+    let run = try await runTool(["zip", "-q", "-r", zipPath, "."], workingDirectory: tempDir)
+    #expect(run.exitCode == 0, "zip should succeed")
 }
 
 func ahNotebookData(language: String = "python", source: String) throws -> Data {

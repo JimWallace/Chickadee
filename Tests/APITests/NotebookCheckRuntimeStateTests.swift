@@ -102,35 +102,16 @@ import Testing
                 to: workDir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", Self.bootstrap, scriptName]
-        process.currentDirectoryURL = workDir
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        process.standardInput = Pipe()
-        try process.run()
-        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let run = try await runTool(
+            ["python3", "-c", Self.bootstrap, scriptName], workingDirectory: workDir)
         return RunResult(
-            exitCode: process.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? "")
+            exitCode: run.exitCode,
+            stdout: run.stdout,
+            stderr: run.stderr)
     }
 
     private func pythonModuleAvailable(_ module: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", "import \(module)"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        process.standardInput = Pipe()
-        guard (try? process.run()) != nil else { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
+        return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 
     // MARK: - variable_exists sees quarantined assignments

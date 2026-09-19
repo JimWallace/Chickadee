@@ -286,13 +286,8 @@ func arMakeZip(at path: String, entries: [(String, String)]) throws {
         try Data(contents.utf8).write(to: fileURL)
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    process.currentDirectoryURL = root
-    process.arguments = ["-q", "-r", path, "."]
-    try process.run()
-    process.waitUntilExit()
-    #expect(process.terminationStatus == 0)
+    let run = try await runTool(["zip", "-q", "-r", path, "."], workingDirectory: root)
+    #expect(run.exitCode == 0)
 }
 
 @discardableResult

@@ -92,23 +92,11 @@ import Testing
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [probe.command] + probe.versionArguments
-            let out = Pipe()
-            let err = Pipe()
-            process.standardOutput = out
-            process.standardError = err
-            guard (try? process.run()) != nil else {
+            guard let run = try? await runTool([probe.command] + probe.versionArguments) else {
                 Issue.record("\(language): could not spawn \(probe.command)")
                 continue
             }
-            let stdout = out.fileHandleForReading.readDataToEndOfFile()
-            let stderr = err.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let combined =
-                (String(data: stdout, encoding: .utf8) ?? "") + "\n"
-                + (String(data: stderr, encoding: .utf8) ?? "")
+            let combined = run.stdout + "\n" + run.stderr
             #expect(
                 RunnerProfileDetector.firstNumericVersion(in: combined) != nil,
                 """

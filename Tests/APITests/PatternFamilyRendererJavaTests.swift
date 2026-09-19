@@ -65,23 +65,8 @@ import Testing
         try script.write(
             to: dir.appendingPathComponent("test.sh"), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["test.sh"]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(data: data, encoding: .utf8) ?? "",
-            String(data: errData, encoding: .utf8) ?? ""
-        )
+        let run = try await runTool(["sh"] + ["test.sh"], workingDirectory: dir)
+        return (run.exitCode, run.stdout, run.stderr)
     }
 
     static func family(

@@ -61,24 +61,12 @@ import Testing
         _ command: String, _ arguments: [String],
         in directory: URL? = nil, removingEnvironment: [String] = []
     ) -> (status: Int32, output: String)? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
-        if let directory { process.currentDirectoryURL = directory }
-        var environment = ProcessInfo.processInfo.environment
-        for key in removingEnvironment { environment.removeValue(forKey: key) }
-        process.environment = environment
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        guard
+            let run = try? await runToolCombiningStreams(
+                [command] + arguments, workingDirectory: directory,
+                removingEnvironment: removingEnvironment)
+        else { return nil }
+        return (run.exitCode, run.stdout)
     }
 
     private static func isPresent(_ language: AssignmentLanguage) -> Bool {

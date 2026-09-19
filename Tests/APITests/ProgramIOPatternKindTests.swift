@@ -189,17 +189,8 @@ import Vapor
         try script.source.write(
             to: dir.appendingPathComponent(script.filename), atomically: true, encoding: .utf8)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", bootstrap, script.filename]
-        process.currentDirectoryURL = dir
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        let run = try await runTool(["python3", "-c", bootstrap, script.filename], workingDirectory: dir)
+        return (run.exitCode, run.stdout)
     }
 
     private static let unguardedSum = "a = int(input())\nb = int(input())\nprint(a + b)\n"

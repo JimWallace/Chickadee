@@ -192,15 +192,8 @@ import Testing
         let scriptURL = dir.appendingPathComponent(script.filename)
         try script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", scriptURL.path]
-        proc.currentDirectoryURL = dir
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
-        return proc.terminationStatus
+        let run = try await runTool(["Rscript", scriptURL.path], workingDirectory: dir)
+        return run.exitCode
     }
 
     private func single(
@@ -446,15 +439,8 @@ import Testing
         let scriptURL = dir.appendingPathComponent(script.filename)
         try script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", scriptURL.path]
-        proc.currentDirectoryURL = dir
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
-        #expect(proc.terminationStatus == 0, "expected 7 delivered via _ck_inputs.R")
+        let run = try await runTool(["Rscript", scriptURL.path], workingDirectory: dir)
+        #expect(run.exitCode == 0, "expected 7 delivered via _ck_inputs.R")
     }
 
     /// The same end-to-end path for variable_equality: a per-student expected
@@ -487,15 +473,8 @@ import Testing
         func runWith(_ submission: String) throws -> Int32 {
             try submission.write(
                 to: dir.appendingPathComponent("solution.R"), atomically: true, encoding: .utf8)
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            proc.arguments = ["Rscript", scriptURL.path]
-            proc.currentDirectoryURL = dir
-            proc.standardOutput = Pipe()
-            proc.standardError = Pipe()
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus
+            let run = try await runTool(["Rscript", scriptURL.path], workingDirectory: dir)
+            return run.exitCode
         }
 
         // Matches this student's personalized value.

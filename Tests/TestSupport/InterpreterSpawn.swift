@@ -76,12 +76,18 @@ private let toolOutputLimitBytes = 4 * 1024 * 1024
 public func runTool(
     _ argv: [String],
     workingDirectory: URL? = nil,
-    extraEnvironment: [String: String] = [:]
+    extraEnvironment: [String: String] = [:],
+    removingEnvironment: [String] = [],
+    standardInput: String? = nil
 ) async throws -> ToolRun {
     var environment = inheritedEnvironment
     for (key, value) in extraEnvironment {
         guard let environmentKey = Environment.Key(rawValue: key) else { continue }
         environment[environmentKey] = value
+    }
+    for key in removingEnvironment {
+        guard let environmentKey = Environment.Key(rawValue: key) else { continue }
+        environment.removeValue(forKey: environmentKey)
     }
 
     var options = PlatformOptions()
@@ -90,6 +96,25 @@ public func runTool(
     // session.
     options.createSession = true
 
+    // `.none` closes the child's stdin, which is what every call site that
+    // passes no input wants: a reader then sees EOF instead of blocking.
+    if let standardInput {
+        let result = try await Subprocess.run(
+            .path("/usr/bin/env"),
+            arguments: Arguments(argv),
+            environment: .custom(environment),
+            workingDirectory: workingDirectory.map { FilePath($0.path) },
+            platformOptions: options,
+            input: .data(Data(standardInput.utf8)),
+            output: .string(limit: toolOutputLimitBytes),
+            error: .string(limit: toolOutputLimitBytes)
+        )
+        return ToolRun(
+            stdout: result.standardOutput,
+            stderr: result.standardError,
+            exitCode: toolExitCode(of: result.terminationStatus)
+        )
+    }
     let result = try await Subprocess.run(
         .path("/usr/bin/env"),
         arguments: Arguments(argv),
@@ -102,6 +127,42 @@ public func runTool(
     return ToolRun(
         stdout: result.standardOutput,
         stderr: result.standardError,
+        exitCode: toolExitCode(of: result.terminationStatus)
+    )
+}
+
+/// Runs `/usr/bin/env <argv>` with stderr folded into stdout, the way a call
+/// site that pointed both streams at ONE pipe used to see them.
+///
+/// Separate streams are the default because most call sites want them apart;
+/// this exists for the ones that read an interpreter's banner without caring
+/// which stream it came out on, and where concatenating after the fact would
+/// lose the interleaving.
+public func runToolCombiningStreams(
+    _ argv: [String],
+    workingDirectory: URL? = nil,
+    removingEnvironment: [String] = []
+) async throws -> ToolRun {
+    var environment = inheritedEnvironment
+    for key in removingEnvironment {
+        guard let environmentKey = Environment.Key(rawValue: key) else { continue }
+        environment.removeValue(forKey: environmentKey)
+    }
+    var options = PlatformOptions()
+    options.createSession = true
+
+    let result = try await Subprocess.run(
+        .path("/usr/bin/env"),
+        arguments: Arguments(argv),
+        environment: .custom(environment),
+        workingDirectory: workingDirectory.map { FilePath($0.path) },
+        platformOptions: options,
+        output: .string(limit: toolOutputLimitBytes),
+        error: .combinedWithOutput
+    )
+    return ToolRun(
+        stdout: result.standardOutput,
+        stderr: "",
         exitCode: toolExitCode(of: result.terminationStatus)
     )
 }

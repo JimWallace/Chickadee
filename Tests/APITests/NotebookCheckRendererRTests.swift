@@ -155,15 +155,8 @@ import Testing
         let scriptURL = dir.appendingPathComponent(bundle.script.filename)
         try bundle.script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", scriptURL.path]
-        proc.currentDirectoryURL = dir
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
-        return proc.terminationStatus
+        let run = try await runTool(["Rscript", scriptURL.path], workingDirectory: dir)
+        return run.exitCode
     }
 
     private let patientsFrame = """
