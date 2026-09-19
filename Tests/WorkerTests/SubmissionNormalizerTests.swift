@@ -50,10 +50,10 @@ import Testing
         try String(contentsOf: workspaceDir.appendingPathComponent(name), encoding: .utf8)
     }
 
-    @Test func validPythonFileCopiedUnchanged() throws {
+    @Test func validPythonFileCopiedUnchanged() async throws {
         try writeSubmissionFile(name: "submission.py", contents: "print('hello')\n")
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -65,7 +65,7 @@ import Testing
         #expect(try readWorkspaceFile("submission.py") == "print('hello')\n")
     }
 
-    @Test func notebookNormalizesToPyWithCellSeparators() throws {
+    @Test func notebookNormalizesToPyWithCellSeparators() async throws {
         try writeSubmissionFile(
             name: "assignment.ipynb",
             contents: """
@@ -80,7 +80,7 @@ import Testing
                 }
                 """)
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -95,7 +95,7 @@ import Testing
         #expect(extracted.contains("# ignored") == false)
     }
 
-    @Test func notebookRenamedToPyIsDetectedByContent() throws {
+    @Test func notebookRenamedToPyIsDetectedByContent() async throws {
         try writeSubmissionFile(
             name: "submission.py",
             contents: """
@@ -106,7 +106,7 @@ import Testing
                 }
                 """)
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -119,11 +119,11 @@ import Testing
             FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.extracted.py").path))
     }
 
-    @Test func jSONFileThatIsNotNotebookFailsWithTargetedError() throws {
+    @Test func jSONFileThatIsNotNotebookFailsWithTargetedError() async throws {
         try writeSubmissionFile(name: "data.json", contents: #"{"hello":"world"}"#)
 
-        #expect {
-            try SubmissionNormalizer().normalizePythonSubmission(
+        await #expect {
+            try await SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
@@ -138,11 +138,11 @@ import Testing
         }
     }
 
-    @Test func invalidNotebookJSONFailsEarly() throws {
+    @Test func invalidNotebookJSONFailsEarly() async throws {
         try writeSubmissionFile(name: "bad.ipynb", contents: "{not json")
 
-        #expect {
-            try SubmissionNormalizer().normalizePythonSubmission(
+        await #expect {
+            try await SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
@@ -155,7 +155,7 @@ import Testing
         }
     }
 
-    @Test func notebookWithNoCodeCellsFailsEarly() throws {
+    @Test func notebookWithNoCodeCellsFailsEarly() async throws {
         try writeSubmissionFile(
             name: "notes.ipynb",
             contents: """
@@ -166,8 +166,8 @@ import Testing
                 }
                 """)
 
-        #expect {
-            try SubmissionNormalizer().normalizePythonSubmission(
+        await #expect {
+            try await SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
@@ -180,11 +180,11 @@ import Testing
         }
     }
 
-    @Test func multiplePythonFilesDoNotCreateCompatibilityCopy() throws {
+    @Test func multiplePythonFilesDoNotCreateCompatibilityCopy() async throws {
         try writeSubmissionFile(name: "alpha.py", contents: "x = 1\n")
         try writeSubmissionFile(name: "beta.py", contents: "y = 2\n")
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(requiredFiles: ["main.py"]),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -195,10 +195,10 @@ import Testing
         #expect(result.warnings.contains { $0.contains("compatibility copy") } == false)
     }
 
-    @Test func singlePythonSourceCreatesCompatibilityCopy() throws {
+    @Test func singlePythonSourceCreatesCompatibilityCopy() async throws {
         try writeSubmissionFile(name: "submission.py", contents: "answer = 42\n")
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(requiredFiles: ["main.py"]),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,
@@ -209,12 +209,12 @@ import Testing
         #expect(result.warnings.contains { $0.contains("compatibility copy") })
     }
 
-    @Test func unsupportedFilesAreIgnoredWhenPythonExists() throws {
+    @Test func unsupportedFilesAreIgnoredWhenPythonExists() async throws {
         try writeSubmissionFile(name: "submission.py", contents: "print('ok')\n")
         let binaryURL = submissionDir.appendingPathComponent("archive.bin")
         try Data([0x00, 0x01, 0x02]).write(to: binaryURL)
 
-        let result = try SubmissionNormalizer().normalizePythonSubmission(
+        let result = try await SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
             submissionDirectory: submissionDir,
             workspaceDirectory: workspaceDir,

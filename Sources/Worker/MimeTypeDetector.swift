@@ -1,5 +1,7 @@
 import Core
 import Foundation
+import Subprocess
+import SystemPackage
 
 #if os(Linux)
 import Glibc
@@ -14,39 +16,69 @@ struct MimeTypeDetector {
     /// pool under parallel-test load).
     private static let timeoutSeconds: TimeInterval = 30
 
-    func detectMimeType(for fileURL: URL) throws -> String {
-        let process = Process()
-        let stdout = Pipe()
-        // CLOEXEC: without it, any subprocess spawned concurrently with this
-        // one inherits a duplicate of the write end across its exec, and the
-        // drain below then never sees EOF until that unrelated process exits
-        // (the #1139 mechanism, recurring in #1233).
-        setCloseOnExec(stdout)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/file")
-        process.arguments = ["--mime-type", "-b", fileURL.path]
-        process.standardOutput = stdout
-        try process.run()
-        // Drain stdout BEFORE waiting: read-after-wait deadlocks once the
-        // child fills the pipe buffer, while EOF arrives exactly when the
-        // child exits (docs/ci-flakiness.md, remaining attack order). The
-        // drain is deadline-bounded — never an unbounded blocking read on a
-        // cooperative-pool thread (issue #1233).
-        let data = boundedReadToEOF(
-            fromDescriptor: stdout.fileHandleForReading.fileDescriptor,
-            deadline: Date().addingTimeInterval(Self.timeoutSeconds)
-        )
-        if process.isRunning {
-            // Deadline hit with `file` still alive: kill it so the reap below
-            // cannot block past the bound. SIGKILL cannot be ignored.
-            kill(process.processIdentifier, SIGKILL)
-        }
-        process.waitUntilExit()
+    /// Cap on `file`'s captured output. One MIME type is a few dozen bytes.
+    private static let outputLimitBytes = 64 * 1024
 
-        guard process.terminationStatus == 0 else {
+    /// Spawns through `swift-subprocess` rather than Foundation's `Process`.
+    /// This call runs once per submission file, unthrottled and concurrently
+    /// with every other job's -- the concurrent-spawn shape behind #1139 and
+    /// #1233. Subprocess owns the capture pipe and drains it, so the
+    /// hand-rolled close-on-exec pipe, deadline-bounded drain and
+    /// `isRunning`/SIGKILL ladder this replaces have nothing left to do.
+    ///
+    /// `async` for that reason alone: the work is identical, but the spawn
+    /// now suspends instead of blocking a cooperative-pool thread.
+    func detectMimeType(for fileURL: URL) async throws -> String {
+        var options = PlatformOptions()
+        options.createSession = true
+        options.teardownSequence = [
+            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .milliseconds(200))
+        ]
+        let platformOptions = options
+        let path = fileURL.path
+
+        let outcome: DetectOutcome
+        do {
+            outcome = try await withThrowingTaskGroup(of: DetectOutcome.self) { group in
+                group.addTask {
+                    let result = try await Subprocess.run(
+                        .path("/usr/bin/file"),
+                        arguments: ["--mime-type", "-b", path],
+                        platformOptions: platformOptions,
+                        output: .string(limit: Self.outputLimitBytes)
+                    )
+                    return .finished(
+                        stdout: result.standardOutput,
+                        succeeded: result.terminationStatus.isSuccess
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(Self.timeoutSeconds))
+                    return .timedOut
+                }
+                let first = try await group.next()
+                // Cancelling the run task tears `file` down; cancelling the
+                // sleep merely ends it. Drain so the cancelled sibling's error
+                // cannot surface as this call's result.
+                group.cancelAll()
+                while (try? await group.next()) != nil {}
+                return first ?? .timedOut
+            }
+        } catch {
             throw SubmissionNormalizationError.mimeDetectionFailed(fileURL.lastPathComponent)
         }
 
-        return String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "application/octet-stream"
+        guard case .finished(let stdout, true) = outcome else {
+            throw SubmissionNormalizationError.mimeDetectionFailed(fileURL.lastPathComponent)
+        }
+        let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "application/octet-stream" : trimmed
+    }
+
+    /// Which of the two racers finished first.  A flat enum so the task group
+    /// has one concrete element type to be generic over.
+    private enum DetectOutcome: Sendable {
+        case finished(stdout: String, succeeded: Bool)
+        case timedOut
     }
 }

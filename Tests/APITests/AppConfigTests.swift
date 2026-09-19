@@ -110,8 +110,11 @@ import Vapor
     /// tests can short-circuit env-based loading without exporting variables.
     @Test func preloadedAppConfigShortCircuitsLoad() async throws {
         let app = try await Application.make(.testing)
+        // Awaited in the defer (SE-0493), not fired into a detached Task: a
+        // fire-and-forget shutdown races test-runner exit and sometimes never
+        // ran at all -- the failure TestAppTempDirectoryTests documents.
         defer {
-            Task { try? await app.asyncShutdown() }
+            try? await app.asyncShutdown()
         }
         var seed = AppConfig.testDefaults(authMode: .dual)
         seed = AppConfig(
