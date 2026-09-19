@@ -218,7 +218,7 @@ import Testing
     }
 
     /// `.differential` end to end: the reference computes each expected value.
-    @Test func differentialGradesAgainstTheReference() throws {
+    @Test func differentialGradesAgainstTheReference() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
@@ -232,7 +232,7 @@ import Testing
     /// A student cannot make it raise except through inputs the instructor
     /// chose, and "your function is wrong" would send them to debug the wrong
     /// code.
-    @Test func differentialBlamesTheReferenceWhenTheReferenceStops() throws {
+    @Test func differentialBlamesTheReferenceWhenTheReferenceStops() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .differential, functionName: "double_it", paramNames: ["x"],
@@ -242,7 +242,7 @@ import Testing
         #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 2)
     }
 
-    @Test func boundaryEqualityPassesAndFails() throws {
+    @Test func boundaryEqualityPassesAndFails() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "double_it", paramNames: ["x"],
@@ -253,7 +253,7 @@ import Testing
         #expect(try run(script: script, submission: "other <- function(x) x\n") == 2)
     }
 
-    @Test func boundaryEqualityComparesCollections() throws {
+    @Test func boundaryEqualityComparesCollections() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "letters_of", paramNames: ["s"],
@@ -271,7 +271,7 @@ import Testing
     /// `NULL`, which demoted the whole arg to `list(...)` and blew up with
     /// "'list' object cannot be coerced to type 'double'" before the student's
     /// function was ever really exercised.
-    @Test func nullArgsAndExpectationsBecomeRNAs() throws {
+    @Test func nullArgsAndExpectationsBecomeRNAs() async throws {
         guard Self.hasRscript else { return }
         let stage =
             "egfr_stage <- function(e) ifelse(e >= 60, \"G2\", \"G4\")\n"
@@ -296,7 +296,7 @@ import Testing
     }
 
     /// A lone NA argument is still an atomic vector, not a list.
-    @Test func aLoneNullArgIsAnAtomicNA() throws {
+    @Test func aLoneNullArgIsAnAtomicNA() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "is_missing", paramNames: ["x"],
@@ -306,7 +306,7 @@ import Testing
 
     /// An integer return against a JSON-decoded double expectation must pass —
     /// the reason `chickadee_equal` compares numerics by value.
-    @Test func integerReturnMatchesDoubleExpectation() throws {
+    @Test func integerReturnMatchesDoubleExpectation() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .boundaryEquality, functionName: "count", paramNames: ["x"],
@@ -314,7 +314,7 @@ import Testing
         #expect(try run(script: script, submission: "count <- function(x) 3L\n") == 0)
     }
 
-    @Test func approximateEqualityHonoursTolerance() throws {
+    @Test func approximateEqualityHonoursTolerance() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .approximateEquality, functionName: "ratio", paramNames: ["x"],
@@ -326,7 +326,7 @@ import Testing
         #expect(try run(script: script, submission: "ratio <- function(x) \"nope\"\n") == 1)
     }
 
-    @Test func unorderedEqualityIgnoresOrder() throws {
+    @Test func unorderedEqualityIgnoresOrder() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .unorderedEquality, functionName: "tags", paramNames: ["x"],
@@ -335,7 +335,7 @@ import Testing
         #expect(try run(script: script, submission: "tags <- function(x) c(\"a\",\"b\")\n") == 1)
     }
 
-    @Test func variableEqualityChecksModuleLevelValue() throws {
+    @Test func variableEqualityChecksModuleLevelValue() async throws {
         guard Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .variableEquality, functionName: "",
@@ -348,7 +348,7 @@ import Testing
         #expect(try run(script: script, submission: "other <- 5\n") == 1)
     }
 
-    @Test func returnTypeCheckAcceptsRAndPythonTypeNames() throws {
+    @Test func returnTypeCheckAcceptsRAndPythonTypeNames() async throws {
         guard Self.hasRscript else { return }
         let rName = single(
             kind: .returnTypeCheck, functionName: "label", paramNames: ["x"],
@@ -363,7 +363,7 @@ import Testing
         #expect(try run(script: pyName, submission: "label <- function(x) \"hi\"\n") == 0)
     }
 
-    @Test func exceptionExpectedRequiresAnError() throws {
+    @Test func exceptionExpectedRequiresAnError() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .exceptionExpected, functionName: "boom", paramNames: ["x"],
@@ -378,7 +378,7 @@ import Testing
         #expect(try run(script: script, submission: "boom <- function(x) stop(\"other\")\n") == 1)
     }
 
-    @Test func performanceThresholdBoundsRuntime() throws {
+    @Test func performanceThresholdBoundsRuntime() async throws {
         guard Self.hasRscript else { return }
         // A tight budget keeps the over-budget case cheap: sleeping just past
         // it costs a fraction of a second rather than seconds of extra load on
@@ -391,7 +391,7 @@ import Testing
         #expect(try run(script: script, submission: "work <- function(n) { Sys.sleep(0.4); n }\n") == 1)
     }
 
-    @Test func stdoutEqualityComparesPrintedOutput() throws {
+    @Test func stdoutEqualityComparesPrintedOutput() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .stdoutEquality, functionName: "greet", paramNames: ["name"],
@@ -408,7 +408,7 @@ import Testing
         #expect(try run(script: script, submission: "greet <- function(name) cat(\"Bye\\n\")\n") == 1)
     }
 
-    @Test func existenceGuardRunsForReal() throws {
+    @Test func existenceGuardRunsForReal() async throws {
         guard Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .boundaryEquality, functionName: "solve",
@@ -422,7 +422,7 @@ import Testing
 
     /// End-to-end personalization: the value the server resolved lands in
     /// `_ck_inputs.R`, and the generated case binds it as `expected`.
-    @Test func perStudentExpectedComesFromInputsFile() throws {
+    @Test func perStudentExpectedComesFromInputsFile() async throws {
         guard Self.hasRscript else { return }
         let c = PatternCase(
             key: "01", label: "personalized", args: [.int(1)], expected: .null,
@@ -461,7 +461,7 @@ import Testing
     /// against a module-level variable, with no function involved. This is the
     /// shape a recap exercise takes ("your sd_systolic equals your value"), and
     /// it was rejected outright before.
-    @Test func variableEqualityPerStudentExpectedRunsForReal() throws {
+    @Test func variableEqualityPerStudentExpectedRunsForReal() async throws {
         guard Self.hasRscript else { return }
         let c = PatternCase(
             key: "01", label: "sd_systolic", args: [.string("sd_systolic")], expected: .null,
@@ -509,7 +509,7 @@ import Testing
     /// `.programIO`: the file is sourced with `readline` / `readLines("stdin")`
     /// / `scan()` masked to the case's lines, and `quit()` masked so a script
     /// that quits after its answer is still graded.
-    @Test func programIOPassesAndFails() throws {
+    @Test func programIOPassesAndFails() async throws {
         guard Self.hasRscript else { return }
         let script = single(
             kind: .programIO, functionName: "", paramNames: ["stdin"],
@@ -536,7 +536,7 @@ import Testing
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
-    @Test func programIORegexMatchesALineOfTheOutput() throws {
+    @Test func programIORegexMatchesALineOfTheOutput() async throws {
         guard Self.hasRscript else { return }
         let fam = PatternFamily(
             id: "fam", name: "Fam", kind: .programIO, functionName: "", paramNames: ["stdin"],

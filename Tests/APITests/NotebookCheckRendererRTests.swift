@@ -174,7 +174,7 @@ import Testing
         )
         """
 
-    @Test func dataFrameShapeChecksRowsAndColumns() throws {
+    @Test func dataFrameShapeChecksRowsAndColumns() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "shape1", kind: .dataFrameShape, tier: .pub, points: 1,
@@ -194,7 +194,7 @@ import Testing
     /// A tibble-like object inheriting from data.frame must still satisfy the
     /// frame checks — the reason `is.data.frame` is the guard rather than an
     /// exact class comparison.
-    @Test func dataFrameShapeAcceptsAnInheritingClass() throws {
+    @Test func dataFrameShapeAcceptsAnInheritingClass() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "shape1", kind: .dataFrameShape, tier: .pub, points: 1,
@@ -203,7 +203,7 @@ import Testing
         #expect(try run(check: check, submission: tibbleish) == 0)
     }
 
-    @Test func dataFrameColumnsExactAndSuperset() throws {
+    @Test func dataFrameColumnsExactAndSuperset() async throws {
         guard Self.hasRscript else { return }
         let exact = NotebookCheck(
             id: "cols1", kind: .dataFrameColumns, tier: .pub, points: 1,
@@ -224,7 +224,7 @@ import Testing
             try run(check: superset, submission: "patients <- data.frame(bmi = c(1.0))\n") == 1)
     }
 
-    @Test func dataFrameEqualityComparesValuesWithinTolerance() throws {
+    @Test func dataFrameEqualityComparesValuesWithinTolerance() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "eq1", kind: .dataFrameEquality, tier: .pub, points: 1,
@@ -253,7 +253,7 @@ import Testing
 
     /// A character column compares as text, so a factor holding the same labels
     /// still passes — students frequently end up with one or the other.
-    @Test func dataFrameEqualityComparesTextColumnsAsText() throws {
+    @Test func dataFrameEqualityComparesTextColumnsAsText() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "eq2", kind: .dataFrameEquality, tier: .pub, points: 1,
@@ -272,7 +272,7 @@ import Testing
                 submission: "df <- data.frame(name = c(\"ada\", \"hopper\"), n = c(1, 2))\n") == 1)
     }
 
-    @Test func seriesEqualityAcceptsVectorAndOneColumnFrame() throws {
+    @Test func seriesEqualityAcceptsVectorAndOneColumnFrame() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "ser1", kind: .seriesEquality, tier: .pub, points: 1,
@@ -294,7 +294,7 @@ import Testing
 
     /// A kind with no R renderer fails closed with a clear message rather than
     /// silently passing, if one ever reaches grading past validation.
-    @Test func unsupportedKindFailsClosedAtGradingTime() throws {
+    @Test func unsupportedKindFailsClosedAtGradingTime() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "ast1", kind: .astStructure, tier: .pub, points: 1,
@@ -304,7 +304,7 @@ import Testing
 
     // MARK: - .variableExists
 
-    @Test func variableExistsChecksPresenceAndType() throws {
+    @Test func variableExistsChecksPresenceAndType() async throws {
         guard Self.hasRscript else { return }
         let untyped = NotebookCheck(
             id: "v1", kind: .variableExists, tier: .pub, points: 1, variable: "beats")
@@ -322,7 +322,7 @@ import Testing
 
     /// A variable built by top-level calls is the case Python needs
     /// `student_main_state()` for; in R it is simply in the environment.
-    @Test func variableExistsSeesAValueBuiltByTopLevelCalls() throws {
+    @Test func variableExistsSeesAValueBuiltByTopLevelCalls() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "v3", kind: .variableExists, tier: .pub, points: 1,
@@ -336,7 +336,7 @@ import Testing
 
     // MARK: - .functionExists
 
-    @Test func functionExistsChecksDefinitionAndCallability() throws {
+    @Test func functionExistsChecksDefinitionAndCallability() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "f1", kind: .functionExists, tier: .pub, points: 1, variable: "bmi")
@@ -346,7 +346,7 @@ import Testing
         #expect(try run(check: check, submission: "bmi <- 27.1\n") == 1)
     }
 
-    @Test func functionExistsChecksArity() throws {
+    @Test func functionExistsChecksArity() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "f2", kind: .functionExists, tier: .pub, points: 1,
@@ -363,7 +363,7 @@ import Testing
 
     // MARK: - .numericArrayClose
 
-    @Test func numericArrayCloseComparesWithinTolerance() throws {
+    @Test func numericArrayCloseComparesWithinTolerance() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "n1", kind: .numericArrayClose, tier: .pub, points: 1,
@@ -383,7 +383,7 @@ import Testing
 
     /// Mirrors numpy's `equal_nan` default so a check converted from Python
     /// keeps agreeing with itself.
-    @Test func numericArrayCloseTreatsMatchingNaNAndInfAsEqual() throws {
+    @Test func numericArrayCloseTreatsMatchingNaNAndInfAsEqual() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "n2", kind: .numericArrayClose, tier: .pub, points: 1,
@@ -406,7 +406,7 @@ import Testing
         return out
     }
 
-    @Test func cellContainsMatchesLiteralText() throws {
+    @Test func cellContainsMatchesLiteralText() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "cc1", kind: .cellContains, tier: .pub, points: 1, containsText: "aggregate")
@@ -419,7 +419,7 @@ import Testing
         #expect(try run(check: check, submission: miss) == 1)
     }
 
-    @Test func cellContainsMatchesARegularExpression() throws {
+    @Test func cellContainsMatchesARegularExpression() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "cc2", kind: .cellContains, tier: .pub, points: 1,
@@ -432,7 +432,7 @@ import Testing
     }
 
     /// The "write your own analysis, do not paste the example" constraint.
-    @Test func cellContainsRejectsACopyOfTheExample() throws {
+    @Test func cellContainsRejectsACopyOfTheExample() async throws {
         guard Self.hasRscript else { return }
         let example = "aggregate(age ~ sex, data = df, FUN = mean)"
         let check = NotebookCheck(
@@ -456,7 +456,7 @@ import Testing
 
     /// A hand-written `.R` upload never went through the extractor, so it has
     /// no markers. The whole file is one cell rather than an error.
-    @Test func cellContainsFallsBackToFileGranularityWithoutMarkers() throws {
+    @Test func cellContainsFallsBackToFileGranularityWithoutMarkers() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "cc4", kind: .cellContains, tier: .pub, points: 1, containsText: "aggregate")
@@ -466,7 +466,7 @@ import Testing
 
     // MARK: - .figureCount
 
-    @Test func figureCountCountsHighLevelPlots() throws {
+    @Test func figureCountCountsHighLevelPlots() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "fig2", kind: .figureCount, tier: .pub, points: 1, minFigures: 2)
@@ -481,7 +481,7 @@ import Testing
 
     /// The distinction that makes `plot.new` the right hook: adding a line to
     /// an existing chart is not a second chart.
-    @Test func figureCountIgnoresLowLevelAdditions() throws {
+    @Test func figureCountIgnoresLowLevelAdditions() async throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
             id: "fig3", kind: .figureCount, tier: .pub, points: 1, minFigures: 2)

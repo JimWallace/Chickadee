@@ -34,10 +34,11 @@ import Testing
     /// The did-not-skip proof. Every test below returns silently when the JDK is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
-    @Test func javacIsPresentInCI() {
+    @Test func javacIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.javacAvailable
         #expect(
-            Self.javacAvailable,
+            isAvailable,
             """
             javac is absent in the CI image, so every native Java grading test skipped \
             silently. Note the probe is `javac`, not `java`: a JRE-only image passes the \

@@ -87,7 +87,7 @@ import Testing
     }
 
     @Test func evaluatesRotationExpressionForSeed() async throws {
-        guard Self.hasRscript else { return }  // silent skip where R is absent
+        guard await Self.hasRscript else { return }  // silent skip where R is absent
 
         let poolStrings = ["AACGT", "GGTTA", "CCGAT", "TTAGC"]
         let pool = FamilyVariable(name: "pool", value: .array(poolStrings.map(JSONValue.string)))
@@ -110,7 +110,7 @@ import Testing
     /// A value with quotes, a newline, a tab and a backslash must survive
     /// `deparse` → JSON → `JSONSerialization` intact as a re-parseable R literal.
     @Test func escapesNastyStringValues() async throws {
-        guard Self.hasRscript else { return }
+        guard await Self.hasRscript else { return }
 
         let expr = PersonalizationExpression(
             name: "note", expression: #"paste0("q:\"x\"", "\n\t", "b \\ c")"#)

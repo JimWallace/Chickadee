@@ -31,10 +31,11 @@ import Testing
     /// The did-not-skip proof. Every test below returns silently when Racket is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
-    @Test func racketIsPresentInCI() {
+    @Test func racketIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.racketAvailable
         #expect(
-            Self.racketAvailable,
+            isAvailable,
             """
             racket is absent in the CI image, so every native Racket grading test skipped \
             silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt \

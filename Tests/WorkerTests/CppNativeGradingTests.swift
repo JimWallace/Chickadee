@@ -28,10 +28,11 @@ import Testing
     /// The did-not-skip proof (audit F2). Every test below guards
     /// `gppAvailable` and returns silently when g++ is absent — right on a
     /// laptop, a silent hole in CI. Under `CI`, g++ MUST be present.
-    @Test func gppIsPresentInCI() {
+    @Test func gppIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.gppAvailable
         #expect(
-            Self.gppAvailable,
+            isAvailable,
             """
             g++ is absent in the CI image, so every native C++ grading test skipped \
             silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests \

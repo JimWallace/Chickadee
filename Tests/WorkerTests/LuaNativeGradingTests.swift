@@ -37,10 +37,11 @@ import Testing
     /// being added to the CI image, so this whole suite skipped while reporting
     /// green. Under `CI`, Lua MUST be present; this cannot be satisfied by
     /// skipping.
-    @Test func luaIsPresentInCI() {
+    @Test func luaIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.luaAvailable
         #expect(
-            Self.luaAvailable,
+            isAvailable,
             """
             lua5.4 is absent in the CI image, so every native Lua grading test skipped silently. \
             Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt fallback in \

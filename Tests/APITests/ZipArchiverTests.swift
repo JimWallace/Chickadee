@@ -40,7 +40,7 @@ final class ZipArchiverTests {
     /// Creates a zip archive at `zipPath` using Python's zipfile module.
     /// Returns `false` (and leaves the test a silent no-op) if python3 is
     /// not available; tests that call this should `guard` on the return value.
-    private func makePythonZip(at zipPath: String, entries: [(name: String, content: String)]) throws -> Bool {
+    private func makePythonZip(at zipPath: String, entries: [(name: String, content: String)]) async -> Bool {
         let entriesCode = entries.map { e in
             "z.writestr(\(e.name.debugDescription), \(e.content.debugDescription))"
         }.joined(separator: "\n    ")
@@ -49,7 +49,8 @@ final class ZipArchiverTests {
             with zipfile.ZipFile('\(zipPath)', 'w') as z:
                 \(entriesCode)
             """
-        return await toolIsAvailable("python3", arguments: ["-c"])
+        let run = try? await runTool(["python3", "-c", script])
+        return run?.succeeded ?? false
     }
 
     // MARK: - Error descriptions

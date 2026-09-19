@@ -108,7 +108,7 @@ import Testing
 
     // MARK: - boundaryEquality
 
-    @Test func boundaryEqualityPassesAndFails() throws {
+    @Test func boundaryEqualityPassesAndFails() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
 
@@ -129,7 +129,7 @@ import Testing
     /// An authored `6` is an `Integer`; a student returning `long` boxes to
     /// `Long`, and `Integer.valueOf(6).equals(Long.valueOf(6L))` is FALSE. A
     /// runtime that trusted `equals` would mark this correct submission wrong.
-    @Test func aWiderReturnTypeStillMatchesAnAuthoredInteger() throws {
+    @Test func aWiderReturnTypeStillMatchesAnAuthoredInteger() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try Self.execute(
@@ -148,7 +148,7 @@ import Testing
     /// calling `System.exit(0)` in their own code exits the JVM with status 0;
     /// without the sentinel the wrapper checks for, the case — and every case in
     /// the assignment — reads as a PASS.
-    @Test func aSubmissionCallingSystemExitIsAnErrorNotAPass() throws {
+    @Test func aSubmissionCallingSystemExitIsAnErrorNotAPass() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try Self.execute(
@@ -165,7 +165,7 @@ import Testing
 
     // MARK: - A submission that does not compile
 
-    @Test func aNonCompilingSubmissionIsAnError() throws {
+    @Test func aNonCompilingSubmissionIsAnError() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try Self.execute(
@@ -176,7 +176,7 @@ import Testing
 
     // MARK: - approximateEquality
 
-    @Test func approximateEqualityHonoursTolerance() throws {
+    @Test func approximateEqualityHonoursTolerance() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
         let good = try Self.execute(
@@ -191,7 +191,7 @@ import Testing
 
     // MARK: - unorderedEquality
 
-    @Test func unorderedEqualityIgnoresOrder() throws {
+    @Test func unorderedEqualityIgnoresOrder() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
@@ -211,7 +211,7 @@ import Testing
 
     // MARK: - returnTypeCheck
 
-    @Test func returnTypeCheckMatchesNeutralNames() throws {
+    @Test func returnTypeCheckMatchesNeutralNames() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
         let good = try Self.execute(
@@ -226,7 +226,7 @@ import Testing
 
     // MARK: - exceptionExpected
 
-    @Test func exceptionExpectedMatchesOnTypeAndMessage() throws {
+    @Test func exceptionExpectedMatchesOnTypeAndMessage() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
@@ -252,7 +252,7 @@ import Testing
     /// static context" — so the one test whose job is to explain the problem
     /// said everything was fine (#1349). Forgetting `static` is the most common
     /// Java intro mistake.
-    @Test func theExistenceGuardRejectsANonStaticMethod() throws {
+    @Test func theExistenceGuardRejectsANonStaticMethod() async throws {
         guard Self.javacAvailable else { return }
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
@@ -279,7 +279,7 @@ import Testing
     /// A successful compile's warnings must not ride into a PASSING test's
     /// `longResult` (#1349). Raw types produce javac's "unchecked or unsafe
     /// operations" note, which is the everyday way a student trips this.
-    @Test func compilerWarningsDoNotReachAPassingResult() throws {
+    @Test func compilerWarningsDoNotReachAPassingResult() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(1)))
         let good = try Self.execute(
@@ -300,7 +300,7 @@ import Testing
     /// emitted an EXPRESSION lambda, and `ck.Thunk.run()` returns `Object`, so
     /// javac refused it with "void cannot be converted to Object" and every
     /// case in the family reported `error` (#1346).
-    @Test func exceptionExpectedAcceptsAVoidTarget() throws {
+    @Test func exceptionExpectedAcceptsAVoidTarget() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
@@ -318,7 +318,7 @@ import Testing
     /// was an illegal escape, erroring the whole family (#1346). Round-trips
     /// through the match, so it proves the escaping is correct and not merely
     /// compilable.
-    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() throws {
+    @Test func anExpectedStringWithQuotesAndBackslashesStillCompiles() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
@@ -335,7 +335,7 @@ import Testing
 
     // MARK: - performanceThreshold
 
-    @Test func performanceThresholdTimesTheCall() throws {
+    @Test func performanceThresholdTimesTheCall() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
         let good = try Self.execute(
@@ -353,7 +353,7 @@ import Testing
 
     // MARK: - stdoutEquality
 
-    @Test func stdoutEqualityComparesPrintedText() throws {
+    @Test func stdoutEqualityComparesPrintedText() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
         let good = try Self.execute(
@@ -376,7 +376,7 @@ import Testing
     /// found no sentinel, and an ordinary exception was reported as exit 2
     /// "Does the submission call System.exit?" (#1344). The exit code is the
     /// regression: it must be 1 (a graded fail), not 2.
-    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() throws {
+    @Test func stdoutEqualityStillReportsWhenTheSubmissionThrows() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
         let thrown = try Self.execute(
@@ -396,7 +396,7 @@ import Testing
 
     // MARK: - variableEquality
 
-    @Test func variableEqualityReadsAStaticField() throws {
+    @Test func variableEqualityReadsAStaticField() async throws {
         guard Self.javacAvailable else { return }
         let family = Self.family(
             .variableEquality, function: "Solution.LIMIT", expected: .int(42))
@@ -412,7 +412,7 @@ import Testing
 
     // MARK: - differential
 
-    @Test func differentialComparesAgainstTheReference() throws {
+    @Test func differentialComparesAgainstTheReference() async throws {
         guard Self.javacAvailable else { return }
         let family = Self.family(
             .differential, expected: .null,
@@ -436,7 +436,7 @@ import Testing
     /// test — the leg the runbook warns is usually proved only in one
     /// direction. The file here is the real `renderInputsFile` output, not a
     /// fixture.
-    @Test func aPerStudentInputReachesTheGeneratedTest() throws {
+    @Test func aPerStudentInputReachesTheGeneratedTest() async throws {
         guard Self.javacAvailable else { return }
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .boundaryEquality,
@@ -466,7 +466,7 @@ import Testing
 
     // MARK: - The existence guard
 
-    @Test func theExistenceGuardFailsOnAMissingMethod() throws {
+    @Test func theExistenceGuardFailsOnAMissingMethod() async throws {
         guard Self.javacAvailable else { return }
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
@@ -485,7 +485,7 @@ import Testing
 
     /// The submission runs in source-file mode with the case's text on its
     /// stdin; the checker class grades what it printed.
-    @Test func programIOPassesAndFails() throws {
+    @Test func programIOPassesAndFails() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
@@ -513,7 +513,7 @@ import Testing
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
-    @Test func programIORegexMatchesALineOfTheOutput() throws {
+    @Test func programIORegexMatchesALineOfTheOutput() async throws {
         guard Self.javacAvailable else { return }
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
@@ -531,7 +531,7 @@ import Testing
     /// `System.exit` from a whole program is the program ending, not the
     /// test: a non-zero status is a graded failure, a zero one is graded on
     /// the output.
-    @Test func programIOSystemExitIsGradedOnTheOutput() throws {
+    @Test func programIOSystemExitIsGradedOnTheOutput() async throws {
         guard Self.javacAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))

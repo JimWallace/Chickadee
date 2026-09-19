@@ -235,8 +235,8 @@ import Testing
         }
     }
 
-    private static func isAvailable(_ command: String) -> Bool {
-        return await toolIsAvailable("which")
+    private static func isAvailable(_ command: String) async -> Bool {
+        return await toolIsAvailable("which", arguments: [command])
     }
 
     @Test(arguments: AssignmentLanguage.allCases)

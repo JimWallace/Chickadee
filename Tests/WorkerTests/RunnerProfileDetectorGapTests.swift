@@ -33,7 +33,7 @@ import Testing
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
     private static func hostHasCommand(_ command: String) async -> Bool {
-        return await toolIsAvailable("which")
+        return await toolIsAvailable("which", arguments: [command])
     }
 
     private static func detectProfile() async throws -> RunnerCapabilityProfile {
@@ -105,7 +105,8 @@ import Testing
     /// Only meaningful where python3 exists; where it does not, the detector
     /// never runs these probes and there is nothing to assert.
     @Test func pythonModuleCapabilitiesMatchWhatTheHostCanImport() async throws {
-        try #require(Self.hostHasCommand("python3"), "no python3 on this host")
+        let hasPython = await Self.hostHasCommand("python3")
+        try #require(hasPython, "no python3 on this host")
         let profile = try await Self.detectProfile()
         let names = Set(profile.capabilities.map(\.name))
 

@@ -26,10 +26,11 @@ import Testing
     /// below guards `octaveAvailable` and returns silently when Octave is
     /// absent — right on a laptop, a silent hole in CI. Under `CI`, Octave MUST
     /// be present; this cannot be satisfied by skipping.
-    @Test func octaveIsPresentInCI() {
+    @Test func octaveIsPresentInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+        let isAvailable = await Self.octaveAvailable
         #expect(
-            Self.octaveAvailable,
+            isAvailable,
             """
             octave is absent in the CI image, so every native Octave grading test skipped \
             silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt \

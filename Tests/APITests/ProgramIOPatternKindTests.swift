@@ -203,7 +203,7 @@ import Vapor
 
     private static let unguardedSum = "a = int(input())\nb = int(input())\nprint(a + b)\n"
 
-    @Test func anUnguardedProgramReadingInputPassesAndFails() throws {
+    @Test func anUnguardedProgramReadingInputPassesAndFails() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let good = try Self.grade(family, program: Self.unguardedSum)
@@ -218,7 +218,7 @@ import Vapor
     /// must neither block on the real stdin nor leak the program's output into
     /// the test's — the first line of stdout is the verdict's, not the
     /// program's.
-    @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() throws {
+    @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("8"))
         let result = try Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
@@ -227,7 +227,7 @@ import Vapor
         #expect(result.stdout.contains("'banner\\n7'"))
     }
 
-    @Test func aMainGuardedProgramRuns() throws {
+    @Test func aMainGuardedProgramRuns() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let program = """
@@ -243,7 +243,7 @@ import Vapor
         #expect(try Self.grade(family, program: program).code == 0)
     }
 
-    @Test func promptsArePartOfTheOutputAsOnATerminal() throws {
+    @Test func promptsArePartOfTheOutputAsOnATerminal() async throws {
         guard Self.pythonAvailable else { return }
         let program = "a = int(input('A: '))\nb = int(input('B: '))\nprint(a + b)\n"
         let exact = ProgramIOPatternKindTests.family(expected: .string("A: B: 7"))
@@ -252,7 +252,7 @@ import Vapor
         #expect(try Self.grade(included, program: program).code == 0)
     }
 
-    @Test func regexComparisonMatchesAcrossLines() throws {
+    @Test func regexComparisonMatchesAcrossLines() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("^sum=7$"), comparison: .regex)
         let program = "a = int(input())\nb = int(input())\nprint('header')\nprint(f'sum={a + b}')\n"
@@ -260,7 +260,7 @@ import Vapor
         #expect(try Self.grade(family, program: "print('sum=8')\n").code == 1)
     }
 
-    @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() throws {
+    @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let good = try Self.grade(
@@ -270,7 +270,7 @@ import Vapor
         #expect(bad.code == 1, "a sys.exit(0) after a wrong answer read as a pass: \(bad.stdout)")
     }
 
-    @Test func aCrashIsAGradedFailureCarryingTheError() throws {
+    @Test func aCrashIsAGradedFailureCarryingTheError() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
         let crashed = try Self.grade(family, program: "print(1 / 0)\n")
@@ -279,7 +279,7 @@ import Vapor
         #expect(crashed.stdout.contains("ZeroDivisionError"))
     }
 
-    @Test func readingPastTheInputIsAGradedFailure() throws {
+    @Test func readingPastTheInputIsAGradedFailure() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(stdin: "3\n")
         let starved = try Self.grade(family, program: Self.unguardedSum)
@@ -287,7 +287,7 @@ import Vapor
         #expect(starved.stdout.contains("EOFError"))
     }
 
-    @Test func trailingWhitespaceIsIgnoredUnderExact() throws {
+    @Test func trailingWhitespaceIsIgnoredUnderExact() async throws {
         guard Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("7"))
         #expect(try Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)

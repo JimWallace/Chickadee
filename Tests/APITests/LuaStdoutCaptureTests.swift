@@ -38,7 +38,7 @@ import Testing
 
     /// Grade `submission` with the generated script + the canonical runtime,
     /// returning the outcome status parsed from the last JSON line.
-    private func grade(_ submission: String) throws -> String {
+    private func grade(_ submission: String) async throws -> String {
         guard Self.luaAvailable else { return "pass" }  // skip: treated as no-op
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-luastdout-\(UUID().uuidString)")
@@ -79,25 +79,25 @@ import Testing
 
     // The fixture family prints the string "hello" for `classify`.
 
-    @Test func printIsCaptured() throws {
+    @Test func printIsCaptured() async throws {
         guard Self.luaAvailable else { return }
         #expect(try grade(#"function classify(x) print("hello") end"#) == "pass")
     }
 
-    @Test func ioStdoutWriteIsCaptured() throws {
+    @Test func ioStdoutWriteIsCaptured() async throws {
         guard Self.luaAvailable else { return }
         // The regression: this escaped the old bare-io.write swap and failed a
         // correct submission with empty output.
         #expect(try grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
     }
 
-    @Test func chainedIoWriteIsCaptured() throws {
+    @Test func chainedIoWriteIsCaptured() async throws {
         guard Self.luaAvailable else { return }
         // Chained writes used to crash on the collector returning nil.
         #expect(try grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
     }
 
-    @Test func wrongOutputStillFails() throws {
+    @Test func wrongOutputStillFails() async throws {
         guard Self.luaAvailable else { return }
         // The capture is stronger, but the check still bites.
         #expect(try grade(#"function classify(x) print("goodbye") end"#) == "fail")

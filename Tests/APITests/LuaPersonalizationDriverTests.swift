@@ -85,7 +85,7 @@ import Testing
             encoding: .utf8)
     }
 
-    @Test func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() throws {
+    @Test func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() async throws {
         guard Self.luaAvailable else { return }
 
         let source = PersonalizationEvaluator.renderLuaDriverScript(
@@ -119,7 +119,7 @@ import Testing
     /// The emitted literals must be *parseable Lua*, not merely plausible. This
     /// is the property that makes the driver's output safe to write verbatim
     /// into the inputs file.
-    @Test func everyEmittedValueParsesBackAsLua() throws {
+    @Test func everyEmittedValueParsesBackAsLua() async throws {
         guard Self.luaAvailable else { return }
 
         let source = PersonalizationEvaluator.renderLuaDriverScript(
@@ -147,7 +147,7 @@ import Testing
 
     /// The done-test item that has no other guard: one seed, two
     /// implementations. Both are run here on the same env var and compared.
-    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() throws {
+    @Test func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
         guard Self.luaAvailable else { return }
 
         // A realistic 64-hex-char assignment seed, plus edge cases: empty (no
@@ -187,7 +187,7 @@ import Testing
     /// The seed is also supposed to match R's, so a student's seed is one number
     /// whichever non-Python language the assignment is in. Both fold the same
     /// hex with Horner's method modulo 2^31-1.
-    @Test func theLuaSeedMatchesTheDocumentedHornerFold() throws {
+    @Test func theLuaSeedMatchesTheDocumentedHornerFold() async throws {
         guard Self.luaAvailable else { return }
 
         let seed = "abc123"
