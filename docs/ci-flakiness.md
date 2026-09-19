@@ -1190,6 +1190,17 @@ inside the scope, which concurrent activity can only raise).
    three layers: bounded waits in the runner itself, `.timeLimit` on the
    stall-capable suites, and (unchanged) the job-level `timeout-minutes`
    backstop.
+4. **A one-in-thousands failure had no reproduction tool.** Fixed:
+   `repeat-test.yml` (Actions tab, "Repeat a test") runs one `--filter`
+   selection up to N times on the CI image and stops at the first failure,
+   using Swift 6.4's `swift test --maximum-repetitions N --repeat-until
+   fail`. The log and the xUnit report are uploaded either way. The
+   2026-08-22 `withAppArmsTheWatchdog` failure (1 in 3,045, above) was
+   diagnosed by reading LeafKit-adjacent theory into a single log; the same
+   question is now a dispatch and a wait. It reproduces a test's own flake,
+   not a lane's: a full `api-tests` lane loads the box in a way one repeated
+   test does not, so a Family 5 collapse is still measured on the `main`
+   population and read from the `[ci-pressure]` lines.
 
 ## Remaining attack order
 

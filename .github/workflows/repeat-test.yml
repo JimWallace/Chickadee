@@ -1,0 +1,175 @@
+name: Repeat a test
+
+# Reproduce a flake on the CI image instead of theorising from one log.
+#
+# `swift test` on Swift 6.4 can repeat each matched test up to N times and
+# stop at the first failure (or the first pass). Run from the Actions tab
+# with a `--filter` regular expression, and the job runs that selection on
+# the same image, at the same parallelization width, with the same tmpfs
+# `/tmp`, as the lane that produced the flake. The full log and the xUnit
+# report are uploaded whether or not a repetition fails.
+#
+# Two things it is NOT:
+#   * A re-kick. `/rerun-failed` re-runs a red job once; this runs one test
+#     many times.
+#   * A green stamp. A test that passes 25 times here is a test that passes
+#     25 times on an unloaded box; the Family 5 collapse in
+#     docs/ci-flakiness.md happens under a full lane, which this does not
+#     reproduce. Read the `[ci-pressure]` lines in the log either way.
+#
+# Known limit: swift-testing issue #1915 says the repetition policy treats a
+# warning-severity issue or a known issue as a failure. No test here records
+# either today; if one does, `--repeat-until fail` stops on it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Regular expression for swift test --filter, for example WedgeWatchdogArmingTests or APITests.VanityURLRoutesTests/slugify"
+        required: true
+        type: string
+      repetitions:
+        description: "Maximum repetitions of each matched test"
+        required: true
+        default: "25"
+        type: string
+      until:
+        description: "Stop at the first failure, or at the first pass"
+        required: true
+        default: fail
+        type: choice
+        options:
+          - fail
+          - pass
+      database:
+        description: "Database backend for APITests"
+        required: true
+        default: sqlite
+        type: choice
+        options:
+          - sqlite
+          - postgres
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      # swift-ci: the mirrored toolchain plus every grading interpreter, the
+      # same image as api-tests and worker-tests in swift-tests.yml.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      # The same tmpfs `/tmp` as the APITests lanes, for the same reason and
+      # with the same `exec` requirement — see swift-tests.yml.
+      options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
+    # Always started, because a service cannot be conditional on an input.
+    # It is idle unless `database` is postgres.
+    services:
+      postgres:
+        image: ghcr.io/jimwallace/chickadee/postgres:16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_DB: chickadee_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chickadee_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      # Full (blobless) history plus mtime restore, so the shared `.build`
+      # cache from swift-tests.yml is reusable — see the build job there.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/restore-git-mtimes
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Exact-match only, like every test lane: an incremental build over a
+      # different tree's `.build` is unsound (swift-tests.yml explains). A
+      # miss pays a clean build, which is the honest cost of running a
+      # tree CI has not built.
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+      - name: Build all targets and tests
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: swift build --build-tests
+
+      - name: Point APITests at the Postgres service
+        if: inputs.database == 'postgres'
+        run: |
+          {
+            echo "TEST_DATABASE_BACKEND=postgres"
+            echo "TEST_DATABASE_HOST=postgres"
+            echo "TEST_DATABASE_PORT=5432"
+            echo "TEST_DATABASE_NAME=chickadee_test"
+            echo "TEST_DATABASE_USER=postgres"
+            echo "TEST_DATABASE_PASSWORD=postgres"
+          } >> "$GITHUB_ENV"
+
+      - name: Repeat the matched tests
+        # The inputs reach the shell through the environment, never through
+        # expression interpolation into the command line.
+        env:
+          FILTER: ${{ inputs.filter }}
+          REPETITIONS: ${{ inputs.repetitions }}
+          UNTIL: ${{ inputs.until }}
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/repeat"
+          set +e
+          swift test --skip-build \
+            --filter "${FILTER}" \
+            --maximum-repetitions "${REPETITIONS}" \
+            --repeat-until "${UNTIL}" \
+            --xunit-output "${RUNNER_TEMP}/repeat/results.xml" \
+            2>&1 | tee "${RUNNER_TEMP}/repeat/swift-test.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "## Repeat a test"
+            echo
+            echo "| input | value |"
+            echo "|---|---|"
+            echo "| filter | \`${FILTER}\` |"
+            echo "| repetitions | ${REPETITIONS} |"
+            echo "| until | ${UNTIL} |"
+            echo "| database | ${{ inputs.database }} |"
+            echo
+            echo "| result | count |"
+            echo "|---|---|"
+            echo "| tests matched | $(grep -c '◇ Test .* started\.$' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
+            echo "| repetitions started | $(grep -c 'started (repetition' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
+            echo "| failures | $(grep -c '✘ Test .* failed' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
+            echo "| swift test exit status | ${status} |"
+            echo
+            echo "The full log and the xUnit report are in the run artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "${status}"
+
+      - name: Upload the log and the xUnit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: repeat-test-${{ github.run_id }}
+          path: ${{ runner.temp }}/repeat/
+          if-no-files-found: warn
