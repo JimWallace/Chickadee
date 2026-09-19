@@ -4,7 +4,7 @@
 # Ubuntu mirror flaked.  Built and pushed by mirror-images.yml (weekly, on
 # demand, and on PRs that touch this file or that workflow), immediately
 # after the base mirror refreshes, so the toolchain inside always matches
-# ghcr.io/<owner>/chickadee/swift:6.3-noble.
+# ghcr.io/<owner>/chickadee/swift:6.4-noble.
 #
 # BASE_IMAGE defaults to the GHCR mirror, not docker.io, so building never
 # hits Docker Hub rate limits (the reason the mirror exists — see
@@ -13,7 +13,7 @@
 # Toolchain identity is unchanged — `swift --version` is byte-identical to
 # the base image, so the `.build` cache keys shared with jobs still on the
 # plain mirror keep matching.
-ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.3-noble
+ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.4-noble
 FROM ${BASE_IMAGE}
 
 # file      — SubmissionNormalizer MIME detection (worker-tests, nightly)

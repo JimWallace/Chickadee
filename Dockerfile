@@ -19,7 +19,7 @@
 ARG BINARIES=compile
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.3-noble AS compile
+FROM swift:6.4-noble AS compile
 
 WORKDIR /build
 
@@ -45,8 +45,22 @@ COPY Tools/runner-support ./Tools/runner-support
 
 # Build products one at a time so each gets its own log output.
 # --static-swift-stdlib embeds the runtime so the runtime stage needs no Swift libs.
-RUN swift build -c release --static-swift-stdlib --product chickadee-server
-RUN swift build -c release --static-swift-stdlib --product chickadee-runner
+#
+# --build-system native is required on Swift 6.4. SwiftPM 6.4 made the Swift
+# Build engine the default, and its autolink extraction drops the transitive
+# private dependency lib_FoundationICU.a: the product link line carries
+# -lFoundationInternationalization but not -l_FoundationICU, so a static link
+# fails with ~300 undefined references to swift_unumf_* / swift_ures_* /
+# swift_ucasemap_*. Only the static release link is affected — the debug build
+# and the whole test suite are clean on the default engine. `native` is
+# deprecated and warns; drop this flag once the default engine links statically.
+RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
+#
+# chickadee-runner additionally needs -lcurl. It uses URLSession to poll the
+# server, so it links lib_CFURLSessionInterface.a, and 6.4 drops libcurl from
+# the link line the same way it drops lib_FoundationICU.a. Neither static SDK
+# has ever bundled curl; on 6.3 it arrived through autolink.
+RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner -Xlinker -lcurl
 RUN mkdir -p /out \
     && cp .build/release/chickadee-server .build/release/chickadee-runner /out/
 

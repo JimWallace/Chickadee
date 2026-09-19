@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -79,8 +79,14 @@ jobs:
       - name: Build release products
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
-          swift build -c release --static-swift-stdlib --product chickadee-server
-          swift build -c release --static-swift-stdlib --product chickadee-runner
+          # --build-system native: see the Dockerfile comment. SwiftPM 6.4's
+          # default Swift Build engine omits lib_FoundationICU.a from the
+          # product link line, so the static release link fails with ~300
+          # undefined ICU symbols. Only the static release link is affected.
+          swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
+          # The runner also needs -lcurl: it links lib_CFURLSessionInterface.a
+          # via URLSession, and 6.4 drops libcurl from the link line too.
+          swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner -Xlinker -lcurl
 
       - name: Stage binaries for the image build
         run: |

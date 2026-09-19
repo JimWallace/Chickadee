@@ -193,7 +193,7 @@ shared Swift, compiled once.
 ## Toolchain & build
 
 - Host Swift toolchain **must match** the wasm SDK version. Currently Swift
-  **6.3.2** (via swiftly) + the `swift-6.3.2-RELEASE_wasm` SDK.
+  **6.4.0** (via swiftly) + the `swift-6.4.0-RELEASE_wasm` SDK.
 - Build the bridge: `scripts/build-runner-wasm.sh` (drives the PackageToJS `js`
   plugin from `wasm/`). Output is vendored under `Public/runner-wasm/`, like
   Pyodide / CodeMirror — so CI and contributors need no wasm SDK; rebuild only

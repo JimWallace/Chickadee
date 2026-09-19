@@ -1,6 +1,6 @@
 name: Mirror CI images
 
-# Mirrors the Docker Hub images our CI jobs run in (swift:6.3-noble job
+# Mirrors the Docker Hub images our CI jobs run in (swift:6.4-noble job
 # container, postgres:16 service) into GHCR, so the test workflows never
 # pull from registry-1.docker.io at job time.
 # Unauthenticated Docker Hub pulls from shared Actions runner IPs are
@@ -9,18 +9,18 @@ name: Mirror CI images
 # three-week window audited for #890).  GHCR pulls from Actions runners
 # are same-infrastructure and not rate-limited.
 #
-# Also builds the derived CI test image, swift-ci:6.3-noble — the mirrored
+# Also builds the derived CI test image, swift-ci:6.4-noble — the mirrored
 # toolchain plus the system packages the test jobs need (file, python3,
 # zip, unzip, curl; see .github/docker/ci-image/Dockerfile) — so those jobs
 # don't apt-get at job start.  Built right after the mirror step so the
 # toolchain inside always matches the freshly mirrored base.
 #
-# Runs weekly (Docker Hub tags like swift:6.3-noble are re-pushed with
+# Runs weekly (Docker Hub tags like swift:6.4-noble are re-pushed with
 # fixes) and on demand.  `docker buildx imagetools create` copies the
 # full multi-arch manifest registry-to-registry without a local pull; the
 # derived image is a plain single-arch (amd64 — all Actions runners) build.
 #
-# When the toolchain pin changes (e.g. swift:6.4), add the new tag here and
+# When the toolchain pin changes (e.g. swift:6.5), add the new tag here and
 # in ci-image/Dockerfile's BASE_IMAGE default FIRST, run this workflow, and
 # only then point swift-tests.yml / test-coverage.yml / docker-build.yml at
 # the new mirrored tags.
@@ -88,7 +88,7 @@ jobs:
             echo "Failed to mirror ${src} after 5 attempts" >&2
             return 1
           }
-          mirror docker.io/library/swift:6.3-noble swift:6.3-noble
+          mirror docker.io/library/swift:6.4-noble swift:6.4-noble
           mirror docker.io/library/postgres:16 postgres:16
 
       - name: Build and push the derived CI test image
@@ -97,8 +97,8 @@ jobs:
         run: |
           set -euo pipefail
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          base="ghcr.io/${owner}/chickadee/swift:6.3-noble"
-          dst="ghcr.io/${owner}/chickadee/swift-ci:6.3-noble"
+          base="ghcr.io/${owner}/chickadee/swift:6.4-noble"
+          dst="ghcr.io/${owner}/chickadee/swift-ci:6.4-noble"
           echo "Building ${dst} from ${base}"
           for attempt in 1 2 3 4 5; do
             if docker buildx build \
