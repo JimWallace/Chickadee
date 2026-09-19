@@ -28,7 +28,7 @@ import Testing
 @Suite(.timeLimit(.minutes(2))) struct OctavePersonalizationDriverTests {
 
     static var octaveAvailable: Bool {
-        OctavePatternFamilyExecutionTests.hasOctave
+        get async { await OctavePatternFamilyExecutionTests.hasOctave }
     }
 
     /// Runs `source` as an Octave script in a fresh directory, returning
