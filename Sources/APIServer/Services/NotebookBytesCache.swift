@@ -70,19 +70,17 @@ actor NotebookBytesCache {
         if let pending = inFlight[key] {
             result = await pending.value
         } else {
-            let threadPool = threadPool
-            let eventLoop = eventLoopGroup?.next()
             let resolving = Task<Result<Data, NotebookLookupError>, Never> {
                 do {
                     // Module-qualified: inside the actor, the bare name binds
                     // to this actor's own notebookData(for:) method.
-                    if let threadPool, let eventLoop {
-                        return .success(
-                            try await threadPool.runIfActive(eventLoop: eventLoop) {
-                                try APIServer.notebookData(from: source)
-                            }.get())
-                    }
-                    return .success(try APIServer.notebookData(from: source))
+                    //
+                    // No thread-pool offload any more. It existed because
+                    // resolving the bytes meant a BLOCKING zip spawn taken
+                    // under the process-wide zip lock. That call suspends now
+                    // and the lock is gone, so what remains is one local file
+                    // read and the offload would only add a hop.
+                    return .success(try await APIServer.notebookData(from: source))
                 } catch let error as NotebookLookupError {
                     return .failure(error)
                 } catch {

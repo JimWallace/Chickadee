@@ -226,7 +226,7 @@ struct GetSuiteTool: ContentTool {
         // (generated family/check files are derived from their specs and need
         // no body). This gives the agent the same complete authoring view the
         // browser suite editor receives from `GET /instructor/:id/suite`.
-        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         // Decode the manifest once for the two pieces of state that live on it
         // rather than on the suite-payload DTO: section variables/expressions,
         // and the concrete on-disk filenames each generated row produces.

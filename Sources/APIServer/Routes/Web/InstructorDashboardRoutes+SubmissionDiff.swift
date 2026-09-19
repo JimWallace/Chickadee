@@ -42,7 +42,7 @@ extension InstructorDashboardRoutes {
             submittedFilename: submission.filename,
             starter: NotebookSourceRef(setup),
             setupZipPath: setup.zipPath)
-        let sides = try await runBlocking(on: req) { submissionDiffSides(source) }
+        let sides = await submissionDiffSides(source)
 
         let rows = LineDiff.unified(old: sides.oldLines, new: sides.newLines, context: 3)
         let counts = LineDiff.counts(rows)
@@ -98,7 +98,7 @@ struct SubmissionDiffSides: Sendable, Equatable {
 /// the whole tail read as changed.
 let notebookDiffCellMarker = "── cell ──"
 
-func submissionDiffSides(_ source: SubmissionDiffSource) -> SubmissionDiffSides {
+func submissionDiffSides(_ source: SubmissionDiffSource) async -> SubmissionDiffSides {
     let artifact = URL(fileURLWithPath: source.artifactPath)
     let submittedName = source.submittedFilename ?? artifact.lastPathComponent
     let ext = (artifact.pathExtension.isEmpty ? (submittedName as NSString).pathExtension : artifact.pathExtension)
@@ -113,7 +113,7 @@ func submissionDiffSides(_ source: SubmissionDiffSource) -> SubmissionDiffSides 
     if ext == "ipynb" || submittedName.lowercased().hasSuffix(".ipynb") {
         submittedNotebook = bytes
     } else if ext == "zip" {
-        submittedNotebook = extractNotebookFromZip(zipPath: source.artifactPath)
+        submittedNotebook = await extractNotebookFromZip(zipPath: source.artifactPath)
         guard submittedNotebook != nil else {
             return SubmissionDiffSides(
                 oldLines: [], newLines: [], comparedLabel: submittedName,
@@ -128,7 +128,7 @@ func submissionDiffSides(_ source: SubmissionDiffSource) -> SubmissionDiffSides 
                 oldLines: [], newLines: [], comparedLabel: submittedName,
                 unavailableReason: "The submitted notebook could not be parsed.")
         }
-        let oldCells = (try? notebookData(from: source.starter)).flatMap(NotebookCellSources.cells(from:)) ?? []
+        let oldCells = await (try? notebookData(from: source.starter)).flatMap(NotebookCellSources.cells(from:)) ?? []
         return SubmissionDiffSides(
             oldLines: notebookDiffLines(oldCells),
             newLines: notebookDiffLines(newCells),
@@ -143,13 +143,15 @@ func submissionDiffSides(_ source: SubmissionDiffSource) -> SubmissionDiffSides 
             oldLines: [], newLines: [], comparedLabel: submittedName,
             unavailableReason: "The submitted file is not UTF-8 text, so it cannot be compared.")
     }
-    let starterEntry = listZipEntries(zipPath: source.setupZipPath).first {
+    let starterEntry = await listZipEntries(zipPath: source.setupZipPath).first {
         ($0 as NSString).lastPathComponent == submittedName
     }
-    let oldText =
-        starterEntry
-        .flatMap { extractZipEntry(zipPath: source.setupZipPath, entryName: $0) }
-        .flatMap { String(bytes: $0, encoding: .utf8) }
+    var oldText: String?
+    if let starterEntry,
+        let bytes = await extractZipEntry(zipPath: source.setupZipPath, entryName: starterEntry)
+    {
+        oldText = String(bytes: bytes, encoding: .utf8)
+    }
     return SubmissionDiffSides(
         oldLines: oldText.map(diffLines) ?? [],
         newLines: diffLines(newText),

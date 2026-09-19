@@ -165,7 +165,7 @@ private func runPatternFamilyFixture(
         try await course.save(on: app.db)
 
         let zipPath = tmpDir + "\(UUID().uuidString).zip"
-        try pfWriteEmptyZip(at: zipPath)
+        try await pfWriteEmptyZip(at: zipPath)
 
         let initialManifest = try makeWorkerManifestJSON(
             testSuites: [], includeMakefile: false,
@@ -197,7 +197,7 @@ private func runPatternFamilyFixture(
     }
 }
 
-func pfWriteEmptyZip(at path: String) throws {
+func pfWriteEmptyZip(at path: String) async throws {
     let fm = FileManager.default
     let stagingDir = fm.temporaryDirectory
         .appendingPathComponent("empty-zip-staging-\(UUID().uuidString)")
@@ -205,7 +205,7 @@ func pfWriteEmptyZip(at path: String) throws {
     defer { try? fm.removeItem(at: stagingDir) }
     // zip needs at least one entry to produce a valid archive.
     try Data("placeholder".utf8).write(to: stagingDir.appendingPathComponent(".placeholder"))
-    try writeZipFixture(of: stagingDir, to: path)
+    try await writeZipFixture(of: stagingDir, to: path)
 }
 
 func pfManifestCacheMaterial(_ setup: APITestSetup) throws -> String {

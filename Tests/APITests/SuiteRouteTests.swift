@@ -35,7 +35,7 @@ import VaporTesting
 
         let setupID = "srt_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
 
         var entries: [ConfiguredSuiteEntry] = []
         for (i, (name, _)) in scripts.enumerated() {
@@ -60,7 +60,7 @@ import VaporTesting
         return assignment.publicID
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("srt-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -71,7 +71,7 @@ import VaporTesting
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try content.data(using: .utf8)?.write(to: url)
         }
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func csrfPair(for id: String, cookie: String) async throws -> (String, String) {
@@ -425,7 +425,7 @@ import VaporTesting
 
             let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            let entries = Set(listZipEntries(zipPath: setup.zipPath))
+            let entries = await Set(listZipEntries(zipPath: setup.zipPath))
             #expect(
                 entries.contains("publictest_bmi_01.py") == false,
                 "Generated script must be gone from the zip after family removal")
@@ -582,7 +582,7 @@ import VaporTesting
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             // The generated .py must contain the approx-kind comparison.
             let source = try #require(
-                readScriptFromZip(
+                await readScriptFromZip(
                     zipPath: setup.zipPath,
                     filename: "publictest_bmi_01.py"
                 ))

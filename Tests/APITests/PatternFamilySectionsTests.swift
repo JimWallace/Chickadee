@@ -56,7 +56,7 @@ import Vapor
                     ))
             ]
             // Need the script to exist in the zip first.
-            try applyScriptChangesToZip(
+            try await applyScriptChangesToZip(
                 zipPath: fixture.setup.zipPath,
                 writes: ["publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n"],
                 deletions: []
@@ -93,7 +93,7 @@ import Vapor
     @Test func apply_createPublishPreservesSectionsAndChecks() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try applyScriptChangesToZip(
+            try await applyScriptChangesToZip(
                 zipPath: fixture.setup.zipPath,
                 writes: [
                     "publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n",
@@ -212,7 +212,7 @@ import Vapor
     @Test func apply_nonContiguousSectionsRejected() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try applyScriptChangesToZip(
+            try await applyScriptChangesToZip(
                 zipPath: fixture.setup.zipPath,
                 writes: [
                     "publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n",
@@ -264,7 +264,7 @@ import Vapor
     @Test func apply_deletingSectionReHomesItemsToUngrouped() async throws {
         try await withPatternFamilyFixture { fixture in
 
-            try applyScriptChangesToZip(
+            try await applyScriptChangesToZip(
                 zipPath: fixture.setup.zipPath,
                 writes: ["publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n"],
                 deletions: []

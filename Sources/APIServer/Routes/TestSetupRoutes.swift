@@ -122,7 +122,7 @@ struct TestSetupRoutes: RouteCollection {
         // Mode-specific validation.
         switch manifest.gradingMode {
         case .browser:
-            guard zipContainsNotebook(upload.files) else {
+            guard await zipContainsNotebook(upload.files) else {
                 throw AppError.unprocessable(
                     reason: "Browser-mode test setup must contain at least one .ipynb file")
             }
@@ -145,7 +145,7 @@ struct TestSetupRoutes: RouteCollection {
         // delete it so a malicious upload doesn't leave stale bytes on
         // disk indefinitely.  (Subprocess — thread pool, #1158.)
         do {
-            try await runBlocking(on: req) { try validateZipUploadSize(zipPath: zipPath) }
+            try await validateZipUploadSize(zipPath: zipPath)
         } catch let error as ZipUploadValidationError {
             try? FileManager.default.removeItem(atPath: zipPath)
             throw AppError.unprocessable(reason: String(describing: error))
@@ -191,7 +191,7 @@ struct TestSetupRoutes: RouteCollection {
         // instructor can edit it later without re-uploading the zip.
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
-            if let data = try await runBlocking(on: req, { extractNotebookFromZip(zipPath: zipPath) }) {
+            if let data = await extractNotebookFromZip(zipPath: zipPath) {
                 let normalized = normalizeNotebookForJupyterLite(data)
                 try await req.fileio.writeFile(.init(data: normalized), at: notebookPath)
                 setup.notebookPath = notebookPath
@@ -351,9 +351,7 @@ struct TestSetupRoutes: RouteCollection {
         }
 
         let zipPath = setup.zipPath
-        let extracted = try await runBlocking(on: req) {
-            extractZipEntry(zipPath: zipPath, entryName: filename)
-        }
+        let extracted = await extractZipEntry(zipPath: zipPath, entryName: filename)
         guard let bytes = extracted else {
             throw Abort(.notFound)
         }

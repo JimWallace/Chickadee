@@ -49,7 +49,7 @@ import Vapor
         let setupID = "vr_setup"
         try await makeTestSetup(
             on: app, id: setupID, courseID: courseID, manifest: manifest(timeLimit: 10))
-        try writeZip(
+        try await writeZip(
             at: app.testSetupsDirectory + setupID + ".zip",
             entries: [(".placeholder", "x")] + scripts)
         let notebookPath = app.testSetupsDirectory + setupID + ".ipynb"
@@ -63,7 +63,7 @@ import Vapor
         return (assignment, setup)
     }
 
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("vr-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -75,7 +75,7 @@ import Vapor
             try content.data(using: .utf8)?.write(to: url)
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func record(_ app: Application, _ setup: APITestSetup, origin: String) async throws {
@@ -86,8 +86,8 @@ import Vapor
             on: app.db)
     }
 
-    private func entry(_ setup: APITestSetup, _ name: String) -> String {
-        String(
+    private func entry(_ setup: APITestSetup, _ name: String) async -> String {
+        await String(
             bytes: extractZipEntry(zipPath: setup.zipPath, entryName: name) ?? Data(),
             encoding: .utf8) ?? ""
     }
@@ -109,7 +109,7 @@ import Vapor
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
             // Break it.
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath,
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 1  # broken\n")])
             setup.manifest = manifest(timeLimit: 999)
@@ -124,7 +124,7 @@ import Vapor
             #expect(output.filesRestored == 2)
 
             let live = try #require(try await APITestSetup.find(setup.id ?? "", on: app.db))
-            #expect(entry(live, "test_a.sh") == "exit 0\n")
+            await #expect(entry(live, "test_a.sh") == "exit 0\n")
             #expect(live.manifest == manifest(timeLimit: 10))
         }
     }
@@ -135,7 +135,7 @@ import Vapor
         try await withApp(app) { app in
             let (assignment, setup) = try await fixture(on: app)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath, entries: [(".placeholder", "x"), ("test_a.sh", "exit 1\n")])
             try await record(app, setup, origin: "mcp:author_script")
 
@@ -163,7 +163,7 @@ import Vapor
             let (assignment, setup) = try await fixture(on: app)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath,
                 entries: [
                     (".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_extra.sh", "exit 0\n"),
@@ -173,7 +173,7 @@ import Vapor
             _ = try await restore(app, assignment, version: 1)
 
             let live = try #require(try await APITestSetup.find(setup.id ?? "", on: app.db))
-            let names = listZipEntries(zipPath: live.zipPath)
+            let names = await listZipEntries(zipPath: live.zipPath)
             #expect(!names.contains("test_extra.sh"))
             #expect(names.contains("test_a.sh"))
         }
@@ -211,7 +211,7 @@ import Vapor
             try await assignment.save(on: app.db)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try writeZip(
+            try await writeZip(
                 at: setup.zipPath, entries: [(".placeholder", "x"), ("test_a.sh", "exit 1\n")])
             try await record(app, setup, origin: "mcp:author_script")
 

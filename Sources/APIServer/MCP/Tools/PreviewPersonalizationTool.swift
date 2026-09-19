@@ -125,7 +125,7 @@ struct PreviewPersonalizationTool: ContentTool {
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
             language: AssignmentLanguage.resolve(for: setup, manifest: manifest))
 
-        let placeholders = Self.placeholderAudit(
+        let placeholders = await Self.placeholderAudit(
             manifest: manifest, setup: setup, resolution: resolution)
         let values = resolution.substitutions
             .map { Output.ResolvedValue(name: $0.key, value: $0.value) }
@@ -170,7 +170,7 @@ struct PreviewPersonalizationTool: ContentTool {
     private static func placeholderAudit(
         manifest: TestProperties, setup: APITestSetup,
         resolution: PersonalizationSubstitution.Resolution
-    ) -> Output.Placeholders {
+    ) async -> Output.Placeholders {
         var used = Set<String>()
 
         // 1. Notebook `{{name}}` placeholders. Read the notebook the student
@@ -179,7 +179,7 @@ struct PreviewPersonalizationTool: ContentTool {
         // student first-open path all use — and only falls back to the zip's
         // starter entry. (Before #811 this read the zip and missed markers added
         // via `update_notebook`, which writes `notebookPath`, not the zip entry.)
-        if let notebookData = try? notebookData(for: setup) {
+        if let notebookData = try? await notebookData(for: setup) {
             used.formUnion(NotebookSubstitution.placeholderNames(in: notebookData))
         }
 

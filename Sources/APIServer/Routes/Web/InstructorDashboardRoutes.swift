@@ -592,7 +592,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             (assignment.validationStatus == "passed"
                 || assignment.validationSubmissionID != nil
                 || hasDraftSolution) ? "solution.ipynb" : nil
-        let currentFiles = currentSetupFiles(
+        let currentFiles = await currentSetupFiles(
             for: setup,
             assignmentID: idStr,
             solutionFilename: existingSolutionName ?? fallbackSolutionFilename
@@ -636,7 +636,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             // `resolve(manifest:)` alone) so a brand-new notebook assignment
             // whose only signal is its kernelspec is answered correctly.
             assignmentLanguageJSON: authoringLanguageFactsJSON(resolvedLanguage),
-            suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
+            suiteStateJSON: await suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             sectionActionBase: "/instructor/\(idStr)/suite-sections",
             sectionActionQuery: "",

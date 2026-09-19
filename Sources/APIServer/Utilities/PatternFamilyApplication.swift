@@ -218,7 +218,7 @@ func applyPatternFamilies(
     )
 
     // ── 4. Render generated scripts ONCE, then diff and mutate the zip ──
-    let mutations = try renderAndApplyZipMutations(
+    let mutations = try await renderAndApplyZipMutations(
         plan: GeneratedArtifactPlan(
             families: nextFamilies,
             checks: inputs.checks,

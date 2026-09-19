@@ -33,7 +33,7 @@ import Vapor
     }
 
     /// Writes a zip at `zipPath` containing the named entries (name -> contents).
-    private func writeZip(at zipPath: String, entries: [(String, String)]) throws {
+    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("preview-zip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -43,7 +43,7 @@ import Vapor
                 .write(to: root.appendingPathComponent(name))
         }
         try? FileManager.default.removeItem(atPath: zipPath)
-        try writeZipFixture(of: root, to: zipPath)
+        try await writeZipFixture(of: root, to: zipPath)
     }
 
     @Test func resolvesLiteralsAndExpressionsForExplicitSeed() async throws {
@@ -119,7 +119,7 @@ import Vapor
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             try blobNotebook.write(
                 toFile: app.testSetupsDirectory + "setup_pv.ipynb", atomically: true, encoding: .utf8)
-            try writeZip(
+            try await writeZip(
                 at: app.testSetupsDirectory + "setup_pv.zip",
                 entries: [("starter.ipynb", zipNotebook)])
 
@@ -145,7 +145,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await enrolledFixture(
                 on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
-            try writeZip(
+            try await writeZip(
                 at: app.testSetupsDirectory + "setup_pv.zip",
                 entries: [("starter.ipynb", notebook)])
 
@@ -172,7 +172,7 @@ import Vapor
                 on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
             // Add a personalized family whose case references the per-student inputs.
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pv.zip")
+            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pv.zip")
             let famCase = PatternCase(
                 key: "01", label: "Adults", args: [.null], expected: .null,
                 argVarRefs: ["patients"], expectedVarRef: "adults_expected")

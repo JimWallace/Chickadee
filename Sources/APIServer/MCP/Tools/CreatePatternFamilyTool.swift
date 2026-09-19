@@ -363,7 +363,7 @@ struct CreatePatternFamilyTool: ContentTool {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
             !payload.items.contains(where: { $0.kind == "family" && $0.family?.id == trimmedID })
         else {

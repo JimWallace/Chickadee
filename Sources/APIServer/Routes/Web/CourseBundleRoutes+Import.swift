@@ -428,7 +428,7 @@ private func importBundledTestSetups(
 
         // Extract .ipynb if present (browser-mode setups).
         var notebookPath: String?
-        if let nbData = extractNotebookFromZip(zipPath: newZipPath) {
+        if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             try await runBlocking(app: app) {
                 try nbData.write(to: URL(fileURLWithPath: nbPath))

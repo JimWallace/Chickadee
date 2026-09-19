@@ -100,7 +100,7 @@ struct DeleteSuiteItemTool: ContentTool {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard let idx = payload.items.firstIndex(where: { Self.matches($0, target) }) else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,

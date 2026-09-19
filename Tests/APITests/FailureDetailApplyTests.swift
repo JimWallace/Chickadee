@@ -15,7 +15,7 @@ import Testing
 
     @Test func rawScriptSettingPersistsAndSurvivesReapply() async throws {
         try await withPatternFamilyFixture { fixture in
-            try updateScriptInZip(
+            try await updateScriptInZip(
                 zipPath: fixture.setup.zipPath, filename: "publictest_masked.py",
                 content: "# masked\npassed('ok')\n")
             let rawEntry = AuthoredRawScript(

@@ -358,7 +358,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
-        var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
             let idx = payload.items.firstIndex(where: {
                 $0.kind == "family" && $0.family?.id == input.familyID

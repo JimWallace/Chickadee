@@ -161,7 +161,7 @@ enum KernelImportGuard {
         content: String,
         setup: APITestSetup,
         environments: KernelEnvironments?
-    ) throws {
+    ) async throws {
         guard
             let language = language(forFile: filename),
             let environment = environments?[language],
@@ -173,7 +173,7 @@ enum KernelImportGuard {
         // the likeliest false positive: a test that imports the support file
         // sitting beside it. Include the file being written, so a script that
         // refers to itself by name is not reported.
-        var localModules = Set(
+        var localModules = await Set(
             listZipEntries(zipPath: setup.zipPath)
                 .compactMap(Self.localModuleName(forFile:)))
         if let own = localModuleName(forFile: filename) { localModules.insert(own) }

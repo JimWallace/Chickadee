@@ -108,7 +108,7 @@ extension DraftAssignmentRoutes {
         req: Request,
         userID: UUID,
         setup: APITestSetup?
-    ) -> DraftRequirementSuggestions {
+    ) async -> DraftRequirementSuggestions {
         guard let setup, let setupID = setup.id else {
             return DraftRequirementSuggestions(languages: [], capabilities: [])
         }
@@ -129,7 +129,7 @@ extension DraftAssignmentRoutes {
                 setupID: setupID
             )
         )
-        return detectRequirementSuggestions(
+        return await detectRequirementSuggestions(
             assignmentNotebookData: assignmentData,
             solutionNotebookData: solutionData,
             setup: setup
@@ -177,8 +177,9 @@ extension DraftAssignmentRoutes {
     /// Suite-editor seed JSON.  `suiteStateJSON` already handles the
     /// no-draft case (returns `{"items":[]}`); this wrapper just supplies
     /// the same payload when no draft exists.
-    func newAssignmentSuiteStateSeedJSON(setup: APITestSetup?) -> String {
-        setup.map { suiteStateJSON(fromManifest: $0.manifest, zipPath: $0.zipPath) } ?? #"{"items":[]}"#
+    func newAssignmentSuiteStateSeedJSON(setup: APITestSetup?) async -> String {
+        guard let setup else { return #"{"items":[]}"# }
+        return await suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath)
     }
 
     /// Server-rendered section-shell rows.  Falls back to a single

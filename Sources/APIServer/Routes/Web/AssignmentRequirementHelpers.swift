@@ -50,7 +50,7 @@ func detectRequirementSuggestions(
     assignmentNotebookData: Data?,
     solutionNotebookData: Data?,
     setup: APITestSetup
-) -> DraftRequirementSuggestions {
+) async -> DraftRequirementSuggestions {
     var languages = Set<String>()
     var capabilities = Set<String>()
 
@@ -107,7 +107,7 @@ func detectRequirementSuggestions(
         }
     }
 
-    func scanZipEntry(name: String, data: Data) {
+    func scanZipEntry(name: String, data: Data) async {
         let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
         // Assignment languages are resolved through the one extension table
         // (`AssignmentLanguage(scriptExtension:)`) rather than re-listed here.
@@ -139,9 +139,9 @@ func detectRequirementSuggestions(
     if let assignmentNotebookData { scanNotebook(assignmentNotebookData) }
     _ = solutionNotebookData
 
-    for entry in listZipEntries(zipPath: setup.zipPath) {
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
-        scanZipEntry(name: entry, data: data)
+    for entry in await listZipEntries(zipPath: setup.zipPath) {
+        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
+        await scanZipEntry(name: entry, data: data)
     }
 
     return DraftRequirementSuggestions(

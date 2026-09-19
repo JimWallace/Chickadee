@@ -232,7 +232,7 @@ import VaporTesting
             )
 
             // Verify the zip on disk was updated.
-            let content = readScriptFromZip(zipPath: setup.zipPath, filename: "test_bar.py")
+            let content = await readScriptFromZip(zipPath: setup.zipPath, filename: "test_bar.py")
             #expect(content == "# new content\n", "Expected updated content in zip, got: \(content ?? "nil")")
 
         }
@@ -329,7 +329,7 @@ import VaporTesting
                 }
             )
 
-            let content = readScriptFromZip(zipPath: setup.zipPath, filename: "test_new.py")
+            let content = await readScriptFromZip(zipPath: setup.zipPath, filename: "test_new.py")
             #expect(content == "# new script\n", "New file should be in the zip")
 
         }
@@ -491,10 +491,10 @@ import VaporTesting
                 }
             )
 
-            let content = readScriptFromZip(zipPath: setup.zipPath, filename: "test_del.py")
+            let content = await readScriptFromZip(zipPath: setup.zipPath, filename: "test_del.py")
             #expect(content == nil, "Deleted file should no longer be in zip")
 
-            let remaining = readScriptFromZip(zipPath: setup.zipPath, filename: "support.py")
+            let remaining = await readScriptFromZip(zipPath: setup.zipPath, filename: "support.py")
             #expect(remaining != nil, "Other files should remain in zip")
 
         }
@@ -685,7 +685,7 @@ import VaporTesting
                 }
             )
 
-            #expect(
+            await #expect(
                 readScriptFromZip(zipPath: setup.zipPath, filename: "test_stats.py") == nil,
                 "a rejected script must not reach the zip")
         }
@@ -720,7 +720,7 @@ import VaporTesting
                 }
             )
 
-            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_ok.py") != nil)
+            await #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_ok.py") != nil)
         }
     }
 
@@ -756,7 +756,7 @@ import VaporTesting
                 }
             )
 
-            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_local.py") != nil)
+            await #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "test_local.py") != nil)
         }
     }
 
@@ -795,7 +795,7 @@ import VaporTesting
                 }
             )
 
-            #expect(
+            await #expect(
                 readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_plot.R") == nil,
                 "a rejected script must not reach the zip")
         }
@@ -830,7 +830,7 @@ import VaporTesting
                 }
             )
 
-            #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_ok.R") != nil)
+            await #expect(readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_ok.R") != nil)
         }
     }
 }

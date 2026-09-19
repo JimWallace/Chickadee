@@ -36,7 +36,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
         let setup = try await loadDraftSetupForRead(req)
-        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -61,7 +61,7 @@ extension DraftAssignmentRoutes {
             setup: setup, body: body,
             kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
-        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -151,7 +151,7 @@ extension DraftAssignmentRoutes {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
+        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
             throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)

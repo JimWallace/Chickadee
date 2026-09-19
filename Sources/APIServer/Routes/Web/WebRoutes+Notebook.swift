@@ -572,7 +572,7 @@ extension WebRoutes {
     ) async -> Bool {
         let data: Data? =
             switch fileKind {
-            case .assignment: try? notebookData(for: setup)
+            case .assignment: try? await notebookData(for: setup)
             case .solution:
                 try? await solutionNotebookData(
                     for: assignment, setup: setup, db: req.db,

@@ -40,7 +40,7 @@ extension PublishedAssignmentRoutes {
         // decoder ignores parts it isn't asked for).
 
         let hasUploadedAssignmentNotebook = form.assignmentNotebookFile?.data.readableBytes ?? 0 > 0
-        let assignmentNotebookRaw = resolvedAssignmentNotebookRaw(
+        let assignmentNotebookRaw = await resolvedAssignmentNotebookRaw(
             uploaded: form.assignmentNotebookFile,
             hasUpload: hasUploadedAssignmentNotebook,
             setup: setup
@@ -91,7 +91,7 @@ extension PublishedAssignmentRoutes {
         )
         try await setup.save(on: req.db)
 
-        extractSupportFilesForActiveSuite(
+        await extractSupportFilesForActiveSuite(
             req: req,
             setup: setup,
             assignmentTestSetupID: assignment.testSetupID
@@ -338,9 +338,9 @@ extension PublishedAssignmentRoutes {
         uploaded: File?,
         hasUpload: Bool,
         setup: APITestSetup
-    ) -> Data {
+    ) async -> Data {
         guard let uploaded, hasUpload else {
-            return (try? notebookData(for: setup)) ?? minimalEmptyNotebookData()
+            return await (try? notebookData(for: setup)) ?? minimalEmptyNotebookData()
         }
         return Data(uploaded.data.readableBytesView)
     }
@@ -355,23 +355,25 @@ extension PublishedAssignmentRoutes {
         uploadedSolution: File?
     ) async throws -> ResolvedSolution {
         var solutionFilename = "solution.ipynb"
-        let solutionNotebookRaw: Data = {
-            if let uploadedSolution, uploadedSolution.data.readableBytes > 0 {
-                solutionFilename = submissionFilenameForStorage(
-                    uploadedName: uploadedSolution.filename,
-                    fallback: "solution.ipynb"
-                )
-                return Data(uploadedSolution.data.readableBytesView)
-            }
-            let archiveFiles = listZipEntries(zipPath: setup.zipPath)
+        // Straight-line rather than an immediately-invoked closure: reading the
+        // zip suspends now, and an async closure cannot write `solutionFilename`
+        // in the enclosing scope.
+        var solutionNotebookRaw = Data()
+        if let uploadedSolution, uploadedSolution.data.readableBytes > 0 {
+            solutionFilename = submissionFilenameForStorage(
+                uploadedName: uploadedSolution.filename,
+                fallback: "solution.ipynb"
+            )
+            solutionNotebookRaw = Data(uploadedSolution.data.readableBytesView)
+        } else {
+            let archiveFiles = await listZipEntries(zipPath: setup.zipPath)
             if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
-                let data = extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry)
+                let data = await extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry)
             {
                 solutionFilename = solutionEntry
-                return data
+                solutionNotebookRaw = data
             }
-            return Data()
-        }()
+        }
         var resolvedSolutionNotebookRaw = solutionNotebookRaw
         if resolvedSolutionNotebookRaw.isEmpty,
             let existingSolution = try await loadExistingSolution(req: req, assignment: assignment)
@@ -431,14 +433,14 @@ extension PublishedAssignmentRoutes {
         req: Request,
         setup: APITestSetup,
         assignmentTestSetupID: String
-    ) {
+    ) async {
         let activeTestSuiteScripts: Set<String> = {
             guard let props = setup.decodedManifest()
 
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: assignmentTestSetupID,
             testSuiteScripts: activeTestSuiteScripts,

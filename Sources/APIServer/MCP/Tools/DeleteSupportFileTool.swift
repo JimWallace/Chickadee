@@ -129,14 +129,14 @@ struct DeleteSupportFileTool: ContentTool {
                     + "delete_suite_item(script: \"\(cleaned)\").")
         }
 
-        guard listZipEntries(zipPath: setup.zipPath).contains(cleaned) else {
+        guard await listZipEntries(zipPath: setup.zipPath).contains(cleaned) else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail: "No support file \"\(cleaned)\" in this test setup (see get_support_files).")
         }
 
         do {
-            try removeScriptFromZip(zipPath: setup.zipPath, filename: cleaned)
+            try await removeScriptFromZip(zipPath: setup.zipPath, filename: cleaned)
         } catch {
             throw MCPToolError.executionFailed(
                 tool: Self.name, detail: "Failed to remove \"\(cleaned)\" from the setup zip.")
@@ -153,7 +153,7 @@ struct DeleteSupportFileTool: ContentTool {
             guard let props = setup.decodedManifest() else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
-        extractSupportFilesToSharedDirectory(
+        await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: assignment.testSetupID,
             testSuiteScripts: testSuiteScripts,
@@ -167,7 +167,7 @@ struct DeleteSupportFileTool: ContentTool {
 
         // Count with get_support_files' own predicate so the number a caller
         // gets back matches the list they'd read next.
-        let remaining = listZipEntries(zipPath: setup.zipPath).filter {
+        let remaining = await listZipEntries(zipPath: setup.zipPath).filter {
             !testSuiteScripts.contains($0) && !GetSupportFilesTool.reservedNames.contains($0)
         }
 
