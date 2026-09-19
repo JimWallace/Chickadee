@@ -119,6 +119,6 @@ import Testing
     }
 
     private static func hostCanImportPythonModule(_ module: String) async -> Bool {
-        return await toolIsAvailable("python3", arguments: ["-c", "import \\(module)"])
+        return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 }
