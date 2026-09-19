@@ -22,7 +22,6 @@
 //     without polling.
 
 import ChickadeeTestSupport
-import Core
 import Foundation
 
 @testable import chickadee_runner
@@ -55,7 +54,13 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         // this, a leaked duplicate in a long-lived process means the read
         // loop below never sees EOF if the interpreter dies before printing
         // — an unbounded stall on a cooperative-pool thread (issue #1233).
-        setCloseOnExec(stdout)
+        // Set here rather than through a shared helper: this is the last
+        // hand-built `Pipe` in the repository, so a `Core` function for it had
+        // exactly one caller, in a test.
+        for handle in [stdout.fileHandleForReading, stdout.fileHandleForWriting] {
+            let flags = fcntl(handle.fileDescriptor, F_GETFD)
+            if flags != -1 { _ = fcntl(handle.fileDescriptor, F_SETFD, flags | FD_CLOEXEC) }
+        }
         process.standardOutput = stdout
         process.standardError = FileHandle.nullDevice
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
