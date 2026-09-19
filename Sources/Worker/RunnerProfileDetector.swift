@@ -1,5 +1,7 @@
 import Core
 import Foundation
+import Subprocess
+import SystemPackage
 
 struct RunnerProfileDetector {
     let discoveryEnabled: Bool
@@ -203,22 +205,69 @@ struct RunnerProfileDetector {
     }
 
     private func run(command: String, arguments: [String]) async -> String? {
-        let process = Process()
-        let output = Pipe()
-        let error = Pipe()
-        // CLOEXEC + bounded drain: a non-CLOEXEC write end inherited by a
-        // concurrently spawned process postpones EOF until *that* process
-        // exits, turning `readDataToEndOfFile()` into an unbounded stall on
-        // a cooperative-pool thread (issue #1233; same mechanism as #1139).
-        setCloseOnExec(output)
-        setCloseOnExec(error)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
-        process.standardOutput = output
-        process.standardError = error
+        guard let probe = await runProbe(command: command, arguments: arguments),
+            probe.exitCode == 0
+        else { return nil }
+        return probe.combined.isEmpty ? nil : probe.combined
+    }
 
+    private func runStatus(command: String, arguments: [String]) async -> Int32? {
+        await runProbe(command: command, arguments: arguments)?.exitCode
+    }
+
+    /// One capability probe: `/usr/bin/env <command> <args…>`, bounded by
+    /// `probeTimeoutSeconds`, stdout and stderr collected and joined.
+    ///
+    /// Spawns through `swift-subprocess` rather than Foundation's `Process`.
+    /// Detection runs every probe concurrently (a task group over every
+    /// language), which is exactly the concurrent-spawn shape #1139 and #1233
+    /// came out of, and Subprocess owns and drains the capture pipes itself --
+    /// so the hand-rolled CLOEXEC pipes, deadline-bounded drain and
+    /// `isRunning` poll loop this replaces have nothing left to do. The 25 ms
+    /// poll is gone with them: the run now suspends until the child exits.
+    private func runProbe(command: String, arguments: [String]) async -> (combined: String, exitCode: Int32)? {
+        var options = PlatformOptions()
+        // setsid(2): a probe that backgrounds something must not outlive the
+        // teardown below, and the group-wide signal is safe only in the
+        // child's own session.
+        options.createSession = true
+        // SIGTERM, then the SIGKILL `teardownSequence` always appends -- the
+        // terminate/sleep/kill ladder the old poll loop ran by hand.
+        options.teardownSequence = [
+            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .milliseconds(200))
+        ]
+        let platformOptions = options
+        let timeout = Self.probeTimeoutSeconds
+
+        let outcome: ProbeOutcome
         do {
-            try process.run()
+            outcome = try await withThrowingTaskGroup(of: ProbeOutcome.self) { group in
+                group.addTask {
+                    let result = try await Subprocess.run(
+                        .path("/usr/bin/env"),
+                        arguments: Arguments([command] + arguments),
+                        platformOptions: platformOptions,
+                        output: .string(limit: Self.probeOutputLimitBytes),
+                        error: .string(limit: Self.probeOutputLimitBytes)
+                    )
+                    return .finished(
+                        stdout: result.standardOutput,
+                        stderr: result.standardError,
+                        exitCode: Self.exitCode(of: result.terminationStatus)
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(timeout))
+                    return .timedOut
+                }
+                let first = try await group.next()
+                // Cancelling the run task is what tears the child down;
+                // cancelling the sleep merely ends it. Drain so the cancelled
+                // sibling's error cannot surface as this probe's result.
+                group.cancelAll()
+                while (try? await group.next()) != nil {}
+                return first ?? .timedOut
+            }
         } catch {
             writeStructuredRunnerLog(
                 event: "local_execution_error",
@@ -229,74 +278,43 @@ struct RunnerProfileDetector {
             return nil
         }
 
-        let exited = await waitWithTimeout(process: process, command: command, arguments: arguments)
-        guard exited, process.terminationStatus == 0 else { return nil }
-
-        // The child has exited, so with CLOEXEC pipes EOF is already in the
-        // buffer; the deadline only bounds descriptors leaked outside our
-        // control.
-        let drainDeadline = Date().addingTimeInterval(Self.probeTimeoutSeconds)
-        let stdout =
-            String(
-                data: boundedReadToEOF(
-                    fromDescriptor: output.fileHandleForReading.fileDescriptor,
-                    deadline: drainDeadline),
-                encoding: .utf8) ?? ""
-        let stderr =
-            String(
-                data: boundedReadToEOF(
-                    fromDescriptor: error.fileHandleForReading.fileDescriptor,
-                    deadline: drainDeadline),
-                encoding: .utf8) ?? ""
-        let combined = (stdout + "\n" + stderr).trimmingCharacters(in: .whitespacesAndNewlines)
-        return combined.isEmpty ? nil : combined
-    }
-
-    private func runStatus(command: String, arguments: [String]) async -> Int32? {
-        let process = Process()
-        let output = Pipe()
-        let error = Pipe()
-        setCloseOnExec(output)
-        setCloseOnExec(error)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command] + arguments
-        process.standardOutput = output
-        process.standardError = error
-        do {
-            try process.run()
-        } catch {
+        switch outcome {
+        case .timedOut:
+            writeStructuredRunnerLog(
+                event: "local_execution_error",
+                fields: [
+                    "error_type": "capability_detection_timeout",
+                    "error_message_summary": "\(command) \(arguments.joined(separator: " "))",
+                    "timeout_seconds": Self.probeTimeoutSeconds,
+                ])
             return nil
+        case .finished(let stdout, let stderr, let exitCode):
+            let combined = (stdout + "\n" + stderr).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (combined, exitCode)
         }
-        let exited = await waitWithTimeout(process: process, command: command, arguments: arguments)
-        guard exited else { return nil }
-        return process.terminationStatus
     }
 
-    /// Polls `process.isRunning` cooperatively for up to `probeTimeoutSeconds`,
-    /// then kills the process if it hasn't exited. Returns true if the process
-    /// finished on its own, false if it had to be terminated.
-    private func waitWithTimeout(process: Process, command: String, arguments: [String]) async -> Bool {
-        let deadline = Date().addingTimeInterval(Self.probeTimeoutSeconds)
-        while process.isRunning {
-            if Date() >= deadline {
-                process.terminate()
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                if process.isRunning {
-                    kill(process.processIdentifier, SIGKILL)
-                }
-                _ = try? await Task.sleep(nanoseconds: 100_000_000)
-                writeStructuredRunnerLog(
-                    event: "local_execution_error",
-                    fields: [
-                        "error_type": "capability_detection_timeout",
-                        "error_message_summary": "\(command) \(arguments.joined(separator: " "))",
-                        "timeout_seconds": Self.probeTimeoutSeconds,
-                    ])
-                return false
-            }
-            try? await Task.sleep(nanoseconds: 25_000_000)  // 25 ms
+    /// Which of the two racers finished first.  A flat enum so the task group
+    /// has one concrete element type to be generic over.
+    private enum ProbeOutcome: Sendable {
+        case finished(stdout: String, stderr: String, exitCode: Int32)
+        case timedOut
+    }
+
+    /// Cap on a probe's captured output.  A `--version` banner is a line or
+    /// two; anything approaching this is a command that ignored its arguments
+    /// and started printing.
+    private static let probeOutputLimitBytes = 1024 * 1024
+
+    /// Flattens a `TerminationStatus` to the `Int32` the callers compare
+    /// against 0, with a signalled probe reported as `128 + signal`.
+    private static func exitCode(of status: TerminationStatus) -> Int32 {
+        switch status {
+        case .exited(let code):
+            return Int32(code)
+        case .signaled(let signal):
+            return 128 + Int32(signal)
         }
-        return true
     }
 
     private func firstNumericVersion(in raw: String) -> String? {
