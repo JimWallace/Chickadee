@@ -19,6 +19,16 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct NotebookCheckRuntimeStateTests {
 
+    static let requiresPython3: ConditionTrait = .enabled("requires python3 on PATH") { Self.python3Available }
+    static let requiresPandas: ConditionTrait = .enabled("requires python3 with pandas") {
+        guard Self.python3Available else { return false }
+        return await Self.pythonModuleAvailable("pandas")
+    }
+    static let requiresMatplotlib: ConditionTrait = .enabled("requires python3 with matplotlib") {
+        guard Self.python3Available else { return false }
+        return await Self.pythonModuleAvailable("matplotlib")
+    }
+
     // MARK: - Harness
 
     private static let python3Available = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
@@ -111,15 +121,13 @@ import Testing
             stderr: run.stderr)
     }
 
-    private func pythonModuleAvailable(_ module: String) async -> Bool {
+    private static func pythonModuleAvailable(_ module: String) async -> Bool {
         return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 
     // MARK: - variable_exists sees quarantined assignments
 
-    @Test func variableExists_seesCallProducedVariable() async throws {
-        guard Self.python3Available else { return }  // no python3 on this host
-
+    @Test(Self.requiresPython3) func variableExists_seesCallProducedVariable() async throws {
         // `answer = compute()` has a call on the RHS, so the extractor
         // quarantines it — an import-only check would report "not defined".
         let cells = [
@@ -134,9 +142,7 @@ import Testing
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test func variableExists_missingVariableStillFails() async throws {
-        guard Self.python3Available else { return }
-
+    @Test(Self.requiresPython3) func variableExists_missingVariableStillFails() async throws {
         let cells = [
             NotebookCell(cellType: "code", source: "def compute():\n    return 1")
         ]
@@ -147,9 +153,7 @@ import Testing
         #expect(result.stdout.contains("is not defined in the student notebook"))
     }
 
-    @Test func variableExists_brokenLaterCellDoesNotHideEarlierState() async throws {
-        guard Self.python3Available else { return }
-
+    @Test(Self.requiresPython3) func variableExists_brokenLaterCellDoesNotHideEarlierState() async throws {
         // The second cell raises at execution; the per-cell resilient
         // wrappers must keep the first cell's state visible.
         let cells = [
@@ -164,9 +168,7 @@ import Testing
 
     // MARK: - data_frame_columns sees a loaded DataFrame (needs pandas)
 
-    @Test func dataFrameColumns_seesLoadedCSV() async throws {
-        guard Self.python3Available, await pythonModuleAvailable("pandas") else { return }
-
+    @Test(Self.requiresPandas) func dataFrameColumns_seesLoadedCSV() async throws {
         let cells = [
             NotebookCell(cellType: "code", source: "import pandas as pd"),
             NotebookCell(cellType: "code", source: "df = pd.read_csv(\"cases.csv\")"),
@@ -184,9 +186,7 @@ import Testing
 
     // MARK: - figure_count sees quarantined plotting calls (needs matplotlib)
 
-    @Test func figureCount_seesPlottedFigures() async throws {
-        guard Self.python3Available, await pythonModuleAvailable("matplotlib") else { return }
-
+    @Test(Self.requiresMatplotlib) func figureCount_seesPlottedFigures() async throws {
         let cells = [
             NotebookCell(
                 cellType: "code",
@@ -201,9 +201,7 @@ import Testing
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test func figureCount_countsPerShowFlush_withoutExplicitFigures() async throws {
-        guard Self.python3Available, await pythonModuleAvailable("matplotlib") else { return }
-
+    @Test(Self.requiresMatplotlib) func figureCount_countsPerShowFlush_withoutExplicitFigures() async throws {
         // Notebook-style plotting with NO plt.figure() calls: in Jupyter each
         // plt.show() renders its own chart, but under batch Agg execution both
         // plots would overlay one figure. The check's show-flush emulation must

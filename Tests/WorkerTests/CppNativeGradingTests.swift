@@ -21,6 +21,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct CppNativeGradingTests {
 
+    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppAvailable }
+
     static var gppAvailable: Bool {
         get async { await toolIsAvailable("g++", arguments: ["--version"]) }
     }
@@ -28,8 +30,7 @@ import Testing
     /// The did-not-skip proof (audit F2). Every test below guards
     /// `gppAvailable` and returns silently when g++ is absent — right on a
     /// laptop, a silent hole in CI. Under `CI`, g++ MUST be present.
-    @Test func gppIsPresentInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func gppIsPresentInCI() async {
         let isAvailable = await Self.gppAvailable
         #expect(
             isAvailable,
@@ -105,9 +106,7 @@ import Testing
 
     /// The whole chain, pass case: compile the runtime + submission + test
     /// as one TU, run the binary, read the shortResult JSON off stdout.
-    @Test func aCppTestIsGradedByTheNativeWorker() async throws {
-        guard await Self.gppAvailable else { return }
-
+    @Test(Self.requiresGpp) func aCppTestIsGradedByTheNativeWorker() async throws {
         let script = Self.wrapper(
             stem: "dbl",
             body: """
@@ -136,9 +135,7 @@ import Testing
 
     /// Exit 1 is a fail; a submission that does not compile is an error with
     /// the g++ diagnostic captured as longResult.
-    @Test func failAndErrorMapThroughTheWrapper() async throws {
-        guard await Self.gppAvailable else { return }
-
+    @Test(Self.requiresGpp) func failAndErrorMapThroughTheWrapper() async throws {
         let script = Self.wrapper(
             stem: "dbl",
             body: """
@@ -170,9 +167,7 @@ import Testing
 
     /// A main-bearing submission (an intro "write a program" file) still has
     /// its functions graded — the wrapper's `#define main` rename.
-    @Test func aMainBearingSubmissionStillExposesItsFunctions() async throws {
-        guard await Self.gppAvailable else { return }
-
+    @Test(Self.requiresGpp) func aMainBearingSubmissionStillExposesItsFunctions() async throws {
         let script = Self.wrapper(
             stem: "m",
             body: """
@@ -199,9 +194,7 @@ import Testing
     /// The per-student inputs header — written through the real renderer,
     /// with a beyond-int32 value so the LL suffix is exercised — reads back
     /// through `ck_inputs::` in the same TU.
-    @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard await Self.gppAvailable else { return }
-
+    @Test(Self.requiresGpp) func perStudentInputsAreReadableOnTheNativePath() async throws {
         let script = Self.wrapper(
             stem: "thr",
             body: """

@@ -543,8 +543,7 @@ import Testing
     /// MUST answer its probe. It runs only in CI (a laptop legitimately lacks
     /// R or Lua), so it never blocks local work — but it cannot be satisfied by
     /// skipping.
-    @Test func noInterpreterIsSilentlyAbsentInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func noInterpreterIsSilentlyAbsentInCI() async {
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
             let (code, _) = await Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
@@ -636,6 +635,12 @@ import Testing
     }
 
     // MARK: - Executed against the real interpreter (skipped when absent)
+    //
+    // These are parameterized over every language, so a `ConditionTrait`
+    // cannot express the skip: it would skip the whole test when one
+    // interpreter is absent. The per-argument guard stays, and
+    // `noInterpreterIsSilentlyAbsentInCI` above is what keeps it from hiding
+    // an absent interpreter on the CI image.
 
     /// The assertion that would have caught a whole class of renderer bug: a
     /// generated script that is not even syntactically valid in its own

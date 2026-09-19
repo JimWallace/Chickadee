@@ -15,6 +15,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaUnorderedEqualTests {
 
+    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") { await Self.luaAvailable }
+
     static var luaAvailable: Bool {
         get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
@@ -35,8 +37,7 @@ import Testing
 
     /// The eight values from the audit table where the old string-keyed
     /// implementation disagreed with `equal`. Every one must now agree.
-    @Test func unorderedEqualNeverDisagreesWithEqual() async throws {
-        guard await Self.luaAvailable else { return }
+    @Test(Self.requiresLua) func unorderedEqualNeverDisagreesWithEqual() async throws {
         // Each pair is `{ actual, expected }` as Lua source; the harness reports
         // any pair whose equal / unordered_equal verdicts differ.
         let pairs = [
@@ -70,8 +71,7 @@ import Testing
     /// The other half of the contract: a genuine reordering (and correct
     /// multiset semantics) must still be accepted, so the fix did not make
     /// unordered_equal a synonym for equal.
-    @Test func unorderedEqualStillAcceptsReorderings() async throws {
-        guard await Self.luaAvailable else { return }
+    @Test(Self.requiresLua) func unorderedEqualStillAcceptsReorderings() async throws {
         let program = """
             local chickadee = require("test_runtime")
             local ok = chickadee.unordered_equal({1,2,3}, {3,1,2})

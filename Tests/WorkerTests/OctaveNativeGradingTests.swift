@@ -18,6 +18,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct OctaveNativeGradingTests {
 
+    static let requiresOctave: ConditionTrait = .enabled("requires octave-cli on PATH") { await Self.octaveAvailable }
+
     static var octaveAvailable: Bool {
         get async { await toolIsAvailable("octave-cli", arguments: ["--version"]) }
     }
@@ -26,8 +28,7 @@ import Testing
     /// below guards `octaveAvailable` and returns silently when Octave is
     /// absent — right on a laptop, a silent hole in CI. Under `CI`, Octave MUST
     /// be present; this cannot be satisfied by skipping.
-    @Test func octaveIsPresentInCI() async {
-        guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
+    @Test(.ciOnly) func octaveIsPresentInCI() async {
         let isAvailable = await Self.octaveAvailable
         #expect(
             isAvailable,
@@ -77,9 +78,7 @@ import Testing
 
     /// A `.m` test is dispatched to a real interpreter and comes back with a
     /// status, not a command-not-found error.
-    @Test func anOctaveTestIsGradedByTheNativeWorker() async throws {
-        guard await Self.octaveAvailable else { return }
-
+    @Test(Self.requiresOctave) func anOctaveTestIsGradedByTheNativeWorker() async throws {
         let passing = """
             chickadee = test_runtime();
             student = chickadee.load_student();
@@ -111,9 +110,7 @@ import Testing
     /// Exit 1 is a fail and exit 2 is an error, through the real subprocess
     /// boundary — the mapping generated Octave relies on when it calls
     /// `chickadee.failed` / `chickadee.errored`.
-    @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard await Self.octaveAvailable else { return }
-
+    @Test(Self.requiresOctave) func exitCodesMapToOutcomeStatuses() async throws {
         let dir = try Self.makeWorkspace(
             submission: "x = 1;\n",
             scripts: [
@@ -144,9 +141,7 @@ import Testing
     /// the runtime error deliberately. (A smaller promise than R's
     /// expression-by-expression loader, which also keeps definitions after the
     /// error; the runtime's header states the difference.)
-    @Test func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
-        guard await Self.octaveAvailable else { return }
-
+    @Test(Self.requiresOctave) func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
         let script = """
             chickadee = test_runtime();
             student = chickadee.load_student();
@@ -175,9 +170,7 @@ import Testing
     /// lines and `chickadee.student_cells()` splits on them — executed under
     /// the real interpreter, because the two live in different files (Swift
     /// and test_runtime.m) with only this to hold them together.
-    @Test func extractedNotebookCellsRoundTripThroughStudentCells() async throws {
-        guard await Self.octaveAvailable else { return }
-
+    @Test(Self.requiresOctave) func extractedNotebookCellsRoundTripThroughStudentCells() async throws {
         let extracted = extractOctave(
             cells: [
                 NotebookCell(cellType: "code", source: "threshold = 10;"),
@@ -210,9 +203,7 @@ import Testing
 
     /// The per-student inputs file, written and read on the native path — with
     /// a null inside a collection, the case that needs `NA` to occupy its slot.
-    @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard await Self.octaveAvailable else { return }
-
+    @Test(Self.requiresOctave) func perStudentInputsAreReadableOnTheNativePath() async throws {
         let script = """
             chickadee = test_runtime();
             values = chickadee.inputs();

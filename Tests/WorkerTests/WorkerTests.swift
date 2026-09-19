@@ -7,6 +7,10 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) final class WorkerTests {
 
+    static let requiresRscript: ConditionTrait = .enabled("requires Rscript on PATH") {
+        await WorkerTests.rscriptAvailable()
+    }
+
     // MARK: - Setup
 
     private let tmpDir: URL
@@ -431,7 +435,7 @@ import Testing
 
     // MARK: - R runtime helpers
 
-    private func rscriptAvailable() async -> Bool {
+    private static func rscriptAvailable() async -> Bool {
         // Probed through the shared throttle so the availability check can't
         // join the suite's spawn storm under parallel CI load.
         guard let run = try? await runToolThrottled(["Rscript", "--version"]) else { return false }
@@ -443,8 +447,7 @@ import Testing
         try testRuntimeSource(for: .r).write(to: url, atomically: true, encoding: .utf8)
     }
 
-    @Test func rRuntimePassedExitsZeroWithJSON() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimePassedExitsZeroWithJSON() async throws {
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\npassed('all good')",
@@ -457,8 +460,7 @@ import Testing
         #expect(output.stdout.contains("shortResult"), "stdout should contain shortResult JSON key")
     }
 
-    @Test func rRuntimeFailedExitsOneWithJSON() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimeFailedExitsOneWithJSON() async throws {
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\nfailed('wrong answer')",
@@ -471,8 +473,7 @@ import Testing
         #expect(output.stdout.contains("shortResult"))
     }
 
-    @Test func rRuntimeErroredExitsTwoWithJSON() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimeErroredExitsTwoWithJSON() async throws {
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\nerrored('unexpected')",
@@ -485,8 +486,7 @@ import Testing
         #expect(output.stdout.contains("shortResult"))
     }
 
-    @Test func rRuntimePassedDefaultMessage() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimePassedDefaultMessage() async throws {
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\npassed()",
@@ -511,8 +511,7 @@ import Testing
     /// workspace, so a helper that just scans `*.R` could grade Chickadee's own
     /// per-student inputs as the submission. It must never be a candidate — and
     /// with nothing else present there is simply nothing to grade.
-    @Test func rRuntimeNeverGradesTheInputsFileAsTheSubmission() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimeNeverGradesTheInputsFileAsTheSubmission() async throws {
         try writeRRuntime()
         try ".ck_inputs <- list(`x` = 1)\n".write(
             to: tmpDir.appendingPathComponent("_ck_inputs.R"), atomically: true, encoding: .utf8)
@@ -533,8 +532,7 @@ import Testing
 
     /// Reserved files, the assignment's own helper, and test scripts are all
     /// skipped; `solution.R` wins when present (the validation path).
-    @Test func rRuntimeFindsSubmissionAmongReservedFiles() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimeFindsSubmissionAmongReservedFiles() async throws {
         try writeRRuntime()
         for (name, body) in [
             ("_ck_inputs.R", ".ck_inputs <- list()\n"),
@@ -564,8 +562,7 @@ import Testing
     /// A `.chickadee_student_module` hint naming a real R file wins; a stale
     /// hint (the pre-fix `.py` name, or a file that was never written) must
     /// fall back to scanning rather than leaving nothing to grade.
-    @Test func rRuntimeHonoursHintAndIgnoresStaleOnes() async throws {
-        guard await rscriptAvailable() else { return }
+    @Test(Self.requiresRscript) func rRuntimeHonoursHintAndIgnoresStaleOnes() async throws {
         try writeRRuntime()
         try "u <- 1\n".write(
             to: tmpDir.appendingPathComponent("utils.R"), atomically: true, encoding: .utf8)
