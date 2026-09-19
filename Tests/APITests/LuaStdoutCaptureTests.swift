@@ -70,25 +70,25 @@ import Testing
 
     @Test func printIsCaptured() async throws {
         guard await Self.luaAvailable else { return }
-        await #expect(try grade(#"function classify(x) print("hello") end"#) == "pass")
+        #expect(try await grade(#"function classify(x) print("hello") end"#) == "pass")
     }
 
     @Test func ioStdoutWriteIsCaptured() async throws {
         guard await Self.luaAvailable else { return }
         // The regression: this escaped the old bare-io.write swap and failed a
         // correct submission with empty output.
-        await #expect(try grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
+        #expect(try await grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
     }
 
     @Test func chainedIoWriteIsCaptured() async throws {
         guard await Self.luaAvailable else { return }
         // Chained writes used to crash on the collector returning nil.
-        await #expect(try grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
+        #expect(try await grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
     }
 
     @Test func wrongOutputStillFails() async throws {
         guard await Self.luaAvailable else { return }
         // The capture is stronger, but the check still bites.
-        await #expect(try grade(#"function classify(x) print("goodbye") end"#) == "fail")
+        #expect(try await grade(#"function classify(x) print("goodbye") end"#) == "fail")
     }
 }

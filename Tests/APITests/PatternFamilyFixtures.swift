@@ -228,7 +228,7 @@ func pfGuardFilename(_ familyID: String, tier: TestTier = .pub) -> String {
     generatedScriptFilename(familyID: familyID, caseKey: patternExistenceGuardCaseKey, tier: tier, language: .python)
 }
 
-func pfAssertValidPythonSyntax(_ source: String, label: String) throws {
+func pfAssertValidPythonSyntax(_ source: String, label: String) async throws {
     // python3 is required to parse-check the generated source.  On a host
     // without it, skip silently rather than trapping: `/usr/bin/env python3`
     // launches env, env exits 127, and a non-throwing write to the now-closed
@@ -261,7 +261,7 @@ enum PFGeneratedOutcome: Equatable { case pass, fail, error }
 /// test assert the per-student preamble actually *grades*, not merely parses.
 func pfRunGeneratedCase(
     body: String, ckInputs: String?, student: String
-) throws -> PFGeneratedOutcome {
+) async throws -> PFGeneratedOutcome {
     let fm = FileManager.default
     let dir = fm.temporaryDirectory.appendingPathComponent("pf_run_\(UUID().uuidString)", isDirectory: true)
     try fm.createDirectory(at: dir, withIntermediateDirectories: true)

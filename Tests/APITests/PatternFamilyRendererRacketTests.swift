@@ -38,7 +38,7 @@ import Testing
     /// submission and the student hint. Returns (exitCode, stdout).
     static func execute(
         script: String, submission: String, inputs: String? = nil
-    ) throws -> (code: Int32, stdout: String) {
+    ) async throws -> (code: Int32, stdout: String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-rktrender-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -96,7 +96,7 @@ import Testing
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
-            let result = try Self.execute(script: script, submission: submission)
+            let result = try await Self.execute(script: script, submission: submission)
             #expect(result.code == 0, "dialect failed: \(submission)\n\(result.stdout)")
         }
     }
@@ -107,10 +107,10 @@ import Testing
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
         for submission in Self.bothDialects("(define (f x) (* x x))") {
-            #expect(try Self.execute(script: script, submission: submission).code == 0)
+            #expect(try await Self.execute(script: script, submission: submission).code == 0)
         }
         for submission in Self.bothDialects("(define (f x) (+ x x))") {
-            let bad = try Self.execute(script: script, submission: submission)
+            let bad = try await Self.execute(script: script, submission: submission)
             #expect(bad.code == 1)
             #expect(bad.stdout.contains("wrong value"))
         }
@@ -124,7 +124,7 @@ import Testing
         let script = Self.render(
             Self.family(.boundaryEquality, expected: .double(18.5), args: [.int(1)]))
         for submission in Self.bothDialects("(define (f x) 18.5)") {
-            let result = try Self.execute(script: script, submission: submission)
+            let result = try await Self.execute(script: script, submission: submission)
             #expect(result.code == 0, "exactness mismatch marked a correct answer wrong")
         }
     }
@@ -142,7 +142,7 @@ import Testing
               (cond [(empty? lst) 0] [else (+ (first lst) (total (rest lst)))]))
             """
         for submission in Self.bothDialects(body) {
-            let result = try Self.execute(script: script, submission: submission)
+            let result = try await Self.execute(script: script, submission: submission)
             #expect(result.code == 0, "list argument did not reach the student: \(result.stdout)")
         }
     }
@@ -152,10 +152,10 @@ import Testing
         let script = Self.render(
             Self.family(
                 .unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
-        let reversed = try Self.execute(
+        let reversed = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (list 3 2 1))\n")
         #expect(reversed.code == 0, "\(reversed.stdout)")
-        let wrong = try Self.execute(
+        let wrong = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (list 1 2 4))\n")
         #expect(wrong.code == 1)
     }
@@ -163,10 +163,10 @@ import Testing
     @Test func approximateEqualityHonoursTolerance() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
-        let close = try Self.execute(
+        let close = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 1.0000001)\n")
         #expect(close.code == 0, "\(close.stdout)")
-        let far = try Self.execute(
+        let far = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 1.5)\n")
         #expect(far.code == 1)
     }
@@ -176,10 +176,10 @@ import Testing
         let script = Self.render(
             Self.family(.variableEquality, function: "threshold", expected: .int(42), args: []))
         for submission in Self.bothDialects("(define threshold 42)") {
-            let result = try Self.execute(script: script, submission: submission)
+            let result = try await Self.execute(script: script, submission: submission)
             #expect(result.code == 0, "\(result.stdout)")
         }
-        let wrong = try Self.execute(
+        let wrong = try await Self.execute(
             script: script, submission: "#lang racket\n(define threshold 7)\n")
         #expect(wrong.code == 1)
     }
@@ -187,10 +187,10 @@ import Testing
     @Test func returnTypeCheckNamesTheNeutralType() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) \"hello\")\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 5)\n")
         #expect(bad.code == 1)
     }
@@ -198,10 +198,10 @@ import Testing
     @Test func exceptionExpectedMatchesTheMessage() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.exceptionExpected, expected: .string("boom")))
-        let raises = try Self.execute(
+        let raises = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (error \"boom\"))\n")
         #expect(raises.code == 0, "\(raises.stdout)")
-        let returns = try Self.execute(
+        let returns = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) 1)\n")
         #expect(returns.code == 1)
     }
@@ -209,7 +209,7 @@ import Testing
     @Test func performanceThresholdBoundsRuntime() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
-        let fast = try Self.execute(
+        let fast = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) x)\n")
         #expect(fast.code == 0, "\(fast.stdout)")
     }
@@ -217,10 +217,10 @@ import Testing
     @Test func stdoutEqualityComparesPrintedOutput() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hi")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (display \"hi\"))\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (display \"bye\"))\n")
         #expect(bad.code == 1)
     }
@@ -231,10 +231,10 @@ import Testing
         guard await Self.racketAvailable else { return }
         let script = renderRacketExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(1)), specHash: "h")
-        let present = try Self.execute(
+        let present = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) x)\n")
         #expect(present.code == 0, "\(present.stdout)")
-        let missing = try Self.execute(
+        let missing = try await Self.execute(
             script: script, submission: "#lang racket\n(define (g x) x)\n")
         // Exit 1, never 2: the dependency gate keys on a failure, and an error
         // would leave the dependent cases running against a missing function.
@@ -246,7 +246,7 @@ import Testing
     @Test func aBrokenSubmissionFailsWithAReadableMessage() async throws {
         guard await Self.racketAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let broken = try Self.execute(
+        let broken = try await Self.execute(
             script: script, submission: "#lang racket\n(define (f x) (+ x\n")
         #expect(broken.code == 1)
         #expect(broken.stdout.contains("could not be loaded"))
@@ -261,7 +261,7 @@ import Testing
         guard await Self.racketAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: """
                 #lang racket
@@ -272,7 +272,7 @@ import Testing
 
                 """)
         #expect(good.code == 0, Comment(rawValue: good.stdout))
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: """
                 #lang racket
@@ -283,7 +283,7 @@ import Testing
                 """)
         #expect(bad.code == 1)
         #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
-        let crashed = try Self.execute(script: script, submission: "#lang racket\n(error \"boom\")\n")
+        let crashed = try await Self.execute(script: script, submission: "#lang racket\n(error \"boom\")\n")
         #expect(crashed.code == 1)
         #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
     }
@@ -296,7 +296,7 @@ import Testing
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
             cases: [PatternCase(key: "01", label: "case", args: [.string("")], expected: .string("^sum=7$"))],
             ioComparison: .regex)
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: Self.render(family),
             submission: "#lang racket\n(displayln \"header\")\n(displayln \"sum=7\")\n")
         #expect(result.code == 0, Comment(rawValue: result.stdout))

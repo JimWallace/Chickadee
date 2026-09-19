@@ -38,6 +38,7 @@
 // it. Neither can drift; this comment deliberately names no package list,
 // because a list in prose is the thing that was wrong.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -754,7 +755,7 @@ import Testing
 
     /// Spawned through `/usr/bin/env`, the same way the runner resolves an
     /// interpreter, so "available here" means the same thing it means there.
-    static func run(_ interpreter: String, _ args: [String], in dir: URL) -> (Int32, String) {
+    static func run(_ interpreter: String, _ args: [String], in dir: URL) async -> (Int32, String) {
         do {
             let run = try await runTool([interpreter] + args, workingDirectory: dir)
             return (run.exitCode, run.stderr)
@@ -763,7 +764,7 @@ import Testing
         }
     }
 
-    static func isAvailable(_ adapter: Adapter) -> Bool {
+    static func isAvailable(_ adapter: Adapter) async -> Bool {
         return await toolIsAvailable(adapter.interpreter, arguments: adapter.versionArguments)
     }
 

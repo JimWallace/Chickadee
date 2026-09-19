@@ -164,7 +164,7 @@ import Vapor
         #expect(aHash != patternFamilySpecHash(c))
     }
 
-    @Test func renderedSourceIsValidPythonSyntax() throws {
+    @Test func renderedSourceIsValidPythonSyntax() async throws {
         // ast.parse rejects syntactically invalid Python, catches
         // quote-escape mishaps in the renderer.
         let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
@@ -182,7 +182,7 @@ import Vapor
     ///      switch to kwargs the moment an arg is omitted.
     /// Regression guard for the "every arg required" pre-v0.4.94 behaviour
     /// and the user-reported `def f(dob: str, currentDate: str = "...")` case.
-    @Test func renderer_defaultedTrailingArgOmitted_positionalCall() throws {
+    @Test func renderer_defaultedTrailingArgOmitted_positionalCall() async throws {
         let family = PatternFamily(
             id: "dobcheck", name: "DOB Check", kind: .boundaryEquality,
             functionName: "check_dob", paramNames: ["dob", "currentDate"],
@@ -214,7 +214,7 @@ import Vapor
 
     /// Middle-arg omission must switch subsequent provided args to kwargs,
     /// otherwise Python rejects the call as "positional after keyword".
-    @Test func renderer_defaultedMiddleArgOmitted_usesKwargs() throws {
+    @Test func renderer_defaultedMiddleArgOmitted_usesKwargs() async throws {
         let family = PatternFamily(
             id: "middlemissing", name: "Middle missing", kind: .boundaryEquality,
             functionName: "three_args", paramNames: ["a", "b", "c"],
@@ -253,7 +253,7 @@ import Vapor
     /// A family with one dict variable: the rendered test prepends the
     /// assignment, and a case referencing the variable via argVarRefs
     /// emits the bare identifier (no literal) in the param declaration.
-    @Test func renderer_familyVariable_prependedAndReferencedInCase() throws {
+    @Test func renderer_familyVariable_prependedAndReferencedInCase() async throws {
         let patients: JSONValue = .object([
             "p01": .object(["dob": .string("20000101"), "exempt": .bool(false)]),
             "p02": .object(["dob": .string("19950515"), "exempt": .bool(true)]),
@@ -495,7 +495,7 @@ import Vapor
             functionName: "countAdults", paramNames: ["patients"], cases: [c])
     }
 
-    @Test func rendererEmitsPerStudentPreambleAndExpectedRef() throws {
+    @Test func rendererEmitsPerStudentPreambleAndExpectedRef() async throws {
         let scripts = renderPatternFamily(
             perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"], language: .python)
         let src = try #require(scripts.first).source
@@ -617,7 +617,7 @@ import Vapor
     /// this student's value". Previously rejected, which forced an author to
     /// reshape a variable exercise into a function purely to get a per-student
     /// answer.
-    @Test func variableEqualityEmitsPerStudentPreambleAndExpectedRef() throws {
+    @Test func variableEqualityEmitsPerStudentPreambleAndExpectedRef() async throws {
         let scripts = renderPatternFamily(
             perStudentVariableFamily(), perStudentNames: ["sd_expected"], language: .python)
         let src = try #require(scripts.first).source
@@ -713,7 +713,7 @@ import Vapor
             perStudentExpressionNames: ["patients", "avg_expected"])
     }
 
-    @Test func approximateRendererEmitsPerStudentPreambleAndExpectedRef() throws {
+    @Test func approximateRendererEmitsPerStudentPreambleAndExpectedRef() async throws {
         let scripts = renderPatternFamily(
             perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"], language: .python)
         let src = try #require(scripts.first).source
@@ -778,7 +778,7 @@ import Vapor
             functionName: "findByDiag", paramNames: ["patients"], cases: [c])
     }
 
-    @Test func unorderedRendererEmitsCanonicalComparison() throws {
+    @Test func unorderedRendererEmitsCanonicalComparison() async throws {
         let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: [], language: .python).first)
             .source
         try pfAssertValidPythonSyntax(src, label: "pick_01")

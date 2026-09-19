@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -200,7 +201,7 @@ import VaporTesting
         """
     }
 
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
+    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
             throw IssueRecorded("env not available")
         }

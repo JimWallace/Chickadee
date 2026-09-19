@@ -47,6 +47,7 @@
 // without Octave is not a defect — so this only fully means anything in CI,
 // which is where the language matrix already relies on the image.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -60,7 +61,7 @@ import Testing
     private static func run(
         _ command: String, _ arguments: [String],
         in directory: URL? = nil, removingEnvironment: [String] = []
-    ) -> (status: Int32, output: String)? {
+    ) async -> (status: Int32, output: String)? {
         guard
             let run = try? await runToolCombiningStreams(
                 [command] + arguments, workingDirectory: directory,

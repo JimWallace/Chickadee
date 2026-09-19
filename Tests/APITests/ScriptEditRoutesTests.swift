@@ -7,6 +7,7 @@
 //   POST   /instructor/:assignmentID/scripts
 //   DELETE /instructor/:assignmentID/scripts/:filename
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -71,7 +72,7 @@ import VaporTesting
 
     /// Creates a zip at `zipPath` containing the given entries.
     /// Skips the test if Python 3 is unavailable (same pattern as ZipArchiverTests).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
+    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
             throw IssueRecorded("env not available")
         }

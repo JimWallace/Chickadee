@@ -12,6 +12,7 @@
 //   GET  /instructor/:assignmentID/files/solution
 //   POST /instructor/:assignmentID/create-solution
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Testing
@@ -74,7 +75,7 @@ import VaporTesting
     /// Creates a zip at `zipPath` via the system `zip` CLI (matches the
     /// pattern in ScriptEditRoutesTests so the same skip-on-missing-tooling
     /// guard applies).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) throws {
+    private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) async throws {
         // Missing zip/unzip is platform-expected -> silent skip (the testing
         // conventions reserve Issue.record for broken setup, not this).
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),

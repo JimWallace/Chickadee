@@ -89,7 +89,7 @@ import Vapor
 
     // MARK: - Shape
 
-    @Test func rendersOneRunnableScriptPerCase() throws {
+    @Test func rendersOneRunnableScriptPerCase() async throws {
         let rendered = renderPatternFamily(Self.family(), language: .python)
         #expect(rendered.count == 1)
         let script = try #require(rendered.first)
@@ -98,7 +98,7 @@ import Vapor
         #expect(script.source.contains("_runpy.run_path("))
         #expect(script.source.contains("_builtins.input = _fed_input"))
         #expect(script.source.contains("stdin_text = \"3\\n4\\n\""))
-        try pfAssertValidPythonSyntax(script.source, label: script.filename)
+        try await pfAssertValidPythonSyntax(script.source, label: script.filename)
     }
 
     @Test func comparisonSelectsTheCheckAndNamesItselfToTheStudent() throws {
@@ -172,7 +172,7 @@ import Vapor
 
     static func grade(
         _ family: PatternFamily, program: String
-    ) throws -> (code: Int32, stdout: String) {
+    ) async throws -> (code: Int32, stdout: String) {
         let script = try #require(renderPatternFamily(family, language: .python).first)
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-programio-\(UUID().uuidString)")
@@ -198,9 +198,9 @@ import Vapor
     @Test func anUnguardedProgramReadingInputPassesAndFails() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let good = try Self.grade(family, program: Self.unguardedSum)
+        let good = try await Self.grade(family, program: Self.unguardedSum)
         #expect(good.code == 0, Comment(rawValue: good.stdout))
-        let bad = try Self.grade(family, program: "a = int(input())\nb = int(input())\nprint(a * b)\n")
+        let bad = try await Self.grade(family, program: "a = int(input())\nb = int(input())\nprint(a * b)\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains(GeneratedMessage.wrongOutput))
         #expect(bad.stdout.contains("'12'"))
@@ -213,7 +213,7 @@ import Vapor
     @Test func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("8"))
-        let result = try Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
+        let result = try await Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
         #expect(result.code == 1)
         #expect(result.stdout.hasPrefix(GeneratedMessage.wrongOutput), Comment(rawValue: result.stdout))
         #expect(result.stdout.contains("'banner\\n7'"))
@@ -232,40 +232,40 @@ import Vapor
                 main()
 
             """
-        #expect(try Self.grade(family, program: program).code == 0)
+        #expect(try await Self.grade(family, program: program).code == 0)
     }
 
     @Test func promptsArePartOfTheOutputAsOnATerminal() async throws {
         guard await Self.pythonAvailable else { return }
         let program = "a = int(input('A: '))\nb = int(input('B: '))\nprint(a + b)\n"
         let exact = ProgramIOPatternKindTests.family(expected: .string("A: B: 7"))
-        #expect(try Self.grade(exact, program: program).code == 0)
+        #expect(try await Self.grade(exact, program: program).code == 0)
         let included = ProgramIOPatternKindTests.family(expected: .string("7"), comparison: .included)
-        #expect(try Self.grade(included, program: program).code == 0)
+        #expect(try await Self.grade(included, program: program).code == 0)
     }
 
     @Test func regexComparisonMatchesAcrossLines() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("^sum=7$"), comparison: .regex)
         let program = "a = int(input())\nb = int(input())\nprint('header')\nprint(f'sum={a + b}')\n"
-        #expect(try Self.grade(family, program: program).code == 0)
-        #expect(try Self.grade(family, program: "print('sum=8')\n").code == 1)
+        #expect(try await Self.grade(family, program: program).code == 0)
+        #expect(try await Self.grade(family, program: "print('sum=8')\n").code == 1)
     }
 
     @Test func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let good = try Self.grade(
+        let good = try await Self.grade(
             family, program: "import sys\nprint(int(input()) + int(input()))\nsys.exit(0)\n")
         #expect(good.code == 0, Comment(rawValue: good.stdout))
-        let bad = try Self.grade(family, program: "import sys\nprint(0)\nsys.exit(0)\n")
+        let bad = try await Self.grade(family, program: "import sys\nprint(0)\nsys.exit(0)\n")
         #expect(bad.code == 1, "a sys.exit(0) after a wrong answer read as a pass: \(bad.stdout)")
     }
 
     @Test func aCrashIsAGradedFailureCarryingTheError() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family()
-        let crashed = try Self.grade(family, program: "print(1 / 0)\n")
+        let crashed = try await Self.grade(family, program: "print(1 / 0)\n")
         #expect(crashed.code == 1)
         #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))
         #expect(crashed.stdout.contains("ZeroDivisionError"))
@@ -274,7 +274,7 @@ import Vapor
     @Test func readingPastTheInputIsAGradedFailure() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(stdin: "3\n")
-        let starved = try Self.grade(family, program: Self.unguardedSum)
+        let starved = try await Self.grade(family, program: Self.unguardedSum)
         #expect(starved.code == 1)
         #expect(starved.stdout.contains("EOFError"))
     }
@@ -282,6 +282,6 @@ import Vapor
     @Test func trailingWhitespaceIsIgnoredUnderExact() async throws {
         guard await Self.pythonAvailable else { return }
         let family = ProgramIOPatternKindTests.family(expected: .string("7"))
-        #expect(try Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
+        #expect(try await Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
     }
 }

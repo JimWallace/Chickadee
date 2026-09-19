@@ -32,10 +32,10 @@ import Testing
     /// answer for itself before it ever reaches the compiler.
     static func executeWithoutSubmission(
         script: String
-    ) throws -> (
+    ) async throws -> (
         code: Int32, stdout: String, stderr: String
     ) {
-        try execute(script: script, submission: nil)
+        try await execute(script: script, submission: nil)
     }
 
     /// Runs a rendered wrapper in a workspace holding the canonical runtime,
@@ -48,7 +48,7 @@ import Testing
     /// message from an empty one.
     static func execute(
         script: String, submission: String?, inputs: String? = nil
-    ) throws -> (code: Int32, stdout: String, stderr: String) {
+    ) async throws -> (code: Int32, stdout: String, stderr: String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-cpprender-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -99,10 +99,10 @@ import Testing
     @Test func boundaryEqualityPassesAndFails() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: "int f(int x) { return x * x; }\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: "int f(int x) { return x + x; }\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains("wrong value"))
@@ -118,10 +118,10 @@ import Testing
             Self.family(
                 .differential, expected: .null,
                 reference: "int ck_ref_f(int x) { return x * x; }"))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: "int f(int x) { return x * x; }\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script, submission: "int f(int x) { return x + x; }\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains("wrong value"))
@@ -140,7 +140,7 @@ import Testing
                 reference: """
                     int ck_ref_f(int) { throw std::runtime_error("reference is broken"); }
                     """))
-        let result = try Self.execute(
+        let result = try await Self.execute(
             script: script, submission: "int f(int x) { return x * x; }\n")
         #expect(result.code == 2, "\(result.stderr)")
         #expect(result.stderr.contains("the reference implementation raised"))
@@ -151,11 +151,11 @@ import Testing
         let script = Self.render(
             Self.family(
                 .unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
-        let reversed = try Self.execute(
+        let reversed = try await Self.execute(
             script: script,
             submission: "#include <vector>\nstd::vector<int> f(int) { return {3, 2, 1}; }\n")
         #expect(reversed.code == 0, "\(reversed.stdout)")
-        let short = try Self.execute(
+        let short = try await Self.execute(
             script: script,
             submission: "#include <vector>\nstd::vector<int> f(int) { return {1, 2}; }\n")
         #expect(short.code == 1)
@@ -170,10 +170,10 @@ import Testing
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil, tolerance: 1e-6),
             cases: family.cases)
         let script = Self.render(family)
-        let close = try Self.execute(
+        let close = try await Self.execute(
             script: script, submission: "double f(int) { return 0.1 + 0.2; }\n")
         #expect(close.code == 0, "\(close.stdout)")
-        let far = try Self.execute(
+        let far = try await Self.execute(
             script: script, submission: "double f(int) { return 0.31; }\n")
         #expect(far.code == 1)
     }
@@ -182,20 +182,20 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.variableEquality, function: "threshold", expected: .int(7), args: []))
-        let good = try Self.execute(script: script, submission: "int threshold = 7;\n")
+        let good = try await Self.execute(script: script, submission: "int threshold = 7;\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(script: script, submission: "int threshold = 8;\n")
+        let bad = try await Self.execute(script: script, submission: "int threshold = 8;\n")
         #expect(bad.code == 1)
     }
 
     @Test func returnTypeCheckMatchesTheNeutralTypeNames() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: "#include <string>\nstd::string f(int) { return \"x\"; }\n")
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(script: script, submission: "int f(int) { return 1; }\n")
+        let bad = try await Self.execute(script: script, submission: "int f(int) { return 1; }\n")
         #expect(bad.code == 1)
         #expect(bad.stdout.contains("wrong return type"))
     }
@@ -203,14 +203,14 @@ import Testing
     @Test func exceptionExpectedMatchesTheSubstring() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.exceptionExpected, expected: .string("negative")))
-        let throwing = try Self.execute(
+        let throwing = try await Self.execute(
             script: script,
             submission: """
                 #include <stdexcept>
                 int f(int) { throw std::invalid_argument("negative input"); }
                 """)
         #expect(throwing.code == 0, "\(throwing.stdout)")
-        let silent = try Self.execute(script: script, submission: "int f(int) { return 1; }\n")
+        let silent = try await Self.execute(script: script, submission: "int f(int) { return 1; }\n")
         #expect(silent.code == 1)
         #expect(silent.stdout.contains("no error raised"))
     }
@@ -219,7 +219,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(2000)))
         // A trivial function is far under a 2s budget.
-        let fast = try Self.execute(script: script, submission: "int f(int x) { return x; }\n")
+        let fast = try await Self.execute(script: script, submission: "int f(int x) { return x; }\n")
         #expect(fast.code == 0, "\(fast.stdout)")
         // The wrapper compiled -O2 — pinned by the script bytes.
         #expect(script.contains("-O2"))
@@ -229,7 +229,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.stdoutEquality, expected: .string("hello 3\nvia cout\n")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: """
                 #include <cstdio>
@@ -241,7 +241,7 @@ import Testing
                 }
                 """)
         #expect(good.code == 0, "\(good.stdout)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: "#include <cstdio>\nint f(int) { std::puts(\"nope\"); return 0; }\n")
         #expect(bad.code == 1)
@@ -258,7 +258,7 @@ import Testing
     @Test func aSubmissionCallingExitIsAnErrorNotAPass() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let sneaky = try Self.execute(
+        let sneaky = try await Self.execute(
             script: script,
             submission: """
                 #include <cstdlib>
@@ -272,7 +272,7 @@ import Testing
             "the run was not identified as incomplete: \(sneaky.stderr)")
 
         // And the sentinel never reaches the student-visible result line.
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script, submission: "int f(int x) { return x * x; }\n")
         #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
         #expect(
@@ -290,7 +290,7 @@ import Testing
         let script = renderCppExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(9)), specHash: "h")
         // An upload with no C++ in it at all: the wrapper finds no candidate.
-        let missing = try Self.executeWithoutSubmission(script: script)
+        let missing = try await Self.executeWithoutSubmission(script: script)
         #expect(
             missing.code == 1,
             "a missing submission was an error rather than a graded fail: \(missing.code)")
@@ -302,7 +302,7 @@ import Testing
     @Test func compilerWarningsDoNotReachAPassingResult() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: """
                 int f(int x) {
@@ -325,7 +325,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let byType = Self.render(
             Self.family(.exceptionExpected, expected: .string("invalid_argument")))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: byType,
             submission: """
                 #include <stdexcept>
@@ -339,7 +339,7 @@ import Testing
         // move it.
         let byMessage = Self.render(
             Self.family(.exceptionExpected, expected: .string("must be positive")))
-        let stillGood = try Self.execute(
+        let stillGood = try await Self.execute(
             script: byMessage,
             submission: """
                 #include <stdexcept>
@@ -348,7 +348,7 @@ import Testing
         #expect(stillGood.code == 0, "an authored MESSAGE stopped matching: \(stillGood.stdout)")
 
         // And a genuinely wrong type is still a fail.
-        let wrong = try Self.execute(
+        let wrong = try await Self.execute(
             script: byType,
             submission: """
                 #include <stdexcept>
@@ -364,7 +364,7 @@ import Testing
     @Test func aNonStdThrowIsAGradedFailureNotACrash() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let thrown = try Self.execute(
+        let thrown = try await Self.execute(
             script: script, submission: #"int f(int) { throw "negative input"; }"#)
         #expect(
             thrown.code == 1,
@@ -380,7 +380,7 @@ import Testing
     @Test func performanceThresholdAcceptsAVoidTarget() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
-        let good = try Self.execute(script: script, submission: "void f(int) { }\n")
+        let good = try await Self.execute(script: script, submission: "void f(int) { }\n")
         #expect(
             good.code == 0,
             "a void target did not compile or did not pass: \(good.stdout) \(good.stderr)")
@@ -395,7 +395,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: """
                 #include <stdexcept>
@@ -420,7 +420,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.stdoutEquality, expected: .string("hello")))
-        let thrown = try Self.execute(
+        let thrown = try await Self.execute(
             script: script,
             submission: """
                 #include <stdexcept>
@@ -439,7 +439,7 @@ import Testing
     @Test func anUnexpectedThrowIsAGradedFailure() async throws {
         guard await Self.gppAvailable else { return }
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(9)))
-        let throwing = try Self.execute(
+        let throwing = try await Self.execute(
             script: script,
             submission: "#include <stdexcept>\nint f(int) { throw std::runtime_error(\"boom\"); }\n")
         #expect(throwing.code == 1)
@@ -468,7 +468,7 @@ import Testing
             "threshold": language.literal(.int(21)),
             "want": language.literal(.int(42)),
         ])
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: "int f(int x) { return x * 2; }\n",
             inputs: inputs)
@@ -484,14 +484,14 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
-        let good = try Self.execute(
+        let good = try await Self.execute(
             script: script,
             submission: """
                 #include <iostream>
                 int main() { int a, b; std::cin >> a >> b; std::cout << a + b << std::endl; return 0; }
                 """)
         #expect(good.code == 0, "\(good.stdout) \(good.stderr)")
-        let bad = try Self.execute(
+        let bad = try await Self.execute(
             script: script,
             submission: """
                 #include <iostream>
@@ -514,7 +514,7 @@ import Testing
                 defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
                 cases: [PatternCase(key: "01", label: "case", args: [.string("3\n4\n")], expected: .string(expected))],
                 ioComparison: comparison)
-            let result = try Self.execute(script: Self.render(family), submission: program)
+            let result = try await Self.execute(script: Self.render(family), submission: program)
             #expect(result.code == 0, "\(comparison): \(result.stdout) \(result.stderr)")
         }
     }
@@ -525,7 +525,7 @@ import Testing
         guard await Self.gppAvailable else { return }
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
-        let crashed = try Self.execute(
+        let crashed = try await Self.execute(
             script: script, submission: "#include <cstdlib>\nint main() { std::exit(3); }\n")
         #expect(crashed.code == 1)
         #expect(crashed.stdout.contains(GeneratedMessage.unexpectedException))

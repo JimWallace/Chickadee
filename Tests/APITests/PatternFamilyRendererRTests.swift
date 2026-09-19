@@ -179,7 +179,7 @@ import Testing
             encoding: .utf8)
     }
 
-    private func run(script: GeneratedScript, submission: String) throws -> Int32 {
+    private func run(script: GeneratedScript, submission: String) async throws -> Int32 {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("ck-rfam-\(UUID().uuidString)")
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -217,8 +217,8 @@ import Testing
             kind: .differential, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .null,
             referenceImplementation: "ck_ref_double_it <- function(x) x * 2")
-        #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 0)
-        #expect(try run(script: script, submission: "double_it <- function(x) x + 2\n") == 1)
+        #expect(try await run(script: script, submission: "double_it <- function(x) x * 2\n") == 0)
+        #expect(try await run(script: script, submission: "double_it <- function(x) x + 2\n") == 1)
     }
 
     /// A reference that STOPS is the instructor's bug: exit 2 (errored), not 1.
@@ -232,7 +232,7 @@ import Testing
             args: [.int(21)], expected: .null,
             referenceImplementation:
                 "ck_ref_double_it <- function(x) stop(\"reference is broken\")")
-        #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 2)
+        #expect(try await run(script: script, submission: "double_it <- function(x) x * 2\n") == 2)
     }
 
     @Test func boundaryEqualityPassesAndFails() async throws {
@@ -240,10 +240,10 @@ import Testing
         let script = single(
             kind: .boundaryEquality, functionName: "double_it", paramNames: ["x"],
             args: [.int(21)], expected: .int(42))
-        #expect(try run(script: script, submission: "double_it <- function(x) x * 2\n") == 0)
-        #expect(try run(script: script, submission: "double_it <- function(x) x + 2\n") == 1)
+        #expect(try await run(script: script, submission: "double_it <- function(x) x * 2\n") == 0)
+        #expect(try await run(script: script, submission: "double_it <- function(x) x + 2\n") == 1)
         // Missing function -> errored (exit 2) via chickadee_require_fn.
-        #expect(try run(script: script, submission: "other <- function(x) x\n") == 2)
+        #expect(try await run(script: script, submission: "other <- function(x) x\n") == 2)
     }
 
     @Test func boundaryEqualityComparesCollections() async throws {
@@ -251,11 +251,11 @@ import Testing
         let script = single(
             kind: .boundaryEquality, functionName: "letters_of", paramNames: ["s"],
             args: [.string("ab")], expected: .array([.string("a"), .string("b")]))
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "letters_of <- function(s) strsplit(s, \"\")[[1]]\n") == 0)
-        #expect(
+        await #expect(
             try run(script: script, submission: "letters_of <- function(s) c(\"b\", \"a\")\n") == 1)
     }
 
@@ -273,15 +273,15 @@ import Testing
             args: [.array([.double(60), .null, .double(20)])],
             expected: .array([.string("G2"), .null, .string("G4")]))
         // ifelse() propagates NA on its own, so the contract holds and it passes.
-        #expect(try run(script: script, submission: stage) == 0)
+        #expect(try await run(script: script, submission: stage) == 0)
         // Dropping the NA (length 2, not 3) must fail rather than error.
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "egfr_stage <- function(e) { e <- e[!is.na(e)]; "
                     + "ifelse(e >= 60, \"G2\", \"G4\") }\n") == 1)
         // Substituting a string for the NA must fail too.
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "egfr_stage <- function(e) ifelse(is.na(e), \"unknown\", "
@@ -294,7 +294,7 @@ import Testing
         let script = single(
             kind: .boundaryEquality, functionName: "is_missing", paramNames: ["x"],
             args: [.array([.null])], expected: .array([.bool(true)]))
-        #expect(try run(script: script, submission: "is_missing <- function(x) is.na(x)\n") == 0)
+        #expect(try await run(script: script, submission: "is_missing <- function(x) is.na(x)\n") == 0)
     }
 
     /// An integer return against a JSON-decoded double expectation must pass —
@@ -304,7 +304,7 @@ import Testing
         let script = single(
             kind: .boundaryEquality, functionName: "count", paramNames: ["x"],
             args: [.int(3)], expected: .int(3))
-        #expect(try run(script: script, submission: "count <- function(x) 3L\n") == 0)
+        #expect(try await run(script: script, submission: "count <- function(x) 3L\n") == 0)
     }
 
     @Test func approximateEqualityHonoursTolerance() async throws {
@@ -313,10 +313,10 @@ import Testing
             kind: .approximateEquality, functionName: "ratio", paramNames: ["x"],
             args: [.int(3)], expected: .double(0.3333333),
             defaults: PatternDefaults(tolerance: 1e-4))
-        #expect(try run(script: script, submission: "ratio <- function(x) 1 / x\n") == 0)
-        #expect(try run(script: script, submission: "ratio <- function(x) 0.5\n") == 1)
+        #expect(try await run(script: script, submission: "ratio <- function(x) 1 / x\n") == 0)
+        #expect(try await run(script: script, submission: "ratio <- function(x) 0.5\n") == 1)
         // Non-numeric return is a clean failure, not an R error.
-        #expect(try run(script: script, submission: "ratio <- function(x) \"nope\"\n") == 1)
+        #expect(try await run(script: script, submission: "ratio <- function(x) \"nope\"\n") == 1)
     }
 
     @Test func unorderedEqualityIgnoresOrder() async throws {
@@ -324,8 +324,8 @@ import Testing
         let script = single(
             kind: .unorderedEquality, functionName: "tags", paramNames: ["x"],
             args: [.int(1)], expected: .array([.string("a"), .string("b"), .string("c")]))
-        #expect(try run(script: script, submission: "tags <- function(x) c(\"c\",\"b\",\"a\")\n") == 0)
-        #expect(try run(script: script, submission: "tags <- function(x) c(\"a\",\"b\")\n") == 1)
+        #expect(try await run(script: script, submission: "tags <- function(x) c(\"c\",\"b\",\"a\")\n") == 0)
+        #expect(try await run(script: script, submission: "tags <- function(x) c(\"a\",\"b\")\n") == 1)
     }
 
     @Test func variableEqualityChecksModuleLevelValue() async throws {
@@ -336,9 +336,9 @@ import Testing
                 PatternCase(key: "01", label: "beats", args: [.string("beats")], expected: .int(5))
             ])
         let script = try #require(renderPatternFamily(fam, language: .r).first)
-        #expect(try run(script: script, submission: "beats <- 5\n") == 0)
-        #expect(try run(script: script, submission: "beats <- 4\n") == 1)
-        #expect(try run(script: script, submission: "other <- 5\n") == 1)
+        #expect(try await run(script: script, submission: "beats <- 5\n") == 0)
+        #expect(try await run(script: script, submission: "beats <- 4\n") == 1)
+        #expect(try await run(script: script, submission: "other <- 5\n") == 1)
     }
 
     @Test func returnTypeCheckAcceptsRAndPythonTypeNames() async throws {
@@ -346,14 +346,14 @@ import Testing
         let rName = single(
             kind: .returnTypeCheck, functionName: "label", paramNames: ["x"],
             args: [.int(1)], expected: .string("character"))
-        #expect(try run(script: rName, submission: "label <- function(x) \"hi\"\n") == 0)
-        #expect(try run(script: rName, submission: "label <- function(x) 1\n") == 1)
+        #expect(try await run(script: rName, submission: "label <- function(x) \"hi\"\n") == 0)
+        #expect(try await run(script: rName, submission: "label <- function(x) 1\n") == 1)
 
         // A family converted from a Python assignment keeps working.
         let pyName = single(
             kind: .returnTypeCheck, functionName: "label", paramNames: ["x"],
             args: [.int(1)], expected: .string("str"))
-        #expect(try run(script: pyName, submission: "label <- function(x) \"hi\"\n") == 0)
+        #expect(try await run(script: pyName, submission: "label <- function(x) \"hi\"\n") == 0)
     }
 
     @Test func exceptionExpectedRequiresAnError() async throws {
@@ -361,14 +361,14 @@ import Testing
         let script = single(
             kind: .exceptionExpected, functionName: "boom", paramNames: ["x"],
             args: [.int(-1)], expected: .string("negative"))
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "boom <- function(x) if (x < 0) stop(\"negative input\") else x\n") == 0)
         // Succeeds when it should have raised.
-        #expect(try run(script: script, submission: "boom <- function(x) x\n") == 1)
+        #expect(try await run(script: script, submission: "boom <- function(x) x\n") == 1)
         // Raises, but not the expected error.
-        #expect(try run(script: script, submission: "boom <- function(x) stop(\"other\")\n") == 1)
+        #expect(try await run(script: script, submission: "boom <- function(x) stop(\"other\")\n") == 1)
     }
 
     @Test func performanceThresholdBoundsRuntime() async throws {
@@ -380,8 +380,8 @@ import Testing
         let script = single(
             kind: .performanceThreshold, functionName: "work", paramNames: ["n"],
             args: [.int(10)], expected: .int(150))
-        #expect(try run(script: script, submission: "work <- function(n) sum(1:n)\n") == 0)
-        #expect(try run(script: script, submission: "work <- function(n) { Sys.sleep(0.4); n }\n") == 1)
+        #expect(try await run(script: script, submission: "work <- function(n) sum(1:n)\n") == 0)
+        #expect(try await run(script: script, submission: "work <- function(n) { Sys.sleep(0.4); n }\n") == 1)
     }
 
     @Test func stdoutEqualityComparesPrintedOutput() async throws {
@@ -389,16 +389,16 @@ import Testing
         let script = single(
             kind: .stdoutEquality, functionName: "greet", paramNames: ["name"],
             args: [.string("Ada")], expected: .string("Hello, Ada!"))
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "greet <- function(name) cat(paste0(\"Hello, \", name, \"!\\n\"))\n") == 0)
         // Trailing blank lines / trailing spaces are normalized away.
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "greet <- function(name) cat(\"Hello, Ada!  \\n\\n\")\n") == 0)
-        #expect(try run(script: script, submission: "greet <- function(name) cat(\"Bye\\n\")\n") == 1)
+        #expect(try await run(script: script, submission: "greet <- function(name) cat(\"Bye\\n\")\n") == 1)
     }
 
     @Test func existenceGuardRunsForReal() async throws {
@@ -408,9 +408,9 @@ import Testing
             paramNames: ["x"],
             cases: [PatternCase(key: "01", label: "c", args: [.int(1)], expected: .int(1))])
         let script = try #require(existenceGuard(for: fam, language: .r))
-        #expect(try run(script: script, submission: "solve <- function(x) x\n") == 0)
-        #expect(try run(script: script, submission: "solve <- 42\n") == 1)
-        #expect(try run(script: script, submission: "nothing <- 1\n") == 1)
+        #expect(try await run(script: script, submission: "solve <- function(x) x\n") == 0)
+        #expect(try await run(script: script, submission: "solve <- 42\n") == 1)
+        #expect(try await run(script: script, submission: "nothing <- 1\n") == 1)
     }
 
     /// End-to-end personalization: the value the server resolved lands in
@@ -470,7 +470,7 @@ import Testing
         let scriptURL = dir.appendingPathComponent(script.filename)
         try script.source.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        func runWith(_ submission: String) throws -> Int32 {
+        func runWith(_ submission: String) async throws -> Int32 {
             try submission.write(
                 to: dir.appendingPathComponent("solution.R"), atomically: true, encoding: .utf8)
             let run = try await runTool(["Rscript", scriptURL.path], workingDirectory: dir)
@@ -478,11 +478,11 @@ import Testing
         }
 
         // Matches this student's personalized value.
-        #expect(try runWith("sd_systolic <- 9.5\n") == 0)
+        #expect(try await runWith("sd_systolic <- 9.5\n") == 0)
         // Another student's answer must not pass.
-        #expect(try runWith("sd_systolic <- 8.1\n") == 1)
+        #expect(try await runWith("sd_systolic <- 8.1\n") == 1)
         // Undefined is a clean failure, not an error.
-        #expect(try runWith("other <- 9.5\n") == 1)
+        #expect(try await runWith("other <- 9.5\n") == 1)
     }
 
     /// `.programIO`: the file is sourced with `readline` / `readLines("stdin")`
@@ -493,25 +493,25 @@ import Testing
         let script = single(
             kind: .programIO, functionName: "", paramNames: ["stdin"],
             args: [.string("3\n4\n")], expected: .string("7"))
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "a <- as.integer(readline())\nb <- as.integer(readline())\ncat(a + b, \"\\n\")\n")
                 == 0)
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "x <- as.integer(readLines(\"stdin\"))\ncat(sum(x), \"\\n\")\n") == 0)
-        #expect(
+        await #expect(
             try run(
                 script: script, submission: "x <- scan(file = \"stdin\", quiet = TRUE)\ncat(sum(x), \"\\n\")\nquit()\n")
                 == 0)
-        #expect(
+        await #expect(
             try run(
                 script: script,
                 submission: "a <- as.integer(readline())\nb <- as.integer(readline())\ncat(a * b, \"\\n\")\n")
                 == 1)
-        #expect(try run(script: script, submission: "stop(\"boom\")\n") == 1)
+        #expect(try await run(script: script, submission: "stop(\"boom\")\n") == 1)
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
@@ -522,7 +522,7 @@ import Testing
             cases: [PatternCase(key: "01", label: "Case 1", args: [.string("")], expected: .string("^sum=7$"))],
             ioComparison: .regex)
         let script = try #require(renderPatternFamily(fam, language: .r).first)
-        #expect(try run(script: script, submission: "cat(\"header\\nsum=7\\n\")\n") == 0)
-        #expect(try run(script: script, submission: "cat(\"sum=8\\n\")\n") == 1)
+        #expect(try await run(script: script, submission: "cat(\"header\\nsum=7\\n\")\n") == 0)
+        #expect(try await run(script: script, submission: "cat(\"sum=8\\n\")\n") == 1)
     }
 }

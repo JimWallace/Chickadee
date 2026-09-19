@@ -88,7 +88,7 @@ import Testing
     /// probe and have that answer parse — the two-step the original guard only
     /// checked the first half of. On a laptop a missing interpreter is not a
     /// defect, so absence is skipped there.
-    @Test func everyProbeOutputParsesInCI() {
+    @Test func everyProbeOutputParsesInCI() async {
         guard ProcessInfo.processInfo.environment["CI"] != nil else { return }
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe

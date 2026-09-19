@@ -55,7 +55,7 @@ import Vapor
 
     // MARK: - Generated guard actually grades
 
-    @Test func existenceGuard_sourceIsValidPython() throws {
+    @Test func existenceGuard_sourceIsValidPython() async throws {
         let g = try #require(existenceGuard(for: pfBMIFamily(), language: .python))
         try pfAssertValidPythonSyntax(g.source, label: "existence guard")
     }

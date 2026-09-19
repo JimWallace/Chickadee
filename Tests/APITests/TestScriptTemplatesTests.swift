@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Fluent
 // Tests/CoreTests/TestScriptTemplatesTests.swift
@@ -128,7 +129,7 @@ import Testing
     /// any indentation / syntax regression in the generated source.  Silently
     /// skipped on machines with no `python3` (expected on a bare dev laptop;
     /// CI images always install it, so the check runs everywhere it matters).
-    @Test func allPythonTemplateTypes_parseAsValidPython() throws {
+    @Test func allPythonTemplateTypes_parseAsValidPython() async throws {
         guard
             FileManager.default.fileExists(atPath: "/usr/bin/python3")
                 || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")

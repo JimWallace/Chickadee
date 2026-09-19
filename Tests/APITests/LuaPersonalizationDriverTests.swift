@@ -39,7 +39,7 @@ import Testing
         _ source: String,
         extraFiles: [String: String] = [:],
         seed: String? = nil
-    ) throws -> (Int32, String, String) {
+    ) async throws -> (Int32, String, String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-luadriver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -83,7 +83,7 @@ import Testing
                 PersonalizationExpression(name: "values", expression: "{1, 2.5, \"three\"}"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runLua(source, seed: String(repeating: "a", count: 64))
+        let (code, stdout, stderr) = try await Self.runLua(source, seed: String(repeating: "a", count: 64))
         #expect(code == 0, "driver failed: \(stderr)")
 
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
@@ -115,7 +115,7 @@ import Testing
                 PersonalizationExpression(name: "b", expression: "true"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runLua(source, seed: "ff")
+        let (code, stdout, stderr) = try await Self.runLua(source, seed: "ff")
         #expect(code == 0, "driver failed: \(stderr)")
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
         let values = try #require(
@@ -123,7 +123,7 @@ import Testing
 
         for (name, literal) in values {
             let probe = "local v = \(literal)\n"
-            let (rc, _, err) = try Self.runLua(probe)
+            let (rc, _, err) = try await Self.runLua(probe)
             #expect(rc == 0, "the driver emitted unparseable Lua for `\(name)`: \(literal) — \(err)")
         }
     }
@@ -140,14 +140,14 @@ import Testing
                 \(LuaPersonalizationRuntime.chickadeeSeedLuaSource)
                 io.write(tostring(chickadee_seed()), "\\n")
                 """
-            let (dcode, dout, derr) = try Self.runLua(driverSource, seed: seed)
+            let (dcode, dout, derr) = try await Self.runLua(driverSource, seed: seed)
             #expect(dcode == 0, "driver seed failed: \(derr)")
 
             let runtimeSource = """
                 local chickadee = require("test_runtime")
                 io.write(tostring(chickadee.seed()), "\\n")
                 """
-            let (rcode, rout, rerr) = try Self.runLua(
+            let (rcode, rout, rerr) = try await Self.runLua(
                 runtimeSource,
                 extraFiles: ["test_runtime.lua": try Self.testRuntimeLuaSource()],
                 seed: seed)
@@ -178,7 +178,7 @@ import Testing
             \(LuaPersonalizationRuntime.chickadeeSeedLuaSource)
             io.write(tostring(chickadee_seed()), "\\n")
             """
-        let (code, out, err) = try Self.runLua(source, seed: seed)
+        let (code, out, err) = try await Self.runLua(source, seed: seed)
         #expect(code == 0, "driver failed: \(err)")
 
         // Computed here independently rather than by re-running the Lua, so

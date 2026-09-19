@@ -21,7 +21,7 @@ import Testing
 
     /// Runs `program` with the embedded `test_runtime.lua` on `package.path`,
     /// returning trimmed stdout.
-    private func runLua(_ program: String) throws -> String {
+    private func runLua(_ program: String) async throws -> String {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-unordered-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -61,7 +61,7 @@ import Testing
             end
             io.write(#disagreements == 0 and "OK" or ("DISAGREE:" .. table.concat(disagreements, ",")))
             """
-        let result = try runLua(program)
+        let result = try await runLua(program)
         #expect(
             result == "OK",
             "equal and unordered_equal disagree on case(s) \(result) — the F3 regression is back")
@@ -81,6 +81,6 @@ import Testing
                 and not chickadee.unordered_equal({1,2,3}, {1,2})
             io.write(ok and "OK" or "WRONG")
             """
-        #expect(try runLua(program) == "OK")
+        #expect(try await runLua(program) == "OK")
     }
 }

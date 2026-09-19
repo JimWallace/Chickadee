@@ -19,6 +19,7 @@
 // Skipped silently when `octave-cli` is absent, matching the conformance
 // matrix; `octaveIsPresentInCI` is the did-not-skip proof.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -37,7 +38,7 @@ import Testing
         _ source: String,
         extraFiles: [String: String] = [:],
         seed: String? = nil
-    ) throws -> (Int32, String, String) {
+    ) async throws -> (Int32, String, String) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-octdriver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

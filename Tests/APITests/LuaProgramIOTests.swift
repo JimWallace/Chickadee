@@ -5,6 +5,7 @@
 // `io.lines()`, and an `os.exit` after the answer — every one of which the
 // generated script proxies in the environment the submission runs in.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -27,7 +28,7 @@ import Testing
     private func grade(
         _ submission: String, stdin: String = "3\n4\n", expected: String = "7",
         comparison: ProgramIOComparison? = nil
-    ) throws -> String {
+    ) async throws -> String {
         let family = PatternFamily(
             id: "io", name: "IO", kind: .programIO, functionName: "", paramNames: ["stdin"],
             cases: [PatternCase(key: "01", label: "sum", args: [.string(stdin)], expected: .string(expected))],

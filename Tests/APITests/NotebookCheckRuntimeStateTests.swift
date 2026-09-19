@@ -10,6 +10,7 @@
 // tests run the real pipeline: RunnerCore.extractPython → rendered check
 // script → python3 with the canonical Tools/runner-support/test_runtime.py.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -68,7 +69,7 @@ import Testing
         cells: [NotebookCell],
         check: NotebookCheck,
         supportFiles: [(name: String, content: String)] = []
-    ) throws -> RunResult {
+    ) async throws -> RunResult {
         let fm = FileManager.default
         let workDir = fm.temporaryDirectory
             .appendingPathComponent("chickadee-runtime-check-\(UUID().uuidString)", isDirectory: true)
@@ -110,7 +111,7 @@ import Testing
             stderr: run.stderr)
     }
 
-    private func pythonModuleAvailable(_ module: String) -> Bool {
+    private func pythonModuleAvailable(_ module: String) async -> Bool {
         return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 

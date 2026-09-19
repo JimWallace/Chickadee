@@ -5,6 +5,7 @@
 // `with*App` wrapper.  Used by AssignmentHelpersManifestTests and
 // AssignmentHelpersUtilityTests after the migration to Swift Testing.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -29,7 +30,7 @@ func ahMakeFile(named name: String, contents: String) -> File {
     return File(data: buffer, filename: name)
 }
 
-func ahMakeZip(at zipPath: String, entries: [(name: String, content: String)]) throws {
+func ahMakeZip(at zipPath: String, entries: [(name: String, content: String)]) async throws {
     let tempDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("assignment-helper-zip-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
