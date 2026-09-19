@@ -242,6 +242,14 @@ actor LocalRunnerManager {
         let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
         let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
 
+        // Deliberately Foundation's `Process`, not `swift-subprocess`, and one
+        // of only three such spawns left in the repository (the list is in
+        // `Tests/TestSupport/InterpreterSpawn.swift`). Subprocess models a run
+        // whose result you collect; this child is held for the server's whole
+        // lifetime — started here, stored, and signalled on shutdown — which
+        // the collected API does not express. The #1139 concurrent-spawn race
+        // that moved everything else is not a concern here either: this runs
+        // once at boot, behind a `.local-runner-autostart` check.
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments =

@@ -28,8 +28,9 @@ import Testing
 
     /// Runs `passed(<message>)` under the composed runtime and returns the
     /// decoded last stdout line — i.e. exactly what the result interpreter sees.
-    /// Launched through `runProcessRobustly` (throttle + bounded exit wait)
-    /// with CLOEXEC pipes and a bounded drain — a raw `Process` with
+    /// Launched through `runToolThrottled`, which holds the suite to four
+    /// concurrent spawns. The CLOEXEC pipes and bounded drain this used to
+    /// need are gone with Foundation's `Process`: a raw one with
     /// `readDataToEndOfFile()` here pinned a cooperative-pool thread and fed
     /// the #1233 whole-process wedge.
     private func emit(_ rMessageLiteral: String) async throws -> [String: Any]? {
@@ -44,21 +45,12 @@ import Testing
         let scriptURL = dir.appendingPathComponent("probe.R")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = try await runProcessRobustly {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            proc.arguments = ["Rscript", scriptURL.path]
-            proc.currentDirectoryURL = dir
-            proc.standardOutput = makeCloexecPipe()
-            proc.standardError = makeCloexecPipe()
-            return proc
-        }
-        let out = try #require(proc.standardOutput as? Pipe)
-        let data = readToEOFBounded(out)
+        let run = try await runToolThrottled(["Rscript", scriptURL.path], workingDirectory: dir)
 
         guard
-            let text = String(data: data, encoding: .utf8),
-            let last = text.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+            let last = run.stdout.split(separator: "\n").last(where: {
+                !$0.trimmingCharacters(in: .whitespaces).isEmpty
+            })
         else { return nil }
         return try JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any]
     }

@@ -222,15 +222,10 @@ import Testing
             try Data(file.contents.utf8).write(to: path)
         }
 
-        // Launched via `runProcessRobustly` so concurrent tests can't pile
-        // python3 forks on top of the suite's other real subprocesses, and a
-        // transient spawn failure under load is retried instead of failing
-        // the test.
-        let process = try await runProcessRobustly {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.currentDirectoryURL = tempDir
-            process.arguments = [
+        // Launched through the shared throttle so concurrent tests can't pile
+        // python3 spawns on top of the suite's other real subprocesses.
+        let run = try await runToolThrottled(
+            [
                 "python3",
                 "-c",
                 #"""
@@ -250,10 +245,9 @@ import Testing
                 """#,
                 zipPath,
                 tempDir.path,
-            ]
-            return process
-        }
-        #expect(process.terminationStatus == 0)
+            ],
+            workingDirectory: tempDir)
+        #expect(run.succeeded)
     }
 
     private func makeServedJob(
