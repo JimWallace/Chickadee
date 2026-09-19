@@ -148,7 +148,7 @@ import Testing
     /// A work root that permits exec advertises C++; the same probe against a
     /// directory it cannot write to does not.
     @Test func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
-        guard gppIsAvailable() else { return }
+        guard await gppIsAvailable() else { return }
 
         let usable = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")

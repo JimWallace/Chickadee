@@ -105,7 +105,7 @@ import Testing
     /// The whole chain, pass case: compile the runtime + submission + test
     /// as one TU, run the binary, read the shortResult JSON off stdout.
     @Test func aCppTestIsGradedByTheNativeWorker() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "dbl",
@@ -136,7 +136,7 @@ import Testing
     /// Exit 1 is a fail; a submission that does not compile is an error with
     /// the g++ diagnostic captured as longResult.
     @Test func failAndErrorMapThroughTheWrapper() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "dbl",
@@ -170,7 +170,7 @@ import Testing
     /// A main-bearing submission (an intro "write a program" file) still has
     /// its functions graded — the wrapper's `#define main` rename.
     @Test func aMainBearingSubmissionStillExposesItsFunctions() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "m",
@@ -199,7 +199,7 @@ import Testing
     /// with a beyond-int32 value so the LL suffix is exercised — reads back
     /// through `ck_inputs::` in the same TU.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard Self.gppAvailable else { return }
+        guard await Self.gppAvailable else { return }
 
         let script = Self.wrapper(
             stem: "thr",

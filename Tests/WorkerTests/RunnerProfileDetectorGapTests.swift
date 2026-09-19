@@ -32,7 +32,7 @@ import Testing
 
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
-    private static func hostHasCommand(_ command: String) -> Bool {
+    private static func hostHasCommand(_ command: String) async -> Bool {
         return await toolIsAvailable("which")
     }
 
@@ -88,7 +88,7 @@ import Testing
 
         for (command, capability) in [("bash", "shell-bash"), ("zsh", "shell-zsh")] {
             let advertised = names.contains(capability)
-            let onHost = Self.hostHasCommand(command)
+            let onHost = await Self.hostHasCommand(command)
             #expect(
                 advertised == onHost,
                 "\(capability) advertised: \(advertised), \(command) on host: \(onHost)")
@@ -110,14 +110,14 @@ import Testing
         let names = Set(profile.capabilities.map(\.name))
 
         for module in ["numpy", "pandas", "scipy", "matplotlib"] {
-            let importable = Self.hostCanImportPythonModule(module)
+            let importable = await Self.hostCanImportPythonModule(module)
             #expect(
                 names.contains(module) == importable,
                 "\(module) advertised: \(names.contains(module)), importable on host: \(importable)")
         }
     }
 
-    private static func hostCanImportPythonModule(_ module: String) -> Bool {
+    private static func hostCanImportPythonModule(_ module: String) async -> Bool {
         return await toolIsAvailable("python3", arguments: ["-c", "import \\(module)"])
     }
 }

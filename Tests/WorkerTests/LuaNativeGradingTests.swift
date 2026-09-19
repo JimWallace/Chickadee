@@ -89,7 +89,7 @@ import Testing
     /// The regression test for the defect: a `.lua` test is dispatched to a real
     /// interpreter and comes back with a status, not a command-not-found error.
     @Test func aLuaTestIsGradedByTheNativeWorker() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
 
         let passing = """
             local chickadee = require("test_runtime")
@@ -123,7 +123,7 @@ import Testing
     /// boundary rather than a stubbed runner — the mapping generated Lua relies
     /// on when it calls `chickadee.failed` / `chickadee.errored`.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "function double(x) return x end\n",
@@ -154,7 +154,7 @@ import Testing
     /// deliberately, matching test_runtime.R. Worth pinning natively because it
     /// is the difference between one failing test and a whole suite of errors.
     @Test func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
 
         let script = """
             local chickadee = require("test_runtime")
@@ -181,7 +181,7 @@ import Testing
     /// browser smoke supplies one as a fixture, which proves the reader and says
     /// nothing about the worker.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard Self.luaAvailable else { return }
+        guard await Self.luaAvailable else { return }
 
         let script = """
             local chickadee = require("test_runtime")

@@ -86,7 +86,7 @@ import Testing
     /// fell through to `/bin/sh`, where the leading `;` is a syntax error and
     /// the run exits 2.
     @Test func aRacketTestIsGradedByTheNativeWorker() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: """
@@ -116,7 +116,7 @@ import Testing
     /// The exit-code contract holds through the real interpreter, not just
     /// through the classifier.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
@@ -146,7 +146,7 @@ import Testing
     /// — so this is the assertion that the helper actually lands and parses,
     /// rather than that a constant exists in the binary.
     @Test func theInstalledRuntimeIsRequirableByAGeneratedTest() async throws {
-        guard Self.racketAvailable else { return }
+        guard await Self.racketAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",

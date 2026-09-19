@@ -86,7 +86,7 @@ import Testing
     /// wrapper's compile-and-run round trip survives the worker's dispatch —
     /// the thing `generatedScriptExtension: "sh"` makes true and no test said.
     @Test func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         // Written out rather than produced by `renderJavaPatternCase`: that
         // renderer lives in APIServer, which WorkerTests cannot import. The
@@ -141,7 +141,7 @@ import Testing
     /// The exit-code contract holds through javac + java + the wrapper's
     /// sentinel check, not just through the classifier.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         func wrapper(_ verdict: String) -> String {
             """
@@ -189,7 +189,7 @@ import Testing
     /// (`docs/java-support.md`), and nothing pinned that it dispatches to `java`
     /// single-file source mode rather than falling through to `/bin/sh`.
     @Test func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
-        guard Self.javacAvailable else { return }
+        guard await Self.javacAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x; } }\n",

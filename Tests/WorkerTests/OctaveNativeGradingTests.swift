@@ -77,7 +77,7 @@ import Testing
     /// A `.m` test is dispatched to a real interpreter and comes back with a
     /// status, not a command-not-found error.
     @Test func anOctaveTestIsGradedByTheNativeWorker() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let passing = """
             chickadee = test_runtime();
@@ -111,7 +111,7 @@ import Testing
     /// boundary — the mapping generated Octave relies on when it calls
     /// `chickadee.failed` / `chickadee.errored`.
     @Test func exitCodesMapToOutcomeStatuses() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let dir = try Self.makeWorkspace(
             submission: "x = 1;\n",
@@ -144,7 +144,7 @@ import Testing
     /// expression-by-expression loader, which also keeps definitions after the
     /// error; the runtime's header states the difference.)
     @Test func aSubmissionThatRaisesAtTopLevelStillExposesItsFunctions() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let script = """
             chickadee = test_runtime();
@@ -175,7 +175,7 @@ import Testing
     /// the real interpreter, because the two live in different files (Swift
     /// and test_runtime.m) with only this to hold them together.
     @Test func extractedNotebookCellsRoundTripThroughStudentCells() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let extracted = extractOctave(
             cells: [
@@ -210,7 +210,7 @@ import Testing
     /// The per-student inputs file, written and read on the native path — with
     /// a null inside a collection, the case that needs `NA` to occupy its slot.
     @Test func perStudentInputsAreReadableOnTheNativePath() async throws {
-        guard Self.octaveAvailable else { return }
+        guard await Self.octaveAvailable else { return }
 
         let script = """
             chickadee = test_runtime();
