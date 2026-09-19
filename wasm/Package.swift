@@ -15,9 +15,16 @@ import PackageDescription
 //     build under Embedded Swift before then. The legacy `globalThis.runner*`
 //     entry points are a JS adapter over the typed exports
 //     (wasm/loader/runner-core-entry.js). See docs/runner-wasm-swift-6-4-review.md.
-//   * swiftLanguageModes [.v5] + the "Extern" experimental feature, matching
-//     JavaScriptKit's Embedded example (BridgeJS's generated code uses
-//     `@_extern(wasm)`).
+//   * Swift 6 language mode, like the main package. The bridge carried
+//     `swiftLanguageModes: [.v5]` from JavaScriptKit's Embedded example, and
+//     while it was hand-marshalled it needed to: `BrowserScriptExecutor` held
+//     `JSObject`s, which are not `Sendable`, behind an `async` protocol. With
+//     BridgeJS the executor holds the typed closures the plugin lifts, the
+//     package builds clean under strict concurrency (measured: zero
+//     diagnostics on the 6.4 Embedded SDK), and the language mode is one
+//     less thing that differs from the rest of the repository. The "Extern"
+//     experimental feature stays: BridgeJS's generated code uses
+//     `@_extern(wasm)`.
 //   * -Osize: the bridge is not hot (one call per submission), so the size
 //     optimizer's ~10 KB raw / ~3 KB gzip saving is free. Measured on the 6.4
 //     Embedded SDK with the Node output-contract harness green.
@@ -43,5 +50,5 @@ let package = Package(
             plugins: [.plugin(name: "BridgeJS", package: "JavaScriptKit")]
         )
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

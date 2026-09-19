@@ -199,9 +199,11 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
 /// The browser conformance of RunnerCore's `ScriptExecutor`: the one
 /// substrate-specific operation, running a script, is delegated to the JS
 /// callbacks; everything else (dependency gating, skip messages, missing-script
-/// handling, `interpretScriptOutput`) is the shared loop. The closures are
-/// JS functions and not `Sendable`; the wasm package builds in Swift 5 mode on
-/// a single-threaded cooperative executor, so nothing is sent across threads.
+/// handling, `interpretScriptOutput`) is the shared loop. The closures are the
+/// typed ones BridgeJS lifts from the JS arguments; the executor is created and
+/// consumed within one `bridgeExecuteSuites` call on the single-threaded
+/// cooperative executor, so nothing crosses an isolation boundary and the
+/// package builds clean in Swift 6 language mode.
 private struct BrowserScriptExecutor: ScriptExecutor {
     let exists: (String) -> Bool
     let runScript: (String, Int) async -> JSScriptOutput
