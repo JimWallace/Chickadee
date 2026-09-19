@@ -1,7 +1,8 @@
 # The browser wasm on Swift 6.4 — what the toolchain move changed, measured
 
-Status: **slices 1 and 2 shipped** (#1548, and the BridgeJS PR after it);
-slices 3–4 are scoped and priced below. Companion to
+Status: **slices 1–3 shipped** (#1548, #1550, and the language-mode PR
+after it). Slice 4 was spiked, measured and deliberately NOT shipped; the
+numbers are in the table so the decision can be revisited with them. Companion to
 [runner-wasm-migration.md](runner-wasm-migration.md) (the design) and
 [runner-wasm-serving.md](runner-wasm-serving.md) (caching and the size guard).
 
@@ -238,8 +239,8 @@ SDK); it is 280 lines that change rarely, and slice 2 shrinks it further.
 |---|---|---|---|
 | 1 | `--strip-debug` + `-Osize`, thresholds rebaselined, `Double(String)`, host Embedded guard, stale-output clean, comment corrections | 1,478 KB → 273 KB raw; 493 KB → 134 KB gzip; correctly rounded footer numbers; embed-breakage caught per PR | **this PR** |
 | 2 | The bridge is BridgeJS `@JS` exports (`wasm/Sources/RunnerWasm/Bridge.swift`): typed structs for cells, suite items, script output and outcomes, async `executeSuites` with typed async JS callbacks, and the generated `.d.ts` vendored as `Public/runner-wasm/runner-core.d.ts` as the contract. The legacy `globalThis.runner*` entry points are a 60-line JS adapter (`wasm/loader/runner-core-entry.js`, the esbuild entry) over the typed exports, so browser-runner.js and every existing Node test kept their contract unchanged | −190 lines of hand-marshalling Swift; **+9 KB raw / +4 KB gzip** on the wasm (281,578 / 138,181) and +6 KB gzip on the loader (BridgeJS's struct codecs cost more than the dynamic bridge they replaced; the "about zero" prediction below was wrong by that much); `runner-core-exports.test.mjs` pins the typed surface and the adapters' tolerances | **shipped** |
-| 3 | Swift 6 language mode for the wasm package (JavaScriptKit's example still pins `.v5`; `BrowserScriptExecutor` now holds JS-backed closures rather than `JSObject`s, but they are still not `Sendable`) | none on size; strict concurrency on the bridge | next |
-| 4 | UTF-8-view rewrite of RunnerCore's string helpers | up to ~−90 KB raw, ~−30 KB gzip, on an immutable once-per-term download | not worth the diff; recorded |
+| 3 | Swift 6 language mode for the wasm package (`swiftLanguageModes: [.v6]`), the same mode as the main package. JavaScriptKit's Embedded example pins `.v5` and the hand-marshalled bridge needed it (non-`Sendable` `JSObject`s behind an `async` protocol); with BridgeJS the executor holds the plugin's typed closures inside one call and the package builds with zero diagnostics | none on size; strict concurrency on the bridge | **shipped** |
+| 4 | RunnerCore scanning and comparing UTF-8 bytes (no `Character`, no `String ==` / `hasPrefix` / `contains` on Strings, no `[String: _]`; the JSON object as a member list; a byte-wise `TestTier.matching(rawValue:)` in the bridge, because the synthesised `init?(rawValue:)` alone re-linked 33 KB of normalisation tables) | **spiked, measured, not shipped**: 281,578 / 138,181 → 177,343 / 80,331 (−37 % raw, −42 % gzip; the grapheme and normalisation code and both tables gone, data segment 63 KB → 8 KB). A bridge-only build with RunnerCore unreferenced is 108,255 / 48,544, so RunnerCore's own logic is the ~69 KB that remains. Cost: every scanner in RunnerCore rewritten on bytes (~600 lines touched, one new helper file), with 574 Node and 450 native tests green and a behaviour test for the places a byte scanner could plausibly differ (non-ASCII trailing white space, an indented first column, a repeated footer key). The maintainer's call was that ~58 KB gzip on an immutable once-per-term download is not worth carrying that code; the spike lives on a local branch and this row is what a later revisit starts from | not shipped |
 
 Two things deliberately NOT changed. The "artifact rebuilt only on `main`"
 model stays: a PR still runs against the checked-in artifact (this PR
