@@ -79,7 +79,7 @@ struct SubmissionDiffRoutesTests {
             let student = try await arInsertStudent(username: "diff_bob", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
             let setup = try await arInsertSetup(id: "diff_file_setup", on: app)
-            try arMakeZip(
+            try await arMakeZip(
                 at: setup.zipPath,
                 entries: [("warmup.py", "def f():\n    return 1\n"), ("test.sh", "exit 0\n")])
             let assignment = try await arInsertAssignment(
@@ -120,7 +120,7 @@ struct SubmissionDiffRoutesTests {
             let submission = try await arInsertSubmission(
                 id: "sub_diff_zip", testSetupID: "diff_zip_setup",
                 userID: student.requireID(), on: app)
-            try arMakeZip(at: submission.zipPath, entries: [("main.cpp", "int main() {}\n")])
+            try await arMakeZip(at: submission.zipPath, entries: [("main.cpp", "int main() {}\n")])
 
             try await app.asyncTest(
                 .GET, "/instructor/\(assignment.publicID)/submissions/sub_diff_zip/diff",

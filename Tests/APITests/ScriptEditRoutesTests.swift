@@ -54,7 +54,7 @@ import VaporTesting
             """
         let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let zipPath = app.testSetupsDirectory + "\(id).zip"
-        try makeZipAt(zipPath: zipPath, entries: entries)
+        try await makeZipAt(zipPath: zipPath, entries: entries)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         return setup

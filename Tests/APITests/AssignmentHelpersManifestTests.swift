@@ -379,7 +379,7 @@ final class AssignmentHelpersManifestTests {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
             .path
-        try ahMakeZip(
+        try await ahMakeZip(
             at: zipPath,
             entries: [
                 (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
@@ -648,7 +648,7 @@ final class AssignmentHelpersManifestTests {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
+        try await ahMakeZip(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -688,7 +688,7 @@ final class AssignmentHelpersManifestTests {
         // A zip WITHOUT solution.ipynb / solution.py — like a draft/MCP-created
         // setup whose reference solution lives only as a validation submission.
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
+        try await ahMakeZip(
             at: zipPath,
             entries: [
                 ("tests.py", "print('t')"),
@@ -730,7 +730,7 @@ final class AssignmentHelpersManifestTests {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
+        try await ahMakeZip(
             at: zipPath,
             entries: [
                 ("tests.py", "print('t')"),

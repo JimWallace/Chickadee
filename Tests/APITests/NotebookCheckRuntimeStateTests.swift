@@ -117,7 +117,7 @@ import Testing
 
     // MARK: - variable_exists sees quarantined assignments
 
-    @Test func variableExists_seesCallProducedVariable() throws {
+    @Test func variableExists_seesCallProducedVariable() async throws {
         guard Self.python3Available else { return }  // no python3 on this host
 
         // `answer = compute()` has a call on the RHS, so the extractor
@@ -129,12 +129,12 @@ import Testing
         ]
         let check = NotebookCheck(id: "answer_defined", kind: .variableExists, variable: "answer")
 
-        let result = try runCheck(cells: cells, check: check)
+        let result = try await runCheck(cells: cells, check: check)
         #expect(result.exitCode == 0, "check should pass; stdout: \(result.stdout)\nstderr: \(result.stderr)")
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test func variableExists_missingVariableStillFails() throws {
+    @Test func variableExists_missingVariableStillFails() async throws {
         guard Self.python3Available else { return }
 
         let cells = [
@@ -142,12 +142,12 @@ import Testing
         ]
         let check = NotebookCheck(id: "answer_defined", kind: .variableExists, variable: "answer")
 
-        let result = try runCheck(cells: cells, check: check)
+        let result = try await runCheck(cells: cells, check: check)
         #expect(result.exitCode == 1, "missing variable must still fail; stdout: \(result.stdout)")
         #expect(result.stdout.contains("is not defined in the student notebook"))
     }
 
-    @Test func variableExists_brokenLaterCellDoesNotHideEarlierState() throws {
+    @Test func variableExists_brokenLaterCellDoesNotHideEarlierState() async throws {
         guard Self.python3Available else { return }
 
         // The second cell raises at execution; the per-cell resilient
@@ -158,14 +158,14 @@ import Testing
         ]
         let check = NotebookCheck(id: "answer_defined", kind: .variableExists, variable: "answer")
 
-        let result = try runCheck(cells: cells, check: check)
+        let result = try await runCheck(cells: cells, check: check)
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
     }
 
     // MARK: - data_frame_columns sees a loaded DataFrame (needs pandas)
 
-    @Test func dataFrameColumns_seesLoadedCSV() throws {
-        guard Self.python3Available, pythonModuleAvailable("pandas") else { return }
+    @Test func dataFrameColumns_seesLoadedCSV() async throws {
+        guard Self.python3Available, await pythonModuleAvailable("pandas") else { return }
 
         let cells = [
             NotebookCell(cellType: "code", source: "import pandas as pd"),
@@ -175,7 +175,7 @@ import Testing
             id: "df_cols", kind: .dataFrameColumns,
             variable: "df", expectedColumns: ["age", "weight"], columnMatch: .superset)
 
-        let result = try runCheck(
+        let result = try await runCheck(
             cells: cells, check: check,
             supportFiles: [("cases.csv", "age,weight,dept\n61,70.2,a\n45,55.6,b\n")])
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
@@ -184,8 +184,8 @@ import Testing
 
     // MARK: - figure_count sees quarantined plotting calls (needs matplotlib)
 
-    @Test func figureCount_seesPlottedFigures() throws {
-        guard Self.python3Available, pythonModuleAvailable("matplotlib") else { return }
+    @Test func figureCount_seesPlottedFigures() async throws {
+        guard Self.python3Available, await pythonModuleAvailable("matplotlib") else { return }
 
         let cells = [
             NotebookCell(
@@ -196,13 +196,13 @@ import Testing
         ]
         let check = NotebookCheck(id: "two_figs", kind: .figureCount, minFigures: 2)
 
-        let result = try runCheck(cells: cells, check: check)
+        let result = try await runCheck(cells: cells, check: check)
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test func figureCount_countsPerShowFlush_withoutExplicitFigures() throws {
-        guard Self.python3Available, pythonModuleAvailable("matplotlib") else { return }
+    @Test func figureCount_countsPerShowFlush_withoutExplicitFigures() async throws {
+        guard Self.python3Available, await pythonModuleAvailable("matplotlib") else { return }
 
         // Notebook-style plotting with NO plt.figure() calls: in Jupyter each
         // plt.show() renders its own chart, but under batch Agg execution both
@@ -217,7 +217,7 @@ import Testing
         ]
         let check = NotebookCheck(id: "two_figs_flush", kind: .figureCount, minFigures: 2)
 
-        let result = try runCheck(cells: cells, check: check)
+        let result = try await runCheck(cells: cells, check: check)
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }

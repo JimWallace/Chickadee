@@ -109,7 +109,7 @@ import VaporTesting
             zipEntries.isEmpty
             ? [("placeholder.txt", Data("placeholder\n".utf8))]
             : zipEntries
-        try makeZipAt(zipPath: zipPath, entries: starter)
+        try await makeZipAt(zipPath: zipPath, entries: starter)
 
         var notebookPath: String?
         if let nb = notebookOnDisk {

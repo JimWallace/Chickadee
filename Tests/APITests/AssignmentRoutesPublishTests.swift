@@ -239,7 +239,7 @@ import VaporTesting
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_display"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            try await arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
             let manifest = """
                 {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
                 """
@@ -288,7 +288,7 @@ import VaporTesting
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_display_reload"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            try await arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
             let manifest = """
                 {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
                 """
@@ -1031,7 +1031,7 @@ import VaporTesting
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_upload_btn_reg"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            try await arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
             let manifest = """
                 {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
                 """

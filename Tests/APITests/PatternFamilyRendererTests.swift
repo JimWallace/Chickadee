@@ -169,7 +169,7 @@ import Vapor
         // quote-escape mishaps in the renderer.
         let rendered = renderPatternFamily(pfBMIFamily(), language: .python)
         for generated in rendered {
-            try pfAssertValidPythonSyntax(generated.source, label: generated.filename)
+            try await pfAssertValidPythonSyntax(generated.source, label: generated.filename)
         }
     }
 
@@ -209,7 +209,7 @@ import Vapor
             "Call should be positional over the leading run: \(src)")
         #expect(
             src.contains("check_dob(dob, currentDate)") == false, "Call must not reference an undeclared local: \(src)")
-        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
+        try await pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// Middle-arg omission must switch subsequent provided args to kwargs,
@@ -234,7 +234,7 @@ import Vapor
             src.contains("three_args(a, c=c)"),
             "Expected kwarg form after middle gap: \(src)")
         #expect(src.contains("b =") == false, "Omitted middle arg must not be declared: \(src)")
-        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
+        try await pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// Pre-v0.4.94 families have no `argsProvided` array in their spec.
@@ -289,7 +289,7 @@ import Vapor
         #expect(
             src.contains("lookup(db, pid)"),
             "Call site must use the declared param names: \(src)")
-        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
+        try await pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// The validator rejects a case arg that references a variable name
@@ -500,7 +500,7 @@ import Vapor
             perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"], language: .python)
         let src = try #require(scripts.first).source
         // The full generated script (preamble + body) must be valid Python.
-        try pfAssertValidPythonSyntax(src, label: "adults_01")
+        try await pfAssertValidPythonSyntax(src, label: "adults_01")
         // Loads per-student inputs by path from the reserved file.
         #expect(src.contains("_ck_inputs.py"))
         #expect(src.contains("spec_from_file_location"))
@@ -542,11 +542,11 @@ import Vapor
         let buggy = "def countAdults(patients):\n    return len(patients)"
 
         // Correct student matches the resolved expected (2 adults) → pass.
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
         // Buggy student returns 3 → fail.
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
         // No `_ck_inputs.py` (no seed resolved) → fail closed, not crash.
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
     }
 
     @Test func rendererOmitsPreambleWhenNoPerStudentRefs() throws {
@@ -621,7 +621,7 @@ import Vapor
         let scripts = renderPatternFamily(
             perStudentVariableFamily(), perStudentNames: ["sd_expected"], language: .python)
         let src = try #require(scripts.first).source
-        try pfAssertValidPythonSyntax(src, label: "sd_01")
+        try await pfAssertValidPythonSyntax(src, label: "sd_01")
         #expect(src.contains("_ck_inputs.py"))
         #expect(src.contains(#"sd_expected = _ck["sd_expected"]"#))
         #expect(src.contains("Personalization input"))  // fails closed when missing
@@ -717,7 +717,7 @@ import Vapor
         let scripts = renderPatternFamily(
             perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"], language: .python)
         let src = try #require(scripts.first).source
-        try pfAssertValidPythonSyntax(src, label: "avg_01")
+        try await pfAssertValidPythonSyntax(src, label: "avg_01")
         #expect(src.contains("_ck_inputs.py"))
         #expect(src.contains(#"patients = _ck["patients"]"#))
         #expect(src.contains(#"avg_expected = _ck["avg_expected"]"#))
@@ -753,9 +753,9 @@ import Vapor
             """
         let correct = "def averageAge(patients):\n    return sum(p['age'] for p in patients) / len(patients)"
         let buggy = "def averageAge(patients):\n    return sum(p['age'] for p in patients)"
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
     }
 
     // MARK: - unorderedEquality (Slice F)
@@ -781,7 +781,7 @@ import Vapor
     @Test func unorderedRendererEmitsCanonicalComparison() async throws {
         let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: [], language: .python).first)
             .source
-        try pfAssertValidPythonSyntax(src, label: "pick_01")
+        try await pfAssertValidPythonSyntax(src, label: "pick_01")
         #expect(src.contains("_ck_canon"))
         #expect(src.contains("sort_keys=True"))
         #expect(src.contains("student_module.pick("))
@@ -795,10 +795,10 @@ import Vapor
         let sortedFn = "def pick(xs):\n    return sorted(xs)"
         let missing = "def pick(xs):\n    return xs[:2]"
         let notList = "def pick(xs):\n    return 5"
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: reordered) == .pass)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: sortedFn) == .pass)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: missing) == .fail)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: notList) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: reordered) == .pass)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: sortedFn) == .pass)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: missing) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: notList) == .fail)
     }
 
     @Test func unorderedPerStudentGradesAtRuntime() throws {
@@ -815,9 +815,9 @@ import Vapor
             """
         let correct = "def findByDiag(patients):\n    return [p for p in patients if p['dx'] == 'A']"
         let buggy = "def findByDiag(patients):\n    return patients"
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
-        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
     }
 
     @Test func validation_unorderedRequiresListExpected() throws {

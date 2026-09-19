@@ -72,7 +72,7 @@ import Testing
                 PersonalizationExpression(name: "values", expression: "[1, 2.5, 4]"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runOctave(
+        let (code, stdout, stderr) = try await Self.runOctave(
             source, seed: String(repeating: "a", count: 64))
         #expect(code == 0, "driver failed: \(stderr)")
 
@@ -103,7 +103,7 @@ import Testing
                 PersonalizationExpression(name: "b", expression: "true"),
             ]
         )
-        let (code, stdout, stderr) = try Self.runOctave(source, seed: "ff")
+        let (code, stdout, stderr) = try await Self.runOctave(source, seed: "ff")
         #expect(code == 0, "driver failed: \(stderr)")
         let lastLine = stdout.split(separator: "\n").last.map(String.init) ?? ""
         let values = try #require(
@@ -111,7 +111,7 @@ import Testing
 
         for (name, literal) in values {
             let probe = "v = \(literal);\ndisp(\"parsed\");\n"
-            let (rc, _, err) = try Self.runOctave(probe)
+            let (rc, _, err) = try await Self.runOctave(probe)
             #expect(
                 rc == 0, "the driver emitted unparseable Octave for `\(name)`: \(literal) — \(err)")
         }
@@ -129,14 +129,14 @@ import Testing
                 \(OctavePersonalizationRuntime.chickadeeSeedOctaveSource)
                 printf("%d\\n", chickadee_seed());
                 """
-            let (dcode, dout, derr) = try Self.runOctave(driverSource, seed: seed)
+            let (dcode, dout, derr) = try await Self.runOctave(driverSource, seed: seed)
             #expect(dcode == 0, "driver seed failed: \(derr)")
 
             let runtimeSource = """
                 chickadee = test_runtime();
                 printf("%d\\n", chickadee.seed());
                 """
-            let (rcode, rout, rerr) = try Self.runOctave(
+            let (rcode, rout, rerr) = try await Self.runOctave(
                 runtimeSource, extraFiles: ["test_runtime.m": runtime], seed: seed)
             #expect(rcode == 0, "runtime seed failed: \(rerr)")
 
@@ -166,7 +166,7 @@ import Testing
             \(OctavePersonalizationRuntime.chickadeeSeedOctaveSource)
             printf("%d\\n", chickadee_seed());
             """
-        let (code, out, err) = try Self.runOctave(source, seed: seed)
+        let (code, out, err) = try await Self.runOctave(source, seed: seed)
         #expect(code == 0, "driver failed: \(err)")
 
         var expected = 0

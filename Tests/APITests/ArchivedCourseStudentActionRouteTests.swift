@@ -44,7 +44,7 @@ import VaporTesting
 
         let setupID = "asa_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
+        try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
             """

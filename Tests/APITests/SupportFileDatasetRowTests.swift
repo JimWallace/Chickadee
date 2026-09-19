@@ -21,9 +21,9 @@ import Testing
 
     /// A setup bundling one marked dataset (`cases.csv`, 25 rows), one plain
     /// support file, and one graded script.
-    private func makeSetup(in directory: URL) throws -> APITestSetup {
+    private func makeSetup(in directory: URL) async throws -> APITestSetup {
         let zipPath = directory.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
+        try await ahMakeZip(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),

@@ -70,9 +70,9 @@ import Testing
         return (run.exitCode, run.stdout)
     }
 
-    private static func isPresent(_ language: AssignmentLanguage) -> Bool {
+    private static func isPresent(_ language: AssignmentLanguage) async -> Bool {
         let probe = language.descriptor.interpreterProbe
-        return run(probe.command, probe.versionArguments)?.status == 0
+        return await run(probe.command, probe.versionArguments)?.status == 0
     }
 
     // MARK: - interpreterProbe
@@ -89,9 +89,9 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theInterpreterProbeSucceedsWhereTheToolIsInstalled(
         _ language: AssignmentLanguage
-    ) throws {
+    ) async throws {
         let probe = language.descriptor.interpreterProbe
-        guard let result = Self.run(probe.command, probe.versionArguments) else { return }
+        guard let result = await Self.run(probe.command, probe.versionArguments) else { return }
         // A shell reports 127 for "command not found"; that is absence, not a
         // broken probe.
         guard result.status != 127 else { return }
@@ -215,9 +215,9 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theWorkingDirectoryClaimMatchesTheInterpreter(
         _ language: AssignmentLanguage
-    ) throws {
+    ) async throws {
         guard let probe = Self.searchPathProbe(for: language) else { return }
-        guard Self.isPresent(language) else { return }
+        guard await Self.isPresent(language) else { return }
 
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-searchpath-\(UUID().uuidString)")
