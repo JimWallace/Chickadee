@@ -7,6 +7,10 @@
   `.requiresSandbox` trait that probes the exact `unshare` request the runner
   makes; the worker-tests lane runs `--privileged`, so the tests execute
   there and a skip would fail the lane.
+- **The zip subprocess tests now run on the core-tests lane.** The lane ran on
+  the plain toolchain image, which has no `zip` or `unzip`, so the three
+  `ZipSubprocessTests` returned early there on every run. The lane now uses
+  the swift-ci image with the same apt fallback the other lanes carry.
 
 ### Changed
 

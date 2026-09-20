@@ -181,7 +181,12 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      # swift-ci, not the plain toolchain mirror: CoreTests' zip subprocess
+      # suite needs `zip` and `unzip`, and on the plain image those three tests
+      # skipped silently for as long as their guard was a bare early return.
+      # The trait that replaced it made the skip visible, and this lane went
+      # red on the first run. Toolchain-identical to the plain mirror.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -200,6 +205,22 @@ jobs:
         with:
           path: .build
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+      - name: Install core test dependencies
+        # `zip`/`unzip` back ZipSubprocessTests (`.requiresZipTools`). Both are
+        # baked into the swift-ci image; the apt-get path is the stale-image
+        # fallback, and the "No test was skipped" step fails the job if
+        # either is still missing.
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "test dependencies already baked into the image; skipping apt-get"
+            exit 0
+          fi
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run CoreTests
         run: |
