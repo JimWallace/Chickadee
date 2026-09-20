@@ -128,7 +128,10 @@ jobs:
 
       - name: Repeat the matched tests
         # The inputs reach the shell through the environment, never through
-        # expression interpolation into the command line.
+        # expression interpolation into the command line. The container's
+        # default shell is dash, which has no PIPESTATUS, so the step names
+        # bash explicitly.
+        shell: bash
         env:
           FILTER: ${{ inputs.filter }}
           REPETITIONS: ${{ inputs.repetitions }}
@@ -157,8 +160,8 @@ jobs:
             echo
             echo "| result | count |"
             echo "|---|---|"
-            echo "| tests matched | $(grep -c '◇ Test .* started\.$' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
-            echo "| repetitions started | $(grep -c 'started (repetition' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
+            echo "| tests matched | $(grep -c '◇ Test .*) started\.$' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
+            echo "| test runs, all repetitions | $(grep -c '◇ Test .*) started' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
             echo "| failures | $(grep -c '✘ Test .* failed' "${RUNNER_TEMP}/repeat/swift-test.log" || true) |"
             echo "| swift test exit status | ${status} |"
             echo
