@@ -80,6 +80,14 @@ import Testing
         return acc
     }
 
+    /// Subprocess budget for the round-trips below. The evaluator's production
+    /// default is 5 s, chosen for instructor expressions on an idle server.
+    /// These tests assert what the R driver COMPUTES, not how fast R starts,
+    /// and on the 4-CPU CI box they run beside the R, Octave, Racket and Lua
+    /// execution suites, where `Rscript` start-up alone crossed 5 s on two of
+    /// four runs (2026-09-20). The suite's `.timeLimit` still bounds a hang.
+    static let ciTolerantTimeoutSeconds = 60
+
     @Test(.requiresRscript) func evaluatesRotationExpressionForSeed() async throws {
 
         let poolStrings = ["AACGT", "GGTTA", "CCGAT", "TTAGC"]
@@ -92,7 +100,8 @@ import Testing
             seedHex: seedHex,
             staticVariables: [pool],
             expressions: [expr],
-            language: .r)
+            language: .r,
+            timeoutSeconds: Self.ciTolerantTimeoutSeconds)
 
         // Expected element: R is 1-based, `(seed %% 4) + 1` → poolStrings[seed % 4].
         let expected = poolStrings[Self.rSeed(seedHex) % 4]
@@ -107,7 +116,8 @@ import Testing
         let expr = PersonalizationExpression(
             name: "note", expression: #"paste0("q:\"x\"", "\n\t", "b \\ c")"#)
         let out = try await PersonalizationEvaluator.evaluate(
-            seedHex: "01", staticVariables: [], expressions: [expr], language: .r)
+            seedHex: "01", staticVariables: [], expressions: [expr], language: .r,
+            timeoutSeconds: Self.ciTolerantTimeoutSeconds)
 
         let literal = try #require(out["note"])
         // It's a quoted R string literal…
