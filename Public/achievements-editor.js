@@ -10,14 +10,16 @@
 // PUT /instructor/:id/achievements (the unified `achievements` array) — there is
 // no separate "Save Achievements" button.  No icon authoring (the generic badge
 // rendering is used).
+//
+// The decisions (row summaries, which signals a scope offers, condition
+// serialisation, what a Save refuses) live in achievements-editor-core.js,
+// loaded before this file; what remains here is the DOM: element lookups,
+// template cloning, event listeners and the fetches.
 
 (function () {
     'use strict';
 
-    var SCOPE_LABEL = {
-        individual: 'This student', classWide: 'The class', record: 'Class record'
-    };
-    var CMP_LABEL = { atLeast: '≥', atMost: '≤', equals: '=' };
+    var Core = ChickadeeAchievementsCore;
     // record dimension -> label, read off the "Ranked by" select's options so
     // RecordDimensionPresentation stays the single source of truth.  Filled
     // lazily: the select lives inside a <template> until the editor opens.
@@ -39,6 +41,12 @@
     // the single source of truth.  Nothing per-signal is written here: a JS-side
     // table is exactly the drift the data attributes exist to prevent.
     var SIGNAL_META = {};
+
+    /// What the core needs to phrase a row: the signal facts, the live
+    /// section names, the HTML escaper and the dimension labels.
+    function presenterCtx() {
+        return { signalMeta: SIGNAL_META, sectionNames: sectionNames(), esc: esc, dimLabel: dimLabel };
+    }
 
     // id -> name for the suite sections currently on the page.  Read live from
     // the suite editor's own DOM rather than a server-rendered copy, so a
@@ -72,38 +80,6 @@
     var esc = ChickadeeUI.escapeHtml;
     function n(v) { return v == null ? '' : v; }
 
-    // One condition rendered as a human phrase for the table's Earned-when cell.
-    function condPhrase(c) {
-        var meta = SIGNAL_META[c.signal] || { label: c.signal, unit: '', refField: '' };
-        var ref = meta.refField ? n(c[meta.refField]) : '';
-        if (meta.refReplacesValue) { return '“' + esc(ref) + '” passes'; }
-        var unit = meta.unit ? (meta.unit === '%' ? '%' : ' ' + meta.unit) : '';
-        var phrase = esc(meta.label) + ' ' + (CMP_LABEL[c.comparator] || c.comparator)
-            + ' ' + n(c.value) + unit;
-        // A section ref is stored as an opaque id; show the name the author
-        // gave it, never the id.
-        if (ref) { phrase += ' in “' + esc(sectionNames()[ref] || ref) + '”'; }
-        return phrase;
-    }
-
-    function conditionsText(row) {
-        var conds = row.conditions || [];
-        if (!conds.length) { return 'always'; }
-        var joiner = row.match === 'any' ? ' or ' : ' and ';
-        return conds.map(condPhrase).join(joiner);
-    }
-
-    function summary(row) {
-        if (row.scope === 'record') {
-            return 'record · ' + dimLabel(row.recordDimension);
-        }
-        if (row.scope === 'classWide') {
-            return conditionsText(row) + ' · by ' + n(row.classPercent)
-                + '% of class · +' + n(row.points) + (row.points === 1 ? ' pt' : ' pts');
-        }
-        return conditionsText(row);
-    }
-
     function init() {
         var block = document.getElementById('achievements-block');
         if (!block) return;
@@ -115,18 +91,8 @@
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
 
-        Array.prototype.slice.call(condTemplate.content.querySelectorAll('.am-cond-signal option'))
-            .forEach(function (o) {
-                SIGNAL_META[o.value] = {
-                    label: o.text, unit: o.getAttribute('data-unit') || '',
-                    scopes: (o.getAttribute('data-scope') || '').split(/\s+/),
-                    refControl: o.getAttribute('data-ref-control') || '',
-                    refField: o.getAttribute('data-ref-field') || '',
-                    refLabel: o.getAttribute('data-ref-label') || '',
-                    refPlaceholder: o.getAttribute('data-ref-placeholder') || '',
-                    refReplacesValue: o.getAttribute('data-ref-replaces-value') === 'true'
-                };
-            });
+        SIGNAL_META = Core.signalMetaFromOptions(
+            condTemplate.content.querySelectorAll('.am-cond-signal option'));
 
         var state = [];
         // Until the initial GET succeeds, saving is disabled: persisting the
@@ -147,8 +113,8 @@
                 tr.setAttribute('data-i', i);
                 tr.innerHTML =
                     '<td><strong>' + esc(row.name) + '</strong></td>'
-                    + '<td>' + esc(SCOPE_LABEL[row.scope] || row.scope) + '</td>'
-                    + '<td>' + summary(row) + '</td>'
+                    + '<td>' + esc(Core.SCOPE_LABEL[row.scope] || row.scope) + '</td>'
+                    + '<td>' + Core.summary(row, presenterCtx()) + '</td>'
                     + '<td class="time">'
                     + ChickadeeAccordion.CARET_HTML + ' '
                     + '<button type="button" class="btn action-btn js-ach-edit" data-i="' + i + '">Edit</button> '
@@ -171,9 +137,7 @@
             }).then(function (r) {
                 if (!r.ok) {
                     return r.text().then(function (t) {
-                        var msg = t || ('HTTP ' + r.status);
-                        try { var p = JSON.parse(t); if (p && p.reason) msg = p.reason; } catch (_) { /* text */ }
-                        throw new Error(msg.slice(0, 240));
+                        throw new Error(Core.persistErrorMessage(t, r.status));
                     });
                 }
                 return r.json()
@@ -213,33 +177,18 @@
             var inputs = refInputs(rowEl);
             var textRef = inputs.text;
             var sectionRef = inputs.sections;
-            // "" counts every test in the suite — including tests in no section
-            // — so the option says "Whole suite" rather than "All sections".
-            var names = sectionNames();
+            // The core decides the option list: "Whole suite" first, then the
+            // live sections, then a disabled home for a ref whose section was
+            // deleted, so a stale ref cannot serialise as the whole suite.
             var stored = cond ? n(cond.sectionRef) : '';
             sectionRef.innerHTML = '';
-            var every = document.createElement('option');
-            every.value = '';
-            every.textContent = 'Whole suite';
-            sectionRef.appendChild(every);
-            Object.keys(names).forEach(function (id) {
+            Core.sectionOptions(sectionNames(), stored).forEach(function (opt) {
                 var o = document.createElement('option');
-                o.value = id;
-                o.textContent = names[id];
+                o.value = opt.value;
+                o.textContent = opt.label;
+                if (opt.disabled) o.disabled = true;
                 sectionRef.appendChild(o);
             });
-            // A ref left behind by a deleted section matches no option. Without
-            // a home it would render blank and then serialize as "", silently
-            // widening the rule from one section to the whole suite — so give
-            // it a disabled option of its own and let the save refuse it by
-            // name.
-            if (stored && !names[stored]) {
-                var missing = document.createElement('option');
-                missing.value = stored;
-                missing.disabled = true;
-                missing.textContent = 'Deleted section';
-                sectionRef.appendChild(missing);
-            }
 
             if (cond) {
                 sig.value = cond.signal || 'grade';
@@ -259,16 +208,12 @@
             function syncScope(scope) {
                 var options = Array.prototype.slice.call(sig.options);
                 options.forEach(function (o) {
-                    var meta = SIGNAL_META[o.value] || {};
-                    var allowed = !meta.scopes || meta.scopes.indexOf(scope) >= 0;
+                    var allowed = Core.isSignalAllowed(SIGNAL_META[o.value] || {}, scope);
                     o.hidden = !allowed;
                     o.disabled = !allowed;
                 });
-                var current = SIGNAL_META[sig.value];
-                if (current && current.scopes && current.scopes.indexOf(scope) < 0) {
-                    var first = options.filter(function (o) { return !o.disabled; })[0];
-                    if (first) { sig.value = first.value; }
-                }
+                sig.value = Core.signalForScope(
+                    sig.value, options.map(function (o) { return o.value; }), SIGNAL_META, scope);
                 sync();
             }
             rowEl.syncScope = syncScope;
@@ -351,44 +296,33 @@
             });
 
             saveBtn.addEventListener('click', function () {
-                var name = (el('am-name').value || '').trim();
-                if (!name) {
-                    st.textContent = 'Name is required.';
+                var conditions = Array.prototype.slice.call(
+                    conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
+                        var signal = rowEl.querySelector('.am-cond-signal').value;
+                        var source = refInput(rowEl, SIGNAL_META[signal] || {});
+                        return Core.conditionFromRow({
+                            signal: signal,
+                            comparator: rowEl.querySelector('.js-am-cond-comparator').value,
+                            value: rowEl.querySelector('.am-cond-value').value,
+                            refText: source ? source.value : ''
+                        }, SIGNAL_META);
+                    });
+                var built = Core.buildAchievement({
+                    name: el('am-name').value,
+                    detail: el('am-detail').value,
+                    scope: scopeSel.value,
+                    match: el('am-match').value,
+                    conditions: conditions,
+                    classPercent: el('am-classPercent').value,
+                    points: el('am-points').value,
+                    recordDimension: el('am-recordDimension').value
+                }, index >= 0 ? state[index] : null);
+                if (!built.ok) {
+                    st.textContent = built.error;
                     st.classList.add('suite-detail-status-error');
                     return;
                 }
-                var scope = scopeSel.value;
-                var next = { name: name, scope: scope, match: el('am-match').value };
-                var detail = (el('am-detail').value || '').trim();
-                if (detail) next.detail = detail;
-                if (index >= 0 && state[index] && state[index].id) next.id = state[index].id;
-
-                if (scope === 'record') {
-                    next.recordDimension = el('am-recordDimension').value;
-                } else {
-                    next.conditions = Array.prototype.slice.call(
-                        conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
-                            var signal = rowEl.querySelector('.am-cond-signal').value;
-                            var meta = SIGNAL_META[signal] || {};
-                            var source = refInput(rowEl, meta);
-                            var refText = source ? (source.value || '').trim() : '';
-                            var out = meta.refReplacesValue
-                                ? { signal: signal, comparator: 'atLeast', value: 1 }
-                                : {
-                                    signal: signal,
-                                    comparator: rowEl.querySelector('.js-am-cond-comparator').value,
-                                    value: Number(rowEl.querySelector('.am-cond-value').value || 0)
-                                };
-                            // The server names the field, so a third ref kind
-                            // lands in the right one with no edit here.
-                            if (meta.refField) { out[meta.refField] = refText; }
-                            return out;
-                        });
-                    if (scope === 'classWide') {
-                        next.classPercent = Number(el('am-classPercent').value || 0);
-                        next.points = Number(el('am-points').value || 0);
-                    }
-                }
+                var next = built.achievement;
 
                 var snapshot = state.slice();
                 if (index < 0) { state.push(next); } else { state[index] = next; }

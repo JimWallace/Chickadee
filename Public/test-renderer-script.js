@@ -17,6 +17,11 @@
 // Persistence (create + content/hint edit) flows through the single PUT /suite
 // path via `window.chickadeeSaveScriptViaSuite`. Editing a queued-but-unsaved
 // upload writes the new body back into the file <input> client-side instead.
+//
+// The decisions (template groups per language, extensions, filename
+// renaming, highlighting mode, time-limit validation, the spec per mode) live
+// in test-renderer-script-core.js, a classic script the page loads before
+// this module; what remains here is CodeMirror, the DOM and the fetches.
 
 import {
     EditorView, keymap, lineNumbers, highlightActiveLine,
@@ -30,69 +35,24 @@ import {
 (function (global) {
     'use strict';
 
-    // Which template groups an assignment may pick from.
-    //
-    // The Python group is Python-only, and used not to be gated at all: an
-    // Octave author opened "Write a custom script" — advertised in the Add Test
-    // catalog as "your assignment's language, or .sh" — and was offered Python
-    // templates and a `test_correctness.py` filename. Applying one wrote Python
-    // into an Octave suite.
-    //
-    // The Shell group is offered everywhere because it IS everywhere: `.sh` is
-    // the universal test-script contract, and a shell test is a legitimate
-    // thing to hand-write in any assignment.
-    //
-    // The Python group is down to ONE. The other eight duplicated a
-    // pattern-family kind that renders in all six languages, in a better form,
-    // and offering both taught authors to reach for the fallback — the one that
-    // only works in Python. `differential` survives because nothing supersedes
-    // it yet.
-    //
-    // So the other five languages get Shell and Blank, and Blank opens an empty
-    // file with the assignment's own extension. That is a smaller gap than it
-    // looks: the tests those templates wrote are pattern families now.
-    var PYTHON_TEMPLATE_GROUP = { group: 'Python', items: [
-        { value: 'py:differential', label: 'Differential (reference solution)' }
-    ] };
-
-    var SHELL_TEMPLATE_GROUP = { group: 'Shell', items: [
-        { value: 'sh:always_pass', label: 'Always Pass (placeholder)' },
-        { value: 'sh:file_exists', label: 'File Exists Check' },
-        { value: 'sh:command_output', label: 'Command Output Check' }
-    ] };
+    var Core = global.ChickadeeScriptRendererCore;
 
     /// The groups this assignment may pick from, in menu order.
-    function templateGroups() {
-        var language = global.ChickadeeLanguage;
-        if (!language || language.isPython()) {
-            return [PYTHON_TEMPLATE_GROUP, SHELL_TEMPLATE_GROUP];
-        }
-        return [SHELL_TEMPLATE_GROUP];
-    }
+    function templateGroups() { return Core.templateGroups(global.ChickadeeLanguage); }
 
     /// The extension a new test file gets when the instructor has not named
     /// one, and the extension a chosen template forces.
-    ///
-    /// `sh:` templates are shell whatever the assignment is. Everything else
-    /// takes the assignment's own extension, which for C++ is `sh` too — its
-    /// test cases are shell wrappers, so there is no contradiction to resolve.
-    function extensionFor(templateKey) {
-        if ((templateKey || '').split(':')[0] === 'sh') return 'sh';
-        var language = global.ChickadeeLanguage;
-        return language ? language.scriptExtension() : 'py';
-    }
+    function extensionFor(templateKey) { return Core.extensionFor(templateKey, global.ChickadeeLanguage); }
 
     function cfg() { return global.ChickadeeScriptRendererConfig || {}; }
 
     var langComp = new Compartment();
-    /// Syntax highlighting for the open file. Python, R and shell are the three
-    /// modes the vendored CodeMirror bundle carries; `.lua`, `.m` and `.rkt`
-    /// fall back to shell highlighting, which is wrong but harmless — adding
-    /// their modes means re-vendoring `Public/vendor/codemirror.js`.
+    /// Syntax highlighting for the open file: the core names the mode, this
+    /// maps it onto the three the vendored CodeMirror bundle carries.
     function langExtensionFor(filename) {
-        var ext = (filename || '').split('.').pop().toLowerCase();
-        if (ext === 'py') return python();
-        if (ext === 'r') return StreamLanguage.define(r);
+        var mode = Core.highlightModeFor(filename);
+        if (mode === 'python') return python();
+        if (mode === 'r') return StreamLanguage.define(r);
         return StreamLanguage.define(shell);
     }
     function makeEditorState(content, filename) {
@@ -150,13 +110,8 @@ import {
 
     function fetchTemplates() {
         if (templateCache) return Promise.resolve(templateCache);
-        // The shell templates name a solution file and an interpreter, so the
-        // server needs the assignment's language to render them. Without it
-        // every language was handed `solution.py` and `python3`.
         var language = global.ChickadeeLanguage && global.ChickadeeLanguage.facts().name;
-        var url = '/instructor/script-templates'
-            + (language ? '?language=' + encodeURIComponent(language) : '');
-        return fetch(url, { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
+        return fetch(Core.templatesURL(language), { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
             .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
             .then(function (data) { templateCache = data; return data; });
     }
@@ -237,16 +192,15 @@ import {
             // "Blank" leaves a name the instructor has already typed alone —
             // it carries no language of its own.
             templateSel.addEventListener('change', function () {
-                var key = templateSel.value || '';
-                var name = (nameInput.value || '').trim();
-                if (!name || key === 'blank') return;
-                nameInput.value = name.replace(/\.[^.]*$/, '') + '.' + extensionFor(key);
+                var renamed = Core.renamedForTemplate(
+                    nameInput.value, templateSel.value || '', global.ChickadeeLanguage);
+                if (renamed !== null) nameInput.value = renamed;
             });
             applyBtn.addEventListener('click', function () {
                 var tplKey = templateSel ? templateSel.value : 'blank';
                 var apply = function (content) {
                     if (!nameInput.value.trim()) {
-                        nameInput.value = 'test_new.' + extensionFor(tplKey);
+                        nameInput.value = Core.defaultFilename(tplKey, global.ChickadeeLanguage);
                     }
                     if (view) {
                         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
@@ -256,7 +210,7 @@ import {
                 };
                 if (tplKey === 'blank') { apply(''); return; }
                 fetchTemplates()
-                    .then(function (t) { apply(t[tplKey] || ''); })
+                    .then(function (t) { apply(Core.templateContent(t, tplKey)); })
                     .catch(function (err) { statusFn('Could not load template: ' + err, 'error'); });
             });
         },
@@ -307,29 +261,17 @@ import {
         },
 
         readSpec: function () {
-            var content = docText();
-            var hint = hintInput ? hintInput.value.trim() : '';
-            // Blank inherits the assignment default (null); out-of-range
-            // values are rejected here so the server never sees them.
-            var timeLimitSeconds = null;
-            if (timeLimitInput && timeLimitInput.value.trim() !== '') {
-                timeLimitSeconds = parseInt(timeLimitInput.value, 10);
-                if (isNaN(timeLimitSeconds) || timeLimitSeconds < 1 || timeLimitSeconds > 600) {
-                    throw new Error('Time limit must be between 1 and 600 seconds (or blank for the assignment default).');
-                }
-            }
-            if (mode === 'uploadEdit') {
-                return { uploadEdit: true, name: uploadEditName, content: content };
-            }
-            var failureDetail = (failureDetailSelect && failureDetailSelect.value) ? failureDetailSelect.value : null;
-            if (mode === 'edit') {
-                if (!currentFilename) throw new Error('No script selected.');
-                return { filename: currentFilename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, failureDetail: failureDetail };
-            }
-            // create
-            var filename = (nameInput.value || '').trim();
-            if (!filename) throw new Error('Enter a filename first.');
-            return { filename: filename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, failureDetail: failureDetail, tier: 'public', points: 1, isTest: true };
+            // The core validates the time limit and shapes the spec per mode;
+            // this only reads the controls.
+            return Core.buildSpec({
+                mode: mode,
+                content: docText(),
+                hint: hintInput ? hintInput.value : '',
+                timeLimitText: timeLimitInput ? timeLimitInput.value : '',
+                failureDetail: failureDetailSelect ? failureDetailSelect.value : '',
+                filename: mode === 'edit' ? currentFilename : (nameInput ? nameInput.value : ''),
+                uploadEditName: uploadEditName
+            });
         },
 
         persistAndSync: function (spec) {

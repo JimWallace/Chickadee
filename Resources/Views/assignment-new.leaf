@@ -404,6 +404,7 @@ Create Assignment
 <!-- The Generate Starter Tests panel.  Loaded unconditionally, because its
      init (in assignment-new-page.js) runs whether or not a draft exists yet
      — with no draft it reports that one is needed. -->
+<script src="/generated-starter-tests-core.js?v=#appVersion()"></script>
 <script src="/generated-starter-tests.js?v=#appVersion()"></script>
 
 <!-- Notebook upload buttons, support files, the Generate Starter Tests
@@ -416,7 +417,9 @@ Create Assignment
      existing overlays during the staged rollout (the shell shows a
      "Continue →" button for those).  Renderer scripts load before the shell
      so they self-register first. -->
+<script src="/test-renderer-check-core.js?v=#appVersion()"></script>
 <script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script src="/test-renderer-script-core.js?v=#appVersion()"></script>
 <script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script src="/support-files.js?v=#appVersion()"></script>

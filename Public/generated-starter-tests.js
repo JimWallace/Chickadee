@@ -25,9 +25,16 @@
 //   csrfToken          string
 //   draftID            string | null   — null before the first notebook upload
 //   solutionNotebookURL string | null  — the draft's saved solution, when it has one
+//
+// The decisions (endpoints, which source a scan reads, the Python-only
+// refusals, the script each function becomes) live in
+// generated-starter-tests-core.js, loaded before this file; what remains
+// here is the DOM, the file reader and the fetches.
 
 (function (global) {
     'use strict';
+
+    var Core = global.ChickadeeStarterTestsCore;
 
     /// Wires the panel. Safe to call on a page that does not render it.
     function initGeneratedStarterTests(config) {
@@ -56,37 +63,15 @@
         // tell a limitation from a mistake.  The server says as much when
         // asked; asking requires clicking a button that looks like it works.
         if (!global.ChickadeeLanguage.canScanFunctions()) {
-            var scanLabel = global.ChickadeeLanguage.label();
             if (scanBtn) scanBtn.disabled = true;
-            setStatus('Scanning a solution for functions is Python-only'
-                + (scanLabel ? ', and this is a ' + scanLabel + ' assignment' : '')
-                + '. Use "+ Add Test" in a section to add a test by hand.');
+            setStatus(Core.pythonOnlyMessage('scan', global.ChickadeeLanguage.label()));
             return;
-        }
-
-        /// The template the scan already rendered for this function, or a
-        /// placeholder when the scan carried none.
-        function generatedTemplate(type, fnName) {
-            var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
-            if (fn && Array.isArray(fn.templates)) {
-                var key = type.indexOf(':') === -1 ? type : type.split(':')[1];
-                var tpl = fn.templates.find(function (t) { return t.id === key; });
-                if (tpl && typeof tpl.content === 'string') return tpl.content;
-            }
-            return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
         }
 
         function runScan(notebookText) {
             setStatus('Scanning…');
             if (scanResults) scanResults.style.display = 'none';
-            // Tell the server which language to read, as the family editor's
-            // scan does. Without it the endpoint falls back to the notebook's
-            // own kernelspec — a better default than assuming Python, but not
-            // the assignment's declared answer.
-            var scanLanguage = global.ChickadeeLanguage.facts().name;
-            var scanURL = '/instructor/scan-notebook'
-                + (scanLanguage ? '?language=' + encodeURIComponent(scanLanguage) : '');
-            return fetch(scanURL, {
+            return fetch(Core.scanURL(global.ChickadeeLanguage.facts().name), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                 body: notebookText
@@ -107,15 +92,16 @@
         if (scanBtn) {
             scanBtn.addEventListener('click', function () {
                 var solInput = document.getElementById('solution-notebook-file-input');
-                var hasUpload = solInput && solInput.files.length > 0;
-                if (!hasUpload && cfg.solutionNotebookURL) {
+                var hasUpload = !!(solInput && solInput.files.length > 0);
+                var source = Core.scanSource({ hasUpload: hasUpload, solutionNotebookURL: cfg.solutionNotebookURL });
+                if (source === 'saved') {
                     fetch(cfg.solutionNotebookURL, { headers: { 'x-csrf-token': csrfToken } })
                         .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
                         .then(function (text) { runScan(text); })
                         .catch(function (err) { setStatus('Scan failed: ' + err); });
                     return;
                 }
-                if (!hasUpload) {
+                if (source === 'none') {
                     setStatus('Upload a solution notebook first.');
                     return;
                 }
@@ -147,26 +133,17 @@
                 // name, which is a thing to keep out of another language's
                 // suite. Only its silence was wrong.
                 if (!global.ChickadeeLanguage.isPython()) {
-                    var langLabel = global.ChickadeeLanguage.label();
-                    setStatus('Generated starter tests are Python-only'
-                        + (langLabel ? ', and this is a ' + langLabel + ' assignment' : '')
-                        + '. Use "+ Add Test" in a section to add one by hand.');
+                    setStatus(Core.pythonOnlyMessage('generate', global.ChickadeeLanguage.label()));
                     return;
                 }
                 setStatus('Saving ' + checked.length + ' test(s)…');
                 var ops = checked.map(function (chk) {
                     var fnName = chk.value;
-                    return fetch('/instructor/new/draft/scripts?draftID='
-                        + encodeURIComponent(cfg.draftID), {
+                    return fetch(Core.draftScriptsURL(cfg.draftID), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                        body: JSON.stringify({
-                            filename: 'test_' + fnName + '.py',
-                            content: generatedTemplate(tplType, fnName),
-                            tier: 'public',
-                            points: 1,
-                            isTest: true
-                        })
+                        body: JSON.stringify(Core.scriptPayload(
+                            fnName, Core.generatedTemplate(scannedFunctions, tplType, fnName)))
                     }).then(function (r) {
                         return r.ok
                             ? r.json()
@@ -180,7 +157,7 @@
                     });
                 });
                 Promise.all(ops).then(function () {
-                    setStatus(checked.length + ' test file(s) added to suite.');
+                    setStatus(Core.savedMessage(checked.length));
                     if (scanResults) scanResults.style.display = 'none';
                 }).catch(function (err) {
                     setStatus('Could not add generated tests: ' + err);
