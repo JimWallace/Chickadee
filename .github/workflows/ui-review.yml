@@ -1,0 +1,159 @@
+name: UI review
+
+# Runs the `ui-review` agent on every pull request that touches the UI layer,
+# so the review CLAUDE.md calls unconditional no longer depends on the agent
+# being available in whichever session wrote the change.
+#
+# The brief is `.claude/agents/ui-review.md`, the same file a Claude Code
+# session runs as a subagent. This workflow holds no second copy of it: the
+# prompt below tells the reviewer to read that file and apply it to this PR.
+#
+# WHAT IT GATES. The job fails only when the review completes and requests
+# changes: a duplicate of a vocabulary component, an idiom heavier than the
+# cheapest that fits, copy over budget, or a tooltip that is the only copy of
+# something a reader needs. An infrastructure failure (no API key, a model
+# outage, a timeout) is a warning and a green job, on the same rule
+# mutation-pr.yml follows: a broken tool must not fail somebody's pull request.
+# A run that did not happen is visible in the job log and the step summary.
+#
+# WHAT IT NEEDS. One repository secret, ANTHROPIC_API_KEY (or
+# CLAUDE_CODE_OAUTH_TOKEN for a Claude subscription). Without either the job
+# says so and passes. The Claude GitHub App lets the review post as
+# claude[bot]; without it the action falls back to GITHUB_TOKEN.
+#
+# The paths filter is the rule in CLAUDE.md verbatim: Resources/Views/,
+# Public/styles.css, and first-party Public/*.js (one level deep, so the
+# vendored trees under Public/vendor/ and Public/jupyterlite/ do not trigger
+# it). The brief and this file are on the list so a change to either gets a
+# run that proves it still works.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - "Resources/Views/**"
+      - "Public/styles.css"
+      - "Public/*.js"
+      - ".claude/agents/ui-review.md"
+      - ".github/workflows/ui-review.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  # Per PR, and cancel superseded runs: only the latest push is worth reviewing.
+  group: ui-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: ui-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The reviewer reads the PR diff through `gh pr diff`, which needs no
+          # history; the checkout is for reading the files around each change.
+          fetch-depth: 1
+
+      - name: Check for credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the UI review did not run. Add one repository secret to enable it."
+            {
+              echo "## ui-review"
+              echo
+              echo "Did not run: no ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret is set."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Review the change
+        id: review
+        if: steps.credentials.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are the Chickadee ui-review agent. Your brief is the file
+            .claude/agents/ui-review.md in the checked-out tree. Read it first
+            and follow it exactly.
+
+            The PR branch is checked out in the working directory. Read the
+            change with `gh pr diff ${{ github.event.pull_request.number }}`
+            and limit the review to the paths the brief names.
+
+            Report as the brief says, in these two places and nowhere else:
+
+            1. One comment on the PR, posted with `gh pr comment`, holding the
+               three-part report (Verdict, Findings, What you did not check).
+               Start it with the heading `## ui-review`. If a previous run of
+               this workflow already left such a comment, replace it with
+               `gh pr comment --edit-last` instead of adding a second one.
+            2. One inline comment per finding that anchors to a changed line,
+               with mcp__github_inline_comment__create_inline_comment and
+               `confirmed: true`.
+
+            End every comment you post with a blank line, a line holding
+            `---`, and the line
+            `_Generated by [Claude Code](https://claude.ai/code)_`.
+
+            Then return the verdict and a one-sentence summary as the
+            structured output.
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment"
+            --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","findings","changes requested"]},"summary":{"type":"string"}},"required":["verdict","summary"]}'
+
+      - name: Record the verdict
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          OUTCOME: ${{ steps.review.outcome }}
+          STRUCTURED: ${{ steps.review.outputs.structured_output }}
+        run: |
+          set -uo pipefail
+          if [ "$OUTCOME" != "success" ]; then
+            echo "::warning::The UI review did not complete (step outcome: $OUTCOME). This is not a verdict. Re-run the job."
+            {
+              echo "## ui-review"
+              echo
+              echo "Did not complete (step outcome: $OUTCOME). Re-run the job."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          verdict="$(jq -r '.verdict // "none"' <<< "${STRUCTURED:-null}")"
+          summary="$(jq -r '.summary // ""' <<< "${STRUCTURED:-null}")"
+          {
+            echo "## ui-review"
+            echo
+            echo "**Verdict:** $verdict"
+            echo
+            echo "$summary"
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$verdict" in
+            "changes requested")
+              echo "::error::ui-review requested changes. $summary"
+              exit 1
+              ;;
+            pass|findings)
+              echo "::notice::ui-review: $verdict. $summary"
+              ;;
+            *)
+              echo "::warning::ui-review returned no verdict. Read the PR comment; treat the run as not done."
+              ;;
+          esac
