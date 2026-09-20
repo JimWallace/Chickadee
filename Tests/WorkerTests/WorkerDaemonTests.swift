@@ -284,115 +284,6 @@ import Testing
     // plus blocking Thread.sleep in mocks/teardown) that Task can be starved
     // for several seconds before it gets to run.  A tight 2–4s window made
     // these tests flaky there; 10s removes the class of failure.
-    /// Tracks daemon-task completion so `awaitCancelledDaemon` can poll it
-    /// with a deadline instead of awaiting `task.value` unbounded.
-    private actor DaemonShutdownFlag {
-        private var done = false
-        private var unexpectedError: String?
-        func markDone(unexpectedError error: String?) {
-            done = true
-            unexpectedError = error
-        }
-        func isDone() -> Bool { done }
-        func failure() -> String? { unexpectedError }
-    }
-
-    /// Cancels-and-awaits a daemon task with a deadline. `Task.value` is not
-    /// cancellation-responsive: if `daemon.run()` is wedged in a
-    /// non-cancellable wait, a bare `try await task.value` after `cancel()`
-    /// suspends forever and rides the whole job to the CI 20-minute kill —
-    /// observed 2026-07-02 in `workerDaemonContinuesToNextJobAfterProcessingFailure`
-    /// (the `.timeLimit` trait attributed it but cannot interrupt it; see
-    /// docs/ci-flakiness.md). On timeout the daemon task is left orphaned —
-    /// acceptable in a test process — and the leak is made LOUD (#1233): an
-    /// Issue.record naming the abandoned daemon plus a thread-state dump to
-    /// stderr, so an ignored cancellation produces evidence instead of a
-    /// silent still-running task.
-    private func awaitCancelledDaemon(
-        _ task: Task<Void, Error>,
-        timeoutSeconds: TimeInterval = 30
-    ) async -> Bool {
-        await WedgeWatchdog.track {
-            task.cancel()
-            let flag = DaemonShutdownFlag()
-            Task {
-                var unexpected: String?
-                do {
-                    try await task.value
-                } catch is CancellationError {
-                    // Expected on cooperative shutdown.
-                } catch {
-                    unexpected = String(describing: error)
-                }
-                await flag.markDone(unexpectedError: unexpected)
-            }
-            let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
-            if done, let unexpectedError = await flag.failure() {
-                Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
-            }
-            if !done {
-                let leakDescription =
-                    "daemon.run() ignored cancellation for \(Int(timeoutSeconds))s and was abandoned "
-                    + "still running; thread states dumped to stderr (issue #1233)"
-                WedgeWatchdog.dumpThreadStates(reason: leakDescription)
-                Issue.record("\(leakDescription)")
-            }
-            return done
-        }
-    }
-
-    private func waitUntil(
-        timeoutSeconds: TimeInterval = 10,
-        pollIntervalNanos: UInt64 = 50_000_000,
-        condition: @escaping @Sendable () async -> Bool
-    ) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
-            // Every poll tick is watchdog liveness: while any test can still
-            // run this loop, the scheduler is alive and the wedge watchdog
-            // must not fire (issue #1233).
-            WedgeWatchdog.noteActivity()
-            if await condition() {
-                return true
-            }
-            try? await Task.sleep(nanoseconds: pollIntervalNanos)
-        }
-        return await condition()
-    }
-
-    // Mutates process env for the duration of `perform`, then restores the
-    // prior values.  The whole region runs under `withEnvLock` so the
-    // window during which the spawned daemon reads these variables back
-    // can't be clobbered by another env-mutating test running in parallel
-    // (Swift Testing parallelizes within a suite by default, and several
-    // `workerDaemonRetriesPollingAfter*` tests set the same RUNNER_RETRY_*
-    // vars).
-    private func withEnvironment(
-        _ values: [String: String],
-        perform: @Sendable () async throws -> Void
-    ) async throws {
-        try await withEnvLock {
-            let originals = Dictionary(
-                uniqueKeysWithValues: values.keys.map { key in
-                    (key, ProcessInfo.processInfo.environment[key])
-                })
-
-            for (key, value) in values {
-                setenv(key, value, 1)
-            }
-            defer {
-                for (key, original) in originals {
-                    if let original {
-                        setenv(key, original, 1)
-                    } else {
-                        unsetenv(key)
-                    }
-                }
-            }
-
-            try await perform()
-        }
-    }
 
     @Test func workerDaemonCanBeCancelledWhilePollingForNoWork() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
@@ -926,11 +817,16 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    // The three retry tests below set RUNNER_RETRY_* for the daemon to read
+    // back. Each body runs in a child process (an exit test), so the `setenv`
+    // reaches no other test's `environ`: nothing to restore, nothing to lock.
+    // A concurrent `getenv` walking an array `setenv` is rewriting is a
+    // segfault, not a stale read, which is why the process-wide env lock
+    // existed. With no writer left in this process the lock is gone.
     @Test func workerDaemonRetriesPollingAfterTransientHTTP500() async throws {
-        try await withEnvironment([
-            "RUNNER_RETRY_BASE_DELAY_MS": "10",
-            "RUNNER_RETRY_MAX_DELAY_MS": "20",
-        ]) {
+        await #expect(processExitsWith: .success) {
+            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
             let reporter = MockReporter()
             let runner = MockRunner(
@@ -961,10 +857,9 @@ import Testing
     }
 
     @Test func workerDaemonRetriesPollingAfterTransientHTTP401() async throws {
-        try await withEnvironment([
-            "RUNNER_RETRY_BASE_DELAY_MS": "10",
-            "RUNNER_RETRY_MAX_DELAY_MS": "20",
-        ]) {
+        await #expect(processExitsWith: .success) {
+            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http401)
             let reporter = MockReporter()
             let runner = MockRunner(
@@ -995,10 +890,9 @@ import Testing
     }
 
     @Test func workerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
-        try await withEnvironment([
-            "RUNNER_RETRY_BASE_DELAY_MS": "10",
-            "RUNNER_RETRY_MAX_DELAY_MS": "20",
-        ]) {
+        await #expect(processExitsWith: .success) {
+            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
             let reporter = MockReporter()
             let runner = MockRunner(
@@ -1390,4 +1284,85 @@ import Testing
             FileManager.default.fileExists(atPath: markers.appendingPathComponent("completed").path) == false,
             "a cancelled daemon must not finish transferring the artifact")
     }
+}
+
+// MARK: - Helpers shared with the exit-test bodies
+//
+// File-scope rather than suite members: an exit test body runs in a child
+// process and cannot capture `self`, so the helpers it calls must not need one.
+
+/// Tracks daemon-task completion so `awaitCancelledDaemon` can poll it
+/// with a deadline instead of awaiting `task.value` unbounded.
+private actor DaemonShutdownFlag {
+    private var done = false
+    private var unexpectedError: String?
+    func markDone(unexpectedError error: String?) {
+        done = true
+        unexpectedError = error
+    }
+    func isDone() -> Bool { done }
+    func failure() -> String? { unexpectedError }
+}
+
+/// Cancels-and-awaits a daemon task with a deadline. `Task.value` is not
+/// cancellation-responsive: if `daemon.run()` is wedged in a
+/// non-cancellable wait, a bare `try await task.value` after `cancel()`
+/// suspends forever and rides the whole job to the CI 20-minute kill —
+/// observed 2026-07-02 in `workerDaemonContinuesToNextJobAfterProcessingFailure`
+/// (the `.timeLimit` trait attributed it but cannot interrupt it; see
+/// docs/ci-flakiness.md). On timeout the daemon task is left orphaned —
+/// acceptable in a test process — and the leak is made LOUD (#1233): an
+/// Issue.record naming the abandoned daemon plus a thread-state dump to
+/// stderr, so an ignored cancellation produces evidence instead of a
+/// silent still-running task.
+private func awaitCancelledDaemon(
+    _ task: Task<Void, Error>,
+    timeoutSeconds: TimeInterval = 30
+) async -> Bool {
+    await WedgeWatchdog.track {
+        task.cancel()
+        let flag = DaemonShutdownFlag()
+        Task {
+            var unexpected: String?
+            do {
+                try await task.value
+            } catch is CancellationError {
+                // Expected on cooperative shutdown.
+            } catch {
+                unexpected = String(describing: error)
+            }
+            await flag.markDone(unexpectedError: unexpected)
+        }
+        let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
+        if done, let unexpectedError = await flag.failure() {
+            Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
+        }
+        if !done {
+            let leakDescription =
+                "daemon.run() ignored cancellation for \(Int(timeoutSeconds))s and was abandoned "
+                + "still running; thread states dumped to stderr (issue #1233)"
+            WedgeWatchdog.dumpThreadStates(reason: leakDescription)
+            Issue.record("\(leakDescription)")
+        }
+        return done
+    }
+}
+
+private func waitUntil(
+    timeoutSeconds: TimeInterval = 10,
+    pollIntervalNanos: UInt64 = 50_000_000,
+    condition: @escaping @Sendable () async -> Bool
+) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeoutSeconds)
+    while Date() < deadline {
+        // Every poll tick is watchdog liveness: while any test can still
+        // run this loop, the scheduler is alive and the wedge watchdog
+        // must not fire (issue #1233).
+        WedgeWatchdog.noteActivity()
+        if await condition() {
+            return true
+        }
+        try? await Task.sleep(nanoseconds: pollIntervalNanos)
+    }
+    return await condition()
 }
