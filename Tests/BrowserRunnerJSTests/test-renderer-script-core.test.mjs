@@ -63,7 +63,7 @@ test('the time limit is blank-or-1-to-600, refused out of range with the documen
   assert.equal(Core.parseTimeLimit('30'), 30);
   assert.equal(Core.parseTimeLimit('600'), 600);
   for (const bad of ['0', '601', 'abc', '-5']) {
-    assert.throws(() => Core.parseTimeLimit(bad), new RegExp(Core.TIME_LIMIT_MESSAGE.replace(/[()]/g, '\\$&')));
+    assert.throws(() => Core.parseTimeLimit(bad), { message: Core.TIME_LIMIT_MESSAGE });
   }
 });
 
