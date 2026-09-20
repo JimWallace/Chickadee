@@ -10,12 +10,13 @@
 //     editor" did not imply "it grades in the browser".  R has had this property
 //     since browser-graded R shipped; this gives it to Python.
 //   * it is the step that lets the ~465 MB vendored Pyodide go, once the other
-//     consumers move (see docs/xeus-python-grading-migration-plan.md).
+//     consumers move (see docs/archive/xeus-python-grading-migration-plan.md;
+//     they did, and Public/pyodide went in v0.5.19).
 //   * it removes an accidental dependency: Pyodide 3.14 refuses to load in a
 //     classic worker and only loads today because the CSP blocks its detection
 //     probe.  See the comment at the top of grading-worker.js.
 //
-// Measured before building this (docs/xeus-python-grading-spike.md): xeus-python
+// Measured before building this (docs/archive/xeus-python-grading-spike.md): xeus-python
 // costs ~5 ms per cell regardless of statement count — R's ~180 ms
 // per-top-level-expression yield does not generalise — and boot is a wash once
 // Pyodide's on-demand numpy/pandas fetch is counted.

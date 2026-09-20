@@ -1633,7 +1633,9 @@ private extension Data {
 ///
 /// Production hashing uses the default cost (12, ~150 ms). Test security is
 /// irrelevant, but running a cost-12 hash + verify for every login across the
-/// parallel suite saturates a 2-core CI runner — under the nightly coverage
+/// parallel suite saturates the CI runner (a 4-CPU box with no quota, measured
+/// 2026-09-16 by the StarvationRecorder arming line; it was 2 cores when this
+/// was written) — under the nightly coverage
 /// build that CPU starvation slows test-app/login setup enough to flake
 /// auth-dependent tests (303/401 / ~80 s stalls). bcrypt verify reads the cost
 /// from the stored hash, so logins against these fixtures are fast too.

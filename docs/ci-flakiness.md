@@ -1,4 +1,4 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-16)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-20)
 
 Handoff document for the flakiness work. Families 1–3 are the original
 2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
@@ -143,6 +143,13 @@ Webkit: `hangs<=1/12` tolerated on `pull_request` runs with a loud
 `::warning` annotation; `workflow_dispatch`/scheduled runs keep the hard
 zero, so the probe remains the regression guard a real fix must turn green
 and the ambient rate stays measured rather than silently absorbed.
+
+*Correction (2026-09-20):* the probe had **no schedule** when this policy
+was written, and never had one — its only hard-zero runs were dispatches
+nobody made. The 30/30 scheduled hard-zero reading below is `editor-smoke`'s,
+which does have one. `grading-hang-probe.yml` now runs weekly (Monday
+04:17 UTC, ahead of the telemetry tally), so the sentence above is true from
+that date on.
 
 **First chromium sighting (2026-08-04, PR #1261, run 30867456697).**
 `grading-probe (chromium)` reported `hangs=1/12` while
@@ -944,6 +951,32 @@ persist at a lower rate, the entry should say so rather than close. A slow run
 now carries `[ci-pressure]` lines, and a HINT on one of them names its own
 cause — that is the whole point of the instrument, and reading it is the first
 step, not another log tail.
+
+### First population reading (2026-09-20, four days on `main`)
+
+Read the way the two paragraphs above ask. `swift-tests.yml` push runs on
+`main` created after both fixes were in (2026-09-16 15:00 UTC), per-step
+durations from the Actions API, completed runs only:
+
+| lane | n | step median | p90 | max | runs ≥2× median | ceiling kills |
+|---|---|---|---|---|---|---|
+| `api-tests` | 27 | **144 s** | 160 s | 166 s | **0** | 0 |
+| `api-tests-postgres` | 27 | **183 s** | 204 s | 218 s | **0** | 0 |
+
+The medians match the single first measurements (143 s, and ~120 s locally
+for the postgres lane's test time). Every `main` run at ≥2× the new medians
+in the same window is dated 2026-09-16 00:28–14:04 and predates one or both
+fixes; none of them carries `[ci-pressure]` lines, because the recorder
+shipped with the first fix.
+
+**Which of the two outcomes this is:** the symptom is absent, and the cause
+is still unknown. Under the old 10.8 % excursion rate, zero excursions in 27
+runs has a probability of about 0.05, so this is evidence the rate fell and
+not proof the collapse is gone — a 4× event on a 144 s median is a 580 s
+step, which still passes, so a recurrence at the old severity would now show
+as an excursion rather than a kill, and the recorder would name its cause.
+The entry stays open. Next reading at roughly 100 post-fix runs; the numbers
+to carry forward are the two medians, the ≥2× count and the kill count.
 
 ---
 

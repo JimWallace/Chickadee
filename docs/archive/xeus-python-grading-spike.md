@@ -1,5 +1,7 @@
 # Spike: xeus-python as the browser grading substrate for Python
 
+> **Archived 2026-09-20.** The spike answered its question: Python browser grading moved to xeus-python and `Public/pyodide` was retired in v0.5.19 (#1271). Kept for the measurements. Nothing below describes current behaviour; see `CLAUDE.md` "Browser grading has four substrates".
+
 Follow-on to #1271 and to the browser-graded-R work. R shipped on the vendored
 xeus-r kernel; this spike asks whether Python's browser grading should follow,
 which is what would let the ~465 MB `Public/pyodide` go.

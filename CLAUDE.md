@@ -1470,7 +1470,7 @@ Full design, runbook, and host steps:
 course offering run on Chickadee and the pivot to next year's feature work.
 The system is a working client–server autograder: Python, R, Lua, Octave, C++,
 Racket and Java assignments;
-browser (Pyodide/wasm) and native worker grading paths sharing one RunnerCore
+browser (xeus/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (10 kinds) and notebook checks (10 kinds); achievements; student slip days;
 per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
@@ -1625,33 +1625,22 @@ shim); and archived finished-era docs under `docs/archive/`.
   indistinguishable to a reader from the broken form, so
   `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
   everything else, with a `check-guards.sh` fixture proving it still fails.
-- **Consolidating on xeus (#1271) — R done, Python open.** Browser grading is
-  now two substrates: R runs the vendored xeus-r kernel (shipped here), Python
-  still runs Pyodide. Moving Python across would restore one authoring/grading
-  environment and let the ~465 MB `Public/pyodide` go, but it is gated on the
-  package-set question the issue flags as unresolved: Pyodide resolves imports
-  at runtime via `loadPackagesFromImports`, while a xeus env is fixed at build
-  time with no escape hatch under `connect-src 'self'` — forgiving for an author
-  who can ask for a package, unforgiving for a student whose submission imports
-  something unanticipated at grade time. R had none of this risk: its env is
-  bare `xeus-r` and is already the editor's. **Spiked 2026-08 —
-  `docs/xeus-python-grading-spike.md`:** xpython boots on the same standalone
-  path (one extra `bootstrapPython` export), and R's ~180ms-per-expression
-  yield does NOT generalise — xeus-python's floor is 5ms per cell vs Pyodide's
-  ~0ms, and boot is a wash once Pyodide's on-demand numpy/pandas fetch is
-  counted. The gate is purely the package set: the env has numpy/pandas/
-  matplotlib/PIL, while the vendored Pyodide resolves scipy/sklearn/sympy/
-  statsmodels/networkx/requests at run time. Chickadee's generated tests import
-  none of those, and students are already held to the env by the editor, so the
-  residual risk is hand-authored scripts. Two other consumers would have to
-  move before `Public/pyodide` could go — `pyodide-worker.js` (the
-  pattern-family editor's auto-compute) and the vendored
-  `jupyterlite-pyodide-kernel` that anchors `check-pyodide-parity.sh`. NOT
-  `/validate`: instructor validation is enqueued as a `kind == .validation`
-  submission and graded by the **native worker**
-  (`WorkerJobRoutes.collectClaimCandidates`), so it never loads Pyodide at all.
-  Earlier notes here and in #1271 claimed otherwise, citing an
-  `assignment-validate.js` that does not exist.
+- **Consolidating on xeus (#1271) — DONE.** Both browser graders and both
+  editor kernels are xeus; `Public/pyodide` went in v0.5.19 (see "Pyodide is
+  gone" above). The package-set question that gated it was settled the way
+  the spike predicted: the kernel env is fixed at build time, students are
+  already held to it by the editor, and `PythonImportGuard` refuses a
+  browser-graded script at authoring time whose imports the vendored kernel
+  cannot satisfy. The measurements that decided it (xeus-python's 5 ms per
+  cell versus Pyodide's ~0 ms; boot a wash once Pyodide's on-demand
+  numpy/pandas fetch is counted; R's ~180 ms per-expression yield NOT
+  generalising) are kept in `docs/archive/xeus-python-grading-spike.md` and
+  `docs/archive/xeus-python-grading-migration-plan.md`. One correction from
+  that arc worth keeping here: instructor validation is enqueued as a
+  `kind == .validation` submission and graded by the **native worker**
+  (`WorkerJobRoutes.collectClaimCandidates`), so it never ran Pyodide and
+  never runs a kernel; earlier notes citing an `assignment-validate.js`
+  described a file that does not exist.
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond the three
   equality kinds); pattern kinds beyond the ten shipped
@@ -1700,8 +1689,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
-- `docs/xeus-python-grading-spike.md` — whether Python browser grading should move to xeus-python (#1271): measured Pyodide-vs-xeus-python execution and boot cost, the package-set gap, and the accidental CSP dependency that currently makes Pyodide load at all in a classic worker
-- `docs/xeus-python-grading-migration-plan.md` — the executable handoff for that migration: the package-set decision that gates it, the slices, which R lessons do NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), staged rollout behind the existing failover, and what must be true before `Public/pyodide` can go
+- `docs/archive/xeus-python-grading-spike.md` and `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide → xeus-python migration (#1271): the measured execution and boot costs, which R lessons did NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), and the slice-by-slice record of what shipped and what it cost. Archived 2026-09-20; the live state is the "Pyodide is gone (v0.5.19)" section above
 - `docs/cpp-assignment-language-decision.md` — why C++ stays on the shell-script + makefile path rather than becoming an `AssignmentLanguage`: the one-file-one-command invocation mismatch, the typed-literal impossibility, and the Clang-REPL-vs-course-toolchain pedagogy problem; the priced revisit condition
 - `docs/authoring-parity.md` — what an instructor authoring in R, Lua, Octave, C++ or Racket can and cannot do that a Python author can, which differences are defects and which are correct refusals. Its work list is complete; what survives is the reasoning behind the parity checklist in `adding-a-xeus-kernel.md`, including the gaps that are correct as they stand and have been re-litigated more than once
 - `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (two still open — `.rkt` dispatching to `/bin/sh`, and `racket --version`'s letter-led token defeating the runner's version parser, confirmed against the production fleet), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect

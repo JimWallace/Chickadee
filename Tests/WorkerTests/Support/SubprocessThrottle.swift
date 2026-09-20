@@ -8,8 +8,9 @@
 // process by default (the `swift test --filter WorkerTests` CI invocation is
 // non-`--parallel`, but that flag only governs XCTest's *cross-process*
 // scheduling — in-process Swift Testing parallelism is unaffected).  Under the
-// cold-cache nightly — every test in the target firing at once on a 2-core
-// runner — the resulting fork/posix_spawn storm transiently fails.  It
+// cold-cache nightly — every test in the target firing at once on a hosted
+// runner (4 CPUs and no quota as of 2026-09-16; 2 cores when this was
+// written) — the resulting fork/posix_spawn storm transiently fails.  It
 // surfaces as the `-1` "never launched" exit sentinel (see
 // `runScriptRobustly`) or a starved daemon `Task` (see WorkerDaemonTests'
 // `waitUntil`).  Both prior mitigations reacted to one symptom each; this is
@@ -41,8 +42,10 @@ func withSubprocessSlot<R: Sendable>(_ body: @Sendable () async throws -> R) asy
 
 private actor SubprocessThrottle {
     // Deliberately a small fixed constant rather than scaled to core count:
-    // the failure mode is resource exhaustion under load, and the 2-core CI
-    // runner is exactly where it bites, so a low floor is the safe choice.  A
+    // the failure mode is resource exhaustion under load, and the hosted CI
+    // runner is exactly where it bites (2 cores when this was chosen, 4 since;
+    // the storm threshold, not the core count, is what the constant tracks),
+    // so a low floor is the safe choice.  A
     // cheap `/bin/sh` fork is sub-millisecond, so four in flight is ample
     // throughput while staying far below the storm threshold.
     static let shared = SubprocessThrottle(limit: 4)
