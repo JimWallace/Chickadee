@@ -563,16 +563,18 @@ jobs:
         # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the
         # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
         # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
-        # skip) when the interpreter is absent.  Both are baked into the
-        # swift-ci image; the apt-get path is the stale-image fallback.  The
-        # graded-language interpreters follow the same all-of-them rule as the
-        # api-tests job — see that job's note; a skip fails this job too.
+        # skip) when the interpreter is absent; `make` is the runner's pre-test
+        # build step, which WorkerDaemonTests' hung-make timeout test needs
+        # (`.requiresMake`).  All are baked into the swift-ci image; the
+        # apt-get path is the stale-image fallback.  The graded-language
+        # interpreters follow the same all-of-them rule as the api-tests job —
+        # see that job's note; a skip fails this job too.
         run: |
-          if command -v file >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
+          if command -v file >/dev/null && command -v make >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
             echo "test dependencies already baked into the image; skipping apt-get"
             exit 0
           fi
-          apt-get update -qq && apt-get install -y --no-install-recommends file python3 r-base lua5.4 octave g++ racket default-jdk
+          apt-get update -qq && apt-get install -y --no-install-recommends file make python3 r-base lua5.4 octave g++ racket default-jdk
 
       - name: Run WorkerTests
         # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift

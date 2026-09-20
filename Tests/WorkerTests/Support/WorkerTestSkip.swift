@@ -1,7 +1,8 @@
 // Tests/WorkerTests/Support/WorkerTestSkip.swift
 //
 // Worker-test-side helpers: the shared `ConditionTrait`s that make a skip
-// visible (`.ciOnly`, `.requiresRscript`, `.requiresSandbox`) and a
+// visible (`.ciOnly`, `.requiresRscript`, `.requiresSandbox`, `.requiresMake`)
+// and a
 // `withMockURLProtocolLock` actor-backed serializer for `MockURLProtocol`'s
 // process-global state. `IssueRecorded` and `testURL` come from
 // `ChickadeeTestSupport`, shared with the other two test targets.
@@ -40,6 +41,13 @@ extension ConditionTrait {
     ) {
         await sandboxIsAvailable()
     }
+
+    /// Skips, visibly, where `/usr/bin/make` is absent: the fixed path
+    /// `RunnerDaemon` spawns for the pre-test build step, so the probe asks
+    /// exactly what the daemon will ask.
+    static let requiresMake: ConditionTrait = .enabled(
+        if: FileManager.default.isExecutableFile(atPath: "/usr/bin/make"),
+        "requires /usr/bin/make")
 }
 
 /// Serializes async test bodies that touch `MockURLProtocol`'s global
@@ -90,4 +98,5 @@ extension Trait where Self == ConditionTrait {
     static var ciOnly: Self { ConditionTrait.ciOnly }
     static var requiresRscript: Self { ConditionTrait.requiresRscript }
     static var requiresSandbox: Self { ConditionTrait.requiresSandbox }
+    static var requiresMake: Self { ConditionTrait.requiresMake }
 }

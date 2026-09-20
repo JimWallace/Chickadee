@@ -76,12 +76,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
 
-      # Shared scaffold: mtime normalisation, build-cache restore, server
-      # build, Node + Playwright install (engine download cached).
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
       - uses: ./.github/actions/browser-probe-setup
         with:
           browser: ${{ matrix.browser }}

@@ -40,7 +40,6 @@
 
 import Foundation
 import Subprocess
-import Synchronization
 import SystemPackage
 
 /// Exit status and captured streams of one tool run.
@@ -186,22 +185,32 @@ public func toolIsAvailable(_ tool: String, arguments: [String] = ["--version"])
     return run.succeeded
 }
 
-/// `toolIsAvailable`, remembered per tool for the lifetime of the test process.
+/// `toolIsAvailable`, probed once per tool for the lifetime of the test
+/// process.
 ///
 /// A `ConditionTrait` evaluates its closure once per test it is attached to,
-/// so a suite of twenty `@Test(.requiresRscript)` tests would otherwise spawn
-/// twenty `Rscript --version` probes. Two tests that race on the first call
-/// both probe; the answer is the same, so the race is harmless.
+/// and Swift Testing evaluates them while planning the run, concurrently, so a
+/// target with forty `@Test(.requiresRscript)` tests would otherwise launch
+/// forty `Rscript --version` probes at once before the first test body runs.
+/// Single-flight: the first caller starts the probe and every concurrent
+/// caller awaits that same task, so each tool is spawned exactly once.
 public func cachedToolIsAvailable(_ tool: String, arguments: [String] = ["--version"]) async -> Bool {
-    if let cached = toolAvailabilityCache.withLock({ $0[tool] }) {
-        return cached
-    }
-    let available = await toolIsAvailable(tool, arguments: arguments)
-    toolAvailabilityCache.withLock { $0[tool] = available }
-    return available
+    await ToolAvailabilityProbes.shared.isAvailable(tool, arguments: arguments)
 }
 
-private let toolAvailabilityCache = Mutex<[String: Bool]>([:])
+private actor ToolAvailabilityProbes {
+    static let shared = ToolAvailabilityProbes()
+    private var probes: [String: Task<Bool, Never>] = [:]
+
+    func isAvailable(_ tool: String, arguments: [String]) async -> Bool {
+        if let probe = probes[tool] {
+            return await probe.value
+        }
+        let probe = Task { await toolIsAvailable(tool, arguments: arguments) }
+        probes[tool] = probe
+        return await probe.value
+    }
+}
 
 /// Flattens a `TerminationStatus` to the `Int32` call sites compare against 0,
 /// with a signalled child reported as `128 + signal`.
