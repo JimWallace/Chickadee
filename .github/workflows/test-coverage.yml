@@ -107,7 +107,20 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
-          run_tests() { swift test --enable-code-coverage --xunit-output "${RUNNER_TEMP}/xunit/all-targets.xml"; }
+          # --build-system native is required for COVERAGE on Swift 6.4, for a
+          # different reason than the release build's ICU link (Dockerfile):
+          # the default Swift Build engine instruments only Core, RunnerCore
+          # and dependency C code, with APIServer and Worker absent from the
+          # coverage map entirely, so the floor below would be measured over
+          # 46 + 9 source files instead of 635. Measured on 6.4.0 with the
+          # same tree: native maps 635 Sources files (558 APIServer, 46 Core,
+          # 9 RunnerCore, 22 Worker), the default engine 55. The default
+          # engine also emits one runner per test target and no
+          # ChickadeePackageTests.xctest, which is what turned the export step
+          # red first (issue #1542). `native` is deprecated and warns; drop the
+          # flag here and in the export step once the default engine maps
+          # every module.
+          run_tests() { swift test --enable-code-coverage --build-system native --xunit-output "${RUNNER_TEMP}/xunit/all-targets.xml"; }
           if run_tests; then
             exit 0
           fi
@@ -126,8 +139,8 @@ jobs:
 
       - name: Export coverage to lcov
         run: |
-          BIN=$(swift build --show-bin-path)
-          PROFDATA=$(find .build -name 'default.profdata' -type f)
+          BIN=$(swift build --build-system native --show-bin-path)
+          PROFDATA=$(find "$BIN" -name 'default.profdata' -type f)
           XCTEST=$(find "$BIN" -name 'ChickadeePackageTests.xctest' -type f)
           llvm-cov export \
             -format=lcov \
