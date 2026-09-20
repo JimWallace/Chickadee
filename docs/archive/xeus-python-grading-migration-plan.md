@@ -1,5 +1,7 @@
 # Migration plan: Python browser grading, Pyodide → xeus-python
 
+> **Archived 2026-09-20.** Every slice and every §A item shipped, including §A3: `Public/pyodide` and its guards were retired in v0.5.19 (the STATUS block and §A3 below predate that and still call it blocked). Kept for the record of how the finished part works and what it cost; see `CLAUDE.md` "Pyodide is gone (v0.5.19)" for the live state.
+
 Companion to [xeus-python-grading-spike.md](xeus-python-grading-spike.md), which
 established that this is viable and measured the cost.
 

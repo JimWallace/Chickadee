@@ -18,9 +18,16 @@ name: Browser grading-hang probe
 #
 # Intentionally NOT required in branch protection: a reproduced hang must not
 # block unrelated PRs. Runs on PRs touching the grading / editor / isolation
-# surface, and on demand (workflow_dispatch) with a larger iteration count.
+# surface, on demand (workflow_dispatch) with a larger iteration count, and
+# once a week on a schedule. The weekly run is the hard-zero datapoint the
+# gate policy describes: until 2026-09-20 the policy named "scheduled runs"
+# while no schedule existed, so the only hard-zero runs were dispatches nobody
+# made. It fires before the Monday flake-telemetry tally (flake-telemetry.yml),
+# which counts this workflow's red runs and warnings.
 
 on:
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
     inputs:
       browser:

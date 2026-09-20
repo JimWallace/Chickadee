@@ -110,7 +110,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// CodeMirror-based assignment editor functional:
     ///   - 'unsafe-eval' is required, and NOT only by Pyodide.  Retiring Pyodide
     ///     in v0.5.19 was expected to allow narrowing this to 'wasm-unsafe-eval'
-    ///     (docs/xeus-python-grading-migration-plan.md §A4 said as much).  It
+    ///     (docs/archive/xeus-python-grading-migration-plan.md §A4 said as much).  It
     ///     does not: measured with Pyodide fully removed, `wasm-unsafe-eval`
     ///     leaves JupyterLab unable to activate its plugins — the editor loads,
     ///     reports `crossOriginIsolated`, fetches both kernel manifests, and
