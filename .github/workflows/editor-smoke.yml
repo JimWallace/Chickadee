@@ -135,11 +135,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
 
-      # Shared scaffold: mtime normalisation, exact-match build-cache restore,
+      # Shared scaffold: exact-match build-cache restore,
       # server build, Node + Playwright install (engine download cached). See
       # .github/actions/browser-probe-setup/action.yml for the cache-soundness
       # notes that used to live inline here.

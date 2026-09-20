@@ -1368,7 +1368,7 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
   Self.luaAvailable }`. The traits more than one file needs live in one
   `HostConditionTraits.swift` per test target (`WorkerTestSkip.swift` in
   WorkerTests): `.ciOnly`, `.requiresRscript`, `.requiresOctave`,
-  `.requiresZipTools`, `.requiresSandbox`; the probes behind them
+  `.requiresZipTools`, `.requiresSandbox`, `.requiresMake`; the probes behind them
   (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
   `IssueRecorded` and `testURL` for all three targets. Swift Testing then
   reports the test as skipped with that reason, in the log and in the xUnit report, and

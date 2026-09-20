@@ -21,6 +21,9 @@ FROM ${BASE_IMAGE}
 #             generated pattern-family scripts, `#!/usr/bin/env python3`
 #             (APITests, nightly); noble, unlike jammy, does not bundle it
 # zip/unzip — test-setup and course-bundle fixtures (APITests, nightly)
+# make      — the runner's pre-test build step (RunnerDaemon spawns
+#             /usr/bin/make); WorkerDaemonTests' hung-make timeout test
+#             skipped on every CI run for as long as this was absent
 # curl      — nightly coverage tooling
 # r-base    — Rscript for the R execution-path suites (PatternFamilyRendererR,
 #             NotebookCheckRendererR, PersonalizationEvaluatorR, WorkerTests R
@@ -45,7 +48,7 @@ FROM ${BASE_IMAGE}
 #             exited 100, every probe skipped its tests, and the required
 #             editor-smoke gate went red because of an Ubuntu mirror.
 RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends file python3 zip unzip curl \
+    && apt-get install -y --no-install-recommends file python3 zip unzip curl make \
         r-base python3-pandas python3-matplotlib lua5.4 octave \
         gnuplot-nox fonts-freefont-otf g++ racket default-jdk \
         ca-certificates \
