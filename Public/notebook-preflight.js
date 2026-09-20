@@ -18,12 +18,15 @@
 // the page — the iframe loads normally and the watchdog is silently armed
 // by notebook.js.
 //
-// Loaded before notebook.js on Resources/Views/notebook.leaf.
+// Loaded before notebook.js on Resources/Views/notebook.leaf, after
+// notebook-preflight-core.js, which holds the decisions (which capabilities
+// are missing, the diagnostic body, the fallback copy, the error-report
+// budget). What remains here is the browser: the probes, the DOM and fetch.
 
 (function () {
     'use strict';
 
-    const PREFLIGHT_DIAGNOSTICS_URL = '/api/v1/client-diagnostics';
+    const Core = ChickadeeNotebookPreflightCore;
 
     // ----------------------------------------------------------------
     // Preflight checks
@@ -34,12 +37,12 @@
      * Returns { ok: bool, failed: string[] }.
      */
     async function runPreflight() {
-        const failed = [];
-
-        if (typeof WebAssembly === 'undefined')      failed.push('WebAssembly');
-        if (!('Worker'        in window))            failed.push('Worker');
-        if (!('serviceWorker' in (navigator || {}))) failed.push('serviceWorker');
-        if (!('indexedDB'     in window))            failed.push('indexedDB');
+        const failed = Core.missingCapabilities({
+            webAssembly:   typeof WebAssembly !== 'undefined',
+            worker:        'Worker' in window,
+            serviceWorker: 'serviceWorker' in (navigator || {}),
+            indexedDB:     'indexedDB' in window
+        });
 
         // Real registration test: SW API may be present but policy may block
         // registration (corporate-managed Edge/Chrome, Safari private mode).
@@ -82,9 +85,7 @@
         // this catches low-RAM Chromebooks/Android but can't see iOS — the runtime
         // `wasm_crash` recovery covers the WebKit case where this signal is absent.
         var dm = (navigator && typeof navigator.deviceMemory === 'number') ? navigator.deviceMemory : null;
-        var lowMemory = (dm !== null && dm > 0 && dm <= 2);
-
-        return { ok: failed.length === 0, failed: failed, lowMemory: lowMemory, deviceMemory: dm };
+        return Core.preflightResult(failed, dm);
     }
 
     // ----------------------------------------------------------------
@@ -121,14 +122,8 @@
         if (info.variant === 'memory' && fallback) {
             const titleEl = fallback.querySelector('.js-nb-fallback-title');
             const textEl  = fallback.querySelector('.js-nb-fallback-text');
-            if (titleEl) titleEl.textContent = 'Your browser ran low on memory';
-            if (textEl) {
-                textEl.textContent =
-                    'The notebook kernel stopped because your browser hit a memory limit \u2014 ' +
-                    'common on Safari and on phones, tablets, or low-memory computers. ' +
-                    'Reload to try again, or open this assignment on a laptop or desktop in ' +
-                    'Chrome or Firefox. You can also submit by uploading your .ipynb file below.';
-            }
+            if (titleEl) titleEl.textContent = Core.FALLBACK_COPY.memory.title;
+            if (textEl) textEl.textContent = Core.FALLBACK_COPY.memory.text;
         }
 
         // Point the "reset the notebook editor" link back at THIS assignment, so
@@ -138,20 +133,12 @@
         const resetLink = document.getElementById('nb-reset-editor-link');
         if (resetLink) {
             try {
-                resetLink.href = '/reset-editor?next=' +
-                    encodeURIComponent(location.pathname + location.search);
+                resetLink.href = Core.resetEditorHref(location.pathname, location.search);
             } catch (_) { /* keep the static href */ }
         }
 
         if (details) {
-            const lines = [
-                'Failure: ' + info.kind,
-                'User-Agent: ' + (navigator.userAgent || '(unknown)'),
-            ];
-            if (info.failedChecks && info.failedChecks.length) {
-                lines.push('Failed checks: ' + info.failedChecks.join(', '));
-            }
-            details.textContent = lines.join('\n');
+            details.textContent = Core.failureDetailsText(info, navigator.userAgent);
         }
 
         postDiagnostic(info).catch(function (err) {
@@ -166,7 +153,7 @@
     function readAppVersion() {
         try {
             const meta = document.querySelector('meta[name="app-version"]');
-            return (meta && meta.content) ? String(meta.content).slice(0, 32) : '';
+            return Core.appVersionFrom(meta && meta.content);
         } catch (_) { return ''; }
     }
 
@@ -175,20 +162,11 @@
         const setupID   = frame && frame.dataset ? frame.dataset.setupId : null;
         const csrfToken = (typeof ChickadeeUI !== 'undefined') ? ChickadeeUI.getCsrfToken() : '';
 
-        const body = { kind: info.kind };
-        if (info.failedChecks && info.failedChecks.length) body.failedChecks = info.failedChecks;
-        if (setupID) body.testSetupID = setupID;
-        // Error detail (editor_error + kernel-unhealthy watchdog).  Client-side
-        // caps are generous; the server trims to its own bounds.
-        if (info.message) body.message = String(info.message).slice(0, 2000);
-        if (info.stack)   body.stack   = String(info.stack).slice(0, 8000);
-        if (info.source)  body.source  = String(info.source).slice(0, 64);
-        // Page-build version, so a diagnostic is attributable to a build and a
-        // stale tab (old appVersion) is distinguishable. Best-effort.
-        const appVersion = readAppVersion();
-        if (appVersion) body.appVersion = appVersion;
+        // Error detail and the page-build version ride along, capped; the
+        // server trims to its own bounds.
+        const body = Core.diagnosticBody(info, { setupID: setupID, appVersion: readAppVersion() });
 
-        await fetch(PREFLIGHT_DIAGNOSTICS_URL, {
+        await fetch(Core.DIAGNOSTICS_URL, {
             method:  'POST',
             credentials: 'same-origin',
             headers: {
@@ -209,17 +187,11 @@
     // de-duplicated per page load so a tight error loop can't flood the
     // endpoint (the server also rate-limits per (user, setup, kind, source)).
 
-    const _reportedErrors = new Set();
-    let _errorReportCount = 0;
-    const MAX_ERROR_REPORTS = 8;
+    const errorReportGate = Core.createErrorReportGate();
 
     function reportEditorError(info) {
         try {
-            if (!info || _errorReportCount >= MAX_ERROR_REPORTS) return;
-            const dedupeKey = (info.source || '') + '|' + (info.message || '');
-            if (_reportedErrors.has(dedupeKey)) return;
-            _reportedErrors.add(dedupeKey);
-            _errorReportCount += 1;
+            if (!errorReportGate.admit(info)) return;
 
             postDiagnostic({
                 kind:    'editor_error',
@@ -269,7 +241,7 @@
         const dm = (info && typeof info.deviceMemory === 'number') ? info.deviceMemory : null;
 
         let dismissed = false;
-        try { dismissed = localStorage.getItem('ck_device_warn_dismissed') === '1'; } catch (_) { /* ignore */ }
+        try { dismissed = localStorage.getItem(Core.DEVICE_WARNING_DISMISSED_KEY) === '1'; } catch (_) { /* ignore */ }
 
         const banner = document.getElementById('nb-device-warning');
         if (banner && !dismissed) {
@@ -278,17 +250,13 @@
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
                     banner.hidden = true;
-                    try { localStorage.setItem('ck_device_warn_dismissed', '1'); } catch (_) { /* ignore */ }
+                    try { localStorage.setItem(Core.DEVICE_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
         }
 
         // Telemetry fires even if the banner was previously dismissed.
-        reportEvent({
-            kind:    'device_warning',
-            source:  'low_memory',
-            message: 'deviceMemory=' + (dm !== null ? dm : 'unknown')
-        });
+        reportEvent(Core.deviceWarningEvent(dm));
     }
 
     // ----------------------------------------------------------------
@@ -315,30 +283,19 @@
         if (fallback) {
             const titleEl = fallback.querySelector('.js-nb-fallback-title');
             const textEl  = fallback.querySelector('.js-nb-fallback-text');
-            if (titleEl) titleEl.textContent = 'The editor is taking a while to load';
-            if (textEl) {
-                textEl.textContent =
-                    'The in-browser kernel may not work on older browsers, or on devices with limited ' +
-                    'memory such as some iPads. If the editor doesn’t finish loading, a laptop or ' +
-                    'desktop — or a more recent browser — may work better. You can still submit ' +
-                    'by uploading your notebook (.ipynb) file below.';
-            }
+            if (titleEl) titleEl.textContent = Core.FALLBACK_COPY.slow.title;
+            if (textEl) textEl.textContent = Core.FALLBACK_COPY.slow.text;
             const resetLink = document.getElementById('nb-reset-editor-link');
             if (resetLink) {
                 try {
-                    resetLink.href = '/reset-editor?next=' +
-                        encodeURIComponent(location.pathname + location.search);
+                    resetLink.href = Core.resetEditorHref(location.pathname, location.search);
                 } catch (_) { /* keep the static href */ }
             }
             // Reveal the upload path; do NOT hide the editor — it may still boot.
             fallback.hidden = false;
         }
 
-        reportEvent({
-            kind:    'editor_error',
-            source:  'slow_boot_notice',
-            message: 'ua=' + (navigator.userAgent || '').slice(0, 200)
-        });
+        reportEvent(Core.slowBootEvent(navigator.userAgent));
     }
 
     // ----------------------------------------------------------------
@@ -364,7 +321,7 @@
         _browserWarningShown = true;
 
         let dismissed = false;
-        try { dismissed = localStorage.getItem('ck_browser_warn_dismissed') === '1'; } catch (_) { /* ignore */ }
+        try { dismissed = localStorage.getItem(Core.BROWSER_WARNING_DISMISSED_KEY) === '1'; } catch (_) { /* ignore */ }
 
         const banner = document.getElementById('nb-browser-support-warning');
         if (banner && !dismissed) {
@@ -373,18 +330,14 @@
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
                     banner.hidden = true;
-                    try { localStorage.setItem('ck_browser_warn_dismissed', '1'); } catch (_) { /* ignore */ }
+                    try { localStorage.setItem(Core.BROWSER_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
         }
 
         // Telemetry fires even if previously dismissed, which gives us the real
         // below-matrix population (the server attributes it by browser from the UA).
-        reportEvent({
-            kind:    'browser_support',
-            source:  'below_matrix',
-            message: 'ua=' + (navigator.userAgent || '').slice(0, 200)
-        });
+        reportEvent(Core.browserSupportEvent(navigator.userAgent));
     }
 
     // ----------------------------------------------------------------

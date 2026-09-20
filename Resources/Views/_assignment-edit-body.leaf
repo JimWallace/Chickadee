@@ -572,8 +572,11 @@
 <script src="/section-inputs-editor.js?v=#appVersion()"></script>
 <script src="/pattern-family-editor.js?v=#appVersion()"></script>
 <script src="/global-inputs-editor.js?v=#appVersion()"></script>
+<script src="/achievements-editor-core.js?v=#appVersion()"></script>
 <script src="/achievements-editor.js?v=#appVersion()"></script>
+<script src="/test-renderer-check-core.js?v=#appVersion()"></script>
 <script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script src="/test-renderer-script-core.js?v=#appVersion()"></script>
 <script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script src="/support-files.js?v=#appVersion()"></script>

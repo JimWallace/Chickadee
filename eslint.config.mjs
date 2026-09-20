@@ -21,6 +21,14 @@ import js from '@eslint/js';
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
+  // The DOM-free halves of five page scripts, each loaded before its wiring
+  // file and unit-tested under node. The split is the inputs-editor-core
+  // pattern: decisions in the core, element lookups and fetches in the wiring.
+  ChickadeeAchievementsCore: 'readonly',
+  ChickadeeNotebookPreflightCore: 'readonly',
+  ChickadeeCheckRendererCore: 'readonly',
+  ChickadeeScriptRendererCore: 'readonly',
+  ChickadeeStarterTestsCore: 'readonly',
   // Public/sparkline.js — the dashboard bar renderer, split out of
   // chickadee-ui.js: drawing a chart is not the same kind of thing as
   // escaping a string.

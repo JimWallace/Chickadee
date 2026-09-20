@@ -10,20 +10,20 @@
 // Contract: mount / reset(kind) / populate(item) / readSpec / persistAndSync /
 // cleanup / title. Persistence flows through the single `PUT /suite` write
 // path via `window.chickadeeSaveChecksViaSuite` (full check list, upserted).
+//
+// The decisions (schema parsing, what control a field becomes, how a value is
+// read, written and defaulted per value type, id generation, the upsert) live
+// in test-renderer-check-core.js, loaded before this file; what remains here
+// is element creation and the modal contract.
 
 (function (global) {
     'use strict';
 
+    var Core = global.ChickadeeCheckRendererCore;
+
     function loadSchema() {
         var el = document.getElementById('check-schema');
-        if (!el) return { common: [], kinds: {} };
-        try {
-            var p = JSON.parse(el.textContent || '{}');
-            return {
-                common: Array.isArray(p.common) ? p.common : [],
-                kinds: (p.kinds && typeof p.kinds === 'object') ? p.kinds : {}
-            };
-        } catch (e) { return { common: [], kinds: {} }; }
+        return el ? Core.parseSchema(el.textContent) : Core.normalizeSchema(null);
     }
 
     function el(tag, attrs) {
@@ -32,39 +32,19 @@
         return node;
     }
 
+    /// Materialises the core's description of a field's control.
     function buildControl(field) {
-        if (field.control === 'textarea') {
-            var ta = el('textarea', { 'class': 'form-input editor-input input-mono', 'data-field': field.name, rows: String(field.rows || 4) });
-            if (field.placeholder) ta.placeholder = field.placeholder;
-            return ta;
-        }
-        if (field.control === 'select') {
-            var sel = el('select', { 'class': 'form-input editor-input', 'data-field': field.name });
-            (field.enumOptions || []).forEach(function (opt) {
-                var o = el('option', { value: opt.value });
-                o.textContent = opt.label;
-                sel.appendChild(o);
-            });
-            return sel;
-        }
-        if (field.control === 'checkbox') {
-            var cb = el('input', { type: 'checkbox', 'data-field': field.name });
-            if (field.defaultChecked) cb.checked = true;
-            // Unusable in this language: uncheckable, and never checked by
-            // default, so the value the form reads back is the one that saves.
-            if (field.unsupportedReason) { cb.disabled = true; cb.checked = false; }
-            return cb;
-        }
-        var input = el('input', {
-            type: field.control === 'number' ? 'number' : 'text',
-            'class': 'form-input editor-input', 'data-field': field.name
+        var spec = Core.controlSpec(field);
+        var node = el(spec.tag, spec.attrs);
+        (spec.options || []).forEach(function (opt) {
+            var o = el('option', { value: opt.value });
+            o.textContent = opt.label;
+            node.appendChild(o);
         });
-        if (field.control === 'number') {
-            if (field.valueType === 'optionalFloat') { input.setAttribute('step', 'any'); }
-            else { input.setAttribute('step', '1'); input.setAttribute('min', '0'); }
-        }
-        if (field.placeholder) input.placeholder = field.placeholder;
-        return input;
+        if (spec.placeholder) node.placeholder = spec.placeholder;
+        if (spec.checked) node.checked = true;
+        if (spec.disabled) node.disabled = true;
+        return node;
     }
 
     function renderField(field) {
@@ -74,10 +54,10 @@
         // here and another on save -- which is exactly what happened to a Lua
         // author ticking `cell_contains` regex, whose save was guaranteed to
         // fail with a message they only saw afterwards.
-        var reasonText = field.unsupportedReason || null;
-        var help = (field.help || reasonText) ? (function () {
+        var helpText = Core.helpText(field);
+        var help = helpText ? (function () {
             var p = el('p', { 'class': 'field-help' });
-            p.textContent = reasonText || field.help;
+            p.textContent = helpText;
             return p;
         })() : null;
         if (field.control === 'checkbox') {
@@ -96,68 +76,13 @@
         return label;
     }
 
-    function readField(control, field) {
-        var vt = field.valueType;
-        if (vt === 'bool') return { set: true, value: !!control.checked };
-        if (vt === 'enum') return { set: true, value: control.value };
-        if (vt === 'string') return { set: true, value: (control.value || '').trim() };
-        if (vt === 'optionalString') { var s = (control.value || '').trim(); return s ? { set: true, value: s } : { set: false }; }
-        if (vt === 'rawString') return { set: true, value: control.value || '' };
-        if (vt === 'optionalRawString') { var raw = control.value || ''; return raw.trim() ? { set: true, value: raw } : { set: false }; }
-        if (vt === 'int') return { set: true, value: parseInt(control.value, 10) };
-        if (vt === 'optionalInt') { var n = parseInt(control.value, 10); return isNaN(n) ? { set: false } : { set: true, value: n }; }
-        if (vt === 'optionalFloat') { var f = parseFloat(control.value); return isNaN(f) ? { set: false } : { set: true, value: f }; }
-        if (vt === 'stringList') {
-            var list = (control.value || '').split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
-            return { set: true, value: list };
-        }
-        if (vt === 'numberList') {
-            var rawArr = (control.value || '').trim(), values;
-            if (rawArr.indexOf('[') === 0) {
-                try { values = JSON.parse(rawArr); } catch (e) { throw new Error('Expected array isn\'t valid JSON: ' + e.message, { cause: e }); }
-            } else {
-                values = rawArr.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; })
-                    .map(function (x) { var num = parseFloat(x); if (isNaN(num)) throw new Error('Expected array contains a non-number: "' + x + '"'); return num; });
-            }
-            return { set: true, value: values };
-        }
-        return { set: false };
-    }
-
-    function writeField(control, field, value) {
-        var vt = field.valueType;
-        // A stored value for a field this language cannot use does not get
-        // restored into a disabled control -- that would produce a check the
-        // instructor can neither save (the server refuses it) nor fix (the
-        // control is disabled). Clearing it makes re-saving the recovery path,
-        // and the reason is displayed directly beneath. Reachable for a check
-        // authored before its language was declared, or carried in by a clone.
-        if (field.unsupportedReason) { defaultField(control, field); return; }
-        if (vt === 'bool') { control.checked = (value != null) ? !!value : !!field.defaultChecked; return; }
-        if (vt === 'enum') { control.value = (value != null) ? value : (field.defaultValue || ''); return; }
-        if (vt === 'stringList' || vt === 'numberList') { control.value = Array.isArray(value) ? value.join('\n') : ''; return; }
-        if (vt === 'int' || vt === 'optionalInt') { control.value = (value != null) ? String(value) : (field.defaultValue || ''); return; }
-        control.value = (value != null) ? value : (field.defaultValue || '');
-    }
-
-    function defaultField(control, field) {
-        if (field.control === 'checkbox') {
-            control.checked = field.unsupportedReason ? false : !!field.defaultChecked;
-            return;
-        }
-        control.value = field.unsupportedReason ? '' : (field.defaultValue || '');
-    }
-
-    function generateID(kind, name) {
-        var base = (name || kind || 'check').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || kind;
-        return base + '_' + Date.now().toString(36).slice(-4);
-    }
+    var readField = Core.readField;
+    var writeField = Core.writeField;
+    var defaultField = Core.defaultField;
 
     function currentChecks() {
         if (typeof global.chickadeeGetSuiteItems === 'function') {
-            return global.chickadeeGetSuiteItems()
-                .filter(function (i) { return i.kind === 'check' && i.check; })
-                .map(function (i) { return i.check; });
+            return Core.checksFrom(global.chickadeeGetSuiteItems());
         }
         return [];
     }
@@ -247,18 +172,13 @@
         readSpec: function () {
             var kind = currentKind;
             var rawName = (nameInput.value || '').trim();
-            var id = editingID || generateID(kind, rawName);
             var existing = editingID
                 ? currentChecks().find(function (c) { return c.id === editingID; })
                 : null;
-            var c = {
-                id: id, kind: kind,
-                tier: (existing && existing.tier) || 'public',
-                points: (existing && existing.points != null) ? existing.points : 1,
-                dependsOn: (existing && existing.dependsOn) || []
-            };
-            if (rawName) c.name = rawName;
-            if (sectionID) c.sectionID = sectionID;
+            var c = Core.baseSpec({
+                kind: kind, rawName: rawName, editingID: editingID,
+                existing: existing, sectionID: sectionID
+            });
             var card = kindCards[kind];
             (schema.kinds[kind] || []).forEach(function (f) {
                 var ctrl = fieldControl(card, f.name);
@@ -279,14 +199,9 @@
             if (typeof global.chickadeeSaveChecksViaSuite !== 'function') {
                 return Promise.reject(new Error('suite table not ready'));
             }
-            var checks = currentChecks();
-            var idx = checks.findIndex(function (c) { return c.id === spec.id; });
-            if (editingID) {
-                if (idx >= 0) checks[idx] = spec; else checks.push(spec);
-            } else {
-                if (idx >= 0) return Promise.reject(new Error('A check with id "' + spec.id + '" already exists. Pick a different name.'));
-                checks.push(spec);
-            }
+            var checks;
+            try { checks = Core.mergeChecks(currentChecks(), spec, editingID); }
+            catch (e) { return Promise.reject(e); }
             return global.chickadeeSaveChecksViaSuite(checks);
         },
 
