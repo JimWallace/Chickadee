@@ -1705,30 +1705,3 @@ func promoteToInstructor(_ username: String, on app: Application) async throws {
         try await enrollment.save(on: app.db)
     }
 }
-
-/// Wraps a runtime skip-or-fail condition as a throwable error.  Use
-/// from sync/async helpers where the test cannot proceed; the test
-/// will surface the message and fail.
-struct IssueRecorded: Error, CustomStringConvertible {
-    let message: String
-    init(_ message: String) { self.message = message }
-    var description: String { message }
-}
-
-extension ConditionTrait {
-    /// Runs the test only in CI, where every grading interpreter must be
-    /// present (`.github/docker/ci-image/Dockerfile`). Everywhere else the test
-    /// reads as skipped, with this reason, instead of returning early in
-    /// silence. `scripts/check-no-skipped-tests.sh` turns a skip on the CI
-    /// image into a red job.
-    static let ciOnly: ConditionTrait = .enabled(
-        if: ProcessInfo.processInfo.environment["CI"] != nil,
-        "runs only in CI, where every interpreter must be present")
-}
-
-/// `@Test(.ciOnly)` resolves through `any TestTrait`, so the implicit-member
-/// spelling needs the same `Trait where Self == ConditionTrait` extension the
-/// built-in `.enabled(if:)` uses.
-extension Trait where Self == ConditionTrait {
-    static var ciOnly: Self { ConditionTrait.ciOnly }
-}

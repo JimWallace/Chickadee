@@ -12,6 +12,7 @@
 // `APIAssignment` parent — that row IS the draft.  Each request
 // includes `?draftID=<setupID>`.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation

@@ -121,12 +121,17 @@ jobs:
   # (~40 min of wall-clock) with one (#523).
   #
   # Cache key combines the toolchain (swift --version) with a content hash
-  # of the source + manifest.  `restore-keys` lets a cache miss restore the
-  # most recent prior `.build/` for the same toolchain.  `git restore-mtime`
-  # then resets each source file's mtime to its last-commit time, so
-  # llbuild's freshness check recompiles only the files touched by new
-  # commits — true incremental builds.  Without it the fresh mtimes
-  # `actions/checkout` stamps make llbuild rebuild everything from scratch.
+  # of the source + manifest, and matches EXACTLY or not at all (the note on
+  # the cache step says why).  So the job has two outcomes: an exact hit
+  # skips the build, and a miss compiles cold into an empty `.build/`.
+  #
+  # The job used to also run `git restore-mtime` after a full-history
+  # checkout, the step that makes an incremental build over a restored
+  # `.build/` sound.  That was left over from the `restore-keys` design and
+  # did nothing under exact-match caching: neither outcome above reads a
+  # source mtime.  It cost about two minutes per run (an apt-get install plus
+  # the mtime walk) and is gone.  `docker-build.yml` keeps the step because
+  # its release cache still restores by prefix.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -137,19 +142,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      # Full (blobless) history so `git restore-mtime` can read each file's
-      # last-commit time.  `blob:none` keeps commits + trees (all the mtime
-      # walk needs) while skipping the large vendored blobs (Pyodide) in
-      # history; the working-tree checkout still fetches only the HEAD blobs,
-      # same as a shallow checkout.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # Normalise source mtimes to commit times so the restored `.build/`
-      # stays valid for unchanged files and only new commits recompile.
-      - uses: ./.github/actions/restore-git-mtimes
 
       - name: Resolve toolchain cache key
         id: toolchain

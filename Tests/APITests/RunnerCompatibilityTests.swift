@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Testing

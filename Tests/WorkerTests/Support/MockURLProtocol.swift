@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Foundation
 
 #if canImport(FoundationNetworking)

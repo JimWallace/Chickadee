@@ -4,9 +4,10 @@ name: Nightly Clean Build & Coverage
 # from scratch every night: it caches only `.build/checkouts` (vendored
 # dependency *source*), never the compiled `.build/<triple>` artifacts, and
 # uses a different cache-key namespace (`-spm-`) than swift-tests.yml's
-# incremental `build` job (`-build-`).  So it catches any break that the
-# per-PR incremental build cache (restore-keys + git-restore-mtime) could
-# mask via a stale object that never got recompiled.
+# `build` job (`-build-`).  That job's cache matches exactly or not at all,
+# so it no longer reuses objects across trees; this run still proves the
+# tree builds with no `.build/` at all, and is the one run that measures
+# coverage.
 #
 # DO NOT add compiled-artifact caching here (the swift-tests.yml `.build`
 # cache, `--skip-build`, etc.) — that would defeat the canary's purpose.
@@ -35,7 +36,10 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
     env:
-      MIN_COVERAGE_PERCENT: "60.0"
+      # The floor sits a few points under the measured line coverage (87.3 %
+      # on 2026-09-20) so a real regression fails the nightly, where the old
+      # 60 % floor would have let a twenty-point drop pass unnoticed.
+      MIN_COVERAGE_PERCENT: "80.0"
 
     steps:
       - uses: actions/checkout@v7

@@ -55,18 +55,6 @@ import Testing
         return url.path
     }
 
-    /// Returns true if the sandboxed runner is stable enough to run on
-    /// the current host.  Linux containerized GitHub runners are
-    /// excluded; callers should guard-return when this is false.
-    private func sandboxedRunnerSupported() -> Bool {
-        #if os(Linux)
-        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
-            return false
-        }
-        #endif
-        return true
-    }
-
     // MARK: - UnsandboxedScriptRunner: exit code mapping
 
     @Test func scriptExitZeroReportsExitCodeZero() async throws {
@@ -262,8 +250,7 @@ import Testing
 
     // MARK: - SandboxedScriptRunner: basic execution
 
-    @Test func sandboxedRunnerExitZero() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerExitZero() async throws {
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
@@ -271,8 +258,7 @@ import Testing
         #expect(output.timedOut == false)
     }
 
-    @Test func sandboxedRunnerExitOne() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerExitOne() async throws {
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
@@ -280,24 +266,21 @@ import Testing
         #expect(output.timedOut == false)
     }
 
-    @Test func sandboxedRunnerCapturesStdout() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerCapturesStdout() async throws {
         let script = try writeScript("#!/bin/sh\necho 'sandbox out'\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stdout.contains("sandbox out"))
     }
 
-    @Test func sandboxedRunnerCapturesStderr() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerCapturesStderr() async throws {
         let script = try writeScript("#!/bin/sh\necho 'sandbox err' >&2\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stderr.contains("sandbox err"))
     }
 
-    @Test func sandboxedRunnerTimesOut() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerTimesOut() async throws {
         let script = try writeScript("#!/bin/sh\nsleep 60\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
@@ -325,8 +308,7 @@ import Testing
     }
     #endif
 
-    @Test func sandboxedRunnerWorkDir() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerWorkDir() async throws {
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
         let runner = SandboxedScriptRunner()
         _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
@@ -339,8 +321,7 @@ import Testing
 
     // MARK: - SandboxedScriptRunner: network isolation
 
-    @Test func sandboxedRunnerBlocksNetworkAccess() async throws {
-        guard sandboxedRunnerSupported() else { return }
+    @Test(.requiresSandbox) func sandboxedRunnerBlocksNetworkAccess() async throws {
         // Write a script that tries to reach an external host.
         // In a sandboxed network namespace this should fail (exit non-zero from python).
         // The script exits 0 only if the connection SUCCEEDS — so we assert exit != 0.

@@ -5,6 +5,7 @@
 //   GET  /api/v1/worker/submissions/:id/download          — stream submission zip
 //   GET  /api/v1/worker/testsetups/:id/download           — stream test-setup zip
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation

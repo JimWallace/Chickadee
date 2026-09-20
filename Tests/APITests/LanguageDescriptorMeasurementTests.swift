@@ -217,6 +217,9 @@ import Testing
         _ language: AssignmentLanguage
     ) async throws {
         guard let probe = Self.searchPathProbe(for: language) else { return }
+        // A guard rather than a trait because availability is per ARGUMENT:
+        // one parameterized test covers every language, and a trait cannot
+        // skip a single case.
         guard await Self.isPresent(language) else { return }
 
         let root = FileManager.default.temporaryDirectory

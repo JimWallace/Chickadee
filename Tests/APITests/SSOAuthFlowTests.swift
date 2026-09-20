@@ -7,6 +7,7 @@
 // callback error paths. End-to-end token exchange requires real IdP credentials
 // and is out of scope for unit tests.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import JWT

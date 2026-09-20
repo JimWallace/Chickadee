@@ -34,9 +34,10 @@ struct ZipProcessEnvironmentTests {
     /// environment. The snapshot is an optimisation over reading environ per
     /// spawn, not a substitute for inheriting it, and a snapshot that came back
     /// empty would silently change what every zip child sees.
-    @Test("a zip spawn receives the parent environment")
+    @Test(
+        "a zip spawn receives the parent environment",
+        .enabled(if: FileManager.default.fileExists(atPath: "/usr/bin/env"), "requires /usr/bin/env"))
     func spawnInheritsParentEnvironment() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/env") else { return }
         let parentPath = try #require(ProcessInfo.processInfo.environment["PATH"])
 
         let result = try await runZipProcess(executablePath: "/usr/bin/env", arguments: [])

@@ -13,6 +13,7 @@
 // because no retry supplies a missing client ID. The network fetch does not:
 // it degrades to "SSO unavailable" and retries on demand.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 import VaporTesting

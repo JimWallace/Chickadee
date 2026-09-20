@@ -181,7 +181,8 @@ let package = Package(
         .testTarget(
             name: "CoreTests",
             dependencies: [
-                .target(name: "Core")
+                .target(name: "Core"),
+                .target(name: "ChickadeeTestSupport"),
             ],
             path: "Tests/CoreTests",
             swiftSettings: strictWarnings

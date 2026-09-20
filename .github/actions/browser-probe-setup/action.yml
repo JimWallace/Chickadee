@@ -1,11 +1,11 @@
 name: Browser probe setup
 description: >
-  Shared scaffold for the browser probe / smoke / visual jobs: normalise git
-  mtimes, restore the shared Swift build cache, build chickadee-server, and
-  install Node + Playwright (engine download cached). Callers must run
-  actions/checkout with fetch-depth: 0 + filter: blob:none first
-  (restore-git-mtimes needs commit times), inside the
-  ghcr.io/jimwallace/chickadee/swift container.
+  Shared scaffold for the browser probe / smoke / visual jobs: restore the
+  shared Swift build cache, build chickadee-server, and install Node +
+  Playwright (engine download cached). Callers run actions/checkout first,
+  inside the ghcr.io/jimwallace/chickadee/swift container. The build cache
+  below matches exactly or not at all, so no git mtime restore is needed
+  and a shallow checkout is enough.
 
 inputs:
   browser:
@@ -19,8 +19,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/restore-git-mtimes
-
     - name: Resolve toolchain cache key
       id: toolchain
       shell: bash
