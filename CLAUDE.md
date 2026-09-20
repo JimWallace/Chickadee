@@ -1314,11 +1314,13 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** All ~340 Swift test files / ~3,000
-  tests (plus the 13 `.mjs` frontend test files in
+- **Framework: Swift Testing only.** All ~490 Swift test files / ~4,200
+  tests (plus the 52 `.mjs` frontend test files in
   `Tests/BrowserRunnerJSTests/`) are on Swift Testing as of the migration
   completion (PRs #597–#608). `scripts/no-new-xctest.sh`
-  blocks any new `import XCTest` under `Tests/`.
+  blocks any new `import XCTest` under `Tests/`. The nightly
+  `test-coverage.yml` run measures line coverage over all four targets
+  (87 % on 2026-09-20) against an 80 % floor.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
   `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
@@ -1363,8 +1365,13 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
   PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
   `@Test(Self.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`,
   each a `static let` built with `.enabled("requires lua on PATH") { await
-  Self.luaAvailable }`. Swift Testing then reports the test as skipped with
-  that reason, in the log and in the xUnit report, and
+  Self.luaAvailable }`. The traits more than one file needs live in one
+  `HostConditionTraits.swift` per test target (`WorkerTestSkip.swift` in
+  WorkerTests): `.ciOnly`, `.requiresRscript`, `.requiresOctave`,
+  `.requiresZipTools`, `.requiresSandbox`; the probes behind them
+  (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
+  `IssueRecorded` and `testURL` for all three targets. Swift Testing then
+  reports the test as skipped with that reason, in the log and in the xUnit report, and
   `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
   because the CI image carries every interpreter. That closed the silent-skip
   trap: a `guard condition else { return }` kept a lane green having executed

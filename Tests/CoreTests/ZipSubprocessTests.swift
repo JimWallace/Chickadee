@@ -38,11 +38,6 @@ final class ZipSubprocessTests {
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
-    private var zipToolsPresent: Bool {
-        FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            && FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-    }
-
     /// Creates `name.zip` in the temp dir containing `entries` (filename →
     /// content), returning its path.
     private func makeZip(named name: String, entries: [String: String]) async throws -> String {
@@ -62,8 +57,7 @@ final class ZipSubprocessTests {
         return zipPath
     }
 
-    @Test func capturesStdoutAndZeroExitStatus() async throws {
-        guard zipToolsPresent else { return }
+    @Test(.requiresZipTools) func capturesStdoutAndZeroExitStatus() async throws {
         let zipPath = try await makeZip(named: "capture", entries: ["greeting.txt": "hello zip"])
 
         let list = try await runZipProcess(
@@ -78,8 +72,7 @@ final class ZipSubprocessTests {
         #expect(String(bytes: extracted.stdout, encoding: .utf8) == "hello zip")
     }
 
-    @Test func reportsNonZeroExitStatus() async throws {
-        guard zipToolsPresent else { return }
+    @Test(.requiresZipTools) func reportsNonZeroExitStatus() async throws {
         let result = try await runZipProcess(
             executablePath: "/usr/bin/unzip",
             arguments: ["-p", tmpDir.appendingPathComponent("absent.zip").path, "nothing.txt"])
@@ -90,8 +83,7 @@ final class ZipSubprocessTests {
     /// Every task must read exactly its own child's stdout. A wrong pairing
     /// (crossed pipes, a drain seeing another child's EOF) or a spawn race
     /// fails this loudly.
-    @Test func concurrentZipSubprocessesEachGetTheirOwnOutput() async throws {
-        guard zipToolsPresent else { return }
+    @Test(.requiresZipTools) func concurrentZipSubprocessesEachGetTheirOwnOutput() async throws {
         let entryCount = 12
         var entries: [String: String] = [:]
         for index in 0..<entryCount {

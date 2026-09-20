@@ -86,14 +86,7 @@ jobs:
           --health-retries 10
 
     steps:
-      # Full (blobless) history plus mtime restore, so the shared `.build`
-      # cache from swift-tests.yml is reusable — see the build job there.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      - uses: ./.github/actions/restore-git-mtimes
 
       - name: Resolve toolchain cache key
         id: toolchain

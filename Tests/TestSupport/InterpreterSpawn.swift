@@ -40,6 +40,7 @@
 
 import Foundation
 import Subprocess
+import Synchronization
 import SystemPackage
 
 /// Exit status and captured streams of one tool run.
@@ -184,6 +185,23 @@ public func toolIsAvailable(_ tool: String, arguments: [String] = ["--version"])
     guard let run = try? await runTool([tool] + arguments) else { return false }
     return run.succeeded
 }
+
+/// `toolIsAvailable`, remembered per tool for the lifetime of the test process.
+///
+/// A `ConditionTrait` evaluates its closure once per test it is attached to,
+/// so a suite of twenty `@Test(.requiresRscript)` tests would otherwise spawn
+/// twenty `Rscript --version` probes. Two tests that race on the first call
+/// both probe; the answer is the same, so the race is harmless.
+public func cachedToolIsAvailable(_ tool: String, arguments: [String] = ["--version"]) async -> Bool {
+    if let cached = toolAvailabilityCache.withLock({ $0[tool] }) {
+        return cached
+    }
+    let available = await toolIsAvailable(tool, arguments: arguments)
+    toolAvailabilityCache.withLock { $0[tool] = available }
+    return available
+}
+
+private let toolAvailabilityCache = Mutex<[String: Bool]>([:])
 
 /// Flattens a `TerminationStatus` to the `Int32` call sites compare against 0,
 /// with a signalled child reported as `128 + signal`.

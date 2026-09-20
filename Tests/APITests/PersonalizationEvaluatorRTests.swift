@@ -67,12 +67,6 @@ import Testing
 
 @Suite(.serialized, .timeLimit(.minutes(3))) struct PersonalizationEvaluatorREvalTests {
 
-    /// True when `Rscript` is on PATH. The evaluator spawns via `/usr/bin/env`,
-    /// so this probe uses the same resolution.
-    private static var hasRscript: Bool {
-        get async { await toolIsAvailable("Rscript", arguments: ["--version"]) }
-    }
-
     /// The base-R seed reduction, mirrored in Swift so the test pins the exact
     /// resolved value (not just "one of the pool"). Horner-fold of the hex
     /// digits modulo 2^31-1 — identical to `RPersonalizationRuntime.chickadeeSeedRSource`.
@@ -86,8 +80,7 @@ import Testing
         return acc
     }
 
-    @Test func evaluatesRotationExpressionForSeed() async throws {
-        guard await Self.hasRscript else { return }  // silent skip where R is absent
+    @Test(.requiresRscript) func evaluatesRotationExpressionForSeed() async throws {
 
         let poolStrings = ["AACGT", "GGTTA", "CCGAT", "TTAGC"]
         let pool = FamilyVariable(name: "pool", value: .array(poolStrings.map(JSONValue.string)))
@@ -109,8 +102,7 @@ import Testing
 
     /// A value with quotes, a newline, a tab and a backslash must survive
     /// `deparse` → JSON → `JSONSerialization` intact as a re-parseable R literal.
-    @Test func escapesNastyStringValues() async throws {
-        guard await Self.hasRscript else { return }
+    @Test(.requiresRscript) func escapesNastyStringValues() async throws {
 
         let expr = PersonalizationExpression(
             name: "note", expression: #"paste0("q:\"x\"", "\n\t", "b \\ c")"#)

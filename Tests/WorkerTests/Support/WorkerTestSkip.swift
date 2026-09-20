@@ -1,10 +1,10 @@
 // Tests/WorkerTests/Support/WorkerTestSkip.swift
 //
-// Worker-test-side helpers: the two shared `ConditionTrait`s that make a
-// skip visible (`.ciOnly`, `.requiresRscript`), an IssueRecorded error for
-// clean failures, a `withMockURLProtocolLock` actor-backed serializer for
-// `MockURLProtocol`'s process-global state, and a `testURL` builder that
-// centralizes the unavoidable force-unwrap of hardcoded test fixture URLs.
+// Worker-test-side helpers: the shared `ConditionTrait`s that make a skip
+// visible (`.ciOnly`, `.requiresRscript`, `.requiresSandbox`) and a
+// `withMockURLProtocolLock` actor-backed serializer for `MockURLProtocol`'s
+// process-global state. `IssueRecorded` and `testURL` come from
+// `ChickadeeTestSupport`, shared with the other two test targets.
 
 import Foundation
 import Testing
@@ -24,25 +24,22 @@ extension ConditionTrait {
     static let requiresRscript: ConditionTrait = .enabled("requires Rscript on PATH") {
         await rscriptIsAvailable()
     }
-}
 
-struct IssueRecorded: Error, CustomStringConvertible {
-    let message: String
-    init(_ message: String) { self.message = message }
-    var description: String { message }
-}
-
-/// Build a `URL` from a fixture string that's known-valid at the call site.
-/// `URL(string:)` returns Optional because the parser must allow for
-/// malformed input from real callers; in test fixtures the string is a
-/// literal we control, so a nil result means the literal itself is wrong
-/// and the test is unrunnable.  Hard-failing here keeps test files free
-/// of per-line force-unwrap noise.
-func testURL(_ string: String, file: StaticString = #file, line: UInt = #line) -> URL {
-    guard let url = URL(string: string) else {
-        fatalError("Malformed test URL literal: \(string)", file: file, line: line)
+    /// Skips, visibly, where `SandboxedScriptRunner` cannot sandbox: a Linux
+    /// host that refuses `unshare` user and net namespaces, or a macOS host
+    /// without `sandbox-exec`. Backed by the cached probe in
+    /// ScriptRunnerTestSupport.swift.
+    ///
+    /// This replaces a `guard` that returned early whenever `GITHUB_ACTIONS`
+    /// was set on Linux. The worker-tests lane has run `--privileged` since
+    /// the mutation baseline probe measured `unshare` working there 20 of 20
+    /// times, so that guard was skipping the sandbox boundary's only tests in
+    /// the one place they were meant to run, and reporting them as passed.
+    static let requiresSandbox: ConditionTrait = .enabled(
+        "requires a working sandbox: unshare user/net namespaces on Linux, sandbox-exec on macOS"
+    ) {
+        await sandboxIsAvailable()
     }
-    return url
 }
 
 /// Serializes async test bodies that touch `MockURLProtocol`'s global
@@ -92,4 +89,5 @@ private actor MockURLProtocolLock {
 extension Trait where Self == ConditionTrait {
     static var ciOnly: Self { ConditionTrait.ciOnly }
     static var requiresRscript: Self { ConditionTrait.requiresRscript }
+    static var requiresSandbox: Self { ConditionTrait.requiresSandbox }
 }

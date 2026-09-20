@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Crypto
 import Foundation
 import Testing

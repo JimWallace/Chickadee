@@ -12,6 +12,7 @@
 // section CRUD is a one-line-of-JSON operation that can't fail from any
 // of the complex pipeline machinery that plagued the v0.4.96 design.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation

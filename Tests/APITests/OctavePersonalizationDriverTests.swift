@@ -28,12 +28,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct OctavePersonalizationDriverTests {
 
-    static let requiresOctave: ConditionTrait = .enabled("requires octave-cli on PATH") { await Self.octaveAvailable }
-
-    static var octaveAvailable: Bool {
-        get async { await OctavePatternFamilyExecutionTests.hasOctave }
-    }
-
     /// Runs `source` as an Octave script in a fresh directory, returning
     /// (exitCode, stdout, stderr). `extraFiles` are written beside it.
     static func runOctave(
@@ -61,7 +55,7 @@ import Testing
         return (run.exitCode, run.stdout, run.stderr)
     }
 
-    @Test(Self.requiresOctave) func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() async throws {
+    @Test(.requiresOctave) func theDriverEvaluatesExpressionsAndEmitsOctaveLiterals() async throws {
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [FamilyVariable(name: "base", value: .int(10))],
             expressions: [
@@ -91,7 +85,7 @@ import Testing
     }
 
     /// The emitted literals must be *parseable Octave*, not merely plausible.
-    @Test(Self.requiresOctave) func everyEmittedValueParsesBackAsOctave() async throws {
+    @Test(.requiresOctave) func everyEmittedValueParsesBackAsOctave() async throws {
         let source = PersonalizationEvaluator.renderOctaveDriverScript(
             staticVariables: [],
             expressions: [
@@ -118,7 +112,7 @@ import Testing
 
     /// One seed, two implementations — both run on the same env var and
     /// compared, across a realistic 64-hex seed and the edge cases.
-    @Test(Self.requiresOctave) func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
+    @Test(.requiresOctave) func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
         let runtime = try OctavePatternFamilyExecutionTests.canonicalRuntime()
         for seed in [String(repeating: "9f3c", count: 16), "", "ff", "0"] {
             let driverSource = """
@@ -154,7 +148,7 @@ import Testing
     /// The seed must also match every other language's, so a student's seed is
     /// one number whatever the assignment's language. Asserted against the fold
     /// computed independently in Swift.
-    @Test(Self.requiresOctave) func theOctaveSeedMatchesTheDocumentedHornerFold() async throws {
+    @Test(.requiresOctave) func theOctaveSeedMatchesTheDocumentedHornerFold() async throws {
         let seed = "abc123"
         let source = """
             1;

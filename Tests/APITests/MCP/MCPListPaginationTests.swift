@@ -3,6 +3,7 @@
 // rejection).  resources/list shares the same paginatedListResponse path, so
 // the cursor semantics proven here apply to both list operations.
 
+import ChickadeeTestSupport
 import Core
 import Testing
 

@@ -1,8 +1,8 @@
-// Tests/CoreTests/CoreTestHelpers.swift
+// Tests/TestSupport/TestURL.swift
 //
-// Core-test-side helpers.  See the WorkerTests/Support equivalent for
-// the same idea; we duplicate because each test target is its own
-// Swift module and CoreTests has no shared `Support/` folder yet.
+// One definition for all three test targets. It used to be declared once in
+// CoreTests and once in WorkerTests, identical to the character, because
+// CoreTests had no shared support target to import.
 
 import Foundation
 
@@ -12,7 +12,7 @@ import Foundation
 /// literal we control, so a nil result means the literal itself is wrong
 /// and the test is unrunnable.  Hard-failing here keeps test files free
 /// of per-line force-unwrap noise.
-func testURL(_ string: String, file: StaticString = #file, line: UInt = #line) -> URL {
+public func testURL(_ string: String, file: StaticString = #file, line: UInt = #line) -> URL {
     guard let url = URL(string: string) else {
         fatalError("Malformed test URL literal: \(string)", file: file, line: line)
     }
