@@ -13,6 +13,9 @@
 # a PR reads skills/steward/SKILL.md from the repository's head branch, so it
 # only has an effect once committed.
 !.claude/skills/
+# Same rule for agents: .claude/agents/ui-review.md is the brief CI runs on
+# every UI pull request, so it is repository content, not local state.
+!.claude/agents/
 .venv-jlite/
 .jupyterlite.doit.db
 Tools/jupyterlite/.jupyterlite.doit.db

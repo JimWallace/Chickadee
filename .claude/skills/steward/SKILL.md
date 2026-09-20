@@ -81,8 +81,12 @@ they cannot see a component that duplicates the vocabulary under a new name,
 an idiom heavier than the situation needs, or copy that runs past house
 length. Every style regression so far has been mechanically legal.
 
-If the agent is genuinely unavailable, say so plainly in the PR rather than
-letting its absence pass unmentioned.
+The agent is checked in at `.claude/agents/ui-review.md`, and CI runs the same
+brief on every pull request that touches those paths
+(`.github/workflows/ui-review.yml`). The workflow posts its report on the PR
+and fails on a `changes requested` verdict; its findings are bot findings, so
+verify each one and push the fix. If the agent cannot run in your session, the
+workflow is the review; no note in the PR is needed.
 
 ## Do not add an environment variable
 
