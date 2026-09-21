@@ -50,6 +50,10 @@ enum MCPAchievementSignalProse {
                 "itemsCovered is a count of DISTINCT suite items the whole class has passed "
                 + "between them, optionally scoped to one suite section with sectionRef "
                 + "(classWide goals only)"
+        case .standing:
+            return "standing is the student's place in a round robin's standings, 1 = first (individual only)"
+        case .matchesWon:
+            return "matchesWon is the number of matches the student's latest submission won (individual only)"
         }
     }
 }

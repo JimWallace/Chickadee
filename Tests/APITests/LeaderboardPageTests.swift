@@ -201,4 +201,62 @@ import VaporTesting
             #expect(!html.contains("No student holds the hill yet"))
         }
     }
+
+    // MARK: - The standings (round robin, slice 4)
+
+    private func robinManifest() throws -> String {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            activity: ClassActivity(kind: .roundRobin, leaderboardVisibility: .visible))
+        return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+    }
+
+    /// A round robin's page shows the standings — played, won, drawn, lost,
+    /// average — by handle, best first, with the viewer's row marked; a
+    /// student viewer never sees a name.
+    @Test func aRoundRobinShowsTheStandingsByHandle() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(id: "lb_robin", manifest: try robinManifest(), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lb_robin", courseID: setup.courseID, title: "Robin")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            let mate = try await makeTestUser(on: app, username: "lb_robin_mate", role: "student")
+            try await wrEnrollUser(mate, on: app)
+
+            let empty = try await get("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
+            #expect(empty.status == .ok)
+            #expect(empty.body.string.contains("No submission has played a match yet"))
+            #expect(!empty.body.string.contains("ranking metric"))
+
+            try await APIActivityStanding(
+                testSetupID: "lb_robin", userID: try mate.requireID(), submissionID: "lb_robin_m",
+                played: 4, wins: 3, draws: 1, losses: 0, scoreSum: 3.5, updatedAt: Date()
+            ).save(on: app.db)
+            try await APIActivityStanding(
+                testSetupID: "lb_robin", userID: try viewer.requireID(), submissionID: "lb_robin_v",
+                played: 4, wins: 1, draws: 0, losses: 3, scoreSum: 1, updatedAt: Date()
+            ).save(on: app.db)
+            let res = try await get("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
+            #expect(res.status == .ok)
+            let html = res.body.string
+            #expect(html.contains("<th class=\"time\">Played</th>"))
+            #expect(html.contains("Highest average match score first"))
+            let mateEnrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == (try mate.requireID())).first())
+            let mateHandle = try #require(mateEnrollment.avatarHandle)
+            let viewerEnrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == (try viewer.requireID())).first())
+            let viewerHandle = try #require(viewerEnrollment.avatarHandle)
+            let mateAt = try #require(html.range(of: mateHandle)?.lowerBound)
+            let viewerAt = try #require(html.range(of: viewerHandle)?.lowerBound)
+            #expect(mateAt < viewerAt)
+            #expect(html.contains("0.875"))
+            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(!html.contains("lb_robin_mate"))
+        }
+    }
 }

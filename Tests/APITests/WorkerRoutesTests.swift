@@ -1007,4 +1007,91 @@ import VaporTesting
             #expect(new?.submissionID == "wsub_hill3")
         }
     }
+
+    // MARK: - Round robin (docs/class-activities.md, slice 4)
+
+    private let robinManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10,"activity":{"kind":"roundRobin","opponentFile":"bot.py"}}
+        """
+
+    private func robinProfile() -> RunnerCapabilityProfile {
+        profile(capabilities: [
+            RunnerCapability.activityMatch.name, RunnerCapability.activityOpponentSubmission.name,
+            RunnerCapability.activityMatrix.name,
+        ])
+    }
+
+    /// Enrolls a student in the setup's course with one complete submission.
+    private func enrolClassmate(
+        username: String, submissionID: String, setup: APITestSetup, filename: String
+    ) async throws -> APISubmission {
+        let mate = try await makeTestUser(on: app, username: username, role: "student")
+        _ = try await makeTestEnrollment(on: app, userID: try mate.requireID(), courseID: setup.courseID)
+        let sub = try await makeSubmission(id: submissionID, setupID: try setup.requireID(), status: "complete")
+        sub.userID = try mate.requireID()
+        sub.filename = filename
+        try await sub.save(on: app.db)
+        return sub
+    }
+
+    /// The served job carries every classmate's submission as an opponent,
+    /// with a row opened per opponent, and no single `opponent`.
+    @Test func requestJob_roundRobin_carriesEveryClassmate() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_robin1", manifest: robinManifestJSON)
+            _ = try await enrolClassmate(
+                username: "robin_b", submissionID: "wsub_robin_b", setup: setup, filename: "b.py")
+            _ = try await enrolClassmate(
+                username: "robin_c", submissionID: "wsub_robin_c", setup: setup, filename: "c.py")
+            let challenger = try await makeTestUser(on: app, username: "robin_a", role: "student")
+            _ = try await makeTestEnrollment(on: app, userID: try challenger.requireID(), courseID: setup.courseID)
+            let sub = try await makeSubmission(id: "wsub_robin_a", setupID: try setup.requireID())
+            sub.userID = try challenger.requireID()
+            try await sub.save(on: app.db)
+
+            let job = try #require(try await requestJob(workerID: "w-robin", profile: robinProfile()))
+            #expect(job.submissionID == "wsub_robin_a")
+            #expect(job.opponent == nil)
+            let opponents = try #require(job.opponents)
+            #expect(opponents.map(\.submissionID) == ["wsub_robin_b", "wsub_robin_c"])
+            #expect(opponents.map(\.submissionFilename) == ["b.py", "c.py"])
+            #expect(opponents.first?.submissionURL?.path == "/api/v1/worker/submissions/wsub_robin_b/download")
+            #expect(
+                opponents.first?.matchSeed
+                    == JobOpponent.matchSeed(
+                        submissionID: "wsub_robin_a", opponentIdentity: JobOpponent.submissionIdentity("wsub_robin_b")))
+            let rows = try await APIMatchResult.query(on: app.db)
+                .filter(\.$submissionID == "wsub_robin_a").sort(\.$opponentIdentity).all()
+            #expect(rows.map(\.opponentSubmissionID) == ["wsub_robin_b", "wsub_robin_c"])
+            #expect(rows.allSatisfy { $0.completedAt == nil })
+        }
+    }
+
+    /// With no classmate yet, the first submitter plays the bot on the
+    /// single-opponent path, so the first match still has a row.
+    @Test func requestJob_roundRobin_playsTheBotUntilAClassmateSubmits() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_robin2", manifest: robinManifestJSON)
+            _ = try await makeSubmission(id: "wsub_robin_first", setupID: try setup.requireID())
+            let job = try #require(try await requestJob(workerID: "w-robin2", profile: robinProfile()))
+            #expect(job.opponents == nil)
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == "bot.py")
+            let row = try #require(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_robin_first").first())
+            #expect(row.opponentIdentity == JobOpponent.supportFileIdentity("bot.py"))
+        }
+    }
+
+    /// A slice-3 build (hill-capable, no matrix) never claims a round-robin job.
+    @Test func requestJob_roundRobin_waitsForARunnerThatRunsAMatrix() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_robin3", manifest: robinManifestJSON)
+            _ = try await makeSubmission(id: "wsub_robin3", setupID: try setup.requireID())
+            let old = try await requestJob(workerID: "w-old-robin", profile: hillProfile())
+            #expect(old == nil)
+            let new = try await requestJob(workerID: "w-new-robin", profile: robinProfile())
+            #expect(new?.submissionID == "wsub_robin3")
+        }
+    }
 }

@@ -19,7 +19,11 @@
             #endif
         </div>
     </div>
-    <p class="text-muted">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
+    #if(showsStandings):
+    <p class="section-intro">Highest average match score first, then most wins. Each row is the student's latest submission. Students appear under their class handle.</p>
+    #else:
+    <p class="section-intro">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
+    #endif
     #if(hasHill):
     #if(champion):
     <p>
@@ -38,7 +42,50 @@
     <p class="text-muted">No student holds the hill yet.</p>
     #endif
     #endif
-    #if(count(rows) == 0):
+    #if(showsStandings):
+    #if(count(standings) == 0):
+    <p class="empty">No submission has played a match yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Played</th>
+                <th class="time">Won</th>
+                <th class="time col-hide-phone">Drawn</th>
+                <th class="time col-hide-phone">Lost</th>
+                <th class="time">Average</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in standings):
+            <tr>
+                <td>#(row.rank)</td>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.played)</td>
+                <td class="time">#(row.wins)</td>
+                <td class="time col-hide-phone">#(row.draws)</td>
+                <td class="time col-hide-phone">#(row.losses)</td>
+                <td class="time">#(row.averageText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+    #elseif(count(rows) == 0):
     <p class="empty">No submission has reported a ranking metric yet.</p>
     #else:
     <table class="results-table">

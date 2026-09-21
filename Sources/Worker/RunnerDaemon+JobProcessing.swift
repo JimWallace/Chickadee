@@ -34,6 +34,9 @@ struct JobPreparedWorkspace {
     /// The staged opponent for a match job (`stageOpponentWorkspace`); nil
     /// for an ordinary run.
     let opponentDir: URL?
+    /// The staged opponents of a matrix job, in `Job.opponents` order; empty
+    /// for every other job.
+    let opponentDirs: [URL]
 }
 
 /// Disk-space samples taken across the lifetime of a job.  The "at start"
@@ -114,10 +117,11 @@ extension WorkerDaemon {
         defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
-        let outcomes = try await executeTestSuites(
+        let (outcomes, matches) = try await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
             opponentDir: prepared.opponentDir,
+            opponentDirs: prepared.opponentDirs,
             job: job
         )
         stageTimings.record(
@@ -145,6 +149,7 @@ extension WorkerDaemon {
             job: job,
             collection: collection,
             diagnostics: diagnostics,
+            matches: matches,
             stageTimings: &stageTimings
         )
     }
@@ -401,6 +406,44 @@ extension WorkerDaemon {
         )
     }
 
+    /// Stages the opponent of a match job and every opponent of a matrix job
+    /// (docs/class-activities.md). A throw here is the job's build failure,
+    /// like a missing personalized file: a match with nobody on the other
+    /// side would read as a win, and the message names the fix. A submission
+    /// opponent (a champion, a classmate) is downloaded first, through the
+    /// same retrying download the challenger's own upload gets. A matrix job
+    /// stages every opponent up front, each in its own directory, so a
+    /// download failure fails the job before any match is played rather than
+    /// after most of them.
+    private func stageOpponents(
+        job: Job, paths: JobWorkspacePaths, testSetupDir: URL
+    ) async throws -> (single: URL?, matrix: [URL]) {
+        var downloadedOpponent: URL?
+        if let url = job.opponent?.submissionURL {
+            let destination = opponentDownloadDestination(workDir: paths.workDir)
+            try await download(url: url, to: destination)
+            downloadedOpponent = destination
+        }
+        let single = try await stageOpponentWorkspace(
+            job: job, workDir: paths.workDir, testSetupDir: testSetupDir,
+            downloadedSubmission: downloadedOpponent)
+        var matrix: [URL] = []
+        for (index, opponent) in (job.opponents ?? []).enumerated() {
+            var downloaded: URL?
+            if let url = opponent.submissionURL {
+                let destination = opponentDownloadDestination(workDir: paths.workDir, index: index)
+                try await download(url: url, to: destination)
+                downloaded = destination
+            }
+            matrix.append(
+                try await stageOpponent(
+                    opponent, manifest: job.manifest,
+                    into: opponentDirectory(workDir: paths.workDir, index: index),
+                    testSetupDir: testSetupDir, downloadedSubmission: downloaded))
+        }
+        return (single, matrix)
+    }
+
     /// Downloads + unzips the submission and test setup, stages the
     /// submission into the test workspace, runs the optional `make` step,
     /// and installs the runtime helpers.  Returns a `JobPreparedWorkspace`
@@ -548,24 +591,11 @@ extension WorkerDaemon {
                 try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
             }
 
-            // Stage the opponent for a match job (docs/class-activities.md).
-            // A throw here is the job's build failure, like a missing
-            // personalized file: a match with nobody on the other side would
-            // read as a win, and the message names the fix. A submission
-            // opponent (the champion) is downloaded first, through the same
-            // retrying download the challenger's own upload gets.
             // Timed inline, as the make step is: `measure`'s closure cannot
             // hop to this actor's isolation for the download.
             let opponentStartedAt = Date()
-            var downloadedOpponent: URL?
-            if let url = job.opponent?.submissionURL {
-                let destination = opponentDownloadDestination(workDir: paths.workDir)
-                try await download(url: url, to: destination)
-                downloadedOpponent = destination
-            }
-            let opponentDir = try await stageOpponentWorkspace(
-                job: job, workDir: paths.workDir, testSetupDir: testSetupDir,
-                downloadedSubmission: downloadedOpponent)
+            let (opponentDir, opponentDirs) = try await stageOpponents(
+                job: job, paths: paths, testSetupDir: testSetupDir)
             stageTimings.record(
                 "opponent_setup", milliseconds: Int(Date().timeIntervalSince(opponentStartedAt) * 1000))
 
@@ -575,7 +605,8 @@ extension WorkerDaemon {
                 normalizationWarnings: normalizationWarnings,
                 preferredStudentModule: preferredStudentModule,
                 testSetupCacheHit: acquireResult.didHit,
-                opponentDir: opponentDir
+                opponentDir: opponentDir,
+                opponentDirs: opponentDirs
             )
         } catch {
             removeWorkspaceItem(at: testSetupDir, label: "test_setup_dir", job: job)
@@ -715,6 +746,7 @@ extension WorkerDaemon {
         job: Job,
         collection: TestOutcomeCollection,
         diagnostics: WorkerExecutionDiagnostics,
+        matches: [MatchReport]?,
         stageTimings: inout JobStageTimings
     ) async throws {
         do {
@@ -730,7 +762,7 @@ extension WorkerDaemon {
             // shielding it delays shutdown by that much at most.
             try await withTaskCancellationShield {
                 try await reporter.report(
-                    WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
+                    WorkerExecutionReport(collection: collection, diagnostics: diagnostics, matches: matches))
             }
             stageTimings.record(
                 "result_report",
@@ -809,18 +841,44 @@ extension WorkerDaemon {
         manifest: TestProperties,
         testSetupDir: URL,
         opponentDir: URL?,
+        opponentDirs: [URL],
         job: Job
-    ) async throws -> [TestOutcome] {
+    ) async throws -> (outcomes: [TestOutcome], matches: [MatchReport]?) {
         // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
         // the grading subprocess. Nil/empty seed means non-personalized job;
         // leaving the env var unset preserves legacy behaviour.
-        var scriptEnv: [String: String] = [:]
+        var baseEnv: [String: String] = [:]
         if let seed = job.assignmentSeed, !seed.isEmpty {
-            scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
+            baseEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
+
+        // A matrix job (round robin): the suite runs once per opponent, each
+        // with that opponent's directory and seed, and the runs fold into one
+        // collection plus the per-match rows (`MatrixAggregation.swift`).
+        let opponents = job.opponents ?? []
+        if !opponents.isEmpty, opponents.count == opponentDirs.count {
+            var runs: [MatrixRun] = []
+            for (opponent, dir) in zip(opponents, opponentDirs) {
+                var env = baseEnv
+                env.merge(opponentScriptEnvironment(opponent: opponent, opponentDir: dir)) { _, new in new }
+                let outcomes = await runSuite(manifest: manifest, testSetupDir: testSetupDir, env: env, job: job)
+                runs.append(MatrixRun(opponent: opponent, outcomes: outcomes))
+            }
+            return (aggregateMatrixRuns(runs), matrixMatchReports(runs))
+        }
+
         // A match job adds the opponent directory and the per-match seed
         // (docs/class-activities.md); an ordinary job adds nothing.
+        var scriptEnv = baseEnv
         scriptEnv.merge(opponentScriptEnvironment(job: job, opponentDir: opponentDir)) { _, new in new }
+        return (await runSuite(manifest: manifest, testSetupDir: testSetupDir, env: scriptEnv, job: job), nil)
+    }
+
+    /// One pass of the shared suite loop with `env` — the whole of what an
+    /// ordinary job does, and one match of a matrix job.
+    private func runSuite(
+        manifest: TestProperties, testSetupDir: URL, env scriptEnv: [String: String], job: Job
+    ) async -> [TestOutcome] {
 
         // Per-student file materialization (`_ck_inputs.py` + dataset slices)
         // happens in `prepareJobWorkspace` — workspace prep, not execution —

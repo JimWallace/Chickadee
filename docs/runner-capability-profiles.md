@@ -289,6 +289,11 @@ Currently detected automatically:
     SUBMISSION as the opponent (king of the hill). Separate from
     `activity-match` because a build that copies a support file may predate
     it; each `ActivityOpponentSource` names the token its jobs need.
+  - `activity-matrix`: this build reads `Job.opponents`, stages every one of
+    them, runs the suite once per opponent and reports the per-match rows
+    (round robin). Separate again, because a build that stages one
+    submission would decode a matrix job without the list and grade it
+    against nobody.
 
 Detection failures do not crash the runner. Missing tools simply do not appear
 in the advertised profile.

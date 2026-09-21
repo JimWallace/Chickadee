@@ -415,7 +415,7 @@ extension WebRoutes {
             testSetupID: submission.testSetupID, on: req.db)
 
         let badges = try await submissionBadges(
-            req: req, subID: subID, displayCollection: displayCollection,
+            req: req, submission: submission, displayCollection: displayCollection,
             setupProps: setupProps, setup: setup, processed: processed)
 
         let sectionedOutcomes = buildSectionedOutcomes(
@@ -541,18 +541,26 @@ extension WebRoutes {
     /// secret-test badge works without revealing the test.
     private func submissionBadges(
         req: Request,
-        subID: String,
+        submission: APISubmission,
         displayCollection: TestOutcomeCollection?,
         setupProps: TestProperties?,
         setup: APITestSetup?,
         processed: ProcessedCollection
     ) async throws -> [AchievementBadge] {
+        let subID = try submission.requireID()
         let classAchievements = try await APIClassAchievement.query(on: req.db)
             .filter(\.$submissionID == subID)
             .all()
+        // The standings are the student's CURRENT place, from their latest
+        // submission — read only on a standings activity, so every other
+        // page pays no query.
+        var standings: (standing: Int, matchesWon: Int)?
+        if setupProps?.activity?.kind.aggregation == .standings, let userID = submission.userID, let setup {
+            standings = try await standingSignals(testSetupID: setup.id ?? "", userID: userID, on: req.db)
+        }
         let individualBadges = earnedIndividualBadgesForDisplay(
             collection: displayCollection, props: setupProps,
-            gradePercent: processed.gradePercent)
+            gradePercent: processed.gradePercent, standings: standings)
         return builtInBadgesForSubmission(
             badgeContext: processed.badgeContext,
             classAchievements: classAchievements,

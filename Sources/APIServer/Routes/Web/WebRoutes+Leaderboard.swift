@@ -37,8 +37,17 @@ extension WebRoutes {
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
-        let rows = try await buildLeaderboardRows(
-            setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+        let showsStandings = activity.kind.aggregation == .standings
+        let rows =
+            showsStandings
+            ? []
+            : try await buildLeaderboardRows(
+                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+        let standings =
+            showsStandings
+            ? try await buildStandingRows(
+                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            : []
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
 
@@ -53,6 +62,8 @@ extension WebRoutes {
                 rows: rows,
                 hasHill: activity.kind.opponentSource == .champion,
                 champion: champion,
+                showsStandings: showsStandings,
+                standings: standings,
                 currentUser: req.currentUserContext))
     }
 }
@@ -103,7 +114,28 @@ struct LeaderboardContext: Encodable {
     let hasHill: Bool
     /// The hill's holder; nil when no student holds it yet.
     let champion: ChampionPresentation?
+    /// True for a round robin: the page shows the standings table (played,
+    /// won, drawn, lost, average score) instead of the metric ranking.
+    let showsStandings: Bool
+    let standings: [StandingRow]
     let currentUser: CurrentUserContext?
+}
+
+/// One row of a round robin's standings.
+struct StandingRow: Encodable {
+    /// Competition ranking on the standings order; equal keys share a rank.
+    let rank: Int
+    let handle: String
+    /// Staff only; empty for a student viewer.
+    let name: String
+    let played: Int
+    let wins: Int
+    let draws: Int
+    let losses: Int
+    /// The average match score, as the page prints a metric.
+    let averageText: String
+    let isViewer: Bool
+    let avatar: AvatarPresentation
 }
 
 /// The hill's holder as the leaderboard shows them.
@@ -149,48 +181,135 @@ func buildLeaderboardRows(
 ) async throws -> [LeaderboardRow] {
     let entries = try await leaderboardEntries(testSetupID: setup.id ?? "", on: db)
     guard !entries.isEmpty else { return [] }
-
-    let userIDs = Array(Set(entries.map(\.userID)))
-    let users = try await APIUser.query(on: db).filter(\.$id ~~ userIDs).all()
-    var userByID: [UUID: APIUser] = [:]
-    for user in users { if let id = user.id { userByID[id] = user } }
-
-    let enrollments = try await APICourseEnrollment.query(on: db)
-        .filter(\.$course.$id == setup.courseID)
-        .filter(\.$userID ~~ userIDs)
-        .all()
-    var enrollmentByUser: [UUID: APICourseEnrollment] = [:]
-    for enrollment in enrollments { enrollmentByUser[enrollment.userID] = enrollment }
+    let identities = try await RankedIdentities.load(
+        userIDs: entries.map(\.userID), courseID: setup.courseID, on: db)
 
     var rows: [LeaderboardRow] = []
     var rank = 0
     var previousMetric: Double?
     for (index, entry) in entries.enumerated() {
-        // A student who has since dropped keeps no row: the roster is what a
-        // classmate is ranked against, and their enrollment carried the handle.
-        guard let user = userByID[entry.userID],
-            let enrollment = enrollmentByUser[entry.userID]
-        else { continue }
+        guard identities.isOnRoster(entry.userID) else { continue }
         if entry.metric != previousMetric {
             rank = index + 1
             previousMetric = entry.metric
         }
+        guard
+            let identity = try await identities.presentation(
+                for: entry.userID, includeName: includeNames, fallbackLabel: "Student \(rank)", on: db)
+        else { continue }
+        rows.append(
+            LeaderboardRow(
+                rank: rank,
+                handle: identity.handle,
+                name: identity.name,
+                metricText: formatLeaderboardMetric(entry.metric),
+                isViewer: entry.userID == viewerID,
+                avatar: identity.avatar))
+    }
+    return rows
+}
+
+/// The standings rows for a round robin, best first (`activityStandings`),
+/// under the same handle-and-bird identity as a ranking row.
+func buildStandingRows(
+    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: Database
+) async throws -> [StandingRow] {
+    let standings = try await activityStandings(testSetupID: setup.id ?? "", on: db)
+    guard !standings.isEmpty else { return [] }
+    let identities = try await RankedIdentities.load(
+        userIDs: standings.map(\.userID), courseID: setup.courseID, on: db)
+
+    var rows: [StandingRow] = []
+    var rank = 0
+    var previousKey: StandingKey?
+    for (index, standing) in standings.enumerated() {
+        guard identities.isOnRoster(standing.userID) else { continue }
+        let key = StandingKey(standing)
+        if key != previousKey {
+            rank = index + 1
+            previousKey = key
+        }
+        guard
+            let identity = try await identities.presentation(
+                for: standing.userID, includeName: includeNames, fallbackLabel: "Student \(rank)", on: db)
+        else { continue }
+        rows.append(
+            StandingRow(
+                rank: rank,
+                handle: identity.handle,
+                name: identity.name,
+                played: standing.played,
+                wins: standing.wins,
+                draws: standing.draws,
+                losses: standing.losses,
+                averageText: formatLeaderboardMetric(standing.averageScore),
+                isViewer: standing.userID == viewerID,
+                avatar: identity.avatar))
+    }
+    return rows
+}
+
+/// The part of a standings row that decides its rank: two rows with equal
+/// keys share a rank.
+private struct StandingKey: Equatable {
+    let averageScore: Double
+    let wins: Int
+    let played: Int
+
+    init(_ standing: APIActivityStanding) {
+        averageScore = standing.averageScore
+        wins = standing.wins
+        played = standing.played
+    }
+}
+
+/// The users and enrollments behind a set of ranked rows, loaded in two
+/// queries, and the handle-and-bird presentation of each.
+struct RankedIdentities {
+    let userByID: [UUID: APIUser]
+    let enrollmentByUser: [UUID: APICourseEnrollment]
+
+    struct Presentation {
+        let handle: String
+        let name: String
+        let avatar: AvatarPresentation
+    }
+
+    static func load(userIDs: [UUID], courseID: UUID, on db: Database) async throws -> RankedIdentities {
+        let ids = Array(Set(userIDs))
+        let users = try await APIUser.query(on: db).filter(\.$id ~~ ids).all()
+        var userByID: [UUID: APIUser] = [:]
+        for user in users { if let id = user.id { userByID[id] = user } }
+        let enrollments = try await APICourseEnrollment.query(on: db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID ~~ ids)
+            .all()
+        var enrollmentByUser: [UUID: APICourseEnrollment] = [:]
+        for enrollment in enrollments { enrollmentByUser[enrollment.userID] = enrollment }
+        return RankedIdentities(userByID: userByID, enrollmentByUser: enrollmentByUser)
+    }
+
+    /// False for a student who has since dropped: the roster is what a
+    /// classmate is ranked against, and their enrollment carried the handle.
+    func isOnRoster(_ userID: UUID) -> Bool {
+        userByID[userID] != nil && enrollmentByUser[userID] != nil
+    }
+
+    /// nil when `isOnRoster` is false.
+    func presentation(
+        for userID: UUID, includeName: Bool, fallbackLabel: String, on db: Database
+    ) async throws -> Presentation? {
+        guard let user = userByID[userID], let enrollment = enrollmentByUser[userID] else { return nil }
         let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         // Decorative when the handle carries the identity; the bird must
         // announce whose it is only when there is no handle beside it.
-        let accessibility: AvatarAccessibility =
-            handle.isEmpty ? .labelled("Student \(rank)") : .decorative
-        rows.append(
-            LeaderboardRow(
-                rank: rank,
-                handle: handle,
-                name: includeNames ? staffFacingName(user) : "",
-                metricText: formatLeaderboardMetric(entry.metric),
-                isViewer: entry.userID == viewerID,
-                avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility)))
+        let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled(fallbackLabel) : .decorative
+        return Presentation(
+            handle: handle,
+            name: includeName ? staffFacingName(user) : "",
+            avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility))
     }
-    return rows
 }
 
 /// The name staff see beside a handle: the display name when the roster has

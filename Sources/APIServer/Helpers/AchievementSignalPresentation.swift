@@ -130,6 +130,10 @@ enum AchievementSignalPresentation {
             return make(
                 signal, "Items covered",
                 "distinct tests the class has collectively passed", unit: "", ref: .section)
+        case .standing:
+            return make(signal, "Standing", "place in the round robin standings (1 = first)", unit: "", ref: .none)
+        case .matchesWon:
+            return make(signal, "Matches won", "matches the latest submission won", unit: "", ref: .none)
         }
     }
 
@@ -197,6 +201,11 @@ enum RecordDimensionPresentation {
                 value: dimension.rawValue, label: "Hill champion",
                 detail: "the current holder of a king-of-the-hill activity's hill (moves to "
                     + "whoever takes it; not gated on 100%)")
+        case .tournamentWinner:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "Standings leader",
+                detail: "the current leader of a round robin's standings (moves with the "
+                    + "standings; not gated on 100%)")
         }
     }
 

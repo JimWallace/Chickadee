@@ -105,4 +105,49 @@ public struct JobOpponent: Codable, Equatable, Sendable {
     /// The identity of an empty hill — no champion and no bot. A match row is
     /// still written, so the first passing match can claim it.
     public static let noOpponentIdentity = "none"
+
+    /// This opponent's identity as the seed and the match row spell it.
+    public var identity: String {
+        if let submissionID { return JobOpponent.submissionIdentity(submissionID) }
+        if let supportFile { return JobOpponent.supportFileIdentity(supportFile) }
+        return JobOpponent.noOpponentIdentity
+    }
+}
+
+/// The match entry of a run: the outcome with the highest reported `metric`.
+/// The verdict is the script's exit code — the challenger WON when that entry
+/// PASSED — and `score` is its credit. Nil when no outcome reports a metric,
+/// which a match script that wants a lost run off the board does on purpose:
+/// no metric, no win. One rule, shared by the worker (which reports a matrix
+/// job's per-match rows from it) and the server (which moves the hill and
+/// the standings from it).
+public func matchOutcome(from outcomes: [TestOutcome]) -> TestOutcome? {
+    outcomes.filter { $0.metric != nil }.max { ($0.metric ?? 0) < ($1.metric ?? 0) }
+}
+
+/// One match's result as the worker reports it beside the collection
+/// (`WorkerExecutionReport.matches`), one per opponent a matrix job played.
+/// The server completes the row it opened at claim from this — by identity,
+/// so the report needs no row id.
+public struct MatchReport: Codable, Equatable, Sendable {
+    public let opponentIdentity: String
+    public let opponentSubmissionID: String?
+    public let seed: String
+    /// The match entry's credit, ranking number and verdict for this one
+    /// opponent (`matchOutcome` over that run's outcomes).
+    public let score: Double?
+    public let metric: Double?
+    public let won: Bool
+
+    public init(
+        opponentIdentity: String, opponentSubmissionID: String?, seed: String,
+        score: Double?, metric: Double?, won: Bool
+    ) {
+        self.opponentIdentity = opponentIdentity
+        self.opponentSubmissionID = opponentSubmissionID
+        self.seed = seed
+        self.score = score
+        self.metric = metric
+        self.won = won
+    }
 }

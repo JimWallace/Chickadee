@@ -22,6 +22,12 @@ public struct RunnerCapability: Codable, Hashable, Sendable {
     /// build would fail — loudly, but for every student until a runner is
     /// upgraded, where the gate makes it wait instead.
     public static let activityOpponentSubmission = RunnerCapability(name: "activity-opponent-submission")
+
+    /// Advertised by every runner build that can play one job against MANY
+    /// opponents (`Job.opponents`, round robin) and report the per-match rows.
+    /// A build that stages one opponent would ignore the list and grade the
+    /// suite once with nobody staged, so the gate makes such a job wait.
+    public static let activityMatrix = RunnerCapability(name: "activity-matrix")
 }
 
 public struct LanguageVersion: Codable, Hashable, Sendable {

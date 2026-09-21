@@ -16,6 +16,11 @@ public struct AchievementSignals: Sendable {
     /// Grade percent of the immediately preceding attempt; nil on the first.
     public var priorGradePercent: Int?
     public var outcomes: [TestOutcome]
+    /// The student's place in a round robin's standings and their win count,
+    /// when the evaluation site loaded them; nil elsewhere, where a condition
+    /// reading them is unmet like any unknown signal.
+    public var standing: Int?
+    public var matchesWon: Int?
     /// Alias map for `testPass` refs: for each outcome `testName` (as stamped
     /// by the runner — display name, else filename stem), every name that
     /// outcome answers to (its script filename, stem, and display name).
@@ -31,7 +36,9 @@ public struct AchievementSignals: Sendable {
         executionTimeMs: Int? = nil,
         priorGradePercent: Int? = nil,
         outcomes: [TestOutcome] = [],
-        testNameAliases: [String: Set<String>] = [:]
+        testNameAliases: [String: Set<String>] = [:],
+        standing: Int? = nil,
+        matchesWon: Int? = nil
     ) {
         self.gradePercent = gradePercent
         self.attemptNumber = attemptNumber
@@ -39,6 +46,8 @@ public struct AchievementSignals: Sendable {
         self.priorGradePercent = priorGradePercent
         self.outcomes = outcomes
         self.testNameAliases = testNameAliases
+        self.standing = standing
+        self.matchesWon = matchesWon
     }
 }
 
@@ -70,6 +79,12 @@ extension AchievementCondition {
                 if runnerScriptStem(ref) == outcome.testName { return true }
                 return signals.testNameAliases[outcome.testName]?.contains(ref) ?? false
             }
+        case .standing:
+            guard let standing = signals.standing else { return false }
+            return compare(Double(standing))
+        case .matchesWon:
+            guard let won = signals.matchesWon else { return false }
+            return compare(Double(won))
         case .itemsCovered:
             // Not a per-submission signal: it reads the class's accumulated
             // coverage, which no single submission's signals can answer.  The
@@ -206,7 +221,7 @@ extension Achievement {
             case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
                 return false
             }
-        case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass:
+        case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon:
             return false
         }
     }

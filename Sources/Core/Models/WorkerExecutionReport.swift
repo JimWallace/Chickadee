@@ -118,9 +118,17 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
 public struct WorkerExecutionReport: Codable, Sendable {
     public let collection: TestOutcomeCollection
     public let diagnostics: WorkerExecutionDiagnostics?
+    /// Per-match rows for a matrix job (docs/class-activities.md); nil for
+    /// every other job and from every runner that predates the field. An
+    /// older server ignores the key.
+    public let matches: [MatchReport]?
 
-    public init(collection: TestOutcomeCollection, diagnostics: WorkerExecutionDiagnostics?) {
+    public init(
+        collection: TestOutcomeCollection, diagnostics: WorkerExecutionDiagnostics?,
+        matches: [MatchReport]? = nil
+    ) {
         self.collection = collection
         self.diagnostics = diagnostics
+        self.matches = matches
     }
 }

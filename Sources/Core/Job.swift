@@ -69,6 +69,13 @@ public struct Job: Codable, Sendable {
     /// rather than trusting it to notice.
     public let opponent: JobOpponent?
 
+    /// The opponents a MATRIX job plays in turn (round robin), each staged
+    /// and played separately, with the per-match rows reported beside the
+    /// collection. Nil for every other job; `opponent` stays nil when this is
+    /// set. Optional for wire back-compat like `opponent`, and gated the same
+    /// way (`activity-matrix`), since an older runner would ignore it.
+    public let opponents: [JobOpponent]?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -81,7 +88,8 @@ public struct Job: Codable, Sendable {
         personalizedInputs: [String: String]? = nil,
         personalizedFiles: [String: String]? = nil,
         language: AssignmentLanguage? = nil,
-        opponent: JobOpponent? = nil
+        opponent: JobOpponent? = nil,
+        opponents: [JobOpponent]? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -95,5 +103,6 @@ public struct Job: Codable, Sendable {
         self.personalizedFiles = personalizedFiles
         self.language = language
         self.opponent = opponent
+        self.opponents = opponents
     }
 }

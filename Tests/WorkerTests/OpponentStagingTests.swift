@@ -237,6 +237,65 @@ import Testing
         #expect(RunnerProfileDetector.buildCapabilities.contains(.activityOpponentSubmission))
     }
 
+    // MARK: - A matrix of opponents (slice 4)
+
+    /// This build advertises the matrix capability too, and every source's
+    /// token is one this build carries.
+    @Test func thisBuildAdvertisesTheMatrixCapability() {
+        #expect(RunnerProfileDetector.buildCapabilities.contains(.activityMatrix))
+        #expect(RunnerCapability.activityMatrix.name == "activity-matrix")
+        for source in ActivityOpponentSource.allCases {
+            guard let token = source.requiredRunnerCapability else { continue }
+            #expect(RunnerProfileDetector.buildCapabilities.contains(token), "\(source) needs \(token.name)")
+        }
+    }
+
+    /// Each opponent of a matrix job gets its own download and its own
+    /// directory, distinct from the single-opponent paths and from each other.
+    @Test func matrixOpponentsGetDistinctPaths() {
+        let work = URL(fileURLWithPath: "/work")
+        #expect(opponentDirectory(workDir: work).lastPathComponent == "opponent")
+        #expect(opponentDirectory(workDir: work, index: 0).lastPathComponent == "opponent-0")
+        #expect(opponentDirectory(workDir: work, index: 1).lastPathComponent == "opponent-1")
+        #expect(opponentDownloadDestination(workDir: work).lastPathComponent == "opponent-submission.bin")
+        #expect(opponentDownloadDestination(workDir: work, index: 2).lastPathComponent == "opponent-2-submission.bin")
+    }
+
+    /// Two opponents staged side by side, each under its own index, each
+    /// with an environment pointing the script at its own directory and seed.
+    @Test func twoOpponentsAreStagedSideBySide() async throws {
+        let work = try Self.makeDir("matrix")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let setup = work.appendingPathComponent("setup", isDirectory: true)
+        try FileManager.default.createDirectory(at: setup, withIntermediateDirectories: true)
+        try "print('rock')\n".write(to: setup.appendingPathComponent("bot.py"), atomically: true, encoding: .utf8)
+        let raw = work.appendingPathComponent("mate.bin")
+        try "def play(_):\n    return 'paper'\n".write(to: raw, atomically: true, encoding: .utf8)
+
+        let bot = JobOpponent(supportFile: "bot.py", matchSeed: Self.seed)
+        let mate = JobOpponent(
+            supportFile: nil,
+            matchSeed: JobOpponent.matchSeed(submissionID: "sub_match", opponentIdentity: "submission:m"),
+            submissionID: "m", submissionURL: testURL("https://x.test/m.bin"), submissionFilename: "strategy.py")
+        let botDir = try await stageOpponent(
+            bot, manifest: TestProperties(), into: opponentDirectory(workDir: work, index: 0),
+            testSetupDir: setup, downloadedSubmission: nil)
+        let mateDir = try await stageOpponent(
+            mate, manifest: TestProperties(), into: opponentDirectory(workDir: work, index: 1),
+            testSetupDir: setup, downloadedSubmission: raw)
+        #expect(botDir.lastPathComponent == "opponent-0")
+        #expect(mateDir.lastPathComponent == "opponent-1")
+        #expect(FileManager.default.fileExists(atPath: botDir.appendingPathComponent("bot.py").path))
+        #expect(FileManager.default.fileExists(atPath: mateDir.appendingPathComponent("strategy.py").path))
+        #expect(!FileManager.default.fileExists(atPath: botDir.appendingPathComponent("strategy.py").path))
+
+        let botEnv = opponentScriptEnvironment(opponent: bot, opponentDir: botDir)
+        let mateEnv = opponentScriptEnvironment(opponent: mate, opponentDir: mateDir)
+        #expect(botEnv[OpponentEnvironment.directory] == botDir.path)
+        #expect(mateEnv[OpponentEnvironment.directory] == mateDir.path)
+        #expect(botEnv[OpponentEnvironment.matchSeed] != mateEnv[OpponentEnvironment.matchSeed])
+    }
+
     /// The fixture match played against a staged champion submission: the
     /// champion's `strategy.py` is found by the same name the bot was.
     @Test func theFixtureMatchIsGradedAgainstAStagedChampion() async throws {
