@@ -116,6 +116,10 @@ struct GetServerInfoTool: ContentTool {
                         "displayName": MCPSchema.string,
                         "summary": MCPSchema.string,
                         "aggregation": MCPSchema.string,
+                        "opponentSource": .object([
+                            "type": .string("string"),
+                            "enum": .array(ActivityOpponentSource.allCases.map { .string($0.rawValue) }),
+                        ]),
                     ]),
                 ]),
             ]),

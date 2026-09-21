@@ -15,13 +15,40 @@
 // class aggregation (how the class's results combine). The instructor never
 // sees the axes. They pick ONE kind, and the kind fixes both.
 
+/// What else is in the workspace when a match script runs — the first of the
+/// two hidden axes. The kind fixes it; the instructor never chooses it.
+///
+/// Only the sources this build can stage. `champion` (king of the hill) and
+/// `classmates` (round robins, brackets) arrive with the slices that make the
+/// worker able to stage them, because a source the worker cannot stage is a
+/// silent misroute, not a feature.
+public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
+    /// No opponent. The script measures the submission on its own.
+    case none
+    /// A grader-only support file the instructor bundles — the bot. The
+    /// worker stages it into the opponent directory the script reads through
+    /// `CHICKADEE_OPPONENT_DIR`.
+    case supportFile
+
+    /// True when a match needs an opponent staged beside the submission.
+    /// Everything that hangs off an opponent — the worker's `activity-match`
+    /// capability, the browser-grading refusal, the opponent directory — asks
+    /// this, never the kind.
+    public var stagesAnOpponent: Bool {
+        switch self {
+        case .none: return false
+        case .supportFile: return true
+        }
+    }
+}
+
 /// The activity kinds this build can author and grade.
 ///
 /// The catalog is deliberately narrow — each kind lands with the slice that
 /// makes it work end to end, because a kind the runner cannot execute is a
-/// silent misroute, not a feature. Kinds that need an opponent in the
-/// workspace (round robin, king of the hill, brackets) arrive with the opponent
-/// primitive.
+/// silent misroute, not a feature. Kinds that need a classmate or a champion in
+/// the workspace (round robin, king of the hill, brackets) arrive with the
+/// opponent source that stages them.
 public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// The instructor bundles a grader-only bot; the student's program plays
     /// it. The match script reports the outcome as `score` (credit) and
@@ -63,6 +90,16 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor, .bestMetric: return true
         }
     }
+
+    /// The opponent axis. Exhaustive on purpose: a kind added without an
+    /// answer here does not compile, so it cannot ship as a leaderboard
+    /// challenge whose bot is never staged.
+    public var opponentSource: ActivityOpponentSource {
+        switch self {
+        case .beatTheInstructor: return .supportFile
+        case .bestMetric: return .none
+        }
+    }
 }
 
 /// Whether students may open the assignment's leaderboard.
@@ -86,14 +123,27 @@ public enum LeaderboardVisibility: String, Codable, CaseIterable, Sendable {
 public struct ClassActivity: Codable, Equatable, Sendable {
     public let kind: ActivityKind
     public let leaderboardVisibility: LeaderboardVisibility
+    /// For a kind whose opponent source is `supportFile`: the bare filename of
+    /// the support file the worker stages as the opponent (the bot). Nil until
+    /// the instructor chooses one — the kind may be set before the bot is
+    /// uploaded — and always nil for a kind with no opponent. The worker fails
+    /// a match job loudly when the kind wants one and none is named, so the
+    /// gap shows on the instructor's validation run rather than in a student's
+    /// grade.
+    public let opponentFile: String?
 
-    public init(kind: ActivityKind, leaderboardVisibility: LeaderboardVisibility = .hidden) {
+    public init(
+        kind: ActivityKind,
+        leaderboardVisibility: LeaderboardVisibility = .hidden,
+        opponentFile: String? = nil
+    ) {
         self.kind = kind
         self.leaderboardVisibility = leaderboardVisibility
+        self.opponentFile = opponentFile
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, leaderboardVisibility
+        case kind, leaderboardVisibility, opponentFile
     }
 
     public init(from decoder: Decoder) throws {
@@ -101,8 +151,47 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         kind = try c.decode(ActivityKind.self, forKey: .kind)
         leaderboardVisibility =
             try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden
+        opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(leaderboardVisibility, forKey: .leaderboardVisibility)
+        // Omitted when nil, so a slice-1 block's bytes are unchanged.
+        try c.encodeIfPresent(opponentFile, forKey: .opponentFile)
     }
 
     /// True when students may open the leaderboard.
     public var leaderboardVisibleToStudents: Bool { leaderboardVisibility == .visible }
+
+    /// True when grading this activity stages an opponent beside the
+    /// submission — the question every opponent-dependent seam asks (the
+    /// claim gate, the browser-grading refusal, the job's opponent).
+    ///
+    /// Needs BOTH a kind whose source stages one AND a chosen file. Until the
+    /// instructor chooses the bot, nothing is staged and the assignment grades
+    /// exactly as a slice-1 activity did — on any runner, with a hand-wired
+    /// bot if the script has one — so shipping the primitive changed no
+    /// existing assignment's path. A script written for the primitive still
+    /// fails loudly on its own when the directory is unset (the fixture does),
+    /// and the edit page's picker says so.
+    public var stagesAnOpponent: Bool {
+        kind.opponentSource.stagesAnOpponent && opponentFile != nil
+    }
+
+    /// True when the kind takes an opponent file at all — what decides
+    /// whether the picker renders, chosen or not.
+    public var takesAnOpponentFile: Bool { kind.opponentSource.stagesAnOpponent }
+
+    /// The same block with a different opponent file, everything else kept.
+    public func withOpponentFile(_ file: String?) -> ClassActivity {
+        ClassActivity(kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file)
+    }
+
+    /// The same block with a different leaderboard visibility, everything
+    /// else kept — so a visibility toggle cannot drop the opponent file.
+    public func withLeaderboardVisibility(_ visibility: LeaderboardVisibility) -> ClassActivity {
+        ClassActivity(kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile)
+    }
 }

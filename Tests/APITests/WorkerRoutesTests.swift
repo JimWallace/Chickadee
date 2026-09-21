@@ -805,4 +805,116 @@ import VaporTesting
 
         }
     }
+
+    // MARK: - Class-activity match jobs (docs/class-activities.md)
+
+    private let opponentManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}
+        """
+
+    private func profile(capabilities: [String]) -> RunnerCapabilityProfile {
+        RunnerCapabilityProfile(
+            platform: "linux", architecture: "x86_64",
+            languageVersions: [], capabilities: capabilities.map { RunnerCapability(name: $0) })
+    }
+
+    /// The served job carries the opponent — file and a seed derived from the
+    /// submission — while the sanitized manifest carries no activity block.
+    @Test func requestJob_matchActivity_carriesTheOpponentOnTheJob() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_match", manifest: opponentManifestJSON)
+            let sub = try await makeSubmission(id: "wsub_match", setupID: (try setup.requireID()))
+
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(
+                workerID: "w-match", profile: profile(capabilities: [RunnerCapability.activityMatch.name]))
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == sub.id)
+                    let opponent = try #require(job.opponent)
+                    #expect(opponent.supportFile == "bot.py")
+                    #expect(
+                        opponent.matchSeed
+                            == JobOpponent.matchSeed(
+                                submissionID: try #require(sub.id),
+                                opponentIdentity: JobOpponent.supportFileIdentity("bot.py")))
+                    #expect(job.manifest.activity == nil)
+                })
+        }
+    }
+
+    /// Neither an ordinary assignment nor a bot kind with no file chosen
+    /// carries an opponent: the second is the slice-1 path, unchanged.
+    @Test(arguments: [
+        #"{"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
+        #"{"schemaVersion":1,"testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor"}}"#,
+    ])
+    func requestJob_withoutAChosenOpponent_carriesNoOpponent(manifestJSON: String) async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_plain", manifest: manifestJSON)
+            _ = try await makeSubmission(id: "wsub_plain", setupID: (try setup.requireID()))
+
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w-plain")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.opponent == nil)
+                })
+        }
+    }
+
+    /// A runner whose profile lacks `activity-match` never claims a match job
+    /// (it would grade the bot match with no bot); the job waits for one that
+    /// advertises it.
+    @Test func requestJob_matchActivity_waitsForARunnerThatCanStageTheOpponent() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_gate", manifest: opponentManifestJSON)
+            let sub = try await makeSubmission(id: "wsub_gate", setupID: (try setup.requireID()))
+
+            let path = "/api/v1/worker/request"
+            let oldBody = try workerRequestBody(
+                workerID: "w-old", profile: profile(capabilities: ["shell-bash"]))
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: oldBody)
+                    req.body = oldBody
+                },
+                afterResponse: { res in
+                    #expect(res.status == .noContent, "an old build must not claim a match job")
+                })
+            let stillPending = try await APISubmission.find(sub.id, on: app.db)
+            #expect(stillPending?.status == "pending")
+
+            let newBody = try workerRequestBody(
+                workerID: "w-new", profile: profile(capabilities: [RunnerCapability.activityMatch.name]))
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: newBody)
+                    req.body = newBody
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == sub.id)
+                })
+            let claimed = try await APISubmission.find(sub.id, on: app.db)
+            #expect(claimed?.workerID == "w-new")
+        }
+    }
 }

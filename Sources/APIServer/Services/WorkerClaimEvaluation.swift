@@ -187,9 +187,17 @@ func evaluateAndClaimCandidate(
             runnerProfile: runnerProfile,
             manifest: manifest
         )
+        // A class-activity match needs a runner build that stages its
+        // opponent; the same implicit shape as the language gate.
+        let activityResult = RunnerActivityGate.evaluate(
+            runnerProfile: runnerProfile,
+            manifest: manifest
+        )
         let compatibilityResult = RunnerVersionGate.combine(
-            RunnerVersionGate.combine(capabilityResult, versionResult),
-            languageResult
+            RunnerVersionGate.combine(
+                RunnerVersionGate.combine(capabilityResult, versionResult),
+                languageResult),
+            activityResult
         )
         await req.application.diagnostics.recordCompatibilityDecision(
             submission: submission,

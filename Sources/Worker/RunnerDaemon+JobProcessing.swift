@@ -31,6 +31,9 @@ struct JobPreparedWorkspace {
     let normalizationWarnings: [String]
     let preferredStudentModule: String?
     let testSetupCacheHit: Bool
+    /// The staged opponent for a match job (`stageOpponentWorkspace`); nil
+    /// for an ordinary run.
+    let opponentDir: URL?
 }
 
 /// Disk-space samples taken across the lifetime of a job.  The "at start"
@@ -114,6 +117,7 @@ extension WorkerDaemon {
         let outcomes = try await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
+            opponentDir: prepared.opponentDir,
             job: job
         )
         stageTimings.record(
@@ -544,12 +548,21 @@ extension WorkerDaemon {
                 try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
             }
 
+            // Stage the opponent for a match job (docs/class-activities.md).
+            // A throw here is the job's build failure, like a missing
+            // personalized file: a match with nobody on the other side would
+            // read as a win, and the message names the fix.
+            let opponentDir = try stageTimings.measureSync("opponent_setup") {
+                try stageOpponentWorkspace(job: job, workDir: paths.workDir, testSetupDir: testSetupDir)
+            }
+
             return JobPreparedWorkspace(
                 testSetupDir: testSetupDir,
                 manifest: manifest,
                 normalizationWarnings: normalizationWarnings,
                 preferredStudentModule: preferredStudentModule,
-                testSetupCacheHit: acquireResult.didHit
+                testSetupCacheHit: acquireResult.didHit,
+                opponentDir: opponentDir
             )
         } catch {
             removeWorkspaceItem(at: testSetupDir, label: "test_setup_dir", job: job)
@@ -782,6 +795,7 @@ extension WorkerDaemon {
     private func executeTestSuites(
         manifest: TestProperties,
         testSetupDir: URL,
+        opponentDir: URL?,
         job: Job
     ) async throws -> [TestOutcome] {
         // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
@@ -791,6 +805,9 @@ extension WorkerDaemon {
         if let seed = job.assignmentSeed, !seed.isEmpty {
             scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
+        // A match job adds the opponent directory and the per-match seed
+        // (docs/class-activities.md); an ordinary job adds nothing.
+        scriptEnv.merge(opponentScriptEnvironment(job: job, opponentDir: opponentDir)) { _, new in new }
 
         // Per-student file materialization (`_ck_inputs.py` + dataset slices)
         // happens in `prepareJobWorkspace` — workspace prep, not execution —

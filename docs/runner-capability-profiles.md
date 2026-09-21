@@ -279,6 +279,12 @@ Currently detected automatically:
 - shell availability:
   - `shell-bash`
   - `shell-zsh`
+- build capabilities — what the binary knows how to do, whatever the host has:
+  - `activity-match`: this build reads `Job.opponent` and stages a
+    class-activity opponent (docs/class-activities.md). `RunnerActivityGate`
+    keeps match jobs away from a runner that does not advertise it, since an
+    older build would grade a bot match with no bot in the workspace and no
+    error.
 
 Detection failures do not crash the runner. Missing tools simply do not appear
 in the advertised profile.

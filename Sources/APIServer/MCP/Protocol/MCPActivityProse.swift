@@ -30,6 +30,11 @@ enum MCPActivityProse {
     static var summaries: String {
         ActivityKind.allCases.map { "\($0.rawValue) — \($0.summary)" }.joined(separator: "; ")
     }
+
+    /// `"none or supportFile"` — the opponent-source tokens a payload reports.
+    static var opponentSourceTokens: String {
+        LanguageProse.list(ActivityOpponentSource.allCases.map(\.rawValue))
+    }
 }
 
 /// One activity kind's facts, as reported by `get_server_info`. Every field is
@@ -44,6 +49,10 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
     /// How the class's results combine: "leaderboard" for every kind shipped
     /// so far; later kinds aggregate to standings or a union.
     let aggregation: String
+    /// What is staged beside the submission when the script runs: "none", or
+    /// "supportFile" for a kind that plays a bundled bot (which then needs
+    /// worker grading and an `opponentFile`).
+    let opponentSource: String
 
     static var all: [MCPActivityKindCapability] {
         ActivityKind.allCases.map { kind in
@@ -51,7 +60,8 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
                 name: kind.rawValue,
                 displayName: kind.displayName,
                 summary: kind.summary,
-                aggregation: kind.aggregatesToLeaderboard ? "leaderboard" : "standings")
+                aggregation: kind.aggregatesToLeaderboard ? "leaderboard" : "standings",
+                opponentSource: kind.opponentSource.rawValue)
         }
     }
 }

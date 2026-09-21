@@ -356,8 +356,28 @@ struct WorkerJobRoutes: RouteCollection {
             assignmentSeed: assignmentSeed,
             personalizedInputs: personalizedInputs,
             personalizedFiles: personalizedFiles,
-            language: language
+            language: language,
+            opponent: Self.jobOpponent(manifest: claimed.manifest, submissionID: submissionID)
         )
+    }
+
+    /// The opponent a match job stages (docs/class-activities.md), or nil for
+    /// an ordinary run — and for an activity whose bot is not chosen yet,
+    /// which grades as it did before the primitive existed. Read from the
+    /// FULL manifest: `runnerSanitized()` strips the activity block, which is
+    /// why the runner learns this from the job.
+    static func jobOpponent(manifest: TestProperties, submissionID: String) -> JobOpponent? {
+        guard let activity = manifest.activity, activity.stagesAnOpponent else { return nil }
+        switch activity.kind.opponentSource {
+        case .none:
+            return nil
+        case .supportFile:
+            return JobOpponent(
+                supportFile: activity.opponentFile,
+                matchSeed: JobOpponent.matchSeed(
+                    submissionID: submissionID,
+                    opponentIdentity: JobOpponent.supportFileIdentity(activity.opponentFile)))
+        }
     }
 
     private func encodeJobResponse(_ job: Job) throws -> Response {

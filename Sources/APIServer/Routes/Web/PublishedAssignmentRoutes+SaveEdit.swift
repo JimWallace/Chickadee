@@ -264,7 +264,8 @@ extension PublishedAssignmentRoutes {
     /// Applies the Class activity select's value, returning a user-facing
     /// refusal or nil. nil `requested` is silence (see the form field); "none"
     /// clears; a kind token sets it, keeping the stored leaderboard visibility
-    /// when the kind is unchanged so a Save does not un-publish a leaderboard.
+    /// and opponent file when the kind is unchanged so a Save does not
+    /// un-publish a leaderboard or drop the bot.
     fileprivate func persistActivityKind(
         requested: String?, setup: APITestSetup, on db: any Database
     ) async -> String? {
@@ -275,10 +276,10 @@ extension PublishedAssignmentRoutes {
         if token == SetActivityTool.noActivityChoice {
             next = nil
         } else if let kind = ActivityKind(rawValue: token) {
-            next = ClassActivity(
-                kind: kind,
-                leaderboardVisibility: current?.kind == kind
-                    ? (current?.leaderboardVisibility ?? .hidden) : .hidden)
+            next =
+                current?.kind == kind
+                ? current
+                : ClassActivity(kind: kind)
         } else {
             // An unrecognised value — a stale tab posting a kind this build no
             // longer has — is ignored, as the submission-mode helper does.

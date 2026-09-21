@@ -6,6 +6,14 @@ public struct RunnerCapability: Codable, Hashable, Sendable {
     public init(name: String) {
         self.name = name
     }
+
+    /// Advertised by every runner build that can stage a class-activity
+    /// opponent (docs/class-activities.md). A BUILD capability, not a host
+    /// one: nothing has to be installed, the runner just has to know how to
+    /// read `Job.opponent`. An older build never advertises it, and the claim
+    /// gate keeps match jobs away from such a runner — which would otherwise
+    /// grade a bot match with no bot in the workspace.
+    public static let activityMatch = RunnerCapability(name: "activity-match")
 }
 
 public struct LanguageVersion: Codable, Hashable, Sendable {

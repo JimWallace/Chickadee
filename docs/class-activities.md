@@ -18,7 +18,7 @@ assignment on the code path it runs today.
 |---|---|---|
 | 0 | This design note | shipped |
 | 1 | Leaderboard surface and raw metric: `metric` footer field, the `activity` block with `beatTheInstructor` and `bestMetric`, `leaderboard_entries` at ingest, `RecordDimension.highestMetric`, the leaderboard page, `set_activity` | shipped |
-| 2 | Opponent primitive with `supportFile`: `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`, the `activity-match` runner capability, the browser-grading refusals | not started |
+| 2 | Opponent primitive with `supportFile`: `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`, the `activity-match` runner capability, the browser-grading refusals | shipped |
 | 3 | `champion` opponent (king of the hill) | not started |
 | 4 | `classmates` matrix, standings, the `standing` / `matchesWon` signals | not started |
 | 5 | Elimination and Swiss brackets, `run_tournament` | not started |
@@ -26,14 +26,14 @@ assignment on the code path it runs today.
 | 7 | Synthetic class submission (coverage percent) | not started |
 | 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
 
-Two things a reader should not go looking for after slice 1. **There is no
-opponent in the workspace yet.** A `beatTheInstructor` assignment in slice 1 is
-authored the way a bug hunt is: the instructor bundles the bot as a grader-only
-support file and writes the match script by hand; the runner does not know it
-is a match. Slice 2 is what makes the bot a first-class opponent. And **the
-web create page has no activity control.** The kind is chosen on the edit page
-(the "Class activity" select) or through MCP `set_activity`, either of which is
-free until the first student submission. Creation-time choice is a follow-up.
+Two things a reader should not go looking for after slice 2. **There is no
+opponent other than a bundled bot yet.** `ActivityOpponentSource` has `none`
+and `supportFile`; `champion` and `classmates` arrive with slices 3 and 4, each
+with the worker code that stages it, because a source the worker cannot stage
+is a silent misroute. And **the web create page has no activity control.** The
+kind is chosen on the edit page (the "Class activity" select) or through MCP
+`set_activity`, either of which is free until the first student submission.
+Creation-time choice is a follow-up.
 
 ## Design decisions (settled)
 
@@ -83,23 +83,31 @@ free until the first student submission. Creation-time choice is a follow-up.
 
 `ActivityKind` (`Sources/Core/ClassActivity.swift`) carries only the kinds that
 work end to end. A kind the runner cannot execute is a silent misroute, not a
-feature, so each arrives with the slice that makes it grade. The two axes are
-not yet types of their own: `aggregatesToLeaderboard` is the one derived fact
-slice 1 needs, and `ActivityOpponentSource` lands with slice 2.
+feature, so each arrives with the slice that makes it grade. The opponent axis
+is a type of its own since slice 2: `ActivityOpponentSource` (`none` |
+`supportFile`), read off the kind by the exhaustive `opponentSource`, so a kind
+added without an answer does not compile. Every seam that depends on an
+opponent — the worker's `activity-match` capability, the claim gate, the
+browser-grading refusal, the opponent picker — asks `stagesAnOpponent`, never
+the kind. The aggregation axis is still the one derived fact
+`aggregatesToLeaderboard`; it becomes a type when standings land.
 
 ### Manifest block (Core, `TestProperties.activity`)
 
 ```json
 "activity": {
-  "kind": "bestMetric",
-  "leaderboardVisibility": "hidden"
+  "kind": "beatTheInstructor",
+  "leaderboardVisibility": "hidden",
+  "opponentFile": "bot.py"
 }
 ```
 
-Every field but `kind` decodes with a default. Later slices add
-`trialsPerMatch`, `schedule` and `freezeAt` (nil meaning the assignment
-deadline, resolved through `postDeadlineRevealDeadline` so the slip-day claim
-window is honoured) as they are used, not before.
+Every field but `kind` decodes with a default. `opponentFile` (slice 2) names
+the support file the worker stages as the opponent for a kind whose source is
+`supportFile`; it is omitted from the bytes when nil, so a slice-1 block is
+unchanged. Later slices add `trialsPerMatch`, `schedule` and `freezeAt` (nil
+meaning the assignment deadline, resolved through `postDeadlineRevealDeadline`
+so the slip-day claim window is honoured) as they are used, not before.
 
 The block is **server-side only**. `runnerSanitized()` strips it, and that is
 what protects a runner: an `ActivityKind` case a runner's build predates would
@@ -162,14 +170,76 @@ routes give for anything a student is not meant to enumerate; staff always
 reach it, with a chip saying it is hidden. The student's submission page links
 the board once it is open to them.
 
-### Runner contract (slice 2)
+### Runner contract
 
-The runner will receive the opponent's workspace as a directory named by
-`CHICKADEE_OPPONENT_DIR` and a per-match seed in `CHICKADEE_MATCH_SEED`, derived
-from both submission IDs. Both ride the existing `CHICKADEE_` env allowlist in
-`Sources/Worker/ScriptRunner.swift`. The opponent loop in the worker wraps
-`executeSuites` and calls it once per opponent; `executeSuites` and
-`interpretScriptOutput` in RunnerCore do not change.
+A match job's script receives the opponent's workspace as a directory named by
+`CHICKADEE_OPPONENT_DIR` and a per-match seed in `CHICKADEE_MATCH_SEED`. Both
+ride the existing `CHICKADEE_` env allowlist in `Sources/Worker/ScriptRunner.swift`,
+and an ordinary job sets neither, so its environment is byte-for-byte what it
+was. `executeSuites` and `interpretScriptOutput` in RunnerCore do not change;
+the opponent loop that calls the suite once per classmate is slice 4's.
+
+**What the runner is told, and why it is not the enum.** The `activity` block
+never reaches the runner (`runnerSanitized()` strips it), so a match's needs
+travel on the job: `Job.opponent` (`Core/JobOpponent.swift`) is structural — the
+support file to stage and the seed — and names no kind and no source. A later
+source adds a field beside `supportFile`, not a case an old runner's decoder
+would choke on. The seed is `JobOpponent.matchSeed(submissionID:opponentIdentity:)`,
+a SHA-256 of the submission ID and the opponent's identity with the source
+spelled in front (`supportFile:bot.py`), so a re-test replays the same trials,
+two students never share one, and a bot named like a submission ID cannot
+collide with it.
+
+**Where the opponent is staged.** `stageOpponentWorkspace`
+(`Sources/Worker/OpponentStaging.swift`) copies the named support file into
+`<job work dir>/opponent/` under its own name — beside the test-setup
+directory, not inside it, so the script's working directory gains no stray
+entry the submission-file candidates would have to ignore. Both sandboxes read
+it (the macOS profile reads the whole filesystem; the Linux namespaces do not
+restrict reads), and it is removed with the job. Because the file keeps its
+name, an instructor who names the bot the way the student's required file is
+named (`strategy.py` against `strategy.py`) can write one match script that
+reads `$CHICKADEE_OPPONENT_DIR/strategy.py` today and will read a classmate's
+staged submission the same way in slice 4.
+
+**An opponent is staged only once a file is chosen.** `stagesAnOpponent` needs
+both a kind whose source stages one and an `opponentFile`. Until the instructor
+chooses the bot, the job carries no opponent, no gate applies and browser
+grading is not refused: the assignment grades exactly as a slice-1 activity did,
+on any runner, with a hand-wired bot if the script has one — so shipping the
+primitive changed no existing assignment's path. The picker renders for the
+kind (`takesAnOpponentFile`) and says nothing is staged until a file is chosen;
+a script written for the primitive fails on its own when the directory is unset
+(the fixture exits 2 with "no opponent staged").
+
+**Failing loudly.** A job that does carry an opponent whose file is not a bare
+filename or is missing from the setup (deleted after it was chosen) fails with
+`buildStatus: failed` and a message naming the fix
+(`WorkerDaemonError.opponentFile*`); the worker also refuses a descriptor
+naming no file, which the server never sends. A match with nobody on the other
+side would read as a win, so the worker refuses to run it — and since instructor
+validation is a `.validation` submission graded on the native worker, the gap
+shows on the validation run, not in a student's grade.
+
+**The claim gate.** `RunnerActivityGate` (the fourth sibling at the claim seam,
+shaped like `RunnerLanguageGate`) refuses a match job to a runner whose profile
+does not list the `activity-match` capability. It is a *build* capability
+(`RunnerProfileDetector.buildCapabilities`): nothing has to be installed, the
+runner just has to know how to read `Job.opponent`. An older build never
+advertises it — and would otherwise decode the job without the key and grade
+the bot match with no bot in the workspace, silently. Fails open, like the
+language gate, for an activity with no opponent and for a runner advertising
+no profile at all.
+
+**Browser grading is refused** for any activity that stages an opponent (a bot
+kind with its file chosen), at the same doors that refuse grader-only files: the
+zip upload, `set_grading_mode` (and the web mode change and section adoption
+through `setManifestGradingMode`), and choosing the file through `set_activity`
+or the picker from the other side. One message,
+`activityOpponentGradingConflictMessage`. A `bestMetric` assignment may still be
+browser-graded. Slice 1's advice to mark the bot grader-only stands, for a
+different reason now: worker grading is forced by the opponent itself, and
+`graderOnly` is what keeps the bot's *source* out of students' hands.
 
 ### New tables
 
@@ -204,8 +274,9 @@ Additive migrations only; no column changes to existing tables.
 |---|---|
 | `makeWorkerManifestJSON` writes a fresh dict | `activity` is threaded through every rebuild caller (both script edits, the family apply, the draft publish and the two draft suite rebuilds). `AssignmentHelpersManifestTests` pins the round trip. This is the `languageDeclared` trap, one field later. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`, so fields this build does not model survive. |
-| Old runners | `runnerSanitized()` drops the block (slice 1). Slice 2 adds the `activity-match` capability token and gates match jobs at claim with the `RunnerLanguageGate` pattern. |
-| Browser grading | Slice 2 refuses `activity` with a non-`none` opponent source plus `gradingMode: browser` at the three doors that refuse `graderOnlyFiles`. A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
+| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising `activity-match` (slice 2); a new opponent source adds a FIELD to `JobOpponent`, never an enum the runner decodes. |
+| Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
+| Visibility and opponent edits | `withLeaderboardVisibility` / `withOpponentFile` rebuild the block from the stored one, so neither surface's edit can drop the other's field. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
 | Versioning | Snapshots carry the manifest verbatim; `AssignmentVersionStoreTests` pins that the block survives. |
 | Bundle export | The manifest travels as an opaque string. A bundle carrying a kind an older server does not know fails to decode on that server; note it in the term-clone runbook when the first such kind ships beyond slice 1. |
@@ -213,20 +284,35 @@ Additive migrations only; no column changes to existing tables.
 | MCP | `set_activity` (kind locked once submitted) and `activityKinds` on `get_server_info`; every kind list derives from `ActivityKind.allCases` via `MCPActivityProse` (`MCPActivityCoverageTests`). |
 | Versions | No edits to `VERSION`, `ChickadeeVersion.swift` or `CHANGELOG.md`; one fragment under `changelog.d/` per PR. |
 
-## Authoring a slice-1 activity
+## Authoring an activity
 
 1. Set the kind: the "Class activity" select on the edit page, or
    `set_activity` with `kind: "bestMetric"` or `"beatTheInstructor"`. Doing so
    seeds a `highestMetric` record achievement, curating the built-in records
    alongside it as a first Save of the Achievements table would, so Pathfinder
    and friends keep awarding.
-2. Author one suite entry whose script measures the submission and prints a
-   footer with `metric`. For `beatTheInstructor`, bundle the bot as a
-   grader-only support file (which forces worker grading, as for a bug hunt)
-   and have the script play the trials and report the win count as `metric`
-   and the win fraction as `score`.
-3. Publish the leaderboard when ready: the Activity section's checkbox or
+2. For `beatTheInstructor`, upload the bot as a support file (mark it
+   grader-only to keep its source from students) and choose it: the Activity
+   section's "Opponent file" select, or `set_activity` with `opponentFile`.
+   The order does not matter — the kind may be set first — but nothing is
+   staged until a file is chosen, and choosing one needs worker grading (it
+   is refused on a browser-graded assignment).
+3. Author one suite entry whose script plays the trials and prints a footer
+   with `metric`. The script finds the bot at
+   `$CHICKADEE_OPPONENT_DIR/<opponentFile>` and a per-match seed in
+   `$CHICKADEE_MATCH_SEED`; report the win count as `metric` and the win
+   fraction as `score`. For `bestMetric` the script measures the submission on
+   its own; neither variable is set.
+4. Publish the leaderboard when ready: the Activity section's checkbox or
    `set_activity` with `leaderboardVisibility: "visible"`.
+
+A match script for rock-paper-scissors, as the fixture
+`Tests/Fixtures/activity-match/match_rps.sh` plays it: it exits 2 unless both
+variables are set and the bot is where they say, plays five rounds calling the
+submission's and the bot's `python3 strategy.py <round-history>`, reports the
+seed and the history on stderr, and prints `{"score": wins/5, "metric": wins}`.
+The worker test runs it end to end, and again with no opponent to prove it
+errors rather than passes.
 
 ## Open questions (decide during the named slice)
 
@@ -261,7 +347,9 @@ Additive migrations only; no column changes to existing tables.
   `Sources/APIServer/Helpers/ClassItemCoverage.swift` (the ingest-time
   pattern this follows)
 - `docs/student-avatars.md`, `Sources/APIServer/Services/AvatarStore.swift`
+- `Sources/Core/JobOpponent.swift`, `Sources/Worker/OpponentStaging.swift`,
+  `Sources/APIServer/Compatibility/RunnerActivityGate.swift` (slice 2)
 - `docs/runner-capability-profiles.md`,
-  `Sources/APIServer/Compatibility/RunnerLanguageGate.swift` (slice 2)
+  `Sources/APIServer/Compatibility/RunnerLanguageGate.swift` (the gate's shape)
 - `docs/solution-visibility.md` for `postDeadlineRevealDeadline`
 - `docs/ui-design.md` for the page archetype and the style ratchets
