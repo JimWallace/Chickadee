@@ -50,6 +50,12 @@ extension WebRoutes {
             : []
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
+        let showsBracket = activity.kind.aggregation == .bracket
+        let tournament =
+            showsBracket
+            ? try await buildTournamentPresentation(
+                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            : nil
 
         return try await req.view.render(
             "leaderboard",
@@ -64,8 +70,73 @@ extension WebRoutes {
                 champion: champion,
                 showsStandings: showsStandings,
                 standings: standings,
+                showsBracket: showsBracket,
+                hasTournament: tournament != nil,
+                tournament: tournament,
                 currentUser: req.currentUserContext))
     }
+}
+
+/// The latest tournament run as the page shows it: its status, the winner
+/// once there is one, and every round's matches by handle and bird. Nil
+/// when no run has been started. Entrants are named from the run's frozen
+/// snapshot, so a student who has since dropped still appears in the
+/// bracket they played.
+func buildTournamentPresentation(
+    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: Database
+) async throws -> TournamentPresentation? {
+    guard let (run, slots) = try await latestTournament(testSetupID: setup.id ?? "", on: db) else { return nil }
+    let entrants = run.entrants
+    let identities = try await RankedIdentities.load(
+        userIDs: entrants.map(\.userID), courseID: setup.courseID, on: db)
+    var bySeed: [Int: TournamentEntrantPresentation] = [:]
+    for entrant in entrants {
+        let identity = try await identities.presentation(
+            for: entrant.userID, includeName: includeNames, fallbackLabel: "Seed \(entrant.seed)", on: db)
+        // A dropped entrant keeps their seed on the bracket they played.
+        bySeed[entrant.seed] = TournamentEntrantPresentation(
+            seed: entrant.seed,
+            handle: identity?.handle ?? "Seed \(entrant.seed)",
+            name: identity?.name ?? "",
+            isViewer: entrant.userID == viewerID,
+            hasAvatar: identity != nil,
+            avatar: identity?.avatar)
+    }
+    func entrant(_ seed: Int?) -> TournamentEntrantPresentation? { seed.flatMap { bySeed[$0] } }
+
+    var rounds: [TournamentRoundPresentation] = []
+    for slot in slots {
+        let home = entrant(slot.homeSeed)
+        let away = entrant(slot.awaySeed)
+        let resultText: String
+        if slot.awaySeed == nil {
+            resultText = "bye"
+        } else if slot.winnerSeed != nil {
+            // The "won" tag beside the entrant says who; the cell says only
+            // that the match is decided.
+            resultText = "decided"
+        } else {
+            resultText = "in progress"
+        }
+        let match = TournamentMatchPresentation(
+            home: home, away: away, hasAway: away != nil,
+            resultText: resultText,
+            homeWon: slot.winnerSeed == slot.homeSeed,
+            awayWon: slot.awaySeed != nil && slot.winnerSeed == slot.awaySeed)
+        if let index = rounds.firstIndex(where: { $0.number == slot.round }) {
+            rounds[index].matches.append(match)
+        } else {
+            rounds.append(TournamentRoundPresentation(number: slot.round, matches: [match]))
+        }
+    }
+    let winner = run.winnerUserID.flatMap { winnerID in entrants.first { $0.userID == winnerID } }
+        .flatMap { entrant($0.seed) }
+    return TournamentPresentation(
+        statusText: tournamentStatusText(run: run),
+        isComplete: run.status == APITournamentRun.Status.complete,
+        hasWinner: winner != nil,
+        winner: winner,
+        rounds: rounds)
 }
 
 /// The hill's holder for the page, or nil when the activity has no hill or
@@ -118,7 +189,50 @@ struct LeaderboardContext: Encodable {
     /// won, drawn, lost, average score) instead of the metric ranking.
     let showsStandings: Bool
     let standings: [StandingRow]
+    /// True for a tournament kind: the page shows the latest run's bracket.
+    let showsBracket: Bool
+    /// True when a run has been started; the template gates on this, never
+    /// on the optional itself.
+    let hasTournament: Bool
+    let tournament: TournamentPresentation?
     let currentUser: CurrentUserContext?
+}
+
+/// The latest tournament run as the page shows it.
+struct TournamentPresentation: Encodable {
+    /// One sentence naming the schedule and where the run stands.
+    let statusText: String
+    let isComplete: Bool
+    let hasWinner: Bool
+    let winner: TournamentEntrantPresentation?
+    let rounds: [TournamentRoundPresentation]
+}
+
+struct TournamentRoundPresentation: Encodable {
+    let number: Int
+    var matches: [TournamentMatchPresentation]
+}
+
+/// One match of a round. `hasAway` is false for a bye.
+struct TournamentMatchPresentation: Encodable {
+    let home: TournamentEntrantPresentation?
+    let away: TournamentEntrantPresentation?
+    let hasAway: Bool
+    let resultText: String
+    let homeWon: Bool
+    let awayWon: Bool
+}
+
+/// An entrant by handle and bird; a dropped student keeps their seed and an
+/// empty handle, since their enrollment carried it.
+struct TournamentEntrantPresentation: Encodable {
+    let seed: Int
+    let handle: String
+    /// Staff only; empty for a student viewer.
+    let name: String
+    let isViewer: Bool
+    let hasAvatar: Bool
+    let avatar: AvatarPresentation?
 }
 
 /// One row of a round robin's standings.

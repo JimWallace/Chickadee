@@ -95,6 +95,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "passing-threshold", use: savePassingThresholdSetting)
         r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
         r.post(":assignmentID", "activity", "opponent", use: saveActivityOpponentFile)
+        r.post(":assignmentID", "tournament", "run", use: runTournament)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)

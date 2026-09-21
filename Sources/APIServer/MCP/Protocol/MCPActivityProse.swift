@@ -35,6 +35,16 @@ enum MCPActivityProse {
     static var opponentSourceTokens: String {
         LanguageProse.list(ActivityOpponentSource.allCases.map(\.rawValue))
     }
+
+    /// `"bracket or swiss"` — the tournament schedules `run_tournament` takes.
+    static var scheduleTokens: String {
+        LanguageProse.list(TournamentSchedule.allCases.map(\.rawValue))
+    }
+
+    /// One clause per schedule: `"bracket — …; swiss — …"`.
+    static var scheduleSummaries: String {
+        TournamentSchedule.allCases.map { "\($0.rawValue) — \($0.summary)" }.joined(separator: "; ")
+    }
 }
 
 /// One activity kind's facts, as reported by `get_server_info`. Every field is
@@ -46,8 +56,11 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
     let displayName: String
     /// What the kind does and where its ranking number comes from.
     let summary: String
-    /// How the class's results combine: "leaderboard" for every kind shipped
-    /// so far; later kinds aggregate to standings or a union.
+    /// How the class's results combine. Reports "leaderboard" for every kind
+    /// with a ranking page (`aggregatesToLeaderboard`), which is all of them;
+    /// `SetActivityToolTests.serverInfoListsEveryKind` pins that value, so
+    /// the finer `ActivityAggregation` axis (standings, bracket) is not yet
+    /// reported here.
     let aggregation: String
     /// What is staged beside the submission when the script runs: "none", or
     /// "supportFile" for a kind that plays a bundled bot (which then needs

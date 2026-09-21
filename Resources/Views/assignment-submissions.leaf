@@ -40,6 +40,29 @@
 </section>
 #endif
 
+#if(tournament.isTournamentKind):
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>Tournament</h2>
+        <a class="btn action-btn" href="#(tournament.leaderboardURL)">Open bracket</a>
+    </div>
+    <p class="section-intro">#(tournament.statusText)</p>
+    <form method="post" action="/instructor/#(assignmentID)/tournament/run" class="form-stack"#if(tournament.hasRunInProgress): data-confirm="Start a new tournament? The run in progress is superseded and its remaining matches decide nothing."#endif>
+        #csrfFormField()
+        <label class="form-label">
+            Schedule
+            <select class="form-input" name="schedule">
+                #for(option in tournament.scheduleOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
+        </label>
+        <p class="field-note field-note--muted">Every student's latest complete submission enters, seeded in submission order.</p>
+        <button class="btn btn-primary" type="submit">Run tournament</button>
+    </form>
+</section>
+#endif
+
 #if(count(rows) == 0):
 <p class="empty">No student users found.</p>
 #else:

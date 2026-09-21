@@ -65,6 +65,33 @@ import Vapor
         }
     }
 
+    /// A tournament kind seeds the tournament-winner record — the same held
+    /// dimension under its own name — and swaps it for the standings leader
+    /// when the kind changes to a round robin.
+    @Test func theTournamentKindSeedsTheWinnerRecord() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, gradingMode: "worker")
+            let out = try await SetActivityTool().execute(
+                .init(assignmentPublicID: assignment.publicID, kind: "elimination", leaderboardVisibility: nil),
+                context(app))
+            #expect(out.opponentSource == "paired")
+            let props = try await manifest(on: app)
+            #expect(props.achievements.contains { $0.id == ActivityAuthoring.seededTournamentRecordID })
+            #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
+            #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededRecordID })
+            #expect(props.achievements.filter { $0.recordDimension == .tournamentWinner }.count == 1)
+
+            _ = try await SetActivityTool().execute(
+                .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
+                context(app))
+            let switched = try await manifest(on: app)
+            #expect(!switched.achievements.contains { $0.id == ActivityAuthoring.seededTournamentRecordID })
+            #expect(switched.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
+            #expect(switched.achievements.filter { $0.recordDimension == .tournamentWinner }.count == 1)
+        }
+    }
+
     /// Worker-only by construction, like the hill.
     @Test func theRoundRobinIsRefusedOnABrowserGradedAssignment() async throws {
         let app = try await makeTestApp()

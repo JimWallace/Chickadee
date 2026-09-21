@@ -79,6 +79,7 @@ Classification column references `policy46-classification.md`.
 | `update_assignment` | assignment | echo of saved metadata | No | Confidential |
 | `set_grading_mode` | assignment, setup | echo of mode | No | Confidential |
 | `set_activity` | assignment, setup | echo of the activity block | No | Confidential |
+| `run_tournament` | assignment, setup, enrollments, submissions (ids only) | run id, schedule, entrant and round counts, status — no student identifier | No | Confidential |
 | `update_suite` | manifest | reconciled suite state | No | Restricted |
 | `author_script` | setup zip | echo (filename, tier, validation status) | No | Restricted |
 | `delete_suite_item` | manifest + zip | reconciled suite state | No | Restricted |

@@ -6,6 +6,8 @@
 // its own translation unit and only gets re-checked when the relevant
 // view changes.
 
+import Core
+import Fluent
 import Foundation
 import Vapor
 
@@ -365,6 +367,8 @@ struct AssignmentSubmissionsContext: Encodable {
     /// One-shot error banner from a redirect back to this page (`?error=`),
     /// rendered by the `_flash` partial in `base.leaf`.
     let flashError: String?
+    /// One-shot success banner (`?notice=`), the same partial.
+    let flashSuccess: String?
     /// The assignment's secret-reveal toggle.  Gates the whole reveal-token
     /// affordance on this page (spent tag + re-grant action) — when off the
     /// page renders identically to the pre-feature layout.
@@ -384,6 +388,66 @@ struct AssignmentSubmissionsContext: Encodable {
     let hasCoverage: Bool
     /// "9 / 15 items found", for the section's summary chip.
     let coverageSummary: String
+    /// The Tournament section's facts (docs/class-activities.md); its
+    /// `isTournamentKind` gates the section off every other page.
+    let tournament: TournamentControlFacts
+}
+
+/// The submissions page's Tournament section: the run control and where
+/// the latest run stands. The bracket itself is on the leaderboard page,
+/// which staff always reach with names.
+struct TournamentControlFacts: Encodable {
+    /// True when the activity's aggregation is a bracket.
+    let isTournamentKind: Bool
+    /// "No tournament has been run yet.", "Round 2 of 3 in progress", …
+    let statusText: String
+    /// True while the latest run is still playing: the form then asks
+    /// before superseding it.
+    let hasRunInProgress: Bool
+    /// The schedule select: every `TournamentSchedule`, the bracket selected.
+    let scheduleOptions: [TournamentScheduleOption]
+    let leaderboardURL: String
+
+    static let none = TournamentControlFacts(
+        isTournamentKind: false, statusText: "", hasRunInProgress: false, scheduleOptions: [], leaderboardURL: "")
+
+    static func make(setup: APITestSetup, on db: any Database) async throws -> TournamentControlFacts {
+        guard let setupID = setup.id, setup.decodedManifest()?.activity?.kind.aggregation == .bracket else {
+            return .none
+        }
+        let latest = try await latestTournament(testSetupID: setupID, on: db)
+        return TournamentControlFacts(
+            isTournamentKind: true,
+            statusText: latest.map { tournamentStatusText(run: $0.run) } ?? "No tournament has been run yet.",
+            hasRunInProgress: latest?.run.status == APITournamentRun.Status.running,
+            scheduleOptions: TournamentScheduleOption.options(),
+            leaderboardURL: "/testsetups/\(setupID)/leaderboard")
+    }
+}
+
+struct TournamentScheduleOption: Encodable {
+    let value: String
+    let label: String
+    let selected: Bool
+
+    static func options(selected: TournamentSchedule = .bracket) -> [TournamentScheduleOption] {
+        TournamentSchedule.allCases.map {
+            TournamentScheduleOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
+        }
+    }
+}
+
+/// One sentence on where a run stands, shared by the control and the page.
+func tournamentStatusText(run: APITournamentRun) -> String {
+    let schedule = run.tournamentSchedule?.displayName ?? run.schedule
+    switch run.status {
+    case APITournamentRun.Status.complete:
+        return "\(schedule): complete after \(run.roundCount) round\(run.roundCount == 1 ? "" : "s")."
+    case APITournamentRun.Status.superseded:
+        return "\(schedule): superseded by a later run."
+    default:
+        return "\(schedule): round \(run.currentRound) of \(run.roundCount) in progress."
+    }
 }
 
 /// One item of a contribution assignment's class-wide coverage.

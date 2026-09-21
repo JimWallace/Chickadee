@@ -101,7 +101,8 @@ func chooseClassmates(
 /// reuses it, so a replayed report of the earlier run can no longer complete
 /// a row the re-test owns.
 func openMatch(
-    testSetupID: String, submissionID: String, opponent: ChosenOpponent, seed: String, on db: Database
+    testSetupID: String, submissionID: String, opponent: ChosenOpponent, seed: String, round: Int? = nil,
+    on db: Database
 ) async throws {
     let existing = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
@@ -114,15 +115,17 @@ func openMatch(
         existing.completedAt = nil
         existing.createdAt = Date()
         existing.seed = seed
+        existing.round = round
         try await existing.update(on: db)
     } else {
         // Ignore the conflict: two claims of one submission at once, first
         // insert wins — the same shape as `awardImmutableBadge`.
-        try? await APIMatchResult(
+        let row = APIMatchResult(
             testSetupID: testSetupID, submissionID: submissionID,
             opponentSubmissionID: opponent.champion?.id, opponentIdentity: opponent.identity,
-            seed: seed, createdAt: Date()
-        ).save(on: db)
+            seed: seed, createdAt: Date())
+        row.round = round
+        try? await row.save(on: db)
     }
 }
 
@@ -156,6 +159,10 @@ func recordActivityMatch(
     else { return }
     switch activity.kind.opponentSource {
     case .none, .supportFile:
+        return
+    case .paired:
+        // A tournament match lands through `recordTournamentMatch`; a
+        // student's own practice submission opened no row.
         return
     case .classmates:
         try await recordMatrixMatches(

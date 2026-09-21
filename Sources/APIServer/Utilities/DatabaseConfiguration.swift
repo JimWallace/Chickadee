@@ -471,6 +471,7 @@ func registerMigrations(on app: Application) {
     // Round-robin standings (docs/class-activities.md): one row per
     // (assignment, student), recomputed at ingest. New table; FK to `users`.
     app.migrations.add(CreateActivityStandings())
+    app.migrations.add(CreateTournamentRuns())
 
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.

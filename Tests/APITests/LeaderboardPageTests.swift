@@ -259,4 +259,77 @@ import VaporTesting
             #expect(!html.contains("lb_robin_mate"))
         }
     }
+
+    // MARK: - The bracket (tournament, slice 5)
+
+    private func tournamentManifest() throws -> String {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            activity: ClassActivity(kind: .elimination, leaderboardVisibility: .visible))
+        return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+    }
+
+    /// A tournament kind's page shows the latest run's rounds by handle —
+    /// byes, open matches, decided ones — and the winner once there is one;
+    /// a student viewer never sees a name.
+    @Test func aTournamentShowsItsRoundsByHandle() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(id: "lb_cup", manifest: try tournamentManifest(), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lb_cup", courseID: setup.courseID, title: "Cup")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            let mate = try await makeTestUser(on: app, username: "lb_cup_mate", role: "student")
+            try await wrEnrollUser(mate, on: app)
+            let third = try await makeTestUser(on: app, username: "lb_cup_third", role: "student")
+            try await wrEnrollUser(third, on: app)
+
+            let empty = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            #expect(empty.status == .ok)
+            #expect(empty.body.string.contains("No tournament has been run yet"))
+
+            let run = try APITournamentRun(
+                testSetupID: "lb_cup", schedule: .bracket, startedBy: nil, startedAt: Date(),
+                entrants: [
+                    TournamentEntrant(seed: 1, userID: try viewer.requireID(), submissionID: "lb_cup_v"),
+                    TournamentEntrant(seed: 2, userID: try mate.requireID(), submissionID: "lb_cup_m"),
+                    TournamentEntrant(seed: 3, userID: try third.requireID(), submissionID: "lb_cup_t"),
+                ])
+            try await run.save(on: app.db)
+            let runID = try run.requireID()
+            try await APITournamentMatch(
+                tournamentID: runID,
+                slot: TournamentSlot(round: 1, position: 0, homeSeed: 1, awaySeed: nil, winnerSeed: 1),
+                matchSubmissionID: nil, completedAt: Date()
+            ).save(on: app.db)
+            try await APITournamentMatch(
+                tournamentID: runID, slot: TournamentSlot(round: 1, position: 1, homeSeed: 2, awaySeed: 3),
+                matchSubmissionID: "lb_cup_match", completedAt: nil
+            ).save(on: app.db)
+
+            let res = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            #expect(res.status == .ok)
+            let html = res.body.string
+            #expect(html.contains("Round 1"))
+            #expect(html.contains("Single elimination"))
+            #expect(html.contains("round 1 of 2 in progress"))
+            #expect(html.contains("bye"))
+            #expect(html.contains("in progress"))
+            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(!html.contains("Winner:"))
+            #expect(!html.contains("lb_cup_mate"))
+            let enrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == (try mate.requireID())).first())
+            #expect(html.contains(try #require(enrollment.avatarHandle)))
+
+            run.status = APITournamentRun.Status.complete
+            run.winnerUserID = try mate.requireID()
+            try await run.update(on: app.db)
+            let done = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            #expect(done.body.string.contains("Winner:"))
+            #expect(done.body.string.contains("complete after 2 rounds"))
+        }
+    }
 }

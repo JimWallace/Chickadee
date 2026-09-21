@@ -85,6 +85,10 @@ import Testing
         // the kind is locked once a student has submitted, so the case that
         // would warrant a close cannot arise. No close/regrade.
         "SetActivityTool.swift",
+        // Starts a tournament on a snapshot of the class: enqueues match
+        // jobs, changes no content, and the assignment stays open for the
+        // live session it serves. No close/regrade.
+        "RunTournamentTool.swift",
         // Dataset marks change delivery (per-student slices), not the graded
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.

@@ -40,6 +40,12 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     /// per-match row for each. With no classmate yet, the bundled bot stands
     /// in so the first submitter still has a match.
     case classmates
+    /// The one classmate a tournament schedule pairs the entrant with
+    /// (brackets). Each pairing is its own job with ONE staged submission —
+    /// the hill's runner contract, not the matrix's, which is why it shares
+    /// the hill's capability token. A student's own submission on such an
+    /// assignment plays the bundled bot, if one is chosen, as practice.
+    case paired
 
     /// True when a match needs an opponent staged beside the submission.
     /// Everything that hangs off an opponent — the worker's `activity-match`
@@ -48,7 +54,7 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     public var stagesAnOpponent: Bool {
         switch self {
         case .none: return false
-        case .supportFile, .champion, .classmates: return true
+        case .supportFile, .champion, .classmates, .paired: return true
         }
     }
 
@@ -60,7 +66,7 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
         switch self {
         case .none: return nil
         case .supportFile: return .activityMatch
-        case .champion: return .activityOpponentSubmission
+        case .champion, .paired: return .activityOpponentSubmission
         case .classmates: return .activityMatrix
         }
     }
@@ -77,6 +83,9 @@ public enum ActivityAggregation: String, Codable, CaseIterable, Sendable {
     /// over a student's latest submission (`activity_standings`). Not
     /// best-so-far: a resubmission replaces the row.
     case standings
+    /// A tournament run on frozen entrants (`tournament_runs`): the page
+    /// shows the bracket's rounds and the winner, not a ranking.
+    case bracket
 }
 
 /// The activity kinds this build can author and grade.
@@ -103,6 +112,11 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// and the class is ranked in standings — wins, draws, losses and average
     /// match score. Feeds achievements, never the grade of record.
     case roundRobin
+    /// Tournament: an instructor starts a single-elimination bracket or a
+    /// Swiss tournament on a snapshot of every student's latest submission;
+    /// each pairing is a match job, rounds advance as matches land, and the
+    /// winner holds the `tournamentWinner` record. Feeds achievements only.
+    case elimination
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
@@ -111,6 +125,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .bestMetric: return "Best metric"
         case .kingOfTheHill: return "Beat the champion"
         case .roundRobin: return "Round robin"
+        case .elimination: return "Tournament"
         }
     }
 
@@ -137,6 +152,14 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
                 + "submission (the bundled bot until a classmate exists) and the class is ranked in "
                 + "standings by wins, draws, losses and average match score; standings feed "
                 + "achievements, never the grade of record."
+        case .elimination:
+            return
+                "Tournament: an instructor runs a single-elimination bracket or a Swiss tournament "
+                + "on a snapshot of every student's latest submission (run_tournament); each pairing "
+                + "is a match job whose script passes (exits 0) when the first entrant beats the one "
+                + "staged as the opponent, rounds advance as matches land, and the winner holds the "
+                + "tournament record; a student's own submission plays the bundled bot, if any, as "
+                + "practice."
         }
     }
 
@@ -145,7 +168,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// `aggregation`.
     public var aggregatesToLeaderboard: Bool {
         switch self {
-        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin: return true
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination: return true
         }
     }
 
@@ -155,6 +178,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .beatTheInstructor, .bestMetric, .kingOfTheHill: return .leaderboard
         case .roundRobin: return .standings
+        case .elimination: return .bracket
         }
     }
 
@@ -167,6 +191,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .bestMetric: return .none
         case .kingOfTheHill: return .champion
         case .roundRobin: return .classmates
+        case .elimination: return .paired
         }
     }
 }
@@ -248,7 +273,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         switch kind.opponentSource {
         case .none: return false
         case .supportFile: return opponentFile != nil
-        case .champion, .classmates: return true
+        case .champion, .classmates, .paired: return true
         }
     }
 

@@ -164,6 +164,8 @@ Anatomy rules that hold across archetypes:
 - **`.page-section` is the one generic section wrapper** (heading + content).
   `.section-block` is the suite editor's per-test-section grouping and
   `.submission-section-block` the results grouping — not general-purpose.
+  `.submission-section-heading` is the sub-heading over a grouped
+  `.results-table` inside a section (a results section, a bracket round).
 - Dense/wide tables wrap in `.table-scroll`.
 
 ## Component vocabulary

@@ -1083,6 +1083,57 @@ import VaporTesting
         }
     }
 
+    // MARK: - Tournament (docs/class-activities.md, slice 5)
+
+    private let tournamentManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10,"activity":{"kind":"elimination","opponentFile":"bot.py"}}
+        """
+
+    /// A tournament match job carries the paired entrant's snapshotted
+    /// submission on the hill's single-opponent contract, with its row
+    /// opened under the round — claimable by a hill-capable build.
+    @Test func requestJob_tournament_carriesThePairedEntrant() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_cup", manifest: tournamentManifestJSON)
+            _ = try await enrolClassmate(username: "cup_a", submissionID: "wsub_cup_a", setup: setup, filename: "a.py")
+            _ = try await enrolClassmate(username: "cup_b", submissionID: "wsub_cup_b", setup: setup, filename: "b.py")
+            let run = try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
+            #expect(run.entrants.count == 2)
+
+            let job = try #require(try await requestJob(workerID: "w-cup", profile: hillProfile()))
+            let match = try #require(try await APISubmission.find(job.submissionID, on: app.db))
+            #expect(match.kind == APISubmission.Kind.tournamentMatch)
+            #expect(job.opponents == nil)
+            let opponent = try #require(job.opponent)
+            #expect(opponent.submissionID == "wsub_cup_b")
+            #expect(opponent.submissionFilename == "b.py")
+            #expect(opponent.submissionURL?.path == "/api/v1/worker/submissions/wsub_cup_b/download")
+            let row = try #require(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == job.submissionID).first())
+            #expect(row.round == 1)
+            #expect(row.opponentSubmissionID == "wsub_cup_b")
+            #expect(row.seed == opponent.matchSeed)
+            // Nothing else is pending.
+            #expect(try await requestJob(workerID: "w-cup-2", profile: hillProfile()) == nil)
+        }
+    }
+
+    /// A student's own submission on a tournament assignment plays the
+    /// bundled bot as practice, with no row, and never a classmate.
+    @Test func requestJob_tournament_aStudentSubmissionPlaysTheBot() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_cup2", manifest: tournamentManifestJSON)
+            _ = try await makeSubmission(id: "wsub_cup_practice", setupID: try setup.requireID())
+            let job = try #require(try await requestJob(workerID: "w-cup3", profile: hillProfile()))
+            #expect(job.submissionID == "wsub_cup_practice")
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == "bot.py")
+            #expect(!opponent.stagesASubmission)
+            #expect(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_cup_practice").count() == 0)
+        }
+    }
+
     /// A slice-3 build (hill-capable, no matrix) never claims a round-robin job.
     @Test func requestJob_roundRobin_waitsForARunnerThatRunsAMatrix() async throws {
         try await withApp(app) { _ in

@@ -421,6 +421,8 @@ struct WorkerJobRoutes: RouteCollection {
         switch activity.kind.opponentSource {
         case .none:
             return nil
+        case .paired:
+            return try await pairedJobOpponent(activity: activity, submission: submission, base: base, on: db)
         case .classmates:
             // With classmates to play, `jobOpponents` carries them. With
             // none yet, the bot stands in as a single opponent — one open
@@ -479,6 +481,46 @@ struct WorkerJobRoutes: RouteCollection {
                 throw WorkerJobError.internalInconsistency(
                     reason: "Could not open the match for \(submissionID): \(error)")
             }
+        }
+    }
+
+    /// The opponent of a tournament match (docs/class-activities.md,
+    /// "Tournaments"): the entrant it is paired with, staged on the hill's
+    /// single-submission contract, with its row opened under the round. A
+    /// student's own submission on such an assignment plays the bundled
+    /// bot, if one is chosen, as practice, with no row.
+    static func pairedJobOpponent(
+        activity: ClassActivity, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> JobOpponent? {
+        guard let submissionID = submission.id else { return nil }
+        do {
+            guard let paired = try await pairedOpponent(for: submission, on: db) else {
+                guard submission.kind == APISubmission.Kind.student, let file = activity.opponentFile else {
+                    return nil
+                }
+                return JobOpponent(
+                    supportFile: file,
+                    matchSeed: JobOpponent.matchSeed(
+                        submissionID: submissionID, opponentIdentity: JobOpponent.supportFileIdentity(file)))
+            }
+            guard let awayID = paired.away.id else { return nil }
+            let chosen = ChosenOpponent(champion: paired.away, identity: JobOpponent.submissionIdentity(awayID))
+            let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+            try await openMatch(
+                testSetupID: submission.testSetupID, submissionID: submissionID,
+                opponent: chosen, seed: seed, round: paired.slot.round, on: db)
+            guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(awayID)/download") else {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Failed to build the opponent download URL from base=\(base)")
+            }
+            return JobOpponent(
+                supportFile: nil, matchSeed: seed, submissionID: awayID,
+                submissionURL: url, submissionFilename: paired.away.filename)
+        } catch let error as WorkerJobError {
+            throw error
+        } catch {
+            throw WorkerJobError.internalInconsistency(
+                reason: "Could not open the tournament match for \(submissionID): \(error)")
         }
     }
 

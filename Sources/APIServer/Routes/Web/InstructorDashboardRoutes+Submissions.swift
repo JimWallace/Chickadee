@@ -108,6 +108,10 @@ extension InstructorDashboardRoutes {
         // every other assignment (the accumulator writes no rows there), which
         // is what keeps this section off ordinary pages.
         let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        var tournament = TournamentControlFacts.none
+        if let setup {
+            tournament = try await TournamentControlFacts.make(setup: setup, on: req.db)
+        }
         let coverageRows = try await buildAssignmentCoverageRows(
             testSetupID: assignment.testSetupID,
             manifest: setup?.decodedManifest(),
@@ -123,11 +127,13 @@ extension InstructorDashboardRoutes {
                 metrics: metrics,
                 rows: rows,
                 flashError: req.query[String.self, at: "error"],
+                flashSuccess: req.query[String.self, at: "notice"],
                 secretRevealEnabled: secretRevealEnabled,
                 passingThresholdPercent: assignment.passingThresholdPercent,
                 coverageRows: coverageRows,
                 hasCoverage: !coverageRows.isEmpty,
-                coverageSummary: assignmentCoverageSummary(coverageRows)
+                coverageSummary: assignmentCoverageSummary(coverageRows),
+                tournament: tournament
             )
         )
     }
