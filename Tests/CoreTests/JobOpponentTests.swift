@@ -4,6 +4,7 @@
 // the seed's shape and determinism, and the wire back-compat in both
 // directions — a job without the key decodes as an ordinary run.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -55,5 +56,36 @@ import Testing
             manifest: TestProperties(), opponent: opponent)
         let decoded = try JSONDecoder().decode(Job.self, from: JSONEncoder().encode(job))
         #expect(decoded.opponent == opponent)
+    }
+
+    // MARK: - A submission opponent (slice 3)
+
+    @Test func aSubmissionOpponentRoundTripsAndABotOpponentsBytesAreUnchanged() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let bot = JobOpponent(supportFile: "bot.py", matchSeed: String(repeating: "ab", count: 32))
+        let botJSON = try #require(String(data: encoder.encode(bot), encoding: .utf8))
+        #expect(!botJSON.contains("submission"))
+        #expect(!bot.stagesASubmission)
+
+        let champion = JobOpponent(
+            supportFile: nil, matchSeed: String(repeating: "cd", count: 32),
+            submissionID: "sub_champ", submissionURL: testURL("https://x.test/c.zip"),
+            submissionFilename: "strategy.py")
+        let decoded = try JSONDecoder().decode(JobOpponent.self, from: encoder.encode(champion))
+        #expect(decoded == champion)
+        #expect(decoded.stagesASubmission)
+        #expect(decoded.submissionFilename == "strategy.py")
+    }
+
+    /// Identities are spelled with their source in front, so a champion's
+    /// submission and a bot named after it never share a seed or a row.
+    @Test func identitiesCarryTheirSource() {
+        #expect(JobOpponent.submissionIdentity("abc") == "submission:abc")
+        #expect(JobOpponent.supportFileIdentity("abc") == "supportFile:abc")
+        #expect(JobOpponent.noOpponentIdentity == "none")
+        #expect(
+            JobOpponent.matchSeed(submissionID: "s", opponentIdentity: JobOpponent.submissionIdentity("abc"))
+                != JobOpponent.matchSeed(submissionID: "s", opponentIdentity: JobOpponent.supportFileIdentity("abc")))
     }
 }

@@ -357,17 +357,27 @@ struct WorkerJobRoutes: RouteCollection {
             personalizedInputs: personalizedInputs,
             personalizedFiles: personalizedFiles,
             language: language,
-            opponent: Self.jobOpponent(manifest: claimed.manifest, submissionID: submissionID)
+            opponent: try await Self.jobOpponent(
+                manifest: claimed.manifest, submission: submission, base: base, on: req.db)
         )
     }
 
     /// The opponent a match job stages (docs/class-activities.md), or nil for
-    /// an ordinary run — and for an activity whose bot is not chosen yet,
+    /// an ordinary run — and for a bot activity whose bot is not chosen yet,
     /// which grades as it did before the primitive existed. Read from the
     /// FULL manifest: `runnerSanitized()` strips the activity block, which is
     /// why the runner learns this from the job.
-    static func jobOpponent(manifest: TestProperties, submissionID: String) -> JobOpponent? {
-        guard let activity = manifest.activity, activity.stagesAnOpponent else { return nil }
+    ///
+    /// For king of the hill this also OPENS the match row (`openMatch`), so
+    /// the result path knows which opponent the job played. A database error
+    /// there is the claim's error: a match graded with no row could never
+    /// move the hill, which would read as a loss.
+    static func jobOpponent(
+        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> JobOpponent? {
+        guard let activity = manifest.activity, activity.stagesAnOpponent,
+            let submissionID = submission.id
+        else { return nil }
         switch activity.kind.opponentSource {
         case .none:
             return nil
@@ -377,6 +387,36 @@ struct WorkerJobRoutes: RouteCollection {
                 matchSeed: JobOpponent.matchSeed(
                     submissionID: submissionID,
                     opponentIdentity: JobOpponent.supportFileIdentity(activity.opponentFile)))
+        case .champion:
+            do {
+                let chosen = try await chooseOpponent(for: submission, activity: activity, on: db)
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: chosen, seed: seed, on: db)
+                if let champion = chosen.champion, let championID = champion.id {
+                    guard
+                        let url = URL(
+                            string: "\(base)/api/v1/worker/submissions/\(championID)/download")
+                    else {
+                        throw WorkerJobError.internalInconsistency(
+                            reason: "Failed to build the champion download URL from base=\(base)")
+                    }
+                    return JobOpponent(
+                        supportFile: nil, matchSeed: seed, submissionID: championID,
+                        submissionURL: url, submissionFilename: champion.filename)
+                }
+                // The bot holds the hill, or nobody does: the job carries the
+                // bot when there is one, and no opponent at all otherwise —
+                // the row is open either way, so a passing match takes it.
+                guard activity.opponentFile != nil else { return nil }
+                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
+            } catch let error as WorkerJobError {
+                throw error
+            } catch {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Could not open the match for \(submissionID): \(error)")
+            }
         }
     }
 

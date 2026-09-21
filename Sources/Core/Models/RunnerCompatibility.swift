@@ -14,6 +14,14 @@ public struct RunnerCapability: Codable, Hashable, Sendable {
     /// gate keeps match jobs away from such a runner — which would otherwise
     /// grade a bot match with no bot in the workspace.
     public static let activityMatch = RunnerCapability(name: "activity-match")
+
+    /// Advertised by every runner build that can stage another SUBMISSION as
+    /// the opponent (king of the hill; later, classmates). Separate from
+    /// `activityMatch` because a build that copies a support file may predate
+    /// downloading and extracting a submission, and a match handed to such a
+    /// build would fail — loudly, but for every student until a runner is
+    /// upgraded, where the gate makes it wait instead.
+    public static let activityOpponentSubmission = RunnerCapability(name: "activity-opponent-submission")
 }
 
 public struct LanguageVersion: Codable, Hashable, Sendable {

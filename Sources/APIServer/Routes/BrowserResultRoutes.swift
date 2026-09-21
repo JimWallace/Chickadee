@@ -274,6 +274,22 @@ struct BrowserResultRoutes: RouteCollection {
             }
         }
 
+        // The hill (king of the hill) — a fourth class-level effect, wired
+        // here for the same reason. A browser-graded king-of-the-hill
+        // assignment is refused at authoring, so this only ever sees the
+        // worker fail-over path, where it completes the row the claim opened.
+        if reconciled.buildStatus == .passed, let userID {
+            await bestEffort("activity_match") {
+                try await recordActivityMatch(
+                    testSetupID: setup.id ?? "",
+                    userID: userID,
+                    submissionID: subID,
+                    outcomes: reconciled.outcomes,
+                    on: req.db
+                )
+            }
+        }
+
         if reconciled.buildStatus == .passed,
             let userID,
             gradePercent(from: reconciled) == 100

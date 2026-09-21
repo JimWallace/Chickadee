@@ -463,6 +463,11 @@ func registerMigrations(on app: Application) {
     // New table; FK to `users`, created far above, so no ordering constraint.
     app.migrations.add(CreateLeaderboardEntries())
 
+    // King of the hill (docs/class-activities.md): match rows opened at claim
+    // and completed at ingest, plus the one champion row per assignment. New
+    // tables; FK to `users`, created far above, so no ordering constraint.
+    app.migrations.add(CreateActivityMatches())
+
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.
     app.migrations.add(CreateSessionReaperIndex())

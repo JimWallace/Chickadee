@@ -20,6 +20,24 @@
         </div>
     </div>
     <p class="text-muted">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
+    #if(hasHill):
+    #if(champion):
+    <p>
+        Champion:
+        #extend("_avatar", champion.avatar)
+        <span data-avatar-handle>#(champion.handle)</span>
+        #if(champion.isViewer):
+        <span class="chip">you</span>
+        #endif
+        #if(isStaff):
+        <span class="text-muted">· #(champion.name)</span>
+        #endif
+        <span class="text-muted">· took the hill <span class="js-relative-time" data-iso="#(champion.crownedAtISO)">#(champion.crownedAtText)</span> · #(champion.defencesText)</span>
+    </p>
+    #else:
+    <p class="text-muted">No student holds the hill yet.</p>
+    #endif
+    #endif
     #if(count(rows) == 0):
     <p class="empty">No submission has reported a ranking metric yet.</p>
     #else:

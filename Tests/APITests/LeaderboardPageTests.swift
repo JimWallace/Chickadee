@@ -155,4 +155,50 @@ import VaporTesting
     func metricFormatting(metric: Double, expected: String) {
         #expect(formatLeaderboardMetric(metric) == expected)
     }
+
+    // MARK: - The hill (king of the hill, slice 3)
+
+    private func hillManifest() throws -> String {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible, opponentFile: "bot.py"))
+        return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+    }
+
+    /// The page names the hill's holder by handle with the streak, and says
+    /// so when no student holds it yet; a student viewer never sees a name.
+    @Test func theHillsHolderIsShownByHandleWithTheStreak() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(id: "lb_hill", manifest: try hillManifest(), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lb_hill", courseID: setup.courseID, title: "Hill")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            let holder = try await makeTestUser(on: app, username: "lb_hill_holder", role: "student")
+            try await wrEnrollUser(holder, on: app)
+
+            let empty = try await get("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
+            #expect(empty.status == .ok)
+            #expect(empty.body.string.contains("No student holds the hill yet"))
+
+            try await APIActivityChampion(
+                testSetupID: "lb_hill", userID: try holder.requireID(), submissionID: "lb_hill_h",
+                crownedAt: Date(), defences: 3
+            ).save(on: app.db)
+            let res = try await get("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
+            #expect(res.status == .ok)
+            let html = res.body.string
+            #expect(html.contains("Champion:"))
+            #expect(html.contains("3 defences"))
+            #expect(html.contains("took the hill"))
+            #expect(html.contains("js-relative-time"))
+            let enrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == (try holder.requireID())).first())
+            #expect(html.contains(try #require(enrollment.avatarHandle)))
+            #expect(!html.contains("lb_hill_holder"))
+            #expect(!html.contains("No student holds the hill yet"))
+        }
+    }
 }

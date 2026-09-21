@@ -19,18 +19,18 @@ assignment on the code path it runs today.
 | 0 | This design note | shipped |
 | 1 | Leaderboard surface and raw metric: `metric` footer field, the `activity` block with `beatTheInstructor` and `bestMetric`, `leaderboard_entries` at ingest, `RecordDimension.highestMetric`, the leaderboard page, `set_activity` | shipped |
 | 2 | Opponent primitive with `supportFile`: `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`, the `activity-match` runner capability, the browser-grading refusals | shipped |
-| 3 | `champion` opponent (king of the hill) | not started |
+| 3 | `champion` opponent (king of the hill): `kingOfTheHill`, `match_results` opened at claim and completed at ingest, `activity_champions`, the champion banner, `RecordDimension.champion`, the `activity-opponent-submission` runner capability | shipped |
 | 4 | `classmates` matrix, standings, the `standing` / `matchesWon` signals | not started |
 | 5 | Elimination and Swiss brackets, `run_tournament` | not started |
 | 6 | Asymmetric matrix (tests versus implementations) | not started |
 | 7 | Synthetic class submission (coverage percent) | not started |
 | 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
 
-Two things a reader should not go looking for after slice 2. **There is no
-opponent other than a bundled bot yet.** `ActivityOpponentSource` has `none`
-and `supportFile`; `champion` and `classmates` arrive with slices 3 and 4, each
-with the worker code that stages it, because a source the worker cannot stage
-is a silent misroute. And **the web create page has no activity control.** The
+Two things a reader should not go looking for after slice 3. **There is no
+classmate opponent yet.** `ActivityOpponentSource` has `none`, `supportFile`
+and `champion`; `classmates` arrives with slice 4 together with the worker
+loop that plays a job against many opponents, because a source the worker
+cannot stage is a silent misroute. And **the web create page has no activity control.** The
 kind is chosen on the edit page (the "Class activity" select) or through MCP
 `set_activity`, either of which is free until the first student submission.
 Creation-time choice is a follow-up.
@@ -75,7 +75,7 @@ Creation-time choice is a follow-up.
 |---|---|---|---|---|
 | `beatTheInstructor` | `supportFile` (a grader-only bot) | `leaderboard` | one `record` on `highestMetric` (slice 1); the match suite entry (slice 2) | 1, 2 |
 | `bestMetric` | `none` | `leaderboard` on a raw metric | one `record` on `highestMetric` | 1 |
-| `kingOfTheHill` | `champion` (the current best submission) | `leaderboard` | match entry, `record` champion | 3 |
+| `kingOfTheHill` | `champion` (whoever holds the hill; the bundled bot until a student does) | `leaderboard` | `record` on `highestMetric`, `record` on `champion` | 3 (shipped) |
 | `roundRobin` | `classmates`, schedule `all` | `standings` | match entry, `record` winner, `standing` badges | 4 |
 | `elimination` | `classmates`, schedule `bracket` or `swiss` | `standings` | match entry, `record` winner | 5 |
 | `bugHunt` | `variants` (instructor's seeded variants) | `union` | already shipped, re-described only | — |
@@ -232,7 +232,7 @@ language gate, for an activity with no opponent and for a runner advertising
 no profile at all.
 
 **Browser grading is refused** for any activity that stages an opponent (a bot
-kind with its file chosen), at the same doors that refuse grader-only files: the
+kind with its file chosen, or a hill kind at all), at the same doors that refuse grader-only files: the
 zip upload, `set_grading_mode` (and the web mode change and section adoption
 through `setManifestGradingMode`), and choosing the file through `set_activity`
 or the picker from the other side. One message,
@@ -246,10 +246,13 @@ different reason now: worker grading is forced by the opponent itself, and
 - `leaderboard_entries` (slice 1): (test_setup_id, user_id, submission_id,
   metric, reached_at), unique on (test_setup_id, user_id). FK to `users`,
   cascade.
-- `match_results` (slice 4): (test_setup_id, submission_id,
-  opponent_submission_id nullable, opponent_kind, round nullable, score, metric
-  nullable, seed, created_at). Unique on (submission_id, opponent_submission_id,
-  round).
+- `match_results` (slice 3): (test_setup_id, submission_id,
+  opponent_submission_id nullable, opponent_identity, round nullable, score,
+  metric, won, seed, created_at, completed_at nullable). Unique on
+  (submission_id, opponent_identity) — the identity rather than the nullable
+  submission ID, so a bot opponent keys too. Slice 4 fills `round`.
+- `activity_champions` (slice 3): (test_setup_id unique, user_id, submission_id,
+  crowned_at, defences). FK to `users`, cascade.
 - `tournament_runs` (slice 5): (test_setup_id, schedule, started_by,
   started_at, entrant snapshot as JSON, status, winner_user_id nullable).
 
@@ -257,16 +260,86 @@ Additive migrations only; no column changes to existing tables.
 
 ### Achievements
 
-- `RecordDimension` gained `highestMetric` (slice 1) and is now `CaseIterable`;
-  the "Ranked by" select, the JS rule summary and the MCP schema enum all
-  derive from `RecordDimensionPresentation`, guarded by
-  `RecordDimensionCoverageTests`. `tournamentWinner` and `champion` follow with
-  their slices.
+- `RecordDimension` gained `highestMetric` (slice 1) and `champion` (slice 3,
+  a held record: the hill's holder) and is `CaseIterable`; the "Ranked by"
+  select, the JS rule summary and the MCP schema enum all derive from
+  `RecordDimensionPresentation`, guarded by `RecordDimensionCoverageTests`.
+  `tournamentWinner` follows with its slice.
 - `AchievementSignal` gains `standing` and `matchesWon` in slice 4. These read
   the whole class but award per student, a third category the current
   `readsTheWholeClass` split does not have (open question 1).
 - `isSweepEvaluableClassGoal` admits exactly three shapes today. Extend the
   admitted list one shape at a time, each with its own test.
+
+### King of the hill (slice 3)
+
+`kingOfTheHill` (chrome label "Beat the champion") is the first kind whose
+opponent is another student's SUBMISSION. Its opponent source is `champion`,
+and the kind stages one whether or not a bot is chosen, so the kind itself is
+worker-only: `stagesAnOpponent` is true for it unconditionally, `set_activity`
+refuses it on a browser-graded assignment, and its jobs need a runner build
+advertising `activity-opponent-submission` — a second token beside
+`activity-match`, because a slice-2 build that copies a support file would
+fail every hill match (loudly, but for every student until a runner is
+upgraded), and `ActivityOpponentSource.requiredRunnerCapability` is where a
+source names the token its jobs need.
+
+**Two tables, and the claim path writes one of them.** `activity_champions`
+holds one row per assignment: who holds the hill, which of their submissions
+does, when they took it, and how many challengers they have turned back
+(`defences`, the streak the leaderboard shows). `match_results` holds one row
+per (submission, opponent identity), OPENED when the job is built and
+COMPLETED when its result lands. That is how the result path knows which
+opponent the job actually played — the champion may have changed while the job
+was out — without the worker echoing it back and without a column on
+`submissions`. The unique key is what makes ingest idempotent: a replayed
+report finds its row completed and does nothing; a re-test reopens the same
+row rather than adding one.
+
+**Who a challenger plays** (`chooseOpponent`): the current champion's
+submission, unless the challenger IS that submission — a re-test of the
+champion plays the bot, never itself — else the bundled bot (`opponentFile`),
+else nobody. A champion who resubmits does play their own earlier entry. The
+job then carries `JobOpponent.submissionURL` / `submissionFilename`
+(a worker download URL for the champion's upload) instead of `supportFile`;
+the worker downloads it through the same retrying download the challenger's
+upload gets and stages it the way the challenger's is staged — raw file under
+its submitted name, zip extracted, every notebook extracted to the assignment's
+source language, and `.chickadee_student_module` naming the opponent's module,
+so a match script finds the opponent's code by the same hint the runtimes use
+for the student's.
+
+**How the hill moves** (`recordActivityMatch`, each rule pinned by
+`ActivityChampionTests`). The match entry is the outcome with the highest
+reported `metric`, and the challenger WON when that entry passed — the script's
+exit code is the verdict, `score` its credit, `metric` its rank, exactly the
+existing contract. Then:
+
+- a replayed report finds no open row and does nothing;
+- a re-test of the champion's own submission never moves the hill (it played
+  the bot);
+- the challenger takes the hill when they won AND the opponent they played is
+  still the hill's holder — a win against a champion who has since been
+  replaced crowns nobody (the student beat the wrong opponent; a re-test plays
+  the right one);
+- a champion beating their own earlier entry moves the hill's submission
+  forward and keeps the streak;
+- a loss to the current champion counts one defence;
+- only a `.student` in the setup's own course can hold the hill, so a staff
+  validation run completes its row and changes nothing.
+
+The leaderboard still ranks on `metric` (a win count, typically) and gains a
+line naming the hill's holder by handle and bird, with "since" and the streak;
+staff also see the name. `RecordDimension.champion` is a HELD record rather
+than a ranked one — `awardChampionRecords` makes the new holder the record's
+holder outright — and `set_activity` seeds it (`hill_champion`) beside the
+leaderboard record, removing it again when the kind changes away from the hill.
+
+Authoring is slice 2's recipe with one change of meaning: the bot in
+`opponentFile` is the hill's FIRST holder, not its only opponent, and the
+match script must exit 0 only when the challenger beat whoever is in
+`CHICKADEE_OPPONENT_DIR` — the fixture's rock-paper-scissors script already
+does, and `OpponentStagingTests` plays it against a staged champion.
 
 ## Compatibility rules (every slice)
 
@@ -274,7 +347,7 @@ Additive migrations only; no column changes to existing tables.
 |---|---|
 | `makeWorkerManifestJSON` writes a fresh dict | `activity` is threaded through every rebuild caller (both script edits, the family apply, the draft publish and the two draft suite rebuilds). `AssignmentHelpersManifestTests` pins the round trip. This is the `languageDeclared` trap, one field later. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`, so fields this build does not model survive. |
-| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising `activity-match` (slice 2); a new opponent source adds a FIELD to `JobOpponent`, never an enum the runner decodes. |
+| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3); a new opponent source adds a FIELD to `JobOpponent` and a token to `requiredRunnerCapability`, never an enum the runner decodes. |
 | Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
 | Visibility and opponent edits | `withLeaderboardVisibility` / `withOpponentFile` rebuild the block from the stored one, so neither surface's edit can drop the other's field. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
@@ -349,6 +422,9 @@ errors rather than passes.
 - `docs/student-avatars.md`, `Sources/APIServer/Services/AvatarStore.swift`
 - `Sources/Core/JobOpponent.swift`, `Sources/Worker/OpponentStaging.swift`,
   `Sources/APIServer/Compatibility/RunnerActivityGate.swift` (slice 2)
+- `Sources/APIServer/Helpers/ActivityMatches.swift`,
+  `Sources/APIServer/Models/APIMatchResult.swift`,
+  `Sources/APIServer/Models/APIActivityChampion.swift` (slice 3)
 - `docs/runner-capability-profiles.md`,
   `Sources/APIServer/Compatibility/RunnerLanguageGate.swift` (the gate's shape)
 - `docs/solution-visibility.md` for `postDeadlineRevealDeadline`

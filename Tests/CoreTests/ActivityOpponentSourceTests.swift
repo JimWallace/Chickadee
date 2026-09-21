@@ -26,14 +26,15 @@ import Testing
         #expect(!ActivityOpponentSource.none.stagesAnOpponent)
     }
 
-    /// The block's predicates ask the source, never the kind's name — and an
-    /// opponent is staged only once a file is chosen, so a bot kind with none
-    /// grades as a slice-1 activity did.
+    /// The block's predicates ask the source, never the kind's name. A bot
+    /// kind stages an opponent only once a file is chosen, so with none it
+    /// grades as a slice-1 activity did; a hill kind stages whoever holds the
+    /// hill, file or not.
     @Test(arguments: ActivityKind.allCases)
-    func theBlockAsksTheSourceAndStagesOnlyAChosenFile(kind: ActivityKind) {
+    func theBlockAsksTheSourceAndABotKindStagesOnlyAChosenFile(kind: ActivityKind) {
         let unchosen = ClassActivity(kind: kind)
         #expect(unchosen.takesAnOpponentFile == kind.opponentSource.stagesAnOpponent)
-        #expect(!unchosen.stagesAnOpponent)
+        #expect(unchosen.stagesAnOpponent == (kind.opponentSource == .champion))
         let chosen = ClassActivity(kind: kind, opponentFile: "bot.py")
         #expect(chosen.stagesAnOpponent == kind.opponentSource.stagesAnOpponent)
     }
@@ -74,5 +75,29 @@ import Testing
         let json = try #require(String(data: encoder.encode(props.runnerSanitized()), encoding: .utf8))
         #expect(!json.contains("bot.py"))
         #expect(!json.contains("activity"))
+    }
+
+    // MARK: - The champion source (slice 3)
+
+    /// King of the hill stages the champion, and stages one whether or not a
+    /// bot is chosen: the kind itself is worker-only.
+    @Test func theHillKindStagesAChampionWithOrWithoutABot() {
+        #expect(ActivityKind.kingOfTheHill.opponentSource == .champion)
+        #expect(ActivityKind.kingOfTheHill.aggregatesToLeaderboard)
+        #expect(ClassActivity(kind: .kingOfTheHill).stagesAnOpponent)
+        #expect(ClassActivity(kind: .kingOfTheHill).takesAnOpponentFile)
+        #expect(ClassActivity(kind: .kingOfTheHill, opponentFile: "bot.py").stagesAnOpponent)
+    }
+
+    /// Each source names the build capability a runner must advertise, and
+    /// the two staging sources name different ones: a build that copies a
+    /// file may predate staging a submission.
+    @Test func eachSourceNamesItsOwnRunnerCapability() {
+        #expect(ActivityOpponentSource.none.requiredRunnerCapability == nil)
+        #expect(ActivityOpponentSource.supportFile.requiredRunnerCapability == .activityMatch)
+        #expect(ActivityOpponentSource.champion.requiredRunnerCapability == .activityOpponentSubmission)
+        for source in ActivityOpponentSource.allCases where source.stagesAnOpponent {
+            #expect(source.requiredRunnerCapability != nil, "\(source) stages an opponent but gates nothing")
+        }
     }
 }

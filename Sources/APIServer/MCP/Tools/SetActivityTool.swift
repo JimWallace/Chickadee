@@ -81,10 +81,14 @@ struct SetActivityTool: ContentTool {
         + "plays each submission against a bot: upload the bot as a support file (graderOnly to hide "
         + "its source), name it in opponentFile, and the native worker stages it in the directory "
         + "the match script reads from CHICKADEE_OPPONENT_DIR, with a per-match seed in "
-        + "CHICKADEE_MATCH_SEED. Such a kind needs worker grading and is refused on a browser-graded "
-        + "assignment. opponentFile absent keeps the stored file; \"\" clears it. No regrade or "
-        + "close. Read the current state from get_assignment; get_server_info lists the kinds with "
-        + "their opponent sources."
+        + "CHICKADEE_MATCH_SEED. A kind whose opponent source is \"champion\" (king of the hill) "
+        + "stages the current champion's submission there instead, with `.chickadee_student_module` "
+        + "naming their module; the bot in opponentFile holds the hill until a student's match "
+        + "passes (exits 0), and the script's exit code is what takes the hill. A kind with an "
+        + "opponent needs worker grading and is refused on a browser-graded assignment. "
+        + "opponentFile absent keeps the stored file; \"\" clears it. No regrade or close. Read "
+        + "the current state from get_assignment; get_server_info lists the kinds with their "
+        + "opponent sources."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -105,8 +109,9 @@ struct SetActivityTool: ContentTool {
             "opponentFile": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "The support file staged as the opponent, for a kind whose opponent source is "
-                        + "\"supportFile\". Absent keeps the stored file; \"\" clears it."),
+                    "The support file staged as the opponent (\"supportFile\"), or the bot that holds "
+                        + "the hill until a student does (\"champion\"). Absent keeps the stored "
+                        + "file; \"\" clears it."),
             ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("kind")]),

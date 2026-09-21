@@ -178,6 +178,16 @@ struct ResultRoutes: RouteCollection {
             on: req.db
         )
 
+        // King of the hill: complete the match this job played and move the
+        // hill if the challenger won (docs/class-activities.md).
+        try await recordActivityMatch(
+            testSetupID: submission.testSetupID,
+            userID: userID,
+            submissionID: subID,
+            outcomes: collection.outcomes,
+            on: req.db
+        )
+
         guard gradePercent(from: collection) == 100 else { return }
         let disabled =
             (try? await APITestSetup.find(submission.testSetupID, on: req.db))

@@ -29,16 +29,18 @@ enum RunnerActivityGate {
         runnerProfile: RunnerCapabilityProfile?,
         manifest: TestProperties
     ) -> CompatibilityResult {
-        guard let activity = manifest.activity, activity.stagesAnOpponent else {
+        guard let activity = manifest.activity, activity.stagesAnOpponent,
+            let required = activity.kind.opponentSource.requiredRunnerCapability
+        else {
             return CompatibilityResult(isCompatible: true)
         }
         guard let runnerProfile else { return CompatibilityResult(isCompatible: true) }
         let advertised = Set(runnerProfile.capabilities.map { normalized($0.name) })
-        guard advertised.contains(normalized(RunnerCapability.activityMatch.name)) else {
+        guard advertised.contains(normalized(required.name)) else {
             return CompatibilityResult(
                 isCompatible: false,
                 reasons: [
-                    "runner does not provide \(RunnerCapability.activityMatch.name) "
+                    "runner does not provide \(required.name) "
                         + "(this \(activity.kind.displayName.lowercased()) activity stages an opponent)"
                 ]
             )

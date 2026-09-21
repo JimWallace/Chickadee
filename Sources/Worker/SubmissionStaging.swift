@@ -496,6 +496,7 @@ enum WorkerDaemonError: Error, LocalizedError {
     case opponentFileNotChosen
     case opponentFileNotBare(String)
     case opponentFileMissing(String)
+    case opponentSubmissionMissing(String)
 
     var errorDescription: String? {
         switch self {
@@ -525,6 +526,12 @@ enum WorkerDaemonError: Error, LocalizedError {
             return """
                 The opponent file '\(name)' is not in the test setup. Upload it as a support \
                 file, or choose a file that exists in the assignment's Activity section, then retest.
+                """
+        case .opponentSubmissionMissing(let submissionID):
+            return """
+                The opponent submission \(submissionID.isEmpty ? "" : "'\(submissionID)' ")for this \
+                match was not downloaded, so there is nobody to play. Retest; if it recurs, the \
+                champion's submission file is missing on the server.
                 """
         case .personalizedInputsWithoutLanguage(let inputCount):
             return """

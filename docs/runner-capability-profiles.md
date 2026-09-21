@@ -285,6 +285,10 @@ Currently detected automatically:
     keeps match jobs away from a runner that does not advertise it, since an
     older build would grade a bot match with no bot in the workspace and no
     error.
+  - `activity-opponent-submission`: this build can download and stage another
+    SUBMISSION as the opponent (king of the hill). Separate from
+    `activity-match` because a build that copies a support file may predate
+    it; each `ActivityOpponentSource` names the token its jobs need.
 
 Detection failures do not crash the runner. Missing tools simply do not appear
 in the advertised profile.
