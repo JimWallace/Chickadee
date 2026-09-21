@@ -163,6 +163,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     // Solution reveal policy
     case solutionVisibilityChanged = "solution_visibility.changed"
     case leaderboardVisibilityChanged = "leaderboard_visibility.changed"
+    case activityOpponentFileChanged = "activity_opponent_file.changed"
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
 
@@ -226,8 +227,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
-            .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
+            .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
         // action on one student.
@@ -268,8 +269,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
-            .slipDaySpent, .slipDayRefunded,
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
+            .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
             .brightspaceAccountConnected, .brightspaceAccountDisconnected,
@@ -328,6 +329,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .solutionVisibilityChanged: return "Solution visibility changed"
         case .passingThresholdChanged: return "Passing threshold changed"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
+        case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
         case .slipDaySettingsChanged: return "Slip day settings changed"

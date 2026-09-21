@@ -1,8 +1,10 @@
 // APIServer/Routes/Web/InstructorDashboardRoutes+ClassActivity.swift
 //
-// The per-assignment leaderboard visibility toggle (the Activity section).
+// The Activity section's two lightweight endpoints: the leaderboard
+// visibility toggle and the opponent-file picker.
 //
 //   POST /instructor/:assignmentID/activity
+//   POST /instructor/:assignmentID/activity/opponent
 
 import Core
 import Fluent
@@ -33,7 +35,7 @@ extension InstructorDashboardRoutes {
         let visible = ((try? req.content.decode(ToggleBody.self))?.visible) != nil
         try await ActivityAuthoring.setActivity(
             setup: setup,
-            to: ClassActivity(kind: current.kind, leaderboardVisibility: visible ? .visible : .hidden),
+            to: current.withLeaderboardVisibility(visible ? .visible : .hidden),
             on: req.db)
         await AuditLogger.record(
             action: .leaderboardVisibilityChanged,
@@ -47,5 +49,47 @@ extension InstructorDashboardRoutes {
         )
         return req.redirect(
             to: "/instructor/\(assignment.publicID)/edit?notice=Leaderboard+setting+saved")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/activity/opponent
+
+    /// Chooses (or clears, with an empty value) the support file the worker
+    /// stages as the opponent (docs/class-activities.md). Its own endpoint,
+    /// like the visibility toggle, so fixing the bot mid-lab never closes or
+    /// re-validates the assignment. `ActivityAuthoring` refuses a file the
+    /// setup does not contain and a file on a kind with no opponent; the
+    /// refusal comes back as the edit page's error banner.
+    @Sendable
+    func saveActivityOpponentFile(req: Request) async throws -> Response {
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let editPath = "/instructor/\(assignment.publicID)/edit"
+        guard let current = currentManifestActivity(setup.manifest) else {
+            return req.redirect(
+                to: editPath + "?error=Choose+a+class+activity+kind+and+save+before+choosing+an+opponent")
+        }
+        struct OpponentBody: Content {
+            var opponentFile: String?
+        }
+        let raw = (try? req.content.decode(OpponentBody.self))?.opponentFile ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = current.withOpponentFile(trimmed.isEmpty ? nil : trimmed)
+        do {
+            try await ActivityAuthoring.setActivity(setup: setup, to: next, on: req.db)
+        } catch let error as AppError {
+            let encoded =
+                error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: editPath + "?error=" + encoded)
+        }
+        await AuditLogger.record(
+            action: .activityOpponentFileChanged,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignment.publicID,
+                "opponentFile": next.opponentFile ?? "",
+            ],
+            on: req
+        )
+        return req.redirect(to: editPath + "?notice=Opponent+file+saved")
     }
 }

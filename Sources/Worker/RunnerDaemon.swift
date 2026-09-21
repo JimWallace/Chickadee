@@ -299,7 +299,8 @@ actor WorkerDaemon {
                     case .downloadFailed(let failedURL):
                         return .terminal("Failed to download \(failedURL.absoluteString)")
                     case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,
-                        .personalizedInputsWithoutLanguage:
+                        .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,
+                        .opponentFileMissing:
                         return .terminal(String(describing: workerError))
                     }
                 }

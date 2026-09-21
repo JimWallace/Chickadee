@@ -407,7 +407,7 @@ func extractSupportFilesToSharedDirectory(
     testSuiteScripts: Set<String>,
     testSetupsDirectory: String
 ) async {
-    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    let reservedNames = reservedSetupEntryNames
     let allEntries = await listZipEntries(zipPath: zipPath)
     let supportNames = allEntries.filter {
         !testSuiteScripts.contains($0) && !reservedNames.contains($0)

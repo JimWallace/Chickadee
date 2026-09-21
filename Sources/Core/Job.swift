@@ -61,6 +61,14 @@ public struct Job: Codable, Sendable {
     /// `.python` — so existing Python jobs are byte-for-byte unchanged.
     public let language: AssignmentLanguage?
 
+    /// The opponent to stage for a match job (docs/class-activities.md), or nil
+    /// for an ordinary run. Optional for wire back-compat in both directions: a
+    /// payload from an older server decodes as nil, and an older runner that
+    /// does not know the key ignores it — which is why the claim gate keeps a
+    /// match job away from a runner that does not advertise `activity-match`,
+    /// rather than trusting it to notice.
+    public let opponent: JobOpponent?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -72,7 +80,8 @@ public struct Job: Codable, Sendable {
         assignmentSeed: String? = nil,
         personalizedInputs: [String: String]? = nil,
         personalizedFiles: [String: String]? = nil,
-        language: AssignmentLanguage? = nil
+        language: AssignmentLanguage? = nil,
+        opponent: JobOpponent? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -85,5 +94,6 @@ public struct Job: Codable, Sendable {
         self.personalizedInputs = personalizedInputs
         self.personalizedFiles = personalizedFiles
         self.language = language
+        self.opponent = opponent
     }
 }

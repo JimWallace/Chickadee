@@ -262,6 +262,21 @@
         <p class="field-note text-muted">Students appear under their class handle and see rank and metric only. Staff always see the leaderboard, with names.</p>
         <button class="btn action-btn" type="submit">Save leaderboard setting</button>
     </form>
+    #if(activity.needsOpponentFile):
+    <form method="post" action="/instructor/#(assignmentID)/activity/opponent" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            Opponent file
+            <select class="form-input" name="opponentFile">
+                #for(option in activity.opponentFileOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
+        </label>
+        <p class="field-note text-muted">#if(activity.opponentFileChosen):The worker copies this file into the directory <code>CHICKADEE_OPPONENT_DIR</code> names, where the match script reads it.#else:Nothing is staged for the match script until you upload the bot as a support file and select it here.#endif</p>
+        <button class="btn action-btn" type="submit">Save opponent file</button>
+    </form>
+    #endif
 </section>
 #endif
 

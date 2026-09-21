@@ -351,10 +351,22 @@ struct ActivityEditFacts: Encodable {
     let summary: String
     let leaderboardVisible: Bool
     let leaderboardURL: String
+    /// True when the kind stages a bundled bot, so the Opponent file picker
+    /// renders. False for a kind with no opponent and for an ordinary
+    /// assignment.
+    let needsOpponentFile: Bool
+    /// True when a bot is chosen; the picker's fine print says so either way,
+    /// since until one is chosen nothing is staged for the script to play.
+    let opponentFileChosen: Bool
+    /// The Opponent file select: "None chosen" first, then every support file
+    /// of the setup (the same listing `get_support_files` reports), marking
+    /// the stored one selected.
+    let opponentFileOptions: [OpponentFileOption]
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
         let testSetupID = setup.id ?? ""
+        let needsOpponentFile = activity?.takesAnOpponentFile == true
         return ActivityEditFacts(
             kindOptions: ActivityKindOption.options(current: activity?.kind),
             locked: try await ActivityAuthoring.hasStudentSubmissions(setup: setup, on: db),
@@ -362,7 +374,33 @@ struct ActivityEditFacts: Encodable {
             kindLabel: activity?.kind.displayName ?? "",
             summary: activity?.kind.summary ?? "",
             leaderboardVisible: activity?.leaderboardVisibleToStudents == true,
-            leaderboardURL: "/testsetups/\(testSetupID)/leaderboard")
+            leaderboardURL: "/testsetups/\(testSetupID)/leaderboard",
+            needsOpponentFile: needsOpponentFile,
+            opponentFileChosen: activity?.opponentFile != nil,
+            opponentFileOptions: needsOpponentFile
+                ? OpponentFileOption.options(
+                    supportFiles: await currentSupportFileNames(setup: setup),
+                    current: activity?.opponentFile)
+                : [])
+    }
+}
+
+/// One entry in the Activity section's "Opponent file" select.
+struct OpponentFileOption: Encodable {
+    /// A support filename, or "" for none.
+    let value: String
+    let label: String
+    let selected: Bool
+
+    /// The empty choice followed by every support file. A stored file the
+    /// setup no longer contains (deleted after it was chosen) is listed too,
+    /// marked selected, so the page shows what the worker will fail on rather
+    /// than silently showing "None chosen".
+    static func options(supportFiles: [String], current: String?) -> [OpponentFileOption] {
+        var names = supportFiles
+        if let current, !names.contains(current) { names.append(current) }
+        return [OpponentFileOption(value: "", label: "None chosen", selected: current == nil)]
+            + names.map { OpponentFileOption(value: $0, label: $0, selected: $0 == current) }
     }
 }
 

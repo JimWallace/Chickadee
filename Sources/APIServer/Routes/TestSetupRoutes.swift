@@ -107,6 +107,13 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: graderOnlyGradingConflictMessage)
         }
 
+        // An activity that stages an opponent is worker-only for the same
+        // reason (only the native worker builds the opponent directory), and
+        // is refused here so a zip-borne manifest cannot smuggle it in.
+        if manifest.gradingMode == .browser, manifest.activity?.stagesAnOpponent == true {
+            throw AppError.unprocessable(reason: activityOpponentGradingConflictMessage)
+        }
+
         // An assignment in a language with no editor kernel is upload-only
         // by construction (EditorSupport.uploadOnly), so a notebook submission
         // mode would promise students an editor that cannot serve them.  Asked
@@ -343,7 +350,7 @@ struct TestSetupRoutes: RouteCollection {
         // the worker but never served to students — block them here alongside
         // test scripts and the canonical notebooks. See docs/datasets.md.
         let graderOnly = props?.graderOnlyFileSet ?? []
-        let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+        let reservedNames = reservedSetupEntryNames
         guard !testScripts.contains(filename), !reservedNames.contains(filename),
             !graderOnly.contains(filename)
         else {

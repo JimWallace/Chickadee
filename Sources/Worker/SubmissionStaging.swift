@@ -493,6 +493,9 @@ enum WorkerDaemonError: Error, LocalizedError {
     case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
     case unsafePersonalizedFilename(String)
     case personalizedInputsWithoutLanguage(inputCount: Int)
+    case opponentFileNotChosen
+    case opponentFileNotBare(String)
+    case opponentFileMissing(String)
 
     var errorDescription: String? {
         switch self {
@@ -510,6 +513,19 @@ enum WorkerDaemonError: Error, LocalizedError {
                 "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
         case .unsafePersonalizedFilename(let name):
             return "Personalized file name '\(name)' is not a bare filename; refusing to write it"
+        case .opponentFileNotChosen:
+            return """
+                This class activity plays the submission against an opponent, but no opponent \
+                file is chosen. Upload the bot as a support file, choose it in the assignment's \
+                Activity section (or pass opponentFile to set_activity), then retest.
+                """
+        case .opponentFileNotBare(let name):
+            return "Opponent file name '\(name)' is not a bare filename; refusing to stage it"
+        case .opponentFileMissing(let name):
+            return """
+                The opponent file '\(name)' is not in the test setup. Upload it as a support \
+                file, or choose a file that exists in the assignment's Activity section, then retest.
+                """
         case .personalizedInputsWithoutLanguage(let inputCount):
             return """
                 This job carries \(inputCount) per-student input value\(inputCount == 1 ? "" : "s") \
