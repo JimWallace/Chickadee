@@ -286,7 +286,8 @@ Currently detected automatically:
     older build would grade a bot match with no bot in the workspace and no
     error.
   - `activity-opponent-submission`: this build can download and stage another
-    SUBMISSION as the opponent (king of the hill). Separate from
+    SUBMISSION as the opponent (king of the hill, and a tournament's paired
+    match, which is the same one-opponent contract). Separate from
     `activity-match` because a build that copies a support file may predate
     it; each `ActivityOpponentSource` names the token its jobs need.
   - `activity-matrix`: this build reads `Job.opponents`, stages every one of

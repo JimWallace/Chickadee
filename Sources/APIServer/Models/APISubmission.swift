@@ -26,6 +26,12 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     enum Kind {
         static let student = "student"
         static let validation = "validation"
+        /// One tournament match (docs/class-activities.md): a frozen copy of
+        /// an entrant's submission, graded once against the entrant it is
+        /// paired with. Never a grade of record — every listing, aggregate
+        /// and grade selection filters on `student`, so it is invisible
+        /// everywhere but the bracket.
+        static let tournamentMatch = "tournamentMatch"
     }
 
     @ID(custom: "id", generatedBy: .user)

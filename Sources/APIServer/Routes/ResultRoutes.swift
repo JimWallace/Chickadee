@@ -121,6 +121,13 @@ struct ResultRoutes: RouteCollection {
                 }
             }
 
+            // A tournament match reaches only the bracket, whatever its
+            // build status: a match that could not run advances the
+            // opponent rather than stalling the round.
+            if submission.kind == APISubmission.Kind.tournamentMatch {
+                try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
+            }
+
             try await applyClassWideEffects(
                 submission: submission, collection: collection, matches: report.matches, on: req)
         }

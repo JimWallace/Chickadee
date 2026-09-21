@@ -21,7 +21,7 @@ assignment on the code path it runs today.
 | 2 | Opponent primitive with `supportFile`: `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`, the `activity-match` runner capability, the browser-grading refusals | shipped |
 | 3 | `champion` opponent (king of the hill): `kingOfTheHill`, `match_results` opened at claim and completed at ingest, `activity_champions`, the champion banner, `RecordDimension.champion`, the `activity-opponent-submission` runner capability | shipped |
 | 4 | `classmates` matrix (round robin): `roundRobin`, `Job.opponents`, the per-match `MatchReport` rows, `activity_standings`, the standings page, `RecordDimension.tournamentWinner`, the `standing` / `matchesWon` signals, the `activity-matrix` runner capability | shipped |
-| 5 | Elimination and Swiss brackets, `run_tournament` | not started |
+| 5 | Tournaments: `elimination` (single-elimination bracket or Swiss), the `paired` opponent source, `tournament_runs` / `tournament_matches`, `tournamentMatch` submissions, the Run tournament control and MCP `run_tournament`, the bracket page | shipped |
 | 6 | Asymmetric matrix (tests versus implementations) | not started |
 | 7 | Synthetic class submission (coverage percent) | not started |
 | 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
@@ -73,7 +73,7 @@ the first student submission. Creation-time choice is a follow-up.
 | `bestMetric` | `none` | `leaderboard` on a raw metric | one `record` on `highestMetric` | 1 |
 | `kingOfTheHill` | `champion` (whoever holds the hill; the bundled bot until a student does) | `leaderboard` | `record` on `highestMetric`, `record` on `champion` | 3 (shipped) |
 | `roundRobin` | `classmates` (every classmate's latest submission; the bundled bot until one exists) | `standings` | `record` on `tournamentWinner`; `standing` / `matchesWon` badges are authored | 4 (shipped) |
-| `elimination` | `classmates`, schedule `bracket` or `swiss` | `standings` | match entry, `record` winner | 5 |
+| `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` | 5 (shipped) |
 | `bugHunt` | `variants` (instructor's seeded variants) | `union` | already shipped, re-described only | — |
 | `testsVersusImplementations` | `classmates`, asymmetric | `union` for testers, `standings` for implementers | match entry, contribution slots | 6 |
 
@@ -255,7 +255,16 @@ different reason now: worker grading is forced by the opponent itself, and
   completed `match_results` rows at every ingest — never best-so-far. FK to
   `users`, cascade.
 - `tournament_runs` (slice 5): (test_setup_id, schedule, started_by,
-  started_at, entrant snapshot as JSON, status, winner_user_id nullable).
+  started_at, entrants as `[TournamentEntrant]` JSON, status
+  `running | complete | superseded`, current_round, round_count,
+  winner_user_id nullable, completed_at nullable). Every run is kept;
+  starting another supersedes the running one.
+- `tournament_matches` (slice 5): (tournament_id FK cascade, round,
+  position, home_seed, away_seed nullable, match_submission_id nullable,
+  winner_seed nullable, completed_at nullable), unique on (tournament_id,
+  round, position). The bracket's structure; a match's score, metric and
+  seed stay on the `match_results` row the claim opens for its job, with
+  `round` set.
 
 Additive migrations only; no column changes to existing tables.
 
@@ -420,13 +429,70 @@ script's own work. Budget the match script's rounds accordingly, and prefer a
 worker with several concurrent jobs; slice 5's brackets are the answer for a
 class where every-pair play is too expensive.
 
+### Tournaments (slice 5)
+
+`elimination` (chrome label "Tournament") is the first kind whose matches
+are not a student's own submission being graded. An instructor starts a run —
+the submissions page's Tournament section or MCP `run_tournament`, choosing
+`bracket` (single elimination) or `swiss` at that moment rather than on the
+manifest, since one assignment may host both across a term — and the run
+snapshots every enrolled `.student`'s latest complete submission as its
+entrants, seeded in the order those submissions arrived (open question 3,
+decided: submission order). Fewer than two entrants is refused. A student who
+resubmits after the start plays with the snapshotted entry; a run already in
+progress is marked superseded (its landed matches keep their rows, its
+outstanding jobs still decide their slots but move nothing), so a stalled run
+can never block the class.
+
+**A match is a submission.** Each pairing enqueues one `tournamentMatch`
+submission — a frozen copy of the home entrant's upload (same file, same
+filename, the entrant's user) — claimed after fresh student work and before
+validation. Its job stages the away entrant's snapshotted submission on the
+hill's single-opponent contract, which is why the kind's opponent source is
+`paired` and its runner token is `activity-opponent-submission`, not a fourth
+one: the axis names what is in the workspace and how many times the suite
+runs, and a bracket match is one opponent, once. The claim opens the
+`match_results` row with `round` set. A match submission is never a grade of
+record: every listing, aggregate, badge path and grade selection filters on
+`kind == student`, and the result path routes it to `recordTournamentMatch`
+alone. A student's own submission on such an assignment plays the bundled bot
+as practice (no row) and grades as it always did.
+
+**How a round moves.** The script's exit code decides the slot: a pass means
+the home entrant won, and anything else — a loss, an error, a timeout, a
+build failure — advances the away entrant, so a broken submission can never
+stall a round. When the current round's last slot is decided the next round
+is enqueued from the pure pairing rules (`TournamentPairing` in Core, tested
+on five, eight and nine entrants); when none is, the run completes and the
+winner holds the `tournamentWinner` record (`tournament_winner`, seeded by
+`set_activity` for a bracket kind in place of the standings leader). A
+replayed report finds its slot decided and does nothing.
+
+**The two schedules.** A bracket seeds entrants into the next power of two in
+the standard order (1 meets N, 2 meets N−1, …), so the byes fall to the top
+seeds and the top seeds cannot meet before the final; a bye is stored already
+won. Swiss plays ceil(log2 N) rounds; each round ranks entrants by points (a
+win or a bye is one), pairs neighbours avoiding a rematch where one can be
+avoided, and gives an odd field's bye to the lowest-ranked entrant who has
+not had one; the most points wins, fewest byes then better seed breaking a
+tie. There are no draws.
+
+**Where it shows.** The leaderboard page switches on `aggregation == .bracket`
+to the latest run: its schedule and status, the winner once there is one,
+and every round's matches by handle and bird (staff also see names). The
+submissions page carries the control — the schedule select, the button, one
+line on where the latest run stands — and links the bracket rather than
+repeating it. `get_server_info` still reports every kind's aggregation as
+"leaderboard": `SetActivityToolTests.serverInfoListsEveryKind` pins that
+value, and changing it is a decision for that test's owner.
+
 ## Compatibility rules (every slice)
 
 | Seam | Rule |
 |---|---|
 | `makeWorkerManifestJSON` writes a fresh dict | `activity` is threaded through every rebuild caller (both script edits, the family apply, the draft publish and the two draft suite rebuilds). `AssignmentHelpersManifestTests` pins the round trip. This is the `languageDeclared` trap, one field later. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`, so fields this build does not model survive. |
-| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3), `activity-matrix` for a round robin (slice 4); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
+| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3) and for a tournament's paired match (slice 5, the same contract), `activity-matrix` for a round robin (slice 4); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
 | Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
 | Visibility and opponent edits | `withLeaderboardVisibility` / `withOpponentFile` rebuild the block from the stored one, so neither surface's edit can drop the other's field. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
@@ -474,8 +540,8 @@ errors rather than passes.
    `matchesWon` needed neither a third category nor the sweep: they are static
    authorable-badge signals evaluated on the submission page with the
    standings it loads. See "Achievements" above.
-3. **Slice 5.** Seeding order for brackets: submission order, a short
-   qualifying round robin within groups, or random under a stored seed.
+3. **Slice 5 — decided.** Brackets seed by submission order (1 = first to
+   submit), the simplest rule a class can predict; see "Tournaments" above.
 4. **Slice 1 follow-up.** A "Class activity" control on the create page, so the
    kind is chosen at creation as the design intends, rather than on the edit
    page in the window before the first submission.
@@ -500,6 +566,10 @@ errors rather than passes.
 - `Sources/Core/JobOpponent.swift` (`JobOpponent`, `MatchReport`,
   `matchOutcome`), `Sources/Worker/OpponentStaging.swift`,
   `Sources/Worker/MatrixAggregation.swift`
+- `Sources/Core/Tournament.swift` (`TournamentSchedule`, `TournamentPairing`),
+  `Sources/APIServer/Helpers/Tournaments.swift` (start, enqueue, pair, land,
+  advance), `Sources/APIServer/Models/APITournamentRun.swift`,
+  `Sources/APIServer/MCP/Tools/RunTournamentTool.swift`
 - `docs/collaborative-class-assignments.md`,
   `Sources/APIServer/Helpers/ClassItemCoverage.swift` (the ingest-time
   pattern this follows)

@@ -19,7 +19,9 @@
             #endif
         </div>
     </div>
-    #if(showsStandings):
+    #if(showsBracket):
+    <p class="section-intro">Each match plays the first entrant's frozen submission against the second's. Rounds advance as matches land. Students appear under their class handle.</p>
+    #elseif(showsStandings):
     <p class="section-intro">Highest average match score first, then most wins. Each row is the student's latest submission. Students appear under their class handle.</p>
     #else:
     <p class="section-intro">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
@@ -42,7 +44,81 @@
     <p class="text-muted">No student holds the hill yet.</p>
     #endif
     #endif
-    #if(showsStandings):
+    #if(showsBracket):
+    #if(hasTournament):
+    <p class="text-muted">#(tournament.statusText)</p>
+    #if(tournament.hasWinner):
+    <p>
+        Winner:
+        #if(tournament.winner.hasAvatar):
+        #extend("_avatar", tournament.winner.avatar)
+        #endif
+        <span data-avatar-handle>#(tournament.winner.handle)</span>
+        #if(tournament.winner.isViewer):
+        <span class="chip">you</span>
+        #endif
+        #if(isStaff):
+        <span class="text-muted">· #(tournament.winner.name)</span>
+        #endif
+    </p>
+    #endif
+    #for(round in tournament.rounds):
+    <h3 class="submission-section-heading">Round #(round.number)</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>First entrant</th>
+                <th>Second entrant</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(match in round.matches):
+            <tr>
+                <td>
+                    #if(match.home.hasAvatar):
+                    #extend("_avatar", match.home.avatar)
+                    #endif
+                    <span data-avatar-handle>#(match.home.handle)</span>
+                    #if(match.home.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                    #if(isStaff):
+                    <span class="text-muted">· #(match.home.name)</span>
+                    #endif
+                    #if(match.homeWon):
+                    <span class="tier tier-open">won</span>
+                    #endif
+                </td>
+                <td>
+                    #if(match.hasAway):
+                    #if(match.away.hasAvatar):
+                    #extend("_avatar", match.away.avatar)
+                    #endif
+                    <span data-avatar-handle>#(match.away.handle)</span>
+                    #if(match.away.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                    #if(isStaff):
+                    <span class="text-muted">· #(match.away.name)</span>
+                    #endif
+                    #if(match.awayWon):
+                    <span class="tier tier-open">won</span>
+                    #endif
+                    #else:
+                    <span class="text-muted">—</span>
+                    #endif
+                </td>
+                <td>#(match.resultText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endfor
+    #else:
+    <p class="empty">No tournament has been run yet.</p>
+    #endif
+    #elseif(showsStandings):
     #if(count(standings) == 0):
     <p class="empty">No submission has played a match yet.</p>
     #else:

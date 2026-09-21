@@ -98,13 +98,18 @@ import Testing
         #expect(ActivityOpponentSource.supportFile.requiredRunnerCapability == .activityMatch)
         #expect(ActivityOpponentSource.champion.requiredRunnerCapability == .activityOpponentSubmission)
         #expect(ActivityOpponentSource.classmates.requiredRunnerCapability == .activityMatrix)
+        // A paired tournament match stages ONE submission, exactly as a hill
+        // match does, so it rides the hill's token rather than a fourth: the
+        // token names a runner contract, not a kind.
+        #expect(ActivityOpponentSource.paired.requiredRunnerCapability == .activityOpponentSubmission)
         for source in ActivityOpponentSource.allCases where source.stagesAnOpponent {
             #expect(source.requiredRunnerCapability != nil, "\(source) stages an opponent but gates nothing")
         }
-        // Three staging sources, three tokens: a build that stages one
-        // submission may predate staging a matrix of them.
+        // Three runner contracts — a file, one submission, a matrix — three
+        // tokens: a build that stages one submission may predate staging a
+        // matrix of them.
         let tokens = ActivityOpponentSource.allCases.compactMap(\.requiredRunnerCapability?.name)
-        #expect(Set(tokens).count == tokens.count)
+        #expect(Set(tokens).count == 3)
     }
 
     // MARK: - The classmates source and the aggregation axis (slice 4)
@@ -124,11 +129,23 @@ import Testing
     @Test(arguments: ActivityKind.allCases)
     func everyKindAnswersTheAggregationAxis(kind: ActivityKind) {
         #expect(kind.aggregatesToLeaderboard)
-        if kind.opponentSource == .classmates {
-            #expect(kind.aggregation == .standings)
-        } else {
-            #expect(kind.aggregation == .leaderboard)
+        switch kind.opponentSource {
+        case .classmates: #expect(kind.aggregation == .standings)
+        case .paired: #expect(kind.aggregation == .bracket)
+        case .none, .supportFile, .champion: #expect(kind.aggregation == .leaderboard)
         }
+    }
+
+    // MARK: - The paired source and the bracket aggregation (slice 5)
+
+    /// A tournament pairs entrants one at a time and keeps a bracket; the
+    /// kind is worker-only like the hill and needs no file to stage.
+    @Test func theTournamentPairsEntrantsAndKeepsABracket() {
+        #expect(ActivityKind.elimination.opponentSource == .paired)
+        #expect(ActivityKind.elimination.aggregation == .bracket)
+        #expect(ClassActivity(kind: .elimination).stagesAnOpponent)
+        #expect(ClassActivity(kind: .elimination).takesAnOpponentFile)
+        #expect(ActivityKind.elimination.displayName == "Tournament")
     }
 
     @Test func theRoundRobinBlockRoundTrips() throws {

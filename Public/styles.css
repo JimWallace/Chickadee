@@ -666,7 +666,9 @@ textarea.form-input {
 /* Section grouping for results tables — one block (optional heading + table)
    per test-suite section.  Shared by the server-rendered submission view
    (submission.leaf) and the browser runner's inline results (notebook.js,
-   assignment-validate.js) so both group identically. */
+   assignment-validate.js) so both group identically.  The heading alone is
+   the sub-heading over any grouped results table inside a section — the
+   leaderboard's bracket uses it per round. */
 .submission-section-block {
     margin-bottom: 1.5rem;
 }

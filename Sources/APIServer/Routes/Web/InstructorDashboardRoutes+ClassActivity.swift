@@ -5,6 +5,7 @@
 //
 //   POST /instructor/:assignmentID/activity
 //   POST /instructor/:assignmentID/activity/opponent
+//   POST /instructor/:assignmentID/tournament/run
 
 import Core
 import Fluent
@@ -91,5 +92,46 @@ extension InstructorDashboardRoutes {
             on: req
         )
         return req.redirect(to: editPath + "?notice=Opponent+file+saved")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/tournament/run
+
+    /// Starts a tournament on the class as it stands (docs/class-activities.md,
+    /// "Tournaments"): snapshots every student's latest submission and
+    /// enqueues the first round. Instructor-level, like the kind itself. A
+    /// refusal — not a tournament kind, fewer than two entrants — comes back
+    /// as the submissions page's error banner.
+    @Sendable
+    func runTournament(req: Request) async throws -> Response {
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let caller = try req.auth.require(APIUser.self)
+        let submissionsPath = "/instructor/\(assignment.publicID)/submissions"
+        struct RunBody: Content {
+            var schedule: String?
+        }
+        let token = (try? req.content.decode(RunBody.self))?.schedule ?? TournamentSchedule.bracket.rawValue
+        guard let schedule = TournamentSchedule(rawValue: token) else {
+            return req.redirect(to: submissionsPath + "?error=Choose+a+tournament+schedule")
+        }
+        let run: APITournamentRun
+        do {
+            run = try await startTournament(setup: setup, schedule: schedule, startedBy: caller.id, on: req.db)
+        } catch let error as TournamentStartError {
+            let encoded = error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: submissionsPath + "?error=" + encoded)
+        }
+        await AuditLogger.record(
+            action: .tournamentStarted,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignment.publicID,
+                "schedule": schedule.rawValue,
+                "entrants": String(run.entrants.count),
+                "rounds": String(run.roundCount),
+            ],
+            on: req
+        )
+        return req.redirect(to: submissionsPath + "?notice=Tournament+started")
     }
 }

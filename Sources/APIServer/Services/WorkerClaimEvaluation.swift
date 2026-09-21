@@ -99,6 +99,25 @@ func collectClaimCandidates(
         candidates.append((candidate, setup, manifest))
     }
 
+    // Tournament matches (docs/class-activities.md) are a live-session
+    // action, so they follow fresh student work and precede validation.
+    let pendingMatches = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
+        .filter(\.$kind == APISubmission.Kind.tournamentMatch)
+        .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
+        .all()
+    for match in pendingMatches {
+        if let cached = resolvedBySetupID[match.testSetupID] {
+            candidates.append((match, cached.0, cached.1))
+            continue
+        }
+        guard let setup = try await APITestSetup.find(match.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[match.testSetupID] = (setup, manifest)
+        candidates.append((match, setup, manifest))
+    }
+
     let pendingValidation = try await APISubmission.query(on: db)
         .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.validation)
