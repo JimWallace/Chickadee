@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.226] - 2026-09-21
+
+### Added
+
+- **Class activities, slice 4: round robin.** A `roundRobin` activity kind plays each submission against every classmate's latest submission (the bundled bot until one exists). The claim opens one `match_results` row per opponent and the job carries `opponents`; the runner stages each opponent in its own directory, runs the suite once per opponent, folds the runs into one collection (mean score, summed metric, pass when at least half the matches were won) and reports a per-match verdict beside it. Standings — played, won, drawn, lost, average — are rewritten from the student's latest submission at ingest and shown on the leaderboard page in place of the metric ranking, with a held `tournamentWinner` record for the leader. Two new badge signals, `standing` and `matchesWon`, let instructors author podium and streak badges. Round-robin jobs need a runner advertising the new `activity-matrix` build capability; older runners wait. See `docs/class-activities.md`.
+
+
 ## [0.5.225] - 2026-09-21
 
 ### Added
