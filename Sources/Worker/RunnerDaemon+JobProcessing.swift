@@ -551,10 +551,23 @@ extension WorkerDaemon {
             // Stage the opponent for a match job (docs/class-activities.md).
             // A throw here is the job's build failure, like a missing
             // personalized file: a match with nobody on the other side would
-            // read as a win, and the message names the fix.
-            let opponentDir = try stageTimings.measureSync("opponent_setup") {
-                try stageOpponentWorkspace(job: job, workDir: paths.workDir, testSetupDir: testSetupDir)
+            // read as a win, and the message names the fix. A submission
+            // opponent (the champion) is downloaded first, through the same
+            // retrying download the challenger's own upload gets.
+            // Timed inline, as the make step is: `measure`'s closure cannot
+            // hop to this actor's isolation for the download.
+            let opponentStartedAt = Date()
+            var downloadedOpponent: URL?
+            if let url = job.opponent?.submissionURL {
+                let destination = opponentDownloadDestination(workDir: paths.workDir)
+                try await download(url: url, to: destination)
+                downloadedOpponent = destination
             }
+            let opponentDir = try await stageOpponentWorkspace(
+                job: job, workDir: paths.workDir, testSetupDir: testSetupDir,
+                downloadedSubmission: downloadedOpponent)
+            stageTimings.record(
+                "opponent_setup", milliseconds: Int(Date().timeIntervalSince(opponentStartedAt) * 1000))
 
             return JobPreparedWorkspace(
                 testSetupDir: testSetupDir,

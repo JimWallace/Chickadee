@@ -29,6 +29,11 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     /// worker stages it into the opponent directory the script reads through
     /// `CHICKADEE_OPPONENT_DIR`.
     case supportFile
+    /// The current champion's submission (king of the hill). The server
+    /// hands the worker the champion's submission to stage; until a student
+    /// holds the hill the bundled bot (`opponentFile`) holds it, and with no
+    /// bot the first passing match takes an empty hill.
+    case champion
 
     /// True when a match needs an opponent staged beside the submission.
     /// Everything that hangs off an opponent — the worker's `activity-match`
@@ -37,7 +42,19 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     public var stagesAnOpponent: Bool {
         switch self {
         case .none: return false
-        case .supportFile: return true
+        case .supportFile, .champion: return true
+        }
+    }
+
+    /// The build capability a runner must advertise to be handed a job with
+    /// this opponent, or nil when there is nothing to stage. Per source, not
+    /// one token for all: a build that stages a support file may predate
+    /// staging a submission, and the gate has to tell them apart.
+    public var requiredRunnerCapability: RunnerCapability? {
+        switch self {
+        case .none: return nil
+        case .supportFile: return .activityMatch
+        case .champion: return .activityOpponentSubmission
         }
     }
 }
@@ -58,12 +75,17 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// a compression ratio, a wins count against a fixed suite — and reports
     /// it as `metric`. The leaderboard ranks on it, highest first.
     case bestMetric
+    /// King of the hill: the submission plays the current champion, and a
+    /// match the script passes (exit 0) takes the hill. The bundled bot holds
+    /// the hill until a student does.
+    case kingOfTheHill
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
         switch self {
         case .beatTheInstructor: return "Beat the instructor"
         case .bestMetric: return "Best metric"
+        case .kingOfTheHill: return "Beat the champion"
         }
     }
 
@@ -79,6 +101,11 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
             return
                 "No opponent: the script measures the submission and reports the number as "
                 + "`metric`; the leaderboard ranks on it, highest first."
+        case .kingOfTheHill:
+            return
+                "King of the hill: the submission plays the current champion's submission (the "
+                + "bundled bot until a student holds the hill); a match the script passes takes the "
+                + "hill, and the leaderboard ranks on `metric` beside the champion."
         }
     }
 
@@ -87,7 +114,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// and a bug hunt to a union, and neither ranks on `metric`.
     public var aggregatesToLeaderboard: Bool {
         switch self {
-        case .beatTheInstructor, .bestMetric: return true
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill: return true
         }
     }
 
@@ -98,6 +125,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .beatTheInstructor: return .supportFile
         case .bestMetric: return .none
+        case .kingOfTheHill: return .champion
         }
     }
 }
@@ -124,12 +152,10 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public let kind: ActivityKind
     public let leaderboardVisibility: LeaderboardVisibility
     /// For a kind whose opponent source is `supportFile`: the bare filename of
-    /// the support file the worker stages as the opponent (the bot). Nil until
+    /// the support file the worker stages as the opponent (the bot). For
+    /// `champion`: the bot that holds the hill until a student does. Nil until
     /// the instructor chooses one — the kind may be set before the bot is
-    /// uploaded — and always nil for a kind with no opponent. The worker fails
-    /// a match job loudly when the kind wants one and none is named, so the
-    /// gap shows on the instructor's validation run rather than in a student's
-    /// grade.
+    /// uploaded — and always nil for a kind with no opponent.
     public let opponentFile: String?
 
     public init(
@@ -169,15 +195,20 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// submission — the question every opponent-dependent seam asks (the
     /// claim gate, the browser-grading refusal, the job's opponent).
     ///
-    /// Needs BOTH a kind whose source stages one AND a chosen file. Until the
-    /// instructor chooses the bot, nothing is staged and the assignment grades
-    /// exactly as a slice-1 activity did — on any runner, with a hand-wired
-    /// bot if the script has one — so shipping the primitive changed no
-    /// existing assignment's path. A script written for the primitive still
-    /// fails loudly on its own when the directory is unset (the fixture does),
-    /// and the edit page's picker says so.
+    /// For `supportFile` this needs a chosen file too. Until the instructor
+    /// chooses the bot, nothing is staged and the assignment grades exactly as
+    /// a slice-1 activity did — on any runner, with a hand-wired bot if the
+    /// script has one — so shipping the primitive changed no existing
+    /// assignment's path. A script written for the primitive still fails
+    /// loudly on its own when the directory is unset (the fixture does), and
+    /// the edit page's picker says so. `champion` stages whoever holds the
+    /// hill, file or not, so the kind itself is worker-only.
     public var stagesAnOpponent: Bool {
-        kind.opponentSource.stagesAnOpponent && opponentFile != nil
+        switch kind.opponentSource {
+        case .none: return false
+        case .supportFile: return opponentFile != nil
+        case .champion: return true
+        }
     }
 
     /// True when the kind takes an opponent file at all — what decides

@@ -39,6 +39,8 @@ extension WebRoutes {
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let rows = try await buildLeaderboardRows(
             setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+        let champion = try await buildChampionPresentation(
+            setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
 
         return try await req.view.render(
             "leaderboard",
@@ -49,8 +51,40 @@ extension WebRoutes {
                 isStaff: isStaff,
                 visibleToStudents: activity.leaderboardVisibleToStudents,
                 rows: rows,
+                hasHill: activity.kind.opponentSource == .champion,
+                champion: champion,
                 currentUser: req.currentUserContext))
     }
+}
+
+/// The hill's holder for the page, or nil when the activity has no hill or
+/// no student holds it yet (the bot, or nobody, does). Same handle-and-bird
+/// identity as a ranking row; staff also see the name.
+func buildChampionPresentation(
+    setup: APITestSetup, activity: ClassActivity, viewerID: UUID?, includeNames: Bool, on db: Database
+) async throws -> ChampionPresentation? {
+    guard activity.kind.opponentSource == .champion,
+        let champion = try await currentChampion(testSetupID: setup.id ?? "", on: db),
+        let user = try await APIUser.find(champion.userID, on: db),
+        let enrollment = try await APICourseEnrollment.query(on: db)
+            .filter(\.$course.$id == setup.courseID)
+            .filter(\.$userID == champion.userID)
+            .first()
+    else { return nil }
+    let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
+    let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+    let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled("Champion") : .decorative
+    // The model requires the date; the fallback only keeps the two strings
+    // non-optional so the template has no empty shape to render.
+    let crownedAt = champion.crownedAt ?? Date()
+    return ChampionPresentation(
+        handle: handle,
+        name: includeNames ? staffFacingName(user) : "",
+        crownedAtISO: ISO8601DateFormatter().string(from: crownedAt),
+        crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
+        defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
+        isViewer: champion.userID == viewerID,
+        avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility))
 }
 
 // MARK: - Context
@@ -64,7 +98,27 @@ struct LeaderboardContext: Encodable {
     let isStaff: Bool
     let visibleToStudents: Bool
     let rows: [LeaderboardRow]
+    /// True for a king-of-the-hill activity: the page shows who holds the
+    /// hill, or that the bot still does.
+    let hasHill: Bool
+    /// The hill's holder; nil when no student holds it yet.
+    let champion: ChampionPresentation?
     let currentUser: CurrentUserContext?
+}
+
+/// The hill's holder as the leaderboard shows them.
+struct ChampionPresentation: Encodable {
+    let handle: String
+    /// Staff only; empty for a student viewer.
+    let name: String
+    /// When the hill was taken: the ISO instant the relative-time script
+    /// renders from, and the absolute text it shows without JS.
+    let crownedAtISO: String
+    let crownedAtText: String
+    /// "3 defences".
+    let defencesText: String
+    let isViewer: Bool
+    let avatar: AvatarPresentation
 }
 
 struct LeaderboardRow: Encodable {

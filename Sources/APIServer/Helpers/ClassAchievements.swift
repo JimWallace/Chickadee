@@ -51,10 +51,12 @@ func awardClassBadgesFor100Percent(
                 newValue: Double(attemptNumber), on: db)
         case .firstToSubmit, .none:
             continue
-        case .highestMetric:
-            // Awarded on the leaderboard path (`awardHighestMetricRecords`),
-            // not here: a ranking metric is reported on any result, and gating
-            // it on 100% would crown nobody on an activity with no such gate.
+        case .highestMetric, .champion:
+            // Awarded on the leaderboard path (`awardHighestMetricRecords`) and
+            // the match path (`awardChampionRecords`), not here: a ranking
+            // metric is reported on any result and a hill is taken by a
+            // passing match, so gating either on 100% would crown nobody on
+            // an activity with no such gate.
             continue
         }
     }
@@ -79,6 +81,50 @@ func awardHighestMetricRecords(
             achievementID: record.id,
             testSetupID: setupID, userID: userID, submissionID: submissionID,
             newValue: metric, higherWins: true, on: db)
+    }
+}
+
+/// Moves the `champion` class records to the student who now holds the hill
+/// (docs/class-activities.md). Held rather than ranked: no comparison, the
+/// new champion simply becomes the holder. Called from `recordActivityMatch`,
+/// which has already applied the per-course student gate.
+func awardChampionRecords(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    on db: Database
+) async throws {
+    guard let setupID = setup.id else { return }
+    let records = BuiltInAchievements.classRecordsForAward(
+        in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+    for record in records where record.recordDimension == .champion {
+        try await setRecordHolder(
+            achievementID: record.id,
+            testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
+    }
+}
+
+/// Makes `userID` the holder of the badge, inserting or replacing.
+private func setRecordHolder(
+    achievementID: String,
+    testSetupID: String,
+    userID: UUID,
+    submissionID: String,
+    on db: Database
+) async throws {
+    let existing = try await APIClassAchievement.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$achievementID == achievementID)
+        .first()
+    if let record = existing {
+        record.userID = userID
+        record.submissionID = submissionID
+        try await record.update(on: db)
+    } else {
+        let badge = APIClassAchievement(
+            testSetupID: testSetupID, achievementID: achievementID,
+            userID: userID, submissionID: submissionID)
+        try? await badge.save(on: db)
     }
 }
 

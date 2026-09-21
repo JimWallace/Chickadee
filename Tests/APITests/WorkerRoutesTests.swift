@@ -917,4 +917,94 @@ import VaporTesting
             #expect(claimed?.workerID == "w-new")
         }
     }
+
+    // MARK: - King of the hill (docs/class-activities.md, slice 3)
+
+    private let hillManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10,"activity":{"kind":"kingOfTheHill","opponentFile":"bot.py"}}
+        """
+
+    private func hillProfile() -> RunnerCapabilityProfile {
+        profile(capabilities: [RunnerCapability.activityMatch.name, RunnerCapability.activityOpponentSubmission.name])
+    }
+
+    private func requestJob(workerID: String, profile: RunnerCapabilityProfile?) async throws -> Job? {
+        let path = "/api/v1/worker/request"
+        let body = try workerRequestBody(workerID: workerID, profile: profile)
+        var job: Job?
+        try await app.asyncTest(
+            .POST, path,
+            beforeRequest: { req in
+                req.headers = workerHeaders(method: .POST, path: path, body: body)
+                req.body = body
+            },
+            afterResponse: { res in
+                if res.status == .ok { job = try res.content.decode(Job.self) }
+            })
+        return job
+    }
+
+    /// With nobody on the hill the challenger plays the bot, and the claim
+    /// opens the match row the result path will complete.
+    @Test func requestJob_hill_playsTheBotUntilAStudentHoldsIt() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_hill1", manifest: hillManifestJSON)
+            let sub = try await makeSubmission(id: "wsub_hill1", setupID: (try setup.requireID()))
+            let job = try #require(try await requestJob(workerID: "w-hill", profile: hillProfile()))
+            #expect(job.submissionID == sub.id)
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == "bot.py")
+            #expect(!opponent.stagesASubmission)
+            let row = try #require(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_hill1").first())
+            #expect(row.opponentIdentity == JobOpponent.supportFileIdentity("bot.py"))
+            #expect(row.completedAt == nil)
+            #expect(row.seed == opponent.matchSeed)
+        }
+    }
+
+    /// With a champion, the challenger's job carries the champion's
+    /// submission — its download URL and filename — and never the bot.
+    @Test func requestJob_hill_carriesTheChampionsSubmission() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_hill2", manifest: hillManifestJSON)
+            let champ = try await makeSubmission(id: "wsub_champ", setupID: (try setup.requireID()), status: "complete")
+            champ.filename = "strategy.py"
+            try await champ.save(on: app.db)
+            let holder = try await makeTestUser(on: app, username: "hill_holder", role: "student")
+            try await APIActivityChampion(
+                testSetupID: try setup.requireID(), userID: try holder.requireID(),
+                submissionID: "wsub_champ", crownedAt: Date()
+            ).save(on: app.db)
+            let sub = try await makeSubmission(id: "wsub_hill2", setupID: (try setup.requireID()))
+
+            let job = try #require(try await requestJob(workerID: "w-hill2", profile: hillProfile()))
+            #expect(job.submissionID == sub.id)
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == nil)
+            #expect(opponent.submissionID == "wsub_champ")
+            #expect(opponent.submissionFilename == "strategy.py")
+            #expect(opponent.submissionURL?.path == "/api/v1/worker/submissions/wsub_champ/download")
+            #expect(
+                opponent.matchSeed
+                    == JobOpponent.matchSeed(
+                        submissionID: "wsub_hill2", opponentIdentity: JobOpponent.submissionIdentity("wsub_champ")))
+            let row = try #require(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_hill2").first())
+            #expect(row.opponentSubmissionID == "wsub_champ")
+        }
+    }
+
+    /// A slice-2 build (activity-match only) never claims a hill job.
+    @Test func requestJob_hill_waitsForARunnerThatStagesSubmissions() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_hill3", manifest: hillManifestJSON)
+            _ = try await makeSubmission(id: "wsub_hill3", setupID: (try setup.requireID()))
+            let old = try await requestJob(
+                workerID: "w-old-hill", profile: profile(capabilities: [RunnerCapability.activityMatch.name]))
+            #expect(old == nil)
+            let new = try await requestJob(workerID: "w-new-hill", profile: hillProfile())
+            #expect(new?.submissionID == "wsub_hill3")
+        }
+    }
 }

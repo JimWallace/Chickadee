@@ -20,6 +20,9 @@ enum ActivityAuthoring {
     /// second `set_activity` call does not seed a second one.
     static let seededRecordID = "leaderboard_record"
 
+    /// The record a king-of-the-hill kind seeds beside it: the hill's holder.
+    static let seededChampionRecordID = "hill_champion"
+
     /// The refusal for a kind change under live submissions. One message for
     /// the web banner and the MCP error.
     static let kindLockedMessage =
@@ -83,7 +86,14 @@ enum ActivityAuthoring {
         if let activity, activity.kind.aggregatesToLeaderboard {
             try await seedLeaderboardRecord(setup: setup, on: db)
         } else if activity == nil {
-            try await removeSeededRecord(setup: setup, on: db)
+            try await removeSeededRecord(setup: setup, id: seededRecordID, on: db)
+        }
+        if activity?.kind.opponentSource == .champion {
+            try await seedChampionRecord(setup: setup, on: db)
+        } else {
+            // A kind change away from the hill (or clearing) takes its
+            // seeded record with it; an instructor-authored one stays.
+            try await removeSeededRecord(setup: setup, id: seededChampionRecordID, on: db)
         }
         return activity
     }
@@ -141,11 +151,33 @@ enum ActivityAuthoring {
         }
     }
 
-    private static func removeSeededRecord(setup: APITestSetup, on db: any Database) async throws {
+    /// The record a king-of-the-hill kind seeds.
+    static let seededChampionRecord = Achievement(
+        id: seededChampionRecordID,
+        name: "Hill champion",
+        detail: "Holds the hill on this assignment.",
+        scope: .record,
+        reward: AchievementReward(type: .title, label: "Champion"),
+        recordDimension: .champion)
+
+    private static func seedChampionRecord(setup: APITestSetup, on db: any Database) async throws {
+        guard let props = setup.decodedManifest() else { return }
+        if props.achievements.contains(where: { $0.recordDimension == .champion }) { return }
+        // The leaderboard record was seeded first (every hill kind is a
+        // leaderboard kind), so the built-ins are already curated here.
+        let achievements = props.achievements + [seededChampionRecord]
+        try await mutateManifest(setup: setup, on: db) { dict in
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
+        }
+    }
+
+    private static func removeSeededRecord(setup: APITestSetup, id: String, on db: any Database) async throws {
         guard let props = setup.decodedManifest(),
-            props.achievements.contains(where: { $0.id == seededRecordID })
+            props.achievements.contains(where: { $0.id == id })
         else { return }
-        let remaining = props.achievements.filter { $0.id != seededRecordID }
+        let remaining = props.achievements.filter { $0.id != id }
         try await mutateManifest(setup: setup, on: db) { dict in
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]

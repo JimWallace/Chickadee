@@ -300,7 +300,7 @@ actor WorkerDaemon {
                         return .terminal("Failed to download \(failedURL.absoluteString)")
                     case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,
                         .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,
-                        .opponentFileMissing:
+                        .opponentFileMissing, .opponentSubmissionMissing:
                         return .terminal(String(describing: workerError))
                     }
                 }

@@ -381,4 +381,9 @@ public enum RecordDimension: String, Codable, CaseIterable, Sendable {
     /// the other four it is NOT gated on a 100% grade: the metric is what the
     /// script chose to measure, and it is awarded on the leaderboard path.
     case highestMetric
+    /// The current holder of a king-of-the-hill activity's hill
+    /// (docs/class-activities.md). Held, not ranked: the record moves to
+    /// whoever takes the hill and stays with them until someone else does,
+    /// so it is awarded on the match path and never gated on a grade.
+    case champion
 }

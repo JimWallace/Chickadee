@@ -192,6 +192,11 @@ enum RecordDimensionPresentation {
                 value: dimension.rawValue, label: "Highest metric",
                 detail: "highest ranking `metric` any submission reported (a class activity's "
                     + "leaderboard record; not gated on 100%)")
+        case .champion:
+            return RecordDimensionOption(
+                value: dimension.rawValue, label: "Hill champion",
+                detail: "the current holder of a king-of-the-hill activity's hill (moves to "
+                    + "whoever takes it; not gated on 100%)")
         }
     }
 

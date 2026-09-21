@@ -29,10 +29,54 @@ public struct JobOpponent: Codable, Equatable, Sendable {
     /// replays the same trials and two students never share one.
     public let matchSeed: String
 
-    public init(supportFile: String?, matchSeed: String) {
+    /// The opponent SUBMISSION to stage — the champion's, for king of the hill
+    /// — as the worker downloads it: its ID (for the log), the worker download
+    /// URL, and the filename it was submitted under (nil for a zip, exactly as
+    /// `Job.submissionFilename` is). All nil for a support-file opponent, and
+    /// absent from the wire, so a slice-2 descriptor's bytes are unchanged.
+    public let submissionID: String?
+    public let submissionURL: URL?
+    public let submissionFilename: String?
+
+    public init(
+        supportFile: String?,
+        matchSeed: String,
+        submissionID: String? = nil,
+        submissionURL: URL? = nil,
+        submissionFilename: String? = nil
+    ) {
         self.supportFile = supportFile
         self.matchSeed = matchSeed
+        self.submissionID = submissionID
+        self.submissionURL = submissionURL
+        self.submissionFilename = submissionFilename
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case supportFile, matchSeed, submissionID, submissionURL, submissionFilename
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        supportFile = try c.decodeIfPresent(String.self, forKey: .supportFile)
+        matchSeed = try c.decode(String.self, forKey: .matchSeed)
+        submissionID = try c.decodeIfPresent(String.self, forKey: .submissionID)
+        submissionURL = try c.decodeIfPresent(URL.self, forKey: .submissionURL)
+        submissionFilename = try c.decodeIfPresent(String.self, forKey: .submissionFilename)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(supportFile, forKey: .supportFile)
+        try c.encode(matchSeed, forKey: .matchSeed)
+        try c.encodeIfPresent(submissionID, forKey: .submissionID)
+        try c.encodeIfPresent(submissionURL, forKey: .submissionURL)
+        try c.encodeIfPresent(submissionFilename, forKey: .submissionFilename)
+    }
+
+    /// True when the opponent is another submission rather than a bundled
+    /// file — what the worker asks to decide whether there is a download.
+    public var stagesASubmission: Bool { submissionURL != nil }
 
     /// The seed for one (submission, opponent) pair: 64 lowercase hex
     /// characters, the same shape as the assignment seed, so a script can
@@ -51,4 +95,14 @@ public struct JobOpponent: Codable, Equatable, Sendable {
     public static func supportFileIdentity(_ filename: String?) -> String {
         "supportFile:\(filename ?? "")"
     }
+
+    /// The identity a champion's submission has in `matchSeed`, and the key a
+    /// match row is stored under (`match_results.opponent_identity`).
+    public static func submissionIdentity(_ submissionID: String) -> String {
+        "submission:\(submissionID)"
+    }
+
+    /// The identity of an empty hill — no champion and no bot. A match row is
+    /// still written, so the first passing match can claim it.
+    public static let noOpponentIdentity = "none"
 }
