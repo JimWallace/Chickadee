@@ -51,12 +51,12 @@ func awardClassBadgesFor100Percent(
                 newValue: Double(attemptNumber), on: db)
         case .firstToSubmit, .none:
             continue
-        case .highestMetric, .champion:
+        case .highestMetric, .champion, .tournamentWinner:
             // Awarded on the leaderboard path (`awardHighestMetricRecords`) and
-            // the match path (`awardChampionRecords`), not here: a ranking
-            // metric is reported on any result and a hill is taken by a
-            // passing match, so gating either on 100% would crown nobody on
-            // an activity with no such gate.
+            // the match path (`awardChampionRecords`, `awardTournamentWinnerRecords`),
+            // not here: a ranking metric is reported on any result and a hill
+            // or a standings lead is taken by match results, so gating any of
+            // them on 100% would crown nobody on an activity with no such gate.
             continue
         }
     }
@@ -98,6 +98,25 @@ func awardChampionRecords(
     let records = BuiltInAchievements.classRecordsForAward(
         in: setup, disabled: BuiltInAchievements.disabled(in: setup))
     for record in records where record.recordDimension == .champion {
+        try await setRecordHolder(
+            achievementID: record.id,
+            testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
+    }
+}
+
+/// Moves the `tournamentWinner` class records to the student who now leads
+/// the standings (docs/class-activities.md). Held like `champion`. Called
+/// from `recordActivityMatch` after the standings are recomputed.
+func awardTournamentWinnerRecords(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    on db: Database
+) async throws {
+    guard let setupID = setup.id else { return }
+    let records = BuiltInAchievements.classRecordsForAward(
+        in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+    for record in records where record.recordDimension == .tournamentWinner {
         try await setRecordHolder(
             achievementID: record.id,
             testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)

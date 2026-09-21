@@ -122,7 +122,7 @@ struct ResultRoutes: RouteCollection {
             }
 
             try await applyClassWideEffects(
-                submission: submission, collection: collection, on: req)
+                submission: submission, collection: collection, matches: report.matches, on: req)
         }
 
         return ReportResponse(received: true)
@@ -139,7 +139,8 @@ struct ResultRoutes: RouteCollection {
     /// keeps the two gates visible: coverage is per item and ungated by grade,
     /// badges are per student and gated at 100%.
     private func applyClassWideEffects(
-        submission: APISubmission, collection: TestOutcomeCollection, on req: Request
+        submission: APISubmission, collection: TestOutcomeCollection, matches: [MatchReport]? = nil,
+        on req: Request
     ) async throws {
         guard submission.kind == APISubmission.Kind.student,
             collection.buildStatus == .passed,
@@ -185,6 +186,7 @@ struct ResultRoutes: RouteCollection {
             userID: userID,
             submissionID: subID,
             outcomes: collection.outcomes,
+            matches: matches,
             on: req.db
         )
 

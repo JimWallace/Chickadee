@@ -22,8 +22,16 @@ enum OpponentEnvironment {
 }
 
 /// Where the daemon downloads an opponent submission before staging it.
-func opponentDownloadDestination(workDir: URL) -> URL {
-    workDir.appendingPathComponent("opponent-submission.bin")
+/// `index` is nil for a single-opponent job and the opponent's position for
+/// a matrix job, so the downloads never collide.
+func opponentDownloadDestination(workDir: URL, index: Int? = nil) -> URL {
+    workDir.appendingPathComponent(index.map { "opponent-\($0)-submission.bin" } ?? "opponent-submission.bin")
+}
+
+/// Where an opponent is staged: `opponent/` for a single-opponent job,
+/// `opponent-<index>/` per opponent of a matrix job.
+func opponentDirectory(workDir: URL, index: Int? = nil) -> URL {
+    workDir.appendingPathComponent(index.map { "opponent-\($0)" } ?? "opponent", isDirectory: true)
 }
 
 /// Stages `job.opponent` under `workDir` and returns the opponent directory,
@@ -49,8 +57,18 @@ func stageOpponentWorkspace(
     job: Job, workDir: URL, testSetupDir: URL, downloadedSubmission: URL? = nil
 ) async throws -> URL? {
     guard let opponent = job.opponent else { return nil }
+    return try await stageOpponent(
+        opponent, manifest: job.manifest, into: opponentDirectory(workDir: workDir),
+        testSetupDir: testSetupDir, downloadedSubmission: downloadedSubmission)
+}
+
+/// Stages one opponent — a matrix job's, by index, or the single one — into
+/// `opponentDir`. The rules are `stageOpponentWorkspace`'s.
+func stageOpponent(
+    _ opponent: JobOpponent, manifest: TestProperties, into opponentDir: URL, testSetupDir: URL,
+    downloadedSubmission: URL?
+) async throws -> URL {
     let fileManager = FileManager.default
-    let opponentDir = workDir.appendingPathComponent("opponent", isDirectory: true)
 
     if opponent.stagesASubmission {
         guard let downloadedSubmission, fileManager.fileExists(atPath: downloadedSubmission.path) else {
@@ -58,8 +76,7 @@ func stageOpponentWorkspace(
         }
         try fileManager.createDirectory(at: opponentDir, withIntermediateDirectories: true)
         try await stageOpponentSubmission(
-            opponent: opponent, downloaded: downloadedSubmission, into: opponentDir,
-            manifest: job.manifest)
+            opponent: opponent, downloaded: downloadedSubmission, into: opponentDir, manifest: manifest)
         return opponentDir
     }
 
@@ -119,7 +136,12 @@ private func stageOpponentSubmission(
 /// environment it always had.
 func opponentScriptEnvironment(job: Job, opponentDir: URL?) -> [String: String] {
     guard let opponent = job.opponent, let opponentDir else { return [:] }
-    return [
+    return opponentScriptEnvironment(opponent: opponent, opponentDir: opponentDir)
+}
+
+/// The same two keys for one opponent of a matrix job.
+func opponentScriptEnvironment(opponent: JobOpponent, opponentDir: URL) -> [String: String] {
+    [
         OpponentEnvironment.directory: opponentDir.path,
         OpponentEnvironment.matchSeed: opponent.matchSeed,
     ]

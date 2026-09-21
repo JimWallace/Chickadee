@@ -115,7 +115,6 @@ enum AchievementsEditing {
                 reason: "'\(offending.signal.rawValue)' reads the whole class, so it can only be "
                     + "used on an achievement awarded to the class together.")
         }
-
         switch scope {
         case .individual:
             return Achievement(
@@ -366,7 +365,7 @@ enum AchievementsEditing {
                                 + "Point it at a section that exists, or clear it to count every "
                                 + "test in the suite.")
                     }
-                case .grade, .attempts, .executionTimeMs, .gradeJumpPercent:
+                case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing, .matchesWon:
                     continue
                 }
             }

@@ -23,6 +23,9 @@ enum ActivityAuthoring {
     /// The record a king-of-the-hill kind seeds beside it: the hill's holder.
     static let seededChampionRecordID = "hill_champion"
 
+    /// The record a standings kind seeds: the standings leader.
+    static let seededWinnerRecordID = "standings_leader"
+
     /// The refusal for a kind change under live submissions. One message for
     /// the web banner and the MCP error.
     static let kindLockedMessage =
@@ -83,10 +86,15 @@ enum ActivityAuthoring {
             try await validateOpponent(of: activity, setup: setup)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
-        if let activity, activity.kind.aggregatesToLeaderboard {
+        if let activity, activity.kind.aggregation == .leaderboard {
             try await seedLeaderboardRecord(setup: setup, on: db)
-        } else if activity == nil {
+        } else {
             try await removeSeededRecord(setup: setup, id: seededRecordID, on: db)
+        }
+        if let activity, activity.kind.aggregation == .standings {
+            try await seedWinnerRecord(setup: setup, on: db)
+        } else {
+            try await removeSeededRecord(setup: setup, id: seededWinnerRecordID, on: db)
         }
         if activity?.kind.opponentSource == .champion {
             try await seedChampionRecord(setup: setup, on: db)
@@ -159,6 +167,32 @@ enum ActivityAuthoring {
         scope: .record,
         reward: AchievementReward(type: .title, label: "Champion"),
         recordDimension: .champion)
+
+    /// The record a standings kind seeds.
+    static let seededWinnerRecord = Achievement(
+        id: seededWinnerRecordID,
+        name: "Standings leader",
+        detail: "Leads the standings on this assignment.",
+        scope: .record,
+        reward: AchievementReward(type: .title, label: "Leader"),
+        recordDimension: .tournamentWinner)
+
+    private static func seedWinnerRecord(setup: APITestSetup, on db: any Database) async throws {
+        guard let props = setup.decodedManifest() else { return }
+        if props.achievements.contains(where: { $0.recordDimension == .tournamentWinner }) { return }
+        let authoredIDs = Set(props.achievements.map(\.id))
+        let builtIns =
+            props.builtInAchievementsSeeded
+            ? []
+            : BuiltInAchievements.all.filter { !authoredIDs.contains($0.id) }
+        let achievements = props.achievements + builtIns + [seededWinnerRecord]
+        try await mutateManifest(setup: setup, on: db) { dict in
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
+            dict["builtInAchievementsSeeded"] = true
+        }
+    }
 
     private static func seedChampionRecord(setup: APITestSetup, on db: any Database) async throws {
         guard let props = setup.decodedManifest() else { return }

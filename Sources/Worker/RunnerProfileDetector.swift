@@ -111,7 +111,9 @@ struct RunnerProfileDetector {
     /// The capabilities every profile this build advertises carries, whatever
     /// the host has installed. Static so a test can pin the set without
     /// running the probes.
-    static let buildCapabilities: Set<RunnerCapability> = [.activityMatch, .activityOpponentSubmission]
+    static let buildCapabilities: Set<RunnerCapability> = [
+        .activityMatch, .activityOpponentSubmission, .activityMatrix,
+    ]
 
     private func platformName() -> String {
         #if os(macOS)

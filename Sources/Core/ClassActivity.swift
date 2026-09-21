@@ -34,6 +34,12 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     /// holds the hill the bundled bot (`opponentFile`) holds it, and with no
     /// bot the first passing match takes an empty hill.
     case champion
+    /// Every other student's latest submission (round robin). One job plays
+    /// them all — the worker stages each in turn and runs the suite once per
+    /// opponent — and reports one aggregated outcome per suite entry plus a
+    /// per-match row for each. With no classmate yet, the bundled bot stands
+    /// in so the first submitter still has a match.
+    case classmates
 
     /// True when a match needs an opponent staged beside the submission.
     /// Everything that hangs off an opponent — the worker's `activity-match`
@@ -42,7 +48,7 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
     public var stagesAnOpponent: Bool {
         switch self {
         case .none: return false
-        case .supportFile, .champion: return true
+        case .supportFile, .champion, .classmates: return true
         }
     }
 
@@ -55,8 +61,22 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
         case .none: return nil
         case .supportFile: return .activityMatch
         case .champion: return .activityOpponentSubmission
+        case .classmates: return .activityMatrix
         }
     }
+}
+
+/// How the class's results combine — the second hidden axis. The instructor
+/// never chooses it; the kind fixes it, and the leaderboard page renders the
+/// table it names.
+public enum ActivityAggregation: String, Codable, CaseIterable, Sendable {
+    /// A ranking on the highest `metric` any of a student's submissions
+    /// reported, best-so-far (`leaderboard_entries`).
+    case leaderboard
+    /// A ranking on match results — wins, draws, losses and average score
+    /// over a student's latest submission (`activity_standings`). Not
+    /// best-so-far: a resubmission replaces the row.
+    case standings
 }
 
 /// The activity kinds this build can author and grade.
@@ -79,6 +99,10 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// match the script passes (exit 0) takes the hill. The bundled bot holds
     /// the hill until a student does.
     case kingOfTheHill
+    /// Round robin: the submission plays every classmate's latest submission
+    /// and the class is ranked in standings — wins, draws, losses and average
+    /// match score. Feeds achievements, never the grade of record.
+    case roundRobin
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
@@ -86,6 +110,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor: return "Beat the instructor"
         case .bestMetric: return "Best metric"
         case .kingOfTheHill: return "Beat the champion"
+        case .roundRobin: return "Round robin"
         }
     }
 
@@ -106,15 +131,30 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
                 "King of the hill: the submission plays the current champion's submission (the "
                 + "bundled bot until a student holds the hill); a match the script passes takes the "
                 + "hill, and the leaderboard ranks on `metric` beside the champion."
+        case .roundRobin:
+            return
+                "Round robin: one job plays the submission against every classmate's latest "
+                + "submission (the bundled bot until a classmate exists) and the class is ranked in "
+                + "standings by wins, draws, losses and average match score; standings feed "
+                + "achievements, never the grade of record."
         }
     }
 
-    /// Whether this kind's class aggregation is a leaderboard — every kind in
-    /// this slice, but the axis is real: a round robin aggregates to standings
-    /// and a bug hunt to a union, and neither ranks on `metric`.
+    /// Whether this kind has a ranking page at all — every kind so far; a bug
+    /// hunt's union aggregation would not. Which table that page shows is
+    /// `aggregation`.
     public var aggregatesToLeaderboard: Bool {
         switch self {
-        case .beatTheInstructor, .bestMetric, .kingOfTheHill: return true
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin: return true
+        }
+    }
+
+    /// The aggregation axis. Exhaustive for the same reason `opponentSource`
+    /// is: a kind added without an answer does not compile.
+    public var aggregation: ActivityAggregation {
+        switch self {
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill: return .leaderboard
+        case .roundRobin: return .standings
         }
     }
 
@@ -126,6 +166,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor: return .supportFile
         case .bestMetric: return .none
         case .kingOfTheHill: return .champion
+        case .roundRobin: return .classmates
         }
     }
 }
@@ -207,7 +248,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         switch kind.opponentSource {
         case .none: return false
         case .supportFile: return opponentFile != nil
-        case .champion: return true
+        case .champion, .classmates: return true
         }
     }
 

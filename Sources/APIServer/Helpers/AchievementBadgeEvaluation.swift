@@ -18,7 +18,8 @@ import Foundation
 func earnedIndividualBadges(
     props: TestProperties?,
     gradePercent: Int,
-    outcomes: [TestOutcome]
+    outcomes: [TestOutcome],
+    standings: (standing: Int, matchesWon: Int)? = nil
 ) -> [AchievementBadge] {
     guard let props else { return [] }
     let authored = props.achievements.filter { $0.isAuthorableIndividualBadge }
@@ -29,10 +30,15 @@ func earnedIndividualBadges(
     // badges, evaluated separately in `AchievementBadge.forSubmission`.  The
     // alias map lets a `testPass` ref authored as a filename resolve against
     // the display-name-or-stem `testName` runners actually stamp (audit A1).
+    // `standings` is the student's current place in a round robin
+    // (`standingSignals`), nil on every other assignment, where a
+    // `standing` / `matchesWon` condition is unmet.
     let signals = AchievementSignals(
         gradePercent: gradePercent,
         outcomes: outcomes,
-        testNameAliases: props.testNameAliases())
+        testNameAliases: props.testNameAliases(),
+        standing: standings?.standing,
+        matchesWon: standings?.matchesWon)
     return authored.compactMap { ach in
         ach.isSatisfied(by: signals) ? AchievementBadge(from: ach) : nil
     }
@@ -46,11 +52,13 @@ func earnedIndividualBadges(
 func earnedIndividualBadgesForDisplay(
     collection: TestOutcomeCollection?,
     props: TestProperties?,
-    gradePercent: Int
+    gradePercent: Int,
+    standings: (standing: Int, matchesWon: Int)? = nil
 ) -> [AchievementBadge] {
     guard let collection else { return [] }
     return earnedIndividualBadges(
         props: props,
         gradePercent: gradePercent,
-        outcomes: collection.outcomes)
+        outcomes: collection.outcomes,
+        standings: standings)
 }

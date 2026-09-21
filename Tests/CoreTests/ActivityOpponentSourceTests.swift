@@ -28,13 +28,14 @@ import Testing
 
     /// The block's predicates ask the source, never the kind's name. A bot
     /// kind stages an opponent only once a file is chosen, so with none it
-    /// grades as a slice-1 activity did; a hill kind stages whoever holds the
-    /// hill, file or not.
+    /// grades as a slice-1 activity did; a kind whose opponents are
+    /// submissions (the hill, the classmates) stages them, file or not.
     @Test(arguments: ActivityKind.allCases)
     func theBlockAsksTheSourceAndABotKindStagesOnlyAChosenFile(kind: ActivityKind) {
         let unchosen = ClassActivity(kind: kind)
         #expect(unchosen.takesAnOpponentFile == kind.opponentSource.stagesAnOpponent)
-        #expect(unchosen.stagesAnOpponent == (kind.opponentSource == .champion))
+        let stagesSubmissions = kind.opponentSource.stagesAnOpponent && kind.opponentSource != .supportFile
+        #expect(unchosen.stagesAnOpponent == stagesSubmissions)
         let chosen = ClassActivity(kind: kind, opponentFile: "bot.py")
         #expect(chosen.stagesAnOpponent == kind.opponentSource.stagesAnOpponent)
     }
@@ -96,8 +97,44 @@ import Testing
         #expect(ActivityOpponentSource.none.requiredRunnerCapability == nil)
         #expect(ActivityOpponentSource.supportFile.requiredRunnerCapability == .activityMatch)
         #expect(ActivityOpponentSource.champion.requiredRunnerCapability == .activityOpponentSubmission)
+        #expect(ActivityOpponentSource.classmates.requiredRunnerCapability == .activityMatrix)
         for source in ActivityOpponentSource.allCases where source.stagesAnOpponent {
             #expect(source.requiredRunnerCapability != nil, "\(source) stages an opponent but gates nothing")
         }
+        // Three staging sources, three tokens: a build that stages one
+        // submission may predate staging a matrix of them.
+        let tokens = ActivityOpponentSource.allCases.compactMap(\.requiredRunnerCapability?.name)
+        #expect(Set(tokens).count == tokens.count)
+    }
+
+    // MARK: - The classmates source and the aggregation axis (slice 4)
+
+    /// Round robin plays every classmate and keeps standings rather than a
+    /// metric ranking; the kind is worker-only like the hill.
+    @Test func theRoundRobinPlaysClassmatesAndKeepsStandings() {
+        #expect(ActivityKind.roundRobin.opponentSource == .classmates)
+        #expect(ActivityKind.roundRobin.aggregation == .standings)
+        #expect(ActivityKind.roundRobin.aggregatesToLeaderboard)
+        #expect(ClassActivity(kind: .roundRobin).stagesAnOpponent)
+        #expect(ClassActivity(kind: .roundRobin).takesAnOpponentFile)
+    }
+
+    /// Every kind answers the aggregation axis, and the slice-1 and slice-3
+    /// kinds keep the metric ranking they shipped with.
+    @Test(arguments: ActivityKind.allCases)
+    func everyKindAnswersTheAggregationAxis(kind: ActivityKind) {
+        #expect(kind.aggregatesToLeaderboard)
+        if kind.opponentSource == .classmates {
+            #expect(kind.aggregation == .standings)
+        } else {
+            #expect(kind.aggregation == .leaderboard)
+        }
+    }
+
+    @Test func theRoundRobinBlockRoundTrips() throws {
+        let block = ClassActivity(kind: .roundRobin, leaderboardVisibility: .visible, opponentFile: "bot.py")
+        let decoded = try decoder.decode(ClassActivity.self, from: encoder.encode(block))
+        #expect(decoded == block)
+        #expect(decoded.kind.opponentSource == .classmates)
     }
 }

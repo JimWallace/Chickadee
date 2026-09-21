@@ -358,8 +358,48 @@ struct WorkerJobRoutes: RouteCollection {
             personalizedFiles: personalizedFiles,
             language: language,
             opponent: try await Self.jobOpponent(
+                manifest: claimed.manifest, submission: submission, base: base, on: req.db),
+            opponents: try await Self.jobOpponents(
                 manifest: claimed.manifest, submission: submission, base: base, on: req.db)
         )
+    }
+
+    /// The opponents a MATRIX job plays (round robin), each with its own open
+    /// match row; nil for every other job. With no classmate yet the job is
+    /// built like a bot match through `jobOpponent`, so this returns nil
+    /// then too.
+    static func jobOpponents(
+        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> [JobOpponent]? {
+        guard let activity = manifest.activity, activity.kind.opponentSource == .classmates,
+            let submissionID = submission.id
+        else { return nil }
+        do {
+            let classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
+            guard !classmates.isEmpty else { return nil }
+            var opponents: [JobOpponent] = []
+            for chosen in classmates {
+                guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: chosen, seed: seed, on: db)
+                guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(classmateID)/download") else {
+                    throw WorkerJobError.internalInconsistency(
+                        reason: "Failed to build a classmate download URL from base=\(base)")
+                }
+                opponents.append(
+                    JobOpponent(
+                        supportFile: nil, matchSeed: seed, submissionID: classmateID,
+                        submissionURL: url, submissionFilename: classmate.filename))
+            }
+            return opponents
+        } catch let error as WorkerJobError {
+            throw error
+        } catch {
+            throw WorkerJobError.internalInconsistency(
+                reason: "Could not open the matches for \(submissionID): \(error)")
+        }
     }
 
     /// The opponent a match job stages (docs/class-activities.md), or nil for
@@ -381,6 +421,28 @@ struct WorkerJobRoutes: RouteCollection {
         switch activity.kind.opponentSource {
         case .none:
             return nil
+        case .classmates:
+            // With classmates to play, `jobOpponents` carries them. With
+            // none yet, the bot stands in as a single opponent — one open
+            // row, completed from the collection's match entry.
+            do {
+                if !(try await chooseClassmates(for: submission, activity: activity, on: db)).isEmpty {
+                    return nil
+                }
+                let bot = ChosenOpponent(
+                    champion: nil,
+                    identity: activity.opponentFile.map(JobOpponent.supportFileIdentity)
+                        ?? JobOpponent.noOpponentIdentity)
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: bot.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: bot, seed: seed, on: db)
+                guard activity.opponentFile != nil else { return nil }
+                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
+            } catch {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Could not open the match for \(submissionID): \(error)")
+            }
         case .supportFile:
             return JobOpponent(
                 supportFile: activity.opponentFile,

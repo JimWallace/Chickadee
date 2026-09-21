@@ -44,6 +44,24 @@ import Testing
         }
     }
 
+    /// A hill-capable build is refused a round robin: the matrix is its own
+    /// token, and a profile carrying all three is admitted.
+    @Test func aRoundRobinNeedsTheMatrixToken() {
+        let robin = manifest(ClassActivity(kind: .roundRobin))
+        let hillBuild = RunnerActivityGate.evaluate(
+            runnerProfile: profile(capabilities: ["activity-match", "activity-opponent-submission"]),
+            manifest: robin)
+        #expect(!hillBuild.isCompatible)
+        #expect(hillBuild.reasons.first?.contains("activity-matrix") == true)
+        #expect(
+            RunnerActivityGate.evaluate(
+                runnerProfile: profile(capabilities: [
+                    "activity-match", "activity-opponent-submission", "activity-matrix",
+                ]),
+                manifest: robin
+            ).isCompatible)
+    }
+
     @Test func aProfileWithTheCapabilityIsAdmitted() {
         #expect(
             RunnerActivityGate.evaluate(
