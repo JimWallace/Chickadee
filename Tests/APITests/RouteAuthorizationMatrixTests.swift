@@ -328,6 +328,7 @@ import VaporTesting
         "POST /instructor/:assignmentID/solution-visibility": .instructor,
         "POST /instructor/:assignmentID/passing-threshold": .instructor,
         "POST /instructor/:assignmentID/activity": .instructor,
+        "POST /instructor/:assignmentID/activity/opponent": .instructor,
         "POST /instructor/setup/:setupID/delete": .instructor,
 
         // MARK: BrightSpace binding — `.instructor`
