@@ -60,7 +60,7 @@ jobs:
     container:
       # swift-ci: the mirrored toolchain plus every grading interpreter, the
       # same image as api-tests and worker-tests in swift-tests.yml.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -55,10 +55,31 @@ jobs:
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # All CI jobs run on noble (Ubuntu 24.04), matching the Dockerfile's build
-    # and runtime base so CI exercises the same glibc the shipped image uses.
-    # noble (glibc 2.39) is also required by SwiftLintBinary, which is linked
-    # against GLIBC 2.38 and cannot run on jammy's glibc 2.35.
+    # THE ONE JOB STILL ON NOBLE, and it is SwiftLint that holds it there.
+    #
+    # Every other CI job runs on resolute (Ubuntu 26.04), matching the
+    # Dockerfile's build and runtime base so CI exercises the same glibc the
+    # shipped image uses. This job cannot: SwiftLintPlugins ships a PREBUILT
+    # binary, that binary is linked against `libxml2.so.2`, and resolute does
+    # not have that soname. Noble carried libxml2 2.9.14 (`libxml2.so.2`);
+    # resolute renamed the package to `libxml2-16` and ships libxml2 2.15
+    # (`libxml2.so.16`), with no compatibility package anywhere in the archive.
+    # SwiftLint then dies at startup with "error while loading shared
+    # libraries", which reads as a lint failure and is not one.
+    #
+    # 0.65.1 is the newest release, so there is no version to move to. The
+    # alternatives were worse: a noble .deb dropped into a resolute container
+    # mixes archives, symlinking the new soname over the old one is an ABI lie,
+    # and building SwiftLint from source is the cost SwiftLintPlugins exists to
+    # avoid.
+    #
+    # Running it here is sound because every step in this job reads source and
+    # none exercises the shipped image's runtime, so the matching-glibc
+    # argument does not apply to it. `mirror-images.yml` keeps the noble tag
+    # refreshed for this job alone.
+    #
+    # MOVE THIS BACK to resolute once SwiftLint publishes a binary that starts
+    # there, and drop the noble line from mirror-images.yml with it.
     container:
       image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
       credentials:
@@ -136,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -186,7 +207,7 @@ jobs:
       # skipped silently for as long as their guard was a bare early return.
       # The trait that replaced it made the skip visible, and this lane went
       # red on the first run. Toolchain-identical to the plain mirror.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -253,7 +274,7 @@ jobs:
       # swift-ci = the mirrored toolchain + baked-in test packages (see
       # mirror-images.yml / .github/docker/ci-image); same `swift --version`,
       # so the `.build` cache key matches the build job's.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -367,7 +388,7 @@ jobs:
     timeout-minutes: 25
     container:
       # swift-ci: see the api-tests job note.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -503,7 +524,7 @@ jobs:
       # worker-tests use. Getting this wrong does not fail loudly: spawnSync
       # simply cannot find the interpreter, and the suites report
       # `exitError: 'exit null'` with an empty stderr.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -539,7 +560,7 @@ jobs:
     # them across multiple xctest binaries that don't share the lock.
     container:
       # swift-ci: see the api-tests job note.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

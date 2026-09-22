@@ -89,10 +89,13 @@ runs:
       run: |
         set -eu
 
-        # The check is on the VERSION, not just presence. Ubuntu noble's node is
-        # 18.19.1 and Playwright dropped Node 18 at 1.63 — `npx playwright
+        # The check is on the VERSION, not just presence. Playwright dropped
+        # Node 18 at 1.63, and Ubuntu noble's node was 18.19.1 — `npx playwright
         # install` then exits 1 before any probe runs. A presence-only check
         # said "already present — skipping apt" and walked straight into it.
+        # Resolute ships 22.22, so the version check now passes on a bare image,
+        # but it stays because the floor is Playwright's to raise, not the
+        # distro's to satisfy.
         node_major=0
         if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
           node_major="$(node --version | sed 's/^v\([0-9]*\).*/\1/')"
@@ -106,10 +109,12 @@ runs:
           else
             echo "::warning::image node is $(node --version), below v${MIN_NODE_MAJOR}; installing Node ${NODE_VERSION}"
           fi
-          # From nodejs.org rather than apt: noble cannot offer >=20 at all, and
-          # archive.ubuntu.com is the least reliable thing in this action (on
+          # From nodejs.org rather than apt: noble could not offer >=20 at all,
+          # and archive.ubuntu.com is the least reliable thing in this action (on
           # 2026-08-04 it was unreachable and took the required editor-smoke gate
-          # red with it). Retried for the same reason.
+          # red with it). Resolute could serve it now, but apt floats the version
+          # and this path is the fallback for an image that is already wrong, so
+          # it keeps the explicit pin. Retried for the same reason.
           for attempt in 1 2 3; do
             if curl -fsSL --max-time 180 \
                 "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \

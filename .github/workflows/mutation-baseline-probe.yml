@@ -49,7 +49,7 @@ jobs:
       # they do for the sweep -- on the toolchain-only image the
       # interpreter-dependent tests SKIP and the probe would measure a
       # different suite than the one the baseline runs.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
