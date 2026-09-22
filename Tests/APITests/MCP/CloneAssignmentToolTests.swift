@@ -86,6 +86,77 @@ import Vapor
         }
     }
 
+    /// The reference solution must travel with the clone. It lives in a
+    /// `validation`-kind submission rather than the setup zip, so a clone that
+    /// copies only the setup lands an assignment that can never be
+    /// re-validated — the defect that left a copied term with no answer keys.
+    @Test func carriesTheReferenceSolution() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let source = try await fixture(on: app)
+            let tester = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
+            let solution = try await makeTestSubmission(
+                on: app, id: "sub_solution", setupID: source.testSetupID,
+                userID: try tester.requireID(), kind: APISubmission.Kind.validation,
+                filename: "solution.ipynb")
+            source.validationSubmissionID = try solution.requireID()
+            try await source.save(on: app.db)
+
+            let output = try await CloneAssignmentTool().execute(
+                CloneAssignmentTool.Input(
+                    sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)",
+                    targetCourseCode: nil),
+                context(app))
+
+            let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
+
+            // The clone owns its own solution, bound to its own setup.
+            let clonedID = try #require(clone.validationSubmissionID)
+            #expect(clonedID != solution.id)
+            let clonedSolution = try #require(try await APISubmission.find(clonedID, on: app.db))
+            #expect(clonedSolution.kind == APISubmission.Kind.validation)
+            #expect(clonedSolution.testSetupID == clone.testSetupID)
+            #expect(clonedSolution.filename == "solution.ipynb")
+
+            // Its bytes are a real copy at a distinct path, not a shared file.
+            #expect(clonedSolution.zipPath != solution.zipPath)
+            #expect(FileManager.default.fileExists(atPath: clonedSolution.zipPath))
+            let original = try Data(contentsOf: URL(fileURLWithPath: solution.zipPath))
+            let copied = try Data(contentsOf: URL(fileURLWithPath: clonedSolution.zipPath))
+            #expect(original == copied)
+
+            // Resolution finds it — this is what get_solution reads.
+            let resolved = try #require(
+                try await MCPStudentDataBoundary.validationSubmission(for: clone, on: app.db))
+            #expect(resolved.id == clonedID)
+
+            // The clone is still unvalidated: carrying a solution is not
+            // evidence that it passes against this suite.
+            #expect(clone.validationStatus == nil)
+            #expect(output.validationStatus == nil)
+        }
+    }
+
+    /// An assignment authored without a solution is a legitimate state, so
+    /// cloning one must still succeed rather than refusing for a missing file.
+    @Test func clonesAnAssignmentThatHasNoSolution() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let source = try await fixture(on: app)
+            let output = try await CloneAssignmentTool().execute(
+                CloneAssignmentTool.Input(
+                    sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)",
+                    targetCourseCode: nil),
+                context(app))
+            let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
+            #expect(clone.validationSubmissionID == nil)
+            let resolved = try await MCPStudentDataBoundary.validationSubmission(
+                for: clone, on: app.db)
+            #expect(resolved == nil)
+        }
+    }
+
     @Test func clonesIntoAnotherEnrolledCourse() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

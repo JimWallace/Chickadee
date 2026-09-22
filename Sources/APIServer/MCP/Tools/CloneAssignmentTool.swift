@@ -132,7 +132,9 @@ struct CloneAssignmentTool: ContentTool {
                 sourceSetup: sourceSetup,
                 newTitle: title,
                 targetCourseID: targetCourseID,
-                setupsDirectory: context.request.application.testSetupsDirectory,
+                directories: AuthoringDirectories(
+                    setups: context.request.application.testSetupsDirectory,
+                    submissions: context.request.application.submissionsDirectory),
                 on: context.db)
         } catch let error as AssignmentAuthoringError {
             switch error {

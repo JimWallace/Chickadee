@@ -20,6 +20,17 @@ enum AssignmentAuthoringError: Error, Sendable, Equatable {
     case setupCopyFailed(reason: String)
 }
 
+/// The content directories a creation operation writes into. Grouped because
+/// a clone writes to both — the setup zip and notebook to one, the copied
+/// reference solution to the other — and two loose path strings next to each
+/// other is an easy pair to transpose at a call site.
+struct AuthoringDirectories: Sendable {
+    /// Where test-setup zips and starter notebooks live.
+    let setups: String
+    /// Where submission files live, including `validation`-kind solutions.
+    let submissions: String
+}
+
 /// A freshly authored assignment + its new test setup, returned by the
 /// creation operations (`cloneAssignment`, `createAssignment`).
 struct AuthoredAssignment: Sendable {
@@ -155,13 +166,13 @@ enum AssignmentAuthoringService {
         sourceSetup: APITestSetup,
         newTitle: String,
         targetCourseID: UUID,
-        setupsDirectory: String,
+        directories: AuthoringDirectories,
         on db: Database
     ) async throws -> AuthoredAssignment {
         let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let fm = FileManager.default
 
-        let dstZip = setupsDirectory + "\(newSetupID).zip"
+        let dstZip = directories.setups + "\(newSetupID).zip"
         do {
             try fm.copyItem(atPath: sourceSetup.zipPath, toPath: dstZip)
         } catch {
@@ -170,7 +181,7 @@ enum AssignmentAuthoringService {
 
         var newNotebookPath: String?
         if let srcNotebook = sourceSetup.notebookPath, fm.fileExists(atPath: srcNotebook) {
-            let dstNotebook = setupsDirectory + "\(newSetupID).ipynb"
+            let dstNotebook = directories.setups + "\(newSetupID).ipynb"
             do {
                 try fm.copyItem(atPath: srcNotebook, toPath: dstNotebook)
                 newNotebookPath = dstNotebook
@@ -184,8 +195,27 @@ enum AssignmentAuthoringService {
             id: newSetupID, manifest: sourceSetup.manifest, zipPath: dstZip,
             notebookPath: newNotebookPath, courseID: targetCourseID)
 
+        var copiedSolutionPath: String?
         do {
             try await newSetup.save(on: db)
+            // Carry the reference solution. It lives in a `validation`-kind
+            // SUBMISSION, not in the setup zip, so copying the setup alone
+            // leaves the clone with no answer key — and neither the stored
+            // pointer nor the by-setup fallback can reach the source's, because
+            // the clone lands on a NEW setup id. That is what made a copied
+            // term impossible to re-validate.
+            //
+            // `validationStatus` stays nil regardless: the clone genuinely has
+            // not been validated, and copying a solution is not evidence that
+            // it passes against this suite. The copy is stored `complete` and
+            // no grading job is queued, so a course copy does not fan out one
+            // job per assignment; the next authoring write validates it.
+            let clonedSolution = try await copyReferenceSolution(
+                from: source,
+                toSetupID: newSetupID,
+                submissionsDirectory: directories.submissions,
+                on: db)
+            copiedSolutionPath = clonedSolution?.zipPath
             let assignment = try await createAssignmentWithUniquePublicID(
                 on: db,
                 testSetupID: newSetupID,
@@ -194,7 +224,7 @@ enum AssignmentAuthoringService {
                 visibility: .closed,
                 sortOrder: nil,
                 validationStatus: nil,
-                validationSubmissionID: nil,
+                validationSubmissionID: clonedSolution?.id,
                 courseID: targetCourseID)
             // Seed the clone's own v1. It inherits no history — the copy lands
             // in a NEW setup id, which is exactly the "only the most recent
@@ -202,14 +232,65 @@ enum AssignmentAuthoringService {
             // gives the fresh assignment a starting point to roll back to.
             await AssignmentVersionStore.seedInitialVersion(
                 setup: newSetup, origin: AssignmentVersionOrigin.clone,
-                testSetupsDirectory: setupsDirectory, on: db)
+                testSetupsDirectory: directories.setups, on: db)
             return AuthoredAssignment(assignment: assignment, setup: newSetup)
         } catch {
             // Roll back the copied files so a failed clone leaves no orphans.
             try? fm.removeItem(atPath: dstZip)
             if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
+            if let copiedSolutionPath { try? fm.removeItem(atPath: copiedSolutionPath) }
             throw error
         }
+    }
+
+    /// Copies the source assignment's reference solution onto a new setup id,
+    /// returning the new `validation` submission, or nil when the source has
+    /// none (or its file is gone from disk).
+    ///
+    /// A missing solution is not an error: an assignment authored without one
+    /// is a legitimate state, and refusing to clone it would be a regression.
+    /// A solution that is present but unreadable IS an error — that is the
+    /// silent-loss shape this whole change exists to remove.
+    private static func copyReferenceSolution(
+        from source: APIAssignment,
+        toSetupID newSetupID: String,
+        submissionsDirectory: String,
+        on db: Database
+    ) async throws -> APISubmission? {
+        let fm = FileManager.default
+        guard
+            let sourceSolution = try await MCPStudentDataBoundary.validationSubmission(
+                for: source, on: db),
+            fm.fileExists(atPath: sourceSolution.zipPath)
+        else { return nil }
+
+        let newSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let ext = URL(fileURLWithPath: sourceSolution.zipPath).pathExtension
+        let destName = ext.isEmpty ? "\(newSubID).bin" : "\(newSubID).\(ext)"
+        let destPath = submissionsDirectory + destName
+        do {
+            try fm.copyItem(atPath: sourceSolution.zipPath, toPath: destPath)
+        } catch {
+            throw AssignmentAuthoringError.setupCopyFailed(
+                reason: "reference solution: \(error)")
+        }
+
+        let solution = APISubmission(
+            id: newSubID,
+            testSetupID: newSetupID,
+            zipPath: destPath,
+            attemptNumber: 1,
+            status: SubmissionStatus.complete.rawValue,
+            filename: sourceSolution.filename,
+            userID: sourceSolution.userID,
+            kind: APISubmission.Kind.validation)
+        do {
+            try await solution.save(on: db)
+        } catch {
+            try? fm.removeItem(atPath: destPath)
+            throw error
+        }
+        return solution
     }
 
     /// Creates a brand-new browser-graded, notebook-based assignment from
