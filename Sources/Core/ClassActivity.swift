@@ -86,6 +86,11 @@ public enum ActivityAggregation: String, Codable, CaseIterable, Sendable {
     /// A tournament run on frozen entrants (`tournament_runs`): the page
     /// shows the bracket's rounds and the winner, not a ranking.
     case bracket
+    /// A union of what the class produced, read two ways from the same
+    /// matches: which classmates' work the class has collectively defeated,
+    /// and how each classmate's own work held up. Materialises nothing of
+    /// its own — both halves are queries over `match_results`.
+    case union
 }
 
 /// The activity kinds this build can author and grade.
@@ -117,6 +122,13 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// each pairing is a match job, rounds advance as matches land, and the
     /// winner holds the `tournamentWinner` record. Feeds achievements only.
     case elimination
+    /// Tests versus implementations: every student submits both, and one job
+    /// runs their tests against every classmate's latest submission. Each
+    /// match is read TWICE — as a kill for the student whose test found the
+    /// fault, and as a fault against the classmate whose work was tested —
+    /// so the class sees which work it has collectively defeated and whose
+    /// work held up. Feeds achievements only.
+    case testsVersusImplementations
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
@@ -126,6 +138,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .kingOfTheHill: return "Beat the champion"
         case .roundRobin: return "Round robin"
         case .elimination: return "Tournament"
+        case .testsVersusImplementations: return "Tests and code"
         }
     }
 
@@ -160,6 +173,11 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
                 + "staged as the opponent, rounds advance as matches land, and the winner holds the "
                 + "tournament record; a student's own submission plays the bundled bot, if any, as "
                 + "practice."
+        case .testsVersusImplementations:
+            return
+                "Tests and code: every student submits both, and each student's tests run against "
+                + "every classmate's latest submission, counting once for the test that finds a "
+                + "fault and once against the code that has it."
         }
     }
 
@@ -168,7 +186,9 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// `aggregation`.
     public var aggregatesToLeaderboard: Bool {
         switch self {
-        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination: return true
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination,
+            .testsVersusImplementations:
+            return true
         }
     }
 
@@ -179,6 +199,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor, .bestMetric, .kingOfTheHill: return .leaderboard
         case .roundRobin: return .standings
         case .elimination: return .bracket
+        case .testsVersusImplementations: return .union
         }
     }
 
@@ -190,7 +211,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor: return .supportFile
         case .bestMetric: return .none
         case .kingOfTheHill: return .champion
-        case .roundRobin: return .classmates
+        case .roundRobin, .testsVersusImplementations: return .classmates
         case .elimination: return .paired
         }
     }

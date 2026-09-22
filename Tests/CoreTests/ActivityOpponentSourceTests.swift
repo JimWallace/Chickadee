@@ -130,7 +130,7 @@ import Testing
     func everyKindAnswersTheAggregationAxis(kind: ActivityKind) {
         #expect(kind.aggregatesToLeaderboard)
         switch kind.opponentSource {
-        case .classmates: #expect(kind.aggregation == .standings)
+        case .classmates: #expect([.standings, .union].contains(kind.aggregation))
         case .paired: #expect(kind.aggregation == .bracket)
         case .none, .supportFile, .champion: #expect(kind.aggregation == .leaderboard)
         }
@@ -146,6 +146,30 @@ import Testing
         #expect(ClassActivity(kind: .elimination).stagesAnOpponent)
         #expect(ClassActivity(kind: .elimination).takesAnOpponentFile)
         #expect(ActivityKind.elimination.displayName == "Tournament")
+    }
+
+    // MARK: - The union aggregation (slice 6)
+
+    /// Tests and code plays every classmate, like a round robin, but its
+    /// class reading is the union rather than a standings table — so it
+    /// reuses the matrix runner contract and needs no new token.
+    @Test func theTestsAndCodeKindPlaysClassmatesAndReadsAUnion() {
+        #expect(ActivityKind.testsVersusImplementations.opponentSource == .classmates)
+        #expect(ActivityKind.testsVersusImplementations.aggregation == .union)
+        #expect(ActivityKind.testsVersusImplementations.aggregatesToLeaderboard)
+        #expect(ClassActivity(kind: .testsVersusImplementations).stagesAnOpponent)
+        #expect(
+            ActivityKind.testsVersusImplementations.opponentSource.requiredRunnerCapability
+                == .activityMatrix)
+        #expect(ActivityKind.testsVersusImplementations.displayName == "Tests and code")
+    }
+
+    /// Two kinds now share the matrix source and differ only in how the
+    /// class reads the matches, which is the axis pair doing its job.
+    @Test func twoKindsShareTheMatrixSourceAndDifferOnlyInAggregation() {
+        let matrixKinds = ActivityKind.allCases.filter { $0.opponentSource == .classmates }
+        #expect(matrixKinds.count == 2)
+        #expect(Set(matrixKinds.map(\.aggregation)) == [.standings, .union])
     }
 
     @Test func theRoundRobinBlockRoundTrips() throws {
