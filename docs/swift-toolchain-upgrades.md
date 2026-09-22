@@ -87,6 +87,7 @@ The pins live in these places:
 | `.github/docker/ci-image/Dockerfile` | `BASE_IMAGE`, and the comment above it |
 | `.github/workflows/mirror-images.yml` | the mirror source, the derived tag, the comments |
 | 13 workflow files | approximately 20 job images, `swift:` and `swift-ci:` |
+| `.github/workflows/swift-tests.yml` `format-lint` | pinned to the **noble** tag, on purpose — see below |
 | `.github/workflows/runner-wasm-vendor.yml` | the swiftly version, twice |
 | `wasm/wasm-sdk.pin` | the bundle URL and the checksum |
 | `scripts/build-runner-wasm.sh` | the default SDK identifier |
@@ -108,6 +109,15 @@ number from a note.
 `mirror-images.yml` publishes it. The jobs start together, so all of the
 container jobs fail at `docker pull ... manifest unknown`. Let the mirror job
 finish, then re-run. #1541 hit this and the re-run was green.
+
+**`format-lint` is on a different distro, and that is deliberate.** Every
+other job runs the resolute tag. `format-lint` runs the noble one because
+SwiftLintPlugins ships a prebuilt binary linked against `libxml2.so.2`, and
+resolute has no such soname: the package is `libxml2-16` and the library is
+`libxml2.so.16`, with no compatibility package. SwiftLint dies at startup
+there. Do not "fix" the inconsistency by moving it to the new tag without
+first checking that a SwiftLint binary starts on that distro. When one does,
+move it and drop the extra `mirror` line from `mirror-images.yml`.
 
 **Vendor the browser wasm inside the pull request.** The vendor gate hashes
 `scripts/build-runner-wasm.sh`. Your change edits that file, so a merge with no

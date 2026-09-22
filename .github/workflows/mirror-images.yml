@@ -1,5 +1,11 @@
 name: Mirror CI images
 
+# The noble tag is mirrored too, for the `format-lint` job alone. SwiftLint
+# ships a prebuilt binary linked against libxml2.so.2. Noble carries that
+# soname; resolute renamed the package to libxml2-16 and ships libxml2.so.16,
+# with no compatibility package, so the binary cannot start there. Drop the
+# noble line once SwiftLint publishes a bundle that runs on resolute.
+#
 # Mirrors the Docker Hub images our CI jobs run in (swift:6.4-resolute job
 # container, postgres:16 service) into GHCR, so the test workflows never
 # pull from registry-1.docker.io at job time.
@@ -89,6 +95,7 @@ jobs:
             return 1
           }
           mirror docker.io/library/swift:6.4-resolute swift:6.4-resolute
+          mirror docker.io/library/swift:6.4-noble swift:6.4-noble
           mirror docker.io/library/postgres:16 postgres:16
 
       - name: Build and push the derived CI test image

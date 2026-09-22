@@ -18,3 +18,10 @@
   R 4.5.3 and Python 3.13.1, so native R goes from two minor versions behind
   the browser to within one patch of it, and native Octave from two majors
   behind to one ahead.
+
+  One CI job stays on noble. SwiftLintPlugins ships a prebuilt binary linked
+  against `libxml2.so.2`, and resolute ships `libxml2-16` with
+  `libxml2.so.16` and no compatibility package, so the binary cannot start
+  there. `format-lint` reads source and does not exercise the shipped image,
+  so running it on the older base costs nothing. It moves back when SwiftLint
+  publishes a binary that starts on resolute.

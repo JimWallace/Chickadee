@@ -55,13 +55,33 @@ jobs:
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # All CI jobs run on resolute (Ubuntu 26.04), matching the Dockerfile's
-    # build and runtime base so CI exercises the same glibc the shipped image
-    # uses. SwiftLintBinary is linked against GLIBC 2.38, so it needs a base at
-    # or above that: resolute supplies 2.43 and noble supplied 2.39, while
-    # jammy's 2.35 is below the floor and cannot run it.
+    # THE ONE JOB STILL ON NOBLE, and it is SwiftLint that holds it there.
+    #
+    # Every other CI job runs on resolute (Ubuntu 26.04), matching the
+    # Dockerfile's build and runtime base so CI exercises the same glibc the
+    # shipped image uses. This job cannot: SwiftLintPlugins ships a PREBUILT
+    # binary, that binary is linked against `libxml2.so.2`, and resolute does
+    # not have that soname. Noble carried libxml2 2.9.14 (`libxml2.so.2`);
+    # resolute renamed the package to `libxml2-16` and ships libxml2 2.15
+    # (`libxml2.so.16`), with no compatibility package anywhere in the archive.
+    # SwiftLint then dies at startup with "error while loading shared
+    # libraries", which reads as a lint failure and is not one.
+    #
+    # 0.65.1 is the newest release, so there is no version to move to. The
+    # alternatives were worse: a noble .deb dropped into a resolute container
+    # mixes archives, symlinking the new soname over the old one is an ABI lie,
+    # and building SwiftLint from source is the cost SwiftLintPlugins exists to
+    # avoid.
+    #
+    # Running it here is sound because every step in this job reads source and
+    # none exercises the shipped image's runtime, so the matching-glibc
+    # argument does not apply to it. `mirror-images.yml` keeps the noble tag
+    # refreshed for this job alone.
+    #
+    # MOVE THIS BACK to resolute once SwiftLint publishes a binary that starts
+    # there, and drop the noble line from mirror-images.yml with it.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
