@@ -92,6 +92,49 @@ import Vapor
         }
     }
 
+    /// A union kind seeds no record: its page is the reward surface, and
+    /// neither held record it could borrow means what a union means. An
+    /// instructor may author one. Switching to it takes the other kinds'
+    /// seeded records away.
+    @Test func theTestsAndCodeKindSeedsNoRecord() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, gradingMode: "worker")
+            _ = try await SetActivityTool().execute(
+                .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
+                context(app))
+            #expect(
+                try await manifest(on: app).achievements
+                    .contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
+
+            let out = try await SetActivityTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, kind: "testsVersusImplementations",
+                    leaderboardVisibility: nil), context(app))
+            #expect(out.opponentSource == "classmates")
+            let props = try await manifest(on: app)
+            #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
+            #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededTournamentRecordID })
+            #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededRecordID })
+            #expect(props.achievements.allSatisfy { $0.recordDimension != .tournamentWinner })
+        }
+    }
+
+    /// Worker-only by construction, like the hill: it stages classmates.
+    @Test func theTestsAndCodeKindIsRefusedOnABrowserGradedAssignment() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, gradingMode: "browser")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await SetActivityTool().execute(
+                    .init(
+                        assignmentPublicID: assignment.publicID, kind: "testsVersusImplementations",
+                        leaderboardVisibility: nil), context(app))
+            }
+            #expect(try await manifest(on: app).activity == nil)
+        }
+    }
+
     /// Worker-only by construction, like the hill.
     @Test func theRoundRobinIsRefusedOnABrowserGradedAssignment() async throws {
         let app = try await makeTestApp()

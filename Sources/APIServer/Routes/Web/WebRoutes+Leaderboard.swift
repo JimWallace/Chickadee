@@ -56,6 +56,12 @@ extension WebRoutes {
             ? try await buildTournamentPresentation(
                 setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
             : nil
+        let showsUnion = activity.kind.aggregation == .union
+        let union =
+            showsUnion
+            ? try await buildUnionPresentation(
+                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            : nil
 
         return try await req.view.render(
             "leaderboard",
@@ -73,8 +79,68 @@ extension WebRoutes {
                 showsBracket: showsBracket,
                 hasTournament: tournament != nil,
                 tournament: tournament,
+                showsUnion: showsUnion,
+                hasUnion: union != nil,
+                union: union,
                 currentUser: req.currentUserContext))
     }
+}
+
+/// Both halves of a union activity as the page shows them, by handle and
+/// bird. Nil when no match has landed yet, so the page can say so once
+/// rather than printing two empty tables.
+func buildUnionPresentation(
+    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: Database
+) async throws -> UnionPresentation? {
+    let tally = try await unionTally(setup: setup, on: db)
+    guard tally.targetCount > 0 else { return nil }
+    let identities = try await RankedIdentities.load(
+        userIDs: tally.kills.map(\.userID) + tally.defences.map(\.userID),
+        courseID: setup.courseID, on: db)
+
+    var kills: [UnionKillRow] = []
+    for tally in tally.kills {
+        guard
+            let identity = try await identities.presentation(
+                for: tally.userID, includeName: includeNames, fallbackLabel: "Student", on: db)
+        else { continue }
+        kills.append(
+            UnionKillRow(
+                handle: identity.handle, name: identity.name,
+                defeated: tally.defeated, faced: tally.faced,
+                isViewer: tally.userID == viewerID, avatar: identity.avatar))
+    }
+
+    var defences: [UnionDefenceRow] = []
+    for tally in tally.defences {
+        guard
+            let identity = try await identities.presentation(
+                for: tally.userID, includeName: includeNames, fallbackLabel: "Student", on: db)
+        else { continue }
+        let statusText: String
+        if tally.defeated {
+            statusText = "defeated"
+        } else if tally.faced == 0 {
+            statusText = "not tested yet"
+        } else {
+            statusText = "holding"
+        }
+        defences.append(
+            UnionDefenceRow(
+                handle: identity.handle, name: identity.name,
+                faced: tally.faced, statusText: statusText,
+                isViewer: tally.userID == viewerID, avatar: identity.avatar))
+    }
+
+    // Counted from the rows the page SHOWS, not from the tally: a student
+    // who has since dropped keeps no row here (their enrollment carried the
+    // handle), and a denominator that counted them would not match the
+    // table under it.
+    let defeated = defences.filter { $0.statusText == "defeated" }.count
+    return UnionPresentation(
+        summaryText: "\(defeated) of \(defences.count) submissions defeated so far.",
+        kills: kills,
+        defences: defences)
 }
 
 /// The latest tournament run as the page shows it: its status, the winner
@@ -195,7 +261,46 @@ struct LeaderboardContext: Encodable {
     /// on the optional itself.
     let hasTournament: Bool
     let tournament: TournamentPresentation?
+    /// True for a tests-and-code kind: the page shows what the class has
+    /// defeated and whose code is holding.
+    let showsUnion: Bool
+    /// True once the roster has code to test; the template gates on this.
+    let hasUnion: Bool
+    let union: UnionPresentation?
     let currentUser: CurrentUserContext?
+}
+
+/// A union activity's two tables plus the one-line count above them.
+struct UnionPresentation: Encodable {
+    /// "7 of 24 submissions defeated so far."
+    let summaryText: String
+    let kills: [UnionKillRow]
+    let defences: [UnionDefenceRow]
+}
+
+/// One student's tests, by what they defeated.
+struct UnionKillRow: Encodable {
+    let handle: String
+    /// Staff only; empty for a student viewer.
+    let name: String
+    let defeated: Int
+    let faced: Int
+    let isViewer: Bool
+    let avatar: AvatarPresentation
+}
+
+/// One student's code, by how it has held up.
+struct UnionDefenceRow: Encodable {
+    let handle: String
+    /// Staff only; empty for a student viewer.
+    let name: String
+    let faced: Int
+    /// "holding", "defeated" or "not tested yet". Plain text in the table:
+    /// early on nearly every row is holding, so badging the ordinary state
+    /// would paint the column one colour and cue nothing.
+    let statusText: String
+    let isViewer: Bool
+    let avatar: AvatarPresentation
 }
 
 /// The latest tournament run as the page shows it.

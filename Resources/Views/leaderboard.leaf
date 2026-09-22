@@ -21,6 +21,8 @@
     </div>
     #if(showsBracket):
     <p class="section-intro">Each match plays the first entrant's frozen submission against the second's. Rounds advance as matches land. Students appear under their class handle.</p>
+    #elseif(showsUnion):
+    <p class="section-intro">Every student's tests run against every classmate's latest submission. Most faults found first, then most classmates tested; code that is still holding first. Students appear under their class handle.</p>
     #elseif(showsStandings):
     <p class="section-intro">Highest average match score first, then most wins. Each row is the student's latest submission. Students appear under their class handle.</p>
     #else:
@@ -117,6 +119,74 @@
     #endfor
     #else:
     <p class="empty">No tournament has been run yet.</p>
+    #endif
+    #elseif(showsUnion):
+    #if(hasUnion):
+    <p class="text-muted">#(union.summaryText)</p>
+    <h3 class="submission-section-heading">Tests</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Defeated</th>
+                <th class="time">Tested</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in union.kills):
+            <tr>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.defeated)</td>
+                <td class="time">#(row.faced)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    <h3 class="submission-section-heading">Code</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Tested by</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in union.defences):
+            <tr>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.faced)</td>
+                <td>#(row.statusText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #else:
+    <p class="empty">No student has submitted yet.</p>
     #endif
     #elseif(showsStandings):
     #if(count(standings) == 0):

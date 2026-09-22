@@ -260,6 +260,71 @@ import VaporTesting
         }
     }
 
+    // MARK: - The union (tests and code, slice 6)
+
+    private func unionManifest() throws -> String {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            activity: ClassActivity(
+                kind: .testsVersusImplementations, leaderboardVisibility: .visible))
+        return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+    }
+
+    /// A tests-and-code page shows both halves by handle — what each
+    /// student's tests defeated, and how each student's code held up — and
+    /// says so once when nothing has been tested yet.
+    @Test func aUnionShowsBothHalvesByHandle() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(id: "lb_union", manifest: try unionManifest(), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lb_union", courseID: setup.courseID, title: "Tests and code")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            let mate = try await makeTestUser(on: app, username: "lb_union_mate", role: "student")
+            try await wrEnrollUser(mate, on: app)
+
+            let empty = try await get("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
+            #expect(empty.status == .ok)
+            #expect(empty.body.string.contains("No student has submitted yet"))
+
+            // The viewer's tests defeat the classmate's code.
+            let viewerSub = APISubmission(
+                id: "lb_union_v", testSetupID: "lb_union", zipPath: "/tmp/v.zip", attemptNumber: 1,
+                status: SubmissionStatus.complete.rawValue, filename: "v.py",
+                userID: try viewer.requireID())
+            try await viewerSub.save(on: app.db)
+            let mateSub = APISubmission(
+                id: "lb_union_m", testSetupID: "lb_union", zipPath: "/tmp/m.zip", attemptNumber: 1,
+                status: SubmissionStatus.complete.rawValue, filename: "m.py",
+                userID: try mate.requireID())
+            try await mateSub.save(on: app.db)
+            let row = APIMatchResult(
+                testSetupID: "lb_union", submissionID: "lb_union_v",
+                opponentSubmissionID: "lb_union_m",
+                opponentIdentity: JobOpponent.submissionIdentity("lb_union_m"),
+                seed: "s", createdAt: Date())
+            row.won = true
+            row.completedAt = Date()
+            try await row.save(on: app.db)
+
+            let res = try await get("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
+            #expect(res.status == .ok)
+            let html = res.body.string
+            #expect(html.contains("1 of 2 submissions defeated so far."))
+            #expect(html.contains("<h3 class=\"submission-section-heading\">Tests</h3>"))
+            #expect(html.contains("<h3 class=\"submission-section-heading\">Code</h3>"))
+            #expect(html.contains("defeated"))
+            #expect(html.contains("not tested yet"))
+            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(!html.contains("lb_union_mate"))
+            let enrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == (try mate.requireID())).first())
+            #expect(html.contains(try #require(enrollment.avatarHandle)))
+        }
+    }
+
     // MARK: - The bracket (tournament, slice 5)
 
     private func tournamentManifest() throws -> String {

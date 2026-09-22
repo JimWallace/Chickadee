@@ -49,6 +49,42 @@ func chooseOpponent(
         identity: JobOpponent.submissionIdentity(champion.submissionID))
 }
 
+/// The latest complete student submission of every enrolled `.student` in
+/// the setup's course, keyed by student.
+///
+/// One definition of "latest", shared by the classmate chooser (who a job
+/// plays) and the union read model (whose record counts), so the two cannot
+/// disagree about which submission represents a student.
+func latestStudentSubmissionsByUser(
+    setup: APITestSetup, excluding excluded: UUID? = nil, on db: Database
+) async throws -> [UUID: APISubmission] {
+    guard let setupID = setup.id else { return [:] }
+    // NULL role is a pre-migration student (the `role` accessor's default).
+    let students = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id == setup.courseID)
+        .group(.or) { or in
+            or.filter(\.$roleRaw == CourseRole.student.rawValue)
+            or.filter(\.$roleRaw == .null)
+        }
+        .all()
+        .map(\.userID)
+        .filter { $0 != excluded }
+    guard !students.isEmpty else { return [:] }
+    let candidates = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$status == SubmissionStatus.complete.rawValue)
+        .filter(\.$userID ~~ students)
+        .sort(\.$submittedAt, .descending)
+        .all()
+    var latestByUser: [UUID: APISubmission] = [:]
+    for candidate in candidates {
+        guard let userID = candidate.userID, latestByUser[userID] == nil else { continue }
+        latestByUser[userID] = candidate
+    }
+    return latestByUser
+}
+
 /// Every classmate a round-robin challenger plays: the latest complete
 /// submission of every OTHER `.student` enrolled in the setup's course. When
 /// there is none yet, the bundled bot stands in (or nobody, when there is no
@@ -62,29 +98,8 @@ func chooseClassmates(
     guard activity.kind.opponentSource == .classmates,
         let setup = try await APITestSetup.find(submission.testSetupID, on: db)
     else { return [] }
-    // NULL role is a pre-migration student (the `role` accessor's default).
-    let students = try await APICourseEnrollment.query(on: db)
-        .filter(\.$course.$id == setup.courseID)
-        .group(.or) { or in
-            or.filter(\.$roleRaw == CourseRole.student.rawValue)
-            or.filter(\.$roleRaw == .null)
-        }
-        .all()
-        .map(\.userID)
-        .filter { $0 != submission.userID }
-    guard !students.isEmpty else { return [] }
-    let candidates = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == submission.testSetupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$status == SubmissionStatus.complete.rawValue)
-        .filter(\.$userID ~~ students)
-        .sort(\.$submittedAt, .descending)
-        .all()
-    var latestByUser: [UUID: APISubmission] = [:]
-    for candidate in candidates {
-        guard let userID = candidate.userID, latestByUser[userID] == nil else { continue }
-        latestByUser[userID] = candidate
-    }
+    let latestByUser = try await latestStudentSubmissionsByUser(
+        setup: setup, excluding: submission.userID, on: db)
     // Stable order — by submission ID — so two claims of one submission
     // stage the same opponents in the same order.
     return latestByUser.values
@@ -268,6 +283,11 @@ private func recordMatrixMatches(
     guard let setupID = setup.id,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
+    // A union kind materialises nothing: both halves of its reading — whose
+    // code the class defeated, and whose code held up — are queries over the
+    // rows just completed (`unionTally`). A standings row would answer only
+    // the tester's half and would be read as the whole record.
+    guard setup.decodedManifest()?.activity?.kind.aggregation != .union else { return }
     try await recomputeStanding(testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
     if let leader = try await activityStandings(testSetupID: setupID, on: db).first {
         try await awardTournamentWinnerRecords(

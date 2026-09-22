@@ -22,7 +22,7 @@ assignment on the code path it runs today.
 | 3 | `champion` opponent (king of the hill): `kingOfTheHill`, `match_results` opened at claim and completed at ingest, `activity_champions`, the champion banner, `RecordDimension.champion`, the `activity-opponent-submission` runner capability | shipped |
 | 4 | `classmates` matrix (round robin): `roundRobin`, `Job.opponents`, the per-match `MatchReport` rows, `activity_standings`, the standings page, `RecordDimension.tournamentWinner`, the `standing` / `matchesWon` signals, the `activity-matrix` runner capability | shipped |
 | 5 | Tournaments: `elimination` (single-elimination bracket or Swiss), the `paired` opponent source, `tournament_runs` / `tournament_matches`, `tournamentMatch` submissions, the Run tournament control and MCP `run_tournament`, the bracket page | shipped |
-| 6 | Asymmetric matrix (tests versus implementations) | not started |
+| 6 | Tests and code (asymmetric reading of the matrix): `testsVersusImplementations`, the `union` aggregation, the two-table class page | shipped |
 | 7 | Synthetic class submission (coverage percent) | not started |
 | 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
 
@@ -75,7 +75,7 @@ the first student submission. Creation-time choice is a follow-up.
 | `roundRobin` | `classmates` (every classmate's latest submission; the bundled bot until one exists) | `standings` | `record` on `tournamentWinner`; `standing` / `matchesWon` badges are authored | 4 (shipped) |
 | `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` | 5 (shipped) |
 | `bugHunt` | `variants` (instructor's seeded variants) | `union` | already shipped, re-described only | — |
-| `testsVersusImplementations` | `classmates`, asymmetric | `union` for testers, `standings` for implementers | match entry, contribution slots | 6 |
+| `testsVersusImplementations` | `classmates` (the same matrix a round robin plays) | `union` — every match read twice, as a kill and as a fault | nothing; the page is the reward surface | 6 (shipped) |
 
 `ActivityKind` (`Sources/Core/ClassActivity.swift`) carries only the kinds that
 work end to end. A kind the runner cannot execute is a silent misroute, not a
@@ -486,13 +486,71 @@ repeating it. `get_server_info` still reports every kind's aggregation as
 "leaderboard": `SetActivityToolTests.serverInfoListsEveryKind` pins that
 value, and changing it is a decision for that test's owner.
 
+### Tests and code (slice 6)
+
+`testsVersusImplementations` (chrome label "Tests and code") is the first
+kind whose class reading is a **union** rather than a ranking. Every student
+submits both tests and code; one job runs their tests against every
+classmate's latest submission, exactly as a round robin does. What is new is
+that each landed match is read TWICE — as a kill for the student whose test
+found the fault, and as a fault against the classmate whose code was tested.
+
+**It reuses the matrix outright.** The opponent source is `classmates`, so
+the claim path, the worker's per-opponent loop, the `activity-matrix`
+capability and the `MatchReport` rows are slice 4's, unchanged. Slice 6 adds
+no table, no migration, no runner token and no worker code. Two kinds now
+share one opponent source and differ only in aggregation, which is the axis
+pair doing the job it was built for.
+
+**It materialises nothing** (`ActivityUnion.swift`). Every other aggregation
+writes a row at ingest because it answers a question the stored outcomes
+cannot answer cheaply; this one can, because a union over matches is a query
+over the rows the matrix already completed — which is what
+[collaborative-class-assignments.md](collaborative-class-assignments.md)
+says a bug-set union is. A stored number would answer the tester's half only,
+and that half reads as the whole record. So a union kind writes no
+`activity_standings` row and moves no record, and `unionTally` reads both
+halves in four queries.
+
+**The two halves scope differently, deliberately.** A KILL belongs to the
+student whose test found the fault and stays theirs after the author fixes
+it: their work is not undone by somebody else's later submission. A DEFENCE
+belongs to the author's CURRENT submission only, because the question it
+answers is whether the code that stands today has held up — so a
+resubmission returns that student to "not tested yet" until a classmate's
+next run reaches it. This is the same asymmetry `class_item_coverage`
+already carries between coverage and breadth, and it is safe here for a
+reason worth stating: a union kind feeds achievements only, and
+`isSweepEvaluableClassGoal` admits no shape that reads these rows, so a
+number that moves when a student resubmits can never freeze into a grade
+push. That is why this number may move at all, where a coverage count must
+never retreat.
+
+**The page** shows the count ("7 of 24 submissions defeated so far") over two
+tables by handle and bird: Tests (what each student's tests defeated, and how
+many classmates they ran against) and Code (how many classmates' tests each
+submission has faced, and whether it is holding, defeated, or not tested
+yet). Staff also see names. `set_activity` seeds no record for a union kind:
+neither held record it could borrow means what a union means, and an
+instructor who wants one authors it.
+
+**Where this departs from the plan in #1508**, which called for an
+`asymmetric` flag splitting the class into testers and implementers by
+contribution slot: there are no roles. Everyone writes both, which removes
+the role assignment, the authoring affordance for it, and the "a student in
+neither role is refused at submit" case — three pieces of machinery for a
+split that also halves what each student practises. The asymmetry the kind
+is named for is real and survives: it is in how each match is READ, not in
+who plays. The match script decides what counts as a fault, as the script
+contract always has.
+
 ## Compatibility rules (every slice)
 
 | Seam | Rule |
 |---|---|
 | `makeWorkerManifestJSON` writes a fresh dict | `activity` is threaded through every rebuild caller (both script edits, the family apply, the draft publish and the two draft suite rebuilds). `AssignmentHelpersManifestTests` pins the round trip. This is the `languageDeclared` trap, one field later. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`, so fields this build does not model survive. |
-| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3) and for a tournament's paired match (slice 5, the same contract), `activity-matrix` for a round robin (slice 4); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
+| Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3) and for a tournament's paired match (slice 5, the same contract), `activity-matrix` for a round robin and for tests-and-code (slices 4 and 6, the same contract); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
 | Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
 | Visibility and opponent edits | `withLeaderboardVisibility` / `withOpponentFile` rebuild the block from the stored one, so neither surface's edit can drop the other's field. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
@@ -566,6 +624,8 @@ errors rather than passes.
 - `Sources/Core/JobOpponent.swift` (`JobOpponent`, `MatchReport`,
   `matchOutcome`), `Sources/Worker/OpponentStaging.swift`,
   `Sources/Worker/MatrixAggregation.swift`
+- `Sources/APIServer/Helpers/ActivityUnion.swift` (`unionTally`, both halves
+  of a union kind's reading)
 - `Sources/Core/Tournament.swift` (`TournamentSchedule`, `TournamentPairing`),
   `Sources/APIServer/Helpers/Tournaments.swift` (start, enqueue, pair, land,
   advance), `Sources/APIServer/Models/APITournamentRun.swift`,
