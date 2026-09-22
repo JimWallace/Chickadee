@@ -1,4 +1,4 @@
-// Shared background refresh for a server-rendered table (UI audit S3).
+// Shared background refresh for a server-rendered table or region (UI audit S3).
 //
 //   <table class="results-table sortable-table" id="…"
 //          data-poll-url="/instructor/students-data?fragment=rows"
@@ -6,15 +6,15 @@
 //
 // Every interval the table's <tbody> is replaced with freshly rendered rows
 // fetched from `data-poll-url` — HTML the SERVER renders from the same Leaf
-// partial the page itself used.
-//
-// An element carrying `data-poll-swap="region"` swaps its own contents
-// instead — see `swapTargetFor` for why one page needs that — and
-// `data-poll-until` stops a poll for good once that instant has passed. Before this, three pages each rebuilt every
+// partial the page itself used. Before this, three pages each rebuilt every
 // row by concatenating HTML strings in an inline script, duplicating the
 // markup (role <select>s, CSRF fields, icon SVGs, a whole register-student
 // popover) in a second place that could drift from the template silently, and
 // did.
+//
+// An element carrying `data-poll-swap="region"` swaps its own contents
+// instead — see `swapTargetFor` for why one page needs that — and
+// `data-poll-until` stops a poll for good once that instant has passed.
 //
 // After a swap the shared row behaviours are re-applied in a fixed order —
 // relative times, then sort, then filter — because each depends on the last:
@@ -89,6 +89,11 @@
     // the one polled region holds plain `.results-table`s with no filter —
     // and both are why a sortable or filterable table wants its own
     // `data-poll-url` rather than a region around it.
+    //
+    // The one way to get this wrong quietly: a non-table element that omits
+    // `data-poll-swap="region"` looks for a `<tbody>`, finds none, and every
+    // poll returns early — an interval that runs forever and refreshes
+    // nothing, with no error anywhere.
     //
     // Declared by the markup rather than sniffed from `tagName`, so the call
     // site says which mode it is in and reading either one does not mean
@@ -180,7 +185,12 @@
         document.querySelectorAll('[data-poll-url]').forEach(start);
     }
 
-    global.ChickadeeTablePoll = { refresh: refresh, shouldSkip: shouldSkip };
+    // `isFinished` is exported for the same reason `shouldSkip` is: it is a
+    // decision about whether to poll at all, and the cost of this file was
+    // always the polls it made rather than the fetches it ran.
+    global.ChickadeeTablePoll = {
+        refresh: refresh, shouldSkip: shouldSkip, isFinished: isFinished
+    };
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {

@@ -1,16 +1,7 @@
-#// The leaderboard page's results region, rendered two ways: inline by
-#// leaderboard.leaf, and on its own as the background-refresh fragment
-#// (?fragment=body). ONE partial rather than a row partial per branch,
-#// because on this page the banner and the rows change together — the
-#// champion, the tournament's status and winner, the union's count and the
-#// session countdown all move with the table beside them, so a rows-only swap
-#// would show fresh ranks under a stale champion.
-#//
-#// It holds only what MOVES. The page's heading, its chips and its branch
-#// intro are fixed for the life of the page and stay in leaderboard.leaf:
-#// tearing an <h2> out of the document every five seconds rebuilds a screen
-#// reader's heading buffer mid-read and drops any text selection, for no
-#// change anybody could see.
+<!-- Everything on the leaderboard that MOVES, rendered inline by
+     leaderboard.leaf and again as its background refresh. The page's fixed
+     chrome stays there, not here. Why: docs/class-activities.md, "Live-session
+     controls (slice 8)". -->
     #if(hasWindow):
     <div class="chip-row">
         <span class="chip">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></span>

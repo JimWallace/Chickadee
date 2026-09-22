@@ -304,3 +304,36 @@ test('a region swap is still a conditional background refresh', async () => {
   assert.equal(h.calls[0].opts.headers['X-Background-Refresh'], '1');
   assert.equal(region.writes, 1, 'an unchanged region is not rewritten');
 });
+
+// `data-poll-until` is what keeps a projected leaderboard from polling all
+// evening after its session ended. It is a decision about whether to poll at
+// all, so it is pinned here beside `shouldSkip` rather than left to the one
+// page that sets it.
+test('a poll with no data-poll-until never finishes', () => {
+  const region = makeRegion();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});
+
+test('a poll finishes once its deadline is past', () => {
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = new Date(Date.now() - 1000).toISOString();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), true);
+});
+
+test('a poll with a deadline ahead of it keeps going', () => {
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = new Date(Date.now() + 60_000).toISOString();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});
+
+test('an unreadable deadline does not stop the poll', () => {
+  // The same direction the server takes on an unreadable window bound: a value
+  // nobody can read must not silently switch a live session's page off.
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = 'half past four';
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});

@@ -286,8 +286,10 @@ struct LeaderboardContext: Encodable {
     /// True once the roster has code to test; the template gates on this.
     let hasUnion: Bool
     let union: UnionPresentation?
-    /// True when the activity runs to a live-session window, so the page
-    /// carries the state line and refreshes itself while it is open.
+    /// True when the page shows the session's state line. A COPY question
+    /// only — whether the page refreshes is `pollsLive`, which answers a
+    /// different one, and an open-ended session says yes to that and no to
+    /// this.
     let hasWindow: Bool
     let window: LiveSessionPresentation?
     /// True while a session is still ahead of or inside its window: the
