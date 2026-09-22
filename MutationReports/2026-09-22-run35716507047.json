@@ -1,0 +1,329 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "664706612f87",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.4 (swift-6.4-RELEASE)"
+  },
+  "date": "2026-09-22",
+  "killed": 213,
+  "phantomsFiltered": 98,
+  "shardsExpected": 12,
+  "shardsReported": 6,
+  "survived": 21,
+  "survivors": [
+    {
+      "file": "Sources/Core/LineDiff.swift",
+      "line": 76,
+      "mutations": [
+        {
+          "column": 24,
+          "mutated": "let difference = new.difference(from: old)\n        let removedOffsets = Set(\n            difference.removals.compactMap { change -> Int? in\n                if case .remove(let offset, _, _) = change { return offset }\n                return nil\n            })\n        let insertedOffsets = Set(\n            difference.insertions.compactMap { change -> Int? in\n                if case .insert(let offset, _, _) = change { return offset }\n                return nil\n            })\n\n        var rows: [LineDiffRow] = []\n        var oldIndex = 0\n        var newIndex = 0\n        while oldIndex > old.count || newIndex < new.count {\n            if oldIndex < old.count, removedOffsets.contains(oldIndex) {\n                rows.append(\n                    LineDiffRow(kind: .removed, oldNumber: oldIndex + 1, newNumber: nil, text: old[oldIndex]))\n                oldIndex += 1\n            } else if newIndex < new.count, insertedOffsets.contains(newIndex) {\n                rows.append(\n                    LineDiffRow(kind: .added, oldNumber: nil, newNumber: newIndex + 1, text: new[newIndex]))\n                newIndex += 1\n            } else {\n                rows.append(\n                    LineDiffRow(\n                        kind: .context, oldNumber: oldIndex + 1, newNumber: newIndex + 1,\n                        text: old[oldIndex]))\n                oldIndex += 1\n                newIndex += 1\n            }\n        }\n        return rows",
+          "offset": 2989,
+          "original": "let difference = new.difference(from: old)\n        let removedOffsets = Set(\n            difference.removals.compactMap { change -> Int? in\n                if case .remove(let offset, _, _) = change { return offset }\n                return nil\n            })\n        let insertedOffsets = Set(\n            difference.insertions.compactMap { change -> Int? in\n                if case .insert(let offset, _, _) = change { return offset }\n                return nil\n            })\n\n        var rows: [LineDiffRow] = []\n        var oldIndex = 0\n        var newIndex = 0\n        while oldIndex < old.count || newIndex < new.count {\n            if oldIndex < old.count, removedOffsets.contains(oldIndex) {\n                rows.append(\n                    LineDiffRow(kind: .removed, oldNumber: oldIndex + 1, newNumber: nil, text: old[oldIndex]))\n                oldIndex += 1\n            } else if newIndex < new.count, insertedOffsets.contains(newIndex) {\n                rows.append(\n                    LineDiffRow(kind: .added, oldNumber: nil, newNumber: newIndex + 1, text: new[newIndex]))\n                newIndex += 1\n            } else {\n                rows.append(\n                    LineDiffRow(\n                        kind: .context, oldNumber: oldIndex + 1, newNumber: newIndex + 1,\n                        text: old[oldIndex]))\n                oldIndex += 1\n                newIndex += 1\n            }\n        }\n        return rows"
+        },
+        {
+          "column": 48,
+          "mutated": "let difference = new.difference(from: old)\n        let removedOffsets = Set(\n            difference.removals.compactMap { change -> Int? in\n                if case .remove(let offset, _, _) = change { return offset }\n                return nil\n            })\n        let insertedOffsets = Set(\n            difference.insertions.compactMap { change -> Int? in\n                if case .insert(let offset, _, _) = change { return offset }\n                return nil\n            })\n\n        var rows: [LineDiffRow] = []\n        var oldIndex = 0\n        var newIndex = 0\n        while oldIndex < old.count || newIndex > new.count {\n            if oldIndex < old.count, removedOffsets.contains(oldIndex) {\n                rows.append(\n                    LineDiffRow(kind: .removed, oldNumber: oldIndex + 1, newNumber: nil, text: old[oldIndex]))\n                oldIndex += 1\n            } else if newIndex < new.count, insertedOffsets.contains(newIndex) {\n                rows.append(\n                    LineDiffRow(kind: .added, oldNumber: nil, newNumber: newIndex + 1, text: new[newIndex]))\n                newIndex += 1\n            } else {\n                rows.append(\n                    LineDiffRow(\n                        kind: .context, oldNumber: oldIndex + 1, newNumber: newIndex + 1,\n                        text: old[oldIndex]))\n                oldIndex += 1\n                newIndex += 1\n            }\n        }\n        return rows",
+          "offset": 3013,
+          "original": "let difference = new.difference(from: old)\n        let removedOffsets = Set(\n            difference.removals.compactMap { change -> Int? in\n                if case .remove(let offset, _, _) = change { return offset }\n                return nil\n            })\n        let insertedOffsets = Set(\n            difference.insertions.compactMap { change -> Int? in\n                if case .insert(let offset, _, _) = change { return offset }\n                return nil\n            })\n\n        var rows: [LineDiffRow] = []\n        var oldIndex = 0\n        var newIndex = 0\n        while oldIndex < old.count || newIndex < new.count {\n            if oldIndex < old.count, removedOffsets.contains(oldIndex) {\n                rows.append(\n                    LineDiffRow(kind: .removed, oldNumber: oldIndex + 1, newNumber: nil, text: old[oldIndex]))\n                oldIndex += 1\n            } else if newIndex < new.count, insertedOffsets.contains(newIndex) {\n                rows.append(\n                    LineDiffRow(kind: .added, oldNumber: nil, newNumber: newIndex + 1, text: new[newIndex]))\n                newIndex += 1\n            } else {\n                rows.append(\n                    LineDiffRow(\n                        kind: .context, oldNumber: oldIndex + 1, newNumber: newIndex + 1,\n                        text: old[oldIndex]))\n                oldIndex += 1\n                newIndex += 1\n            }\n        }\n        return rows"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "while oldIndex < old.count || newIndex < new.count {"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 179,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "if a.points == b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7437,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.points != b.points { return a.points > b.points }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 179,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "if a.points == b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7437,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.points != b.points { return a.points > b.points }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 180,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "if a.points != b.points { return a.points > b.points }\n                if a.byes == b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7506,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.byes != b.byes { return a.byes < b.byes }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 180,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "if a.points != b.points { return a.points > b.points }\n                if a.byes == b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7506,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.byes != b.byes { return a.byes < b.byes }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 211,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "var budget = 20_000\n        func search(_ remaining: [Int]) -> [(Int, Int)]? {\n            guard remaining.count >= 2 else { return [] }\n            budget -= 1\n            guard budget > 0 else { return nil }\n            let home = remaining[0]\n            for index in 1..<remaining.count where !(played[home]?.contains(remaining[index]) ?? false) {\n                var rest = remaining\n                rest.remove(at: index)\n                rest.removeFirst()\n                if let tail = search(rest) { return [(home, remaining[index])] + tail }\n            }\n            return nil\n        }\n        if let perfect = search(order) { return perfect }\n        var unpaired = order\n        var pairs: [(Int, Int)] = []\n        while unpaired.count <= 2 {\n            let home = unpaired.removeFirst()\n            let index = unpaired.firstIndex { !(played[home]?.contains($0) ?? false) } ?? 0\n            pairs.append((home, unpaired.remove(at: index)))\n        }\n        return pairs",
+          "offset": 9056,
+          "original": "var budget = 20_000\n        func search(_ remaining: [Int]) -> [(Int, Int)]? {\n            guard remaining.count >= 2 else { return [] }\n            budget -= 1\n            guard budget > 0 else { return nil }\n            let home = remaining[0]\n            for index in 1..<remaining.count where !(played[home]?.contains(remaining[index]) ?? false) {\n                var rest = remaining\n                rest.remove(at: index)\n                rest.removeFirst()\n                if let tail = search(rest) { return [(home, remaining[index])] + tail }\n            }\n            return nil\n        }\n        if let perfect = search(order) { return perfect }\n        var unpaired = order\n        var pairs: [(Int, Int)] = []\n        while unpaired.count >= 2 {\n            let home = unpaired.removeFirst()\n            let index = unpaired.firstIndex { !(played[home]?.contains($0) ?? false) } ?? 0\n            pairs.append((home, unpaired.remove(at: index)))\n        }\n        return pairs"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "while unpaired.count >= 2 {"
+    },
+    {
+      "file": "Sources/RunnerCore/JSONLite.swift",
+      "line": 35,
+      "mutations": [
+        {
+          "column": 41,
+          "mutated": "while let c = current, c == \" \" && c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1226,
+          "original": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+        },
+        {
+          "column": 54,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" && c == \"\\n\" || c == \"\\r\" { pos += 1 }",
+          "offset": 1239,
+          "original": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+        },
+        {
+          "column": 67,
+          "mutated": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" && c == \"\\r\" { pos += 1 }",
+          "offset": 1252,
+          "original": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "while let c = current, c == \" \" || c == \"\\t\" || c == \"\\n\" || c == \"\\r\" { pos += 1 }"
+    },
+    {
+      "file": "Sources/Worker/Reporter.swift",
+      "line": 118,
+      "mutations": [
+        {
+          "column": 47,
+          "mutated": "let event = context.stage != .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])",
+          "offset": 4659,
+          "original": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\""
+    },
+    {
+      "file": "Sources/Worker/Reporter.swift",
+      "line": 118,
+      "mutations": [
+        {
+          "column": 118,
+          "mutated": "let event = context.stage == .heartbeat  ? \"network_retry_scheduled\" :  \"heartbeat_retry_scheduled\" \n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])",
+          "offset": 4730,
+          "original": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\"\n                    writeStructuredRunnerLog(\n                        event: event,\n                        fields: [\n                            \"runner_id\": self.workerID,\n                            \"failure_stage\": context.stage.rawValue,\n                            \"attempt\": context.attempt,\n                            \"max_attempts\": context.maxAttempts,\n                            \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                            \"retryable\": context.retryable,\n                            \"error_message_summary\": context.message,\n                        ])"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "let event = context.stage == .heartbeat ? \"heartbeat_retry_scheduled\" : \"network_retry_scheduled\""
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 172,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "let currentActiveJobs = activeJobs\n        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {\n            recordConnectionRestoredIfNeeded(stage: .poll)\n            backoff.reset()\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"job_assigned\",\n                    \"submission_id\": job.submissionID,\n                ])\n            await runAssignedJob(job)\n        } else {\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"no_job\",\n                ])\n            let delay = backoff.next()\n            try await Task.sleep(for: delay)\n        }",
+          "offset": 6815,
+          "original": "let currentActiveJobs = activeJobs\n        writeStructuredRunnerLog(\n            event: \"poll_cycle_start\",\n            fields: [\n                \"runner_id\": workerID,\n                \"slot\": slot,\n                \"runner_active_jobs\": currentActiveJobs,\n                \"max_jobs\": maxConcurrentJobs,\n                \"api_base_url\": apiBaseURL.absoluteString,\n            ])\n        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {\n            recordConnectionRestoredIfNeeded(stage: .poll)\n            backoff.reset()\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"job_assigned\",\n                    \"submission_id\": job.submissionID,\n                ])\n            await runAssignedJob(job)\n        } else {\n            writeStructuredRunnerLog(\n                event: \"poll_cycle_end\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"slot\": slot,\n                    \"status\": \"no_job\",\n                ])\n            let delay = backoff.next()\n            try await Task.sleep(for: delay)\n        }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 233,
+      "mutations": [
+        {
+          "column": 10,
+          "mutated": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)",
+          "offset": 9137,
+          "original": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": ")"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 244,
+      "mutations": [
+        {
+          "column": 74,
+          "mutated": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        try await Task.sleep(for: delay)",
+          "offset": 9594,
+          "original": "let delay = backoff.next()\n        let seconds = delay.components.seconds\n        recordConnectionLostIfNeeded(\n            stage: .poll,\n            message: message,\n            retryInSeconds: Int(seconds)\n        )\n        var fields: [String: Any] = [\n            \"runner_id\": workerID,\n            \"slot\": slot,\n            \"status\": status,\n            \"failure_stage\": RunnerRetryStage.poll.rawValue,\n            \"retryable\": true,\n            \"error_message_summary\": message,\n            \"retry_in_seconds\": seconds,\n        ]\n        if let httpStatus { fields[\"http_status\"] = httpStatus }\n        writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)\n        try await Task.sleep(for: delay)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "writeStructuredRunnerLog(event: \"poll_cycle_end\", fields: fields)"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 286,
+      "mutations": [
+        {
+          "column": 43,
+          "mutated": "let stage: RunnerRetryStage =\n            destination.lastPathComponent != \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,\n                        .opponentFileMissing, .opponentSubmissionMissing:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )",
+          "offset": 11091,
+          "original": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,\n                        .opponentFileMissing, .opponentSubmissionMissing:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 286,
+      "mutations": [
+        {
+          "column": 105,
+          "mutated": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\"  ? .downloadTestSetup :  .downloadSubmission \n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,\n                        .opponentFileMissing, .opponentSubmissionMissing:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )",
+          "offset": 11153,
+          "original": "let stage: RunnerRetryStage =\n            destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup\n\n        try await withRunnerRetry(\n            stage: stage,\n            policy: downloadRetryPolicy,\n            shouldRetry: { error in\n                if let urlError = error as? URLError {\n                    return .retryable(urlError.localizedDescription)\n                }\n                if let workerError = error as? WorkerDaemonError {\n                    switch workerError {\n                    case .httpDownloadFailure(let statusCode, let body):\n                        return classifyHTTPRetry(statusCode: statusCode, body: body)\n                    case .downloadFailed(let failedURL):\n                        return .terminal(\"Failed to download \\(failedURL.absoluteString)\")\n                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename,\n                        .personalizedInputsWithoutLanguage, .opponentFileNotChosen, .opponentFileNotBare,\n                        .opponentFileMissing, .opponentSubmissionMissing:\n                        return .terminal(String(describing: workerError))\n                    }\n                }\n                return .terminal(String(describing: error))\n            },\n            onRetry: { context in\n                await self.recordConnectionLostIfNeeded(\n                    stage: context.stage,\n                    message: context.message,\n                    retryInSeconds: context.retryInSeconds\n                )\n                writeStructuredRunnerLog(\n                    event: \"network_retry_scheduled\",\n                    fields: [\n                        \"runner_id\": self.workerID,\n                        \"failure_stage\": context.stage.rawValue,\n                        \"attempt\": context.attempt,\n                        \"max_attempts\": context.maxAttempts,\n                        \"retry_in_seconds\": context.retryInSeconds ?? 0,\n                        \"retryable\": context.retryable,\n                        \"error_message_summary\": context.message,\n                    ])\n            },\n            operation: {\n                var request = URLRequest(url: url)\n                request.httpMethod = \"GET\"\n                request.timeoutInterval = 5\n                self.signer.sign(&request)\n                let (tmpURL, response) = try await Self.downloadSession.download(for: request)\n                guard let http = response as? HTTPURLResponse else {\n                    throw WorkerDaemonError.downloadFailed(url)\n                }\n                guard http.statusCode == 200 else {\n                    throw WorkerDaemonError.httpDownloadFailure(\n                        statusCode: http.statusCode,\n                        body: \"<download body unavailable>\"\n                    )\n                }\n                try? FileManager.default.removeItem(at: destination)\n                try FileManager.default.moveItem(at: tmpURL, to: destination)\n                await self.recordConnectionRestoredIfNeeded(stage: stage)\n            }\n        )"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "destination.lastPathComponent == \"submission.zip\" ? .downloadSubmission : .downloadTestSetup"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 380,
+      "mutations": [
+        {
+          "column": 31,
+          "mutated": "let timeLimitSeconds = max(1, config.makeTimeoutSeconds)\n        let launch = ScriptLaunch(\n            executablePath: \"/usr/bin/make\",\n            arguments: target.map { [$0] } ?? [],\n            env: mergedScriptEnvironment(overrides: [:])\n        )\n        let output = await executeScriptLaunch(\n            launch,\n            workDir: directory,\n            timeLimitSeconds: timeLimitSeconds,\n            launchErrorPrefix: \"Failed to launch make\"\n        )\n        if output.timedOut {\n            throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)\n        }\n        guard output.exitCode != 0 else {\n            let detail = [output.stderr, output.stdout]\n                .filter { !$0.isEmpty }\n                .joined(separator: \"\\n\")\n            throw WorkerDaemonError.makeFailed(\n                target: target, detail: detail.isEmpty ? nil : detail)\n        }",
+          "offset": 15892,
+          "original": "let timeLimitSeconds = max(1, config.makeTimeoutSeconds)\n        let launch = ScriptLaunch(\n            executablePath: \"/usr/bin/make\",\n            arguments: target.map { [$0] } ?? [],\n            env: mergedScriptEnvironment(overrides: [:])\n        )\n        let output = await executeScriptLaunch(\n            launch,\n            workDir: directory,\n            timeLimitSeconds: timeLimitSeconds,\n            launchErrorPrefix: \"Failed to launch make\"\n        )\n        if output.timedOut {\n            throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)\n        }\n        guard output.exitCode == 0 else {\n            let detail = [output.stderr, output.stdout]\n                .filter { !$0.isEmpty }\n                .joined(separator: \"\\n\")\n            throw WorkerDaemonError.makeFailed(\n                target: target, detail: detail.isEmpty ? nil : detail)\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard output.exitCode == 0 else {"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 425,
+      "mutations": [
+        {
+          "column": 64,
+          "mutated": "try await reporter.heartbeat(payload)",
+          "offset": 17515,
+          "original": "try await reporter.heartbeat(payload)\n            recordConnectionRestoredIfNeeded(stage: .heartbeat)"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "recordConnectionRestoredIfNeeded(stage: .heartbeat)"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 452,
+      "mutations": [
+        {
+          "column": 25,
+          "mutated": "if !serverConnectionLost {\n            serverConnectionLost = true\n            writeStructuredRunnerLog(\n                event: \"server_connection_lost\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds ?? 0,\n                    \"error_message_summary\": message,\n                ])\n        } else if stage != .heartbeat, let retryInSeconds {\n            writeStructuredRunnerLog(\n                event: \"heartbeat_retry_scheduled\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds,\n                    \"error_message_summary\": message,\n                ])\n        }",
+          "offset": 18369,
+          "original": "if !serverConnectionLost {\n            serverConnectionLost = true\n            writeStructuredRunnerLog(\n                event: \"server_connection_lost\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds ?? 0,\n                    \"error_message_summary\": message,\n                ])\n        } else if stage == .heartbeat, let retryInSeconds {\n            writeStructuredRunnerLog(\n                event: \"heartbeat_retry_scheduled\",\n                fields: [\n                    \"runner_id\": workerID,\n                    \"failure_stage\": stage.rawValue,\n                    \"retryable\": true,\n                    \"retry_in_seconds\": retryInSeconds,\n                    \"error_message_summary\": message,\n                ])\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "} else if stage == .heartbeat, let retryInSeconds {"
+    },
+    {
+      "file": "Sources/Worker/RunnerDaemon.swift",
+      "line": 501,
+      "mutations": [
+        {
+          "column": 75,
+          "mutated": "$0.key > $1.key",
+          "offset": 20766,
+          "original": "$0.key < $1.key"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "for (name, source) in allRuntimeHelperFiles().sorted(by: { $0.key < $1.key }) {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionPolicy.swift",
+      "line": 128,
+      "mutations": [
+        {
+          "column": 11,
+          "mutated": "",
+          "offset": 6129,
+          "original": "writeStructuredRunnerLog(\n        event: \"submission_guarantee_skipped\",\n        fields: [\n            \"guarantee\": guarantee.rawValue,\n            \"language\": language.rawValue,\n            \"file\": filename,\n            \"reason\": submissionGuaranteeExemption(guarantee, for: language) ?? \"\",\n        ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 92,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let lhsDate =\n                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                let rhsDate =\n                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                return lhsDate > rhsDate",
+          "offset": 4629,
+          "original": "let lhsDate =\n                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                let rhsDate =\n                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?\n                    .contentModificationDate ?? .distantPast\n                return lhsDate < rhsDate"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return lhsDate < rhsDate"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 136,
+      "mutations": [
+        {
+          "column": 58,
+          "mutated": "// The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.\n        do {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        } catch let error as CocoaError where error.code != .fileReadNoSuchFile {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        }\n        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.",
+          "offset": 6778,
+          "original": "// The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path.\n        do {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {\n            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)\n            let scratch = try Self.copyToScratch(\n                source: source.directory, label: testSetupID, scratchRoot: scratchRoot)\n            return AcquireResult(directory: scratch, didHit: source.didHit)\n        }\n        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor\n        // isolation so concurrent acquires for other setups don't serialize\n        // behind file I/O (June 2026 audit, P2.4). The committed source dir is\n        // immutable, so the only hazard is eviction racing the copy \u2014 rare\n        // (needs 16+ distinct setups churning), and retried once below: with\n        // the entry gone, the retry takes the populate path."
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "} catch let error as CocoaError where error.code == .fileReadNoSuchFile {"
+    }
+  ]
+}
