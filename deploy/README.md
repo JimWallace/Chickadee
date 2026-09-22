@@ -167,6 +167,55 @@ Reload:
 docker compose up -d
 ```
 
+#### Certificate renewal
+
+Renewal is automatic only if Let's Encrypt can reach port 80 from the internet.
+On `chickadee.uwaterloo.ca` it cannot: IST's SaltStack generates the host
+firewall (`/etc/iptables/rules.v4`, marked "DO NOT EDIT"), and that policy opens
+port 443 to the world but port 80 only to campus. Every renewal timed out from
+2026-09-17, and nothing reported it until the certificate expired on 2026-09-22.
+Do not edit `rules.v4`, because Salt overwrites it.
+
+Three certbot hooks in [`certbot-hooks/`](certbot-hooks/) solve this:
+
+| Hook | When certbot runs it | What it does |
+|---|---|---|
+| `open-port-80.sh` (pre) | Before a renewal attempt | Inserts one tagged rule that accepts port 80 |
+| `close-port-80.sh` (post) | After the attempt, success or failure | Removes the tagged rule |
+| `reload-nginx.sh` (deploy) | After a successful renewal | Reloads nginx so it serves the new certificate |
+
+Port 80 is open to the world only for the seconds that a renewal takes. The hooks
+insert and delete one rule. They never restore a whole table, which would delete
+Docker's chains (see "The host's iptables state is a deploy dependency" in
+[docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md)).
+
+Install the hooks from the repository root on the host:
+
+```bash
+sudo cp deploy/certbot-hooks/open-port-80.sh /etc/letsencrypt/renewal-hooks/pre/
+sudo cp deploy/certbot-hooks/close-port-80.sh /etc/letsencrypt/renewal-hooks/post/
+sudo cp deploy/certbot-hooks/reload-nginx.sh /etc/letsencrypt/renewal-hooks/deploy/
+sudo chmod 755 /etc/letsencrypt/renewal-hooks/pre/open-port-80.sh /etc/letsencrypt/renewal-hooks/post/close-port-80.sh /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+
+If you opened port 80 by hand, remove that rule, so that the next test proves
+the hooks and not the manual rule:
+
+```bash
+sudo iptables -D INPUT -p tcp --dport 80 -j ACCEPT
+```
+
+Test a full renewal. A dry run treats the certificate as due and runs the pre
+and post hooks, but not the deploy hook:
+
+```bash
+sudo certbot renew --dry-run
+sudo iptables -S INPUT
+```
+
+The dry run must end with "all simulated renewals succeeded", and the rule list
+must not contain `chickadee-acme`.
+
 ### 5. Updating
 
 Use the deploy script from the repo root — it backs up the SQLite database when
