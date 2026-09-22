@@ -181,7 +181,10 @@ extension WebRoutes {
         // A bare test setup with no assignment row is not a student-facing
         // assignment; `requireOpenStudentAssignment` returns nil there without
         // an enrollment check, so reject it explicitly to avoid a bypass.
-        guard try await requireOpenStudentAssignment(for: setupID, user: user, on: req) != nil else {
+        guard
+            try await requireOpenStudentAssignment(for: setupID, user: user, gate: .access, on: req)
+                != nil
+        else {
             throw Abort(.notFound)
         }
 

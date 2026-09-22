@@ -1578,6 +1578,20 @@ shim); and archived finished-era docs under `docs/archive/`.
   That last row is why existing comments naming CSS ids are safe, and why the
   rule is narrower than "never write `#` in prose".
 
+  **That row has a second edge, and it cost a leaked page header (v0.5.233).
+  Leaf has NO LINE-COMMENT SYNTAX.** `LeafLexer.lexCheckTagIndicator` pops the
+  `#`, peeks the next character, and takes the tag path only when it is a letter
+  or an open paren — so a `#` followed by a slash emits a raw `#` and returns to
+  raw state. It is the same rule that makes `C#` inert, seen from the other
+  side: "passes through as text" is invisible only inside an HTML comment.
+  Outside one it means the comment **prints**. A thirteen-line `#//` header on
+  `_leaderboard-body.leaf` rendered above the results, rode every five-second
+  background refresh, and emitted the unclosed heading tag inside its own prose
+  for real. Render tests could not see it — the template resolves, it just
+  resolves wrong, the same blind spot as the `isEmpty` finding below. Comment a
+  template with an HTML comment; `scripts/check-leaf-semantics.sh` now fails on
+  the other form, with a `check-guards.sh` fixture proving it still does.
+
   **Practical rule:** never write Leaf *tag* syntax in template prose or
   comments — not a bare structural tag name, not `#(field)`, not a complete
   include. Say "the extend" or "an `extend(...)` include" instead. Commenting a
@@ -1654,7 +1668,10 @@ shim); and archived finished-era docs under `docs/archive/`.
   (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
   indistinguishable to a reader from the broken form, so
   `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
-  everything else, with a `check-guards.sh` fixture proving it still fails.
+  everything else, with a `check-guards.sh` fixture proving it still fails. That
+  script carries the line-comment rule above too: both are Leaf idioms that
+  render fine and resolve wrong, which is the one thing a render test cannot
+  catch.
 - **Consolidating on xeus (#1271) — DONE.** Both browser graders and both
   editor kernels are xeus; `Public/pyodide` went in v0.5.19 (see "Pyodide is
   gone" above). The package-set question that gated it was settled the way

@@ -108,6 +108,50 @@ import VaporTesting
         }
     }
 
+    /// LEAF HAS NO LINE-COMMENT SYNTAX, and the failure is silent. `#` followed
+    /// by anything that is not a tag name lexes as raw text — the same rule
+    /// that makes `C#` and `id="#main"` inert — so a `#//` header does not
+    /// disappear, it PRINTS, above the results and again on every background
+    /// refresh, with any markup inside it emitted for real.
+    ///
+    /// Render tests cannot see that by themselves: the template resolves, it
+    /// just resolves wrong. So the assertion is on the served bytes, and the
+    /// strings are ones that can only come from a leaked source comment.
+    @Test func theResultsPartialsHeaderDoesNotRenderAsMarkup() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            _ = try await seedRankedClass(on: app, setupID: "setup_header", visible: true)
+            let res = try await get(
+                "/testsetups/setup_header/leaderboard", cookie: cookie, on: app)
+            // Strip HTML comments first: the question is not whether the
+            // prose is in the bytes — a comment is — but whether any of it
+            // reaches the document as markup or text.
+            let served = Self.withoutHTMLComments(res.body.string)
+            #expect(
+                !served.contains("#//"), "a Leaf line comment is not a thing; this would print")
+            #expect(
+                !served.contains("rendered inline by"),
+                "the partial's header escaped its HTML comment")
+            #expect(served.contains("Leaderboard"), "the page itself still rendered")
+        }
+    }
+
+    /// Everything outside `<!-- … -->`. Written here rather than reached for
+    /// as a regex over the whole document because an unterminated comment must
+    /// read as "the rest is commented", which is what a browser does with one.
+    static func withoutHTMLComments(_ html: String) -> String {
+        var out = ""
+        var rest = Substring(html)
+        while let open = rest.range(of: "<!--") {
+            out += rest[rest.startIndex..<open.lowerBound]
+            guard let close = rest.range(of: "-->", range: open.upperBound..<rest.endIndex) else {
+                return out
+            }
+            rest = rest[close.upperBound...]
+        }
+        return out + rest
+    }
+
     @Test func anOrdinaryAssignmentHasNoLeaderboard() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)

@@ -25,6 +25,11 @@ struct SetActivityTool: ContentTool {
         /// "" clears it. Refused on a kind with no opponent. (`var` so the
         /// memberwise init defaults it, as an absent wire field does.)
         var opponentFile: String?
+        /// The live-session window's start, ISO-8601. Absent keeps the stored
+        /// window when the kind is unchanged; "" clears that bound.
+        var opensAt: String?
+        /// The window's end, ISO-8601, same rules.
+        var closesAt: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -43,10 +48,14 @@ struct SetActivityTool: ContentTool {
         /// The support file staged as the opponent; null when the kind has no
         /// opponent or none is chosen yet.
         var opponentFile: String?
+        /// The stored live-session window, ISO-8601; null when the bound is
+        /// not set or there is no activity.
+        var opensAt: String?
+        var closesAt: String?
 
         private enum CodingKeys: String, CodingKey {
             case assignmentPublicID, kind, leaderboardVisibility, leaderboardPath
-            case recordAchievementSeeded, opponentSource, opponentFile
+            case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt
         }
 
         /// The two opponent keys are always present — explicitly null when
@@ -61,6 +70,11 @@ struct SetActivityTool: ContentTool {
             try c.encode(recordAchievementSeeded, forKey: .recordAchievementSeeded)
             try c.encode(opponentSource, forKey: .opponentSource)
             try c.encode(opponentFile, forKey: .opponentFile)
+            // Always present for the same reason the opponent keys are: an
+            // agent must be able to tell "no window" from "a server that
+            // predates the field".
+            try c.encode(opensAt, forKey: .opensAt)
+            try c.encode(closesAt, forKey: .closesAt)
         }
     }
 
@@ -86,7 +100,12 @@ struct SetActivityTool: ContentTool {
         + "naming their module; the bot in opponentFile holds the hill until a student's match "
         + "passes (exits 0), and the script's exit code is what takes the hill. A kind with an "
         + "opponent needs worker grading and is refused on a browser-graded assignment. "
-        + "opponentFile absent keeps the stored file; \"\" clears it. No regrade or close. Read "
+        + "opponentFile absent keeps the stored file; \"\" clears it. A LIVE-SESSION WINDOW is "
+        + "optional and independent of the assignment's due date: opensAt and closesAt are ISO-8601 "
+        + "instants, either may stand alone, and a submission outside the window is refused (course "
+        + "staff are not gated, so an instructor can run and demonstrate the session). Each is "
+        + "absent to keep the stored bound and \"\" to clear it; a window that closes before it "
+        + "opens is refused. No regrade or close. Read "
         + "the current state from get_assignment; get_server_info lists the kinds with their "
         + "opponent sources."
     static let inputSchema: JSONValue = .object([
@@ -113,6 +132,17 @@ struct SetActivityTool: ContentTool {
                         + "the hill until a student does (\"champion\"). Absent keeps the stored "
                         + "file; \"\" clears it."),
             ]),
+            "opensAt": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "ISO-8601 instant the live session starts accepting submissions. Absent keeps "
+                        + "the stored bound; \"\" clears it."),
+            ]),
+            "closesAt": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "ISO-8601 instant it stops. Absent keeps the stored bound; \"\" clears it."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("kind")]),
         "additionalProperties": .bool(false),
@@ -130,6 +160,8 @@ struct SetActivityTool: ContentTool {
                 "enum": .array(ActivityOpponentSource.allCases.map { .string($0.rawValue) }),
             ]),
             "opponentFile": MCPSchema.string,
+            "opensAt": MCPSchema.string,
+            "closesAt": MCPSchema.string,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),
@@ -162,11 +194,17 @@ struct SetActivityTool: ContentTool {
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+        let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
-            block.withOpponentFile(
-                Self.resolvedOpponentFile(
-                    input: input.opponentFile, kind: block.kind,
-                    current: currentManifestActivity(setup.manifest)))
+            block
+                .withOpponentFile(
+                    Self.resolvedOpponentFile(
+                        input: input.opponentFile, kind: block.kind, current: current)
+                )
+                .withWindow(
+                    Self.resolvedWindow(
+                        opensAt: input.opensAt, closesAt: input.closesAt, kind: block.kind,
+                        current: current))
         }
         do {
             try await ActivityAuthoring.setActivity(setup: setup, to: requested, on: context.db)
@@ -186,7 +224,32 @@ struct SetActivityTool: ContentTool {
             recordAchievementSeeded: stored?.achievements
                 .contains { $0.recordDimension == .highestMetric } ?? false,
             opponentSource: stored?.activity?.kind.opponentSource.rawValue,
-            opponentFile: stored?.activity?.opponentFile)
+            opponentFile: stored?.activity?.opponentFile,
+            opensAt: stored?.activity?.window?.opensAtISO,
+            closesAt: stored?.activity?.window?.closesAtISO)
+    }
+
+    /// The window the call means, one bound at a time: an explicit value as
+    /// given (trimmed; "" clears), or, when absent, the stored bound carried
+    /// forward as long as the kind is unchanged — so a visibility-only call
+    /// cannot close a live session. A kind change starts from none, as the
+    /// opponent file does, since another kind's schedule means nothing.
+    ///
+    /// Returns nil when neither bound survives, because an unbounded window is
+    /// no window.
+    static func resolvedWindow(
+        opensAt: String?, closesAt: String?, kind: ActivityKind, current: ClassActivity?
+    ) -> LiveSessionWindow? {
+        let stored = current?.kind == kind ? current?.window : nil
+        func resolve(_ input: String?, _ storedISO: String?) -> String? {
+            guard let input else { return storedISO }
+            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        let window = LiveSessionWindow(
+            opensAtISO: resolve(opensAt, stored?.opensAtISO),
+            closesAtISO: resolve(closesAt, stored?.closesAtISO))
+        return window.isBounded ? window : nil
     }
 
     /// The opponent file the call means: an explicit value as given (trimmed;

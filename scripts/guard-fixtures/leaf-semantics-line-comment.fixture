@@ -1,0 +1,13 @@
+# Leaf has no line-comment syntax. A tag indicator followed by a slash lexes
+# as RAW TEXT — the same rule that makes `C#` and `id="#main"` inert, seen from
+# the other side — so the "comment" does not disappear, it renders into the
+# page and into any fragment the template serves, with any markup inside it
+# emitted for real. It shipped once as a thirteen-line partial header that
+# printed above a leaderboard and rode every five-second refresh.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/enroll.leaf"
+description="a Leaf line comment, which renders instead of disappearing"
+expect="Leaf has no line-comment syntax"
+apply() {
+    printf '%s guard fixture: this prints\n' "#/" >> Resources/Views/enroll.leaf
+}

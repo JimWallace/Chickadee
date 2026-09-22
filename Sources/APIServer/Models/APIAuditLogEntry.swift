@@ -164,6 +164,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case solutionVisibilityChanged = "solution_visibility.changed"
     case leaderboardVisibilityChanged = "leaderboard_visibility.changed"
     case activityOpponentFileChanged = "activity_opponent_file.changed"
+    case activityWindowChanged = "activity_window.changed"
     case tournamentStarted = "tournament.started"
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
@@ -229,7 +230,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
-            .tournamentStarted,
+            .activityWindowChanged, .tournamentStarted,
             .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
@@ -272,6 +273,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
+            .activityWindowChanged,
             .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
@@ -332,6 +334,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .passingThresholdChanged: return "Passing threshold changed"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
         case .activityOpponentFileChanged: return "Activity opponent file changed"
+        case .activityWindowChanged: return "Activity session window changed"
         case .tournamentStarted: return "Tournament started"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
