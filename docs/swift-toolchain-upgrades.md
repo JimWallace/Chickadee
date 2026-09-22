@@ -131,6 +131,24 @@ of code changing. The execution-path test suites skip when an interpreter is
 absent. They do not fail. So the distro half of a mixed change fails silently.
 Give the distro its own pull request.
 
+**A changed build system can neutralise a flag without removing it.** Swift
+6.4 made SwiftBuild the default SwiftPM build system, and it orders the compiler
+command line differently: `-Xswiftc` flags are emitted BEFORE each target's own
+`swiftSettings`, so a target setting now wins over the command line rather than
+losing to it. The mutation sweep demoted warnings with `-Xswiftc
+-no-warnings-as-errors` against the package's `.treatAllWarnings(as: .error)`.
+After the move that argument was still accepted, still printed on every command
+line, and had no effect at all — the frontend command read `-no-warnings-as-errors
+-warnings-as-errors -no-warnings-as-errors -warnings-as-errors`. Nothing in the
+gauntlet could see it, because the tree itself compiles warning-free; the sweep
+that depends on it runs weekly, and six of its twelve shards died twelve minutes
+in, three releases later. The demotion is a toolset now, which wins under both
+build systems, and `scripts/mutation-run.sh --check-build-flags` proves it in
+five seconds. **The general shape is worth more than the instance: a flag that
+overrides a build setting is ordering-dependent, and a build-system change
+re-orders it silently.** Any such flag needs a check that asserts the EFFECT,
+not the flag's presence.
+
 **Look at the workarounds that the last upgrade added.** Swift 6.4 added two,
 and both are still in the tree:
 
@@ -220,6 +238,7 @@ The gauntlet:
 | `scripts/lint.sh` | swift-format produces no diff |
 | `scripts/swiftlint.sh` | 0 violations, under `--strict` |
 | `scripts/check-guards.sh` | every fixture proves its guard |
+| `scripts/mutation-run.sh --check-build-flags` | the sweep's warning demotion still takes effect |
 | `scripts/check-styles.sh` | green, it runs the other guards |
 | release link, both products | links, and both binaries execute |
 | `scripts/build-runner-wasm.sh` | builds on the new Embedded SDK |
