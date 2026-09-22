@@ -74,6 +74,18 @@ func coverageFoundSummary(covered: Int, total: Int) -> String {
     "\(covered) / \(total) items found"
 }
 
+/// "62% / 80% covered" — the one wording for a CLASS CORPUS goal's number.
+///
+/// A sibling of `coverageFoundSummary` rather than the same sentence, because
+/// the two count different things and an author choosing between them should
+/// see that: one is distinct suite items the class passed between them, the
+/// other is the share of the reference their combined contributions exercise.
+/// Whole percents, since a tenth of a percent of a reference is not a number
+/// anybody acts on.
+func corpusCoverageSummary(percent: Double, required: Double) -> String {
+    "\(Int(percent.rounded()))% / \(Int(required.rounded()))% covered"
+}
+
 /// The section's summary chip.
 func assignmentCoverageSummary(_ rows: [AssignmentCoverageRow]) -> String {
     coverageFoundSummary(covered: rows.filter(\.found).count, total: rows.count)

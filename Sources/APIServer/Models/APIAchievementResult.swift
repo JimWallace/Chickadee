@@ -58,6 +58,23 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
     @OptionalField(key: "items_required")
     var itemsRequired: Int?
 
+    /// CORPUS goals only: what percent (0–100) of the reference the class's
+    /// combined contributions covered when this snapshot was written.  nil for
+    /// every other goal shape.
+    ///
+    /// A separate pair from `itemsCovered` / `itemsRequired` because they count
+    /// different things — distinct suite items versus a percent one corpus run
+    /// produced — and folding a percent into a column named for an item count
+    /// would leave every frozen row ambiguous about which produced it.
+    @OptionalField(key: "coverage_percent")
+    var coveragePercent: Double?
+
+    /// CORPUS goals only: the percent the goal asks the class to reach,
+    /// captured alongside the number so the frozen row is readable without
+    /// re-decoding the manifest it was graded against.
+    @OptionalField(key: "coverage_required")
+    var coverageRequired: Double?
+
     /// True once the assignment deadline has passed; a locked snapshot is frozen
     /// (the sweep stops recomputing it).
     @Field(key: "locked")
@@ -77,7 +94,9 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
         locked: Bool,
         evaluatedAt: Date,
         itemsCovered: Int? = nil,
-        itemsRequired: Int? = nil
+        itemsRequired: Int? = nil,
+        coveragePercent: Double? = nil,
+        coverageRequired: Double? = nil
     ) {
         self.testSetupID = testSetupID
         self.achievementID = achievementID
@@ -88,5 +107,7 @@ final class APIAchievementResult: Model, Content, @unchecked Sendable {
         self.evaluatedAt = evaluatedAt
         self.itemsCovered = itemsCovered
         self.itemsRequired = itemsRequired
+        self.coveragePercent = coveragePercent
+        self.coverageRequired = coverageRequired
     }
 }

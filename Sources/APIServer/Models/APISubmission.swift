@@ -32,6 +32,14 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         /// and grade selection filters on `student`, so it is invisible
         /// everywhere but the bracket.
         static let tournamentMatch = "tournamentMatch"
+        /// The synthetic class corpus run
+        /// (docs/collaborative-class-assignments.md): every contributor's slot
+        /// cells assembled into one notebook and graded once, so the class's
+        /// combined coverage is a number rather than a guess. Owned by NO
+        /// student — `userID` is nil — which is what keeps it out of every
+        /// grade of record, every listing and every aggregate, all of which
+        /// filter on `student`.
+        static let classAggregate = "classAggregate"
     }
 
     @ID(custom: "id", generatedBy: .user)

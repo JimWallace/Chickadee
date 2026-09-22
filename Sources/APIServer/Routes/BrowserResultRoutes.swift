@@ -257,6 +257,15 @@ struct BrowserResultRoutes: RouteCollection {
                     declaredSlotCount: slotCount,
                     on: req.db
                 )
+                // Wired here for the same reason the coverage union is: a
+                // browser-graded contribution assignment whose corpus is only
+                // re-run from the worker path would freeze its class coverage
+                // at whatever the last worker-graded submission produced.
+                if slotCount > 0 {
+                    await scheduleClassCorpusRun(
+                        setupID: setup.id ?? "", app: req.application, on: req.db,
+                        logger: req.logger)
+                }
             }
         }
 

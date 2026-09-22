@@ -128,6 +128,14 @@ struct ResultRoutes: RouteCollection {
                 try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
             }
 
+            // The class corpus run's grade IS the class's coverage number
+            // (docs/collaborative-class-assignments.md). It belongs to no
+            // student, so it never reaches `applyClassWideEffects` below.
+            if submission.kind == APISubmission.Kind.classAggregate {
+                try await recordClassCoverageRun(
+                    submission: submission, collection: collection, on: req.db)
+            }
+
             try await applyClassWideEffects(
                 submission: submission, collection: collection, matches: report.matches, on: req)
         }
@@ -174,6 +182,16 @@ struct ResultRoutes: RouteCollection {
             declaredSlotCount: slotCount,
             on: req.db
         )
+
+        // A new contribution changes what the class's combined corpus covers,
+        // so the corpus is re-assembled and re-graded. Debounced to one run in
+        // flight per assignment, and a no-op for every assignment that
+        // declares no slots.
+        if slotCount > 0 {
+            await scheduleClassCorpusRun(
+                setupID: submission.testSetupID, app: req.application, on: req.db,
+                logger: req.logger)
+        }
 
         // The activity leaderboard, likewise outside the 100% gate: a ranking
         // metric is whatever the script measured, and the script decides

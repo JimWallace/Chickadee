@@ -85,14 +85,15 @@ extension AchievementCondition {
         case .matchesWon:
             guard let won = signals.matchesWon else { return false }
             return compare(Double(won))
-        case .itemsCovered:
-            // Not a per-submission signal: it reads the class's accumulated
-            // coverage, which no single submission's signals can answer.  The
-            // convention for an unknown signal applies — unmet, because it
-            // cannot be proven satisfied here.  The class-goal sweep is the
-            // only evaluator that can read it (`classUnionGoalProgress`), and
-            // `isSweepEvaluableClassGoal` is what keeps it out of every other
-            // shape.
+        case .itemsCovered, .classCoverage:
+            // Not per-submission signals: one reads the class's accumulated
+            // coverage and the other the class corpus run's own grade, and no
+            // single submission's signals can answer either.  The convention
+            // for an unknown signal applies — unmet, because it cannot be
+            // proven satisfied here.  The class-goal sweep is the only
+            // evaluator that can read them (`classUnionGoalProgress` /
+            // `classCoverageGoalProgress`), and `isSweepEvaluableClassGoal` is
+            // what keeps them out of every other shape.
             return false
         }
     }
@@ -186,15 +187,36 @@ extension Achievement {
         return (max(0, Int(condition.value)), condition.target)
     }
 
+    /// A class goal graded on how much of the reference the class's COMBINED
+    /// contributions cover — one number produced by the synthetic corpus run,
+    /// not a union of per-item rows.
+    ///
+    /// Mutually exclusive with the other two shapes for the same reason they
+    /// are with each other: the sweep admits exactly one condition.
+    public var isCoverageClassGoal: Bool {
+        isClassGoal && conditions.contains { $0.signal == .classCoverage }
+    }
+
+    /// What percent (0–100) of the reference a coverage class goal asks the
+    /// class to cover between them.  nil when this is not a coverage goal.
+    public var coveragePercentRequirement: Double? {
+        guard isCoverageClassGoal,
+            let condition = conditions.first(where: { $0.signal == .classCoverage })
+        else { return nil }
+        return min(100, max(0, condition.value))
+    }
+
     /// Whether the class-goal sweep can evaluate this achievement's conditions
-    /// as authored.  It supports exactly three shapes:
+    /// as authored.  It supports exactly four shapes:
     ///
     /// - no conditions — every student must reach 100%;
     /// - a single `grade atLeast` condition — counted over students' best
     ///   whole-assignment grades;
     /// - a single `itemsCovered atLeast` condition — counted over the class's
     ///   accumulated coverage union, with `classFraction` reinterpreted as the
-    ///   share of the roster that must have contributed a credited item.
+    ///   share of the roster that must have contributed a credited item;
+    /// - a single `classCoverage atLeast` condition — the corpus run's own
+    ///   coverage percent, with `classFraction` reading the same way.
     ///
     /// Anything richer (other signals, `atMost`/`equals`, multiple conditions)
     /// would be silently mis-evaluated — authoring rejects those shapes for
@@ -221,6 +243,10 @@ extension Achievement {
             case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
                 return false
             }
+        case .classCoverage:
+            // Scopes nothing: one number for the assignment, so any target
+            // would name a share of a reference nothing measured.
+            return condition.target == nil
         case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon:
             return false
         }

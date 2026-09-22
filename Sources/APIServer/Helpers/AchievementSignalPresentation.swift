@@ -134,6 +134,11 @@ enum AchievementSignalPresentation {
             return make(signal, "Standing", "place in the round robin standings (1 = first)", unit: "", ref: .none)
         case .matchesWon:
             return make(signal, "Matches won", "matches the latest submission won", unit: "", ref: .none)
+        case .classCoverage:
+            return make(
+                signal, "Class coverage",
+                "share of the reference the class's combined contributions cover", unit: "%",
+                ref: .none)
         }
     }
 

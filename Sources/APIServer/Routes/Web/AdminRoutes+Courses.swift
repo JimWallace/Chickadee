@@ -290,6 +290,12 @@ extension AdminRoutes {
             if !setupIDs.isEmpty {
                 try await ValidationVariant.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
+                // The corpus runs go with the submissions they name. They are
+                // the one class-level table holding WHO contributed rather than
+                // only what was graded, which is why deletion reaches them
+                // explicitly (docs/collaborative-class-assignments.md, Phase 4).
+                try await APIClassCoverageRun.query(on: db)
+                    .filter(\.$testSetupID ~~ setupIDs).delete()
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }

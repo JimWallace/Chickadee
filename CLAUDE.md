@@ -386,7 +386,7 @@ covered too, since instructor validation is enqueued as a `kind == .validation`
 submission and always runs on the **native worker**. See
 `docs/runner-capability-profiles.md`.
 
-**A class goal counts one of two things, and the sweep will evaluate no third.**
+**A class goal counts one of three things, and the sweep will evaluate no fourth.**
 `Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
 students' best whole-assignment grade cleared a threshold, over the enrolled
 roster. A collaborative assignment needs the other one — the **union** of what
@@ -395,15 +395,29 @@ the class produced, "the class has found 12 of the 15 seeded bugs" — so
 `class_item_coverage` table, optionally scoped to one suite section (a bug
 hunt's variants, not the well-formedness gate beside them).
 
-`isSweepEvaluableClassGoal` admits **exactly three shapes**: no conditions, a
-single `grade atLeast`, or a single `itemsCovered atLeast`. Everything else is
-refused at save time and skipped-with-a-log by the sweep. That guard is the
-reason a hand-authored manifest cannot silently mis-grade a bonus (audit A4), so
-admitting the union shape meant admitting exactly it — the arity did not move.
+The third arithmetic is the **corpus percent**, "the class collectively reaches
+80% coverage", which a union of per-item rows cannot produce because no row can
+say what fraction of a reference a combined test corpus exercises.
+`AchievementSignal.classCoverage` reads the newest completed
+`class_coverage_runs` row — one synthetic `kind == .classAggregate` submission
+holding every contributor's slot cells, graded once, its ordinary grade fraction
+being the number. It scopes nothing: the run produces one number for the
+assignment, so a `.section` target would name a share of a reference nothing
+measured. See
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md)
+§"The corpus run".
 
-A union goal is graded on the SMALLER of two halves: coverage (the item count)
-and **breadth** (at least `classFraction` of the roster contributed at least one
-covered item). Breadth is why there is no per-student contribution cap: one
+`isSweepEvaluableClassGoal` admits **exactly four shapes**: no conditions, a
+single `grade atLeast`, a single `itemsCovered atLeast`, or a single
+`classCoverage atLeast`. Everything else is refused at save time and
+skipped-with-a-log by the sweep. That guard is the reason a hand-authored
+manifest cannot silently mis-grade a bonus (audit A4), so admitting each new
+shape meant admitting exactly it — the arity has never moved.
+
+A union or corpus goal is graded on the SMALLER of two halves: coverage (the
+item count, or the corpus percent) and **breadth** (at least `classFraction` of
+the roster contributed at least one covered item, or one cell to the corpus).
+Breadth is why there is no per-student contribution cap: one
 student finding everything reaches full coverage and then fails on breadth. The
 alternative — crediting each student only their K rarest items — bounds the solo
 hero too, and breaks determinism doing it, because a later submission can change
@@ -413,8 +427,11 @@ The two halves scope differently, and the asymmetry is deliberate. **Coverage
 counts every row**, including one found by a student who has since dropped: the
 item was covered, and the number must never retreat because it freezes into a
 LEARN push. **Breadth counts only currently-enrolled students**, because it is a
-fraction of the CURRENT roster — audit A7's shape. `achievement_results` stores
-`items_covered` / `items_required` rather than recomputing them, so a frozen row
+fraction of the CURRENT roster — audit A7's shape. A corpus goal carries the
+same split, one level up: the run's number is what it measured, and its stored
+contributor list is intersected with today's roster. `achievement_results` stores
+`items_covered` / `items_required` (and `coverage_percent` /
+`coverage_required`) rather than recomputing them, so a frozen row
 can say what coverage produced the bonus in every student's grade of record. See
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
@@ -1721,7 +1738,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
-- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now largely shipped, so it opens with a **Status** table separating built behaviour from the two things deliberately not built: coverage % (which needs a corpus aggregation run, unlike a bug-set union, which is a query over stored outcomes) and a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
+- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now shipped, so it opens with a **Status** table separating built behaviour from the one thing deliberately not built: a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). Its §"The corpus run" records what coverage % turned out to be once built — a `classAggregate` submission owned by nobody whose ordinary grade fraction IS the number, opt-in behind the goal that reads it, debounced to one run in flight, read as the newest COMPLETED row so a queued re-run never blanks a bar that freezes into a grade push — plus the three things it deliberately does not do (call `mergeNotebook`, whose slot bound would truncate a corpus to one student's worth of cells; grade a personalized assignment, which has no single set of inputs; resolve name collisions between contributors, which no language-agnostic server can). It also says plainly that it shipped against the note's own "do not start it until a real offering has run one" advice, and what to measure in the first offering as a result. The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
 - `docs/class-activities.md` — class activities (#1508): leaderboard challenges, beat-the-instructor bots and, in later slices, round robins, king of the hill and brackets. Opens with a **Status** table per slice; the model is two hidden axes (opponent source × class aggregation) behind one instructor-chosen `ActivityKind`, the `activity` manifest block, the footer's `metric` field (ranking, never credit), the ingest-time `leaderboard_entries` materialisation, the pseudonymous leaderboard page, the kind-locked-once-submitted rule, the slice-2 opponent primitive (`ActivityOpponentSource` read off the kind exhaustively; the structural `Job.opponent` the runner reads instead of the enum; `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`; the `activity-match` build capability `RunnerActivityGate` requires at claim; browser grading refused wherever grader-only files are), the slice-3 hill (`match_results` opened at claim and completed at ingest, `activity_champions`), the slice-4 round robin (`Job.opponents`, the worker's per-opponent loop folding into ONE collection plus `MatchReport` rows, `activity_standings` rewritten from the latest submission only, the `standing` / `matchesWon` signals that turned out to be static authorable-badge signals rather than the third category the design predicted), the slice-5 tournaments (`paired` rides the hill's runner token because a bracket match is one opponent once; a match is a `tournamentMatch` submission every student-kind filter already excludes; `TournamentPairing` in Core is the pure bracket/Swiss rule; a failed match advances the opponent so a round cannot stall), the slice-6 tests-and-code kind (the `union` aggregation reuses the slice-4 matrix outright — no table, no migration, no runner token, no worker code — and materialises nothing, because a union over matches is a query; a kill stays with the test's author after the fault is fixed while a defence counts only the code standing today, which is safe because no union shape is sweep-evaluable), and the compatibility rules every slice must keep (the `makeWorkerManifestJSON` fresh-dict trap, `runnerSanitized` stripping the block so an old runner never decodes a kind it predates)
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/student-avatars.md` — generated chickadee avatars, shipped for the account page (art, `Core/` model, storage, per-course handles; leaderboards and the customization wardrobe are not built) replacing the account-page initials monogram, and the pseudonymous identity primitive a leaderboard would be built on: why the spec is stored rather than derived from a username (a hash of an identifier is reproducible by any classmate, which looks private without being private) and rather than re-derived from a stored seed (appending one option reshuffles everyone), why uniqueness is carried by a per-course handle rather than by the picture (uniqueness must hold at the granularity a viewer can distinguish, at the scope where they see them together — and enforcing it per course would make an avatar change when somebody drops), and how the existing UI guards decide the rendering mechanism (sprite symbols plus custom-property recolouring, since raw path data in a template already fails S4)
