@@ -11,6 +11,10 @@
 //   - Users: match by username or create placeholder (inert until password reset)
 //   - All DB IDs are regenerated; bundleIDs are internal cross-references only.
 //   - validationStatus is NOT imported; assignments land as "pending" validation.
+//     The reference SOLUTION does travel, as a "validation"-kind submission,
+//     and each imported assignment is re-linked to its own copy — so a
+//     "pending" assignment is one that CAN be re-validated, which before was
+//     not true of any imported assignment.
 
 import Core
 import Fluent
@@ -263,6 +267,12 @@ extension CourseBundleRoutes {
                 manifest: manifest, extractDir: extractDir, subsDir: subsDir,
                 idMaps: ImportIDMaps(userIDMap: userIDMap, setupIDMap: setupIDMap),
                 db: db, tally: &t)
+
+            // 6h-bis. Point each imported assignment at its own imported
+            // reference solution. The submissions above landed on the NEW
+            // setup ids, so this is what turns a carried solution into one the
+            // assignment can actually resolve.
+            try await linkImportedValidationSubmissions(courseID: t.courseID, db: db)
 
             // 6i. Create results
             try await importBundledResults(
@@ -611,13 +621,41 @@ private func importBundledSubmissions(
             status: SubmissionStatus.complete.rawValue,
             filename: bundledSub.filename,
             userID: userID,
-            kind: APISubmission.Kind.student
+            kind: bundledSub.kindOrStudent
         )
         try await sub.save(on: db)
         subIDMap[bundledSub.bundleID] = newSubID
         tally.submissionsImported += 1
     }
     return subIDMap
+}
+
+/// Sets `validationSubmissionID` on every assignment in the freshly imported
+/// course that has a reference solution among the imported submissions.
+///
+/// Resolution would find it anyway — `MCPStudentDataBoundary` falls back to the
+/// newest validation submission for the assignment's setup — but the stored
+/// pointer is what the authoring pages read to decide an assignment HAS a
+/// solution, so leaving it nil shows an imported assignment as having none.
+private func linkImportedValidationSubmissions(
+    courseID: UUID,
+    db: Database
+) async throws {
+    let assignments = try await APIAssignment.query(on: db)
+        .filter(\.$courseID == courseID)
+        .all()
+    for assignment in assignments {
+        guard
+            let solution = try await APISubmission.query(on: db)
+                .filter(\.$testSetupID == assignment.testSetupID)
+                .filter(\.$kind == APISubmission.Kind.validation)
+                .sort(\.$submittedAt, .descending)
+                .first(),
+            let solutionID = solution.id
+        else { continue }
+        assignment.validationSubmissionID = solutionID
+        try await assignment.save(on: db)
+    }
 }
 
 private func importBundledResults(

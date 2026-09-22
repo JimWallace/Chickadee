@@ -106,7 +106,10 @@ import Vapor
 
             let cloned = try await AssignmentAuthoringService.cloneAssignment(
                 source: assignment, sourceSetup: setup, newTitle: "Cloned lab",
-                targetCourseID: courseID, setupsDirectory: app.testSetupsDirectory, on: app.db)
+                targetCourseID: courseID,
+                directories: AuthoringDirectories(
+                    setups: app.testSetupsDirectory, submissions: app.submissionsDirectory),
+                on: app.db)
 
             let clonedHistory = try await versions(app, cloned.setup.id ?? "")
             #expect(clonedHistory.count == 1)

@@ -421,7 +421,9 @@ struct InstructorDashboardRoutes: RouteCollection {
             sourceSetup: sourceSetup,
             newTitle: "\(source.title) (Copy)",
             targetCourseID: source.courseID,
-            setupsDirectory: req.application.testSetupsDirectory,
+            directories: AuthoringDirectories(
+                setups: req.application.testSetupsDirectory,
+                submissions: req.application.submissionsDirectory),
             on: req.db)
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentCloned, assignment: cloned.assignment,
