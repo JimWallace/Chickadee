@@ -157,6 +157,15 @@ command -v swift >/dev/null || { echo "swift not on PATH" >&2; exit 1; }
 # line after it had stopped having any effect, so the first sign of it was six
 # of run 14's twelve shards reporting `error: Build failed` twelve minutes in.
 # A measurement of nothing must not cost an hour to discover.
+#
+# NO check-guards.sh FIXTURE, AND THAT IS NOT AN OVERSIGHT. The house rule is
+# that a check never seen to fail is not a check, and this one was seen to fail:
+# put `-Xswiftc -no-warnings-as-errors` back into config.json and it refuses,
+# quoting the compiler. It cannot be a fixture, for two reasons that both sit in
+# the runner rather than here -- a fixture names a guard with no arguments, and
+# the guard-self-tests job runs the PLAIN swift image, which carries no python3.
+# Re-check it by hand whenever you touch the demotion:
+#     scripts/mutation-run.sh --check-build-flags
 check_warning_demotion() {
     local probe
     local extra_args
