@@ -52,6 +52,22 @@ set -uo pipefail
 # why they are named here rather than left to be re-derived. Add a pair only
 # after confirming the struct declares the property.
 #
+# A SECOND IDIOM THAT LOOKS RIGHT: a line comment. Leaf has none.
+# `LeafLexer.lexCheckTagIndicator` pops the `#`, peeks the next character, and
+# takes the tag path only when it is a letter or an open paren — so a `#`
+# followed by a slash emits a raw `#` and returns to raw state. The rest of the
+# line is raw text, which means the "comment" does not disappear, it PRINTS:
+# into the page, into any fragment the partial serves, and any markup inside it
+# is emitted for real. It is the same rule that makes `C#` and `id="#main"`
+# inert, seen from the other side — "passes through as text" is invisible only
+# inside an HTML comment.
+#
+# It shipped once, as a thirteen-line header on `_leaderboard-body.leaf` that
+# rendered above the results and rode every five-second refresh, with an
+# unclosed heading tag in it. Render tests could not see it (the template
+# resolves, it just resolves wrong), which is this file's whole subject.
+# Comment a template with an HTML comment, as the other partials do.
+#
 # The rule covers `isEmpty` and `count` and stops there. Those are the two a
 # Swift author reaches for on a collection, and both fail silently. Adding
 # speculative names (`first`, `uppercased`, …) would buy no evidence-backed
@@ -107,8 +123,28 @@ for prop in $swift_only_properties; do
   done <<< "$(grep -rnE "#[a-zA-Z]*\([^)]*[A-Za-z0-9_]\.${prop}\b" Resources/Views/ 2>/dev/null || true)"
 done
 
+# The line-comment rule. The forbidden sequence is BUILT rather than written,
+# so this script's own prose describing it cannot trip a future guard that
+# scans more than templates — the trap CLAUDE.md records twice, where a guard
+# matched its own documentation.
+tag_indicator='#'
+line_comment_opener="${tag_indicator}/"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  if [ $status -eq 0 ]; then
+    echo "check-leaf-semantics: Leaf has no line-comment syntax." >&2
+    echo "  A tag indicator followed by a slash lexes as RAW TEXT, so the" >&2
+    echo "  comment renders into the page — and into any fragment the" >&2
+    echo "  template serves — with any markup inside it emitted for real." >&2
+    echo "  Use an HTML comment, as the other partials do." >&2
+    echo "" >&2
+  fi
+  status=1
+  echo "  $line" >&2
+done <<< "$(grep -rn -- "$line_comment_opener" Resources/Views/ 2>/dev/null || true)"
+
 if [ $status -eq 0 ]; then
-  echo "check-leaf-semantics: OK (no Swift property access in Leaf tag parameters)"
+  echo "check-leaf-semantics: OK (no Swift property access or line comments in templates)"
 fi
 
 exit $status
