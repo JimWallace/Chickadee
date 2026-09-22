@@ -1,0 +1,255 @@
+#// The leaderboard page's results region, rendered two ways: inline by
+#// leaderboard.leaf, and on its own as the background-refresh fragment
+#// (?fragment=body). ONE partial rather than a row partial per branch,
+#// because on this page the banner and the rows change together — the
+#// champion, the tournament's status and winner, the union's count and the
+#// session countdown all move with the table beside them, so a rows-only swap
+#// would show fresh ranks under a stale champion.
+#//
+#// It holds only what MOVES. The page's heading, its chips and its branch
+#// intro are fixed for the life of the page and stay in leaderboard.leaf:
+#// tearing an <h2> out of the document every five seconds rebuilds a screen
+#// reader's heading buffer mid-read and drops any text selection, for no
+#// change anybody could see.
+    #if(hasWindow):
+    <div class="chip-row">
+        <span class="chip">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></span>
+    </div>
+    #endif
+    #if(hasHill):
+    #if(champion):
+    <p>
+        Champion:
+        #extend("_avatar", champion.avatar)
+        <span data-avatar-handle>#(champion.handle)</span>
+        #if(champion.isViewer):
+        <span class="chip">you</span>
+        #endif
+        #if(isStaff):
+        <span class="text-muted">· #(champion.name)</span>
+        #endif
+        <span class="text-muted">· took the hill <span class="js-relative-time" data-iso="#(champion.crownedAtISO)">#(champion.crownedAtText)</span> · #(champion.defencesText)</span>
+    </p>
+    #else:
+    <p class="text-muted">No student holds the hill yet.</p>
+    #endif
+    #endif
+    #if(showsBracket):
+    #if(hasTournament):
+    <p class="text-muted">#(tournament.statusText)</p>
+    #if(tournament.hasWinner):
+    <p>
+        Winner:
+        #if(tournament.winner.hasAvatar):
+        #extend("_avatar", tournament.winner.avatar)
+        #endif
+        <span data-avatar-handle>#(tournament.winner.handle)</span>
+        #if(tournament.winner.isViewer):
+        <span class="chip">you</span>
+        #endif
+        #if(isStaff):
+        <span class="text-muted">· #(tournament.winner.name)</span>
+        #endif
+    </p>
+    #endif
+    #for(round in tournament.rounds):
+    <h3 class="submission-section-heading">Round #(round.number)</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>First entrant</th>
+                <th>Second entrant</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(match in round.matches):
+            <tr>
+                <td>
+                    #if(match.home.hasAvatar):
+                    #extend("_avatar", match.home.avatar)
+                    #endif
+                    <span data-avatar-handle>#(match.home.handle)</span>
+                    #if(match.home.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                    #if(isStaff):
+                    <span class="text-muted">· #(match.home.name)</span>
+                    #endif
+                    #if(match.homeWon):
+                    <span class="tier tier-open">won</span>
+                    #endif
+                </td>
+                <td>
+                    #if(match.hasAway):
+                    #if(match.away.hasAvatar):
+                    #extend("_avatar", match.away.avatar)
+                    #endif
+                    <span data-avatar-handle>#(match.away.handle)</span>
+                    #if(match.away.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                    #if(isStaff):
+                    <span class="text-muted">· #(match.away.name)</span>
+                    #endif
+                    #if(match.awayWon):
+                    <span class="tier tier-open">won</span>
+                    #endif
+                    #else:
+                    <span class="text-muted">—</span>
+                    #endif
+                </td>
+                <td>#(match.resultText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endfor
+    #else:
+    <p class="empty">No tournament has been run yet.</p>
+    #endif
+    #elseif(showsUnion):
+    #if(hasUnion):
+    <p class="text-muted">#(union.summaryText)</p>
+    <h3 class="submission-section-heading">Tests</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Defeated</th>
+                <th class="time">Tested</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in union.kills):
+            <tr>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.defeated)</td>
+                <td class="time">#(row.faced)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    <h3 class="submission-section-heading">Code</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Tested by</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in union.defences):
+            <tr>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.faced)</td>
+                <td>#(row.statusText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #else:
+    <p class="empty">No student has submitted yet.</p>
+    #endif
+    #elseif(showsStandings):
+    #if(count(standings) == 0):
+    <p class="empty">No submission has played a match yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Played</th>
+                <th class="time">Won</th>
+                <th class="time col-hide-phone">Drawn</th>
+                <th class="time col-hide-phone">Lost</th>
+                <th class="time">Average</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in standings):
+            <tr>
+                <td>#(row.rank)</td>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.played)</td>
+                <td class="time">#(row.wins)</td>
+                <td class="time col-hide-phone">#(row.draws)</td>
+                <td class="time col-hide-phone">#(row.losses)</td>
+                <td class="time">#(row.averageText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+    #elseif(count(rows) == 0):
+    <p class="empty">No submission has reported a ranking metric yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Student</th>
+                #if(isStaff):
+                <th>Name</th>
+                #endif
+                <th class="time">Metric</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in rows):
+            <tr>
+                <td>#(row.rank)</td>
+                <td>
+                    #extend("_avatar", row.avatar)
+                    <span data-avatar-handle>#(row.handle)</span>
+                    #if(row.isViewer):
+                    <span class="chip">you</span>
+                    #endif
+                </td>
+                #if(isStaff):
+                <td>#(row.name)</td>
+                #endif
+                <td class="time">#(row.metricText)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif

@@ -15,6 +15,8 @@
 // class aggregation (how the class's results combine). The instructor never
 // sees the axes. They pick ONE kind, and the kind fixes both.
 
+import Foundation
+
 /// What else is in the workspace when a match script runs — the first of the
 /// two hidden axes. The kind fixes it; the instructor never chooses it.
 ///
@@ -217,6 +219,143 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Where a live session stands relative to its window.
+///
+/// Named for the session rather than for the activity because `ActivityWindow`
+/// is already taken, by the admin dashboard's chart range (day / week / term).
+/// Two unrelated senses of "activity window" in one build is how a call site
+/// ends up reading the wrong one and compiling.
+public enum LiveSessionState: String, Codable, CaseIterable, Sendable {
+    /// The window is set and has not opened yet.
+    case beforeOpen
+    /// Submissions are being accepted.
+    case open
+    /// The window has closed.
+    case afterClose
+}
+
+/// The live-session window: when an activity accepts submissions.
+///
+/// SEPARATE FROM THE DEADLINE, and not a replacement for it. An assignment's
+/// `dueAt` is a date students plan around, moved by extensions and slip days
+/// and softened by a claim window; this is the fifty minutes of a lecture. One
+/// is coursework policy and carries grade consequences, the other is a gate on
+/// a room, so folding them together would mean a slip day silently extending a
+/// live contest, or a contest's end time closing an assignment.
+///
+/// Both bounds are optional and independently useful: an open end is a
+/// challenge that starts when the instructor says so and runs until the
+/// assignment closes; an open start is one that runs until a fixed moment.
+/// Neither set is no window at all, which is what every activity has today.
+///
+/// THE BOUNDS ARE STORED AS ISO-8601 STRINGS, not as `Date`. `ManifestCodec`
+/// documents that `TestProperties` carries no `Date` field and that its plain
+/// encoder/decoder pair is sufficient because of it — a `Date` here would
+/// encode as a bare seconds-since-2001 Double, unreadable in a hand-authored
+/// manifest and correct only as long as every decoder on the path shares one
+/// date strategy. The manifest is decoded by several. A string is decoded the
+/// same way by all of them.
+///
+/// An unparseable bound reads as no bound: the window fails OPEN. A typo an
+/// instructor cannot see must not lock a class out of their own session, and
+/// the supported doors refuse one at save time so a stored bound is one
+/// somebody wrote on purpose.
+public struct LiveSessionWindow: Codable, Equatable, Sendable {
+    /// When submissions start being accepted, ISO-8601; nil accepts from the
+    /// moment the assignment opens.
+    public let opensAtISO: String?
+    /// When they stop, ISO-8601; nil accepts until the assignment closes.
+    public let closesAtISO: String?
+
+    public init(opensAtISO: String? = nil, closesAtISO: String? = nil) {
+        self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO
+        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO
+    }
+
+    public init(opensAt: Date?, closesAt: Date?) {
+        self.init(
+            opensAtISO: opensAt.map(Self.format), closesAtISO: closesAt.map(Self.format))
+    }
+
+    /// A formatter per call, as every other ISO-8601 site in this codebase
+    /// does: `ISO8601DateFormatter` is not `Sendable`, so a shared static one
+    /// does not compile under strict concurrency, and the allocation is
+    /// nothing beside the file write a submission already does.
+    private static func formatter(fractionalSeconds: Bool) -> ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions =
+            fractionalSeconds
+            ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
+        return formatter
+    }
+
+    /// Parses an ISO-8601 instant, or nil when it is not one.
+    ///
+    /// Fractional seconds are accepted as well as omitted, because the two
+    /// producers write different shapes: a browser `datetime-local` field
+    /// resolves to whole seconds, and an agent passing a timestamp through a
+    /// JSON encoder may not.
+    public static func parse(_ iso: String?) -> Date? {
+        guard let iso, !iso.isEmpty else { return nil }
+        return formatter(fractionalSeconds: false).date(from: iso)
+            ?? formatter(fractionalSeconds: true).date(from: iso)
+    }
+
+    /// Renders an instant the way this type stores one.
+    public static func format(_ date: Date) -> String {
+        formatter(fractionalSeconds: false).string(from: date)
+    }
+
+    public var opensAt: Date? { Self.parse(opensAtISO) }
+    public var closesAt: Date? { Self.parse(closesAtISO) }
+
+    /// True when this window bounds anything. An unbounded window is stored as
+    /// nil rather than as an empty block, so a manifest cannot carry a window
+    /// that says nothing.
+    ///
+    /// Asked of the STORED strings rather than the parsed dates: a bound that
+    /// is present but unparseable is still an authored bound, and treating it
+    /// as absent would silently drop it on the next rebuild.
+    public var isBounded: Bool { opensAtISO != nil || closesAtISO != nil }
+
+    /// True when both bounds parse. A stored bound that does not is the
+    /// fail-open case above; the save-time refusal is what keeps it rare.
+    public var boundsAreReadable: Bool {
+        (opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)
+    }
+
+    /// True when the bounds are in order. A window that closes before it opens
+    /// accepts nothing ever, which no author means, so it is refused at save
+    /// rather than stored and puzzled over.
+    public var boundsAreOrdered: Bool {
+        guard let opensAt, let closesAt else { return true }
+        return closesAt > opensAt
+    }
+
+    /// Where `now` falls. The bounds are half-open — a submission landing
+    /// exactly at `closesAt` is out — because a countdown that reaches zero has
+    /// to mean the same thing to the student watching it and to the server
+    /// reading the clock.
+    public func state(at now: Date) -> LiveSessionState {
+        if let opensAt, now < opensAt { return .beforeOpen }
+        if let closesAt, now >= closesAt { return .afterClose }
+        return .open
+    }
+
+    /// True when a submission arriving at `now` is inside the window.
+    public func accepts(at now: Date) -> Bool { state(at: now) == .open }
+
+    /// The next moment the state changes, which is what a countdown counts
+    /// down to; nil once nothing is left to wait for.
+    public func nextBoundary(at now: Date) -> Date? {
+        switch state(at: now) {
+        case .beforeOpen: return opensAt
+        case .open: return closesAt
+        case .afterClose: return nil
+        }
+    }
+}
+
 /// Whether students may open the assignment's leaderboard.
 ///
 /// Hidden by default, deliberately: every existing assignment already carries
@@ -244,19 +383,28 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// the instructor chooses one — the kind may be set before the bot is
     /// uploaded — and always nil for a kind with no opponent.
     public let opponentFile: String?
+    /// The live-session window, when the activity runs to a clock. Nil — the
+    /// default and what every activity before this carried — means the
+    /// assignment's own open/closed state is the only gate.
+    public let window: LiveSessionWindow?
 
     public init(
         kind: ActivityKind,
         leaderboardVisibility: LeaderboardVisibility = .hidden,
-        opponentFile: String? = nil
+        opponentFile: String? = nil,
+        window: LiveSessionWindow? = nil
     ) {
         self.kind = kind
         self.leaderboardVisibility = leaderboardVisibility
         self.opponentFile = opponentFile
+        // An unbounded window is no window: storing an empty block would put
+        // a field on the manifest that says nothing and make "has a window"
+        // two different questions at two different call sites.
+        self.window = (window?.isBounded == true) ? window : nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, leaderboardVisibility, opponentFile
+        case kind, leaderboardVisibility, opponentFile, window
     }
 
     public init(from decoder: Decoder) throws {
@@ -265,6 +413,8 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         leaderboardVisibility =
             try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden
         opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)
+        let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)
+        window = (decoded?.isBounded == true) ? decoded : nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -273,6 +423,14 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         try c.encode(leaderboardVisibility, forKey: .leaderboardVisibility)
         // Omitted when nil, so a slice-1 block's bytes are unchanged.
         try c.encodeIfPresent(opponentFile, forKey: .opponentFile)
+        try c.encodeIfPresent(window, forKey: .window)
+    }
+
+    /// True when a submission arriving at `now` is inside the live-session
+    /// window. An activity with no window accepts whenever the assignment
+    /// does, which is what every activity before slice 8 did.
+    public func acceptsSubmissions(at now: Date) -> Bool {
+        window?.accepts(at: now) ?? true
     }
 
     /// True when students may open the leaderboard.
@@ -304,12 +462,26 @@ public struct ClassActivity: Codable, Equatable, Sendable {
 
     /// The same block with a different opponent file, everything else kept.
     public func withOpponentFile(_ file: String?) -> ClassActivity {
-        ClassActivity(kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file)
+        ClassActivity(
+            kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file,
+            window: window)
     }
 
     /// The same block with a different leaderboard visibility, everything
     /// else kept — so a visibility toggle cannot drop the opponent file.
     public func withLeaderboardVisibility(_ visibility: LeaderboardVisibility) -> ClassActivity {
-        ClassActivity(kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile)
+        ClassActivity(
+            kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile,
+            window: window)
+    }
+
+    /// The same block with a different live-session window, everything else
+    /// kept — the third of these for the third reason: each of the Activity
+    /// section's forms saves one field, and a rebuild that dropped a
+    /// neighbour's would lose a bot or close a leaderboard on a window edit.
+    public func withWindow(_ window: LiveSessionWindow?) -> ClassActivity {
+        ClassActivity(
+            kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
+            window: window)
     }
 }

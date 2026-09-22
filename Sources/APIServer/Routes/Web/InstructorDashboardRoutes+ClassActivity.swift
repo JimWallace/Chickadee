@@ -1,10 +1,11 @@
 // APIServer/Routes/Web/InstructorDashboardRoutes+ClassActivity.swift
 //
-// The Activity section's two lightweight endpoints: the leaderboard
-// visibility toggle and the opponent-file picker.
+// The Activity section's three lightweight endpoints: the leaderboard
+// visibility toggle, the opponent-file picker and the live-session window.
 //
 //   POST /instructor/:assignmentID/activity
 //   POST /instructor/:assignmentID/activity/opponent
+//   POST /instructor/:assignmentID/activity/window
 //   POST /instructor/:assignmentID/tournament/run
 
 import Core
@@ -92,6 +93,64 @@ extension InstructorDashboardRoutes {
             on: req
         )
         return req.redirect(to: editPath + "?notice=Opponent+file+saved")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/activity/window
+
+    /// Sets (or clears, with empty fields) the live-session window
+    /// (docs/class-activities.md). Its own lightweight endpoint like the two
+    /// above, and for a sharper version of the same reason: a window is set
+    /// minutes before the session and adjusted during it, which is exactly
+    /// when closing and re-validating the assignment would be worst.
+    ///
+    /// The fields are `datetime-local`, so they arrive as Toronto wall-clock
+    /// and go through `parseDueDate` — the one parser for an
+    /// instructor-entered local datetime (#1118).
+    @Sendable
+    func saveActivityWindow(req: Request) async throws -> Response {
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let editPath = "/instructor/\(assignment.publicID)/edit"
+        guard let current = currentManifestActivity(setup.manifest) else {
+            return req.redirect(
+                to: editPath + "?error=Choose+a+class+activity+kind+and+save+before+setting+a+window")
+        }
+        struct WindowBody: Content {
+            var opensAt: String?
+            var closesAt: String?
+        }
+        let body = (try? req.content.decode(WindowBody.self)) ?? WindowBody()
+        // An empty field clears that bound; a field the parser cannot read is
+        // refused rather than silently dropped, since a window half-applied is
+        // one an instructor believes is in force.
+        for (name, raw) in [("opens at", body.opensAt), ("closes at", body.closesAt)] {
+            let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, parseDueDate(trimmed) == nil else { continue }
+            let message = "The window's \(name) time could not be read."
+            let encoded = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: editPath + "?error=" + encoded)
+        }
+        let window = LiveSessionWindow(
+            opensAt: parseDueDate(body.opensAt), closesAt: parseDueDate(body.closesAt))
+        do {
+            try await ActivityAuthoring.setActivity(
+                setup: setup, to: current.withWindow(window.isBounded ? window : nil), on: req.db)
+        } catch let error as AppError {
+            let encoded =
+                error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: editPath + "?error=" + encoded)
+        }
+        await AuditLogger.record(
+            action: .activityWindowChanged,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignment.publicID,
+                "opensAt": window.opensAtISO ?? "",
+                "closesAt": window.closesAtISO ?? "",
+            ],
+            on: req
+        )
+        return req.redirect(to: editPath + "?notice=Session+window+saved")
     }
 
     // MARK: - POST /instructor/:assignmentID/tournament/run

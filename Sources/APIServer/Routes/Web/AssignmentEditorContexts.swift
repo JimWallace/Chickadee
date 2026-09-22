@@ -362,6 +362,17 @@ struct ActivityEditFacts: Encodable {
     /// of the setup (the same listing `get_support_files` reports), marking
     /// the stored one selected.
     let opponentFileOptions: [OpponentFileOption]
+    /// The live-session window's bounds as a `datetime-local` input reads
+    /// them — "2026-09-22T14:00", local time, no zone — or "" when unset.
+    ///
+    /// A different spelling from the stored ISO-8601, and it has to be: the
+    /// input type refuses a value carrying a zone, and rendering the stored
+    /// string straight into it leaves the field blank with no error anywhere.
+    /// Rendered by `dueAtLocalInputString` and read back by `parseDueDate` —
+    /// the one renderer and the one parser this UI has for an
+    /// instructor-entered local datetime, which is the #1118 rule.
+    let windowOpensAtLocal: String
+    let windowClosesAtLocal: String
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
@@ -381,7 +392,9 @@ struct ActivityEditFacts: Encodable {
                 ? OpponentFileOption.options(
                     supportFiles: await currentSupportFileNames(setup: setup),
                     current: activity?.opponentFile)
-                : [])
+                : [],
+            windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
+            windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt))
     }
 }
 

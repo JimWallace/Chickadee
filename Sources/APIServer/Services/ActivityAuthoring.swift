@@ -87,6 +87,7 @@ enum ActivityAuthoring {
         }
         if let activity {
             try await validateOpponent(of: activity, setup: setup)
+            try validateWindow(of: activity)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
         if let activity, activity.kind.aggregation == .leaderboard {
@@ -120,6 +121,32 @@ enum ActivityAuthoring {
         }
         return activity
     }
+
+    /// Refuses a live-session window that closes before it opens.
+    ///
+    /// Such a window accepts nothing, ever, which no author means — and it
+    /// would refuse every submission with a message naming a time already
+    /// past, so the instructor would be debugging the contest rather than
+    /// the typo. Shared by both doors, like the opponent checks beside it.
+    private static func validateWindow(of activity: ClassActivity) throws {
+        guard let window = activity.window else { return }
+        // Refused here so a stored bound is always one somebody wrote on
+        // purpose. The window itself fails OPEN on a bound it cannot read,
+        // which is the right answer at grading time and the wrong one to
+        // reach by accident.
+        guard window.boundsAreReadable else {
+            throw AppError.badRequest(reason: windowBoundsUnreadableMessage)
+        }
+        guard window.boundsAreOrdered else {
+            throw AppError.badRequest(reason: windowBoundsOutOfOrderMessage)
+        }
+    }
+
+    static let windowBoundsOutOfOrderMessage =
+        "A class activity's window must close after it opens."
+
+    static let windowBoundsUnreadableMessage =
+        "A class activity's window needs ISO-8601 times, for example 2026-09-22T14:00:00Z."
 
     private static func validateOpponent(of activity: ClassActivity, setup: APITestSetup) async throws {
         if activity.stagesAnOpponent,

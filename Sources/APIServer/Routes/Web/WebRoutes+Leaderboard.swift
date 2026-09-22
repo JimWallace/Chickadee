@@ -22,7 +22,7 @@ import Vapor
 extension WebRoutes {
 
     @Sendable
-    func leaderboardPage(req: Request) async throws -> View {
+    func leaderboardPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db),
@@ -63,8 +63,8 @@ extension WebRoutes {
                 setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
             : nil
 
-        return try await req.view.render(
-            "leaderboard",
+        let session = LiveSessionPresentation.make(activity)
+        let context =
             LeaderboardContext(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
@@ -82,7 +82,26 @@ extension WebRoutes {
                 showsUnion: showsUnion,
                 hasUnion: union != nil,
                 union: union,
-                currentUser: req.currentUserContext))
+                hasWindow: session != nil,
+                window: session,
+                // Two decisions, deliberately not one nil. Whether the page
+                // shows a line is a copy question — an open-ended session is
+                // just an open assignment and says nothing — while whether it
+                // refreshes is about whether anything can still change, which
+                // an open-ended session emphatically can.
+                pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
+                hasPollUntil: activity.window?.closesAtISO != nil,
+                pollUntilISO: activity.window?.closesAtISO ?? "",
+                currentUser: req.currentUserContext)
+
+        // Two representations, one query, the shape every polled page here
+        // uses: `?fragment=body` renders the SAME partial the page rendered
+        // inline, so the refresh cannot drift from what it replaces.
+        guard req.query[String.self, at: "fragment"] == "body" else {
+            return try await req.view.render("leaderboard", context).encodeResponse(for: req)
+        }
+        return try await req.view.render("_leaderboard-body", context)
+            .encodePollFragment(for: req)
     }
 }
 
@@ -267,7 +286,74 @@ struct LeaderboardContext: Encodable {
     /// True once the roster has code to test; the template gates on this.
     let hasUnion: Bool
     let union: UnionPresentation?
+    /// True when the activity runs to a live-session window, so the page
+    /// carries the state line and refreshes itself while it is open.
+    let hasWindow: Bool
+    let window: LiveSessionPresentation?
+    /// True while a session is still ahead of or inside its window: the
+    /// results region carries the background-refresh attributes, so a
+    /// projected leaderboard stays current without anybody touching it.
+    ///
+    /// BEFORE the session counts too, and that is not a nicety. The countdown
+    /// is a client-side tick over a SERVER-rendered label, so a page opened at
+    /// 13:58 for a 14:00 start would otherwise sit there reading "Opens 2
+    /// minutes ago" — the label frozen at load while the time ticks past it.
+    /// Refreshing is what re-renders the label.
+    ///
+    /// False on every assignment with no window, which is what keeps this
+    /// page's cost unchanged for them, and false once the session has ended.
+    let pollsLive: Bool
+    /// True when there is an instant to stop refreshing at.
+    let hasPollUntil: Bool
+    /// That instant — the window's close, ISO-8601. A page loaded at 13:58
+    /// must not keep polling all evening because the session ended at 14:50
+    /// and nobody closed the tab. An open-ended session has none, and then
+    /// polls while the tab is open, as the three dashboards already do.
+    let pollUntilISO: String
     let currentUser: CurrentUserContext?
+}
+
+/// The live-session line above the results, and what the page needs to keep
+/// itself current (docs/class-activities.md, slice 8).
+struct LiveSessionPresentation: Encodable {
+    /// "Opens", "Closes" or "Closed" — the label before the time.
+    let label: String
+    /// The boundary being counted down to, formatted; the no-JS fallback.
+    let boundaryText: String
+    /// The same instant as ISO-8601 for `.js-relative-time`, which is the
+    /// countdown: the component already ticks a `data-iso` node on every page
+    /// and picks its cadence from the freshest stamp, so a session clock is
+    /// one attribute rather than a second timer.
+    let boundaryISO: String
+    /// True once the window has closed: nothing is left to count down to, so
+    /// the line reads as a statement and the page stops refreshing.
+    let isClosed: Bool
+    /// True while submissions are being accepted.
+    let isOpen: Bool
+
+    /// nil when the activity has no window at all, which is every activity
+    /// before slice 8 and every one that does not run to a clock.
+    static func make(_ activity: ClassActivity, now: Date = Date()) -> LiveSessionPresentation? {
+        guard let window = activity.window else { return nil }
+        let formatter = waterlooDateTimeFormatter()
+        let state = window.state(at: now)
+        guard let boundary = window.nextBoundary(at: now) else {
+            // Closed, or open with no end: both have nothing to count down
+            // to, and they say opposite things, so only the closed one gets a
+            // line. An open-ended session is just an open assignment.
+            guard state == .afterClose else { return nil }
+            let closedAt = window.closesAt.map(formatter.string(from:)) ?? ""
+            return LiveSessionPresentation(
+                label: "Closed", boundaryText: closedAt,
+                boundaryISO: window.closesAtISO ?? "", isClosed: true, isOpen: false)
+        }
+        return LiveSessionPresentation(
+            label: state == .beforeOpen ? "Opens" : "Closes",
+            boundaryText: formatter.string(from: boundary),
+            boundaryISO: LiveSessionWindow.format(boundary),
+            isClosed: false,
+            isOpen: state == .open)
+    }
 }
 
 /// A union activity's two tables plus the one-line count above them.

@@ -277,6 +277,19 @@
         <button class="btn action-btn" type="submit">Save opponent file</button>
     </form>
     #endif
+    <form method="post" action="/instructor/#(assignmentID)/activity/window" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            Session opens (optional)
+            <input class="form-input" type="datetime-local" name="opensAt" value="#(activity.windowOpensAtLocal)">
+        </label>
+        <label class="form-label">
+            Session closes (optional)
+            <input class="form-input" type="datetime-local" name="closesAt" value="#(activity.windowClosesAtLocal)">
+        </label>
+        <p class="field-note text-muted">Submissions outside these times are refused.</p>
+        <button class="btn action-btn" type="submit">Save session window</button>
+    </form>
 </section>
 #endif
 

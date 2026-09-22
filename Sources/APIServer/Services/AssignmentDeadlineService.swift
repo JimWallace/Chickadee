@@ -5,10 +5,20 @@ import Vapor
 
 enum AssignmentSubmissionGateError: AbortError {
     case closed
+    /// A class activity's live-session window has not opened yet
+    /// (docs/class-activities.md). Carries the formatted opening time,
+    /// because "not yet" without a time is a message a student can only
+    /// answer by retrying.
+    case activityNotYetOpen(opensAtText: String)
+    /// The window has closed. Distinct from `.closed` on purpose: the
+    /// assignment is still open, so "this assignment is closed" would be
+    /// false and would send a student looking for an extension that is not
+    /// the thing standing in their way.
+    case activityClosed(closedAtText: String)
 
     var status: HTTPResponseStatus {
         switch self {
-        case .closed:
+        case .closed, .activityNotYetOpen, .activityClosed:
             return .forbidden
         }
     }
@@ -17,8 +27,30 @@ enum AssignmentSubmissionGateError: AbortError {
         switch self {
         case .closed:
             return "This assignment is closed and no longer accepts submissions."
+        case .activityNotYetOpen(let opensAtText):
+            return "This class activity opens at \(opensAtText)."
+        case .activityClosed(let closedAtText):
+            return "This class activity closed at \(closedAtText)."
         }
     }
+}
+
+/// What a caller of `requireOpenStudentAssignment` is about to do.
+///
+/// The live-session window gates HANDING WORK IN and nothing else. Opening the
+/// notebook, downloading the setup and reading the personalization seed stay
+/// available outside it, because a student who reads the prompt before the
+/// session starts, or re-reads their work after it ends, is doing nothing the
+/// window exists to prevent — and refusing the seed mid-session would break a
+/// page already open rather than refuse a submission.
+///
+/// Deliberately un-defaulted, for the reason `no-language-defaults.sh` exists:
+/// a door that does not say which it is has not been thought about.
+enum StudentAssignmentGate {
+    /// Reading: a page, the setup zip, the manifest, the seed.
+    case access
+    /// Handing work in.
+    case submission
 }
 
 func assignmentDeadlineHasPassed(_ assignment: APIAssignment, now: Date = Date()) -> Bool {
@@ -445,6 +477,7 @@ func openScheduledAssignments(
 func requireOpenStudentAssignment(
     for testSetupID: String,
     user: APIUser,
+    gate: StudentAssignmentGate,
     on req: Request,
     now: Date = Date()
 ) async throws -> APIAssignment? {
@@ -477,7 +510,49 @@ func requireOpenStudentAssignment(
     guard open else {
         throw AssignmentSubmissionGateError.closed
     }
+    if gate == .submission {
+        try await requireOpenActivityWindow(
+            testSetupID: testSetupID, assignment: assignment, user: user, on: req, now: now)
+    }
     return assignment
+}
+
+/// Refuses a submission landing outside a class activity's live-session
+/// window (docs/class-activities.md).
+///
+/// ONE CHOKEPOINT, reached through `requireOpenStudentAssignment`, because
+/// every submission door already goes through that: the web upload, the
+/// notebook submit, the browser result and the browser failover. Wiring it at
+/// each door instead is how the class-badge award reached only half the class
+/// until audit A2 found it.
+///
+/// Course staff are not gated. They run the session — starting it, testing the
+/// bot, submitting a demonstration entry while the room watches — and an
+/// instructor locked out of their own contest has no way in.
+private func requireOpenActivityWindow(
+    testSetupID: String,
+    assignment: APIAssignment,
+    user: APIUser,
+    on req: Request,
+    now: Date
+) async throws {
+    guard let setup = try await APITestSetup.find(testSetupID, on: req.db),
+        let window = setup.decodedManifest()?.activity?.window,
+        !window.accepts(at: now)
+    else { return }
+    if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
+
+    let formatter = waterlooDateTimeFormatter()
+    switch window.state(at: now) {
+    case .beforeOpen:
+        throw AssignmentSubmissionGateError.activityNotYetOpen(
+            opensAtText: window.opensAt.map(formatter.string(from:)) ?? "a later time")
+    case .afterClose:
+        throw AssignmentSubmissionGateError.activityClosed(
+            closedAtText: window.closesAt.map(formatter.string(from:)) ?? "an earlier time")
+    case .open:
+        return
+    }
 }
 
 /// Sweep every minute so scheduled opens/closes land close to their times.

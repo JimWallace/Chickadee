@@ -24,7 +24,7 @@ assignment on the code path it runs today.
 | 5 | Tournaments: `elimination` (single-elimination bracket or Swiss), the `paired` opponent source, `tournament_runs` / `tournament_matches`, `tournamentMatch` submissions, the Run tournament control and MCP `run_tournament`, the bracket page | shipped |
 | 6 | Tests and code (asymmetric reading of the matrix): `testsVersusImplementations`, the `union` aggregation, the two-table class page | shipped |
 | 7 | Synthetic class submission (coverage percent): `classAggregate` submissions, `class_coverage_runs`, the `classCoverage` goal signal | shipped |
-| 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
+| 8 | Live-session controls: the `window` block, the submission refusal, the countdown and the leaderboard's background refresh | shipped |
 
 One thing a reader should not go looking for after slice 4: **the web create
 page has no activity control.** The kind is chosen on the edit page (the "Class
@@ -569,6 +569,93 @@ activity slice should copy: a server-initiated background job goes behind every
 submission a human is waiting on, because a deadline spike is exactly when it
 would otherwise be in the way.
 
+### Live-session controls (slice 8)
+
+The clock a class activity runs to. An `activity.window` block carries
+`opensAt` / `closesAt`; a submission landing outside it is refused, the
+leaderboard counts down to the next boundary, and it refreshes itself while
+the session is open.
+
+**The window is not the deadline, and folding them together would break
+both.** An assignment's `dueAt` is a date students plan around — moved by
+extensions, softened by the slip-day claim window, carrying grade
+consequences. A session window is the fifty minutes of a lecture. Sharing one
+field would mean a slip day silently extending a live contest, or a contest's
+end time closing an assignment.
+
+**Both bounds are optional and each stands alone.** An open end is a challenge
+that starts when the instructor says so and runs until the assignment closes;
+an open start runs until a fixed moment. Neither set is no window, and an
+unbounded window is stored as nil rather than as an empty block — so "has a
+window" is one question, not two.
+
+**The bounds are ISO-8601 STRINGS, not `Date`.** `ManifestCodec` documents
+that `TestProperties` carries no `Date` field and that its plain
+encoder/decoder pair is sufficient *because of that*. A `Date` here would
+encode as a bare seconds-since-2001 Double: unreadable in a hand-authored
+manifest, and correct only while every decoder on the path shares one date
+strategy. Several decode this manifest. A string is decoded the same way by
+all of them.
+
+**Half-open bounds.** The opening instant is inside the window and the closing
+instant is outside, because a countdown that reaches zero has to mean the same
+thing to the student watching it and to the server reading the clock.
+
+**One chokepoint, and it gates handing in only.**
+`requireOpenStudentAssignment` gained a `gate:` parameter — `.access` or
+`.submission`, un-defaulted, so a door that does not say which it is has not
+been thought about. Every submission door already goes through that function
+(the web upload, the notebook submit, the browser result, the browser
+failover), which is why the window is enforced there rather than at each door:
+wiring a class-level effect per door is how the class badges reached half the
+class until audit A2. Reading — the notebook page, the setup download, the
+personalization seed — is NOT gated: a student reading the prompt before the
+session or their work after it is doing nothing the window exists to prevent,
+and refusing the seed mid-session would break a page already open rather than
+refuse a submission.
+
+**Course staff are never gated.** They run the session — starting it, testing
+the bot, submitting a demonstration entry while the room watches — and an
+instructor locked out of their own contest has no way back in.
+
+**The refusal says which side you are on.** `.activityNotYetOpen` and
+`.activityClosed` are separate cases carrying the formatted time. Reusing
+`.closed` would have told a student "this assignment is closed", which is
+false — the assignment is open — and would send them looking for an extension
+that is not what is in their way.
+
+**A bad window is refused at save; a bad stored window fails OPEN.**
+`ActivityAuthoring` refuses bounds that are unreadable or out of order, at both
+doors. But the runtime reading of an unparseable bound is "no bound", because a
+typo an instructor cannot see must not lock a class out of their session. The
+save-time refusal is what keeps that backstop from ever being reached through a
+supported door.
+
+**The countdown is an existing component, not a new timer.**
+`.js-relative-time[data-iso]` already ticks on every page and picks its cadence
+from the freshest stamp, so the session clock is one attribute.
+
+**The refresh swaps the whole results region, not a `<tbody>`.** On this page
+the champion banner, the tournament's status and winner, and the union's count
+all move with the table beside them, so a rows-only swap would show fresh ranks
+under a stale champion — and the bracket's per-round tables are generated in a
+loop and are not individually addressable. So `leaderboard.leaf`'s section body
+became `_leaderboard-body.leaf`, rendered inline and again as `?fragment=body`,
+and `table-poll.js` gained a region branch: an element with `data-poll-url`
+that is not a table swaps its own contents. Everything else — the suppression
+rules, the background-refresh header, the conditional ETag request, the
+re-applied row behaviours — is shared, which is what makes this a branch there
+rather than a second poller somewhere else. `data-poll-until` stops the poll
+for good once the session ends, so a tab left open all evening is not a request
+a second forever.
+
+**A known gap, inherited rather than introduced.** `POST /api/v1/submissions`
+and its `/file` sibling do not call `requireOpenStudentAssignment` at all, so
+they already bypass the open/closed gate — and therefore bypass the window too.
+The window is exactly as strong as the deadline on that path, which is the
+honest statement; closing it is its own change, since it would alter behaviour
+for existing API callers.
+
 ## Compatibility rules (every slice)
 
 | Seam | Rule |
@@ -577,7 +664,7 @@ would otherwise be in the way.
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`, so fields this build does not model survive. |
 | Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3) and for a tournament's paired match (slice 5, the same contract), `activity-matrix` for a round robin and for tests-and-code (slices 4 and 6, the same contract); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
 | Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
-| Visibility and opponent edits | `withLeaderboardVisibility` / `withOpponentFile` rebuild the block from the stored one, so neither surface's edit can drop the other's field. The edit page's kind select carries the stored block forward when the kind is unchanged. |
+| Visibility, opponent and window edits | `withLeaderboardVisibility` / `withOpponentFile` / `withWindow` each rebuild the block from the stored one, so no surface's edit can drop another's field — three forms, three rebuilds, one rule. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
 | Versioning | Snapshots carry the manifest verbatim; `AssignmentVersionStoreTests` pins that the block survives. |
 | Bundle export | The manifest travels as an opaque string. A bundle carrying a kind an older server does not know fails to decode on that server; note it in the term-clone runbook when the first such kind ships beyond slice 1. |
