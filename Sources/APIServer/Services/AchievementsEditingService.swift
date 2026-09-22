@@ -197,7 +197,7 @@ enum AchievementsEditing {
                 target: ref.isEmpty ? nil : AchievementTarget(kind: .section, ref: ref))
         }
         let value = input.value ?? 0
-        if signal == .grade || signal == .gradeJumpPercent {
+        if signal == .grade || signal == .gradeJumpPercent || signal == .classCoverage {
             guard (0...100).contains(value) else {
                 throw WebAssignmentError.invalidParameter(
                     name: "value", reason: "A percent value must be 0–100.")
@@ -365,7 +365,8 @@ enum AchievementsEditing {
                                 + "Point it at a section that exists, or clear it to count every "
                                 + "test in the suite.")
                     }
-                case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing, .matchesWon:
+                case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing,
+                    .matchesWon, .classCoverage:
                     continue
                 }
             }

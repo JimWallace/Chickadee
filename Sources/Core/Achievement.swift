@@ -263,6 +263,23 @@ public enum AchievementSignal: String, Codable, CaseIterable, Sendable {
     case standing
     /// How many matches the student's latest submission won in a round robin.
     case matchesWon
+    /// What percent (0–100) of the reference the CLASS's combined
+    /// contributions cover — the corpus run's grade, read at the class level
+    /// (docs/collaborative-class-assignments.md).
+    ///
+    /// The second whole-class signal, and the second one the sweep alone can
+    /// evaluate. It differs from `itemsCovered` in what it counts: that one
+    /// unions the suite items the class passed BETWEEN them, one row per item,
+    /// while this one is a single number one synthetic run produced over
+    /// everybody's contributions assembled into one notebook. A bug hunt wants
+    /// the union; a "the class collectively reaches 85% coverage" goal wants
+    /// this, because no per-item row can say what fraction of a reference a
+    /// combined test corpus exercises.
+    ///
+    /// It scopes nothing: the corpus run produces one number for the
+    /// assignment, so a `.section` target would name a share of a reference
+    /// nothing measured.
+    case classCoverage
 }
 
 extension AchievementSignal {
@@ -280,7 +297,7 @@ extension AchievementSignal {
         switch self {
         case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon:
             return false
-        case .itemsCovered:
+        case .itemsCovered, .classCoverage:
             return true
         }
     }
@@ -296,7 +313,9 @@ extension AchievementSignal {
     public var readsTheStandings: Bool {
         switch self {
         case .standing, .matchesWon: return true
-        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered: return false
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered,
+            .classCoverage:
+            return false
         }
     }
 

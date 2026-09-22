@@ -23,7 +23,7 @@ assignment on the code path it runs today.
 | 4 | `classmates` matrix (round robin): `roundRobin`, `Job.opponents`, the per-match `MatchReport` rows, `activity_standings`, the standings page, `RecordDimension.tournamentWinner`, the `standing` / `matchesWon` signals, the `activity-matrix` runner capability | shipped |
 | 5 | Tournaments: `elimination` (single-elimination bracket or Swiss), the `paired` opponent source, `tournament_runs` / `tournament_matches`, `tournamentMatch` submissions, the Run tournament control and MCP `run_tournament`, the bracket page | shipped |
 | 6 | Tests and code (asymmetric reading of the matrix): `testsVersusImplementations`, the `union` aggregation, the two-table class page | shipped |
-| 7 | Synthetic class submission (coverage percent) | not started |
+| 7 | Synthetic class submission (coverage percent): `classAggregate` submissions, `class_coverage_runs`, the `classCoverage` goal signal | shipped |
 | 8 | Live-session controls (`openWindow`, countdown, auto-refresh) | not started |
 
 One thing a reader should not go looking for after slice 4: **the web create
@@ -543,6 +543,31 @@ split that also halves what each student practises. The asymmetry the kind
 is named for is real and survives: it is in how each match is READ, not in
 who plays. The match script decides what counts as a fault, as the script
 contract always has.
+
+### The class corpus run (slice 7)
+
+Slice 7 is the odd one in this plan: it is not an activity kind, and it adds
+nothing to `ActivityKind`. It closes the gap
+[collaborative-class-assignments.md](collaborative-class-assignments.md) left
+open at its own Phase 4 — the class's **coverage percent**, which a union of
+per-item rows cannot produce because no row can say what fraction of a
+reference a combined test corpus exercises.
+
+The whole design, and what it cost, is recorded in that document under **The
+corpus run**. In one paragraph: every contributor's slot cells are assembled
+into one notebook owned by nobody, enqueued as a `kind == .classAggregate`
+submission through the validation path, claimed LAST by the native worker, and
+its ordinary grade fraction is the coverage number. It materialises one
+`class_coverage_runs` row per run, debounced to one in flight per assignment,
+and the sweep reads the newest COMPLETED row through a third evaluable class
+goal shape, `classCoverage atLeast P`.
+
+Two facts that belong here rather than there. It touches no activity seam at
+all — no kind, no opponent source, no aggregation, no runner token — so nothing
+in the compatibility table below moved. And its claim-order rule is the one an
+activity slice should copy: a server-initiated background job goes behind every
+submission a human is waiting on, because a deadline spike is exactly when it
+would otherwise be in the way.
 
 ## Compatibility rules (every slice)
 

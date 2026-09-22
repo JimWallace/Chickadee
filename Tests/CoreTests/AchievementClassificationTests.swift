@@ -256,13 +256,23 @@ import Testing
 
     /// Kills the `SwapTernary` on `AchievementSignal.allowedScopes`
     /// (`readsTheWholeClass ? [.classWide] : allCases` swapped). Swapped, a
-    /// per-student scope is offered for `itemsCovered` — the badge that saves
-    /// cleanly and then never fires, the exact shape the property exists to
-    /// refuse — while every other signal is locked to class goals only.
-    @Test func itemsCoveredIsScopedToClassGoalsAndNothingElseIs() {
+    /// per-student scope is offered for a whole-class signal — the badge that
+    /// saves cleanly and then never fires, the exact shape the property exists
+    /// to refuse — while every other signal is locked to class goals only.
+    ///
+    /// Split on `readsTheWholeClass` rather than on a named case, so a second
+    /// whole-class signal is held to the same rule without an edit here.
+    /// `itemsCovered` is asserted by name as well, because it is the case the
+    /// property was written for and a derivation that admitted nothing would
+    /// otherwise pass vacuously.
+    @Test func wholeClassSignalsAreScopedToClassGoalsAndNothingElseIs() {
         #expect(AchievementSignal.itemsCovered.allowedScopes == [.classWide])
-        for signal in AchievementSignal.allCases where signal != .itemsCovered {
-            #expect(signal.allowedScopes == AchievementScope.allCases)
+        for signal in AchievementSignal.allCases {
+            if signal.readsTheWholeClass {
+                #expect(signal.allowedScopes == [.classWide], "\(signal) reads the whole class")
+            } else {
+                #expect(signal.allowedScopes == AchievementScope.allCases)
+            }
         }
     }
 }

@@ -473,6 +473,13 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateActivityStandings())
     app.migrations.add(CreateTournamentRuns())
 
+    // The synthetic class corpus run and its coverage number
+    // (docs/collaborative-class-assignments.md). New table, plus the two
+    // percent columns a coverage goal's frozen snapshot carries — those must
+    // follow `AddAchievementResultCoverage` above, which is on the same table.
+    app.migrations.add(CreateClassCoverageRuns())
+    app.migrations.add(AddAchievementResultCoveragePercent())
+
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.
     app.migrations.add(CreateSessionReaperIndex())

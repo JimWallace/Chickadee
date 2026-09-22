@@ -75,6 +75,34 @@ func classUnionGoalProgress(
     return min(coverage, breadth)
 }
 
+/// Fraction of a CLASS-CORPUS goal reached, `0...1` — the "the class
+/// collectively reaches 85% coverage" shape.
+///
+/// The same two halves as a union goal, and for the same reasons: COVERAGE is
+/// what the corpus run measured over everybody's combined contributions, and
+/// BREADTH is the share of the roster that put a cell in it. Progress is the
+/// smaller, so one student writing an exhaustive suite in their own slots
+/// reaches full coverage and then fails the goal on breadth.
+///
+/// Percents on both sides, `0...100`, because that is how the condition is
+/// authored and how the editor's unit reads. `requiredPercent <= 0` is
+/// coverage-trivial, leaving breadth as the whole goal. Pure — unit-tested
+/// without a database.
+func classCoverageGoalProgress(
+    coveragePercent: Double,
+    requiredPercent: Double,
+    studentsContributing: Int,
+    denominator: Int,
+    classFraction: Double
+) -> Double {
+    let coverage = requiredPercent > 0 ? min(1, max(0, coveragePercent) / requiredPercent) : 1
+    let breadth = classGoalProgress(
+        studentsMeeting: studentsContributing,
+        denominator: denominator,
+        classFraction: classFraction)
+    return min(coverage, breadth)
+}
+
 /// Evaluates every assignment's `classGoal` achievements and upserts one
 /// `APIAchievementResult` snapshot per (setup, achievement).  A snapshot whose
 /// assignment deadline has passed is locked and then frozen — later sweeps skip
@@ -148,6 +176,13 @@ func evaluateClassGoalAchievements(
             goals.contains(where: \.isUnionClassGoal)
             ? try await classItemCoverage(testSetupID: setupID, on: db) : []
 
+        // Likewise for the corpus run: one query, and only where a goal reads
+        // it. The LATEST completed run, which is what "the goal reads the
+        // latest aggregate only" means.
+        let corpusRun =
+            goals.contains(where: \.isCoverageClassGoal)
+            ? try await latestClassCoverageRun(testSetupID: setupID, on: db) : nil
+
         let outcome = try await writeClassGoalSnapshots(
             goals: goals,
             rowByAchievement: rowByAchievement,
@@ -156,6 +191,7 @@ func evaluateClassGoalAchievements(
                 properties: entry.properties,
                 bestByStudent: bestByStudent,
                 coverage: coverage,
+                corpusRun: corpusRun,
                 enrolledStudents: enrolledStudents,
                 denominator: denominator,
                 locked: locked,
@@ -216,6 +252,9 @@ private struct ClassGoalEvaluation {
     /// Every accumulated coverage row for this setup; empty unless a union goal
     /// is present.
     let coverage: [APIClassItemCoverage]
+    /// The newest completed class corpus run; nil unless a coverage goal is
+    /// present, or none has produced a number yet.
+    let corpusRun: APIClassCoverageRun?
     /// Currently-enrolled students, the roster every *student count* is scoped
     /// to (audit A7).
     let enrolledStudents: Set<UUID>
@@ -233,6 +272,10 @@ private struct ClassGoalMetric {
     /// grade-counted goal, which unions nothing.
     var itemsCovered: Int?
     var itemsRequired: Int?
+    /// Corpus goals only: the coverage percent the snapshot froze at, and the
+    /// percent the goal asked for.
+    var coveragePercent: Double?
+    var coverageRequired: Double?
 }
 
 /// Computes one goal's metric, branching on which of the two evaluable class
@@ -246,6 +289,10 @@ private struct ClassGoalMetric {
 private func classGoalMetric(
     goal: Achievement, evaluation: ClassGoalEvaluation
 ) -> ClassGoalMetric {
+    if let requiredPercent = goal.coveragePercentRequirement {
+        return corpusGoalMetric(
+            goal: goal, requiredPercent: requiredPercent, evaluation: evaluation)
+    }
     guard let requirement = goal.coveredItemsRequirement else {
         let threshold = goal.gradeThresholdFraction ?? 1
         let meeting = evaluation.bestByStudent.values.filter { $0 >= threshold }.count
@@ -281,6 +328,36 @@ private func classGoalMetric(
         itemsRequired: requirement.count)
 }
 
+/// One CORPUS goal's metric: what the latest completed corpus run covered, and
+/// how many of its contributors are still on the roster.
+///
+/// The same split the union branch above carries. COVERAGE is the run's own
+/// number and counts every contribution that went into it, a since-dropped
+/// student's included — the corpus covered what it covered, and a number that
+/// retreats is one that freezes into a grade push at whatever it happened to be.
+/// BREADTH counts only currently-enrolled contributors, because it is a
+/// fraction of the CURRENT roster (audit A7).
+///
+/// No completed run yet reads as zero coverage rather than as a met goal: an
+/// assignment nobody has contributed to has not covered the reference.
+private func corpusGoalMetric(
+    goal: Achievement, requiredPercent: Double, evaluation: ClassGoalEvaluation
+) -> ClassGoalMetric {
+    let coveragePercent = (evaluation.corpusRun?.coverage ?? 0) * 100
+    let contributing = Set(evaluation.corpusRun?.contributors ?? [])
+        .intersection(evaluation.enrolledStudents)
+    return ClassGoalMetric(
+        studentsMeeting: contributing.count,
+        progress: classCoverageGoalProgress(
+            coveragePercent: coveragePercent,
+            requiredPercent: requiredPercent,
+            studentsContributing: contributing.count,
+            denominator: evaluation.denominator,
+            classFraction: goal.classFraction ?? 1),
+        coveragePercent: coveragePercent,
+        coverageRequired: requiredPercent)
+}
+
 /// Upserts one snapshot per evaluable goal on a setup and reports whether a
 /// points-rewarded goal just froze — the transition that finalizes the bonus
 /// every student's grade of record carries.
@@ -313,8 +390,8 @@ private func writeClassGoalSnapshots(
             logger.warning(
                 """
                 Class goal '\(goal.id)' on setup \(setupID) has conditions the sweep \
-                cannot evaluate (a single 'grade atLeast' or 'itemsCovered atLeast' \
-                condition is supported); skipping.
+                cannot evaluate (a single 'grade atLeast', 'itemsCovered atLeast' or \
+                'classCoverage atLeast' condition is supported); skipping.
                 """
             )
             continue
@@ -332,6 +409,8 @@ private func writeClassGoalSnapshots(
             row.evaluatedAt = now
             row.itemsCovered = metric.itemsCovered
             row.itemsRequired = metric.itemsRequired
+            row.coveragePercent = metric.coveragePercent
+            row.coverageRequired = metric.coverageRequired
             try await row.save(on: db)
         } else {
             try await APIAchievementResult(
@@ -343,7 +422,9 @@ private func writeClassGoalSnapshots(
                 locked: locked,
                 evaluatedAt: now,
                 itemsCovered: metric.itemsCovered,
-                itemsRequired: metric.itemsRequired
+                itemsRequired: metric.itemsRequired,
+                coveragePercent: metric.coveragePercent,
+                coverageRequired: metric.coverageRequired
             ).save(on: db)
         }
         outcome.written += 1

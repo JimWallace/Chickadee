@@ -139,6 +139,28 @@ func collectClaimCandidates(
         candidates.append((validation, valSetup, valManifest))
     }
 
+    // The class corpus run (docs/collaborative-class-assignments.md) goes
+    // LAST, behind everything a human is waiting on. Nobody is watching it
+    // land: it feeds a class progress bar, it is debounced to one run in
+    // flight per assignment, and a deadline spike is exactly when a student's
+    // job must not queue behind it.
+    let pendingAggregates = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
+        .filter(\.$kind == APISubmission.Kind.classAggregate)
+        .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
+        .all()
+    for aggregate in pendingAggregates {
+        if let cached = resolvedBySetupID[aggregate.testSetupID] {
+            candidates.append((aggregate, cached.0, cached.1))
+            continue
+        }
+        guard let setup = try await APITestSetup.find(aggregate.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[aggregate.testSetupID] = (setup, manifest)
+        candidates.append((aggregate, setup, manifest))
+    }
+
     return candidates
 }
 
