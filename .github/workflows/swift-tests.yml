@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -55,12 +55,13 @@ jobs:
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # All CI jobs run on noble (Ubuntu 24.04), matching the Dockerfile's build
-    # and runtime base so CI exercises the same glibc the shipped image uses.
-    # noble (glibc 2.39) is also required by SwiftLintBinary, which is linked
-    # against GLIBC 2.38 and cannot run on jammy's glibc 2.35.
+    # All CI jobs run on resolute (Ubuntu 26.04), matching the Dockerfile's
+    # build and runtime base so CI exercises the same glibc the shipped image
+    # uses. SwiftLintBinary is linked against GLIBC 2.38, so it needs a base at
+    # or above that: resolute supplies 2.43 and noble supplied 2.39, while
+    # jammy's 2.35 is below the floor and cannot run it.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -136,7 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -186,7 +187,7 @@ jobs:
       # skipped silently for as long as their guard was a bare early return.
       # The trait that replaced it made the skip visible, and this lane went
       # red on the first run. Toolchain-identical to the plain mirror.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -253,7 +254,7 @@ jobs:
       # swift-ci = the mirrored toolchain + baked-in test packages (see
       # mirror-images.yml / .github/docker/ci-image); same `swift --version`,
       # so the `.build` cache key matches the build job's.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -367,7 +368,7 @@ jobs:
     timeout-minutes: 25
     container:
       # swift-ci: see the api-tests job note.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -503,7 +504,7 @@ jobs:
       # worker-tests use. Getting this wrong does not fail loudly: spawnSync
       # simply cannot find the interpreter, and the suites report
       # `exitError: 'exit null'` with an empty stderr.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -539,7 +540,7 @@ jobs:
     # them across multiple xctest binaries that don't share the lock.
     container:
       # swift-ci: see the api-tests job note.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

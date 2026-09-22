@@ -38,9 +38,9 @@ A **minor** release (6.4 to 6.5, or 6.x to 7.0) starts the full two-pull-request
 work.
 
 A **patch** release (6.4.0 to 6.4.1) is a smaller job. The Docker tags
-`swift:6.4-noble` and `swift-ci:6.4-noble` follow the patch automatically, and
-`mirror-images.yml` refreshes them weekly. Only the sites that name the patch
-number change: `wasm/wasm-sdk.pin`, the swiftly version in
+`swift:6.4-resolute` and `swift-ci:6.4-resolute` follow the patch
+automatically, and `mirror-images.yml` refreshes them weekly. Only the sites
+that name the patch number change: `wasm/wasm-sdk.pin`, the swiftly version in
 `runner-wasm-vendor.yml`, and the SDK identifier in
 `scripts/build-runner-wasm.sh`. There is no feature scan for a patch release.
 
@@ -56,7 +56,7 @@ them is false.
 1. **The release exists.** Read <https://www.swift.org/install/linux/> and
    <https://github.com/swiftlang/swift/releases>. Get the exact version, for
    example `6.5.0`.
-2. **The Docker images exist.** The `swift:<X.Y>-noble` tag must be on Docker
+2. **The Docker images exist.** The `swift:<X.Y>-resolute` tag must be on Docker
    Hub. This was the only thing that blocked #1541. The toolchain was released
    on 14 September and the images landed five days later.
 3. **The WebAssembly SDK exists.** The bundle for the release must be published.
@@ -83,7 +83,7 @@ The pins live in these places:
 | Site | What it holds |
 |---|---|
 | `Package.swift` line 1 | the swift-tools-version |
-| `Dockerfile` compile stage | `swift:<X.Y>-noble` |
+| `Dockerfile` compile stage | `swift:<X.Y>-resolute` |
 | `.github/docker/ci-image/Dockerfile` | `BASE_IMAGE`, and the comment above it |
 | `.github/workflows/mirror-images.yml` | the mirror source, the derived tag, the comments |
 | 13 workflow files | approximately 20 job images, `swift:` and `swift-ci:` |
@@ -104,7 +104,7 @@ number from a note.
 ### Traps that cost a day
 
 **The first CI run fails, and that is expected.** The test jobs use
-`swift-ci:<X.Y>-noble`. That tag does not exist in GHCR until
+`swift-ci:<X.Y>-resolute`. That tag does not exist in GHCR until
 `mirror-images.yml` publishes it. The jobs start together, so all of the
 container jobs fail at `docker pull ... manifest unknown`. Let the mirror job
 finish, then re-run. #1541 hit this and the re-run was green.
@@ -124,7 +124,9 @@ same machine, from unmodified `main`, on the old toolchain. A failure that also
 happens there is not from the new toolchain.
 
 **The distro stays where it is.** A Swift release often makes a new Ubuntu the
-Docker `latest`. Do not take it in this pull request. The CI image and the
+Docker `latest`. Do not take it in this pull request. The distro is currently
+resolute (Ubuntu 26.04), moved there by its own pull request after the 6.4
+upgrade, for the reasons below. The CI image and the
 production image install seven grading interpreters. A distro change moves all
 seven at the same time, and `default-jdk` changes its major version with no line
 of code changing. The execution-path test suites skip when an interpreter is
@@ -320,7 +322,7 @@ Read docs/swift-toolchain-upgrades.md. It is the runbook.
 Do Step 0 first. Find the newest stable Swift release. Compare it with the
 tools version on line 1 of Package.swift.
 
-If there is no newer release, or the swift:<X.Y>-noble Docker image is not
+If there is no newer release, or the swift:<X.Y>-resolute Docker image is not
 published yet, report that and stop. Do not open a pull request.
 
 If there is a newer minor release and the images are published:

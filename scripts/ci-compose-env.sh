@@ -31,10 +31,10 @@
 # telling a human to decide what the value should be.
 #
 # Deliberately awk and shell, with no python3. CI runs two similar images and
-# they are easy to confuse: the test jobs use chickadee/swift-ci:6.4-noble,
+# they are easy to confuse: the test jobs use chickadee/swift-ci:6.4-resolute,
 # which .github/docker/ci-image/Dockerfile builds with python3 and friends,
 # while format-lint / build / browser-runner-tests run the plain mirror
-# chickadee/swift:6.4-noble, which has no python3 — noble does not bundle it.
+# chickadee/swift:6.4-resolute, which has no python3 — noble does not bundle it.
 # The first cut of this guard used python3 and exited 127 in format-lint. A
 # guard should depend on nothing its job might not have.
 #

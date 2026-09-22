@@ -11,7 +11,7 @@
 # Both paths must use the same Swift / Ubuntu version so the
 # statically-linked-stdlib binaries match the runtime glibc.
 # To update Swift: change the tag here and in the runtime stage.
-# Current: Swift 6.3 on Ubuntu 24.04 (noble).
+# Current: Swift 6.4 on Ubuntu 26.04 (resolute).
 # ============================================================
 
 # Global ARG — must be declared before the first FROM so it can be used in
@@ -19,7 +19,7 @@
 ARG BINARIES=compile
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.4-noble AS compile
+FROM swift:6.4-resolute AS compile
 
 WORKDIR /build
 
@@ -62,7 +62,7 @@ RUN mkdir -p /out \
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
 # otherwise.  CI downloads the `build-release` artifact into ./artifacts/.
-FROM ubuntu:24.04 AS prebuilt
+FROM ubuntu:26.04 AS prebuilt
 
 WORKDIR /out
 COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
@@ -78,9 +78,9 @@ RUN ls -lh /out/chickadee-server /out/chickadee-runner
 
 # ============================================================
 # Stage 2 — Runtime
-# Must use the same Ubuntu version as the build stage (noble).
+# Must use the same Ubuntu version as the build stage (resolute).
 # ============================================================
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -106,7 +106,10 @@ RUN groupadd --system --gid 999 chickadee \
     && useradd --system --uid 999 --gid 999 --create-home chickadee
 
 # System dependencies:
-#   - C runtime libs (Swift stdlib is statically linked)
+#   - C runtime libs (Swift stdlib is statically linked). The `t64` suffix is
+#     the 64-bit time_t transition, not a version: noble carried `libssl3` and
+#     `libcurl4` as transitional names for these, and resolute dropped them.
+#     `libssl3t64` and `libcurl4t64` resolve on both.
 #   - zip / unzip: the server and worker shell out to /usr/bin/{zip,unzip}
 #     for test-setup extract/publish, course-bundle import/export, and the
 #     personal-data export (ZipArchiver, TestSetupZipHelpers). They were only
@@ -131,8 +134,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         unzip \
         zip \
         libsqlite3-0 \
-        libssl3 \
-        libcurl4 \
+        libssl3t64 \
+        libcurl4t64 \
         python3 \
         python3-pip \
         python3-numpy \
@@ -157,8 +160,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # advertise Java and then fail every test at exit 127.
 #
 # `default-jdk` rather than a pinned `openjdk-N-jdk`: it tracks the base image's
-# LTS (21 on noble) and needs no bump when the base moves. ~350 MB installed,
-# the same order as the octave line below and accepted on the same grounds.
+# LTS, which is 25 on resolute and was 21 on noble. That is the trade this line
+# accepts: the base image chooses the Java version, and a distro move changes it
+# with no line of code changing. Chickadee teaches no Java course at present, so
+# the version is free to follow the base. Pin `openjdk-N-jdk` here if a course
+# ever needs a fixed one. ~350 MB installed, the same order as the octave line
+# below and accepted on the same grounds.
 # racket — the interpreter generated .rkt tests are handed to, and the one the
 # Racket personalization driver runs under. The Debian package carries the HtDP
 # teaching-language collections (`#lang htdp/bsl`), which is what CS 135/115
@@ -172,8 +179,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # test compiles its single translation unit before running. ~60 MB installed.
 # `octave` provides /usr/bin/octave-cli, the binary the worker invokes for .m
 # test scripts. There is no CLI-only Debian/Ubuntu package: even with
-# --no-install-recommends, `octave` hard-depends on the Qt5 stack, so this line
-# costs ~338 MB installed (measured on noble). Accepted as the price of Octave
+# --no-install-recommends, `octave` hard-depends on the Qt stack (Qt6 on
+# resolute, Qt5 on noble), so this line costs ~338 MB installed (measured on
+# noble; not re-measured for the Qt6 build). Accepted as the price of Octave
 # validation working at all — without the interpreter, every Octave test exits
 # 127 and instructor validation cannot pass (the failure class #1280 fixed for
 # Lua).
