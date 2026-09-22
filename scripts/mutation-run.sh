@@ -53,6 +53,11 @@ Usage: scripts/mutation-run.sh [options]
   --out DIR        Report destination. Default mutation-report/
   --muter-src DIR  Reuse an existing Muter checkout/build instead of cloning.
   --plan           Print the shard assignment and exit. Runs nothing.
+  --check-build-flags
+                   Prove, in seconds, that the build arguments still demote a
+                   mutated copy's warnings, then exit. Nothing else runs. Worth
+                   a row in the Swift-upgrade gauntlet: this is the check that
+                   sees a toolchain quietly neutralising the flag.
   -h, --help       This message.
 USAGE
 }
@@ -63,6 +68,7 @@ cd "$repo_root"
 config="Tools/mutation/config.json"
 patch_file="Tools/mutation/0001-restore-parse-tree-cache.patch"
 plan_only=0
+check_flags_only=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -73,6 +79,7 @@ while [ $# -gt 0 ]; do
         --out) OUT_DIR="$2"; shift 2 ;;
         --muter-src) MUTER_SRC="$2"; shift 2 ;;
         --plan) plan_only=1; shift ;;
+        --check-build-flags) check_flags_only=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown option: $1" >&2; usage; exit 2 ;;
     esac
@@ -131,6 +138,106 @@ fi
 
 command -v swift >/dev/null || { echo "swift not on PATH" >&2; exit 1; }
 
+# ------------------------------------------------------- warning-demotion check
+# PROVE, IN SECONDS, THE ONE BUILD SETTING THIS RUN CANNOT DO WITHOUT. Muter's
+# RemoveSideEffects deletes the USE of a binding and leaves the binding, so a
+# mutated copy is full of `let x = ...` that nothing reads. The package makes
+# every warning an error, schemata put every mutant in ONE binary, and so a
+# single such mutant fails the build of the whole copy: zero outcomes, after the
+# shard has paid its entire build.
+#
+# config.json carries the demotion -- a toolset, as of Swift 6.4; the reasoning
+# is there. This builds a throwaway package with the same
+# `.treatAllWarnings(as: .error)` and one unused binding, using the very
+# arguments that will be handed to Muter, and refuses to go on if the warning
+# still lands as an error.
+#
+# It exists because the PREVIOUS mechanism broke silently. `-Xswiftc
+# -no-warnings-as-errors` was still accepted and still printed on every command
+# line after it had stopped having any effect, so the first sign of it was six
+# of run 14's twelve shards reporting `error: Build failed` twelve minutes in.
+# A measurement of nothing must not cost an hour to discover.
+#
+# NO check-guards.sh FIXTURE, AND THAT IS NOT AN OVERSIGHT. The house rule is
+# that a check never seen to fail is not a check, and this one was seen to fail:
+# put `-Xswiftc -no-warnings-as-errors` back into config.json and it refuses,
+# quoting the compiler. It cannot be a fixture, for two reasons that both sit in
+# the runner rather than here -- a fixture names a guard with no arguments, and
+# the guard-self-tests job runs the PLAIN swift image, which carries no python3.
+# Re-check it by hand whenever you touch the demotion:
+#     scripts/mutation-run.sh --check-build-flags
+check_warning_demotion() {
+    local probe
+    local extra_args
+    probe="${TMPDIR:-/tmp}/chickadee-mutation-flag-probe"
+    rm -rf "$probe"
+    mkdir -p "$probe/Sources/Probe"
+
+    # `test`, and each `--skip <suite>`, select tests rather than affect the
+    # build; everything else in testArgs is build configuration and belongs in
+    # the probe. Derived rather than restated, so the probe measures whatever
+    # the sweep is actually configured to use.
+    mapfile -t extra_args < <(python3 - "$config" "$repo_root" <<'ARGS'
+import json, sys
+args = json.load(open(sys.argv[1]))["testArgs"]
+out, i = [], 0
+while i < len(args):
+    if args[i] == "test":
+        i += 1
+    elif args[i] == "--skip":
+        i += 2
+    else:
+        out.append(args[i].replace("{repoRoot}", sys.argv[2]))
+        i += 1
+print("\n".join(out))
+ARGS
+    )
+
+    cat > "$probe/Package.swift" <<'MANIFEST'
+// swift-tools-version:6.2
+import PackageDescription
+
+// Mirrors the repository's own `strictWarnings`, which is what makes an unused
+// binding in a mutated copy fatal.
+let package = Package(
+    name: "Probe",
+    targets: [
+        .target(name: "Probe", swiftSettings: [.treatAllWarnings(as: .error)])
+    ]
+)
+MANIFEST
+
+    # Exactly the shape RemoveSideEffects leaves behind.
+    cat > "$probe/Sources/Probe/Probe.swift" <<'SOURCE'
+public func probe() {
+    let neverRead = 42
+}
+SOURCE
+
+    ( cd "$probe" && swift build "${extra_args[@]}" ) > "$probe/log.txt" 2>&1
+}
+
+echo "==> checking that a mutated copy's warnings are not errors"
+if check_warning_demotion; then
+    echo "    ok"
+    [ "$check_flags_only" -eq 0 ] || exit 0
+else
+    probe_dir="${TMPDIR:-/tmp}/chickadee-mutation-flag-probe"
+    echo "::error::The mutation run's warning demotion no longer works." >&2
+    cat >&2 <<'EXPLAIN'
+An unused binding still compiles as an ERROR under the arguments in
+Tools/mutation/config.json. Muter's RemoveSideEffects produces exactly that
+shape, so the mutated copy would fail to build and this shard would report zero
+mutant outcomes after paying its whole build -- a measurement of nothing that
+reads like a broken test suite.
+
+Fix the demotion in Tools/mutation/config.json (and the toolset it names)
+rather than reading anything from a run made without it. The probe's build log:
+EXPLAIN
+    sed -n '1,40p' "$probe_dir/log.txt" >&2 || true
+    exit 1
+fi
+
 if [ "${#EXPLICIT_FILES[@]}" -gt 0 ]; then
     shard_files=("${EXPLICIT_FILES[@]}")
     label="${#shard_files[@]} changed file(s)"
@@ -187,13 +294,18 @@ muter_bin="$MUTER_SRC/.build/release/muter"
 # 'SwiftShims'". The cost is a cold build inside the copy, every time.
 rm -rf .build
 
-python3 - "$config" <<'PY' > muter.conf.yml
+# `{repoRoot}` in a test argument becomes this checkout's path. It is there for
+# the toolset that demotes warnings (see config.json): Muter runs the test
+# command from inside its mutated COPY, and an absolute path into the real
+# checkout is true from either directory, so the argument cannot quietly point
+# at a file that is not where the run thinks it is.
+python3 - "$config" "$repo_root" <<'PY' > muter.conf.yml
 import json, shutil, sys
 cfg = json.load(open(sys.argv[1]))
 print("executable: " + (shutil.which("swift") or "/usr/bin/swift"))
 print("arguments:")
 for a in cfg["testArgs"]:
-    print(f"  - {a}")
+    print(f"  - {a.replace('{repoRoot}', sys.argv[2])}")
 print("exclude:")
 print("  - .build")
 print("mutationTestTimeout: 900")

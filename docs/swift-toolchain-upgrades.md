@@ -131,6 +131,24 @@ of code changing. The execution-path test suites skip when an interpreter is
 absent. They do not fail. So the distro half of a mixed change fails silently.
 Give the distro its own pull request.
 
+**A changed build system can neutralise a flag without removing it.** Swift 6.4
+made SwiftBuild the SwiftPM default. It orders the compiler command line
+differently. `-Xswiftc` flags now come BEFORE each target's own
+`swiftSettings`, so a target setting wins over the command line. The mutation
+sweep used `-Xswiftc -no-warnings-as-errors` against the package's
+`.treatAllWarnings(as: .error)`. After the move, that argument was still
+accepted and still printed. It had no effect. The frontend command read
+`-no-warnings-as-errors -warnings-as-errors -no-warnings-as-errors
+-warnings-as-errors`. No job could see it, because the tree itself compiles
+with no warnings. Only a mutated copy trips it, and that runs weekly. Six of
+twelve shards died, three releases later. The demotion is a toolset now, which
+wins under both build systems. `scripts/mutation-run.sh --check-build-flags`
+proves it in five seconds.
+
+Keep the shape, not the instance. A flag that overrides a build setting depends
+on order. A build-system change re-orders it and says nothing. Such a flag needs
+a check of its EFFECT, not of its presence.
+
 **Look at the workarounds that the last upgrade added.** Swift 6.4 added two,
 and both are still in the tree:
 
@@ -220,6 +238,7 @@ The gauntlet:
 | `scripts/lint.sh` | swift-format produces no diff |
 | `scripts/swiftlint.sh` | 0 violations, under `--strict` |
 | `scripts/check-guards.sh` | every fixture proves its guard |
+| `scripts/mutation-run.sh --check-build-flags` | the sweep's warning demotion still takes effect |
 | `scripts/check-styles.sh` | green, it runs the other guards |
 | release link, both products | links, and both binaries execute |
 | `scripts/build-runner-wasm.sh` | builds on the new Embedded SDK |
