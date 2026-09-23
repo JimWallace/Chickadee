@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.236] - 2026-09-23
+
+### Changed
+
+- **Runner hosts need the Docker netfilter drop-in too.** `deploy/README.md` now tells operators to install `deploy/docker-restart-after-netfilter.conf` on every runner host. Without it, a daily configuration-management restart of `netfilter-persistent` deletes Docker's iptables chains, and the runner container stays `Up` but cannot reach the server. The server-host postmortem now records that cause as well as the kernel-upgrade one.
+
+
 ## [0.5.235] - 2026-09-23
 
 ### Removed
