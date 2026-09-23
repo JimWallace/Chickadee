@@ -413,6 +413,7 @@ enum SchemaMutatingSuites {
         "MigrationNamespaceReconcilerTests",
         "MCPAuditFailClosedTests",
         "ResultCollectionBackfillMigrationTests",
+        "GetValidationResultVariantFallbackTests",
     ]
 
     /// True when the test currently running belongs to one of those suites.
