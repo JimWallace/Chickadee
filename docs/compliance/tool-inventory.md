@@ -183,7 +183,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
 | `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
 | `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
-| `get_health_alerts` | live rule evaluation | counts/thresholds; BrightSpace `last_error` writer-sanitized (audit F-2) |
+| `get_health_alerts` | live rule evaluation | counts/thresholds; runner IDs of runners that stopped polling (operational, as `list_runners`); BrightSpace `last_error` writer-sanitized (audit F-2) |
 | `get_browser_diagnostics` | `client_diagnostics` | `user_id` omitted; samples carry the coarse browser/OS label, never the raw User-Agent (audit F-4); PII-tested |
 | `list_connected_agents` | OAuth grants | owner is the authorizing staff/admin (consent-gated), never a student; no token material |
 | `get_brightspace_sync_status` | `brightspace_sync_log` | `username`/`points`/`user_id` columns omitted; `detail` sanitized at write (audit F-2); PII-tested |
