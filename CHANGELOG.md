@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.237] - 2026-09-23
+
+### Added
+
+- **Health alert for one runner that stops polling.** The new `runnerMissing` rule fires when a runner with an operator-chosen ID (for example `--worker-id Sparrow`) has not checked in for `ALERT_RUNNER_OFFLINE_SECONDS`, even while other runners poll. It reads `runner_snapshots`, so it remembers a runner for seven days across server restarts and deploys. The existing `runnerOffline` rule fires only when no runner at all checks in, and it forgets a runner after an hour, so it missed a runner that was down for several days. The rule ignores the `runner-<container id>` IDs that the bundled Compose file generates, because those change on every redeploy.
+
+
 ## [0.5.236] - 2026-09-23
 
 ### Changed
