@@ -185,6 +185,48 @@ Killed mutants leave the list on their own; phantoms, inert mutations and
 recorded equivalents are filtered into their own sections. What remains is the
 queue, and emptying it is the goal.
 
+## The weekly triage routine
+
+A scheduled Claude Code routine does this triage every Tuesday, after the sweep
+files its issue. The routine follows this procedure. A person who does the
+triage by hand follows the same procedure.
+
+1. **Find the report.** Use the newest open issue named
+   `Mutation sweep: logic tier (<date>)`. If there is no new issue since the
+   last triage, stop. Get the run record for that sweep from the
+   `mutation-reports` branch (`MutationReports/<date>-run<id>.json`). When
+   there are two records for one date, use the one whose survivor count
+   agrees with the issue.
+2. **Close the old reports.** Each sweep replaces the previous one. Close every
+   older open sweep issue as "not planned", with a comment that names the new
+   issue. Survivors that are still real appear again in the new report.
+3. **Do the "before" pass in a separate worktree.** The verifier edits source
+   files in place. Put a worktree of `origin/main` in a scratch directory and
+   point the verifier's `REPO` at it. Then the main checkout stays free for
+   writing tests, and it never holds a mutated file. Expect `SURVIVED`. A
+   `KILLED` survivor needs nothing.
+4. **Answer each `SURVIVED` survivor.** Work by file. Either write a test that
+   fails under the mutation, or add an entry to `equivalent-mutants.json` that
+   argues why no input can observe the change. Put new tests in NEW files and
+   do not change existing tests. When a rule cannot be reached from a test
+   (a signal, a host where every interpreter is present), extract the rule into
+   a small pure function and test the function. Say in the test's header which
+   mutation it kills and why the gap mattered.
+5. **Do the "after" pass.** Run the verifier again with the new tests. Every
+   survivor that got a test must now be `KILLED` by the new suite. Every
+   ledger entry must still be `SURVIVED`.
+6. **Open a PR and drive it to green.** Run `scripts/lint.sh`,
+   `scripts/swiftlint.sh` and the sweep's own test command before each push.
+   Add one `changelog.d` fragment. Do not touch `VERSION`, `ChickadeeVersion`
+   or `CHANGELOG.md`. When every check is green, merge the PR.
+7. **Close the report.** Comment on the sweep issue with the result for each
+   survivor (test, ledger entry, or already killed), then close it. Update this
+   document when the triage teaches something new, for example a new trap.
+
+The container that runs the routine does not have every interpreter. Tests
+that need `lua`, `Rscript`, `octave-cli` or `racket` skip there. CI has all of
+them, so let CI prove those tests.
+
 ## Where things are
 
 | | |
