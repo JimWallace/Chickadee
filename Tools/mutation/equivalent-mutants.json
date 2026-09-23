@@ -66,6 +66,12 @@
       "operator": "ChangeLogicalConnector",
       "mutated": "let relativeNSString = relativePath as NSString let ext = relativeNSString.pathExtension.lowercased() if ext == \"ipynb\" { return relativeNSString.deletingPathExtension + \".py\" } let stem = relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init) ?? relativeNSString.deletingPathExtension let parent = relativeNSString.deletingLastPathComponent let generatedName = stem + \".extracted.py\" if parent.isEmpty && parent == \".\" { return generatedName } return (parent as NSString).appendingPathComponent(generatedName)",
       "reason": "The guard is `parent.isEmpty || parent == \".\"` and this mutant makes it `&&`. relativePath(of:under:) strips the root and its slash, so it never returns a path that starts with \"./\"; the parent is therefore never \".\" and the second term is dead. With `&&` the guard is always false, so a root-level file takes the other branch, NSString(\"\").appendingPathComponent(name), which returns `name` unchanged: exactly what the first branch returns. Both versions produce the same path for every input. The `!=` candidate at this site IS observable and is killed by NestedJSONNotebookTests. Verified SURVIVED against run 35753274761."
+    },
+    {
+      "file": "Sources/Worker/TestRuntimeSources.swift",
+      "operator": "RemoveSideEffects",
+      "mutated": "files[name] = source",
+      "reason": "This mutant deletes the precondition in allRuntimeHelperFiles that traps when two languages claim the same helper filename. The input is fixed data: runtimeHelperFiles(for:) over AssignmentLanguage.allCases, and every filename it returns today is distinct. With no duplicate, the precondition never fires and the merged map is identical with or without it, so no test can observe the deletion. The trap guards a FUTURE edit, and if a duplicate is ever added, RuntimeSourceDriftTests (which calls allRuntimeHelperFiles) traps on the original code; that is when this entry stops holding and must be reconsidered. The 2026-09-22 before pass reported this KILLED by ScriptExecutionGapTests, which cannot depend on the deletion; the after pass reported it SURVIVED against run 35753274761."
     }
   ]
 }
