@@ -360,6 +360,16 @@ service running it after `dockerd` started destroys those chains.
 `netfilter-persistent` does precisely this on restart — and an unattended kernel
 upgrade restarts it.
 
+That was the first explanation, and it is not the complete one. One week later
+the same failure stopped the separate runner host `sparrow`, and its journal
+showed `netfilter-persistent` restarts on 2026-09-16 and 2026-09-17 with no
+reboot and no kernel upgrade between them. The restarts came from the IST
+SaltStack build that writes `/etc/iptables/rules.v4` (its header says
+`DO NOT EDIT - created by SaltStack`). A host managed that way can lose its
+Docker chains on any day, not only after an upgrade. Every Docker host needs the
+drop-in below, runner hosts included (`deploy/README.md`, "Runner hosts: keep
+Docker's firewall chains").
+
 On 2026-09-16 that happened at 11:37:59 UTC, 40 seconds after the last
 successful outbound call. The consequences, in the order they were noticed —
 which is the reverse of the order they are explicable:
