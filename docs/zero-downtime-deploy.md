@@ -65,7 +65,7 @@ host root for a process that accepts student uploads). The app only ever
 | App ⇄ daemon channel | **Files on a shared bind-mount dir** | No DB coupling, no new network surface, no privilege leak |
 | Initiation | **Fully automatic CD** | New release → auto blue-green; MCP for oversight/rollback |
 | Version source | **GitHub Releases / the release tag `vX.Y.Z`** | The project's actual source of truth; the VERSION file is unreliable and is *not* used |
-| Image deployed | The immutable **`:vX.Y.Z`** tag (not `:latest`) | What runs maps 1:1 to a visible release; rollback targets a release |
+| Image deployed | The release commit's immutable **`:sha-<commit>`** image, checked by its revision label and deployed by digest (not `:latest`) | What runs maps 1:1 to a visible release. `:latest` is published before the release build finishes, and can move backwards (see step 5) |
 | Safety gate | **SemVer: auto for non-major, hold majors for approval** | Breaking changes (incl. destructive migrations) live in majors |
 | MCP surface | **Admin/diagnostics**, not content-authoring | Deploying is an operator action, never an instructor one |
 
@@ -179,19 +179,45 @@ mechanism without moving any student traffic:
    (default `major` → only major bumps held; set `minor` to also hold minor
    bumps during the 0-series), it writes `pending_approval` and waits for an
    `approve` command. Otherwise it proceeds automatically.
-5. Runs `scripts/snapshot.sh --label predeploy-<ver>` (Postgres dump +
+5. **Stages the release image.** It resolves the commit of the release tag,
+   pulls `:sha-<first 7 characters>`, and requires the image's
+   `org.opencontainers.image.revision` label to equal that commit. It then tags
+   the image `:latest` on the host, removes the `:sha-` tag again (the swap
+   prunes only untagged images, so a tag per release would fill the disk), and
+   deploys it **by digest**. If the image is not published yet, the state is
+   `waiting_for_image`: no snapshot, no swap, and a new check every poll. After
+   two hours of waiting the state becomes `stuck`.
+
+   This replaced deploying `:latest`, which failed twice over. The release is
+   published about 30 minutes before its own image build finishes, so the
+   first swaps of every release ran the *previous* version, reported success
+   with it, and repeated each poll (v0.5.232 was swapped five times, each with
+   a snapshot and a runner restart). And `:latest` is pushed in the order
+   builds *finish*, so it can move backwards: on 2026-09-22 the build of the
+   commit before the release finished after the release's own tag build.
+6. Runs `scripts/snapshot.sh --label predeploy-<ver>` (Postgres dump +
    artifacts) as a safety net. `SNAPSHOT_REQUIRED=1` makes a failed snapshot
    abort the deploy; the default warns and continues.
-6. Calls `bluegreen-deploy.sh deploy --yes` with `CHICKADEE_IMAGE=...:vX.Y.Z`.
-   It **never** forces — if `/data/Public` isn't a symlink the guard refuses and
-   the daemon records an error (fail-safe).
-7. **Post-deploy verification:** watches the public `/health` for
+7. Calls `bluegreen-deploy.sh deploy --yes` with `CHICKADEE_IMAGE` set to the
+   staged digest. It **never** forces — if `/data/Public` isn't a symlink the
+   guard refuses and the daemon records an error (fail-safe).
+8. **Post-deploy verification:** watches the public `/health` for
    `POST_DEPLOY_VERIFY_SECS` (default 30); 3 consecutive failures →
    `bluegreen-deploy.sh rollback --yes`. (A swap that never goes healthy is
    already aborted by the script *before* the nginx flip, so traffic never moved
    — this covers the rarer "healthy at cutover, degrades after" case.)
-8. **Refreshes the Compose runner** onto the new image
-   (`docker compose pull <runner> && docker compose up -d --no-deps <runner>`) so
+
+   A **TLS failure is not a failed release.** TLS terminates at the host nginx,
+   in front of both colors, so when the certificate check fails the probe asks
+   again without verification. If the application answers, the release stays,
+   `history.jsonl` gets a `certificate failed` entry with the curl error, and
+   the state is `certificate_invalid`. Before this, the expired certificate of
+   2026-09-22 rolled back every healthy release for 90 minutes. See "Certificate
+   renewal" in `deploy/README.md` for the fix on the host.
+9. **Refreshes the Compose runner** onto the new image
+   (`docker compose up -d --no-deps <runner>`, with no pull: step 5 already
+   tagged the verified image `:latest` on the host, and a pull would fetch the
+   registry's `:latest`, which can be older) so
    it grades in lockstep with the server instead of drifting on a stale build.
    The runner polls and has no inbound traffic, so a rolling restart is the right
    model — no blue-green needed — and any job interrupted by the brief restart is
@@ -204,7 +230,15 @@ mechanism without moving any student traffic:
    behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default 900s),
    which is set generously so the *expected* transient skew during this very step
    never fires.
-9. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
+10. **Failures back off.** A refused swap, a rollback and a failed required
+    snapshot all count as failures of that version. The next attempt waits
+    `POLL_INTERVAL_SECS`, then twice that, doubling up to one hour. Five in a
+    row make the state `stuck`. A newer release, or an `approve` / `deploy`
+    command for this one, is attempted at once and starts a new count. Rollbacks
+    used to be left out of the count, so a release that rolled back every time
+    was retried every five minutes, with a snapshot each time, and never became
+    `stuck`.
+11. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
 
 ### Configuration (env / `/etc/chickadee-deployer.env`)
 
@@ -244,6 +278,11 @@ chickadee-deployer`.
 
 - `command.json` — operator/MCP → daemon: `{"command":"pause|resume|approve|rollback|deploy","version":"vX.Y.Z"}` (consumed each cycle).
 - `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `updatedAt`.
+  `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
+  `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
+  says when the next one is), `stuck` (five failures in a row, or two hours
+  waiting for an image) and `certificate_invalid` (deployed, but the public
+  certificate failed verification; step 8).
 - `history.jsonl` — append-only deploy log.
 - `deployed_version` — the daemon's source of truth for what is live.
 
@@ -394,7 +433,9 @@ Three guards were added after this incident:
   iptables cannot be inspected at all.
 - `chickadee-deployer.sh` records **what the deploy actually printed** in
   `history.jsonl` instead of a fixed string, and escalates to a `stuck` state
-  after five consecutive failures of the same version.
+  after five consecutive failures of the same version. (Until 2026-09-22 a
+  rollback did not count as a failure, so that escalation could not see the
+  commonest repeated failure; see step 10 of the loop.)
 - The server's `outboundEgressFailing` health rule fires when several outbound
   calls have failed in the window and none has succeeded in it.
 

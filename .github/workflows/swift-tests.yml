@@ -52,6 +52,17 @@ jobs:
         # before anything ran it, because the pattern named its neighbour.
         run: python3 -m unittest discover -s Tools/mutation -p '*_test.py' -v
 
+  # The auto-deploy daemon is bash that runs as root on the production host, so
+  # its tests stub docker, curl and the clock (scripts/test-chickadee-deployer.sh).
+  # They need bash and python3 and nothing else, like the job above.
+  deployer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Auto-deploy daemon behaviour tests
+        run: scripts/test-chickadee-deployer.sh
+
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -643,6 +654,7 @@ jobs:
       - format-lint
       - guard-self-tests
       - mutation-trend-tests
+      - deployer-tests
       - build
       - core-tests
       - api-tests
