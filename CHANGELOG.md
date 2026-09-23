@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.235] - 2026-09-23
+
+### Removed
+
+- **Stray coverage file.** A 9 MB `default.profraw` that a local test run wrote into the working tree was committed to `main` by accident with #1558. It is removed, and `.gitignore` now ignores `*.profraw` so the same file cannot be committed again.
+
+
 ## [0.5.234] - 2026-09-22
 
 ### Added
