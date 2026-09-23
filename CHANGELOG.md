@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.239] - 2026-09-23
+
+### Fixed
+
+- **The mutation verifier runs its suite again.** `Tools/mutation/verify-survivor.py` passed the `{repoRoot}` placeholder from `config.json` through to `swift test` unchanged, so every survivor verified as UNVERIFIABLE. It now substitutes the placeholder the same way `scripts/mutation-run.sh` does.
+- **Triage of the 2026-09-22 mutation sweep (#1574).** New tests cover the survivors that were real gaps: the `--sandbox` flag (the runner choice now comes from one function), Swiss standings tie-breaks, cache eviction order after a restart, the `make` exit code, first-pass success in round robins, trailing lines in a diff, notebook language for zip uploads, the server connection state, and the runner's structured log events. A task-local `RunnerLogCapture` lets tests read those log events. Survivors that no input can observe are recorded in `Tools/mutation/equivalent-mutants.json` with the reason for each.
+
+### Fixed
+
+- **`get_validation_result` reports the primary run when the variant batch cannot be read.**
+  In production the least-privilege `chickadee_mcp` role had no grant on
+  `validation_variants`, because the grants file was applied before that table
+  existed. The variant query then failed every call, and the log showed only
+  `PSQLError`'s generic text. The tool now returns the per-test outcomes, adds a
+  warning that names the reason, and logs the Postgres server message and
+  SQLSTATE. To get the variant batch back, apply
+  `deploy/sql/mcp-least-privilege-role.sql` again on the database host.
+
+
 ## [0.5.238] - 2026-09-23
 
 ### Fixed

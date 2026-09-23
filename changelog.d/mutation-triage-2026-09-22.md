@@ -1,4 +1,0 @@
-### Fixed
-
-- **The mutation verifier runs its suite again.** `Tools/mutation/verify-survivor.py` passed the `{repoRoot}` placeholder from `config.json` through to `swift test` unchanged, so every survivor verified as UNVERIFIABLE. It now substitutes the placeholder the same way `scripts/mutation-run.sh` does.
-- **Triage of the 2026-09-22 mutation sweep (#1574).** New tests cover the survivors that were real gaps: the `--sandbox` flag (the runner choice now comes from one function), Swiss standings tie-breaks, cache eviction order after a restart, the `make` exit code, first-pass success in round robins, trailing lines in a diff, notebook language for zip uploads, the server connection state, and the runner's structured log events. A task-local `RunnerLogCapture` lets tests read those log events. Survivors that no input can observe are recorded in `Tools/mutation/equivalent-mutants.json` with the reason for each.
