@@ -236,6 +236,10 @@ import Testing
             await daemon.recordConnectionLostIfNeeded(stage: .heartbeat, message: "still down", retryInSeconds: 2)
         }
         #expect(capture.events == ["server_connection_lost", "heartbeat_retry_scheduled"])
+        // The event must come from the heartbeat call, not the second poll.
+        let retry = Self.payloads("heartbeat_retry_scheduled", in: capture).first
+        #expect(retry?["failure_stage"] as? String == "heartbeat")
+        #expect(retry?["retry_in_seconds"] as? Int == 2)
     }
 
     /// A download retry names its stage: the submission and the test setup
