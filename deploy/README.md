@@ -235,6 +235,50 @@ on their own. If the API stays unavailable longer than the bounded retry window
 for downloads or result uploads, the active job can still fail cleanly and will
 be visible in the structured runner logs.
 
+### Runner hosts: keep Docker's firewall chains
+
+A runner on a separate host needs the same Docker drop-in as the server host.
+Docker creates its iptables chains (`DOCKER`, `DOCKER-FORWARD` and others) only
+when the daemon starts. If `netfilter-persistent` restarts after that, its
+`iptables-restore` deletes those chains. Then the runner container continues to
+show `Up`, but it cannot open a connection to the server, so it does not poll
+and grades nothing. No message in the runner log tells you about the failure.
+
+This occurs on a schedule. On a host whose firewall is managed by
+configuration management (for example the IST SaltStack build, which writes
+`/etc/iptables/rules.v4` with a `DO NOT EDIT` header), the Salt run restarts
+`netfilter-persistent` each day. In September 2026 this stopped the runner on
+`sparrow` for several days.
+
+Install the drop-in on each runner host. With it, a restart of
+`netfilter-persistent` also restarts Docker, and Docker creates its chains
+again:
+
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo cp deploy/docker-restart-after-netfilter.conf /etc/systemd/system/docker.service.d/restart-after-netfilter.conf
+sudo systemctl daemon-reload
+```
+
+The runner service in the Compose file must have `restart: unless-stopped`,
+so that the container starts again after Docker restarts. Each restart stops
+the runner for approximately 10 seconds, and a job that runs at that time is
+interrupted.
+
+To make sure that the drop-in works, restart the firewall service and then
+look for the chain and for new poll lines in the runner log:
+
+```bash
+sudo systemctl restart netfilter-persistent
+sudo iptables -n -L DOCKER-FORWARD
+sudo docker compose logs --tail 5
+```
+
+If the chain is already gone, `sudo systemctl restart docker` recovers the
+host. The postmortem for the same failure on the server host is in
+[docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
+"The host's iptables state is a deploy dependency".
+
 ### Observability and operations
 
 Backend-only observability is built in:
