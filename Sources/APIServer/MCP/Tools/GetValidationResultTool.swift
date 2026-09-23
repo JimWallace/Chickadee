@@ -164,7 +164,9 @@ struct GetValidationResultTool: ContentTool {
                 tool: Self.name, detail: "Could not read the validation result: \(error)")
         }
 
-        let variants = try await Self.variantBatch(for: assignment, context: context)
+        let (variants, variantWarning) = await Self.variantBatchOrWarning(
+            for: assignment, context: context)
+        let variantWarnings = variantWarning.map { [$0] } ?? []
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -175,7 +177,7 @@ struct GetValidationResultTool: ContentTool {
         else {
             return Self.empty(
                 assignmentPublicID: assignment.publicID, validationStatus: status,
-                variants: variants)
+                warnings: variantWarnings, variants: variants)
         }
 
         let outcomes = collection.outcomes.map {
@@ -194,7 +196,7 @@ struct GetValidationResultTool: ContentTool {
             ranAt: ISO8601DateFormatter().string(from: collection.timestamp),
             buildStatus: collection.buildStatus.rawValue,
             compilerOutput: collection.compilerOutput,
-            warnings: collection.warnings,
+            warnings: collection.warnings + variantWarnings,
             outcomes: outcomes,
             counts: Counts(
                 total: collection.totalTests,
@@ -208,6 +210,28 @@ struct GetValidationResultTool: ContentTool {
             // happens to be running now.
             runnerVersion: collection.runnerVersion,
             variants: variants)
+    }
+
+    /// The variant batch, or no variants plus a warning when it cannot be
+    /// read. The batch is secondary to the primary run's outcomes, so a
+    /// failure here must not hide them. The failure seen in production was
+    /// the least-privilege MCP role missing its grant on
+    /// `validation_variants`: the grants file is applied by hand, and a
+    /// deployment that applied it before the table existed failed every call.
+    private static func variantBatchOrWarning(
+        for assignment: APIAssignment, context: ToolContext
+    ) async -> (variants: [VariantDTO], warning: String?) {
+        do {
+            return (try await variantBatch(for: assignment, context: context), nil)
+        } catch {
+            let reason = DatabaseErrorDetail.describe(error)
+            context.logger.warning("get_validation_result could not read the variant batch: \(reason)")
+            return (
+                [],
+                "The per-student variant batch could not be read, so `variants` is empty; "
+                    + "the outcomes above are complete. Reason: \(reason)"
+            )
+        }
     }
 
     /// The current multi-variant batch for the assignment's setup, each
@@ -263,7 +287,8 @@ struct GetValidationResultTool: ContentTool {
     /// The pending / no-result-yet response: the current status with no outcomes
     /// (mirrors validate_assignment's pending state).
     private static func empty(
-        assignmentPublicID: String, validationStatus: String, variants: [VariantDTO]
+        assignmentPublicID: String, validationStatus: String, warnings: [String],
+        variants: [VariantDTO]
     ) -> Output {
         Output(
             assignmentPublicID: assignmentPublicID,
@@ -271,7 +296,7 @@ struct GetValidationResultTool: ContentTool {
             ranAt: nil,
             buildStatus: nil,
             compilerOutput: nil,
-            warnings: [],
+            warnings: warnings,
             outcomes: [],
             counts: nil,
             runnerID: nil,
