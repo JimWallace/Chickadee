@@ -133,12 +133,23 @@ actor TestSetupCache {
             let scratch = try Self.copyToScratch(
                 source: source.directory, label: testSetupID, scratchRoot: scratchRoot)
             return AcquireResult(directory: scratch, didHit: source.didHit)
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+        } catch  where Self.isEvictionRace(error) {
             let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
             let scratch = try Self.copyToScratch(
                 source: source.directory, label: testSetupID, scratchRoot: scratchRoot)
             return AcquireResult(directory: scratch, didHit: source.didHit)
         }
+    }
+
+    /// Whether a failed scratch copy lost the race with eviction: the entry's
+    /// directory disappeared during the copy. Only that failure is retried,
+    /// because the retry repopulates the entry. Any other failure (a full
+    /// disk, a permission error) would fail the same way again. A separate
+    /// function because no test can make eviction land in the middle of a
+    /// copy, and the mutation sweep of 2026-09-22 (#1574) showed that nothing
+    /// else could see this rule change.
+    nonisolated static func isEvictionRace(_ error: any Error) -> Bool {
+        (error as? CocoaError)?.code == .fileReadNoSuchFile
     }
 
     /// Actor-isolated bookkeeping half of `acquire`: returns the committed

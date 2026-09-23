@@ -76,7 +76,7 @@ struct RunnerProfileDetector {
         // leaves match jobs for one that does.
         var capabilities: Set<RunnerCapability> = Self.buildCapabilities
 
-        if languageVersions.contains(where: { $0.language == AssignmentLanguage.python.capabilityName }) {
+        if Self.probesPythonModules(given: languageVersions) {
             // Python module probes are cheap on a hit and fairly cheap on a
             // miss; run them in parallel too.
             await withTaskGroup(of: (String, Bool).self) { group in
@@ -106,6 +106,14 @@ struct RunnerProfileDetector {
             languageVersions: languageVersions.sorted { $0.language < $1.language },
             capabilities: capabilities.sorted { $0.name < $1.name }
         )
+    }
+
+    /// Whether the Python module probes run: only when the host has Python.
+    /// Separate from `detect()` because every CI host has every interpreter,
+    /// so no end-to-end run can tell this apart from "some language was
+    /// found" — and a Python-only host would then advertise no modules.
+    static func probesPythonModules(given languageVersions: [LanguageVersion]) -> Bool {
+        languageVersions.contains { $0.language == AssignmentLanguage.python.capabilityName }
     }
 
     /// The capabilities every profile this build advertises carries, whatever
