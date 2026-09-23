@@ -275,7 +275,15 @@ sudo docker compose logs --tail 5
 ```
 
 If the chain is already gone, `sudo systemctl restart docker` recovers the
-host. The postmortem for the same failure on the server host is in
+host.
+
+Give each runner host a stable ID, for example `--worker-id Sparrow` or
+`RUNNER_WORKER_ID=Sparrow` in the Compose `.env`. The server health rule
+"Named runner not polling" (`runnerMissing`) then tells you when that runner
+stops polling, even while other runners continue. It uses the
+`ALERT_RUNNER_OFFLINE_SECONDS` threshold and remembers a runner for seven days.
+It ignores the default `runner-<container id>` IDs, because those change each
+time the container is created again. The postmortem for the same failure on the server host is in
 [docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
 "The host's iptables state is a deploy dependency".
 

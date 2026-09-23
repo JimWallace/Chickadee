@@ -44,6 +44,14 @@ func evaluateHealthRules(
         offlineThreshold: configuration.runnerOfflineSeconds,
         now: now
     )
+    results[.runnerMissing] =
+        (try? await loadRunnerLastSeen(on: application.db, now: now)).map {
+            decideRunnersMissing(
+                lastSeenByRunner: $0,
+                offlineSeconds: configuration.runnerOfflineSeconds,
+                now: now
+            )
+        } ?? .ok
     results[.runnerVersionSkew] = await evaluateRunnerVersionSkew(
         on: application,
         configuration: configuration,
