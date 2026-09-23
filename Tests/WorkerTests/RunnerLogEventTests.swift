@@ -107,7 +107,7 @@ import Testing
         let result = try await #require(processExitsWith: .success, observing: [\.standardErrorContent]) {
             writeStructuredRunnerLog(event: "exit_test_probe", fields: ["slot": 1])
         }
-        let stderr = String(decoding: result.standardErrorContent, as: UTF8.self)
+        let stderr = try #require(String(bytes: result.standardErrorContent, encoding: .utf8))
         #expect(stderr.contains(#""event":"exit_test_probe""#))
     }
 

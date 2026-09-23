@@ -83,11 +83,12 @@ func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
     payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
     payload["event"] = event
     guard JSONSerialization.isValidJSONObject(payload),
-        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+        let line = String(bytes: data, encoding: .utf8)
     else {
         writeToStandardError(
             "{\"event\":\"\(event)\",\"timestamp\":\"\(ISO8601DateFormatter().string(from: Date()))\"}\n")
         return
     }
-    writeToStandardError(String(decoding: data, as: UTF8.self) + "\n")
+    writeToStandardError(line + "\n")
 }
