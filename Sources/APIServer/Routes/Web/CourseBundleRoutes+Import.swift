@@ -454,6 +454,9 @@ private func importBundledTestSetups(
             courseID: courseID
         )
         try await setup.save(on: db)
+        // The zip copy above carries the support files, but students and
+        // personalization expressions read them from the shared directory.
+        await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: setupsDir)
 
         // A bundle exported by an older build carries no language declaration,
         // so declare one on the way in — the same thing

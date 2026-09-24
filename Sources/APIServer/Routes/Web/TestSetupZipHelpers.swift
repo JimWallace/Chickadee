@@ -395,6 +395,27 @@ func createRunnerSetupZip(
 
 // MARK: - Support file extraction
 
+/// `extractSupportFilesToSharedDirectory` for a stored setup, with the graded
+/// scripts read from its own manifest.
+///
+/// The copy paths (course-bundle import, `clone_assignment`) and the
+/// `BackfillSharedSupportFiles` migration use it. Those paths used to copy the
+/// zip without this step, so a copied assignment had no shared directory: its
+/// students could not open its data files in the editor, and a personalization
+/// expression that calls a support module failed with a `NameError`.
+func extractSupportFilesToSharedDirectory(
+    for setup: APITestSetup,
+    testSetupsDirectory: String
+) async {
+    guard let setupID = setup.id else { return }
+    let testSuiteScripts = Set((setup.decodedManifest()?.testSuites ?? []).map(\.script))
+    await extractSupportFilesToSharedDirectory(
+        zipPath: setup.zipPath,
+        setupID: setupID,
+        testSuiteScripts: testSuiteScripts,
+        testSetupsDirectory: testSetupsDirectory)
+}
+
 /// Extracts "support" files (zip entries that are neither test suite scripts nor the
 /// canonical notebooks) to `{testSetupsDirectory}/shared/{setupID}/`.
 ///

@@ -233,6 +233,10 @@ enum AssignmentAuthoringService {
             await AssignmentVersionStore.seedInitialVersion(
                 setup: newSetup, origin: AssignmentVersionOrigin.clone,
                 testSetupsDirectory: directories.setups, on: db)
+            // The zip copy above carries the support files, but students and
+            // personalization expressions read them from the shared directory.
+            await extractSupportFilesToSharedDirectory(
+                for: newSetup, testSetupsDirectory: directories.setups)
             return AuthoredAssignment(assignment: assignment, setup: newSetup)
         } catch {
             // Roll back the copied files so a failed clone leaves no orphans.

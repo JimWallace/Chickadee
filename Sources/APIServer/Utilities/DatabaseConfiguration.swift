@@ -509,4 +509,9 @@ func registerMigrations(on app: Application) {
     // Per-assignment advisory passing threshold. Nullable column on
     // `assignments`; nil = no threshold, the pre-existing behaviour.
     app.migrations.add(AddAssignmentPassingThreshold())
+
+    // Data repair, registered LAST for the same reason as
+    // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
+    // copied setup the shared support directory the copy paths never wrote.
+    app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
 }
