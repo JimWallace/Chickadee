@@ -9,6 +9,9 @@
 //     backfill seeded roles from the then-global user role; a fresh table has
 //     no rows to seed, so only the column carries forward)
 //
+// The third round (#1252) folded in:
+//   - AddEnrollmentSlipDaysAdjustment    — slip_days_adjustment
+//
 // Existing deploys have this migration already marked applied and never re-run
 // it; the folded Add* structs were deleted outright (Fluent ignores
 // `_fluent_migrations` rows whose names are no longer registered).
@@ -45,6 +48,9 @@ struct CreateCourseEnrollments: ChickadeeMigration {
             // Folded from AddEnrollmentBrightSpaceSection: the LEARN group name
             // in the course's section category. nil until the sweep resolves it.
             .field("brightspace_section", .string)
+            // Folded from AddEnrollmentSlipDaysAdjustment (#1228): staff hand one
+            // student extra slip days, or take some back. nil reads as 0.
+            .field("slip_days_adjustment", .int)
             // One enrollment per (user, course) pair.
             .unique(on: "user_id", "course_id")
             .create()

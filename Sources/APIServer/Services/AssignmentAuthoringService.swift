@@ -217,15 +217,13 @@ enum AssignmentAuthoringService {
                 on: db)
             copiedSolutionPath = clonedSolution?.zipPath
             let assignment = try await createAssignmentWithUniquePublicID(
-                on: db,
-                testSetupID: newSetupID,
-                title: newTitle,
-                dueAt: nil,
-                visibility: .closed,
-                sortOrder: nil,
-                validationStatus: nil,
-                validationSubmissionID: clonedSolution?.id,
-                courseID: targetCourseID)
+                NewAssignmentFields(
+                    testSetupID: newSetupID,
+                    title: newTitle,
+                    courseID: targetCourseID,
+                    visibility: .closed,
+                    validationSubmissionID: clonedSolution?.id),
+                on: db)
             // Seed the clone's own v1. It inherits no history — the copy lands
             // in a NEW setup id, which is exactly the "only the most recent
             // version travels" semantic a new term wants — so this is what
@@ -328,15 +326,9 @@ enum AssignmentAuthoringService {
             try await writeAssignmentNotebook(
                 setup: setup, notebookData: notebookData, setupsDirectory: setupsDirectory, on: db)
             let assignment = try await createAssignmentWithUniquePublicID(
-                on: db,
-                testSetupID: setupID,
-                title: title,
-                dueAt: nil,
-                visibility: .closed,
-                sortOrder: nil,
-                validationStatus: nil,
-                validationSubmissionID: nil,
-                courseID: courseID)
+                NewAssignmentFields(
+                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed),
+                on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,
                 testSetupsDirectory: setupsDirectory, on: db)

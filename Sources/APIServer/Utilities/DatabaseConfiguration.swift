@@ -333,13 +333,12 @@ func registerMigrations(on app: Application) {
     //     "column must exist before a later migration full-queries the
     //     model" boot-order hazard class (#1077) — columns no longer
     //     arrive after their table does.
+    //   - the third round (#1252): the two slip-day migrations
+    //     (`AddCourseSlipDaySettings`, `AddEnrollmentSlipDaysAdjustment`).
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
-    // Deliberately left out of the second consolidation round (#1228 columns
-    // only days old at v0.4.669) — fold in the next consolidation round.
-    app.migrations.add(AddCourseSlipDaySettings())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -400,10 +399,6 @@ func registerMigrations(on app: Application) {
     // Audit-followup indexes (June 2026): request_metrics(finished_at) and
     // other uncovered hot-path filters. Index-only, runs last.
     app.migrations.add(CreateAuditFollowupIndexes())
-
-    // Per-student slip-day budget adjustment (#1228, only days old at
-    // v0.4.669) — fold in the next consolidation round.
-    app.migrations.add(AddEnrollmentSlipDaysAdjustment())
 
     // Collapse the deployment-global role to user|admin (#417 Slice G2):
     // rewrite every legacy student/instructor row to `user`. A pure data
