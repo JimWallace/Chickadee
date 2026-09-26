@@ -256,29 +256,22 @@ struct ResultRoutes: RouteCollection {
     }
 }
 
-private func decodeWorkerReport(
+/// Decodes a runner's result body: the wrapped `WorkerExecutionReport` every
+/// current runner sends, or a legacy bare `TestOutcomeCollection`.
+///
+/// A body with a top-level `collection` key is the wrapped form and is decoded
+/// as a whole, so a malformed report fails with its own error rather than one
+/// about the legacy shape. It must be decoded as a whole: an earlier version
+/// rebuilt the report from `collection` and `diagnostics` alone and silently
+/// dropped `matches`, so no round-robin match row ever completed over HTTP.
+func decodeWorkerReport(
     from data: Data,
     using decoder: JSONDecoder
 ) throws -> WorkerExecutionReport {
     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let collectionObject = json["collection"]
+        json["collection"] != nil
     {
-        let collectionData = try JSONSerialization.data(withJSONObject: collectionObject)
-        let collection = try decoder.decode(TestOutcomeCollection.self, from: collectionData)
-
-        let diagnostics: WorkerExecutionDiagnostics?
-        if let diagnosticsObject = json["diagnostics"], !(diagnosticsObject is NSNull) {
-            let diagnosticsData = try JSONSerialization.data(withJSONObject: diagnosticsObject)
-            diagnostics = try decoder.decode(WorkerExecutionDiagnostics.self, from: diagnosticsData)
-        } else {
-            diagnostics = nil
-        }
-
-        return WorkerExecutionReport(collection: collection, diagnostics: diagnostics)
-    }
-
-    if let report = try? decoder.decode(WorkerExecutionReport.self, from: data) {
-        return report
+        return try decoder.decode(WorkerExecutionReport.self, from: data)
     }
 
     let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
