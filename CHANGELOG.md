@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.244] - 2026-09-26
+
+### Removed
+
+- **Legacy bare result body on `POST /api/v1/worker/results`.** The server now accepts only the wrapped `WorkerExecutionReport` and refuses a bare `TestOutcomeCollection` with 422. Every runner since 0.4.x sends the wrapped form, and the deployment runner floor (`0.5.0`) keeps older runners from claiming jobs, so no live runner is affected (#1249).
+
+
 ## [0.5.243] - 2026-09-26
 
 ### Fixed
