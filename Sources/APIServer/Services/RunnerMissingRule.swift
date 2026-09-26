@@ -1,5 +1,6 @@
 import Fluent
 import Foundation
+import Logging
 import SQLKit
 
 // The runner-missing rule: one named runner stopped polling.
@@ -50,14 +51,47 @@ func decideRunnersMissing(
         "\(runnerID) for \(formatQuietDuration(now.timeIntervalSince(lastSeen)))"
     }
     let summary = "Runners not polling: \(described.joined(separator: ", "))"
+    // The absolute time, beside the relative one in the summary: a quiet time
+    // that grows by exactly the cooldown on every page means the sender reads a
+    // FIXED last-seen time, and only the absolute value can be compared against
+    // what the live server's database says.
+    let formatter = ISO8601DateFormatter()
+    let lastSeen = missing.map { runnerID, lastSeen in "\(runnerID) \(formatter.string(from: lastSeen))" }
     return RuleEvaluation(
         isFiring: true,
         summary: summary,
         details: [
             "missing_runners": missing.map(\.key).joined(separator: ", "),
+            "last_seen": lastSeen.joined(separator: ", "),
             "runner_offline_threshold_seconds": String(Int(offlineSeconds)),
         ]
     )
+}
+
+/// The rule as the sweep runs it. A failed read stays green, but it is logged:
+/// `try?` alone made "the query failed" and "every runner polled" the same
+/// silent answer. The loader is a parameter so a test can make it throw.
+func evaluateRunnerMissing(
+    loadLastSeen: () async throws -> [String: Date],
+    offlineSeconds: TimeInterval,
+    now: Date,
+    logger: Logger
+) async -> RuleEvaluation {
+    do {
+        return decideRunnersMissing(
+            lastSeenByRunner: try await loadLastSeen(),
+            offlineSeconds: offlineSeconds,
+            now: now
+        )
+    } catch {
+        logger.warning(
+            "health_rule_evaluation_failed",
+            metadata: [
+                "rule": .string(HealthRule.runnerMissing.rawValue),
+                "error": .string(String(describing: error)),
+            ])
+        return .ok
+    }
 }
 
 /// "45m", "3h 20m", "5d 13h": short enough for an alert summary line.

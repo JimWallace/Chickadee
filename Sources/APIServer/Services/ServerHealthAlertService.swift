@@ -44,14 +44,12 @@ func evaluateHealthRules(
         offlineThreshold: configuration.runnerOfflineSeconds,
         now: now
     )
-    results[.runnerMissing] =
-        (try? await loadRunnerLastSeen(on: application.db, now: now)).map {
-            decideRunnersMissing(
-                lastSeenByRunner: $0,
-                offlineSeconds: configuration.runnerOfflineSeconds,
-                now: now
-            )
-        } ?? .ok
+    results[.runnerMissing] = await evaluateRunnerMissing(
+        loadLastSeen: { try await loadRunnerLastSeen(on: application.db, now: now) },
+        offlineSeconds: configuration.runnerOfflineSeconds,
+        now: now,
+        logger: application.logger
+    )
     results[.runnerVersionSkew] = await evaluateRunnerVersionSkew(
         on: application,
         configuration: configuration,
@@ -764,7 +762,8 @@ actor ServerHealthAlertMonitor {
             ? "RESOLVED: \(rule.humanReadable)"
             : evaluation.summary
         let serverURL = application.securityConfiguration.publicBaseURL?.absoluteString ?? ""
-        var details = evaluation.details
+        let sender = AlertSender.current(startedAt: application.serverStartedAt)
+        var details = evaluation.details.merging(sender.details) { rule, _ in rule }
         details["rule_human"] = rule.humanReadable
         return AlertMessage(
             rule: rule.rawValue,
@@ -774,7 +773,7 @@ actor ServerHealthAlertMonitor {
             summary: summary,
             details: details,
             serverURL: serverURL,
-            text: "[Chickadee] \(summary)"
+            text: sender.text(summary: summary)
         )
     }
 }
