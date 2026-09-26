@@ -9,7 +9,6 @@
 
 import Core
 import Foundation
-import SQLKit
 import Testing
 import VaporTesting
 
@@ -62,16 +61,25 @@ import VaporTesting
 
     // MARK: - A failed read
 
-    @Test func aFailedSnapshotReadStaysGreen() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let sql = try #require(app.db as? any SQLDatabase)
-            try await sql.raw("DROP TABLE runner_snapshots").run()
+    private struct SnapshotReadFailed: Error {}
 
-            let results = await evaluateHealthRules(on: app, configuration: .default, now: startedAt)
+    @Test func aFailedSnapshotReadStaysGreen() async {
+        let evaluation = await evaluateRunnerMissing(
+            loadLastSeen: { throw SnapshotReadFailed() },
+            offlineSeconds: 300,
+            now: startedAt,
+            logger: Logger(label: "AlertSenderTests")
+        )
+        #expect(!evaluation.isFiring)
+    }
 
-            let evaluation = try #require(results[.runnerMissing])
-            #expect(!evaluation.isFiring)
-        }
+    @Test func aSuccessfulReadIsDecidedAsBefore() async {
+        let evaluation = await evaluateRunnerMissing(
+            loadLastSeen: { ["Sparrow": startedAt.addingTimeInterval(-3600)] },
+            offlineSeconds: 300,
+            now: startedAt,
+            logger: Logger(label: "AlertSenderTests")
+        )
+        #expect(evaluation.summary == "Runners not polling: Sparrow for 1h 0m")
     }
 }

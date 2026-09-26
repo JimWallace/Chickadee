@@ -1,5 +1,6 @@
 import Fluent
 import Foundation
+import Logging
 import SQLKit
 
 // The runner-missing rule: one named runner stopped polling.
@@ -65,6 +66,32 @@ func decideRunnersMissing(
             "runner_offline_threshold_seconds": String(Int(offlineSeconds)),
         ]
     )
+}
+
+/// The rule as the sweep runs it. A failed read stays green, but it is logged:
+/// `try?` alone made "the query failed" and "every runner polled" the same
+/// silent answer. The loader is a parameter so a test can make it throw.
+func evaluateRunnerMissing(
+    loadLastSeen: () async throws -> [String: Date],
+    offlineSeconds: TimeInterval,
+    now: Date,
+    logger: Logger
+) async -> RuleEvaluation {
+    do {
+        return decideRunnersMissing(
+            lastSeenByRunner: try await loadLastSeen(),
+            offlineSeconds: offlineSeconds,
+            now: now
+        )
+    } catch {
+        logger.warning(
+            "health_rule_evaluation_failed",
+            metadata: [
+                "rule": .string(HealthRule.runnerMissing.rawValue),
+                "error": .string(String(describing: error)),
+            ])
+        return .ok
+    }
 }
 
 /// "45m", "3h 20m", "5d 13h": short enough for an alert summary line.

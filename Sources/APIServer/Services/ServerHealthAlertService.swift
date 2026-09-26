@@ -44,22 +44,12 @@ func evaluateHealthRules(
         offlineThreshold: configuration.runnerOfflineSeconds,
         now: now
     )
-    // A failed read stays green, but it is logged: `try?` alone made "the
-    // query failed" and "every runner polled" the same silent answer.
-    do {
-        results[.runnerMissing] = decideRunnersMissing(
-            lastSeenByRunner: try await loadRunnerLastSeen(on: application.db, now: now),
-            offlineSeconds: configuration.runnerOfflineSeconds,
-            now: now
-        )
-    } catch {
-        application.logger.warning(
-            "health_rule_evaluation_failed",
-            metadata: [
-                "rule": .string(HealthRule.runnerMissing.rawValue),
-                "error": .string(String(describing: error)),
-            ])
-    }
+    results[.runnerMissing] = await evaluateRunnerMissing(
+        loadLastSeen: { try await loadRunnerLastSeen(on: application.db, now: now) },
+        offlineSeconds: configuration.runnerOfflineSeconds,
+        now: now,
+        logger: application.logger
+    )
     results[.runnerVersionSkew] = await evaluateRunnerVersionSkew(
         on: application,
         configuration: configuration,
