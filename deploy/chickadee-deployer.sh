@@ -288,7 +288,7 @@ verify_post_deploy() {
 #
 # So the release image is pulled by its immutable :sha-<commit> tag, and its
 # revision label must name the release commit. It is then tagged :latest on the
-# host (so the Compose runner and the fallback server use it too) and deployed
+# host (so the Compose runner uses it too) and deployed
 # by digest. The :sha- tag is removed again, because bluegreen-deploy.sh prunes
 # only untagged images and a tag per release would fill the disk.
 #
@@ -376,8 +376,8 @@ clear_failures() {
 # The runner has no inbound traffic — it polls — so it needs a rolling restart,
 # not a blue-green cutover, and it should stay in lockstep with the server (they
 # share the Job / TestProperties / result schemas). We recreate only the runner
-# on the image the swap just deployed (--no-deps leaves the fallback server + db
-# alone). A job interrupted by the brief restart is re-queued by the
+# on the image the swap just deployed (--no-deps leaves db, and any legacy
+# Compose server, alone; bluegreen-deploy.sh retires the latter). A job interrupted by the brief restart is re-queued by the
 # server's StuckSubmissionReaperMonitor, and the fresh runner reconnects within a
 # poll interval.
 #

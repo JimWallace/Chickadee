@@ -456,13 +456,56 @@ This is worth checking during any deploy-path investigation: the script that ran
 may not be the script in this repository. The Sept 2026 investigation lost time
 to exactly that, chasing a shell-quoting bug that had already been fixed here.
 
+## The legacy Compose server kept running, and paged Slack
+
+Until September 2026 `bluegreen-deploy.sh` never stopped the Compose `server`
+on `:8080`. The first cutover moved traffic from it to a colour and "left it
+running as a fallback", and nothing ever stopped it after that. That container
+is a complete server:
+
+- it runs its own health-alert sweep against the same webhook;
+- the local runner can reach it, because the runner polls `http://server:8080`
+  and the Compose service name `server` resolves to it;
+- nginx sends it no traffic, so `/admin`, `/admin/alerts` and the admin MCP
+  never show it.
+
+It stayed quiet for as long as every runner rule read in-memory state, which a
+server forgets after an hour. The `runnerMissing` rule (#1580) reads the stored
+`runner_snapshots` history instead, and from then on production paged "Runners
+not polling: Sparrow for 9h 29m" every 30 minutes, while the live server saw
+Sparrow poll every 30 seconds. The quiet time grew by exactly the 30-minute
+cooldown on each page, which is the signature of a sender that reads a fixed
+last-seen time.
+
+Three changes came out of it:
+
+- **The legacy server is retired.** It stays up through the first cutover,
+  where it is the rollback target, and the next cutover stops it
+  (`chickadee_legacy_server_to_retire` in `scripts/lib/deployment-target.sh`).
+- **A stop is checked.** `docker stop ... || true` reported success whatever
+  happened. The script now reads the container state after the stop, uses
+  `docker kill` if it is still running, and prints a warning that names the
+  container if even that fails.
+- **Every alert says who sent it.** The Slack line ends with the sender's
+  container hostname and version, and `details` carries `server_host`,
+  `server_version` and `server_started_at`. `runnerMissing` also reports each
+  runner's absolute `last_seen` time, which can be compared with the database.
+
+To check a host by hand, list every server container. Only one colour must be
+running:
+
+```
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+```
+
 ## Blue-green removed the Compose `server` service, and four scripts did not notice
 
 Blue-green does not run the server through Compose. `bluegreen-deploy.sh` starts
 it with a plain `docker run` under a colour name (`chickadee-server-blue` /
 `-green`) on `127.0.0.1:8081` / `:8082`, and flips an nginx upstream between
-them. The Compose stack keeps `db` and `runner`; it has no `server` container at
-all.
+them. The Compose stack keeps `db` and `runner`, and should have no `server`
+container. A host that ran Compose before it adopted blue-green can still have
+one, though: see the next section.
 
 Every script that asked Compose for the server therefore got nothing back, and
 **none of them treated that as an error** — each had a fallback that looked
