@@ -220,9 +220,12 @@ func evaluateAndClaimCandidate(
         // knows what language the assignment is in and the runner already
         // advertises what it has, so a runner that cannot grade this
         // assignment leaves it for one that can instead of failing it.
-        let versionResult = RunnerVersionGate.evaluate(
-            runnerVersion: body.runnerVersion,
-            minimumRunnerVersion: manifest.minimumRunnerVersion
+        let versionResult = RunnerVersionGate.combine(
+            RunnerVersionGate.evaluateDeploymentFloor(runnerVersion: body.runnerVersion),
+            RunnerVersionGate.evaluate(
+                runnerVersion: body.runnerVersion,
+                minimumRunnerVersion: manifest.minimumRunnerVersion
+            )
         )
         let languageResult = RunnerLanguageGate.evaluate(
             runnerProfile: runnerProfile,
