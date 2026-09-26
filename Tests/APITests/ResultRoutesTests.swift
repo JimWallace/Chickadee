@@ -44,10 +44,7 @@ import VaporTesting
     }
 
     private func bodyData(for collection: TestOutcomeCollection) throws -> ByteBuffer {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(collection)
-        return ByteBuffer(data: data)
+        try bodyData(for: WorkerExecutionReport(collection: collection, diagnostics: nil))
     }
 
     private func bodyData(for report: WorkerExecutionReport) throws -> ByteBuffer {
@@ -233,6 +230,35 @@ import VaporTesting
                     #expect(res.status == .unprocessableEntity)
                 })
 
+        }
+    }
+
+    /// The legacy bare-collection body is refused now that the deployment
+    /// runner floor retired it (#1249).
+    @Test func reportResultsRejectsLegacyBareCollection() async throws {
+        try await withApp(app) { _ in
+            let collection = makeCollection(submissionID: "sub_bare")
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let body = ByteBuffer(data: try encoder.encode(collection))
+
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unprocessableEntity)
+                })
+
+            let result = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == "sub_bare")
+                .first()
+            #expect(result == nil)
         }
     }
 

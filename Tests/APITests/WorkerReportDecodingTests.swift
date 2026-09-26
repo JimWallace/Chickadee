@@ -3,7 +3,8 @@
 // The body of `POST /api/v1/worker/results`, decoded as the route decodes it.
 // Pinned here: a wrapped report keeps every field the runner sent — above all
 // `matches`, which an earlier decoder dropped so that no round-robin match row
-// completed over HTTP — and a legacy bare collection is still accepted.
+// completed over HTTP — and a legacy bare collection is refused, since the
+// deployment runner floor retired it (#1249).
 
 import Foundation
 import Testing
@@ -79,11 +80,11 @@ import Testing
         #expect(received.collection.submissionID == "sub_decode")
     }
 
-    @Test func aLegacyBareCollectionIsStillAccepted() throws {
-        let received = try decode(try encode(collection))
-        #expect(received.collection.submissionID == "sub_decode")
-        #expect(received.diagnostics == nil)
-        #expect(received.matches == nil)
+    @Test func aLegacyBareCollectionIsRefused() throws {
+        let body = try encode(collection)
+        #expect(throws: DecodingError.self) {
+            try decode(body)
+        }
     }
 
     @Test func aMalformedWrappedReportFailsToDecode() {
