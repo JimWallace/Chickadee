@@ -260,7 +260,8 @@ import VaporTesting
             runnerVersion: "runner-tests/1.0", timestamp: Date())
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        let body = try ByteBuffer(data: encoder.encode(collection))
+        let body = try ByteBuffer(
+            data: encoder.encode(WorkerExecutionReport(collection: collection, diagnostics: nil)))
         let path = "/api/v1/worker/results"
         try await app.asyncTest(
             .POST, path,

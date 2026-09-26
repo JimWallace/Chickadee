@@ -203,6 +203,11 @@ a job is the higher of the floor and the manifest's `minimumRunnerVersion`.
   the fallback in the same PR. The runner-version-skew alert shows a runner that
   has not upgraded.
 
+The first shim retired this way is the legacy bare `TestOutcomeCollection` body
+on `POST /api/v1/worker/results`. Every runner since 0.4.x sends the wrapped
+`WorkerExecutionReport`, which is below the `0.5.0` floor, so the server now
+refuses a bare collection with 422.
+
 ### `minimumRunnerVersion`: for runner behaviour that is not a language
 
 The version gate remains for the case the language gate cannot see — a suite

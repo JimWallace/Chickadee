@@ -256,26 +256,21 @@ struct ResultRoutes: RouteCollection {
     }
 }
 
-/// Decodes a runner's result body: the wrapped `WorkerExecutionReport` every
-/// current runner sends, or a legacy bare `TestOutcomeCollection`.
+/// Decodes a runner's result body: the wrapped `WorkerExecutionReport`.
 ///
-/// A body with a top-level `collection` key is the wrapped form and is decoded
-/// as a whole, so a malformed report fails with its own error rather than one
-/// about the legacy shape. It must be decoded as a whole: an earlier version
-/// rebuilt the report from `collection` and `diagnostics` alone and silently
-/// dropped `matches`, so no round-robin match row ever completed over HTTP.
+/// The report is decoded as a whole: an earlier version rebuilt it from
+/// `collection` and `diagnostics` alone and silently dropped `matches`, so no
+/// round-robin match row ever completed over HTTP.
+///
+/// A legacy bare `TestOutcomeCollection` is refused (a `DecodingError`, which
+/// the route reports as 422). Every runner at or above
+/// `RunnerVersionGate.deploymentMinimumRunnerVersion` sends the wrapped form,
+/// and a runner below that floor never claims a job (#1249).
 func decodeWorkerReport(
     from data: Data,
     using decoder: JSONDecoder
 ) throws -> WorkerExecutionReport {
-    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        json["collection"] != nil
-    {
-        return try decoder.decode(WorkerExecutionReport.self, from: data)
-    }
-
-    let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
-    return WorkerExecutionReport(collection: collection, diagnostics: nil)
+    try decoder.decode(WorkerExecutionReport.self, from: data)
 }
 
 // MARK: - Response
