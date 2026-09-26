@@ -182,6 +182,27 @@ Everything else is checked, and the check catches strictly more than a version
 gate would: a runner that is new enough but whose *host* lacks the interpreter
 never advertises it either, and is refused for the same reason.
 
+### The deployment floor (#1249)
+
+Under every job, whatever its manifest says, the claim also applies
+`RunnerVersionGate.deploymentMinimumRunnerVersion` (currently `0.5.0`). A runner
+that advertises a real semver below it claims nothing. The effective minimum for
+a job is the higher of the floor and the manifest's `minimumRunnerVersion`.
+
+- **It is a constant in the server code, not an environment variable.** The
+  floor records which wire shims the server still carries, so it changes with the
+  code, in a PR.
+- **It fails open on a version it cannot parse.** A manifest minimum fails closed,
+  because an author asked for it on one assignment. The floor applies to every
+  job, and mock and third-party runners advertise strings such as `runner/1.0`;
+  refusing those would stop all grading. It refuses only a version it can prove
+  is too old.
+- **It is the retirement path for wire shims.** To remove a compatibility
+  fallback, raise the floor at or above the version that introduced the new
+  shape, confirm with `list_runners` that no live runner is below it, and delete
+  the fallback in the same PR. The runner-version-skew alert shows a runner that
+  has not upgraded.
+
 ### `minimumRunnerVersion`: for runner behaviour that is not a language
 
 The version gate remains for the case the language gate cannot see — a suite
