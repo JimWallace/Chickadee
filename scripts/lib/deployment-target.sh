@@ -141,6 +141,26 @@ chickadee_running_server_names() {  # $1=compose_cid $2=blue_state $3=green_stat
     return 0
 }
 
+# Decide whether a blue-green cutover retires the legacy compose `server`.
+# Prints the container to stop, or nothing.
+#
+# bluegreen-deploy.sh used to leave that container running forever "as a
+# fallback". It is a whole server: it runs its own health-alert sweep against
+# the same webhook, and the local runner can reach it through the compose
+# service name `server`, while nginx sends it no traffic, so no admin page shows
+# it. In Sept 2026 production paged "Runners not polling" every 30 minutes while
+# the live server saw those runners poll every 30 seconds.
+#
+# It is still the rollback target on the FIRST cutover, when traffic leaves
+# :8080 for a colour, so it is kept then. On every later cutover the previous
+# live server is a colour and the legacy container is nobody's rollback target.
+chickadee_legacy_server_to_retire() {  # $1=compose_cid $2=port that was live before the cutover
+    local compose_cid="$1" previous_port="$2"
+    [ -n "$compose_cid" ] || return 0
+    [ -n "$(chickadee_colour_for_port "$previous_port")" ] || return 0
+    printf '%s\n' "$compose_cid"
+}
+
 # ---------------------------------------------------------------------------
 # Observation collectors (these do call Docker)
 # ---------------------------------------------------------------------------

@@ -50,11 +50,18 @@ func decideRunnersMissing(
         "\(runnerID) for \(formatQuietDuration(now.timeIntervalSince(lastSeen)))"
     }
     let summary = "Runners not polling: \(described.joined(separator: ", "))"
+    // The absolute time, beside the relative one in the summary: a quiet time
+    // that grows by exactly the cooldown on every page means the sender reads a
+    // FIXED last-seen time, and only the absolute value can be compared against
+    // what the live server's database says.
+    let formatter = ISO8601DateFormatter()
+    let lastSeen = missing.map { runnerID, lastSeen in "\(runnerID) \(formatter.string(from: lastSeen))" }
     return RuleEvaluation(
         isFiring: true,
         summary: summary,
         details: [
             "missing_runners": missing.map(\.key).joined(separator: ", "),
+            "last_seen": lastSeen.joined(separator: ", "),
             "runner_offline_threshold_seconds": String(Int(offlineSeconds)),
         ]
     )

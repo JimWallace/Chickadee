@@ -15,12 +15,16 @@
 #     compose, untouched). Their environment is resolved FROM compose
 #     (`docker compose config`), so compose remains the single source of truth
 #     for configuration — no env duplication, no drift.
-#   * The runner reaches the server over the public URL, so it follows the nginx
-#     flip automatically and needs no changes.
+#   * A runner on another host reaches the server over the public URL, so it
+#     follows the nginx flip automatically. The local Compose runner polls
+#     http://server:8080 instead: each color carries the network alias
+#     `server`, and so does a legacy Compose `server` container while it runs.
 #   * "active" = the port the nginx upstream currently points at. On a fresh host
 #     that is 8080 (the legacy compose `server`); the first deploy moves traffic
 #     onto a color, after which colors alternate (8081 <-> 8082). The legacy
-#     compose server is left running as a fallback and is never auto-stopped.
+#     compose server stays up through that first cutover as its rollback
+#     target, and the next cutover stops it (see
+#     chickadee_legacy_server_to_retire in lib/deployment-target.sh).
 #
 # One-time host setup (see docs/zero-downtime-deploy.md) — make nginx route via a
 # rewritable upstream instead of a hard-coded proxy_pass:
@@ -66,7 +70,7 @@ DATA_VOLUME="${CHICKADEE_DATA_VOLUME:-chickadee_chickadee-data}"
 
 BLUE_NAME="chickadee-server-blue";   BLUE_PORT="${CHICKADEE_BLUE_PORT:-8081}"
 GREEN_NAME="chickadee-server-green"; GREEN_PORT="${CHICKADEE_GREEN_PORT:-8082}"
-BOOTSTRAP_PORT=8080   # the legacy compose `server`; fallback, never auto-stopped
+BOOTSTRAP_PORT=8080   # the legacy compose `server`; rollback target of the first cutover only
 
 NGINX_UPSTREAM_FILE="${CHICKADEE_NGINX_UPSTREAM:-/etc/nginx/conf.d/chickadee-active-upstream.conf}"
 UPSTREAM_NAME="chickadee_backend"
@@ -90,6 +94,29 @@ log()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 run()  { if (( DRY_RUN )); then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
+
+# Stop a container and confirm it stopped. `docker stop ... || true` used to
+# report success whatever happened, so a server that did not stop kept running
+# its own alert sweep with nothing to say so. Escalates to `docker kill`, and
+# warns rather than dies: traffic has already moved, and failing the deploy now
+# would make the deployer retry a cutover that succeeded.
+stop_container() {  # $1 = container name or id, $2 = what it is (log text)
+  local name="$1" what="$2" state
+  if (( DRY_RUN )); then printf '  [dry-run] docker stop %s\n' "$name"; return 0; fi
+  docker stop "$name" >/dev/null 2>&1 || true
+  state="$(chickadee_container_state "$name" || true)"
+  if [[ "$state" == "running" || "$state" == "restarting" ]]; then
+    warn "$what $name did not stop (state: $state); killing it."
+    docker kill "$name" >/dev/null 2>&1 || true
+    state="$(chickadee_container_state "$name" || true)"
+  fi
+  if [[ "$state" == "running" || "$state" == "restarting" ]]; then
+    warn "$what $name is STILL RUNNING (state: $state). It is a second server with its own
+     alert sweep. Stop it by hand:  docker stop $name"
+    return 1
+  fi
+  return 0
+}
 
 # Interactive guard against a fat-fingered prod swap: when run from a terminal,
 # require an explicit yes before moving traffic. Skipped by --yes (for the future
@@ -330,13 +357,21 @@ cmd_deploy() {
   log "Draining old color for ${DRAIN_SECS}s before stopping it..."
   (( DRY_RUN )) || sleep "$DRAIN_SECS"
 
-  # Stop only a *managed color*; never the legacy compose server (fallback).
   local old_name; old_name="$(color_name_for_port "$active_port")"
   if [[ -n "$old_name" ]]; then
     log "Stopping old color $old_name (:$active_port). Kept (not removed) for fast rollback."
-    run "docker stop '$old_name' >/dev/null 2>&1 || true"
+    stop_container "$old_name" "Old color" || true
   else
-    log "Previous active was :$active_port (legacy compose server) — left running as fallback."
+    log "Previous active was :$active_port (legacy compose server) — left running as the rollback target."
+  fi
+
+  # The legacy compose server, once it is nobody's rollback target.
+  local legacy_cid legacy
+  legacy_cid="$(docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" ps -q server 2>/dev/null | head -n1 || true)"
+  legacy="$(chickadee_legacy_server_to_retire "$legacy_cid" "$active_port")"
+  if [[ -n "$legacy" ]]; then
+    log "Stopping the legacy compose server ($legacy); the rollback target is $old_name."
+    stop_container "$legacy" "Legacy compose server" || true
   fi
 
   log "Deploy complete. Live on $idle_name (:$idle_port)."

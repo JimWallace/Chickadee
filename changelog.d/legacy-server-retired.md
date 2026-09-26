@@ -1,0 +1,4 @@
+### Fixed
+
+- **Blue-green deploys retire the legacy Compose server.** `bluegreen-deploy.sh` left the Compose `server` on `:8080` running forever as a fallback. It ran its own health-alert sweep, which nothing showed, and after the `runnerMissing` rule (#1580) it paged "Runners not polling" every 30 minutes for runners the live server saw polling. The first cutover keeps it as the rollback target, and the next cutover stops it. A container stop is now checked, with `docker kill` if the stop failed, in place of `|| true`.
+- **Alerts name the process that sent them.** The Slack line ends with the sender's container hostname and version, and `details` carries `server_host`, `server_version` and `server_started_at`. `runnerMissing` also reports each quiet runner's absolute `last_seen` time and logs a failed snapshot read, which `try?` used to hide.
