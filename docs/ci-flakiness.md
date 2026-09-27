@@ -1289,7 +1289,9 @@ fork, `JimWallace/swift-subprocess` at branch `chickadee/abort-lock-fix`:
 upstream 1.0.0 plus one patch, in which the Linux child resets its signals
 with the raw `rt_sigaction` syscall, which takes no lock. It resets the same
 signals as before (1 to 31; glibc's `signal()` refused 32 and ended the
-loop). Return to upstream once a release carries an equivalent fix.
+loop). Return to upstream once a release carries an equivalent fix; the
+upstream report is
+[swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
 `SubprocessSpawnRaceTests` pins it: two threads call `posix_spawn` in a loop
 while the test launches through Subprocess 200 times. On the CI image it hangs
 against unpatched 1.0.0, and on a glibc older than 2.41 it passes either way.

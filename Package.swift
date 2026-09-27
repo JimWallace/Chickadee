@@ -42,7 +42,8 @@ let package = Package(
         // comes from a raw clone3 and reset SIGABRT through glibc, which on
         // glibc 2.41+ blocks forever if another thread was inside posix_spawn
         // at the clone (docs/ci-flakiness.md, Family 6). Return to upstream
-        // once a release carries the fix.
+        // once a release carries the fix:
+        // https://github.com/swiftlang/swift-subprocess/issues/375
         .package(
             url: "https://github.com/JimWallace/swift-subprocess.git",
             revision: "6f7083d5d16613c6183aef5b85075f24e05b6db0"),
