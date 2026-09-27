@@ -10,6 +10,11 @@ func routes(_ app: Application) throws {
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: HealthRoutes())
+    // LTI 1.3 tool endpoints (docs/lti-1-3.md). Public: the platform fetches
+    // the key set with no session. Creating the key provider here, before any
+    // request, keeps two concurrent first requests from each generating a key.
+    _ = app.ltiToolKeyProvider
+    try app.register(collection: LTIRoutes())
     let loginRateLimit = LoginRateLimitMiddleware(
         configuration: app.loginRateLimitConfiguration
     )

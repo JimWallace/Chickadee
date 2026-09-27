@@ -1725,6 +1725,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 ## Reference Material
 
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
+- `docs/lti-1-3.md` — LTI 1.3 tool support, additive to everything above: the compatibility rules (no platform registered = no change; registrations in the database, never env vars; Valence stays the default grade transport), why a launch opens a new window rather than an iframe (an iframe inside a non-isolated LMS page loses cross-origin isolation and silently fails browser grading over to the native worker), the RS256 tool key created on first use, the launch claim rules and role mapping (a TA sub-role wins over the Instructor principal sent beside it), and the five-slice plan
 - `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook: Valence credential handshake (`scripts/brightspace-valence-auth.py`), env wiring, org-unit/grade-item binding, end-to-end testing against `learntest`
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/zero-downtime-deploy.md` — production CI/CD: blue-green swap (`scripts/bluegreen-deploy.sh`), the `chickadee-deployer` auto-deploy daemon (GitHub-release SemVer gate, snapshot, auto-rollback), and the read-only admin-MCP deploy-oversight tools
