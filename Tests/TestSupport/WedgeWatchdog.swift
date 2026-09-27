@@ -269,14 +269,18 @@ public enum WedgeWatchdog {
             by: { (Int($0) ?? 0) < (Int($1) ?? 0) })
         {
             report += "thread table (state D/S = blocked; wchan = kernel wait it is parked in):\n"
+            var syscalls: [(tid: String, syscall: String)] = []
             for tid in tids {
                 let comm = readProcFile("\(taskDir)/\(tid)/comm") ?? "?"
                 let wchan = readProcFile("\(taskDir)/\(tid)/wchan") ?? "?"
                 let stat = readProcFile("\(taskDir)/\(tid)/stat") ?? ""
                 let syscall = readProcFile("\(taskDir)/\(tid)/syscall") ?? "?"
+                syscalls.append((tid, syscall))
                 report += "  tid \(tid) state=\(threadStateCharacter(fromStat: stat)) "
                 report += "wchan=\(wchan) syscall=\(syscall) comm=\(comm)\n"
             }
+            report += pipeHolderReport(threadSyscalls: syscalls)
+            report += childProcessReport()
         } else {
             report += "(/proc/self/task unavailable on this platform — no per-thread table)\n"
         }
