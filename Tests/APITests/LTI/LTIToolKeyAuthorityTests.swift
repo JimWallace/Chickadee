@@ -90,7 +90,8 @@ import Testing
         let token = try await authority.sign(payload)
 
         let jwksJSON = try JSONEncoder().encode(["keys": [await authority.publicJWK()]])
-        let platformKeys = try await JWTKeyCollection().add(jwksJSON: String(decoding: jwksJSON, as: UTF8.self))
+        let jwksString = try #require(String(bytes: jwksJSON, encoding: .utf8))
+        let platformKeys = try await JWTKeyCollection().add(jwksJSON: jwksString)
         #expect(try await platformKeys.verify(token, as: TestPayload.self) == payload)
 
         let header = try #require(token.split(separator: ".").first)
