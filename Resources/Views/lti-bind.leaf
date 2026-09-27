@@ -1,0 +1,29 @@
+#extend("base"):
+#export("title"):
+Link LMS course
+#endexport
+#export("content"):
+<h1>Link LMS course</h1>
+<p class="section-intro">Choose the Chickadee course for <strong>#(contextTitle)</strong>. Launches from this LMS course then go to it, and students are enrolled on their first launch.</p>
+#if(count(courses) == 0):
+<p class="empty">No unlinked Chickadee course is available to you.</p>
+<p class="section-note">Ask an administrator to create the course, or to add you as its instructor. <a href="/">Go to your dashboard</a></p>
+#else:
+<form method="post" action="/lti/bind" class="form-stack">
+    #csrfFormField()
+    <div class="field-stack">
+        <label for="lti-bind-course">Chickadee course</label>
+        <select id="lti-bind-course" class="form-input" name="courseID" required>
+            <option value="" selected disabled>Choose a course</option>
+            #for(course in courses):
+            <option value="#(course.id)">#(course.code) — #(course.name)</option>
+            #endfor
+        </select>
+    </div>
+    <div class="toolbar toolbar--end">
+        <button class="btn btn-primary" type="submit">Link course</button>
+    </div>
+</form>
+#endif
+#endexport
+#endextend

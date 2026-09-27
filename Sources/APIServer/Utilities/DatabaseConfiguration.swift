@@ -509,6 +509,13 @@ func registerMigrations(on app: Application) {
     // an empty table means LTI is off.
     app.migrations.add(CreateLTIPlatforms())
 
+    // LTI 1.3 launch (docs/lti-1-3.md slice 2): logins in flight, subject →
+    // account links, the course binding and the per-platform username trust.
+    // All follow CreateLTIPlatforms, whose table they reference or alter.
+    app.migrations.add(CreateLTILoginStates())
+    app.migrations.add(CreateLTIIdentities())
+    app.migrations.add(AddLTILaunchColumns())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.
