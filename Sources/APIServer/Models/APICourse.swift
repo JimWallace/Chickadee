@@ -98,6 +98,15 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "slip_day_release_reveal_hold")
     var slipDayReleaseRevealHold: Bool?
 
+    /// The LTI platform this course is bound to (docs/lti-1-3.md "Courses").
+    /// Nil = not bound; set together with `ltiContextID`.
+    @OptionalField(key: "lti_platform_id")
+    var ltiPlatformID: UUID?
+
+    /// The platform's `context.id` for the bound LMS course.
+    @OptionalField(key: "lti_context_id")
+    var ltiContextID: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

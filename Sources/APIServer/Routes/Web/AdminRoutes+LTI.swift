@@ -52,6 +52,7 @@ extension AdminRoutes {
                 issuer: valid.issuer, clientID: valid.clientID, deploymentIDs: valid.deploymentIDs,
                 authLoginURL: valid.authLoginURL, accessTokenURL: valid.accessTokenURL,
                 jwksURL: valid.jwksURL, displayName: valid.displayName)
+            platform.trustUsername = valid.trustUsername
             try await platform.save(on: req.db)
             await AuditLogger.record(
                 action: .ltiPlatformRegistered, targetType: .ltiPlatform, targetID: platform.id?.uuidString,
@@ -79,6 +80,7 @@ extension AdminRoutes {
             platform.authLoginURL = valid.authLoginURL
             platform.accessTokenURL = valid.accessTokenURL
             platform.jwksURL = valid.jwksURL
+            platform.trustUsername = valid.trustUsername
             try await platform.save(on: req.db)
             await AuditLogger.record(
                 action: .ltiPlatformUpdated, targetType: .ltiPlatform, targetID: platform.id?.uuidString,

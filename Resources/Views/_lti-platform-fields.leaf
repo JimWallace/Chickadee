@@ -41,3 +41,11 @@
     <input id="#(idPrefix)-jwks" class="form-input" type="url" name="jwksURL"
            value="#(form.jwksURL)" required>
 </div>
+<div class="field-stack">
+    <label class="checkbox-row">
+        <input type="checkbox" name="trustUsername" value="true"
+               aria-describedby="#(idPrefix)-trust-note"#if(form.trustUsername): checked#endif>
+        Trust this platform's username
+    </label>
+    <p class="field-note" id="#(idPrefix)-trust-note">Links a launch to the account named in its <code>username</code> custom parameter.</p>
+</div>

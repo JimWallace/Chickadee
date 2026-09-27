@@ -155,54 +155,83 @@ because they describe the user, not the user in this course.
 
 ## Launch (slice 2)
 
+**Status:** implemented. `LTIRoutes+Launch.swift`, `LTIIdentityResolver`,
+`LTICourseBinding`, `LTIBindRoutes`.
+
 Two routes, both public and outside the CSRF group:
 
-1. `GET|POST /lti/login` — third-party initiated login. The tool checks that
-   `iss` and `client_id` match an enabled registration, stores a `state` and a
-   `nonce`, and redirects to the platform `auth_login_url`.
+1. `GET|POST /lti/login` — third-party initiated login. The tool finds the one
+   enabled registration for `iss` (and `client_id` when sent), stores the hash
+   of a new `state` and a new `nonce` in `lti_login_states` (five minutes),
+   sets the `state` in a cookie, and redirects to the platform
+   `auth_login_url` with `response_mode=form_post`.
 2. `POST /lti/launch` — the platform posts the `id_token` and `state`. The tool:
-   1. consumes the `state` row in one atomic
-      `UPDATE … WHERE consumed = false RETURNING` (the MCP OAuth code pattern);
-   2. verifies the signature against the platform key set, and fetches the key
-      set again once when it sees an unknown `kid`;
-   3. runs `LTILaunchValidator`, and checks the `nonce` against the stored one;
-   4. finds or creates the user, binds the context to a course, maps the role;
-   5. creates a normal session and redirects to the assignment.
+   1. requires the state cookie to equal the posted `state`;
+   2. consumes the `state` row in one atomic
+      `UPDATE … WHERE consumed = false RETURNING` (the MCP OAuth code
+      primitive, `burnConsumable`), then refuses an expired row;
+   3. verifies the signature against the platform key set
+      (`LTIPlatformKeyCache`), and fetches the key set again once when a token
+      does not verify, at most every 30 seconds;
+   4. runs `LTILaunchValidator`, and checks the `nonce` against the stored one;
+   5. finds or creates the user (below), and creates a normal session, with a
+      new session ID, exactly as local and SSO sign-in do;
+   6. sends the user to the bound course (below).
 
-The state is stored in the database, not only in a cookie. A cookie-only state
-fails when the browser blocks third-party cookies during the platform POST.
+The state lives in the database and in a cookie. The database row makes it
+single use. The cookie binds the launch to the browser that started the login,
+so an attacker cannot hand a victim a launch that the attacker completed (login
+CSRF). The cookie is `SameSite=None; Secure` over HTTPS, because the launch is
+a cross-site POST, and it is set on `/lti` only. A browser that blocks it, for
+example inside an LMS iframe, gets a page that says to open the link in a new
+window.
+
+Every refusal is an `LTILaunchFailure`: an `AbortError` that the existing error
+page shows as one sentence. The server log names the rule that failed and never
+the token.
 
 ### Identity
 
-A launched user is `authProvider = "lti:<platform id>"`,
-`externalSubject = sub`. The `sub` value is opaque, so it can not link to an
-existing DUO account alone. To link, the platform sends the username in a custom
-parameter (D2L: `username=$User.username`). The tool reads it only from an
-enabled, admin-registered platform, normalizes it with `normalizedIdentityKey()`,
-and links it to the existing account with the same key. If there is no such
-account, the tool creates one.
+Links live in their own table, `lti_identities` (platform, subject → account),
+unique per (platform, subject). An account keeps its `authProvider`, so one
+person can sign in with DUO and also launch from the LMS. In order:
 
-Account linking from a claim is a way to take over an account if the claim is
-not trustworthy. So the admin UI shows a per-platform switch, "Trust this
-platform's username", which is off by default. When it is off, each launched
-user is a new account.
+1. A known (platform, subject) resolves to its account.
+2. When the platform is trusted for usernames (the per-platform "Trust this
+   platform's username" switch, off by default) and the launch carries a
+   `username` custom parameter (D2L: `username=$User.username`), the launch
+   links to the account with that username. If there is none, it creates one
+   shaped like a pre-SSO stub (`duo-oidc`, no subject), so a later DUO sign-in
+   adopts the same account.
+3. Otherwise the subject gets its own account, `lti-` plus 16 hex digits of
+   SHA-256(platform|subject): stable, and opaque.
+
+A launch never links to an admin or MCP account, and never gives one account a
+second subject on one platform. Either would let an LMS user take over an
+account that the LMS does not own. A `username` value that still starts with
+`$` (the platform did not substitute the variable) counts as absent.
 
 ### Courses
 
-A context binds to one `APICourse` through a new nullable column,
-`lti_context_id`, together with the platform ID. An instructor binds a context
-to a course the first time they launch from it. A student launch from an
-unbound context shows "This course is not linked yet" and does nothing else.
+A context binds to one `APICourse` through two nullable columns,
+`lti_platform_id` and `lti_context_id`. An unbound context binds itself to the
+one unarchived course whose `brightspaceOrgUnitID` equals `context.id`, because
+D2L sends the org unit ID as `context.id` and the LEARN tab already made that
+link. Otherwise:
 
-In D2L, `context.id` is usually the org unit ID, so a course that has
-`brightspaceOrgUnitID` can be bound automatically when the two values match.
+- an instructor launch goes to `/lti/bind`, which lists the unarchived, unbound
+  courses the instructor teaches, and binds the chosen one (audited as
+  `lti.course_bound`);
+- any other launch shows "This LMS course is not linked to a Chickadee course
+  yet" (403).
 
 ### Enrollment
 
-A student launch into a bound course enrolls the student if the course allows
-LTI enrollment (a per-course switch, off by default). Otherwise the student
-must already be on the roster. A launch never lowers an existing role and never
-raises a role above what the launch claims.
+A launch into a bound course enrolls a user who is not enrolled yet, at the
+role that the launch claims. The platform is admin-registered and is the
+authority for its own roster, so no per-course switch gates this. A launch
+never changes an existing enrollment: a TA made an instructor in Chickadee stays
+one, and a student does not become a TA because the LMS says so later.
 
 ## Deep Linking (slice 3)
 
@@ -256,7 +285,7 @@ Before a production registration:
 |---|---|---|
 | 1 | `LTIToolKeyAuthority`, `GET /lti/jwks`, `lti_platforms` table and model, `LTILaunchValidator`, `LTIRoleMapping` | None. The JWKS is empty. |
 | 1b (done) | Admin UI to register a platform, and the tool configuration values to give to the LMS administrator | None. A new admin tab. |
-| 2 | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
+| 2 (done) | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
 | 3 | Deep Linking | None. |
 | 4 | AGS transport | None. Valence stays the default. |
 | 5 | NRPS roster source | None. |

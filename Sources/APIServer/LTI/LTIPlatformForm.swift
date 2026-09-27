@@ -16,6 +16,8 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
     var authLoginURL: String
     var accessTokenURL: String
     var jwksURL: String
+    /// The checkbox: present and true when ticked, absent otherwise.
+    var trustUsername: Bool?
 
     /// A form that passed every rule, trimmed and split.
     struct Validated: Sendable, Equatable {
@@ -26,6 +28,7 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
         let authLoginURL: String
         let accessTokenURL: String
         let jwksURL: String
+        let trustUsername: Bool
     }
 
     static let empty = LTIPlatformForm(
@@ -41,12 +44,13 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
             deploymentIDs: platform.deploymentIDs.joined(separator: "\n"),
             authLoginURL: platform.authLoginURL,
             accessTokenURL: platform.accessTokenURL,
-            jwksURL: platform.jwksURL)
+            jwksURL: platform.jwksURL,
+            trustUsername: platform.trustUsername ?? false)
     }
 
     init(
         displayName: String, issuer: String, clientID: String, deploymentIDs: String,
-        authLoginURL: String, accessTokenURL: String, jwksURL: String
+        authLoginURL: String, accessTokenURL: String, jwksURL: String, trustUsername: Bool? = nil
     ) {
         self.displayName = displayName
         self.issuer = issuer
@@ -55,6 +59,7 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
         self.authLoginURL = authLoginURL
         self.accessTokenURL = accessTokenURL
         self.jwksURL = jwksURL
+        self.trustUsername = trustUsername
     }
 
     func validated() throws(LTIPlatformFormError) -> Validated {
@@ -78,7 +83,8 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
             deploymentIDs: uniqueDeployments,
             authLoginURL: try Self.secureURL(authLoginURL, field: .authLoginURL),
             accessTokenURL: try Self.secureURL(accessTokenURL, field: .accessTokenURL),
-            jwksURL: try Self.secureURL(jwksURL, field: .jwksURL))
+            jwksURL: try Self.secureURL(jwksURL, field: .jwksURL),
+            trustUsername: trustUsername ?? false)
     }
 
     /// An absolute `https` URL. Plain `http` is accepted only for a loopback

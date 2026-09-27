@@ -51,6 +51,12 @@ final class APILTIPlatform: Model, @unchecked Sendable {
     @Field(key: "enabled")
     var enabled: Bool
 
+    /// Whether a launch may link to an existing account by the platform's
+    /// `username` custom parameter (docs/lti-1-3.md "Identity"). Nil or false
+    /// = no: every launched subject gets its own account.
+    @OptionalField(key: "trust_username")
+    var trustUsername: Bool?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

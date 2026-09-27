@@ -1,7 +1,7 @@
 // APIServer/LTI/LTIRoutes.swift
 //
-// Public LTI 1.3 endpoints (docs/lti-1-3.md). Slice 1 mounts only the tool
-// key set; the login and launch routes come with slice 2.
+// Public LTI 1.3 endpoints (docs/lti-1-3.md): the tool key set here, and the
+// login and launch in LTIRoutes+Launch.swift.
 
 import Core
 import Fluent
@@ -11,6 +11,9 @@ struct LTIRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let lti = routes.grouped("lti")
         lti.get("jwks", use: jwks)
+        lti.get("login", use: login)
+        lti.post("login", use: login)
+        lti.post("launch", use: launch)
     }
 
     /// The tool's public key set. Empty until an admin registers an enabled
