@@ -37,7 +37,7 @@ undefined=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   name="$(printf '%s' "$hit" | sed -E 's/.*var\([[:space:]]*(--[A-Za-z0-9_-]+)[[:space:]]*\).*/\1/')"
-  if ! printf '%s\n' "$declared" | grep -qxF -- "$name"; then
+  if ! grep -qxF -- "$name" <<< "$declared"; then
     undefined+="  ${hit}"$'\n'
   fi
 done < <(grep -rnoE 'var\([[:space:]]*--[A-Za-z0-9_-]+[[:space:]]*\)' "${usage_files[@]}" || true)

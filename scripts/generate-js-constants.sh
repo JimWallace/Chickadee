@@ -72,7 +72,7 @@ for lang in $langs; do
   fi
 
   # The sniff lowercases before comparing, so an uppercase alias could never match.
-  if printf '%s\n' "$names" | grep -q '[A-Z]'; then
+  if grep -q '[A-Z]' <<< "$names"; then
     echo "generate-js-constants: ${lang}KernelNames entries must be lowercase" >&2
     rm -f "$work"; exit 1
   fi
@@ -119,7 +119,7 @@ if [ -z "$extensions" ]; then
   echo "generate-js-constants: found no scriptExtensions declarations in $descriptor_src" >&2
   rm -f "$work"; exit 1
 fi
-if printf '%s\n' "$extensions" | grep -q '[A-Z]'; then
+if grep -q '[A-Z]' <<< "$extensions"; then
   echo "generate-js-constants: scriptExtensions entries must be lowercase" >&2
   rm -f "$work"; exit 1
 fi
