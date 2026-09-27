@@ -1,0 +1,39 @@
+<!-- The fields of one LTI platform registration, shared by the add form and
+     each edit form on the admin LTI page.  It renders under a sub-context
+     (idPrefix plus form), so every copy on the page has unique ids. -->
+<div class="field-stack">
+    <label for="#(idPrefix)-name">Name</label>
+    <input id="#(idPrefix)-name" class="form-input" type="text" name="displayName"
+           value="#(form.displayName)" required placeholder="UW LEARN">
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-issuer">Issuer</label>
+    <input id="#(idPrefix)-issuer" class="form-input" type="url" name="issuer"
+           value="#(form.issuer)" required placeholder="https://learn.example.edu">
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-client">Client ID</label>
+    <input id="#(idPrefix)-client" class="form-input" type="text" name="clientID"
+           value="#(form.clientID)" required>
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-deployments">Deployment IDs</label>
+    <textarea id="#(idPrefix)-deployments" class="form-input textarea-mono" name="deploymentIDs"
+              rows="3" required>#(form.deploymentIDs)</textarea>
+    <p class="field-note">One per line.</p>
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-auth">OIDC authorization URL</label>
+    <input id="#(idPrefix)-auth" class="form-input" type="url" name="authLoginURL"
+           value="#(form.authLoginURL)" required>
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-token">Access token URL</label>
+    <input id="#(idPrefix)-token" class="form-input" type="url" name="accessTokenURL"
+           value="#(form.accessTokenURL)" required>
+</div>
+<div class="field-stack">
+    <label for="#(idPrefix)-jwks">Key set URL</label>
+    <input id="#(idPrefix)-jwks" class="form-input" type="url" name="jwksURL"
+           value="#(form.jwksURL)" required>
+</div>

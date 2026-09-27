@@ -1,0 +1,111 @@
+#extend("base"):
+#export("title"):
+LTI
+#endexport
+#export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
+#extend("_admin-tabs")
+<section class="page-section">
+    <h2>Tool configuration</h2>
+    <p>Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool.</p>
+    #if(!baseURLConfigured):
+    <div class="flash flash-warning" role="status">
+        <code>PUBLIC_BASE_URL</code> is not set, so these are paths, not URLs.
+    </div>
+    #endif
+    <dl class="detail-grid section-gap">
+        <dt>OIDC login URL</dt>
+        <dd><code>#(loginURL)</code></dd>
+        <dt>Redirect URL</dt>
+        <dd><code>#(launchURL)</code></dd>
+        <dt>Target link URL</dt>
+        <dd><code>#(launchURL)</code></dd>
+        <dt>Key set URL</dt>
+        <dd><code>#(jwksURL)</code></dd>
+        <dt>Signing algorithm</dt>
+        <dd><code>RS256</code></dd>
+    </dl>
+    <p class="field-note">Set the link to open in a new window.</p>
+</section>
+
+<section class="page-section">
+    <h2>Platforms</h2>
+    <div class="table-scroll"><table class="results-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Issuer</th>
+                <th>Client ID</th>
+                <th>Deployments</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(platform in platforms):
+            <tr>
+                <td>#(platform.displayName)</td>
+                <td><code>#(platform.issuer)</code></td>
+                <td><code>#(platform.clientID)</code></td>
+                <td>#(platform.deploymentCount)</td>
+                <td>
+                    #if(platform.enabled):
+                        <span class="tier tier-open">enabled</span>
+                    #else:
+                        <span class="tier tier-closed">disabled</span>
+                    #endif
+                </td>
+                <td>
+                    <div class="toolbar">
+                        <form method="post" action="/admin/lti/platforms/#(platform.id)/enabled" class="inline-form">
+                            #csrfFormField()
+                            #if(platform.enabled):
+                            <input type="hidden" name="enabled" value="false">
+                            <button class="btn action-btn" type="submit">Disable</button>
+                            #else:
+                            <input type="hidden" name="enabled" value="true">
+                            <button class="btn action-btn" type="submit">Enable</button>
+                            #endif
+                        </form>
+                        <form method="post" action="/admin/lti/platforms/#(platform.id)/delete" class="inline-form">
+                            #csrfFormField()
+                            <button class="btn action-btn action-danger" type="submit"
+                                    data-confirm="Delete the platform #(platform.displayName)? Launches from it stop immediately, and the registration cannot be restored.">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            <tr class="test-output-row">
+                <td colspan="6">
+                    <details class="test-output-details"#if(platform.editOpen): open#endif>
+                        <summary>Edit</summary>
+                        <form method="post" action="/admin/lti/platforms/#(platform.id)" class="form-stack">
+                            #csrfFormField()
+                            #extend("_lti-platform-fields", platform.fields)
+                            <div class="toolbar toolbar--end">
+                                <button class="btn btn-primary" type="submit">Save platform</button>
+                            </div>
+                        </form>
+                    </details>
+                </td>
+            </tr>
+        #endfor
+        #if(count(platforms) == 0):
+            <tr><td colspan="6" class="text-muted">No platforms registered. LTI launches are off.</td></tr>
+        #endif
+        </tbody>
+    </table></div>
+
+    <details class="test-output-details"#if(newPlatformOpen): open#endif>
+        <summary>Register a platform</summary>
+        <form method="post" action="/admin/lti/platforms" class="form-stack">
+            #csrfFormField()
+            #extend("_lti-platform-fields", newFields)
+            <div class="toolbar toolbar--end">
+                <button class="btn btn-primary" type="submit">Register platform</button>
+            </div>
+        </form>
+    </details>
+</section>
+#endexport
+#endextend
