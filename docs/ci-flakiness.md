@@ -1206,7 +1206,7 @@ inside the scope, which concurrent activity can only raise).
 
 ---
 
-## Family 6 — `worker-tests` cancelled at its ceiling after the move to resolute (Foundation `Process` exit-signal leak) — ROOT-CAUSED & FIXED
+## Family 6 — `worker-tests` cancelled at its ceiling after the move to resolute (Foundation `Process` exit-signal leak, then the glibc abort lock in a swift-subprocess child) — ROOT-CAUSED & FIXED
 
 **Symptom.** `worker-tests` runs to its 20-minute `timeout-minutes` and reads
 `cancelled`; `swift-tests-gate` fails. A handful of `WorkerDaemonTests`
@@ -1258,6 +1258,49 @@ was cancelled. It now also writes its thread table to
 is blocked in, and the `worker-tests` lane prints that file in a step that
 runs on failure or cancel. The test step has its own 15-minute limit, so a
 stall fails the step with five minutes left for that print.
+
+**The second cause: glibc's abort lock in a swift-subprocess child.** The fix
+above was necessary and not sufficient. With it in place, `WorkerTests` × 30
+still stalled on all three of three `repeat-test.yml` runs, and this time the
+dump arrived. It showed one thread blocked in swift-subprocess's 4-byte
+exec-handshake read, and the only other holder of that pipe was a child whose
+command line was still the test runner's own: a child that never reached
+`exec`. Its one thread was in `futex_wait` on an address in libc's `.bss`.
+Matching the dump's user-space program counters against the Ubuntu glibc
+builds identified the library as 2.43-2ubuntu2.4, and its debug symbols named
+the address: offset 8 of `lock` in `stdlib/abort.c`, a `pthread_rwlock_t`.
+
+Since glibc 2.41, `sigaction(SIGABRT)` takes that lock for writing, and
+`posix_spawn` and `_Fork` take it for reading while they run. `_Fork` resets
+it in its own child. swift-subprocess creates its Linux child with a raw
+`clone3` syscall instead, so no glibc fork handling runs there, and the child
+inherits the lock in whatever state the parent had it. Before `exec`, the
+child resets every signal to its default with `signal()`, and `signal(SIGABRT,
+SIG_DFL)` goes through `sigaction`. If another thread of the parent was inside
+`posix_spawn` at the moment of the `clone3`, the child's copy of the lock has
+a reader that will never release it, and the child waits for it forever. The
+parent then waits forever for the handshake. Swift Testing starts every exit
+test with `posix_spawn`, so any `WorkerTests` exit test running beside a
+Subprocess launch could set it up. A glibc older than 2.41 has no such lock,
+which is why no local machine (2.39) ever showed it.
+
+**The fix for the second cause.** `Package.swift` pins swift-subprocess to a
+fork, `JimWallace/swift-subprocess` at branch `chickadee/abort-lock-fix`:
+upstream 1.0.0 plus one patch, in which the Linux child resets its signals
+with the raw `rt_sigaction` syscall, which takes no lock. It resets the same
+signals as before (1 to 31; glibc's `signal()` refused 32 and ended the
+loop). Return to upstream once a release carries an equivalent fix.
+`SubprocessSpawnRaceTests` pins it: two threads call `posix_spawn` in a loop
+while the test launches through Subprocess 200 times. On the CI image it hangs
+against unpatched 1.0.0, and on a glibc older than 2.41 it passes either way.
+This was a production hazard as well as a test one: the server starts its
+local runner with Foundation's `Process` (so `posix_spawn`) while
+`PersonalizationEvaluator` launches through Subprocess.
+
+**Why the abort did not end the process.** After each dump the process kept
+running until the step limit. That is a separate question, and the file dump
+and the step limits make it harmless: the evidence is on disk before
+`abort()` is called.
 
 **Handling if it reappears.** Read the printed dump first: a pool thread in
 `futex`/`pipe_read` with a `syscall=` naming a `read` or `wait` is the shape.

@@ -1,3 +1,4 @@
 ### Fixed
 
 - **`worker-tests` no longer stalls until its CI ceiling.** The test HTTP server launched its Python processes through Foundation's `Process`, whose exit signal could leak into a sibling server and leave `stop()` waiting forever on a shared thread. It now launches them through Subprocess, and `stop()` never waits. The wedge watchdog also writes its thread table to a file that the lane prints on failure or cancel. See `docs/ci-flakiness.md`, Family 6.
+- **A process launch can no longer hang before it starts on glibc 2.41 or later.** swift-subprocess creates its Linux child with a raw `clone3`, and that child reset `SIGABRT` through glibc, which blocks forever if another thread was inside `posix_spawn` at the time. This affected the worker's test run and, rarely, the server. swift-subprocess is now pinned to a fork with a one-line fix until upstream carries one.
