@@ -1,7 +1,8 @@
 # Submitting from GitHub
 
-**Status:** design note. Nothing is built. Slice 0 (the privacy review) must
-finish before slice 1 starts.
+**Status:** design note. Nothing is built. Slices 1 to 3 can be built before
+the privacy review (slice 0) finishes, but no deployment may turn GitHub
+submission on until it finishes. See "Privacy".
 
 This note tells how a student can submit to Chickadee from a GitHub repository,
 and how a course can give each student a private repository made from a
@@ -279,7 +280,11 @@ GitHub. See "Privacy".
 ## Privacy
 
 This is the real obstacle, and it is not a technical one. Slice 0 is a review
-with the UW privacy office before any code is written.
+with the UW privacy office. It gates **turning the feature on**, not building
+it: slices 1 to 3 can merge while the review runs, because with no App
+registered they change nothing (rule 1). No deployment registers an App, and
+no assignment turns GitHub submission on, until the review finishes. Slice 4
+and later wait for the review, because its answers can change their design.
 
 What changes:
 
@@ -321,7 +326,7 @@ Questions for the privacy office:
 
 | Slice | Content | Visible change |
 |---|---|---|
-| 0 | Privacy review. | None. |
+| 0 | Privacy review. Gates turning slices 1 to 3 on, and starting slice 4. | None. |
 | 1 | `github_apps` table, the secrets file, the manifest flow, and an admin page to register and remove the App. | An admin page. |
 | 2 | Account linking and unlinking on the account page. | A button on the account page. |
 | 3 | The manifest field, the submit panel, the ownership check, tarball conversion and the `source_*` columns. **The MVP.** | GitHub submission for student-owned repositories. |
