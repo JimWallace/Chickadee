@@ -242,14 +242,16 @@ actor LocalRunnerManager {
         let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
         let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
 
-        // Deliberately Foundation's `Process`, not `swift-subprocess`, and one
-        // of only three such spawns left in the repository (the list is in
-        // `Tests/TestSupport/InterpreterSpawn.swift`). Subprocess models a run
-        // whose result you collect; this child is held for the server's whole
-        // lifetime — started here, stored, and signalled on shutdown — which
-        // the collected API does not express. The #1139 concurrent-spawn race
-        // that moved everything else is not a concern here either: this runs
-        // once at boot, behind a `.local-runner-autostart` check.
+        // Foundation's `Process`, not `swift-subprocess`: the last such spawn
+        // in the repository (the list is in
+        // `Tests/TestSupport/InterpreterSpawn.swift`). It is safe only because
+        // it is the one Foundation launch in the server process and runs once
+        // at boot, behind a `.local-runner-autostart` check. Foundation's exit
+        // detection relies on a socket the child inherits, and concurrent
+        // Foundation launches leak those sockets into each other's children
+        // (docs/ci-flakiness.md, Family 6). A second Foundation launch here
+        // would reopen that; move this to Subprocess first, as
+        // `LocalHTTPTestServer` shows a long-lived child can be.
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments =
