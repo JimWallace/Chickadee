@@ -236,7 +236,7 @@ extension LTIRoutes {
             try await APICourseEnrollment(userID: userID, courseID: courseID, role: launch.courseRole)
                 .save(on: req.db)
         }
-        try await Self.recordGradeService(launch: launch, course: course, userID: userID, on: req.db)
+        try await Self.recordLaunchServices(launch: launch, course: course, userID: userID, on: req.db)
         req.session.data["activeCourseID"] = courseID.uuidString
         if isDeepLink {
             req.session.data[LTIPendingDeepLink.courseKey] = courseID.uuidString
@@ -245,19 +245,28 @@ extension LTIRoutes {
         return req.redirect(to: try await Self.resourceLinkDestination(launch: launch, course: course, on: req.db))
     }
 
-    /// Keeps the course's AGS line-items URL current from the launch, and,
-    /// on a course that sends grades through AGS, queues again the pushes
-    /// that waited for this student's first launch.
-    static func recordGradeService(
+    /// Keeps the course's AGS line-items URL and NRPS membership URL current
+    /// from the launch, and, on a course that sends grades through AGS,
+    /// queues again the pushes that waited for this student's first launch.
+    static func recordLaunchServices(
         launch: LTIValidatedLaunch, course: APICourse, userID: UUID, on db: Database
     ) async throws {
+        var changed = false
         if let url = launch.agsEndpoint?.usableLineItemsURL,
             let secure = try? LTIPlatformForm.secureURL(url, field: .lineItemsURL),
             course.ltiLineItemsURL != secure
         {
             course.ltiLineItemsURL = secure
-            try await course.save(on: db)
+            changed = true
         }
+        if let url = launch.nrpsEndpoint?.contextMembershipsURL,
+            let secure = try? LTIPlatformForm.secureURL(url, field: .membershipsURL),
+            course.ltiMembershipsURL != secure
+        {
+            course.ltiMembershipsURL = secure
+            changed = true
+        }
+        if changed { try await course.save(on: db) }
         if course.usesLTIGrades, let courseID = course.id {
             try await LTIGradeSyncQueue.retryFailed(userID: userID, courseID: courseID, on: db)
         }

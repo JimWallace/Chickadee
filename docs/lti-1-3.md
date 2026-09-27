@@ -321,11 +321,32 @@ AGS removes the per-instructor Valence key problem that
 [brightspace-setup.md](brightspace-setup.md) describes. The write permission
 comes with the tool registration, not with a user key.
 
-## Roster through NRPS (slice 5)
+## Roster through NRPS (slice 5, done)
 
-The roster reconciler (`LearnRosterReconciler`) gets a second source: the NRPS
-membership service URL from the launch. It reduces the membership into the same
-`BrightSpaceIdentityIndex` shape so that one set of matching rules applies.
+The Students tab's "Check against LEARN" gets a second source: the NRPS
+membership of the LMS course. A launch that carries the `namesroleservice`
+claim records its `context_memberships_url` on the course
+(`courses.lti_memberships_url`), next to the AGS line-items URL.
+
+The check reads the membership when the course has that URL and either uses
+the LTI grade service or has no Valence link. A course linked to a LEARN org
+unit through Valence keeps reading the Valence classlist, as before. The token
+has the `contextmembership.readonly` scope, and the read follows the `Link`
+header's `next` pages (no more than 100).
+
+NRPS names a member by LTI subject, not by username, so `LTIRoster` reduces
+the membership into the same `BrightSpaceIdentityIndex` the Valence classlist
+uses: each active member's keys are the Chickadee username linked to its
+subject (through `lti_identities`, once the student has launched) and its
+`lis_person_sourcedid` (the student number, when the platform sends it). The
+same `LearnRosterReconciler` then classifies each student. A student may be
+flagged as not in the LMS course only when the LMS could know them: they have
+launched, or the membership carries student numbers and they have one. Anyone
+else is "could not be matched", never flagged. A pending pre-enrollment has
+only a username, which NRPS does not send, so it is always "could not be
+matched".
+
+The readiness sweep that feeds the LEARN tab still reads Valence only.
 
 ## Compliance
 
@@ -348,7 +369,7 @@ Before a production registration:
 | 2 (done) | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
 | 3 (done) | Deep Linking | None. |
 | 4 (done) | AGS transport | None. Valence stays the default, and the AGS sweep finds an empty queue. |
-| 5 | NRPS roster source | None. |
+| 5 (done) | NRPS roster source | None. A course with no NRPS URL keeps the Valence classlist. |
 
 Each slice has Swift Testing coverage. The launch tests use a test platform that
 signs `id_token` values with a key that the test controls, and each validation

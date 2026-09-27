@@ -25,7 +25,7 @@ import VaporTesting
             .appendingPathComponent("chickadee-lti-grades-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: keyDirectory, withIntermediateDirectories: true)
         app.ltiToolKeyFilePath = keyDirectory.appendingPathComponent(".lti-tool-key").path
-        app.ltiAGSClient = await lms.client
+        app.ltiServiceClient = await lms.client
     }
 
     deinit {
@@ -186,7 +186,7 @@ import VaporTesting
             // the push again.
             try await APILTIIdentity(platformID: fixture.platformID, subject: "subject-1", userID: fixture.studentID)
                 .save(on: app.db)
-            try await LTIRoutes.recordGradeService(
+            try await LTIRoutes.recordLaunchServices(
                 launch: Self.launch(ags: nil), course: fixture.course, userID: fixture.studentID, on: app.db)
             #expect(try await row(fixture).pending)
 
@@ -251,7 +251,7 @@ import VaporTesting
             #expect(
                 LTIGradeSyncSweep.reason(for: BrightSpaceSyncError.missingPoints) == LTIGradeSyncSweep.noGradeMessage)
             #expect(
-                LTIGradeSyncSweep.reason(for: LTIAGSError.lineItemGone) == LTIAGSError.lineItemGone.description)
+                LTIGradeSyncSweep.reason(for: LTIServiceError.lineItemGone) == LTIServiceError.lineItemGone.description)
 
             // Every reason the page can show stays short: the page lists them in
             // a table column, so none may grow into a paragraph.
@@ -259,12 +259,12 @@ import VaporTesting
                 [
                     LTIGradeSyncSweep.notLaunchedMessage, LTIGradeSyncSweep.noLineItemsMessage,
                     LTIGradeSyncSweep.noTotalMessage, LTIGradeSyncSweep.noGradeMessage,
-                    LTIGradeSyncSweep.unreachableMessage, LTIAGSError.lineItemGone.description,
+                    LTIGradeSyncSweep.unreachableMessage, LTIServiceError.lineItemGone.description,
                 ]
-                + [LTIAGSError.Step.token, .findLineItem, .createLineItem, .postScore].flatMap { step in
+                + [LTIServiceError.Step.token, .findLineItem, .createLineItem, .postScore].flatMap { step in
                     [
-                        LTIAGSError.rejected(step, status: 500).description,
-                        LTIAGSError.unreadableResponse(step).description,
+                        LTIServiceError.rejected(step, status: 500).description,
+                        LTIServiceError.unreadableResponse(step).description,
                     ]
                 }
             for reason in reasons {
@@ -319,7 +319,7 @@ import VaporTesting
             try await fixture.course.save(on: app.db)
             let url = "https://lms.example.edu/api/lti/courses/7/line_items"
 
-            try await LTIRoutes.recordGradeService(
+            try await LTIRoutes.recordLaunchServices(
                 launch: Self.launch(ags: Self.endpoint(url)), course: fixture.course,
                 userID: fixture.studentID, on: app.db)
 
@@ -333,7 +333,7 @@ import VaporTesting
             fixture.course.ltiLineItemsURL = nil
             try await fixture.course.save(on: app.db)
 
-            try await LTIRoutes.recordGradeService(
+            try await LTIRoutes.recordLaunchServices(
                 launch: Self.launch(ags: Self.endpoint("http://lms.example.edu/items")), course: fixture.course,
                 userID: fixture.studentID, on: app.db)
 
@@ -342,7 +342,7 @@ import VaporTesting
     }
 
     private static func endpoint(_ url: String) -> LTIAGSEndpoint {
-        LTIAGSEndpoint(scope: LTIAGSClient.scopes, lineItems: url, lineItem: nil)
+        LTIAGSEndpoint(scope: LTIServiceClient.agsScopes, lineItems: url, lineItem: nil)
     }
 
     private static func launch(ags: LTIAGSEndpoint?) -> LTIValidatedLaunch {
