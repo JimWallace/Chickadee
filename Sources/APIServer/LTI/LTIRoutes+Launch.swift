@@ -177,7 +177,9 @@ extension LTIRoutes {
             resolution = try await LTIIdentityResolver.resolve(
                 launch: launch, platform: platform, authMode: req.application.authMode, on: req.db)
         } catch LTIIdentityResolver.Failure.linkRefused(let username) {
-            req.logger.warning("LTI launch refused to link to account \(username)")
+            // The username rides metadata, which the admin log buffer redacts.
+            req.logger.warning(
+                "LTI launch refused to link to an existing account", metadata: ["username": .string(username)])
             throw LTILaunchFailure.linkRefused
         }
         let user = resolution.user
