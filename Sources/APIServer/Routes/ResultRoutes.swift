@@ -249,6 +249,8 @@ struct ResultRoutes: RouteCollection {
         // drift apart on which grades reach LEARN.
         try await flagResultForBrightSpaceSync(
             result, testSetupID: collection.testSetupID, application: req.application, on: db)
+        try await LTIGradeSyncQueue.queue(
+            submissionID: collection.submissionID, testSetupID: collection.testSetupID, on: db)
 
         // Row + blob side-table row persist together; the caller's
         // transaction (persist + submission status flip) encloses both.

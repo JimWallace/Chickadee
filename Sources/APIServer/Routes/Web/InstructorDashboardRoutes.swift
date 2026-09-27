@@ -55,6 +55,10 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
+        // LMS grades through the LTI grade service (docs/lti-1-3.md, AGS).
+        r.get("lti-grades", use: ltiGradesPage)
+        r.post("lti-grades", "transport", use: saveLTIGradeTransport)
+        r.post("lti-grades", "push-all", use: pushAllLTIGrades)
         // MCP tab: the active course's authoring guidance for connected agents.
         r.get("mcp", use: mcpPanelPage)
         r.post("mcp", use: saveMCPGuidance)

@@ -35,7 +35,9 @@ deployment that registers no LTI platform behaves exactly as it does today.
 These rules keep every existing feature working. Each slice must obey them.
 
 1. **No platform, no change.** When the `lti_platforms` table is empty, no LTI
-   route accepts a request, and no page, header, cookie or sweep changes.
+   route accepts a request, and no page, header, cookie or existing sweep
+   changes. The AGS sweep runs on every deployment, but its queue stays empty
+   unless a course has chosen AGS.
 2. **No new environment variables.** The standing rule in `CLAUDE.md` applies.
    Platform registrations live in the database and an admin edits them in the
    UI. The tool key path derives from the working directory, the same way
@@ -262,23 +264,58 @@ A resource-link launch that carries `custom.assignment` opens that assignment,
 when it is in the bound course, at its vanity URL; otherwise it opens the
 course dashboard.
 
-A `lineItem` is not sent yet; it comes with AGS in slice 4.
+The response sends no `lineItem`. The AGS sweep finds or creates each line
+item itself (below), so a link and its grade item stay independent, and a
+course on Valence never gets a second grade item from a link.
 
-## Grades through AGS (slice 4)
+## Grades through AGS (slice 4, done)
 
-The existing grade-sync machinery stays: the pending flag, the debounce, the
-sweep, the retry rules and the audit log. Only the final "send one score" step
-gets a second implementation:
+AGS is a second grade transport beside the Valence sync. It has its own queue
+and sweep, so the Valence code path does not change. The two share one rule
+for what a grade is: both call `bestGradeForStudent`, so an override, the
+best-of rule and a class-goal bonus mean the same thing on both.
 
-1. Get an access token with the client-credentials grant and a JWT assertion
-   signed by the tool key (`scope` = the AGS scopes).
-2. Find or create the line item for the assignment (`resourceId` = assignment
-   public ID).
-3. Post a score with `scoreGiven`, `scoreMaximum`, `activityProgress` and
-   `gradingProgress`.
+**Choosing the transport.** A course uses Valence (the default, today's
+behaviour) until an instructor selects "LTI grade service" on
+`/instructor/lti-grades`, which the LEARN tab links to for a linked course.
+The choice is offered only when the course is linked to a platform and a launch
+has sent the course's line-items URL (the AGS `endpoint` claim, with both the
+`lineitem` and `score` scopes). A TA sees the page but cannot change the
+choice. `APICourse.usesLTIGrades` is the one test, and the two transports are
+never both active: on a course that uses AGS, the Valence ingest flag, the
+Valence sweep and the class-goal re-push all skip the course. The LEARN tab then
+says that Valence is off for the course and hides its "Sync now".
 
-A course selects its transport: Valence (the default, today's behaviour) or
-AGS. The two are never active for the same course.
+**The queue.** `lti_grade_syncs` holds one row per (student, test setup) with a
+pending flag, the time it became pending, when the LMS last took a score, and
+the last error. It holds no grade: the sweep computes it when it sends.
+`LTIGradeSyncQueue` marks a row pending on every event that can move a grade:
+a result from either grading path, an override set or cleared, a class-goal
+bonus that freezes, and "Sync now" on that page. Each call does nothing unless the course
+uses AGS.
+
+**The sweep.** Every 60 seconds, for each row pending longer than 90 seconds:
+
+1. Find the student's subject on the platform in `lti_identities`. A student
+   who has never launched has none; the row fails with a reason and is queued
+   again by that student's first launch.
+2. Compute the best grade. With no grade, and a score on the LMS that
+   Chickadee sent, send a clearing score (`gradingProgress` = NotReady, no
+   `scoreGiven`).
+3. Get an access token with the client-credentials grant and a JWT assertion
+   signed by the tool key (`iss` = `sub` = the client ID, `aud` = the token
+   URL). Tokens are cached per platform until one minute before they expire,
+   and dropped when the LMS answers 401.
+4. Find the line item by `resource_id` = the assignment public ID, or create
+   it with the suite total as `scoreMaximum`. The URL is kept on the
+   assignment; when the LMS answers 404 for it, it is forgotten and found again.
+5. Post the score with `scoreGiven`, `scoreMaximum`, `activityProgress` =
+   Completed and `gradingProgress` = FullyGraded.
+
+A network error, 401, 408, 425, 429, a 5xx or a deleted line item keeps the row
+pending for the next sweep. Any other failure records the reason, which the
+page lists, and waits for a new push or "Sync now". A disabled platform keeps
+its rows waiting.
 
 AGS removes the per-instructor Valence key problem that
 [brightspace-setup.md](brightspace-setup.md) describes. The write permission
@@ -310,7 +347,7 @@ Before a production registration:
 | 1b (done) | Admin UI to register a platform, and the tool configuration values to give to the LMS administrator | None. A new admin tab. |
 | 2 (done) | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
 | 3 (done) | Deep Linking | None. |
-| 4 | AGS transport | None. Valence stays the default. |
+| 4 (done) | AGS transport | None. Valence stays the default, and the AGS sweep finds an empty queue. |
 | 5 | NRPS roster source | None. |
 
 Each slice has Swift Testing coverage. The launch tests use a test platform that

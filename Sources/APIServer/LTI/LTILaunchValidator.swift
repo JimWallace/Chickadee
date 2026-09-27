@@ -64,7 +64,8 @@ enum LTILaunchValidator {
             name: claims.name,
             email: claims.email,
             custom: claims.custom ?? [:],
-            deepLinkingSettings: claims.deepLinkingSettings
+            deepLinkingSettings: claims.deepLinkingSettings,
+            agsEndpoint: claims.agsEndpoint
         )
     }
 

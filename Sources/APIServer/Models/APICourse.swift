@@ -107,6 +107,22 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "lti_context_id")
     var ltiContextID: String?
 
+    /// The AGS line-items URL of the bound LMS course, from the most recent
+    /// launch that carried one (docs/lti-1-3.md "Grades through AGS").
+    @OptionalField(key: "lti_line_items_url")
+    var ltiLineItemsURL: String?
+
+    /// True when an instructor chose AGS as this course's grade transport.
+    /// Nil or false = Valence, the default. The two are never both active.
+    @OptionalField(key: "lti_grades_enabled")
+    var ltiGradesEnabled: Bool?
+
+    /// True when grades for this course go to the LMS through AGS, and so
+    /// never through the Valence sync.
+    var usesLTIGrades: Bool {
+        ltiGradesEnabled == true && ltiPlatformID != nil
+    }
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

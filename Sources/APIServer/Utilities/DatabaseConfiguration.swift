@@ -516,6 +516,11 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateLTIIdentities())
     app.migrations.add(AddLTILaunchColumns())
 
+    // LTI 1.3 grades through AGS (docs/lti-1-3.md slice 4): the per-course
+    // transport choice, the line-item URLs and the push queue.
+    app.migrations.add(AddLTIGradeColumns())
+    app.migrations.add(CreateLTIGradeSyncs())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

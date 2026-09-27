@@ -214,6 +214,8 @@ enum AuditAction: String, Sendable, CaseIterable {
     case ltiPlatformDeleted = "lti.platform_deleted"
     case ltiCourseBound = "lti.course_bound"
     case ltiContentLinked = "lti.content_linked"
+    case ltiGradeTransportChanged = "lti.grade_transport_changed"
+    case ltiGradesPushAll = "lti.grades_push_all"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -257,7 +259,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
-            .ltiContentLinked:
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .lti
         }
     }
@@ -296,7 +298,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
-            .ltiContentLinked:
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .ok
         }
     }
@@ -383,6 +385,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiPlatformDeleted: return "LTI platform deleted"
         case .ltiCourseBound: return "LMS course linked"
         case .ltiContentLinked: return "Assignments added to the LMS"
+        case .ltiGradeTransportChanged: return "LMS grade transport changed"
+        case .ltiGradesPushAll: return "All grades queued for the LMS"
         }
     }
 }
