@@ -505,6 +505,10 @@ func registerMigrations(on app: Application) {
     // `assignments`; nil = no threshold, the pre-existing behaviour.
     app.migrations.add(AddAssignmentPassingThreshold())
 
+    // LTI 1.3 platform registrations (docs/lti-1-3.md). New table, no FKs;
+    // an empty table means LTI is off.
+    app.migrations.add(CreateLTIPlatforms())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

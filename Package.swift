@@ -91,6 +91,9 @@ let package = Package(
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Leaf", package: "leaf"),
                 .product(name: "JWT", package: "jwt"),
+                // RSA key generation for the LTI 1.3 tool key; JWTKit can
+                // load an RSA key but cannot create one.
+                .product(name: "CryptoExtras", package: "swift-crypto"),
                 .product(name: "CSRF", package: "CSRF"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 // The server's own interpreter spawn (PersonalizationEvaluator)
