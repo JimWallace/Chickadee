@@ -1,3 +1,0 @@
-### Added
-
-- **LTI 1.3 launch.** A registered LMS can now launch Chickadee: `/lti/login` starts the OIDC third-party login and `/lti/launch` verifies the signed launch against the platform key set and every claim rule, signs the user in, enrols them at the role the LMS sends, and opens the linked course. An instructor launching from an LMS course that is not linked yet picks the Chickadee course on a new page; a course already linked to the same LEARN org unit links itself. Account linking by username is off unless an admin trusts the platform, and a launch can never claim an admin account. Design: `docs/lti-1-3.md`.
