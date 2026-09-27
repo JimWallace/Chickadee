@@ -418,6 +418,10 @@ duplicate.
   with `.test-output-details` as the disclosure and a `.detail-grid` inside it.
   A payload in a last column instead would wrap JSON into whatever width the
   fixed columns left over.
+  The same second-row disclosure may hold a row's edit form when the form is
+  too long for the row (the admin LTI platforms table); give its `<summary>`
+  a visually hidden copy of the row's name, so a screen reader can tell one
+  "Edit" from the next.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.

@@ -255,7 +255,7 @@ Before a production registration:
 | Slice | Content | Behaviour change for a deployment with no platform |
 |---|---|---|
 | 1 | `LTIToolKeyAuthority`, `GET /lti/jwks`, `lti_platforms` table and model, `LTILaunchValidator`, `LTIRoleMapping` | None. The JWKS is empty. |
-| 1b | Admin UI to register a platform, and the tool configuration values to give to the LMS administrator | None. A new admin tab. |
+| 1b (done) | Admin UI to register a platform, and the tool configuration values to give to the LMS administrator | None. A new admin tab. |
 | 2 | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
 | 3 | Deep Linking | None. |
 | 4 | AGS transport | None. Valence stays the default. |

@@ -6,7 +6,7 @@
      shared partial resolves.
 
      Eight flat tabs are now four: Overview, Health Alerts and People are
-     direct links, and the remaining five group into Data and Integrations.
+     direct links, and the rest group into Data and Integrations.
      The menus are the site's existing nav-dropdown idiom (app.js drives every
      [data-nav-dropdown]: one open at a time, outside-click and Escape to
      close), so this adds no component and no script.  activeAdminTab values
@@ -31,6 +31,7 @@
 #if(activeAdminTab == "audit"):Data — Audit Log#endif
 #if(activeAdminTab == "brightspace"):Integrations — LEARN#endif
 #if(activeAdminTab == "mcp"):Integrations — MCP#endif
+#if(activeAdminTab == "lti"):Integrations — LTI#endif
 </h1>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
@@ -56,7 +57,7 @@
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif>
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif#if(activeAdminTab == "lti"): data-group-current#endif>
             <span>Integrations</span>
             <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
@@ -65,6 +66,8 @@
                role="menuitem" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
             #if(mcpEnabled()):<a class="nav-dropdown-item#if(activeAdminTab == "mcp"): nav-dropdown-item-active#endif"
                role="menuitem" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
+            <a class="nav-dropdown-item#if(activeAdminTab == "lti"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/lti"#if(activeAdminTab == "lti"): aria-current="page"#endif>LTI</a>
         </div>
     </div>
 </nav>

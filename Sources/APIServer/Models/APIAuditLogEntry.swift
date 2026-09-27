@@ -208,6 +208,11 @@ enum AuditAction: String, Sendable, CaseIterable {
     case mcpCourseInstructionsUpdated = "mcp.course_instructions_updated"
     case adminMcpToolCalled = "admin_mcp.tool_called"
 
+    // LTI 1.3 platform registrations (docs/lti-1-3.md)
+    case ltiPlatformRegistered = "lti.platform_registered"
+    case ltiPlatformUpdated = "lti.platform_updated"
+    case ltiPlatformDeleted = "lti.platform_deleted"
+
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
         switch self {
@@ -249,6 +254,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
+        case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted:
+            return .lti
         }
     }
 
@@ -284,7 +291,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled,
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
-            .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
+            .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
+            .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted:
             return .ok
         }
     }
@@ -366,6 +374,9 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .mcpRefreshReuseDetected: return "MCP refresh-token reuse detected"
         case .mcpCourseInstructionsUpdated: return "MCP course guidance updated"
         case .adminMcpToolCalled: return "Admin diagnostic tool called"
+        case .ltiPlatformRegistered: return "LTI platform registered"
+        case .ltiPlatformUpdated: return "LTI platform updated"
+        case .ltiPlatformDeleted: return "LTI platform deleted"
         }
     }
 }
@@ -401,6 +412,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case runner = "Runner"
     case mcp = "MCP / agents"
     case brightspace = "LEARN sync"
+    case lti = "LTI"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,
@@ -431,4 +443,5 @@ enum AuditTargetType: String, Sendable {
     case course
     case enrollment
     case oauthClient = "oauth_client"
+    case ltiPlatform = "lti_platform"
 }
