@@ -9,6 +9,19 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.248] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 Deep Linking.** Course staff can add Chickadee assignments from the LMS content picker: a deep-linking launch opens a list of the linked course's assignments, and the choice goes back to the LMS as a response signed with the tool key. A student who opens a returned link lands on that assignment. Design: `docs/lti-1-3.md`.
+
+### Fixed
+
+- **`worker-tests` no longer stalls until its CI ceiling.** The test HTTP server launched its Python processes through Foundation's `Process`, whose exit signal could leak into a sibling server and leave `stop()` waiting forever on a shared thread. It now launches them through Subprocess, and `stop()` never waits. The wedge watchdog also writes its thread table to a file that the lane prints on failure or cancel. See `docs/ci-flakiness.md`, Family 6.
+- **A process launch can no longer hang before it starts on glibc 2.41 or later.** swift-subprocess creates its Linux child with a raw `clone3`, and that child reset `SIGABRT` through glibc, which blocks forever if another thread was inside `posix_spawn` at the time. This affected the worker's test run and, rarely, the server. swift-subprocess is now pinned to a fork with a one-line fix until upstream carries one.
+- **CI guard scripts no longer misread an early `grep` match as a miss.** Nine scripts piped a list into `grep -q` under `pipefail`. When `grep` stopped at an early match, the writer got SIGPIPE and the pipeline read as "not found", so a defined class could be reported as unstyled, and the Leaf, security-header and compose-variable checks could miss what they look for. They now pass the list as a here-string, as `editor-smoke.yml` already did.
+
+
 ## [0.5.247] - 2026-09-27
 
 ### Added
