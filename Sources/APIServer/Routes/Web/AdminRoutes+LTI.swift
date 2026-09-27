@@ -58,7 +58,7 @@ extension AdminRoutes {
                 metadata: ["issuer": valid.issuer, "client_id": valid.clientID], on: req)
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.registered.rawValue)")
         } catch let error as LTIPlatformFormError {
-            return try await renderLTIPage(req: req, flashError: error.message, newForm: form)
+            return try await renderLTIPage(req: req, newForm: (form, error.message))
                 .encodeResponse(for: req)
         }
     }
@@ -86,7 +86,7 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.updated.rawValue)")
         } catch let error as LTIPlatformFormError {
             return try await renderLTIPage(
-                req: req, flashError: error.message, editing: platform.id.map { ($0, form) }
+                req: req, editing: platform.id.map { ($0, form, error.message) }
             ).encodeResponse(for: req)
         }
     }
@@ -147,9 +147,8 @@ extension AdminRoutes {
     private func renderLTIPage(
         req: Request,
         flashSuccess: String? = nil,
-        flashError: String? = nil,
-        newForm: LTIPlatformForm? = nil,
-        editing: (id: UUID, form: LTIPlatformForm)? = nil
+        newForm: (form: LTIPlatformForm, error: String)? = nil,
+        editing: (id: UUID, form: LTIPlatformForm, error: String)? = nil
     ) async throws -> View {
         let platforms = try await APILTIPlatform.query(on: req.db).sort(\.$displayName).all()
         let rows = platforms.compactMap { platform -> AdminLTIPlatformRow? in
@@ -166,7 +165,8 @@ extension AdminRoutes {
                 fields: LTIPlatformFieldsContext(
                     idPrefix: "lti-\(id.uuidString)",
                     form: isEditing ? (editing?.form ?? LTIPlatformForm(platform: platform))
-                        : LTIPlatformForm(platform: platform)))
+                        : LTIPlatformForm(platform: platform),
+                    error: isEditing ? editing?.error : nil))
         }
         let endpoints = LTIToolEndpoints(publicBaseURL: req.application.appConfig.security.publicBaseURL)
         let ctx = AdminLTIContext(
@@ -177,10 +177,11 @@ extension AdminRoutes {
             launchURL: endpoints.launchURL,
             jwksURL: endpoints.jwksURL,
             platforms: rows,
-            newPlatformOpen: newForm != nil,
-            newFields: LTIPlatformFieldsContext(idPrefix: "lti-new", form: newForm ?? .empty),
+            newPlatformOpen: newForm != nil || rows.isEmpty,
+            newFields: LTIPlatformFieldsContext(
+                idPrefix: "lti-new", form: newForm?.form ?? .empty, error: newForm?.error),
             flashSuccess: flashSuccess,
-            flashError: flashError)
+            flashError: nil)
         return try await req.view.render("admin-lti", ctx)
     }
 }

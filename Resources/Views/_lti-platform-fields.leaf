@@ -1,6 +1,10 @@
 <!-- The fields of one LTI platform registration, shared by the add form and
      each edit form on the admin LTI page.  It renders under a sub-context
-     (idPrefix plus form), so every copy on the page has unique ids. -->
+     (idPrefix plus form), so every copy on the page has unique ids.  A
+     validation error shows here, beside the form it belongs to. -->
+#if(error):
+<div class="form-error" role="alert">#(error)</div>
+#endif
 <div class="field-stack">
     <label for="#(idPrefix)-name">Name</label>
     <input id="#(idPrefix)-name" class="form-input" type="text" name="displayName"

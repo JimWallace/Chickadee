@@ -6,7 +6,7 @@
      shared partial resolves.
 
      Eight flat tabs are now four: Overview, Health Alerts and People are
-     direct links, and the remaining five group into Data and Integrations.
+     direct links, and the rest group into Data and Integrations.
      The menus are the site's existing nav-dropdown idiom (app.js drives every
      [data-nav-dropdown]: one open at a time, outside-click and Escape to
      close), so this adds no component and no script.  activeAdminTab values

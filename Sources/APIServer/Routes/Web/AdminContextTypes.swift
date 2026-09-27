@@ -399,7 +399,8 @@ struct AdminLTIContext: Encodable {
     let jwksURL: String
     let platforms: [AdminLTIPlatformRow]
     /// True when a registration failed validation, so the form reopens with
-    /// what the admin typed.
+    /// what the admin typed, or when no platform exists yet, so the only way
+    /// forward is already open.
     let newPlatformOpen: Bool
     let newFields: LTIPlatformFieldsContext
     let flashSuccess: String?
@@ -423,4 +424,7 @@ struct AdminLTIPlatformRow: Encodable {
 struct LTIPlatformFieldsContext: Encodable {
     let idPrefix: String
     let form: LTIPlatformForm
+    /// A validation error for this form, shown inside it rather than at the
+    /// top of the page, which can be a whole table away.
+    var error: String? = nil
 }

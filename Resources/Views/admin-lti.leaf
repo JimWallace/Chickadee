@@ -7,10 +7,10 @@ LTI
 #extend("_admin-tabs")
 <section class="page-section">
     <h2>Tool configuration</h2>
-    <p>Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool.</p>
+    <p class="section-intro">Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool.</p>
     #if(!baseURLConfigured):
     <div class="flash flash-warning" role="status">
-        <code>PUBLIC_BASE_URL</code> is not set, so these are paths, not URLs.
+        <code>PUBLIC_BASE_URL</code> is not set, so these are paths. Set it and restart the server.
     </div>
     #endif
     <dl class="detail-grid section-gap">
@@ -30,6 +30,10 @@ LTI
 
 <section class="page-section">
     <h2>Platforms</h2>
+    #if(count(platforms) == 0):
+    <p class="empty">No platforms registered.</p>
+    <p class="section-note">LTI launches are off until a platform is registered.</p>
+    #else:
     <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
@@ -78,7 +82,7 @@ LTI
             <tr class="test-output-row">
                 <td colspan="6">
                     <details class="test-output-details"#if(platform.editOpen): open#endif>
-                        <summary>Edit</summary>
+                        <summary>Edit <span class="visually-hidden">#(platform.displayName)</span></summary>
                         <form method="post" action="/admin/lti/platforms/#(platform.id)" class="form-stack">
                             #csrfFormField()
                             #extend("_lti-platform-fields", platform.fields)
@@ -90,11 +94,9 @@ LTI
                 </td>
             </tr>
         #endfor
-        #if(count(platforms) == 0):
-            <tr><td colspan="6" class="text-muted">No platforms registered. LTI launches are off.</td></tr>
-        #endif
         </tbody>
     </table></div>
+    #endif
 
     <details class="test-output-details"#if(newPlatformOpen): open#endif>
         <summary>Register a platform</summary>
