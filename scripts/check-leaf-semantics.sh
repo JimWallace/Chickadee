@@ -108,7 +108,7 @@ for prop in $swift_only_properties; do
           ;;
       esac
     done
-    printf '%s' "$remaining" | grep -qE "#[a-zA-Z]*\([^)]*[A-Za-z0-9_]\.${prop}\b" || continue
+    grep -qE "#[a-zA-Z]*\([^)]*[A-Za-z0-9_]\.${prop}\b" <<< "$remaining" || continue
 
     if [ $status -eq 0 ]; then
       echo "check-leaf-semantics: Leaf cannot resolve Swift properties on a collection." >&2

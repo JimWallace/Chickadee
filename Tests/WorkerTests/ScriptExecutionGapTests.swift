@@ -27,6 +27,13 @@
 // So the capture is asked for its own descriptors instead. Deterministic, and
 // it fails naming the descriptor whose flag is wrong.
 //
+// THE SAME RACE CAME BACK IN `discardReleasesBothReadEnds`, one step later. It
+// asked whether a descriptor NUMBER was closed after `discard()`, but the kernel
+// hands a freed number to the next open in the process, so a pipe another suite
+// opened in between made a correct `discard()` read as a leak (seen once in a
+// WorkerTests x30 run, 2026-09-27). It now remembers which pipe each number
+// named, and a number that names a different file afterwards counts as closed.
+//
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
 import Foundation
@@ -45,8 +52,16 @@ import Glibc
         return flags != -1 && (flags & FD_CLOEXEC) != 0
     }
 
-    private static func isClosed(_ descriptor: Int32) -> Bool {
-        fcntl(descriptor, F_GETFD) == -1
+    /// The file a descriptor refers to, or nil when the descriptor is closed.
+    private static func fileIdentity(_ descriptor: Int32) -> FileIdentity? {
+        var status = stat()
+        guard fstat(descriptor, &status) == 0 else { return nil }
+        return FileIdentity(device: UInt64(status.st_dev), inode: UInt64(status.st_ino))
+    }
+
+    private struct FileIdentity: Equatable {
+        let device: UInt64
+        let inode: UInt64
     }
 
     /// Survivors: `:337 RelationalOperatorReplacement` (`flags != -1` → `== -1`)
@@ -81,15 +96,21 @@ import Glibc
         let capture = ScriptCapture()
         let (readEnds, _) = capture.descriptorsForTesting
 
+        var pipes: [Int32: FileIdentity] = [:]
         for descriptor in readEnds {
-            #expect(!Self.isClosed(descriptor), "read end \(descriptor) was closed before discard()")
+            let identity = Self.fileIdentity(descriptor)
+            #expect(identity != nil, "read end \(descriptor) was closed before discard()")
+            pipes[descriptor] = identity
         }
 
         capture.discard()
 
+        // Another suite may already have reopened the number; only the same
+        // pipe under it would be a leak.
         for descriptor in readEnds {
+            let identity = Self.fileIdentity(descriptor)
             #expect(
-                Self.isClosed(descriptor),
+                identity == nil || identity != pipes[descriptor],
                 "discard() left read end \(descriptor) open; a failed launch leaks it")
         }
     }

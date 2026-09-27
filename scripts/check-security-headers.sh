@@ -70,7 +70,7 @@ for path in "/login" "/app.js"; do
     script_src="$(directive_of "$csp" "script-src")"
     if [ -z "$script_src" ]; then
         fail "${path}: CSP has no script-src directive: ${csp}"
-    elif printf '%s' "$script_src" | grep -q "'unsafe-inline'"; then
+    elif grep -q "'unsafe-inline'" <<< "$script_src"; then
         fail "${path}: script-src permits inline execution — ${script_src}"
         echo "       This is the AppScan High (CVSS 8.2) closed by #1516. Page JS"
         echo "       belongs in a Public/*.js file; an event-handler attribute"
@@ -92,7 +92,7 @@ for path in "/login" "/app.js"; do
         fi
     done
 
-    if ! printf '%s' "$(header_value "$headers" "Permissions-Policy")" | grep -q 'camera=()'; then
+    if ! grep -q 'camera=()' <<< "$(header_value "$headers" "Permissions-Policy")"; then
         fail "${path}: Permissions-Policy does not deny camera"
     fi
 done

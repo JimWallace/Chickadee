@@ -304,8 +304,8 @@ pairs="$(
 shadowed=""
 while IFS=$'\t' read -r sel file; do
   [ -z "$sel" ] && continue
-  if printf '%s\n' "$sel" | grep -qE "$ALLOW_GLOBAL_OVERRIDE"; then continue; fi
-  if printf '%s\n' "$global_sel" | grep -qxF -- "$sel"; then
+  if grep -qE "$ALLOW_GLOBAL_OVERRIDE" <<< "$sel"; then continue; fi
+  if grep -qxF -- "$sel" <<< "$global_sel"; then
     shadowed+="  ${file}: ${sel}"$'\n'
   fi
 done <<< "$pairs"

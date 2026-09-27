@@ -235,11 +235,34 @@ one, and a student does not become a TA because the LMS says so later.
 
 ## Deep Linking (slice 3)
 
-An instructor launch with `LtiDeepLinkingRequest` shows a picker of the bound
-course's assignments. The tool returns a signed `LtiDeepLinkingResponse` with
-one `ltiResourceLink` item for each selected assignment. The item carries the
-assignment public ID as a custom parameter, and a `lineItem` when the course
-uses AGS.
+**Status:** implemented. `LTIDeepLinkRoutes`, `LTIDeepLinkingResponse`,
+`LTIPendingDeepLink`.
+
+1. The launch checks an `LtiDeepLinkingRequest` before anyone is signed in:
+   the `deep_linking_settings` claim must accept `ltiResourceLink` and give an
+   `https` return URL, the launch must name a context, and the role must be TA
+   or instructor. A student gets 403; anything else gets 400.
+2. The verified request (return URL, `data`, deployment, `accept_multiple`) is
+   held in the session. The return URL comes only from the signed token, never
+   from the browser, so the picker cannot be pointed at another site. Every
+   launch first clears an older, unanswered request.
+3. `/lti/deep-link` lists the bound course's assignments, as checkboxes or, when
+   the platform accepts one item, radios. An unbound context goes through
+   `/lti/bind` first and then continues to the picker.
+4. The choice becomes an `LtiDeepLinkingResponse` signed with the tool key:
+   `iss` = the client ID, `aud` = the platform issuer, the request's `data`
+   echoed, and one `ltiResourceLink` per assignment with the launch URL and
+   `custom.assignment` = the assignment public ID. It is audited as
+   `lti.content_linked`.
+5. The return page posts the JWT to the return URL. Its CSP `form-action`
+   allows exactly that origin for that one response. There is no auto-submit:
+   the CSP forbids inline script, so the page has one button.
+
+A resource-link launch that carries `custom.assignment` opens that assignment,
+when it is in the bound course, at its vanity URL; otherwise it opens the
+course dashboard.
+
+A `lineItem` is not sent yet; it comes with AGS in slice 4.
 
 ## Grades through AGS (slice 4)
 
@@ -286,7 +309,7 @@ Before a production registration:
 | 1 | `LTIToolKeyAuthority`, `GET /lti/jwks`, `lti_platforms` table and model, `LTILaunchValidator`, `LTIRoleMapping` | None. The JWKS is empty. |
 | 1b (done) | Admin UI to register a platform, and the tool configuration values to give to the LMS administrator | None. A new admin tab. |
 | 2 (done) | `/lti/login`, `/lti/launch`, state table, identity, course binding | None. Both routes refuse an unknown issuer. |
-| 3 | Deep Linking | None. |
+| 3 (done) | Deep Linking | None. |
 | 4 | AGS transport | None. Valence stays the default. |
 | 5 | NRPS roster source | None. |
 

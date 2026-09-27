@@ -23,4 +23,6 @@ struct LTIValidatedLaunch: Equatable, Sendable {
     let name: String?
     let email: String?
     let custom: [String: JSONValue]
+    /// Present on a deep-linking launch whose platform sent the settings.
+    var deepLinkingSettings: LTIDeepLinkingSettings?
 }

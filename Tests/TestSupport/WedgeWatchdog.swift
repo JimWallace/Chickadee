@@ -202,7 +202,7 @@ public enum WedgeWatchdog {
     }
 
     private static func abortWedgedProcess(stalledSeconds: TimeInterval, activeHelpers: Int) {
-        dumpThreadStates(
+        let report = threadStateReport(
             reason: "no test activity for \(Int(stalledSeconds))s with \(activeHelpers) tracked "
                 + "scope(s) in flight — cooperative pool presumed wedged; aborting so CI gets "
                 + "evidence instead of the 20-minute job kill (issues #1233 / ci-flakiness "
@@ -212,6 +212,12 @@ public enum WedgeWatchdog {
                 + "below — threads parked in pipe_read / do_wait / futex are the pinned ones.\n"
                 + "        Stall limit was \(Int(stallLimitSeconds))s "
                 + "(CHICKADEE_WORKERTESTS_STALL_SECONDS)")
+        // The file first. In the Family 6 stalls (docs/ci-flakiness.md) the
+        // stderr pipe to `swift test` stopped delivering, and whatever this
+        // path wrote there was lost with the cancelled job. The CI lanes
+        // print these files in a step that runs on failure and on cancel.
+        persist(report)
+        RawStandardError.write(report)
         // Buffered structured-log lines are evidence too — the #1233 wedges
         // each surfaced their last log line only at kill time. Flushing can
         // itself block if stdout is the contended resource; the dump above
@@ -225,6 +231,37 @@ public enum WedgeWatchdog {
     /// `write(2)` calls — stdio locks are avoided deliberately, since a
     /// wedged thread may be holding them.
     public static func dumpThreadStates(reason: String) {
+        RawStandardError.write(threadStateReport(reason: reason))
+    }
+
+    /// Where `persist` writes, and where the CI lanes look.
+    public static let dumpFilePrefix = "chickadee-wedge-dump-"
+
+    /// Writes `report` to a file in the temporary directory with raw
+    /// `open(2)`/`write(2)`, so neither a blocked stderr nor a held stdio
+    /// lock can stop it.
+    private static func persist(_ report: String) {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(dumpFilePrefix)\(getpid()).txt").path
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard descriptor >= 0 else { return }
+        defer { close(descriptor) }
+        let bytes = Array(report.utf8)
+        var offset = 0
+        while offset < bytes.count {
+            let written = bytes[offset...].withUnsafeBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                return write(descriptor, base, buffer.count)
+            }
+            if written <= 0 { return }
+            offset += written
+        }
+    }
+
+    /// Every thread's kernel-visible state: run state, the kernel wait it is
+    /// parked in, and the syscall it is blocked in (number and arguments, so a
+    /// `write` to fd 2 or a `read` on a pipe names itself).
+    static func threadStateReport(reason: String) -> String {
         var report = "\n==== WedgeWatchdog thread dump (issue #1233) ====\n"
         report += "reason: \(reason)\n"
         let taskDir = "/proc/self/task"
@@ -232,18 +269,23 @@ public enum WedgeWatchdog {
             by: { (Int($0) ?? 0) < (Int($1) ?? 0) })
         {
             report += "thread table (state D/S = blocked; wchan = kernel wait it is parked in):\n"
+            var syscalls: [(tid: String, syscall: String)] = []
             for tid in tids {
                 let comm = readProcFile("\(taskDir)/\(tid)/comm") ?? "?"
                 let wchan = readProcFile("\(taskDir)/\(tid)/wchan") ?? "?"
                 let stat = readProcFile("\(taskDir)/\(tid)/stat") ?? ""
+                let syscall = readProcFile("\(taskDir)/\(tid)/syscall") ?? "?"
+                syscalls.append((tid, syscall))
                 report += "  tid \(tid) state=\(threadStateCharacter(fromStat: stat)) "
-                report += "wchan=\(wchan) comm=\(comm)\n"
+                report += "wchan=\(wchan) syscall=\(syscall) comm=\(comm)\n"
             }
+            report += pipeHolderReport(threadSyscalls: syscalls)
+            report += childProcessReport()
         } else {
             report += "(/proc/self/task unavailable on this platform — no per-thread table)\n"
         }
         report += "==== end thread dump ====\n"
-        RawStandardError.write(report)
+        return report
     }
 
     private static func readProcFile(_ path: String) -> String? {

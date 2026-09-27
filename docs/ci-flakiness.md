@@ -1,9 +1,9 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-20)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-27)
 
 Handoff document for the flakiness work. Families 1–3 are the original
-2026-07-02 body; **Family 4 (2026-08-05) and Family 5 (2026-08-09) were added
-later**, so the header date is where this started, not where it ends. Check
-the newest families first — they are the ones still open.
+2026-07-02 body; **Family 4 (2026-08-05), Family 5 (2026-08-09) and Family 6
+(2026-09-27) were added later**, so the header date is where this started, not
+where it ends. Check the newest families first — they are the ones still open.
 
 Family 5 was rewritten on 2026-09-16 against a 213-run population rather than
 a single log tail. Two of the three tells it used to carry turned out to be
@@ -1206,6 +1206,110 @@ inside the scope, which concurrent activity can only raise).
 
 ---
 
+## Family 6 — `worker-tests` cancelled at its ceiling after the move to resolute (Foundation `Process` exit-signal leak, then the glibc abort lock in a swift-subprocess child) — ROOT-CAUSED & FIXED
+
+**Symptom.** `worker-tests` runs to its 20-minute `timeout-minutes` and reads
+`cancelled`; `swift-tests-gate` fails. A handful of `WorkerDaemonTests`
+(always including `hungMakeStepIsKilledAtTheConfiguredTimeout` and
+`workerDaemonReportsFallbackFailureWhenFinalReportFails`) record "Time limit
+was exceeded", the `[ci-pressure]` lines show the process at 0 % CPU from
+about a minute in, and nothing else ever finishes. The watchdog's dump never
+appears. It started with the move to the resolute image on 2026-09-22
+(#1572): before it, every release run on `main` passed; after it, 6 of the
+next 19 were cancelled this way, and PR #1591 hit it on both attempts.
+
+**Root cause.** On Linux, Foundation's `Process` learns that a child exited
+from a socketpair: the child inherits one end, and EOF on the other end means
+the child is gone. That end is not close-on-exec. Foundation emulates
+close-on-exec by listing the open descriptors *before* `posix_spawn`, so a
+descriptor another thread creates in between is inherited as well.
+`LocalHTTPTestServer` was the last `Process` in the worker test process, and
+its children are long-lived Python servers, up to four launched at once. A
+server that inherited a sibling's end kept the sibling's exit invisible, so
+the sibling's `stop()` sat in `waitUntilExit()` — a run loop spun on a
+cooperative-pool thread, outside every `WedgeWatchdog` scope — until the
+server holding its end died. Four such waits fill the pool, and then no test
+can reach the `stop()` that would free them.
+
+**Evidence.** Measured on this toolchain, not inferred from the logs: four
+concurrent `Process` launches put another launch's socket end into a child in
+18 of 300 rounds. The regression test below, run against the old helper,
+hung in exactly this state, and `gdb` showed it: one pool thread in
+`LocalHTTPTestServer.stop()` → `Process.waitUntilExit()` →
+`RunLoop.run(until:)`, the killed server a zombie Foundation had not reaped,
+and a sibling server holding four sockets where it needs one. A
+`repeat-test.yml` dispatch of `WorkerTests` × 20 on the pre-fix head stalled
+the same way on the CI image.
+
+**Fix.** `LocalHTTPTestServer` launches through swift-subprocess, like
+everything else the worker and its tests start. Subprocess closes every
+descriptor above stderr in the child and watches the exit with a pidfd, so
+there is nothing to leak and nothing a leak could hide. `stop()` no longer
+waits: it tells the running body to tear the server down with SIGKILL, and
+Subprocess reaps it. `LocalHTTPTestServerTests.aServerHoldsOnlyItsListeningSocket`
+pins the property: each server child holds its listening socket and no other
+(the old helper's children held at least two, and the test hangs on it).
+
+**Why the watchdog said nothing.** Two gaps, both closed. The blocked waits
+were outside every tracked scope, so the watchdog was never armed; that path
+no longer exists. And what the watchdog writes to stderr was lost when the job
+was cancelled. It now also writes its thread table to
+`/tmp/chickadee-wedge-dump-<pid>.txt`, each row naming the syscall the thread
+is blocked in, and the `worker-tests` lane prints that file in a step that
+runs on failure or cancel. The test step has its own 15-minute limit, so a
+stall fails the step with five minutes left for that print.
+
+**The second cause: glibc's abort lock in a swift-subprocess child.** The fix
+above was necessary and not sufficient. With it in place, `WorkerTests` × 30
+still stalled on all three of three `repeat-test.yml` runs, and this time the
+dump arrived. It showed one thread blocked in swift-subprocess's 4-byte
+exec-handshake read, and the only other holder of that pipe was a child whose
+command line was still the test runner's own: a child that never reached
+`exec`. Its one thread was in `futex_wait` on an address in libc's `.bss`.
+Matching the dump's user-space program counters against the Ubuntu glibc
+builds identified the library as 2.43-2ubuntu2.4, and its debug symbols named
+the address: offset 8 of `lock` in `stdlib/abort.c`, a `pthread_rwlock_t`.
+
+Since glibc 2.41, `sigaction(SIGABRT)` takes that lock for writing, and
+`posix_spawn` and `_Fork` take it for reading while they run. `_Fork` resets
+it in its own child. swift-subprocess creates its Linux child with a raw
+`clone3` syscall instead, so no glibc fork handling runs there, and the child
+inherits the lock in whatever state the parent had it. Before `exec`, the
+child resets every signal to its default with `signal()`, and `signal(SIGABRT,
+SIG_DFL)` goes through `sigaction`. If another thread of the parent was inside
+`posix_spawn` at the moment of the `clone3`, the child's copy of the lock has
+a reader that will never release it, and the child waits for it forever. The
+parent then waits forever for the handshake. Swift Testing starts every exit
+test with `posix_spawn`, so any `WorkerTests` exit test running beside a
+Subprocess launch could set it up. A glibc older than 2.41 has no such lock,
+which is why no local machine (2.39) ever showed it.
+
+**The fix for the second cause.** `Package.swift` pins swift-subprocess to a
+fork, `JimWallace/swift-subprocess` at branch `chickadee/abort-lock-fix`:
+upstream 1.0.0 plus one patch, in which the Linux child resets its signals
+with the raw `rt_sigaction` syscall, which takes no lock. It resets the same
+signals as before (1 to 31; glibc's `signal()` refused 32 and ended the
+loop). Return to upstream once a release carries an equivalent fix; the
+upstream report is
+[swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
+`SubprocessSpawnRaceTests` pins it: two threads call `posix_spawn` in a loop
+while the test launches through Subprocess 200 times. On the CI image it hangs
+against unpatched 1.0.0, and on a glibc older than 2.41 it passes either way.
+This was a production hazard as well as a test one: the server starts its
+local runner with Foundation's `Process` (so `posix_spawn`) while
+`PersonalizationEvaluator` launches through Subprocess.
+
+**Why the abort did not end the process.** After each dump the process kept
+running until the step limit. That is a separate question, and the file dump
+and the step limits make it harmless: the evidence is on disk before
+`abort()` is called.
+
+**Handling if it reappears.** Read the printed dump first: a pool thread in
+`futex`/`pipe_read` with a `syscall=` naming a `read` or `wait` is the shape.
+Do not re-add a Foundation `Process` to a test process that also spawns
+long-lived children; `Tests/TestSupport/InterpreterSpawn.swift` has the
+Subprocess helpers.
+
 ## Structural problems → current state
 
 1. **A bot's only re-kick was a new SHA.** Fixed: comment `/rerun-failed`
@@ -1432,8 +1536,9 @@ inside the scope, which concurrent activity can only raise).
    `ScriptExecution` builds its own CLOEXEC pipes inline because Subprocess's
    pipes do not set the flag. The measurement above still holds — it is simply
    no longer pinned by a test, because the code it measured no longer exists.
-   One hand-built `Pipe` remains, in `LocalHTTPTestServer`, and it sets the
-   flag itself.
+   The last hand-built `Pipe`, in `LocalHTTPTestServer`, went with Family 6's
+   fix: the handshake pipe is created close-on-exec, and the server itself is
+   a Subprocess child.
 4. **Stall visibility in `api-tests`** (Family 5) — **DONE, and the
    Family 5 half of the claim was wrong; see that entry.**
    `WedgeWatchdog` moved to a shared `ChickadeeTestSupport` target (a plain

@@ -63,7 +63,8 @@ enum LTILaunchValidator {
             resourceLink: claims.resourceLink,
             name: claims.name,
             email: claims.email,
-            custom: claims.custom ?? [:]
+            custom: claims.custom ?? [:],
+            deepLinkingSettings: claims.deepLinkingSettings
         )
     }
 

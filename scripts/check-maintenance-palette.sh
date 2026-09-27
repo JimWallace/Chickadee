@@ -44,7 +44,7 @@ status=0
 missing=""
 while IFS= read -r c; do
   [ -z "$c" ] && continue
-  if ! printf '%s\n' "$palette" | grep -qxF -- "$c"; then
+  if ! grep -qxF -- "$c" <<< "$palette"; then
     missing+="  ${c}"$'\n'
   fi
 done <<< "$page_colours"

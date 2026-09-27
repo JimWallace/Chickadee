@@ -107,7 +107,7 @@ fi
 
 names_of() { printf '%s\n' "$1" | cut -d= -f1; }
 value_of() { printf '%s\n' "$1" | grep "^$2=" | cut -d= -f2-; }
-listed() { printf '%s\n' "$2" | grep -qxF "$1"; }
+listed() { grep -qxF "$1" <<< "$2"; }
 
 known="$(printf '%s\n%s\n' "$(names_of "$BASE")" "$(names_of "$SATISFIERS")")"
 

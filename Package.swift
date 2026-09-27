@@ -37,7 +37,16 @@ let package = Package(
         // Process deadlocked forking from the multithreaded daemon (issue
         // #1139); Subprocess spawns without that hazard and is CI-tested on the
         // distributions the runner ships on.
-        .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "1.0.0"),
+        //
+        // Pinned to a fork: upstream 1.0.0 plus one patch. Its Linux child
+        // comes from a raw clone3 and reset SIGABRT through glibc, which on
+        // glibc 2.41+ blocks forever if another thread was inside posix_spawn
+        // at the clone (docs/ci-flakiness.md, Family 6). Return to upstream
+        // once a release carries the fix:
+        // https://github.com/swiftlang/swift-subprocess/issues/375
+        .package(
+            url: "https://github.com/JimWallace/swift-subprocess.git",
+            revision: "6f7083d5d16613c6183aef5b85075f24e05b6db0"),
         // Subprocess speaks `FilePath` at its API boundary. Already in the
         // resolved graph as its dependency; declared explicitly because a
         // target may only import what it declares.
@@ -210,6 +219,10 @@ let package = Package(
                 .target(name: "chickadee-runner"),
                 .target(name: "RunnerCore"),
                 .target(name: "ChickadeeTestSupport"),
+                // LocalHTTPTestServer launches its servers through
+                // Subprocess, like the runner (docs/ci-flakiness.md Family 6).
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Tests/WorkerTests",
             swiftSettings: strictWarnings

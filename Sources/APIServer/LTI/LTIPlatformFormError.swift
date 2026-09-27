@@ -9,6 +9,7 @@ enum LTIPlatformFormError: Error, Equatable, Sendable {
         case authLoginURL = "OIDC authorization URL"
         case accessTokenURL = "Access token URL"
         case jwksURL = "Key set URL"
+        case deepLinkReturnURL = "Deep link return URL"
     }
 
     case missingDisplayName

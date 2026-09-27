@@ -213,6 +213,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case ltiPlatformUpdated = "lti.platform_updated"
     case ltiPlatformDeleted = "lti.platform_deleted"
     case ltiCourseBound = "lti.course_bound"
+    case ltiContentLinked = "lti.content_linked"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -255,7 +256,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
-        case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound:
+        case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
+            .ltiContentLinked:
             return .lti
         }
     }
@@ -293,7 +295,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled,
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
-            .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound:
+            .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
+            .ltiContentLinked:
             return .ok
         }
     }
@@ -379,6 +382,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiPlatformUpdated: return "LTI platform updated"
         case .ltiPlatformDeleted: return "LTI platform deleted"
         case .ltiCourseBound: return "LMS course linked"
+        case .ltiContentLinked: return "Assignments added to the LMS"
         }
     }
 }

@@ -609,6 +609,9 @@ jobs:
           apt-get update -qq && apt-get install -y --no-install-recommends file make python3 r-base lua5.4 octave g++ racket default-jdk
 
       - name: Run WorkerTests
+        # Five minutes inside the job's ceiling, so a stall fails this step
+        # and the wedge-dump step below still gets to run.
+        timeout-minutes: 15
         # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
         # Testing's in-process parallelism, matching the APITests jobs and
         # the nightly coverage run.  WorkerTests spawn real subprocesses
@@ -635,6 +638,13 @@ jobs:
 
       - name: No test was skipped
         run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
+
+      - name: Print the wedge watchdog dump
+        # WedgeWatchdog writes its thread table to a file before it aborts,
+        # because what it writes to stderr can be lost with a stalled
+        # `swift test` (docs/ci-flakiness.md, Family 6).
+        if: failure() || cancelled()
+        run: cat /tmp/chickadee-wedge-dump-*.txt 2>/dev/null || echo "No wedge dump was written."
 
   # Single aggregate status for branch protection (the editor-smoke-gate
   # pattern): require THIS job instead of the individual jobs, so a job
