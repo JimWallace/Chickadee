@@ -103,6 +103,11 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_excluded")
     var brightspaceSyncExcluded: Bool?
 
+    /// The AGS line item this assignment's scores go to, once found or
+    /// created on the LMS. Nil = not yet known; the AGS sweep finds it.
+    @OptionalField(key: "lti_line_item_url")
+    var ltiLineItemURL: String?
+
     /// When true, students may spend their one secret-reveal token on this
     /// assignment to see secret-tier test results itemized. nil/false = off
     /// (the default): secret results stay aggregate-only for students.

@@ -143,6 +143,7 @@ struct BrowserResultRoutes: RouteCollection {
         // all" or a retest that routed through a worker.
         try await flagResultForBrightSpaceSync(
             browserResult, testSetupID: body.testSetupID, application: req.application, on: req.db)
+        try await LTIGradeSyncQueue.queue(submissionID: subID, testSetupID: body.testSetupID, on: req.db)
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.

@@ -209,6 +209,7 @@ func evaluateClassGoalAchievements(
         // an assignment whose class goal completed late lands in LEARN with
         // every early submitter's bonus permanently under-counted.
         if outcome.bonusFroze {
+            try await LTIGradeSyncQueue.queueAllStudents(testSetupID: setupID, on: db)
             try await requeueFrozenClassGoalBonusPushes(
                 assignment: assignment, testSetupID: setupID, on: db, logger: logger)
         }
@@ -463,7 +464,8 @@ private func requeueFrozenClassGoalBonusPushes(
         !gradeObjectID.isEmpty,
         let course = try await APICourse.find(assignment.courseID, on: db),
         let orgUnitID = course.brightspaceOrgUnitID,
-        !orgUnitID.isEmpty
+        !orgUnitID.isEmpty,
+        !course.usesLTIGrades
     else { return }
 
     let submissionIDs = try await APISubmission.query(on: db)

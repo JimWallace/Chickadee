@@ -128,7 +128,9 @@ func flagResultForBrightSpaceSync(
         !gradeObjectID.isEmpty,
         let course = try await APICourse.find(assignment.courseID, on: db),
         let orgUnitID = course.brightspaceOrgUnitID,
-        !orgUnitID.isEmpty
+        !orgUnitID.isEmpty,
+        // A course on AGS never sends through Valence (docs/lti-1-3.md).
+        !course.usesLTIGrades
     else { return }
 
     result.brightspaceSyncPending = true

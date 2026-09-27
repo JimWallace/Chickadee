@@ -25,4 +25,6 @@ struct LTIValidatedLaunch: Equatable, Sendable {
     let custom: [String: JSONValue]
     /// Present on a deep-linking launch whose platform sent the settings.
     var deepLinkingSettings: LTIDeepLinkingSettings?
+    /// Present when the platform grants AGS for this launch.
+    var agsEndpoint: LTIAGSEndpoint?
 }

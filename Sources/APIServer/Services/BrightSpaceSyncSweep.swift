@@ -232,10 +232,12 @@ extension GradeSyncSweep {
             return true
         }
 
-        // The course must have an org unit ID.
+        // The course must have an org unit ID, and must not send its grades
+        // through AGS instead (docs/lti-1-3.md: never both transports).
         guard let course = target.course,
             let orgUnitID = course.brightspaceOrgUnitID,
-            !orgUnitID.isEmpty
+            !orgUnitID.isEmpty,
+            !course.usesLTIGrades
         else {
             try await clearPendingFlag(syncRows, on: db)
             return true

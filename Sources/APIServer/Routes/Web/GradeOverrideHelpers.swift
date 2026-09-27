@@ -189,6 +189,8 @@ func flagOverrideOrResultsPendingSync(
     studentUserID: UUID,
     on db: Database
 ) async throws {
+    // A course on AGS sends the new grade (or the clear) through its own queue.
+    try await LTIGradeSyncQueue.queue(userIDs: [studentUserID], testSetupID: testSetupID, on: db)
     let now = Date()
     let results = try await gradeResultsForStudent(
         testSetupID: testSetupID, studentUserID: studentUserID, on: db)

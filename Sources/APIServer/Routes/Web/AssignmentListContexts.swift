@@ -226,6 +226,12 @@ struct InstructorBrightspaceContext: Encodable {
     /// old log-heuristic "unmapped students" list.
     let unreachableStudents: [BrightspaceReadinessRow]
     let hasUnreachable: Bool
+    /// True when the course is linked to an LTI platform, so the page links
+    /// to the LMS grades page. False on every deployment with no platform.
+    var showLTIGradesLink = false
+    /// True when the course sends its grades through AGS, so Valence is off
+    /// for it and the page says so.
+    var usesLTIGrades = false
 }
 
 /// Constants shared between the BrightSpace grade-sync server code and the

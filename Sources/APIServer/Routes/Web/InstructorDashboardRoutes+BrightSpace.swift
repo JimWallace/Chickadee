@@ -772,11 +772,13 @@ extension InstructorDashboardRoutes {
             showIdentityActions: showIdentityActions,
             showUseMyIdentity: showIdentityActions && !syncIdentity.isMe,
             flashSuccess: flashSuccess, flashError: flashError,
-            canSyncNow: syncEnabled && !course.isArchived,
+            canSyncNow: syncEnabled && !course.isArchived && !course.usesLTIGrades,
             doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             canReconcile: courseLinked && !course.isArchived,
-            unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty)
+            unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty,
+            showLTIGradesLink: course.ltiPlatformID != nil,
+            usesLTIGrades: course.usesLTIGrades)
     }
 
     /// Builds the per-assignment mapping rows: grade-item ID, latest-sync badge,

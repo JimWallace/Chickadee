@@ -2,8 +2,8 @@
 //
 // The claims of an LTI 1.3 launch `id_token` that Chickadee reads
 // (docs/lti-1-3.md "Launch validation"). Everything LTI-specific rides a
-// URI-named claim, hence the explicit coding keys. Claims for later slices
-// (deep-linking settings, AGS and NRPS endpoints) are added with those slices.
+// URI-named claim, hence the explicit coding keys. The NRPS claim is added
+// with slice 5.
 
 import Core
 import Foundation
@@ -51,6 +51,8 @@ struct LTILaunchClaims: JWTPayload, Equatable {
     /// Present on an `LtiDeepLinkingRequest`. Last and defaulted, so a launch
     /// built without it (every resource-link launch) needs no change.
     var deepLinkingSettings: LTIDeepLinkingSettings?
+    /// The AGS endpoint, on a launch from a platform that grants AGS.
+    var agsEndpoint: LTIAGSEndpoint?
 
     enum CodingKeys: String, CodingKey {
         case iss, sub, aud, exp, iat, nonce, azp, name, email
@@ -63,6 +65,7 @@ struct LTILaunchClaims: JWTPayload, Equatable {
         case resourceLink = "https://purl.imsglobal.org/spec/lti/claim/resource_link"
         case custom = "https://purl.imsglobal.org/spec/lti/claim/custom"
         case deepLinkingSettings = "https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings"
+        case agsEndpoint = "https://purl.imsglobal.org/spec/lti-ags/claim/endpoint"
     }
 
     /// Signature-time check: expiry only, with clock skew. The full rule set,
