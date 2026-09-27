@@ -1,0 +1,15 @@
+#extend("base"):
+#export("title"):
+Return to LMS
+#endexport
+#export("content"):
+<h1>Return to LMS</h1>
+<p class="section-intro">Your assignment links are ready. Return to the LMS to finish adding them.</p>
+<form method="post" action="#(returnURL)" class="form-stack">
+    <input type="hidden" name="JWT" value="#(jwt)">
+    <div class="toolbar toolbar--end">
+        <button class="btn btn-primary" type="submit">Return to LMS</button>
+    </div>
+</form>
+#endexport
+#endextend

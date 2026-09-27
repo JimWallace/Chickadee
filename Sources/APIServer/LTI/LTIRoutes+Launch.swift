@@ -170,7 +170,7 @@ extension LTIRoutes {
             throw LTILaunchFailure.claimRejected(error)
         }
         guard launch.nonce == login.nonce else { throw LTILaunchFailure.nonceMismatch }
-        guard launch.messageType == .resourceLink else { throw LTILaunchFailure.deepLinkingUnsupported }
+        let deepLink = try launch.messageType == .deepLinking ? Self.deepLinkRequest(launch) : nil
 
         let resolution: LTIIdentityResolver.Resolution
         do {
@@ -198,7 +198,11 @@ extension LTIRoutes {
             action: .loginSuccess, targetType: .auth, targetID: user.id?.uuidString,
             metadata: ["username": user.username, "method": "lti"], actorOverride: user, on: req)
 
-        let response = try await routeToCourse(launch: launch, platform: platform, user: user, req: req)
+        // A deep link left over from an earlier launch must not steer this one.
+        LTIPendingDeepLink.clear(from: req.session)
+        deepLink?.save(to: req.session)
+        let response = try await routeToCourse(
+            launch: launch, platform: platform, user: user, isDeepLink: deepLink != nil, req: req)
         response.cookies[Self.stateCookieName] = Self.expiredStateCookie(req: req)
         return response
     }
@@ -207,7 +211,7 @@ extension LTIRoutes {
     /// launch's role when they are not enrolled yet. An unbound context sends
     /// an instructor to the binding page and refuses anyone else.
     private func routeToCourse(
-        launch: LTIValidatedLaunch, platform: APILTIPlatform, user: APIUser, req: Request
+        launch: LTIValidatedLaunch, platform: APILTIPlatform, user: APIUser, isDeepLink: Bool, req: Request
     ) async throws -> Response {
         let platformID = try platform.requireID()
         guard let context = launch.context else { throw LTILaunchFailure.missingLaunchParameters }
@@ -233,7 +237,41 @@ extension LTIRoutes {
                 .save(on: req.db)
         }
         req.session.data["activeCourseID"] = courseID.uuidString
-        return req.redirect(to: "/")
+        if isDeepLink {
+            req.session.data[LTIPendingDeepLink.courseKey] = courseID.uuidString
+            return req.redirect(to: "/lti/deep-link")
+        }
+        return req.redirect(to: try await Self.resourceLinkDestination(launch: launch, course: course, on: req.db))
+    }
+
+    /// Where a resource-link launch lands: the assignment its `assignment`
+    /// custom parameter names (set by deep linking) when that assignment is in
+    /// the bound course, and the course dashboard otherwise.
+    static func resourceLinkDestination(
+        launch: LTIValidatedLaunch, course: APICourse, on db: Database
+    ) async throws -> String {
+        guard case .string(let publicID) = launch.custom[LTIPendingDeepLink.assignmentParameter],
+            let courseID = course.id,
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$courseID == courseID)
+                .filter(\.$publicID == publicID)
+                .first()
+        else { return "/" }
+        return VanityURLRoutes.vanityPath(courseCode: course.code, assignmentSlug: assignment.slug)
+    }
+
+    /// The deep-linking request, checked before anyone is signed in: the
+    /// platform must accept resource links and give a safe return URL, the
+    /// launch must name a course, and only course staff may add content.
+    static func deepLinkRequest(_ launch: LTIValidatedLaunch) throws -> LTIPendingDeepLink {
+        guard let settings = launch.deepLinkingSettings, settings.acceptsResourceLinks,
+            let returnURL = try? LTIPlatformForm.secureURL(settings.deepLinkReturnURL, field: .deepLinkReturnURL)
+        else { throw LTILaunchFailure.deepLinkingUnsupported }
+        guard launch.context != nil else { throw LTILaunchFailure.missingLaunchParameters }
+        guard launch.courseRole >= .ta else { throw LTILaunchFailure.deepLinkingNotAllowed }
+        return LTIPendingDeepLink(
+            returnURL: returnURL, data: settings.data, deploymentID: launch.deploymentID,
+            acceptMultiple: settings.acceptMultiple ?? false)
     }
 
     // MARK: - Helpers

@@ -61,6 +61,7 @@ func routes(_ app: Application) throws {
     // Binds an LMS course to a Chickadee course after an instructor launch
     // (docs/lti-1-3.md "Courses"). A first-party form, so it rides the CSRF group.
     try auth.register(collection: LTIBindRoutes())
+    try auth.register(collection: LTIDeepLinkRoutes())
     // Registered last so fixed-path routes always take precedence.
     try auth.register(collection: VanityURLRoutes())
 

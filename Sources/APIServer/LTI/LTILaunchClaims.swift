@@ -48,6 +48,9 @@ struct LTILaunchClaims: JWTPayload, Equatable {
     /// platform may send a number or boolean, and one non-string value must
     /// not make the whole launch undecodable.
     let custom: [String: JSONValue]?
+    /// Present on an `LtiDeepLinkingRequest`. Last and defaulted, so a launch
+    /// built without it (every resource-link launch) needs no change.
+    var deepLinkingSettings: LTIDeepLinkingSettings?
 
     enum CodingKeys: String, CodingKey {
         case iss, sub, aud, exp, iat, nonce, azp, name, email
@@ -59,6 +62,7 @@ struct LTILaunchClaims: JWTPayload, Equatable {
         case context = "https://purl.imsglobal.org/spec/lti/claim/context"
         case resourceLink = "https://purl.imsglobal.org/spec/lti/claim/resource_link"
         case custom = "https://purl.imsglobal.org/spec/lti/claim/custom"
+        case deepLinkingSettings = "https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings"
     }
 
     /// Signature-time check: expiry only, with clock skew. The full rule set,

@@ -67,6 +67,11 @@ struct LTIBindRoutes: RouteCollection {
         req.session.data[LTIRoutes.pendingContextKey] = nil
         req.session.data[LTIRoutes.pendingContextTitleKey] = nil
         req.session.data["activeCourseID"] = courseID.uuidString
+        // A deep-linking launch from an unlinked course continues to the picker.
+        if LTIPendingDeepLink.load(from: req.session) != nil {
+            req.session.data[LTIPendingDeepLink.courseKey] = courseID.uuidString
+            return req.redirect(to: "/lti/deep-link")
+        }
         return req.redirect(to: "/")
     }
 
