@@ -181,7 +181,7 @@ for fixture in "${fixtures[@]}"; do
         echo "    expected: $expect"
         echo "    The defect tripped a different rule, so the rule under test"
         echo "    is still unproven."
-        printf '%s\n' "$out" | sed 's/^/      /' | head -12
+        sed -n '1,12s/^/      /p' <<< "$out"
         failed=$((failed + 1)); status=1
     else
         echo "✔ $name — $description"
