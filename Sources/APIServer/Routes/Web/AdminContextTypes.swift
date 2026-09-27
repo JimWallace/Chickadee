@@ -426,5 +426,5 @@ struct LTIPlatformFieldsContext: Encodable {
     let form: LTIPlatformForm
     /// A validation error for this form, shown inside it rather than at the
     /// top of the page, which can be a whole table away.
-    var error: String? = nil
+    var error: String?
 }

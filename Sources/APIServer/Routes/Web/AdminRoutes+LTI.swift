@@ -164,7 +164,8 @@ extension AdminRoutes {
                 editOpen: isEditing,
                 fields: LTIPlatformFieldsContext(
                     idPrefix: "lti-\(id.uuidString)",
-                    form: isEditing ? (editing?.form ?? LTIPlatformForm(platform: platform))
+                    form: isEditing
+                        ? (editing?.form ?? LTIPlatformForm(platform: platform))
                         : LTIPlatformForm(platform: platform),
                     error: isEditing ? editing?.error : nil))
         }

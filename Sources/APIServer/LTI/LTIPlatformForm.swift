@@ -63,7 +63,8 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
         let issuer = try Self.secureURL(issuer, field: .issuer)
         let clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clientID.isEmpty else { throw .missingClientID }
-        let deployments = deploymentIDs
+        let deployments =
+            deploymentIDs
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }

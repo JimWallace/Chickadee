@@ -35,7 +35,7 @@ import VaporTesting
     /// POSTs `fields` to `path` as the admin, with a CSRF token bound to the session.
     private func post(
         _ path: String, _ fields: [String: String], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) async throws -> Void
+        _ check: @escaping (TestingHTTPResponse) throws -> Void
     ) async throws {
         let (token, boundCookie) = try await csrfFields(for: "/admin/lti", cookie: cookie, on: app)
         var body = fields
@@ -49,16 +49,24 @@ import VaporTesting
             afterResponse: check)
     }
 
+    /// GETs `path` with the session cookie.
+    private func get(
+        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+    ) async throws {
+        try await app.asyncTest(
+            .GET, path,
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: check)
+    }
+
     private func auditActions() async throws -> [String] {
         try await APIAuditLogEntry.query(on: app.db).all().map(\.action)
     }
 
     @Test func pageShowsToolConfigurationAndAnEmptyPlatformList() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
-            try await app.asyncTest(
-                .GET, "/admin/lti", beforeRequest: { $0.headers.add(name: .cookie, value: cookie) }
-            ) { res in
+            try await get("/admin/lti", cookie: cookie) { res in
                 #expect(res.status == .ok)
                 let body = res.body.string
                 #expect(body.contains("class=\"admin-tabs\""))
@@ -74,9 +82,7 @@ import VaporTesting
     @Test func nonAdminIsForbidden() async throws {
         try await withApp(app) { app in
             let cookie = try await loginUser(username: "lti_user", password: "testpassword", role: "user", on: app)
-            try await app.asyncTest(
-                .GET, "/admin/lti", beforeRequest: { $0.headers.add(name: .cookie, value: cookie) }
-            ) { res in
+            try await get("/admin/lti", cookie: cookie) { res in
                 #expect(res.status == .forbidden)
             }
         }
@@ -96,9 +102,7 @@ import VaporTesting
             let actions = try await auditActions()
             #expect(actions.contains(AuditAction.ltiPlatformRegistered.rawValue))
 
-            try await app.asyncTest(
-                .GET, "/admin/lti?ok=registered", beforeRequest: { $0.headers.add(name: .cookie, value: cookie) }
-            ) { res in
+            try await get("/admin/lti?ok=registered", cookie: cookie) { res in
                 #expect(res.body.string.contains("Platform registered."))
                 #expect(res.body.string.contains("UW LEARN"))
             }
@@ -188,7 +192,7 @@ import VaporTesting
     }
 
     @Test func unknownPlatformIsNotFound() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             try await post("/admin/lti/platforms/\(UUID())/delete", [:], cookie: cookie) { res in
                 #expect(res.status == .notFound)
@@ -197,12 +201,9 @@ import VaporTesting
     }
 
     @Test func unknownNoticeKeyShowsNoBanner() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
-            try await app.asyncTest(
-                .GET, "/admin/lti?ok=%3Cb%3Espoof%3C%2Fb%3E",
-                beforeRequest: { $0.headers.add(name: .cookie, value: cookie) }
-            ) { res in
+            try await get("/admin/lti?ok=%3Cb%3Espoof%3C%2Fb%3E", cookie: cookie) { res in
                 #expect(res.status == .ok)
                 #expect(!res.body.string.contains("spoof"))
             }

@@ -9,9 +9,11 @@ import Testing
 @testable import APIServer
 
 @Suite struct LTIToolEndpointsTests {
-    @Test(arguments: ["https://chickadee.example.edu", "https://chickadee.example.edu/", "https://chickadee.example.edu//"])
-    func absoluteURLsHaveOneSlashBeforeThePath(base: String) throws {
-        let endpoints = LTIToolEndpoints(publicBaseURL: try #require(URL(string: base)))
+    @Test(arguments: [
+        "https://chickadee.example.edu", "https://chickadee.example.edu/", "https://chickadee.example.edu//",
+    ])
+    func absoluteURLsHaveOneSlashBeforeThePath(base: String) {
+        let endpoints = LTIToolEndpoints(publicBaseURL: URL(string: base))
         #expect(endpoints.isAbsolute)
         #expect(endpoints.loginURL == "https://chickadee.example.edu/lti/login")
         #expect(endpoints.launchURL == "https://chickadee.example.edu/lti/launch")
