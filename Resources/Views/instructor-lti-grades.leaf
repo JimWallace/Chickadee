@@ -5,6 +5,15 @@ LMS grades
 #export("content"):
 #extend("_instructor-tabs")
 
+#if(canPushAll):
+<div class="toolbar toolbar--end section-gap">
+    <form method="post" action="/instructor/lti-grades/push-all" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit">Sync now</button>
+    </form>
+</div>
+#endif
+
 #if(!hasActiveCourse):
 <section class="page-section">
     <p class="empty">Select a course to manage its LMS grades.</p>
@@ -23,8 +32,7 @@ LMS grades
     </p>
     #if(!hasGradeService):
     <p class="section-note">
-        The LMS has not sent a grade service URL yet. Open Chickadee from the LMS course once
-        to receive it.
+        Open Chickadee from the LMS course once so that the LMS sends its grade service URL.
     </p>
     #endif
     #if(canChooseTransport):
@@ -35,7 +43,7 @@ LMS grades
             <div class="checkbox-list">
                 <label class="checkbox-row">
                     <input type="radio" name="transport" value="valence"#if(!usesAGS): checked#endif>
-                    Valence sync
+                    LEARN grade sync
                 </label>
                 <label class="checkbox-row">
                     <input type="radio" name="transport" value="ags"#if(usesAGS): checked#endif>
@@ -50,7 +58,7 @@ LMS grades
     #elseif(usesAGS):
     <p class="section-note">Grades go through the LTI grade service.</p>
     #else:
-    <p class="section-note">Grades go through the Valence sync.</p>
+    <p class="section-note">Grades go through the LEARN grade sync.</p>
     #endif
 </section>
 
@@ -63,17 +71,9 @@ LMS grades
         #if(failedCount > 0):
         <span class="chip chip-err">#(failedCount) failed</span>
         #else:
-        <span class="chip">0 failed</span>
+        <span class="chip chip-ok">0 failed</span>
         #endif
     </div>
-    #if(canPushAll):
-    <div class="toolbar">
-        <form method="post" action="/instructor/lti-grades/push-all" class="inline-form">
-            #csrfFormField()
-            <button class="btn action-btn" type="submit">Sync now</button>
-        </form>
-    </div>
-    #endif
     #if(count(failures) > 0):
     <div class="table-scroll"><table class="results-table">
         <thead>

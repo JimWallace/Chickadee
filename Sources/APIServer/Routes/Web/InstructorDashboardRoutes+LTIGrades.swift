@@ -188,8 +188,9 @@ extension InstructorDashboardRoutes {
     static func ltiGradesNotice(_ key: String?) -> String? {
         switch key {
         case LTIGradeTransport.ags.rawValue: "Grades for this course now go to the LMS through the LTI grade service."
-        case LTIGradeTransport.valence.rawValue: "Grades for this course now go to the LMS through the Valence sync."
-        case "push": "Every grade is queued. The LMS receives them within a minute."
+        case LTIGradeTransport.valence.rawValue:
+            "Grades for this course now go to the LMS through the LEARN grade sync."
+        case "push": "Every grade is queued, and the LMS receives them within a minute."
         default: nil
         }
     }
@@ -197,7 +198,8 @@ extension InstructorDashboardRoutes {
     static func ltiGradesProblem(_ key: String?) -> String? {
         switch key {
         case "course": "Select a course first."
-        case "service": "The LMS has not sent a grade service URL. Open Chickadee from the LMS once, then try again."
+        case "service":
+            "Open Chickadee from the LMS course once so that the LMS sends its grade service URL, then try again."
         case "transport": "This course does not send its grades through the LTI grade service."
         default: nil
         }
