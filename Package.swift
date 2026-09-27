@@ -210,6 +210,10 @@ let package = Package(
                 .target(name: "chickadee-runner"),
                 .target(name: "RunnerCore"),
                 .target(name: "ChickadeeTestSupport"),
+                // LocalHTTPTestServer launches its servers through
+                // Subprocess, like the runner (docs/ci-flakiness.md Family 6).
+                .product(name: "Subprocess", package: "swift-subprocess"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Tests/WorkerTests",
             swiftSettings: strictWarnings
