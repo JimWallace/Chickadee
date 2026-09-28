@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.254] - 2026-09-28
+
+### Added
+
+- **Submit a commit from GitHub (slice 3 of docs/github-submissions.md).** An instructor can turn on GitHub submission for a worker-graded assignment in *Student Options* while a GitHub App is registered. A student with a linked GitHub account then chooses a repository they own and a branch, and submits the head commit. The server checks that the linked account owns the repository, applies the same deadline gate as the upload form before it reads anything from GitHub, and converts the commit tarball into an ordinary submission zip: the top folder is removed, only regular files are kept, and a commit larger than 10 MB is refused. The results page shows the repository and a link to the commit. The upload form does not change, and a deployment with no GitHub App registered shows nothing new.
+
+
 ## [0.5.253] - 2026-09-28
 
 ### Added
