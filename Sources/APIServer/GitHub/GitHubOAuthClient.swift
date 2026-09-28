@@ -26,6 +26,15 @@ struct GitHubCodeExchange: Sendable, Equatable {
     let redirectURI: String
 }
 
+/// An installation of the App that a user can reach (slice 4).
+struct GitHubUserInstallation: Sendable, Equatable {
+    let installationID: Int64
+    let accountID: Int64
+    let accountLogin: String
+    /// `Organization` or `User`.
+    let accountType: String
+}
+
 struct GitHubOAuthClient: Sendable {
     /// Exchanges an authorization code for a user access token.
     var exchangeCode: @Sendable (GitHubCodeExchange) async throws -> String
@@ -33,6 +42,14 @@ struct GitHubOAuthClient: Sendable {
     var fetchUser: @Sendable (_ token: String) async throws -> GitHubUser
     /// Revokes a user token. Best effort: a failure is logged, not shown.
     var revokeToken: @Sendable (_ token: String, _ clientID: String, _ clientSecret: String) async throws -> Void
+    /// The App's installations that the user can reach (slice 4: binding an
+    /// organization to a course).
+    var userInstallations: @Sendable (_ token: String) async throws -> [GitHubUserInstallation] = { _ in [] }
+    /// The user's role in an organization (`admin` or `member`) while the
+    /// membership is active, else nil.
+    var organizationRole: @Sendable (_ token: String, _ organization: String) async throws -> String? = { _, _ in
+        nil
+    }
 }
 
 extension GitHubOAuthClient {
@@ -60,6 +77,25 @@ extension GitHubOAuthClient {
             case codeVerifier = "code_verifier"
             case redirectURI = "redirect_uri"
         }
+    }
+
+    private struct InstallationAccount: Decodable {
+        let id: Int64
+        let login: String
+        let type: String
+    }
+
+    private struct InstallationList: Decodable {
+        struct Installation: Decodable {
+            let id: Int64
+            let account: InstallationAccount
+        }
+        let installations: [Installation]
+    }
+
+    private struct Membership: Decodable {
+        let state: String
+        let role: String
     }
 
     private static func apiHeaders(_ headers: inout HTTPHeaders) {
@@ -110,6 +146,35 @@ extension GitHubOAuthClient {
                 guard response.status == .noContent || response.status == .ok else {
                     throw Abort(response.status)
                 }
+            },
+            userInstallations: { token in
+                let response = try await client.get(
+                    URI(string: "https://api.github.com/user/installations?per_page=100")
+                ) { req in
+                    apiHeaders(&req.headers)
+                    req.headers.bearerAuthorization = BearerAuthorization(token: token)
+                }
+                guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
+                return try response.content.decode(InstallationList.self).installations.map {
+                    GitHubUserInstallation(
+                        installationID: $0.id, accountID: $0.account.id,
+                        accountLogin: $0.account.login, accountType: $0.account.type)
+                }
+            },
+            organizationRole: { token, organization in
+                let response = try await client.get(
+                    URI(
+                        string:
+                            "https://api.github.com/user/memberships/orgs/\(GitHubRepoClient.pathSegment(organization))"
+                    )
+                ) { req in
+                    apiHeaders(&req.headers)
+                    req.headers.bearerAuthorization = BearerAuthorization(token: token)
+                }
+                if response.status == .notFound || response.status == .forbidden { return nil }
+                guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
+                let membership = try response.content.decode(Membership.self)
+                return membership.state == "active" ? membership.role : nil
             })
     }
 }

@@ -443,8 +443,10 @@ struct AdminGitHubContext: Encodable {
     let creation: GitHubAppCreationContext?
     /// The organization the admin typed, so the field keeps it.
     let organization: String
-    /// True when an organization was typed, so its disclosure stays open.
+    /// True when an option was set, so the disclosure stays open.
     let organizationOpen: Bool
+    /// True when the manifest asks for the course-repository permissions.
+    let courseRepositories: Bool
     let flashSuccess: String?
     let flashError: String?
 }

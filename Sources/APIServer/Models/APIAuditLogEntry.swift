@@ -223,6 +223,11 @@ enum AuditAction: String, Sendable, CaseIterable {
     case githubAccountLinked = "github.account_linked"
     case githubAccountUnlinked = "github.account_unlinked"
     case githubSubmissionToggled = "github.submission_toggled"
+    case githubCourseBound = "github.course_bound"
+    case githubCourseUnbound = "github.course_unbound"
+    case githubTemplateSet = "github.template_set"
+    case githubCourseRepositoryCreated = "github.course_repository_created"
+    case githubCourseRepositoriesArchived = "github.course_repositories_archived"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -269,7 +274,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .lti
         case .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
-            .githubSubmissionToggled:
+            .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
+            .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
             return .github
         }
     }
@@ -310,7 +316,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
             .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
-            .githubSubmissionToggled:
+            .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
+            .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
             return .ok
         }
     }
@@ -404,6 +411,11 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .githubAccountLinked: return "GitHub account linked"
         case .githubAccountUnlinked: return "GitHub account unlinked"
         case .githubSubmissionToggled: return "GitHub submission setting changed"
+        case .githubCourseBound: return "GitHub organization bound to course"
+        case .githubCourseUnbound: return "GitHub organization unbound from course"
+        case .githubTemplateSet: return "GitHub template repository changed"
+        case .githubCourseRepositoryCreated: return "GitHub course repository created"
+        case .githubCourseRepositoriesArchived: return "GitHub course repositories archived"
         }
     }
 }

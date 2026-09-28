@@ -81,6 +81,7 @@ func routes(_ app: Application) throws {
     try instructor.register(collection: DraftAssignmentRoutes())
     try instructor.register(collection: PublishedAssignmentRoutes())
     try instructor.register(collection: CourseAdminRoutes())
+    try instructor.register(collection: GitHubCourseRoutes())
     try instructor.register(collection: StudentCourseRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())

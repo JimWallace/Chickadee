@@ -58,6 +58,32 @@ struct GitHubRepoClient: Sendable {
     /// The gzipped tarball of a commit. Throws `GitHubSubmitError.tooLarge`
     /// when the download is more than `maxBytes`.
     var tarball: @Sendable (_ token: String, _ fullName: String, _ sha: String, _ maxBytes: Int) async throws -> Data
+
+    // MARK: Course repositories (slice 4)
+    //
+    // Each has a default, so a fake built for slice 3 needs no change. A
+    // default refuses rather than succeeds, so a test that forgets one fails.
+
+    /// The template repositories the installation grants (the first 100).
+    var templates: @Sendable (_ token: String) async throws -> [GitHubRepository] = { _ in
+        throw GitHubSubmitError.unavailable
+    }
+    /// Makes the private repository `owner/name` from a template.
+    var generate:
+        @Sendable (_ token: String, _ template: String, _ owner: String, _ name: String) async throws ->
+            GitHubRepository = { _, _, _, _ in throw GitHubSubmitError.unavailable }
+    /// Invites `login` to the repository with write access.
+    var addCollaborator: @Sendable (_ token: String, _ fullName: String, _ login: String) async throws -> Void =
+        { _, _, _ in throw GitHubSubmitError.unavailable }
+    /// Whether members may fork the organization's private repositories, or
+    /// nil when the installation cannot read the setting.
+    var privateForksAllowed: @Sendable (_ token: String, _ organization: String) async throws -> Bool? = { _, _ in
+        nil
+    }
+    /// Archives a repository: it becomes read-only and stays on GitHub.
+    var archive: @Sendable (_ token: String, _ fullName: String) async throws -> Void = { _, _ in
+        throw GitHubSubmitError.unavailable
+    }
 }
 
 extension GitHubRepoClient {
@@ -83,11 +109,13 @@ extension GitHubRepoClient {
         let fullName: String
         let owner: Owner
         let defaultBranch: String
+        let isTemplate: Bool?
 
         enum CodingKeys: String, CodingKey {
             case id, owner
             case fullName = "full_name"
             case defaultBranch = "default_branch"
+            case isTemplate = "is_template"
         }
 
         var repository: GitHubRepository {
@@ -97,6 +125,35 @@ extension GitHubRepoClient {
 
     private struct RepositoryList: Decodable {
         let repositories: [RepositoryBody]
+    }
+
+    private struct OrganizationBody: Decodable {
+        let membersCanForkPrivateRepositories: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case membersCanForkPrivateRepositories = "members_can_fork_private_repositories"
+        }
+    }
+
+    private struct GenerateBody: Content {
+        let owner: String
+        let name: String
+        let `private`: Bool
+    }
+
+    private struct PermissionBody: Content {
+        let permission: String
+    }
+
+    private struct ArchiveBody: Content {
+        let archived: Bool
+    }
+
+    /// GitHub refuses with 403 and no remaining quota, or with 429, when an App
+    /// makes repositories too fast.
+    static func isRateLimited(_ response: ClientResponse) -> Bool {
+        response.status == .tooManyRequests
+            || (response.status == .forbidden && response.headers.first(name: "x-ratelimit-remaining") == "0")
     }
 
     private struct BranchBody: Decodable {
@@ -141,26 +198,46 @@ extension GitHubRepoClient {
         return decoder
     }
 
+    /// The calls every live closure makes. Only the transport call is
+    /// wrapped in the reachability record: a non-2xx answer means GitHub was
+    /// reached, which the rule must not report as an outage.
+    private struct LiveTransport: Sendable {
+        let app: Application
+
+        func get(_ path: String, token: String) async throws -> ClientResponse {
+            let client = app.client
+            return try await app.recordingReachability(.github) {
+                try await client.get(URI(string: api + path), headers: headers(token: token))
+            }
+        }
+
+        func send(
+            _ method: HTTPMethod, _ path: String, token: String, body: some Content & Sendable
+        ) async throws -> ClientResponse {
+            let client = app.client
+            return try await app.recordingReachability(.github) {
+                try await client.send(method, headers: headers(token: token), to: URI(string: api + path)) { req in
+                    try req.content.encode(body, as: .json)
+                }
+            }
+        }
+
+        func decode<T: Decodable>(_: T.Type, from response: ClientResponse) throws -> T {
+            guard response.status == .ok, let body = response.body else { throw GitHubSubmitError.githubFailed }
+            return try decoder().decode(T.self, from: Data(buffer: body))
+        }
+    }
+
     /// The client that calls api.github.com.
     static func live(app: Application) -> GitHubRepoClient {
         let client = app.client
         let http = app.http.client.shared
-        // Only the transport call is wrapped: a non-2xx answer means GitHub was
-        // reached, which the reachability rule must not report as an outage.
-        @Sendable func get(_ path: String, token: String) async throws -> ClientResponse {
-            try await app.recordingReachability(.github) {
-                try await client.get(URI(string: api + path), headers: headers(token: token))
-            }
-        }
-        @Sendable func decode<T: Decodable>(_: T.Type, from response: ClientResponse) throws -> T {
-            guard response.status == .ok, let body = response.body else { throw GitHubSubmitError.githubFailed }
-            return try decoder().decode(T.self, from: Data(buffer: body))
-        }
-        return GitHubRepoClient(
+        let transport = LiveTransport(app: app)
+        var live = GitHubRepoClient(
             findInstallation: { appJWT, login in
-                let response = try await get("/users/\(pathSegment(login))/installation", token: appJWT)
+                let response = try await transport.get("/users/\(pathSegment(login))/installation", token: appJWT)
                 if response.status == .notFound { return nil }
-                let body = try decode(InstallationBody.self, from: response)
+                let body = try transport.decode(InstallationBody.self, from: response)
                 return GitHubInstallation(id: body.id, accountID: body.account.id)
             },
             createInstallationToken: { appJWT, installationID in
@@ -176,22 +253,24 @@ extension GitHubRepoClient {
                 return GitHubInstallationToken(token: decoded.token, expiresAt: decoded.expiresAt)
             },
             repositories: { token in
-                let response = try await get("/installation/repositories?per_page=100", token: token)
-                return try decode(RepositoryList.self, from: response).repositories.map(\.repository)
+                let response = try await transport.get("/installation/repositories?per_page=100", token: token)
+                return try transport.decode(RepositoryList.self, from: response).repositories.map(\.repository)
             },
             repository: { token, id in
-                let response = try await get("/repositories/\(id)", token: token)
+                let response = try await transport.get("/repositories/\(id)", token: token)
                 if response.status == .notFound { return nil }
-                return try decode(RepositoryBody.self, from: response).repository
+                return try transport.decode(RepositoryBody.self, from: response).repository
             },
             branches: { token, fullName in
-                let response = try await get("/repos/\(repoPath(fullName))/branches?per_page=100", token: token)
-                return try decode([BranchBody].self, from: response).map(\.name)
+                let response = try await transport.get(
+                    "/repos/\(repoPath(fullName))/branches?per_page=100", token: token)
+                return try transport.decode([BranchBody].self, from: response).map(\.name)
             },
             commit: { token, fullName, ref in
-                let response = try await get("/repos/\(repoPath(fullName))/commits/\(pathSegment(ref))", token: token)
+                let response = try await transport.get(
+                    "/repos/\(repoPath(fullName))/commits/\(pathSegment(ref))", token: token)
                 if response.status == .notFound || response.status == .unprocessableEntity { return nil }
-                let body = try decode(CommitBody.self, from: response)
+                let body = try transport.decode(CommitBody.self, from: response)
                 return GitHubCommit(sha: body.sha, message: body.commit.message)
             },
             tarball: { token, fullName, sha, maxBytes in
@@ -209,6 +288,47 @@ extension GitHubRepoClient {
                     throw GitHubSubmitError.tooLarge
                 }
             })
+        addCourseRepositoryCalls(to: &live, transport: transport)
+        return live
+    }
+
+    /// The slice-4 calls, apart from `live` so each builder stays readable.
+    private static func addCourseRepositoryCalls(to live: inout GitHubRepoClient, transport: LiveTransport) {
+        live.templates = { token in
+            let response = try await transport.get("/installation/repositories?per_page=100", token: token)
+            return try transport.decode(RepositoryList.self, from: response).repositories
+                .filter { $0.isTemplate == true }.map(\.repository)
+        }
+        live.generate = { token, template, owner, name in
+            let response = try await transport.send(
+                .POST, "/repos/\(repoPath(template))/generate", token: token,
+                body: GenerateBody(owner: owner, name: name, private: true))
+            if isRateLimited(response) { throw GitHubSubmitError.rateLimited }
+            if response.status == .unprocessableEntity { throw GitHubSubmitError.repositoryNameTaken }
+            guard response.status == .created, let body = response.body else {
+                throw GitHubSubmitError.githubFailed
+            }
+            return try decoder().decode(RepositoryBody.self, from: Data(buffer: body)).repository
+        }
+        live.addCollaborator = { token, fullName, login in
+            let response = try await transport.send(
+                .PUT, "/repos/\(repoPath(fullName))/collaborators/\(pathSegment(login))", token: token,
+                body: PermissionBody(permission: "push"))
+            if isRateLimited(response) { throw GitHubSubmitError.rateLimited }
+            guard response.status == .created || response.status == .noContent else {
+                throw GitHubSubmitError.githubFailed
+            }
+        }
+        live.privateForksAllowed = { token, organization in
+            let response = try await transport.get("/orgs/\(pathSegment(organization))", token: token)
+            guard response.status == .ok else { return nil }
+            return try transport.decode(OrganizationBody.self, from: response).membersCanForkPrivateRepositories
+        }
+        live.archive = { token, fullName in
+            let response = try await transport.send(
+                .PATCH, "/repos/\(repoPath(fullName))", token: token, body: ArchiveBody(archived: true))
+            guard response.status == .ok else { throw GitHubSubmitError.githubFailed }
+        }
     }
 }
 

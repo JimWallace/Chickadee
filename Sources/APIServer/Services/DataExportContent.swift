@@ -44,6 +44,16 @@ struct DataExportProfile: Codable, Sendable {
     /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
     /// when none is linked.
     let githubAccount: DataExportGitHubAccount?
+    /// Course repositories made for the student (slice 4), or nil when none.
+    var githubCourseRepositories: [DataExportGitHubCourseRepository]?
+}
+
+struct DataExportGitHubCourseRepository: Codable, Sendable {
+    let testSetupID: String
+    let repositoryID: Int64
+    let repository: String
+    let createdAt: Date?
+    let archivedAt: Date?
 }
 
 struct DataExportGitHubAccount: Codable, Sendable {
@@ -157,6 +167,12 @@ func gatherDataExportContent(
     let auditEntries = try await gatherAuditEntries(for: user, on: db)
     let adjustments = try await gatherGradingAdjustments(userID: userID, on: db)
     let githubLink = try await APIGitHubAccountLink.query(on: db).filter(\.$userID == userID).first()
+    let courseRepositories = try await APIGitHubCourseRepository.query(on: db).filter(\.$userID == userID).all()
+        .map {
+            DataExportGitHubCourseRepository(
+                testSetupID: $0.testSetupID, repositoryID: $0.repoID, repository: $0.repoFullName,
+                createdAt: $0.createdAt, archivedAt: $0.archivedAt)
+        }
 
     return DataExportContent(
         profile: DataExportProfile(
@@ -176,7 +192,8 @@ func gatherDataExportContent(
             avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode),
             githubAccount: githubLink.map {
                 DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
-            }
+            },
+            githubCourseRepositories: courseRepositories.isEmpty ? nil : courseRepositories
         ),
         enrollments: enrollments,
         submissions: submissionData.submissions,

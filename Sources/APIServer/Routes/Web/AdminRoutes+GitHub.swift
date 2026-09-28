@@ -42,6 +42,7 @@ extension AdminRoutes {
         let error = req.query[String.self, at: "error"].flatMap(GitHubAppRegistrationError.init(rawValue:))
         return try await renderGitHubPage(
             req: req, organizationText: req.query[String.self, at: "org"] ?? "",
+            courseRepositories: req.query[String.self, at: "courseRepositories"] != nil,
             flashSuccess: notice?.message, flashError: error?.message)
     }
 
@@ -128,7 +129,8 @@ extension AdminRoutes {
     }
 
     private func renderGitHubPage(
-        req: Request, organizationText: String, flashSuccess: String?, flashError: String?
+        req: Request, organizationText: String, courseRepositories: Bool,
+        flashSuccess: String?, flashError: String?
     ) async throws -> View {
         let registered = try await APIGitHubApp.query(on: req.db).first()
         let baseURL = req.application.securityConfiguration.publicBaseURL
@@ -139,7 +141,9 @@ extension AdminRoutes {
             let organization = GitHubOrganizationName(trimmed)
             if !trimmed.isEmpty, organization == nil {
                 flashError = GitHubAppRegistrationError.invalidOrganization.message
-            } else if let manifest = GitHubAppManifest(publicBaseURL: baseURL, organization: organization) {
+            } else if let manifest = GitHubAppManifest(
+                publicBaseURL: baseURL, organization: organization, courseRepositories: courseRepositories)
+            {
                 let state = LTILaunchSecrets.randomToken()
                 req.session.data[Self.githubManifestStateKey] = state
                 // The manifest form posts to github.com, so this page's CSP must
@@ -159,7 +163,9 @@ extension AdminRoutes {
             app: registered.map(AdminGitHubAppDetails.init(app:)),
             creation: creation,
             organization: organizationText,
-            organizationOpen: !organizationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            organizationOpen: courseRepositories
+                || !organizationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            courseRepositories: courseRepositories,
             flashSuccess: flashSuccess,
             flashError: flashError)
         return try await req.view.render("admin-github", ctx)

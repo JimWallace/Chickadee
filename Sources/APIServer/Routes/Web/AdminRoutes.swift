@@ -625,6 +625,10 @@ struct AdminRoutes: RouteCollection {
         try await APIGitHubAccountLink.query(on: req.db)
             .filter(\.$userID == uuid)
             .delete()
+        // The repository on GitHub stays: it holds the commits a grade points at.
+        try await APIGitHubCourseRepository.query(on: req.db)
+            .filter(\.$userID == uuid)
+            .delete()
         try await APISubmission.query(on: req.db)
             .filter(\.$retestedByUserID == uuid)
             .set(\.$retestedByUserID, to: nil)

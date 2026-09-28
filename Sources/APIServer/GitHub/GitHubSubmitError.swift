@@ -26,6 +26,12 @@ enum GitHubSubmitError: String, Error, Equatable {
     case empty
     /// The tarball could not be read.
     case unreadable
+    /// GitHub refused to make a repository because the App makes them too fast.
+    case rateLimited
+    /// The course organization already has a repository with that name.
+    case repositoryNameTaken
+    /// The assignment uses course repositories and this student has none yet.
+    case noCourseRepository
 
     var message: String {
         switch self {
@@ -50,6 +56,12 @@ enum GitHubSubmitError: String, Error, Equatable {
             "The commit has no files to submit."
         case .unreadable:
             "The files in that commit could not be read. Use the upload form."
+        case .rateLimited:
+            "GitHub is busy. Try again in a few minutes, or use the upload form."
+        case .repositoryNameTaken:
+            "The course organization already has a repository with that name. Ask course staff."
+        case .noCourseRepository:
+            "Make your course repository first."
         }
     }
 }
