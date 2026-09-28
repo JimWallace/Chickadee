@@ -217,6 +217,10 @@ enum AuditAction: String, Sendable, CaseIterable {
     case ltiGradeTransportChanged = "lti.grade_transport_changed"
     case ltiGradesPushAll = "lti.grades_push_all"
 
+    // The GitHub App registration (docs/github-submissions.md)
+    case githubAppRegistered = "github.app_registered"
+    case githubAppRemoved = "github.app_removed"
+
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
         switch self {
@@ -261,6 +265,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .lti
+        case .githubAppRegistered, .githubAppRemoved:
+            return .github
         }
     }
 
@@ -298,7 +304,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
-            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
+            .githubAppRegistered, .githubAppRemoved:
             return .ok
         }
     }
@@ -387,6 +394,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiContentLinked: return "Assignments added to the LMS"
         case .ltiGradeTransportChanged: return "LMS grade transport changed"
         case .ltiGradesPushAll: return "All grades queued for the LMS"
+        case .githubAppRegistered: return "GitHub App registered"
+        case .githubAppRemoved: return "GitHub App removed"
         }
     }
 }
@@ -423,6 +432,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case mcp = "MCP / agents"
     case brightspace = "LEARN sync"
     case lti = "LTI"
+    case github = "GitHub"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,
@@ -454,4 +464,5 @@ enum AuditTargetType: String, Sendable {
     case enrollment
     case oauthClient = "oauth_client"
     case ltiPlatform = "lti_platform"
+    case githubApp = "github_app"
 }

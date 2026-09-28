@@ -65,6 +65,9 @@ struct AdminRoutes: RouteCollection {
         admin.post("lti", "platforms", ":platformID", use: updateLTIPlatform)
         admin.post("lti", "platforms", ":platformID", "enabled", use: setLTIPlatformEnabled)
         admin.post("lti", "platforms", ":platformID", "delete", use: deleteLTIPlatform)
+        admin.get("github", use: githubPage)
+        admin.get("github", "callback", use: githubCallback)
+        admin.post("github", "delete", use: deleteGitHubApp)
     }
 
     // MARK: - GET /admin
