@@ -442,9 +442,10 @@ As built (slice 5):
   webhook secret is registered. Every delivery must carry
   `X-Hub-Signature-256`, checked in constant time against the raw body;
   anything else is 401. Bodies over 5 MB are refused.
-- **Only the branch list's other use was dropped.** The branch list on the
-  submit page still reads GitHub on each load; a webhook-fed cache would store
-  data the page needs for seconds.
+- **The branch list is not cached.** The design above names a second use,
+  refreshing the branch list from pushes. It is not built: the submit page
+  still reads GitHub on each load, because a cache fed by webhooks would store
+  data the page needs for a few seconds only.
 - **A push** to a course repository records the server's time of receipt and
   the new head SHA on its row. A deleted branch, a push to any other
   repository, and every other event change nothing. Nothing is audited per
