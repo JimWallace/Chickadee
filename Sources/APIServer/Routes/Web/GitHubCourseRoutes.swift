@@ -356,7 +356,7 @@ struct GitHubCourseRoutes: RouteCollection {
             let options =
                 [
                     GitHubSubmitOption(
-                        value: "", label: "None: students use their own repositories", selected: chosen == nil)
+                        value: "", label: "None", selected: chosen == nil)
                 ]
                 + templates.map {
                     GitHubSubmitOption(

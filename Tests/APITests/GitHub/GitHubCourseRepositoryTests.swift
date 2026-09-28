@@ -403,7 +403,7 @@ import VaporTesting
             let row = try #require(try await APIGitHubCourseRepository.query(on: app.db).first())
             #expect(!row.invited)
             try await get("/testsetups/gh_setup/github", cookie: cookie) { res in
-                #expect(res.body.string.contains("Send the invitation again"))
+                #expect(res.body.string.contains("Resend invitation"))
             }
 
             useRepos()

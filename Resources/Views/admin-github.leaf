@@ -61,7 +61,7 @@ GitHub
             </label>
             <p class="field-note text-muted">Adds write access to repository administration and read access to organization members.</p>
             <div class="toolbar toolbar--end">
-                <button class="btn" type="submit">Update the App settings</button>
+                <button class="btn" type="submit">Apply</button>
             </div>
         </form>
     </details>

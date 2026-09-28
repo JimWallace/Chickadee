@@ -152,7 +152,8 @@ As built (slice 4): the admin page's *Owner and permissions* disclosure has an
 *Allow course repositories* checkbox. Only when it is on does the manifest ask
 for the two slice-4 permissions. An App made without them can be given them
 later on GitHub; until then, every course-repository call fails with a GitHub
-error on the page.
+error on the page. The admin page does not yet say whether the registered
+App has them, because the choice is not stored at registration.
 
 ## Linking an account (slice 2)
 
@@ -396,8 +397,8 @@ As built (slice 4):
 - **The repository** is `{assignment-slug}-{github-login}`, with any character
   GitHub does not allow replaced by `-`, private, in the bound organization.
   The student is invited with write (`push`) access. The row is saved before
-  the invitation, so a failed invitation can be sent again (*Send the
-  invitation again*) without making a second repository.
+  the invitation, so a failed invitation can be sent again (*Resend
+  invitation*) without making a second repository.
 - **Submitting** reads the course repository with the organization's
   installation token, not the student's. The ownership rule becomes "this is
   the repository made for this student": any other repository ID is refused
@@ -405,7 +406,7 @@ As built (slice 4):
 - **Forks.** The page reads the organization's
   `members_can_fork_private_repositories` setting and shows a warning when it
   is on. When the setting cannot be read, the page says so.
-- **The end of term.** *Archive course repositories* archives every course
+- **The end of term.** *Archive repositories* archives every course
   repository of the course that is not archived yet, and records the time.
   Nothing is deleted. It is not yet part of the course-archival flow.
 - **Deletion.** Deleting a Chickadee user deletes their course-repository rows.

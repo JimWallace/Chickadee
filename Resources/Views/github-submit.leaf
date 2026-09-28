@@ -35,7 +35,7 @@ Submit from GitHub
     <p class="section-note">The invitation to this repository was not sent.</p>
     <form method="post" action="/testsetups/#(testSetupID)/github/repository" class="inline-form">
         #csrfFormField()
-        <button class="btn" type="submit">Send the invitation again</button>
+        <button class="btn" type="submit">Resend invitation</button>
     </form>
     #endif
     #endif
@@ -53,8 +53,12 @@ Submit from GitHub
 #if(state.loaded):
 #if(count(state.repositories) == 0):
 <p class="empty">No repository is available.</p>
+#if(state.courseRepositoryMode):
+<p class="section-note">Accept the invitation to your course repository on GitHub.</p>
+#else:
 <p class="section-note">Give the GitHub App access to a repository that you own.</p>
 <p><a class="btn" href="#(state.configureURL)">Choose repositories on GitHub</a></p>
+#endif
 #else:
 <form class="form form--wide" method="get" action="/testsetups/#(testSetupID)/github">
     <label class="form-label">

@@ -19,16 +19,18 @@ GitHub
         <dd><a href="#(organization.url)">#(organization.login)</a></dd>
     </dl>
     #if(organization.forksAllowed):
-    <div class="flash flash-warning" role="status">Members of this organization can fork private repositories, so a student can copy a course repository out of the course. Turn off private forks in the organization settings on GitHub.</div>
+    <div class="flash flash-warning" role="status">Members of this organization can fork private repositories. Turn off private forks in its settings on GitHub.</div>
     #endif
     #if(organization.forksUnknown):
     <p class="section-note">The fork setting of this organization could not be read.</p>
     #endif
     #if(canEdit):
-    <form method="post" action="/instructor/github/unbind" class="inline-form">
+    <form method="post" action="/instructor/github/unbind">
         #csrfFormField()
-        <button class="btn action-btn action-danger" type="submit"
-                data-confirm="Unbind #(organization.login)? The course repositories stay on GitHub.">Unbind</button>
+        <div class="toolbar">
+            <button class="btn action-btn action-danger" type="submit"
+                    data-confirm="Unbind #(organization.login)? The course repositories stay on GitHub.">Unbind</button>
+        </div>
     </form>
     #endif
     #else:
@@ -95,10 +97,12 @@ GitHub
     </table>
     #endif
     #if(canEdit):
-    <form method="post" action="/instructor/github/archive" class="inline-form section-gap">
+    <form method="post" action="/instructor/github/archive" class="section-gap">
         #csrfFormField()
-        <button class="btn action-btn" type="submit"
-                data-confirm="Archive every course repository? They become read-only and stay on GitHub.">Archive course repositories</button>
+        <div class="toolbar">
+            <button class="btn action-btn" type="submit"
+                    data-confirm="Archive every course repository? They become read-only and stay on GitHub.">Archive repositories</button>
+        </div>
     </form>
     #endif
 </section>
