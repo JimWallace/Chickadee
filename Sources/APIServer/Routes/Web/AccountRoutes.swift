@@ -108,6 +108,8 @@ struct AccountRoutes: RouteCollection {
             .first()
         let dateFormatter = waterlooDateTimeFormatter()
 
+        let github = try await accountGitHubContext(req: req, userID: userID)
+
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -137,8 +139,34 @@ struct AccountRoutes: RouteCollection {
                 exportCompletedAtDisplay: export?.completedAt.map(dateFormatter.string(from:)),
                 exportCanRequest: dataExportCanBeRequested(export),
                 exportNotice: req.query[String.self, at: "exportNotice"],
-                exportError: req.query[String.self, at: "exportError"]
+                exportError: req.query[String.self, at: "exportError"],
+                github: github,
+                flashSuccess: req.query[String.self, at: "github"]
+                    .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message,
+                flashError: req.query[String.self, at: "githubError"]
+                    .flatMap(GitHubLinkError.init(rawValue:))?.message
             ))
+    }
+
+    /// The GitHub section, or nil when this user has no link to show and
+    /// cannot make one. With no App registered, the page is unchanged; with an
+    /// App but no `PUBLIC_BASE_URL`, students see nothing they cannot use (the
+    /// admin GitHub page reports the missing base URL).
+    private func accountGitHubContext(req: Request, userID: UUID) async throws -> AccountGitHubContext? {
+        let link = try await APIGitHubAccountLink.query(on: req.db).filter(\.$userID == userID).first()
+        let appRegistered = try await APIGitHubApp.query(on: req.db).first() != nil
+        let canLink =
+            appRegistered
+            && GitHubUserAuthorization.redirectURI(
+                publicBaseURL: req.application.securityConfiguration.publicBaseURL) != nil
+        guard link != nil || canLink else { return nil }
+        if canLink, link == nil {
+            // The Link form posts here and the server redirects to github.com.
+            // Chromium checks form-action across that redirect, against the CSP
+            // of the page that holds the form.
+            SecurityHeadersMiddleware.allowFormAction("https://github.com", on: req)
+        }
+        return AccountGitHubContext(login: link?.githubLogin)
     }
 
     // MARK: - POST /account/enroll
@@ -262,6 +290,19 @@ private struct AccountContext: Encodable {
     let exportCanRequest: Bool
     let exportNotice: String?
     let exportError: String?
+    /// The GitHub section (docs/github-submissions.md slice 2), or nil to hide
+    /// it: no App registered and no existing link.
+    let github: AccountGitHubContext?
+    /// The GitHub link notices, rendered by base.leaf's `_flash` partial.
+    let flashSuccess: String?
+    let flashError: String?
+}
+
+/// The account page's GitHub section.
+private struct AccountGitHubContext: Encodable {
+    /// The linked login, or nil when no account is linked. The section is
+    /// built without a login only when the Link button works.
+    let login: String?
 }
 
 private struct AccountCourseRow: Encodable {

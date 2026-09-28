@@ -41,6 +41,15 @@ struct DataExportProfile: Codable, Sendable {
     /// image. Personal information about them, so it belongs in the export;
     /// nil when they have never had one materialized.
     let avatar: AvatarSpec?
+    /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
+    /// when none is linked.
+    let githubAccount: DataExportGitHubAccount?
+}
+
+struct DataExportGitHubAccount: Codable, Sendable {
+    let githubUserID: Int64
+    let login: String
+    let linkedAt: Date?
 }
 
 struct DataExportEnrollment: Codable, Sendable {
@@ -147,6 +156,7 @@ func gatherDataExportContent(
     let submissionData = try await gatherSubmissions(user: user, on: db, now: now)
     let auditEntries = try await gatherAuditEntries(for: user, on: db)
     let adjustments = try await gatherGradingAdjustments(userID: userID, on: db)
+    let githubLink = try await APIGitHubAccountLink.query(on: db).filter(\.$userID == userID).first()
 
     return DataExportContent(
         profile: DataExportProfile(
@@ -163,7 +173,10 @@ func gatherDataExportContent(
             accountCreatedAt: user.createdAt,
             lastLoginAt: user.lastLoginAt,
             lastSeenAt: user.lastSeenAt,
-            avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode)
+            avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode),
+            githubAccount: githubLink.map {
+                DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
+            }
         ),
         enrollments: enrollments,
         submissions: submissionData.submissions,

@@ -40,6 +40,30 @@ My Account
     </dl>
 </section>
 
+#if(github):
+<section class="page-section">
+    <h2>GitHub</h2>
+    #if(github.login):
+    <dl class="detail-grid">
+        <dt>GitHub login</dt>
+        <dd><strong>#(github.login)</strong></dd>
+    </dl>
+    <form method="post" action="/account/github/unlink" class="inline-form">
+        #csrfFormField()
+        <button class="btn action-btn action-danger" type="submit"
+                data-confirm="Unlink the GitHub account #(github.login)?">Unlink</button>
+    </form>
+    #else:
+    <p class="empty">No GitHub account linked.</p>
+    <p class="section-note">Chickadee keeps only your GitHub user ID and login.</p>
+    <form method="post" action="/account/github/link" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit">Link GitHub account</button>
+    </form>
+    #endif
+</section>
+#endif
+
 <section class="page-section">
     <h2>My courses</h2>
     #if(!hasEnrolledCourses):
