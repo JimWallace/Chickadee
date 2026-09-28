@@ -1291,7 +1291,8 @@ with the raw `rt_sigaction` syscall, which takes no lock. It resets the same
 signals as before (1 to 31; glibc's `signal()` refused 32 and ended the
 loop). Return to upstream once a release carries an equivalent fix; the
 upstream report is
-[swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
+[swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375),
+and #1597 holds the steps and checks for moving back.
 `SubprocessSpawnRaceTests` pins it: two threads call `posix_spawn` in a loop
 while the test launches through Subprocess 200 times. On the CI image it hangs
 against unpatched 1.0.0, and on a glibc older than 2.41 it passes either way.
