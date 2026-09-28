@@ -260,6 +260,10 @@ struct EditAssignmentContext: Encodable {
     /// "notebook" | "uploadOnly" from the manifest — renders the Submission
     /// select's current value in the name/due-date edit block.
     let submissionMode: String
+    /// The GitHub submission checkbox (docs/github-submissions.md slice 3);
+    /// nil hides it, because no GitHub App is registered or the assignment is
+    /// browser-graded and so cannot offer it.
+    let githubSubmission: GitHubSubmissionSetting?
     /// The Language select's options, in `AssignmentLanguage.allCases` order
     /// behind the "detect automatically" entry. Built from `allCases` rather
     /// than written out in the template so a sixth language needs no Leaf edit —
@@ -431,4 +435,9 @@ struct ActivityKindOption: Encodable {
                 ActivityKindOption(value: kind.rawValue, label: kind.displayName, selected: kind == current)
             }
     }
+}
+
+/// The GitHub submission checkbox's state.
+struct GitHubSubmissionSetting: Encodable {
+    let enabled: Bool
 }

@@ -99,6 +99,24 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "materialization_json")
     var materializationJSON: String?
 
+    /// Where the files came from (docs/github-submissions.md slice 3): a
+    /// `SubmissionSource` raw value. Nil on every row written before the
+    /// column, which means an upload.
+    @OptionalField(key: "source_kind")
+    var sourceKind: String?
+
+    /// The numeric GitHub repository ID of a GitHub submission.
+    @OptionalField(key: "source_repo_id")
+    var sourceRepoID: Int64?
+
+    /// `owner/name` of the repository at the time of the submit, for display.
+    @OptionalField(key: "source_repo_name")
+    var sourceRepoName: String?
+
+    /// The full 40-character commit SHA that was graded.
+    @OptionalField(key: "source_commit")
+    var sourceCommit: String?
+
     init() {}
 
     init(
@@ -120,6 +138,13 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         self.userID = userID
         self.kind = kind
     }
+}
+
+/// Where a submission's files came from. The `source_kind` column stays a
+/// plain string; nil means `upload`.
+enum SubmissionSource: String, Sendable {
+    case upload
+    case github
 }
 
 // MARK: - Typed status accessors

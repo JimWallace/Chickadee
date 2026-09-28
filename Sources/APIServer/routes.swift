@@ -48,6 +48,7 @@ func routes(_ app: Application) throws {
     try auth.register(collection: AccountRoutes())
     try auth.register(collection: AccountExportRoutes())
     try auth.register(collection: GitHubAccountLinkRoutes())
+    try auth.register(collection: GitHubSubmissionRoutes())
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())

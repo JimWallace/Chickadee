@@ -96,6 +96,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
+        r.post(":assignmentID", "github-submission", use: saveGitHubSubmissionSetting)
         r.post(":assignmentID", "passing-threshold", use: savePassingThresholdSetting)
         r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
         r.post(":assignmentID", "activity", "opponent", use: saveActivityOpponentFile)
@@ -660,6 +661,9 @@ struct InstructorDashboardRoutes: RouteCollection {
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             submissionMode: manifest?.submissionMode.rawValue
                 ?? SubmissionMode.notebook.rawValue,
+            githubSubmission: try await APIGitHubApp.query(on: req.db).count() > 0
+                && manifest?.effectiveGradingMode != .browser
+                ? GitHubSubmissionSetting(enabled: manifest?.githubSubmission == true) : nil,
             // Read straight off the manifest JSON, not from resolution: the
             // select shows what is DECLARED, and resolution would fill the box
             // in with a derived answer the author never chose.

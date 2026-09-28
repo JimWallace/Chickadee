@@ -109,6 +109,65 @@ func submissionRejectionMessage(manifest: TestProperties?) -> String {
     "That file type is not accepted. " + submissionAcceptHintText(manifest: manifest)
 }
 
+/// The attempt and deadline chips on the upload form and the GitHub submit
+/// page, so the two show the same facts.
+struct SubmitChips: Encodable {
+    /// Prior submissions plus one.
+    let attemptNumber: Int
+    let deadlineText: String?
+    let deadlineISO: String?
+
+    static func make(
+        setupID: String, assignment: APIAssignment?, user: APIUser, on db: Database
+    ) async throws -> SubmitChips {
+        // The deadline actually in force for this student: a personal extension
+        // outranks the class due date, which is what the chip must show.
+        let extensionDueAt: Date? =
+            if let assignment {
+                try await studentExtensionDueAt(for: assignment, user: user, on: db)
+            } else { nil }
+        let deadline = laterDeadline(baseline: assignment?.dueAt, extensionDueAt: extensionDueAt)
+        let priorAttempts: Int =
+            if let userID = user.id {
+                try await APISubmission.query(on: db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$userID == userID)
+                    .count()
+            } else { 0 }
+        return SubmitChips(
+            attemptNumber: priorAttempts + 1,
+            deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
+            deadlineISO: deadline.map(iso8601String))
+    }
+}
+
+/// Saves a student submission whose file is already stored, then runs what
+/// every student submission runs next. Shared by the upload form and a GitHub
+/// submission (docs/github-submissions.md slice 3), so the two cannot drift.
+func recordStudentSubmission(
+    _ submission: APISubmission, setup: APITestSetup, user: APIUser, req: Request
+) async throws {
+    // Attempt number is scoped to this student for this test setup,
+    // assigned race-free inside one transaction (concurrent submits used
+    // to share a number, corrupting the prior-attempt delta and the
+    // First-Try-Perfect badge).
+    try await saveSubmissionWithNextAttemptNumber(submission, userID: user.id, on: req.db)
+    await req.application.diagnostics.recordSubmissionCreated(
+        submission: submission, on: req.db, logger: req.logger
+    )
+
+    // Award Pathfinder to the first STUDENT in the class who submits.
+    // The shared helper carries the v0.4.127 role gate (an admin/TA/
+    // instructor testing the assignment must not lock in the immutable
+    // badge) and is the same code path the notebook submission routes use.
+    if let uid = user.id {
+        try await awardFirstToSubmitRecords(
+            setup: setup, userID: uid, submissionID: try submission.requireID(), on: req.db)
+    }
+
+    await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+}
+
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/submit
@@ -145,21 +204,7 @@ extension WebRoutes {
             }
         }
         let requiredFiles = manifest?.requiredFiles ?? []
-        // The deadline actually in force for this student: a personal extension
-        // outranks the class due date, which is what the chip must show.
-        let extensionDueAt: Date? =
-            if let assignment {
-                try await studentExtensionDueAt(for: assignment, user: user, on: req.db)
-            } else { nil }
-        let deadline = laterDeadline(
-            baseline: assignment?.dueAt, extensionDueAt: extensionDueAt)
-        let priorAttempts: Int =
-            if let userID = user.id {
-                try await APISubmission.query(on: req.db)
-                    .filter(\.$testSetupID == setupID)
-                    .filter(\.$userID == userID)
-                    .count()
-            } else { 0 }
+        let chips = try await SubmitChips.make(setupID: setupID, assignment: assignment, user: user, on: req.db)
         return try await req.view.render(
             "submit",
             SubmitContext(
@@ -171,10 +216,12 @@ extension WebRoutes {
                     ? submissionRejectionMessage(manifest: manifest) : nil,
                 requiredFilesText: requiredFiles.isEmpty
                     ? nil : requiredFiles.joined(separator: ", "),
-                attemptNumber: priorAttempts + 1,
-                deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
-                deadlineISO: deadline.map(iso8601String),
-                currentUser: req.currentUserContext
+                attemptNumber: chips.attemptNumber,
+                deadlineText: chips.deadlineText,
+                deadlineISO: chips.deadlineISO,
+                currentUser: req.currentUserContext,
+                githubSubmitURL: try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db)
+                    ? "/testsetups/\(setupID)/github" : nil
             )
         ).encodeResponse(for: req)
     }
@@ -239,10 +286,6 @@ extension WebRoutes {
         try await req.fileio.writeFile(.init(data: fileData), at: filePath)
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
-        // Attempt number is scoped to this student for this test setup,
-        // assigned race-free inside one transaction (concurrent submits used
-        // to share a number, corrupting the prior-attempt delta and the
-        // First-Try-Perfect badge).
         let submission = APISubmission(
             id: subID,
             testSetupID: setupID,
@@ -252,22 +295,7 @@ extension WebRoutes {
             userID: user.id,
             kind: APISubmission.Kind.student
         )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: user.id, on: req.db)
-        await req.application.diagnostics.recordSubmissionCreated(
-            submission: submission, on: req.db, logger: req.logger
-        )
-
-        // Award Pathfinder to the first STUDENT in the class who submits.
-        // The shared helper carries the v0.4.127 role gate (an admin/TA/
-        // instructor testing the assignment must not lock in the immutable
-        // badge) and is the same code path the notebook submission routes use.
-        if let uid = user.id {
-            try await awardFirstToSubmitRecords(
-                setup: setup, userID: uid, submissionID: subID, on: req.db)
-        }
-
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
-
+        try await recordStudentSubmission(submission, setup: setup, user: user, req: req)
         return req.redirect(to: "/submissions/\(subID)")
     }
 

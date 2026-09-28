@@ -222,6 +222,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case githubAppRemoved = "github.app_removed"
     case githubAccountLinked = "github.account_linked"
     case githubAccountUnlinked = "github.account_unlinked"
+    case githubSubmissionToggled = "github.submission_toggled"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -267,7 +268,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .lti
-        case .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked:
+        case .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
+            .githubSubmissionToggled:
             return .github
         }
     }
@@ -307,7 +309,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
-            .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked:
+            .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
+            .githubSubmissionToggled:
             return .ok
         }
     }
@@ -400,6 +403,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .githubAppRemoved: return "GitHub App removed"
         case .githubAccountLinked: return "GitHub account linked"
         case .githubAccountUnlinked: return "GitHub account unlinked"
+        case .githubSubmissionToggled: return "GitHub submission setting changed"
         }
     }
 }

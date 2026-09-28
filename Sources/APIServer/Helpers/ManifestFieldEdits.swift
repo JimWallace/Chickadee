@@ -410,6 +410,20 @@ func setManifestMinimumRunnerVersion(
     return effective
 }
 
+/// Turns GitHub submission on or off for the test setup
+/// (docs/github-submissions.md slice 3), saving only when it changes. Off
+/// removes the key, matching `TestProperties.encode`, which omits `false`.
+func setManifestGitHubSubmission(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
+    guard setup.decodedManifest()?.githubSubmission != enabled else { return }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        if enabled {
+            dict["githubSubmission"] = true
+        } else {
+            dict.removeValue(forKey: "githubSubmission")
+        }
+    }
+}
+
 /// Reads the `activity` block straight from a manifest JSON string — the same
 /// access pattern as `currentManifestGradingMode` — nil when the field is
 /// absent, unreadable, or names a kind this build does not know.

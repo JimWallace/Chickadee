@@ -320,6 +320,17 @@
         <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
         <button class="btn action-btn" type="submit">Save solution setting</button>
     </form>
+    #if(githubSubmission):
+    <form method="post" action="/instructor/#(assignmentID)/github-submission" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="enabled" #if(githubSubmission.enabled):checked#endif>
+            Allow submission from a GitHub commit
+        </label>
+        <p class="field-note text-muted">Students can also submit a commit from a GitHub repository they own.</p>
+        <button class="btn action-btn" type="submit">Save GitHub setting</button>
+    </form>
+    #endif
     <form method="post" action="/instructor/#(assignmentID)/passing-threshold" data-ck-inplace>
         #csrfFormField()
         <label class="field-inline">

@@ -532,6 +532,10 @@ func registerMigrations(on app: Application) {
     // referencing users; an empty table changes nothing.
     app.migrations.add(CreateGitHubAccountLinks())
 
+    // Where a submission came from (docs/github-submissions.md slice 3).
+    // Nullable columns; nil on every existing row means an upload.
+    app.migrations.add(AddSubmissionSourceColumns())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

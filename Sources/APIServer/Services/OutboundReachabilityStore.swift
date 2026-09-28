@@ -26,11 +26,14 @@ import Vapor
 enum OutboundDestination: String, Sendable {
     case identityProvider
     case brightspace
+    /// api.github.com, for GitHub submission (docs/github-submissions.md).
+    case github
 
     var humanReadable: String {
         switch self {
         case .identityProvider: return "identity provider"
         case .brightspace: return "BrightSpace"
+        case .github: return "GitHub"
         }
     }
 }
