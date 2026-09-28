@@ -65,6 +65,11 @@ GitHub
                 Receive push events
             </label>
             <p class="field-note text-muted">Shows staff the last push to each course repository.</p>
+            <label class="form-label">
+                <input type="checkbox" name="commitStatuses"#if(commitStatuses): checked#endif>
+                Post commit statuses
+            </label>
+            <p class="field-note text-muted">Adds write access to commit statuses, so an assignment can post its public-test count.</p>
             <div class="toolbar toolbar--end">
                 <button class="btn" type="submit">Apply</button>
             </div>

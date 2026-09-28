@@ -449,6 +449,8 @@ struct AdminGitHubContext: Encodable {
     let courseRepositories: Bool
     /// True when the manifest asks GitHub to deliver push events.
     let pushEvents: Bool
+    /// True when the manifest asks to post commit statuses.
+    let commitStatuses: Bool
     let flashSuccess: String?
     let flashError: String?
 }

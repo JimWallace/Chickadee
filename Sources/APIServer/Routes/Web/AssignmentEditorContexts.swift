@@ -440,4 +440,6 @@ struct ActivityKindOption: Encodable {
 /// The GitHub submission checkbox's state.
 struct GitHubSubmissionSetting: Encodable {
     let enabled: Bool
+    /// Commit statuses (slice 6).
+    let statusChecks: Bool
 }

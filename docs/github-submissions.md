@@ -1,11 +1,12 @@
 # Submitting from GitHub
 
-**Status:** slices 1 to 5 are built: an admin can register the GitHub App on
+**Status:** slices 1 to 6 are built: an admin can register the GitHub App on
 the admin GitHub page (Integrations → GitHub), a student can link a GitHub
 account on the account page, a student can submit a commit from a repository
 they own, a course can give each student a private repository in a course
-organization, made from a template, and staff can see the last push to each
-course repository. They are built so that the privacy review
+organization, made from a template, staff can see the last push to each
+course repository, and an assignment can post its public-test count to a
+graded commit. They are built so that the privacy review
 (slice 0) can examine working behaviour. No deployment may register an App, and
 no course may use any of it, until the review finishes. The section "What
 reaches GitHub" lists every item of data that crosses, by slice. See
@@ -469,6 +470,36 @@ result, for example "3/5 public tests passed". It never posts release or secret
 tier results. It is off by default, because it puts a student's result on
 GitHub. See "Privacy".
 
+As built (slice 6):
+
+- **Two opt-ins.** The admin ticks *Post commit statuses* when creating the
+  App, which adds `statuses: write`. An instructor ticks *Post commit status*
+  in the assignment's GitHub setting, beside *Allow submission from a GitHub
+  commit*. The server saves it only with GitHub submission on, and turning
+  submission off turns it off. The flag is `githubStatusChecks` in the
+  manifest, written only when on, threaded through `makeWorkerManifestJSON`
+  and dropped by `runnerSanitized`.
+- **When.** After the worker's result for a GitHub submission is saved. Only
+  worker grading reaches it, because GitHub submission is offered only on
+  worker-graded assignments. An upload never posts.
+- **What.** One status per commit and assignment, with the context
+  `chickadee/{assignment-slug}`. The description is "n/m public tests passed",
+  "No public tests" or "Build failed"; the state is success only when every
+  public test passed. Release and secret tests are never counted, and the grade
+  is never sent. The target URL is the results page, which only the student
+  and course staff can open.
+- **Only private repositories.** A student-owned repository can be public, and
+  an assignment's opt-in must not make a student's result public. The
+  repository is read before posting, and a repository that is not private gets
+  no status. The value defaults to "not private", so a repository whose
+  visibility was not read never gets one.
+- **Whose token.** The student's own installation for a student-owned
+  repository, the course organization's installation for a course repository.
+  The same ownership check as a submission applies.
+- **Best effort.** Every failure is logged and ignored, so a GitHub outage
+  never fails the worker's result report. An App made without `statuses:
+  write` therefore posts nothing; the assignment's note says the App needs it.
+
 ## Privacy
 
 This is the real obstacle, and it is not a technical one. Slice 0 is a review
@@ -531,11 +562,14 @@ Chickadee.
 | 4 | The archived state at the end of term | Out | The same people as the repository |
 | 5 | The deployment's webhook URL, in the App's settings | Out | The App's owner on GitHub |
 | 5 | Push deliveries for course repositories: the repository ID and head SHA are kept; commit messages, author and committer names and emails, and the pusher's login and email arrive and are **discarded** | In | Stored: the time and the SHA on the course-repository row |
+| 6 | A commit status on a graded GitHub submission's commit, private repositories only: "n/m public tests passed", "No public tests" or "Build failed", a success or failure state, the context `chickadee/{assignment-slug}`, and a link to the results page | Out | Everyone who can see the repository: the student and, for a course repository, the organization's owners and members with access |
 
-Nothing in slices 1 to 5 sends a grade, a test result, a Chickadee username,
+Nothing in slices 1 to 6 sends a grade, a test result, a Chickadee username,
 a name, an email address or a student number to GitHub. The student's GitHub
 login reaches the course organization only in slice 4, and only after the
-student clicks *Make my repository*. Slice 5 is the one slice that receives
+student clicks *Make my repository*. Slice 6 is the one slice that sends a
+test result, and it sends only the public-tier count, which the student
+already sees at once, and only to a private repository. Slice 5 is the one slice that receives
 personal data Chickadee does not want: the push payload's names and email
 addresses reach the server and are dropped at decoding.
 

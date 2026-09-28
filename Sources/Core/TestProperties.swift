@@ -232,6 +232,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `runnerSanitized()` drops the flag via the memberwise default. Encoded
     /// only when true, so every other manifest keeps its bytes.
     public let githubSubmission: Bool
+    /// True when a graded GitHub submission posts its public-tier result to
+    /// the commit as a status (docs/github-submissions.md slice 6). Only with
+    /// `githubSubmission`; server-side only, like it, and encoded only when true.
+    public let githubStatusChecks: Bool
     public let requiredFiles: [String]
     public let testSuites: [TestSuiteEntry]
     public let timeLimitSeconds: Int
@@ -497,6 +501,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         gradingMode: GradingMode = .worker,
         submissionMode: SubmissionMode = .notebook,
         githubSubmission: Bool = false,
+        githubStatusChecks: Bool = false,
         requiredFiles: [String] = [],
         testSuites: [TestSuiteEntry] = [],
         timeLimitSeconds: Int = 10,
@@ -522,6 +527,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.gradingMode = gradingMode
         self.submissionMode = submissionMode
         self.githubSubmission = githubSubmission
+        self.githubStatusChecks = githubStatusChecks
         self.requiredFiles = requiredFiles
         self.testSuites = testSuites
         self.timeLimitSeconds = timeLimitSeconds
@@ -557,6 +563,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         submissionMode =
             try c.decodeIfPresent(SubmissionMode.self, forKey: .submissionMode) ?? .notebook
         githubSubmission = try c.decodeIfPresent(Bool.self, forKey: .githubSubmission) ?? false
+        githubStatusChecks = try c.decodeIfPresent(Bool.self, forKey: .githubStatusChecks) ?? false
         requiredFiles = try c.decodeIfPresent([String].self, forKey: .requiredFiles) ?? []
         testSuites = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites) ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
@@ -605,6 +612,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case gradingMode
         case submissionMode
         case githubSubmission
+        case githubStatusChecks
         case requiredFiles
         case testSuites
         case timeLimitSeconds
@@ -634,6 +642,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(submissionMode, forKey: .submissionMode)
         if githubSubmission {
             try c.encode(githubSubmission, forKey: .githubSubmission)
+        }
+        if githubStatusChecks {
+            try c.encode(githubStatusChecks, forKey: .githubStatusChecks)
         }
         try c.encode(requiredFiles, forKey: .requiredFiles)
         try c.encode(testSuites, forKey: .testSuites)

@@ -328,6 +328,11 @@
             Allow submission from a GitHub commit
         </label>
         <p class="field-note text-muted">Students can also submit a commit from a GitHub repository they own, or from a <a href="/instructor/github">course repository</a>.</p>
+        <label class="form-label">
+            <input type="checkbox" name="statusChecks" #if(githubSubmission.statusChecks):checked#endif>
+            Post commit status
+        </label>
+        <p class="field-note text-muted">Posts only the public-test count to a private repository, and needs GitHub submission on and a GitHub App with commit statuses.</p>
         <button class="btn action-btn" type="submit">Save GitHub setting</button>
     </form>
     #endif
