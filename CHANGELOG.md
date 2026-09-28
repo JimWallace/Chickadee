@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.256] - 2026-09-28
+
+### Added
+
+- **GitHub push webhooks, for display only (slice 5 of docs/github-submissions.md).** When an admin ticks *Receive push events* while creating the GitHub App, GitHub sends push events to `POST /github/webhook`. Each delivery must carry a valid `X-Hub-Signature-256`. A push to a course repository records when it happened and its head commit, and the course GitHub page lists every course repository with its last push. A push never starts grading. Of the payload, only the repository ID and commit SHA are kept; names and email addresses in it are discarded. Nothing changes while no App with a webhook secret is registered.
+
+
 ## [0.5.255] - 2026-09-28
 
 ### Added
