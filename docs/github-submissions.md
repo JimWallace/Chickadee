@@ -1,10 +1,11 @@
 # Submitting from GitHub
 
-**Status:** slices 1 to 4 are built: an admin can register the GitHub App on
+**Status:** slices 1 to 5 are built: an admin can register the GitHub App on
 the admin GitHub page (Integrations → GitHub), a student can link a GitHub
 account on the account page, a student can submit a commit from a repository
-they own, and a course can give each student a private repository in a course
-organization, made from a template. They are built so that the privacy review
+they own, a course can give each student a private repository in a course
+organization, made from a template, and staff can see the last push to each
+course repository. They are built so that the privacy review
 (slice 0) can examine working behaviour. No deployment may register an App, and
 no course may use any of it, until the review finishes. The section "What
 reaches GitHub" lists every item of data that crosses, by slice. See
@@ -429,6 +430,38 @@ would use an attempt and a runner slot, and "which commit counts at the
 deadline" would have no clear answer. A webhook needs a public inbound URL and
 a check of the `X-Hub-Signature-256` header against the webhook secret.
 
+As built (slice 5):
+
+- **Opt-in.** The admin page's *Owner and permissions* disclosure has a
+  *Receive push events* checkbox. Only then does the manifest carry
+  `hook_attributes` (the URL `/github/webhook`) and the `push` event, and only
+  then does GitHub make a webhook secret, which arrives with the other
+  credentials and goes to `.github-app-secrets`.
+- **The route** is `POST /github/webhook`, outside the session and CSRF
+  middleware, because GitHub is the caller. It is 404 while no App with a
+  webhook secret is registered. Every delivery must carry
+  `X-Hub-Signature-256`, checked in constant time against the raw body;
+  anything else is 401. Bodies over 5 MB are refused.
+- **The branch list is not cached.** The design above names a second use,
+  refreshing the branch list from pushes. It is not built: the submit page
+  still reads GitHub on each load, because a cache fed by webhooks would store
+  data the page needs for a few seconds only.
+- **A push** to a course repository records the server's time of receipt and
+  the new head SHA on its row. A deleted branch, a push to any other
+  repository, and every other event change nothing. Nothing is audited per
+  delivery, because deliveries are frequent and carry no staff action.
+- **What is discarded.** GitHub's push payload also carries the commit
+  messages, the author and committer names and email addresses, and the
+  pusher's login and email address. The route decodes the repository ID and
+  the head SHA only; the rest is neither stored nor logged.
+- **Where it shows.** The course GitHub page lists every course repository
+  with its assignment, the student's name, and the last push as a relative
+  time ("Not reported" before the first). Only course staff see that page.
+- **What it does not handle.** A delivery is not deduplicated by
+  `X-GitHub-Delivery`, and a replayed delivery would move the time forward. A
+  replay needs a captured, signed request, which TLS prevents in transit; the
+  effect is limited to a display time.
+
 ## Status checks (slice 6, opt-in)
 
 An instructor can let Chickadee post a commit status with the **public** tier
@@ -496,11 +529,15 @@ Chickadee.
 | 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
 | 4 | The repository ID and `owner/name`, and whether the invitation succeeded | In | Stored in `github_course_repositories` |
 | 4 | The archived state at the end of term | Out | The same people as the repository |
+| 5 | The deployment's webhook URL, in the App's settings | Out | The App's owner on GitHub |
+| 5 | Push deliveries for course repositories: the repository ID and head SHA are kept; commit messages, author and committer names and emails, and the pusher's login and email arrive and are **discarded** | In | Stored: the time and the SHA on the course-repository row |
 
-Nothing in slices 1 to 4 sends a grade, a test result, a Chickadee username,
+Nothing in slices 1 to 5 sends a grade, a test result, a Chickadee username,
 a name, an email address or a student number to GitHub. The student's GitHub
 login reaches the course organization only in slice 4, and only after the
-student clicks *Make my repository*.
+student clicks *Make my repository*. Slice 5 is the one slice that receives
+personal data Chickadee does not want: the push payload's names and email
+addresses reach the server and are dropped at decoding.
 
 ## Operations
 

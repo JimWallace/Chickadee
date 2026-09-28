@@ -36,6 +36,15 @@ final class APIGitHubCourseRepository: Model, @unchecked Sendable {
     @OptionalField(key: "archived_at")
     var archivedAt: Date?
 
+    /// When a webhook last reported a push (slice 5), by the server's clock.
+    /// Display only: a push never starts a grading job.
+    @OptionalField(key: "last_pushed_at")
+    var lastPushedAt: Date?
+
+    /// The commit that push left the default branch at, or any branch.
+    @OptionalField(key: "last_push_sha")
+    var lastPushSHA: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

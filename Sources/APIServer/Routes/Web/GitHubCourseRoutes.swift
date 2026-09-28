@@ -66,6 +66,7 @@ struct GitHubCourseRoutes: RouteCollection {
         let flashError = req.query[String.self, at: "error"].flatMap(GitHubCourseBindError.init(rawValue:))?.message
         var organization: InstructorGitHubOrganization?
         var rows: [InstructorGitHubAssignmentRow] = []
+        var repositories: [InstructorGitHubRepositoryRow] = []
         var templatesUnavailable = false
         if let course, let courseID = course.id {
             if let binding = try await APIGitHubCourseOrganization.query(on: req.db)
@@ -84,6 +85,7 @@ struct GitHubCourseRoutes: RouteCollection {
                     login: binding.orgLogin, url: "https://github.com/\(binding.orgLogin)",
                     forksAllowed: forks == true, forksUnknown: forks == nil)
                 rows = try await Self.assignmentRows(courseID: courseID, templates: templates, on: req.db)
+                repositories = try await Self.repositoryRows(courseID: courseID, on: req.db)
             }
             if canEdit { SecurityHeadersMiddleware.allowFormAction("https://github.com", on: req) }
         }
@@ -100,6 +102,7 @@ struct GitHubCourseRoutes: RouteCollection {
                 organizationText: req.query[String.self, at: "org"] ?? "",
                 assignments: rows,
                 templatesUnavailable: templatesUnavailable,
+                repositories: repositories,
                 flashSuccess: req.query[String.self, at: "ok"].flatMap(Notice.init(rawValue:))?.message,
                 flashError: flashError))
     }
@@ -368,6 +371,35 @@ struct GitHubCourseRoutes: RouteCollection {
                     templateName: chosen?.templateFullName, repositoryCount: count))
         }
         return rows
+    }
+
+    /// Every course repository of the course, by assignment then student.
+    private static func repositoryRows(courseID: UUID, on db: Database) async throws -> [InstructorGitHubRepositoryRow]
+    {
+        let assignments = try await APIAssignment.query(on: db).filter(\.$courseID == courseID).all()
+        let titles = Dictionary(assignments.map { ($0.testSetupID, $0.title) }) { first, _ in first }
+        let repositories = try await APIGitHubCourseRepository.query(on: db)
+            .filter(\.$testSetupID ~~ Array(titles.keys)).all()
+        let users = try await APIUser.query(on: db).filter(\.$id ~~ repositories.map(\.userID)).all()
+        var names: [UUID: String] = [:]
+        for user in users {
+            if let id = user.id {
+                names[id] = accountIdentityName(
+                    displayName: user.displayName, preferredName: user.preferredName, username: user.username)
+            }
+        }
+        let formatter = waterlooDateTimeFormatter()
+        return repositories.map { row in
+            InstructorGitHubRepositoryRow(
+                assignmentTitle: titles[row.testSetupID] ?? row.testSetupID,
+                studentName: names[row.userID] ?? "Unknown student",
+                repositoryName: row.repoFullName,
+                repositoryURL: "https://github.com/\(row.repoFullName)",
+                lastPushedText: row.lastPushedAt.map { formatter.string(from: $0) } ?? "Not reported",
+                lastPushedISO: row.lastPushedAt.map(iso8601String),
+                archived: row.archivedAt != nil)
+        }
+        .sorted { ($0.assignmentTitle, $0.studentName) < ($1.assignmentTitle, $1.studentName) }
     }
 
     private static func redirect(

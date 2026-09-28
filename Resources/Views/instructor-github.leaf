@@ -106,6 +106,39 @@ GitHub
     </form>
     #endif
 </section>
+
+<section class="page-section">
+    <h2>Course repositories</h2>
+    #if(count(repositories) == 0):
+    <p class="empty">No student has made a course repository.</p>
+    <p class="section-note">Students make one on the GitHub page of an assignment that has a template.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Assignment</th>
+                <th>Student</th>
+                <th>Repository</th>
+                <th>Last push</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in repositories):
+            <tr>
+                <td>#(row.assignmentTitle)</td>
+                <td>#(row.studentName)</td>
+                <td><a href="#(row.repositoryURL)">#(row.repositoryName)</a>#if(row.archived): <span class="tier tier-closed">archived</span>#endif</td>
+                #if(row.lastPushedISO):
+                <td class="time js-relative-time" data-iso="#(row.lastPushedISO)">#(row.lastPushedText)</td>
+                #else:
+                <td>#(row.lastPushedText)</td>
+                #endif
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
 #endif
 
 #endif

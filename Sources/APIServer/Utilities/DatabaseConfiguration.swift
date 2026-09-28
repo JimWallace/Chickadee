@@ -540,6 +540,10 @@ func registerMigrations(on app: Application) {
     // referencing courses, test setups and users; empty tables change nothing.
     app.migrations.add(CreateGitHubCourseRepositories())
 
+    // The last push to a course repository, from a webhook
+    // (docs/github-submissions.md slice 5). Nullable columns.
+    app.migrations.add(AddGitHubCourseRepositoryPushColumns())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

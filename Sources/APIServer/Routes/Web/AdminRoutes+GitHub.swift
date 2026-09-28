@@ -43,6 +43,7 @@ extension AdminRoutes {
         return try await renderGitHubPage(
             req: req, organizationText: req.query[String.self, at: "org"] ?? "",
             courseRepositories: req.query[String.self, at: "courseRepositories"] != nil,
+            pushEvents: req.query[String.self, at: "pushEvents"] != nil,
             flashSuccess: notice?.message, flashError: error?.message)
     }
 
@@ -129,7 +130,7 @@ extension AdminRoutes {
     }
 
     private func renderGitHubPage(
-        req: Request, organizationText: String, courseRepositories: Bool,
+        req: Request, organizationText: String, courseRepositories: Bool, pushEvents: Bool,
         flashSuccess: String?, flashError: String?
     ) async throws -> View {
         let registered = try await APIGitHubApp.query(on: req.db).first()
@@ -142,7 +143,8 @@ extension AdminRoutes {
             if !trimmed.isEmpty, organization == nil {
                 flashError = GitHubAppRegistrationError.invalidOrganization.message
             } else if let manifest = GitHubAppManifest(
-                publicBaseURL: baseURL, organization: organization, courseRepositories: courseRepositories)
+                publicBaseURL: baseURL, organization: organization, courseRepositories: courseRepositories,
+                pushEvents: pushEvents)
             {
                 let state = LTILaunchSecrets.randomToken()
                 req.session.data[Self.githubManifestStateKey] = state
@@ -163,9 +165,10 @@ extension AdminRoutes {
             app: registered.map(AdminGitHubAppDetails.init(app:)),
             creation: creation,
             organization: organizationText,
-            organizationOpen: courseRepositories
+            organizationOpen: courseRepositories || pushEvents
                 || !organizationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             courseRepositories: courseRepositories,
+            pushEvents: pushEvents,
             flashSuccess: flashSuccess,
             flashError: flashError)
         return try await req.view.render("admin-github", ctx)

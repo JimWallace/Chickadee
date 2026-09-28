@@ -447,6 +447,8 @@ struct AdminGitHubContext: Encodable {
     let organizationOpen: Bool
     /// True when the manifest asks for the course-repository permissions.
     let courseRepositories: Bool
+    /// True when the manifest asks GitHub to deliver push events.
+    let pushEvents: Bool
     let flashSuccess: String?
     let flashError: String?
 }
