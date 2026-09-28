@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.253] - 2026-09-28
+
+### Added
+
+- **Link a GitHub account (GitHub submissions, slice 2).** When a GitHub App is registered, the account page lets a student link their GitHub account. Chickadee keeps only the GitHub user ID and login and revokes GitHub's user token at once; a GitHub account can link to one Chickadee account only. Linking and unlinking are audited, the link appears in the student's data export, and deleting a user deletes their link. With no App registered, nothing changes.
+
+
 ## [0.5.252] - 2026-09-28
 
 ### Added
