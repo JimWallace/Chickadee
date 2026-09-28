@@ -60,6 +60,11 @@ GitHub
                 Allow course repositories
             </label>
             <p class="field-note text-muted">Adds write access to repository administration and read access to organization members.</p>
+            <label class="form-label">
+                <input type="checkbox" name="pushEvents"#if(pushEvents): checked#endif>
+                Receive push events
+            </label>
+            <p class="field-note text-muted">Shows staff the last push to each course repository.</p>
             <div class="toolbar toolbar--end">
                 <button class="btn" type="submit">Apply</button>
             </div>

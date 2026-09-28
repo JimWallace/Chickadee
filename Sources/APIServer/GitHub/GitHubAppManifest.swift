@@ -20,6 +20,8 @@ struct GitHubAppManifest: Sendable, Equatable {
     static let userCallbackPath = "/github/link/callback"
     /// Where GitHub returns a student who installs the App (slice 3).
     static let setupPath = "/github/installed"
+    /// Where GitHub delivers webhook events (slice 5).
+    static let webhookPath = "/github/webhook"
 
     /// `PUBLIC_BASE_URL` without a trailing slash.
     let base: String
@@ -27,14 +29,20 @@ struct GitHubAppManifest: Sendable, Equatable {
     let organization: GitHubOrganizationName?
     /// True when the App may also make course repositories (slice 4).
     let courseRepositories: Bool
+    /// True when GitHub should deliver push events to this server (slice 5).
+    let pushEvents: Bool
 
     /// Nil when `PUBLIC_BASE_URL` is not set: GitHub needs absolute URLs.
-    init?(publicBaseURL: URL?, organization: GitHubOrganizationName?, courseRepositories: Bool = false) {
+    init?(
+        publicBaseURL: URL?, organization: GitHubOrganizationName?, courseRepositories: Bool = false,
+        pushEvents: Bool = false
+    ) {
         guard var text = publicBaseURL?.absoluteString, !text.isEmpty else { return nil }
         while text.hasSuffix("/") { text.removeLast() }
         base = text
         self.organization = organization
         self.courseRepositories = courseRepositories
+        self.pushEvents = pushEvents
     }
 
     /// The slice-3 minimum.
@@ -80,15 +88,22 @@ struct GitHubAppManifest: Sendable, Equatable {
             defaultPermissions: courseRepositories
                 ? Self.submissionPermissions.merging(Self.courseRepositoryPermissions) { $1 }
                 : Self.submissionPermissions,
-            // No `hook_attributes` and no events: the App has no webhook until
-            // slice 5, so GitHub has no Chickadee URL to call.
-            defaultEvents: [])
+            // With no push events there is no `hook_attributes` and no event,
+            // so GitHub has no Chickadee URL to call. With them, GitHub makes a
+            // webhook secret and returns it with the other credentials.
+            defaultEvents: pushEvents ? ["push"] : [],
+            hookAttributes: pushEvents ? HookAttributes(url: base + Self.webhookPath, active: true) : nil)
     }
 
     /// The host of the base URL, so two deployments make Apps with two names.
     /// GitHub App names are unique across GitHub.
     private var hostLabel: String {
         URL(string: base)?.host ?? base
+    }
+
+    struct HookAttributes: Encodable, Equatable {
+        let url: String
+        let active: Bool
     }
 
     struct Body: Encodable, Equatable {
@@ -100,6 +115,8 @@ struct GitHubAppManifest: Sendable, Equatable {
         let `public`: Bool
         let defaultPermissions: [String: String]
         let defaultEvents: [String]
+        /// Encoded only when set, so an App without push events has no webhook.
+        let hookAttributes: HookAttributes?
 
         enum CodingKeys: String, CodingKey {
             case name, url, `public`
@@ -108,6 +125,7 @@ struct GitHubAppManifest: Sendable, Equatable {
             case setupURL = "setup_url"
             case defaultPermissions = "default_permissions"
             case defaultEvents = "default_events"
+            case hookAttributes = "hook_attributes"
         }
     }
 }

@@ -16,6 +16,9 @@ func routes(_ app: Application) throws {
     _ = app.ltiToolKeyProvider
     _ = app.ltiPlatformKeyCache
     try app.register(collection: LTIRoutes())
+    // GitHub webhook deliveries (docs/github-submissions.md slice 5): signed by
+    // GitHub, so no session and no CSRF token.
+    try app.register(collection: GitHubWebhookRoutes())
     let loginRateLimit = LoginRateLimitMiddleware(
         configuration: app.loginRateLimitConfiguration
     )

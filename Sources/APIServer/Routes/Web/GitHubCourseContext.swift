@@ -22,6 +22,8 @@ struct InstructorGitHubContext: Encodable {
     let assignments: [InstructorGitHubAssignmentRow]
     /// True when the organization's template list could not be read.
     let templatesUnavailable: Bool
+    /// Every course repository, for staff (slice 5 adds the last push).
+    let repositories: [InstructorGitHubRepositoryRow]
     let flashSuccess: String?
     let flashError: String?
 }
@@ -43,4 +45,16 @@ struct InstructorGitHubAssignmentRow: Encodable {
     let templateOptions: [GitHubSubmitOption]
     let templateName: String?
     let repositoryCount: Int
+}
+
+struct InstructorGitHubRepositoryRow: Encodable {
+    let assignmentTitle: String
+    let studentName: String
+    let repositoryName: String
+    let repositoryURL: String
+    /// "Not reported" until a webhook reports a push.
+    let lastPushedText: String
+    /// The same moment as ISO-8601, for the relative-time label; nil before a push.
+    let lastPushedISO: String?
+    let archived: Bool
 }
