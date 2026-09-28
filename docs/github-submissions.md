@@ -1,9 +1,10 @@
 # Submitting from GitHub
 
-**Status:** slice 1 is built: an admin can register the GitHub App on the
-admin GitHub page (Integrations → GitHub). Nothing uses the App yet. Slices 1 to
-3 can be built before the privacy review (slice 0) finishes, but no deployment
-may register an App until it finishes. See "Privacy".
+**Status:** slices 1 and 2 are built: an admin can register the GitHub App on
+the admin GitHub page (Integrations → GitHub), and a student can link a GitHub
+account on the account page. Nothing submits from GitHub yet. Slices 1 to 3 can
+be built before the privacy review (slice 0) finishes, but no deployment may
+register an App until it finishes. See "Privacy".
 
 This note tells how a student can submit to Chickadee from a GitHub repository,
 and how a course can give each student a private repository made from a
@@ -156,6 +157,26 @@ user from `GET /user`, keeps two values, and discards the user token:
 A new table `github_account_links` holds one row per Chickadee user, with
 `github_user_id` unique. One GitHub account can not link to two Chickadee users.
 *Unlink* deletes the row. The student can unlink at any time.
+
+As built (slice 2):
+
+- The account page shows a GitHub section only when the student can link an
+  account (an App is registered and `PUBLIC_BASE_URL` is set) or already has a
+  link. With no App, the page is unchanged.
+- *Link GitHub account* posts to `/account/github/link`, which stores a
+  single-use `state` and a PKCE verifier in the session and redirects to
+  GitHub's authorize page with `allow_signup=false`. The account page adds
+  `https://github.com` to its `form-action`, because Chromium checks the
+  redirect against the page that holds the form.
+- The callback (`/github/link/callback`, the URL the slice-1 manifest
+  registered) accepts only that `state`, exchanges the code with the client
+  secret and the verifier, reads `GET /user`, and **revokes the user token at
+  once**. Nothing that can act on the student's GitHub account stays on the
+  server.
+- Linking again replaces the student's link. A GitHub account already linked
+  to another Chickadee account is refused.
+- Linking and unlinking are audited. The link appears in the student's data
+  export (`profile.githubAccount`), and deleting a user deletes their link.
 
 ## Submitting a commit (slice 3, the MVP)
 

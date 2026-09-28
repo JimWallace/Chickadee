@@ -220,6 +220,8 @@ enum AuditAction: String, Sendable, CaseIterable {
     // The GitHub App registration (docs/github-submissions.md)
     case githubAppRegistered = "github.app_registered"
     case githubAppRemoved = "github.app_removed"
+    case githubAccountLinked = "github.account_linked"
+    case githubAccountUnlinked = "github.account_unlinked"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -265,7 +267,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
             return .lti
-        case .githubAppRegistered, .githubAppRemoved:
+        case .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked:
             return .github
         }
     }
@@ -305,7 +307,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
-            .githubAppRegistered, .githubAppRemoved:
+            .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked:
             return .ok
         }
     }
@@ -396,6 +398,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiGradesPushAll: return "All grades queued for the LMS"
         case .githubAppRegistered: return "GitHub App registered"
         case .githubAppRemoved: return "GitHub App removed"
+        case .githubAccountLinked: return "GitHub account linked"
+        case .githubAccountUnlinked: return "GitHub account unlinked"
         }
     }
 }
