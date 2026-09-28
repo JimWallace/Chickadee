@@ -5,6 +5,13 @@ Handoff document for the flakiness work. Families 1–3 are the original
 later**, so the header date is where this started, not where it ends. Check
 the newest families first — they are the ones still open.
 
+**Family 5 is closed for monitoring as of 2026-09-28** (acceptance run: 88
+`main` runs, no recurrence). **Family 6 is new and OPEN** — jobs wedging to
+the ceiling since the noble→resolute base-image move, which looks like Family
+5 and is the opposite shape: a job that stops completely rather than one that
+runs slowly. Read its telemetry section before diagnosing any `cancelled`
+job.
+
 Family 5 was rewritten on 2026-09-16 against a 213-run population rather than
 a single log tail. Two of the three tells it used to carry turned out to be
 artifacts of Swift Testing's reporting, so if you are working from a copy of
@@ -571,9 +578,18 @@ the first thing to check.
 
 ### The occurrences
 
-Seven, not one. Five of them are on `main`, where the concurrency group never
-cancels a run, so `cancelled` there can only be the job's own
-`timeout-minutes`.
+Seven, not one. Five are on `main`, and each was confirmed by its `Run
+APITests` step running to the budget (1373-1398 s) rather than by the
+conclusion string.
+
+**Do not shortcut that check.** An earlier revision of this paragraph said
+`main` never cancels for concurrency, so `cancelled` there could only be a
+job timeout. That is false: with `cancel-in-progress: false` GitHub keeps only
+the newest PENDING run in a group and cancels older ones, which the
+auto-release commit landing seconds after a merge produces constantly — 39 of
+the 117 runs in the acceptance window below are exactly that, cancelled with
+**no job ever started**. A ceiling kill is a run with a cancelled JOB whose
+step ran to the budget; anything else is bookkeeping.
 
 | date | ref | `Run APITests` | conclusion |
 |---|---|---|---|
@@ -1179,6 +1195,43 @@ the recorder's `io_full`.
    variance, which is the subject of this entry and is why both are quoted
    rather than the better.
 
+### Acceptance (2026-09-28): the collapse has not recurred — 88 runs
+
+The test this entry named. `swift-tests.yml` on `main`, 2026-09-16 14:00 →
+2026-09-28 12:26: **117 completed runs, 88 of which started jobs.**
+
+| lane | median | was | max/med | ≥2× median | was |
+|---|---|---|---|---|---|
+| `build` (control) | 630 s | 597 s | 1.14 | 0.0 % | 0.0 % |
+| **`api-tests`** | **156 s** | 291 s | 8.95 † | **1.1 %** | **10.8 %** |
+| `api-tests-postgres` | **198 s** | 391 s | 2.08 | 1.1 % | 3.8 % |
+| `worker-tests` | 21 s | 20 s | 53.19 ‡ | 10.2 % ‡ | 0.5 % |
+| `core-tests` | 9 s | 14 s | 1.89 | 0.0 % | 0.5 % |
+
+† and ‡ are NOT this family — see Family 6. Excluding the single wedged run,
+`api-tests` has a p90 of 177 s against a 156 s median: a 1.13 spread, tighter
+than the `build` control's 1.14.
+
+**Established.** The throughput collapse has not recurred. Both lanes are
+roughly half their former cost and the excursion rate went 10.8 % → 0 genuine
+excursions in 88 runs. That is stronger than "headroom absorbed it", because
+the ≥2×-**median** metric is scale-free: a 3-5× collapse against the new
+median would still register, and does not. At the old rate one would expect
+about nine excursions in 88; there are none.
+
+**Still not root-caused, and that distinction still matters.** Nobody ever
+explained the collapse. It stopped appearing after two changes that removed
+its cost, which is consistent with "fixed" and equally consistent with "the
+mechanism needs a load the lane no longer reaches". Nothing here distinguishes
+those, and the entry should not be read as though it does. What is different
+from a year of guessing is that the next occurrence arrives with telemetry
+attached — which is exactly what happened to the run that looked like a
+recurrence and was not (Family 6).
+
+**What retires.** Family 5 is closed for monitoring. The lever that worked was
+the median, not the ceiling; the two harness artifacts corrected above remain
+the reason the original diagnosis was possible at all.
+
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
 sole failure in a 3,045-test `api-tests-postgres` run (run 32542491009,
@@ -1205,6 +1258,93 @@ inside the scope, which concurrent activity can only raise).
 
 
 ---
+
+---
+
+## Family 6 — test jobs wedged to the ceiling after the noble→resolute base-image move — OPEN (10 occurrences, 2026-09-23 →)
+
+**Symptom.** A test job reports `cancelled` at its `timeout-minutes` ceiling.
+It reads like Family 5 and is **not** one: Family 5 is a job running slowly
+and still finishing tests. This is a job that stops **completely**.
+
+**The telemetry settles it in one line**, which is what `StarvationRecorder`
+was built for. From the one `api-tests` occurrence (run 35926143500, job
+107405907756, 2026-09-23):
+
+```
+t=60s   busy=97.2% self cpu=90.6% scopes=241.9/min  thr=19 procs=6  kids=1
+t=90s   busy=42.3% self cpu=42.5% scopes=1316.3/min thr=22 procs=7  kids=2
+t=120s  busy= 0.1% self cpu= 0.0% scopes=   0.0/min thr=18 procs=7  kids=2
+  ... unchanged for 1,300 s, load decaying 2.5 → 0.0, rss frozen at 276.4MiB ...
+t=1110s busy= 0.1% self cpu= 0.0% scopes=   0.0/min thr=18 procs=7  kids=2
+```
+
+2,606 tests completed, then nothing. Not slow — **stopped**. `self cpu 0.0 %`
+with the machine at `busy 0.1 %` and load decaying to zero is a process that
+is not running at all, and `kids=2` says two child processes outlived it and
+never exited. That is the #1233 shape (leaked descriptors postponing EOF
+forever), not the Family 5 shape.
+
+**`WedgeWatchdog` did not fire, and that is an arming gap, not a bug.** The
+only dump in that log reads `reason: WedgeWatchdogArmingTests smoke test — not
+a real wedge` — its own guard exercising the dump path. The watchdog is armed
+only while a `track` scope is in flight and disarms when the last one returns,
+so a wedge that lands between tracked scopes is invisible to it and burns the
+whole ceiling. The recorder saw it perfectly and cannot abort; the watchdog
+can abort and could not see it. **Closing that gap is the first thing to do
+here** — the signal `scopes == 0` with `self cpu == 0` sustained is
+unambiguous and needs no arming.
+
+**Occurrences.** All ten postdate the base-image move; the week between the
+Family 5 changes and the first kill is clean.
+
+| when | lane | job ran |
+|---|---|---|
+| 2026-09-23 01:27 → 09-27 14:33 | `worker-tests` ×9 | 1202-1204 s (its 20-min ceiling) |
+| 2026-09-23 22:17 | `api-tests` ×1 | 1504 s (its 25-min ceiling) |
+
+`worker-tests` takes 9 of 10 and is by far the most subprocess-dense target
+(2 of 50 files spawn one, against 1 of 381 in APITests); `core-tests` has no
+kills. Consistent with a subprocess/descriptor mechanism, not proof of one.
+
+**What changed, in order.** This is a timeline, not a conclusion:
+
+1. **2026-09-19, #1551** deleted `Core/PipeCloseOnExec.swift` **and its test**.
+   The rationale is sound — zero production callers, the zip and notebook
+   helpers moved to `ZipSubprocess`, `ScriptExecution` builds CLOEXEC pipes
+   inline. But that test is the one "Remaining attack order" item 3 names as
+   pinning the measurement "so a toolchain change that re-opens the leak is
+   caught here rather than in a wedged job". **The tripwire was removed.**
+2. **2026-09-22, #1572** moved the base image noble → resolute: glibc
+   2.39 → 2.43, plus python3, r-base, octave, racket, g++, default-jdk and
+   lua in one step. Item 3's measurement was explicitly qualified "on Swift
+   6.3 / glibc 2.39".
+3. **2026-09-23** the wedges start, ~12 hours later.
+
+**Do not read that as proven causation.** The deletion removed a
+*measurement*, not necessarily a *protection*, and the wedge may have nothing
+to do with descriptors. What is established is that the condition item 3
+warned about occurred, the check that was supposed to catch it no longer
+existed, and jobs began wedging. Re-establishing the measurement against
+glibc 2.43 is cheap and is the second thing to do here.
+
+**Attack order.**
+
+1. **Make the wedge self-aborting.** `scopes == 0` and `self cpu == 0` held
+   across several consecutive samples is a wedge by construction; the
+   recorder already computes both. Abort there with the thread dump, so the
+   next one costs six minutes and a `wchan` table instead of twenty minutes
+   and nothing. This is the only item that pays off even if the cause is
+   something else entirely.
+2. **Re-pin the CLOEXEC measurement on glibc 2.43**, restoring what #1551
+   deleted as a behavioural test against the current toolchain rather than
+   the old helper.
+3. **Read a wedged `worker-tests` thread dump** once (1) lands. #1233 was
+   diagnosed from exactly that artifact.
+
+**Handling for now.** Re-run the job. Before blaming a `cancelled` job on your
+diff, read its `[ci-pressure]` tail: `scopes=0.0/min` with `self cpu=0.0%` is
+this family and is not yours.
 
 ## Structural problems → current state
 
@@ -1419,9 +1559,15 @@ inside the scope, which concurrent activity can only raise).
    cause of a Family 5 event.** An intermediate revision of this file
    reclassified "cosmetic" as an unmeasured assumption; that reclassification
    was itself the unmeasured thing, and the original wording was closer to
-   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pins the measurement so
-   a toolchain change that re-opens the leak is caught here rather than in a
-   wedged job. Note the precise claim: *our pipe's write end* does not reach
+   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pinned the measurement
+   so a toolchain change that re-opens the leak would be caught there rather
+   than in a wedged job.
+
+   **That test no longer exists** — #1551 deleted it with the helper it
+   covered, for sound reasons (zero production callers). The toolchain then
+   changed underneath the claim: glibc 2.39 → 2.43 with the resolute move,
+   and jobs began wedging the next day. See Family 6; re-pinning this
+   measurement against the current toolchain is item 2 there. Note the precise claim: *our pipe's write end* does not reach
    the child. Other inherited descriptors do — "the child holds only fds
    0/1/2" is too strong and measures false.
 
