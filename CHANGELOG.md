@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.251] - 2026-09-28
+
+### Changed
+
+- **The local-runner autostart launches through swift-subprocess.** It was the last Foundation `Process` in the repository, the launcher whose exit-detection socket leaks into concurrently started children. A new `SupervisedProcess` holds the runner, stops it with SIGTERM, then SIGINT, then SIGKILL, and appends its output to `results/local-runner.log` as before. `scripts/no-foundation-process.sh` now fails `format-lint` on any new Foundation `Process` launch.
+
+
+## [0.5.250] - 2026-09-28
+
+### Added
+
+- **LTI 1.3 roster through NRPS.** The Students tab's roster check can read the class list from the LMS through the LTI Names and Role Provisioning Services. A course uses it when it sends grades through the LTI grade service or has no Valence link. A student is flagged only when the LMS could know them. Design: `docs/lti-1-3.md`.
+
+
 ## [0.5.249] - 2026-09-27
 
 ### Added

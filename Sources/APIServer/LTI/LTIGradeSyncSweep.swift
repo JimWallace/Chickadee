@@ -35,7 +35,7 @@ struct LTIGradeSyncSweep {
 
     let db: any Database
     let logger: Logger
-    let client: LTIAGSClient
+    let client: LTIServiceClient
     let keys: @Sendable () async throws -> LTIToolKeyAuthority
 
     /// Sends every row pending since before `now - debounce` (every pending
@@ -121,7 +121,7 @@ struct LTIGradeSyncSweep {
                 .first()
         else { throw Failure(message: Self.notLaunchedMessage) }
 
-        let target = LTIAGSClient.Platform(
+        let target = LTIServiceClient.Platform(
             id: platformID, clientID: platform.clientID, accessTokenURL: platform.accessTokenURL)
         let keys = try await keys()
 
@@ -154,23 +154,23 @@ struct LTIGradeSyncSweep {
     }
 
     private func post(
-        _ score: LTIScore, to lineItem: String, assignment: APIAssignment, platform: LTIAGSClient.Platform,
+        _ score: LTIScore, to lineItem: String, assignment: APIAssignment, platform: LTIServiceClient.Platform,
         keys: LTIToolKeyAuthority
     ) async throws {
         do {
             try await client.postScore(score, lineItemURL: lineItem, platform: platform, keys: keys)
-        } catch LTIAGSError.lineItemGone {
+        } catch LTIServiceError.lineItemGone {
             // Forget the deleted line item; the retry finds or creates a new one.
             assignment.ltiLineItemURL = nil
             try await assignment.save(on: db)
-            throw LTIAGSError.lineItemGone
+            throw LTIServiceError.lineItemGone
         }
     }
 
     /// The one sentence the instructor page shows for a failure. The full
     /// error goes to the log only, so the page never shows raw error text.
     static func reason(for error: any Error) -> String {
-        if let agsError = error as? LTIAGSError { return agsError.description }
+        if let agsError = error as? LTIServiceError { return agsError.description }
         if error is BrightSpaceSyncError { return noGradeMessage }
         return unreachableMessage
     }
@@ -179,7 +179,7 @@ struct LTIGradeSyncSweep {
     /// `BrightSpaceSyncError` when a grade cannot be computed, which no retry
     /// fixes. Anything else is a transport error, worth another try.
     static func isRetryable(_ error: any Error) -> Bool {
-        if let agsError = error as? LTIAGSError { return agsError.isRetryable }
+        if let agsError = error as? LTIServiceError { return agsError.isRetryable }
         if error is BrightSpaceSyncError { return false }
         return true
     }
@@ -187,8 +187,8 @@ struct LTIGradeSyncSweep {
 
 // MARK: - Application wiring
 
-private struct LTIAGSClientKey: StorageKey {
-    typealias Value = LTIAGSClient
+private struct LTIServiceClientKey: StorageKey {
+    typealias Value = LTIServiceClient
 }
 
 private struct LTIGradeSyncMonitorKey: StorageKey {
@@ -198,20 +198,20 @@ private struct LTIGradeSyncMonitorKey: StorageKey {
 extension Application {
     /// The AGS HTTP client. Tests replace it with one whose `send` answers
     /// for the LMS.
-    var ltiAGSClient: LTIAGSClient {
+    var ltiServiceClient: LTIServiceClient {
         get {
-            lazyStored(LTIAGSClientKey.self) {
+            lazyStored(LTIServiceClientKey.self) {
                 let client = self.client
-                return LTIAGSClient { request in try await client.send(request) }
+                return LTIServiceClient { request in try await client.send(request) }
             }
         }
-        set { storage[LTIAGSClientKey.self] = newValue }
+        set { storage[LTIServiceClientKey.self] = newValue }
     }
 
     /// A sweep over this application's database, client and tool key.
     var ltiGradeSyncSweep: LTIGradeSyncSweep {
         LTIGradeSyncSweep(
-            db: db, logger: logger, client: ltiAGSClient,
+            db: db, logger: logger, client: ltiServiceClient,
             keys: { [self] in try await self.ltiToolKeyAuthority() })
     }
 

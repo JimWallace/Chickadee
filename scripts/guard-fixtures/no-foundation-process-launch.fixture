@@ -1,0 +1,11 @@
+# Foundation's Process leaks its exit-detection socket into concurrently
+# launched children, so one child's exit stays invisible while another lives.
+# It stalled worker-tests for a week (docs/ci-flakiness.md, Family 6) and was
+# removed from the last place it survived; this keeps it out.
+guard="scripts/no-foundation-process.sh"
+files="Sources/APIServer/Services/SupervisedProcess.swift"
+description="a Foundation Process launch in server code"
+expect="Foundation Process launch"
+apply() {
+    printf '\nfunc guardFixtureLaunch() { let launch = Process(); _ = launch }\n' >> Sources/APIServer/Services/SupervisedProcess.swift
+}

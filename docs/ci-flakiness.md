@@ -1306,9 +1306,11 @@ and the step limits make it harmless: the evidence is on disk before
 
 **Handling if it reappears.** Read the printed dump first: a pool thread in
 `futex`/`pipe_read` with a `syscall=` naming a `read` or `wait` is the shape.
-Do not re-add a Foundation `Process` to a test process that also spawns
-long-lived children; `Tests/TestSupport/InterpreterSpawn.swift` has the
-Subprocess helpers.
+Do not re-add a Foundation `Process` anywhere: `scripts/no-foundation-process.sh`
+fails `format-lint` on one. The local-runner autostart, its last user, now runs
+as a `SupervisedProcess`, which is also the type to use for any other
+long-lived child; `Tests/TestSupport/InterpreterSpawn.swift` has the one-shot
+Subprocess helpers for tests.
 
 ## Structural problems → current state
 

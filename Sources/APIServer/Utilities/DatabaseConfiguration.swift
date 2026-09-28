@@ -521,6 +521,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddLTIGradeColumns())
     app.migrations.add(CreateLTIGradeSyncs())
 
+    // LTI 1.3 roster through NRPS (docs/lti-1-3.md slice 5).
+    app.migrations.add(AddLTIMembershipsColumn())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())

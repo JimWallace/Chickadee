@@ -30,6 +30,11 @@ extension InstructorDashboardRoutes {
         else {
             return .unavailable("No active course selected.")
         }
+        if Self.rosterCheckUsesLTI(
+            course: course, valenceConfigured: req.application.brightSpaceAppCredentials != nil)
+        {
+            return try await ltiRosterCheck(course: course, courseID: courseUUID, req: req)
+        }
         guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
             return .unavailable(
                 "BrightSpace isn't connected for this course yet.", configured: false)

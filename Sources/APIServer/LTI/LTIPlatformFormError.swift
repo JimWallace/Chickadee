@@ -11,6 +11,7 @@ enum LTIPlatformFormError: Error, Equatable, Sendable {
         case jwksURL = "Key set URL"
         case deepLinkReturnURL = "Deep link return URL"
         case lineItemsURL = "Line items URL"
+        case membershipsURL = "Memberships URL"
     }
 
     case missingDisplayName

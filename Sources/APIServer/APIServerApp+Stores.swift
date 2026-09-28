@@ -10,6 +10,7 @@ import Core
 import Fluent
 import Foundation
 import Leaf
+import SystemPackage
 import Vapor
 
 // `AppSecurityConfiguration` lives in `Configuration/SecurityConfig.swift`
@@ -217,11 +218,10 @@ actor LocalRunnerAutoStartStore {
 }
 
 actor LocalRunnerManager {
-    private var process: Process?
-    private var logHandle: FileHandle?
+    private var runner: SupervisedProcess?
 
     func ensureRunning(app: Application, logger: Logger) async {
-        if let existing = process, existing.isRunning {
+        if let runner, runner.isRunning {
             return
         }
 
@@ -242,83 +242,43 @@ actor LocalRunnerManager {
         let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
         let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
 
-        // Foundation's `Process`, not `swift-subprocess`: the last such spawn
-        // in the repository (the list is in
-        // `Tests/TestSupport/InterpreterSpawn.swift`). It is safe only because
-        // it is the one Foundation launch in the server process and runs once
-        // at boot, behind a `.local-runner-autostart` check. Foundation's exit
-        // detection relies on a socket the child inherits, and concurrent
-        // Foundation launches leak those sockets into each other's children
-        // (docs/ci-flakiness.md, Family 6). A second Foundation launch here
-        // would reopen that; move this to Subprocess first, as
-        // `LocalHTTPTestServer` shows a long-lived child can be.
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments =
-            argsPrefix + [
-                "--api-base-url", apiBaseURL,
-                "--worker-id", workerID,
-                "--max-jobs", "1",
-                "--sandbox",
-            ]
         var childEnvironment = EnvironmentSource.all
         childEnvironment["RUNNER_SHARED_SECRET"] = secret
-        proc.environment = childEnvironment
-        proc.currentDirectoryURL = URL(fileURLWithPath: workDir)
-
-        let logPath = workDir + "results/local-runner.log"
-        if !FileManager.default.fileExists(atPath: logPath) {
-            _ = FileManager.default.createFile(atPath: logPath, contents: nil)
-        }
-        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
-            _ = try? handle.seekToEnd()
-            proc.standardOutput = handle
-            proc.standardError = handle
-            logHandle = handle
-        }
 
         do {
-            try proc.run()
-            process = proc
-            logger.info("Started local runner \(workerID) (\(launchViaBinary ? "binary" : "swift run"))")
+            runner = try SupervisedProcess.start(
+                executable: "/usr/bin/env",
+                arguments: argsPrefix + [
+                    "--api-base-url", apiBaseURL,
+                    "--worker-id", workerID,
+                    "--max-jobs", "1",
+                    "--sandbox",
+                ],
+                environment: childEnvironment,
+                workingDirectory: FilePath(workDir),
+                logPath: FilePath(workDir + "results/local-runner.log")
+            ) { outcome in
+                switch outcome {
+                case .success(let status):
+                    logger.info("Local runner \(workerID) exited: \(status)")
+                case .failure(let error):
+                    logger.error("Failed to start local runner: \(error)")
+                }
+            }
+            logger.info("Starting local runner \(workerID) (\(launchViaBinary ? "binary" : "swift run"))")
         } catch {
             logger.error("Failed to start local runner: \(error)")
-            process = nil
-            if let handle = logHandle {
-                try? handle.close()
-                logHandle = nil
-            }
+            runner = nil
         }
     }
 
     func stopIfRunning(logger: Logger) async {
-        guard let proc = process else {
-            if let handle = logHandle {
-                try? handle.close()
-                logHandle = nil
-            }
-            return
-        }
-
-        if proc.isRunning {
+        guard let runner else { return }
+        if runner.isRunning {
             logger.info("Stopping local runner process...")
-            proc.terminate()
-            for _ in 0..<20 where proc.isRunning {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-            if proc.isRunning {
-                proc.interrupt()
-                for _ in 0..<10 where proc.isRunning {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                }
-            }
         }
-
-        if let handle = logHandle {
-            try? handle.close()
-            logHandle = nil
-        }
-        process = nil
+        await runner.stop()
+        self.runner = nil
     }
 }
 

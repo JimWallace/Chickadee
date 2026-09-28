@@ -120,6 +120,9 @@ jobs:
       - name: Block new XCTest imports
         run: scripts/no-new-xctest.sh
 
+      - name: Block Foundation Process launches
+        run: scripts/no-foundation-process.sh
+
       - name: Check view / stylesheet hygiene
         run: scripts/check-styles.sh
 
