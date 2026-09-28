@@ -23,11 +23,42 @@ Submit from GitHub
 <p><a class="btn btn-primary" href="#(state.installURL)">Install on GitHub</a></p>
 #endif
 
+#if(state.courseRepositoryMode):
+<section class="page-section">
+    <h2>Course repository</h2>
+    #if(state.courseRepository):
+    <dl class="detail-grid">
+        <dt>Repository</dt>
+        <dd><a href="#(state.courseRepository.url)">#(state.courseRepository.name)</a></dd>
+    </dl>
+    #if(!state.courseRepository.invited):
+    <p class="section-note">The invitation to this repository was not sent.</p>
+    <form method="post" action="/testsetups/#(testSetupID)/github/repository" class="inline-form">
+        #csrfFormField()
+        <button class="btn" type="submit">Resend invitation</button>
+    </form>
+    #endif
+    #endif
+    #if(state.canMakeCourseRepository):
+    <p class="empty">You have no course repository for this assignment.</p>
+    <p class="section-note">Chickadee makes a private repository from the course template and invites your GitHub account to it.</p>
+    <form method="post" action="/testsetups/#(testSetupID)/github/repository" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit">Make my repository</button>
+    </form>
+    #endif
+</section>
+#endif
+
 #if(state.loaded):
 #if(count(state.repositories) == 0):
 <p class="empty">No repository is available.</p>
+#if(state.courseRepositoryMode):
+<p class="section-note">Accept the invitation to your course repository on GitHub.</p>
+#else:
 <p class="section-note">Give the GitHub App access to a repository that you own.</p>
 <p><a class="btn" href="#(state.configureURL)">Choose repositories on GitHub</a></p>
+#endif
 #else:
 <form class="form form--wide" method="get" action="/testsetups/#(testSetupID)/github">
     <label class="form-label">
@@ -53,7 +84,9 @@ Submit from GitHub
         <button class="btn" type="submit">Show commit</button>
     </div>
 </form>
+#if(!state.courseRepositoryMode):
 <p class="section-note"><a href="#(state.configureURL)">Choose repositories on GitHub</a> to add one to this list.</p>
+#endif
 #endif
 #endif
 

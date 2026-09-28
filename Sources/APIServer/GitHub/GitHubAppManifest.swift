@@ -7,8 +7,9 @@
 // an environment variable.
 //
 // The permissions are the slice-3 minimum: read a repository's contents and
-// metadata. Slice 4 (course repositories) asks for more; an admin then accepts
-// the new permissions on GitHub.
+// metadata. Course repositories (slice 4) need two more, and the admin opts in
+// to them when creating the App, so a deployment that never uses them never
+// asks for them.
 
 import Foundation
 
@@ -24,14 +25,25 @@ struct GitHubAppManifest: Sendable, Equatable {
     let base: String
     /// The organization that owns the App, or nil for the admin's own account.
     let organization: GitHubOrganizationName?
+    /// True when the App may also make course repositories (slice 4).
+    let courseRepositories: Bool
 
     /// Nil when `PUBLIC_BASE_URL` is not set: GitHub needs absolute URLs.
-    init?(publicBaseURL: URL?, organization: GitHubOrganizationName?) {
+    init?(publicBaseURL: URL?, organization: GitHubOrganizationName?, courseRepositories: Bool = false) {
         guard var text = publicBaseURL?.absoluteString, !text.isEmpty else { return nil }
         while text.hasSuffix("/") { text.removeLast() }
         base = text
         self.organization = organization
+        self.courseRepositories = courseRepositories
     }
+
+    /// The slice-3 minimum.
+    static let submissionPermissions = ["contents": "read", "metadata": "read"]
+    /// Course repositories add these: `administration` to make a repository
+    /// from a template, add the student as a collaborator and archive it at
+    /// the end of term; `members` (an organization permission) to confirm that
+    /// the instructor who binds an organization is one of its owners.
+    static let courseRepositoryPermissions = ["administration": "write", "members": "read"]
 
     /// The GitHub page that receives the manifest form, with the `state` that
     /// the callback must return.
@@ -65,7 +77,9 @@ struct GitHubAppManifest: Sendable, Equatable {
             // Any account can install the App: a student installs it on the one
             // repository they submit from.
             public: true,
-            defaultPermissions: ["contents": "read", "metadata": "read"],
+            defaultPermissions: courseRepositories
+                ? Self.submissionPermissions.merging(Self.courseRepositoryPermissions) { $1 }
+                : Self.submissionPermissions,
             // No `hook_attributes` and no events: the App has no webhook until
             // slice 5, so GitHub has no Chickadee URL to call.
             defaultEvents: [])

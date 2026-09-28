@@ -1,12 +1,14 @@
 # Submitting from GitHub
 
-**Status:** slices 1 to 3 are built: an admin can register the GitHub App on
+**Status:** slices 1 to 4 are built: an admin can register the GitHub App on
 the admin GitHub page (Integrations → GitHub), a student can link a GitHub
-account on the account page, and a student can submit a commit from a
-repository they own to an assignment that turns GitHub submission on. Slices 1
-to 3 could be built before the privacy review (slice 0) finishes, but no
-deployment may register an App, and no assignment may turn GitHub submission
-on, until it finishes. Slice 4 and later wait for the review. See "Privacy".
+account on the account page, a student can submit a commit from a repository
+they own, and a course can give each student a private repository in a course
+organization, made from a template. They are built so that the privacy review
+(slice 0) can examine working behaviour. No deployment may register an App, and
+no course may use any of it, until the review finishes. The section "What
+reaches GitHub" lists every item of data that crosses, by slice. See
+"Privacy".
 
 This note tells how a student can submit to Chickadee from a GitHub repository,
 and how a course can give each student a private repository made from a
@@ -145,6 +147,13 @@ The App asks for the minimum:
 The App does not ask for a user's email, for Actions, or for write access to
 contents. A deployment that stops at slice 3 never asks for the slice-4
 permissions.
+
+As built (slice 4): the admin page's *Owner and permissions* disclosure has an
+*Allow course repositories* checkbox. Only when it is on does the manifest ask
+for the two slice-4 permissions. An App made without them can be given them
+later on GitHub; until then, every course-repository call fails with a GitHub
+error on the page. The admin page does not yet say whether the registered
+App has them, because the choice is not stored at registration.
 
 ## Linking an account (slice 2)
 
@@ -353,6 +362,60 @@ Things to handle:
   the grade of record points at their commits. The course-archival flow
   should offer this.
 
+As built (slice 4):
+
+- **The course page** is `/instructor/github`. It has no tab, because the tab
+  bar must not change while no App is registered; the GitHub note in an
+  assignment's Student Options links to it. Course staff can read it; only a
+  per-course instructor can change it. Every route is 404 while no App is
+  registered.
+- **Binding** proves two things, because typing an organization's name must
+  not be enough: the App is installed on that organization, and the
+  instructor's GitHub account is one of its owners. The instructor authorizes
+  the App on GitHub (the same user authorization as account linking, and the
+  same callback URL, told apart by the session's `state`). The server lists the
+  installations that the user can reach (`GET /user/installations`), reads the
+  user's role in the organization (`GET /user/memberships/orgs/{org}`, which
+  needs the `members: read` permission), and **revokes the user token before it
+  uses either answer**. The binding stores the installation ID, the
+  organization ID and its login. It links no Chickadee account to GitHub.
+- **Unbinding** removes only the binding. The repositories and their rows
+  stay, so grades keep their commits.
+- **Templates** are chosen per assignment, from the repositories the
+  installation grants that GitHub marks as templates. A template that is not
+  in that list is refused. A template puts the assignment in course-repository
+  mode: the student submits only from the repository made for them, and the
+  slice-3 list of the student's own repositories is not offered.
+- **Making a repository is a button, not a page load.** The design above says
+  "when a student first opens the assignment". As built, the student clicks
+  *Make my repository* on the GitHub submit page. A GET must not make
+  anything; GitHub limits how fast an App makes repositories, so a refusal
+  must reach a person who can try again; and the student acts, so nothing is
+  made in a student's name before they choose to use GitHub. There is no
+  background retry: a refusal shows "GitHub is busy. Try again in a few
+  minutes", and the upload form stays.
+- **The repository** is `{assignment-slug}-{github-login}`, with any character
+  GitHub does not allow replaced by `-`, private, in the bound organization.
+  The student is invited with write (`push`) access. The row is saved before
+  the invitation, so a failed invitation can be sent again (*Resend
+  invitation*) without making a second repository.
+- **Submitting** reads the course repository with the organization's
+  installation token, not the student's. The ownership rule becomes "this is
+  the repository made for this student": any other repository ID is refused
+  as `notOwner`.
+- **Forks.** The page reads the organization's
+  `members_can_fork_private_repositories` setting and shows a warning when it
+  is on. When the setting cannot be read, the page says so.
+- **The end of term.** *Archive repositories* archives every course
+  repository of the course that is not archived yet, and records the time.
+  Nothing is deleted. It is not yet part of the course-archival flow.
+- **Deletion.** Deleting a Chickadee user deletes their course-repository rows.
+  The repository on GitHub stays, because it holds the commits a grade points
+  at; an organization owner deletes it on GitHub if that is required.
+- **The personal-data export** lists the student's course repositories.
+- **Audit.** Binding, unbinding, a template change, a new course repository
+  and archiving each write an audit entry in the GitHub category.
+
 ## Webhooks (slice 5, optional)
 
 The MVP needs no webhooks: the student clicks *Submit*, and Chickadee pulls.
@@ -377,16 +440,19 @@ GitHub. See "Privacy".
 
 This is the real obstacle, and it is not a technical one. Slice 0 is a review
 with the UW privacy office. It gates **turning the feature on**, not building
-it: slices 1 to 3 can merge while the review runs, because with no App
+it: the built slices can merge while the review runs, because with no App
 registered they change nothing (rule 1). No deployment registers an App, and
-no assignment turns GitHub submission on, until the review finishes. Slice 4
-and later wait for the review, because its answers can change their design.
+no course uses any slice, until the review finishes. Slice 4 was built before
+the review so that the review can examine working behaviour rather than a
+plan; its answers can still change the design, and the code changes with
+them.
 
 What changes:
 
 - The student's code, commit history and GitHub login are on US-hosted GitHub.
   Today, all submission data stays inside the UW boundary (see
-  `docs/compliance/trust-boundary.md`).
+  `docs/compliance/trust-boundary.md`). See "What reaches GitHub" for the
+  complete list, by slice.
 - The student must accept GitHub's terms to make an account.
 - Slice 4 puts a student's name, as their GitHub login, into a course
   organization that other staff can see.
@@ -407,6 +473,35 @@ Questions for the privacy office:
 4. Must the data-flow inventory (`docs/compliance/data-flow-inventory.md`)
    and the trust-boundary diagram show GitHub as a new third party?
 
+### What reaches GitHub
+
+This table is for the privacy review. It lists every item of data that crosses
+between Chickadee and GitHub in the built slices, in which direction, and who
+on GitHub can see it. "Out" is from Chickadee to GitHub; "In" is from GitHub to
+Chickadee.
+
+| Slice | Item | Direction | Who on GitHub sees it |
+|---|---|---|---|
+| 1 | The App manifest: the deployment's base URL and callback URLs, the App name, the permissions | Out | The admin who creates the App; the public App page shows the name and the homepage URL |
+| 1 | The App ID, client ID, client secret, private key, webhook secret | In | Stored on the server only (the database and a 0600 file) |
+| 2 | That a Chickadee user authorizes the App (the OAuth request itself) | Out | The student's own GitHub account |
+| 2 | The student's GitHub user ID and login | In | Stored in `github_account_links`; the user token is revoked at once |
+| 3 | The repository and branch names, the head commit's SHA and message | In | Read for the page only; not stored |
+| 3 | The commit's files (tarball) | In | Stored as the submission zip, as an upload is |
+| 3 | The repository ID, `owner/name` and the SHA of each GitHub submission | In | Stored on the submission row |
+| 4 | That an instructor authorizes the App, and their role in the organization | Out, then In | The instructor's own account; the role is read once and not stored |
+| 4 | The organization's ID and login, and the installation ID | In | Stored in `github_course_organizations` |
+| 4 | A repository named `{assignment-slug}-{github-login}` | Out | **Every owner of the course organization, and every member who can see private repositories. The name contains the assignment's slug and the student's GitHub login.** |
+| 4 | The template's files, copied into the student's repository | Out (GitHub to GitHub) | The same people |
+| 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
+| 4 | The repository ID and `owner/name`, and whether the invitation succeeded | In | Stored in `github_course_repositories` |
+| 4 | The archived state at the end of term | Out | The same people as the repository |
+
+Nothing in slices 1 to 4 sends a grade, a test result, a Chickadee username,
+a name, an email address or a student number to GitHub. The student's GitHub
+login reaches the course organization only in slice 4, and only after the
+student clicks *Make my repository*.
+
 ## Operations
 
 - Add `github` to `OutboundDestination`, so that the outbound-reachability
@@ -424,7 +519,7 @@ Questions for the privacy office:
 
 | Slice | Content | Visible change |
 |---|---|---|
-| 0 | Privacy review. Gates turning slices 1 to 3 on, and starting slice 4. | None. |
+| 0 | Privacy review. Gates turning any slice on in a deployment. | None. |
 | 1 | `github_apps` table, the secrets file, the manifest flow, and an admin page to register and remove the App. | An admin page. |
 | 2 | Account linking and unlinking on the account page. | A button on the account page. |
 | 3 | The manifest field, the submit panel, the ownership check, tarball conversion and the `source_*` columns. **The MVP.** | GitHub submission for student-owned repositories. |

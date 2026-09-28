@@ -62,6 +62,11 @@ struct GitHubAccountLinkRoutes: RouteCollection {
 
     @Sendable
     func callback(req: Request) async throws -> Response {
+        // GitHub accepts one user-authorization callback URL, so binding a
+        // course organization (slice 4) returns here too.
+        if GitHubCourseRoutes.isBinding(req) {
+            return try await GitHubCourseRoutes.completeBinding(req: req)
+        }
         let user = try req.auth.require(APIUser.self)
         let userID = try user.requireID()
         let expectedState = req.session.data[Self.stateKey]

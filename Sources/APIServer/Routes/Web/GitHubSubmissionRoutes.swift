@@ -8,6 +8,9 @@
 //   GET  /testsetups/:id/github  → choose a repository and a branch
 //   POST /testsetups/:id/github  → submit the commit the page showed
 //   GET  /github/installed       → GitHub returns here after an install
+//   POST /testsetups/:id/github/repository
+//                                → course-repository mode (slice 4): make the
+//                                  student's repository, or invite them again
 //
 // The page resolves the branch to a SHA and the form posts that SHA, so the
 // student submits exactly the commit they saw, even if they push again. The
@@ -26,6 +29,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.get("testsetups", ":testSetupID", "github", use: page)
         routes.post("testsetups", ":testSetupID", "github", use: submit)
+        routes.post("testsetups", ":testSetupID", "github", "repository", use: makeRepository)
         routes.get("github", "installed", use: installed)
     }
 
@@ -42,9 +46,13 @@ struct GitHubSubmissionRoutes: RouteCollection {
         // so its banner would say the same thing twice.
         let queryError = req.query[String.self, at: "error"].flatMap(GitHubSubmitError.init(rawValue:))
         var state = GitHubSubmitState(
-            errorText: [.notLinked, .notInstalled].contains(queryError) ? nil : queryError?.message)
+            errorText: [.notLinked, .notInstalled, .noCourseRepository].contains(queryError)
+                ? nil : queryError?.message)
+        if req.query[String.self, at: "ok"] == "repository" {
+            state.noticeText = "Your course repository is ready. Accept the invitation on GitHub."
+        }
         do {
-            let access = try await GitHubSubmissionAccess.resolve(userID: userID, req: req)
+            let access = try await Self.access(userID: userID, setup: setup, state: &state, req: req)
             try await state.load(
                 access: access,
                 repositoryID: req.query[Int64.self, at: "repo"],
@@ -58,6 +66,8 @@ struct GitHubSubmissionRoutes: RouteCollection {
             case .notInstalled:
                 state.installURL = try await Self.installURL(on: req.db)
                 req.session.data[Self.returnPathKey] = "/testsetups/\(setupID)/github"
+            case .noCourseRepository:
+                state.canMakeCourseRepository = true
             default:
                 state.errorText = error.message
             }
@@ -70,7 +80,8 @@ struct GitHubSubmissionRoutes: RouteCollection {
                 chips: try await SubmitChips.make(
                     setupID: setupID, assignment: assignment, user: user, on: req.db),
                 state: state,
-                currentUser: req.currentUserContext))
+                currentUser: req.currentUserContext,
+                flashSuccess: state.noticeText))
     }
 
     // MARK: - POST /testsetups/:id/github
@@ -100,7 +111,8 @@ struct GitHubSubmissionRoutes: RouteCollection {
             + (body.branch.map { [URLQueryItem(name: "branch", value: $0)] } ?? [])
         do {
             guard GitHubCommitSHA.isWellFormed(sha) else { throw GitHubSubmitError.commitNotFound }
-            let access = try await GitHubSubmissionAccess.resolve(userID: userID, req: req)
+            var ignored = GitHubSubmitState()
+            let access = try await Self.access(userID: userID, setup: setup, state: &ignored, req: req)
             let repository = try await access.ownedRepository(id: body.repositoryID, req: req)
             let tarball = try await access.tarball(of: repository, sha: sha, req: req)
             let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
@@ -130,6 +142,51 @@ struct GitHubSubmissionRoutes: RouteCollection {
         } catch let error as GitHubSubmitError {
             page.queryItems?.append(URLQueryItem(name: "error", value: error.rawValue))
             return req.redirect(to: page.string ?? "/testsetups/\(setupID)/github")
+        }
+    }
+
+    // MARK: - POST /testsetups/:id/github/repository
+
+    /// Makes the student's course repository from the assignment's template
+    /// and invites them, or sends the invitation again when the first one
+    /// failed. A button, not a page load: a GET must not make a repository,
+    /// and GitHub limits how fast an App may make them.
+    @Sendable
+    func makeRepository(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let userID = try user.requireID()
+        let setup = try await Self.offeredSetup(req: req, user: user)
+        let setupID = try setup.requireID()
+        let assignment = try await requireOpenStudentAssignment(for: setupID, user: user, gate: .access, on: req)
+        let pagePath = "/testsetups/\(setupID)/github"
+        do {
+            guard
+                let template = try await APIGitHubAssignmentTemplate.query(on: req.db)
+                    .filter(\.$testSetupID == setupID).first()
+            else { throw GitHubSubmitError.unavailable }
+            guard
+                let link = try await APIGitHubAccountLink.query(on: req.db).filter(\.$userID == userID).first()
+            else { throw GitHubSubmitError.notLinked }
+            let organization = try await GitHubCourseAccess.resolve(courseID: setup.courseID, req: req)
+            if let existing = try await APIGitHubCourseRepository.query(on: req.db)
+                .filter(\.$testSetupID == setupID).filter(\.$userID == userID).first()
+            {
+                if !existing.invited {
+                    try await organization.invite(existing, login: link.githubLogin, req: req)
+                }
+            } else {
+                let name = GitHubCourseRepositoryName.make(
+                    assignmentSlug: assignment?.slug ?? setupID, login: link.githubLogin)
+                let row = try await organization.makeRepository(
+                    template: template, name: name, testSetupID: setupID, userID: userID,
+                    login: link.githubLogin, req: req)
+                await AuditLogger.record(
+                    action: .githubCourseRepositoryCreated, targetType: .user, targetID: userID.uuidString,
+                    metadata: ["repository_id": String(row.repoID), "test_setup_id": setupID], on: req)
+            }
+            return req.redirect(to: pagePath + "?ok=repository")
+        } catch let error as GitHubSubmitError {
+            return req.redirect(to: pagePath + "?error=\(error.rawValue)")
         }
     }
 
@@ -164,6 +221,28 @@ struct GitHubSubmissionRoutes: RouteCollection {
             throw Abort(.notFound)
         }
         return setup
+    }
+
+    /// The access for this assignment: the student's course repository when
+    /// the assignment has a template (slice 4), else the repositories the
+    /// student owns (slice 3). Fills in the course-repository view on `state`.
+    private static func access(
+        userID: UUID, setup: APITestSetup, state: inout GitHubSubmitState, req: Request
+    ) async throws -> GitHubSubmissionAccess {
+        let setupID = try setup.requireID()
+        guard
+            try await APIGitHubAssignmentTemplate.query(on: req.db).filter(\.$testSetupID == setupID).first()
+                != nil
+        else { return try await GitHubSubmissionAccess.resolve(userID: userID, req: req) }
+        state.courseRepositoryMode = true
+        if let row = try await APIGitHubCourseRepository.query(on: req.db)
+            .filter(\.$testSetupID == setupID).filter(\.$userID == userID).first()
+        {
+            state.courseRepository = GitHubCourseRepositoryView(
+                name: row.repoFullName, url: "https://github.com/\(row.repoFullName)", invited: row.invited)
+        }
+        return try await GitHubSubmissionAccess.resolveCourseRepository(
+            userID: userID, testSetupID: setupID, courseID: setup.courseID, req: req)
     }
 
     private static func installURL(on db: Database) async throws -> String? {

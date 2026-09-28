@@ -25,11 +25,27 @@ struct GitHubSubmitCommitView: Encodable, Equatable {
     let commitURL: String
 }
 
+/// The student's course repository (slice 4).
+struct GitHubCourseRepositoryView: Encodable, Equatable {
+    let name: String
+    let url: String
+    /// False when the invitation failed and can be sent again.
+    let invited: Bool
+}
+
 struct GitHubSubmitState: Encodable {
     /// The longest commit summary the page shows.
     static let summaryLimit = 72
 
     var errorText: String?
+    var noticeText: String?
+    /// The assignment has a template: the student submits only from the
+    /// course repository made for them (slice 4).
+    var courseRepositoryMode = false
+    /// The student's course repository, once made.
+    var courseRepository: GitHubCourseRepositoryView?
+    /// Course-repository mode and no repository yet: offer to make one.
+    var canMakeCourseRepository = false
     /// The student has no linked GitHub account.
     var needsLink = false
     /// The App is not installed on the student's account: where to install it.
@@ -91,6 +107,8 @@ struct GitHubSubmitContext: Encodable {
     let chips: SubmitChips
     let state: GitHubSubmitState
     let currentUser: CurrentUserContext?
+    /// Rendered by the `_flash` partial in `base`.
+    let flashSuccess: String?
 }
 
 /// The link from a submission to the commit it was made from.

@@ -48,15 +48,20 @@ GitHub
         </div>
     </form>
     <details class="test-output-details"#if(organizationOpen): open#endif>
-        <summary>Create on an organization</summary>
+        <summary>Owner and permissions</summary>
         <form method="get" action="/admin/github" class="form-stack">
             <div class="field-stack">
                 <label for="github-org">Organization</label>
                 <input id="github-org" class="form-input" type="text" name="org"
                        value="#(organization)" placeholder="uwaterloo-cs">
             </div>
+            <label class="form-label">
+                <input type="checkbox" name="courseRepositories"#if(courseRepositories): checked#endif>
+                Allow course repositories
+            </label>
+            <p class="field-note text-muted">Adds write access to repository administration and read access to organization members.</p>
             <div class="toolbar toolbar--end">
-                <button class="btn" type="submit">Set owner</button>
+                <button class="btn" type="submit">Apply</button>
             </div>
         </form>
     </details>

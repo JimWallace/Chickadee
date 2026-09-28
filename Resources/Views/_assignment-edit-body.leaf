@@ -327,7 +327,7 @@
             <input type="checkbox" name="enabled" #if(githubSubmission.enabled):checked#endif>
             Allow submission from a GitHub commit
         </label>
-        <p class="field-note text-muted">Students can also submit a commit from a GitHub repository they own.</p>
+        <p class="field-note text-muted">Students can also submit a commit from a GitHub repository they own, or from a <a href="/instructor/github">course repository</a>.</p>
         <button class="btn action-btn" type="submit">Save GitHub setting</button>
     </form>
     #endif

@@ -8,6 +8,7 @@
 #if(activeInstructorTab == "slip-days"):Slip days#endif
 #if(activeInstructorTab == "brightspace"):LEARN#endif
 #if(activeInstructorTab == "mcp"):MCP#endif
+#if(activeInstructorTab == "github"):GitHub#endif
 </h1>
 <nav class="instructor-tabs" aria-label="Instructor sections">
     <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
