@@ -1,4 +1,4 @@
-// Tests/APITests/LTI/LTIAGSClientTests.swift
+// Tests/APITests/LTI/LTIServiceClientTests.swift
 //
 // The AGS client against a stand-in LMS (docs/lti-1-3.md "Grades through
 // AGS"): the token request and its signed assertion, token caching, line-item
@@ -12,8 +12,8 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct LTIAGSClientTests {
-    static let platform = LTIAGSClient.Platform(
+@Suite struct LTIServiceClientTests {
+    static let platform = LTIServiceClient.Platform(
         id: UUID(), clientID: "chickadee-client", accessTokenURL: LTITestGradeService.tokenURL)
 
     private static func toolKey() async throws -> (LTIToolKeyAuthority, URL) {
@@ -40,7 +40,7 @@ import Vapor
         #expect(requests.map(\.method) == [.POST, .GET, .POST])
         #expect(requests[1].url.contains("resource_id=abc123"))
         #expect(requests[1].authorization == "Bearer token-1")
-        #expect(requests[2].contentType == LTIAGSClient.lineItemType)
+        #expect(requests[2].contentType == LTIServiceClient.lineItemType)
         let created = try JSONDecoder().decode([String: JSONValue].self, from: Data(requests[2].body.utf8))
         #expect(created["resourceId"] == .string("abc123"))
         #expect(created["label"] == .string("Lab 1"))
@@ -83,7 +83,7 @@ import Vapor
         }
         #expect(form["grant_type"] == "client_credentials")
         #expect(form["client_assertion_type"] == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
-        #expect(form["scope"] == LTIAGSClient.scopes.joined(separator: " "))
+        #expect(form["scope"] == LTIServiceClient.agsScopes.joined(separator: " "))
         let assertion = try await keys.verify(try #require(form["client_assertion"]), as: LTIClientAssertion.self)
         #expect(assertion.iss.value == "chickadee-client")
         #expect(assertion.sub.value == "chickadee-client")
@@ -114,7 +114,7 @@ import Vapor
         let score = LTIScore.graded(userID: "subject-1", points: 7, maximum: 10, at: Date())
 
         await lms.refuseNextScore(with: .unauthorized)
-        await #expect(throws: LTIAGSError.rejected(.postScore, status: 401)) {
+        await #expect(throws: LTIServiceError.rejected(.postScore, status: 401)) {
             try await client.postScore(
                 score, lineItemURL: LTITestGradeService.createdLineItemURL, platform: Self.platform, keys: keys)
         }
@@ -139,7 +139,7 @@ import Vapor
 
         let scoreRequest = try #require(await lms.requests.last)
         #expect(scoreRequest.url == LTITestGradeService.createdLineItemURL + "/scores")
-        #expect(scoreRequest.contentType == LTIAGSClient.scoreType)
+        #expect(scoreRequest.contentType == LTIServiceClient.scoreType)
         let score = try #require(await lms.scores.first)
         #expect(score.userId == "subject-1")
         #expect(score.scoreGiven == 7)
@@ -153,26 +153,61 @@ import Vapor
         let lms = LTITestGradeService()
         await lms.refuseNextScore(with: .notFound)
 
-        await #expect(throws: LTIAGSError.lineItemGone) {
+        await #expect(throws: LTIServiceError.lineItemGone) {
             try await lms.client.postScore(
                 .graded(userID: "subject-1", points: 7, maximum: 10, at: Date()),
                 lineItemURL: LTITestGradeService.createdLineItemURL, platform: Self.platform, keys: keys)
         }
     }
 
+    // MARK: - Memberships
+
+    @Test func membersAreReadAcrossEveryPage() async throws {
+        let (keys, directory) = try await Self.toolKey()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let lms = LTITestGradeService()
+        let subjects = (1...5).map { "subject-\($0)" }
+        await lms.setMembers(subjects.map { LTIRosterTests.member($0) }, perPage: 2)
+
+        let members = try await lms.client.members(
+            membershipsURL: LTITestGradeService.membershipsURL, platform: Self.platform, keys: keys)
+
+        #expect(members.map(\.userID) == subjects)
+        let pages = await lms.requests.filter { $0.url.hasPrefix(LTITestGradeService.membershipsURL) }
+        #expect(pages.count == 3)
+    }
+
+    @Test func gradeAndRosterCallsUseSeparateTokens() async throws {
+        let (keys, directory) = try await Self.toolKey()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let lms = LTITestGradeService()
+        let client = await lms.client
+
+        _ = try await client.members(
+            membershipsURL: LTITestGradeService.membershipsURL, platform: Self.platform, keys: keys)
+        try await client.postScore(
+            .graded(userID: "subject-1", points: 7, maximum: 10, at: Date()),
+            lineItemURL: LTITestGradeService.createdLineItemURL, platform: Self.platform, keys: keys)
+
+        let tokenBodies = await lms.requests.filter { $0.url == LTITestGradeService.tokenURL }.map(\.body)
+        #expect(tokenBodies.count == 2)
+        #expect(tokenBodies[0].contains("contextmembership.readonly"))
+        #expect(tokenBodies[1].contains("lti-ags"))
+    }
+
     // MARK: - Wire rules
 
     @Test func theScoresURLKeepsTheLineItemQuery() {
         #expect(
-            LTIAGSClient.scoresURL(forLineItem: "https://lms.example.edu/items/2?type=x")
+            LTIServiceClient.scoresURL(forLineItem: "https://lms.example.edu/items/2?type=x")
                 == "https://lms.example.edu/items/2/scores?type=x")
         #expect(
-            LTIAGSClient.scoresURL(forLineItem: "https://lms.example.edu/items/2/")
+            LTIServiceClient.scoresURL(forLineItem: "https://lms.example.edu/items/2/")
                 == "https://lms.example.edu/items/2/scores")
     }
 
     @Test func theResourceFilterKeepsTheLineItemsQuery() {
-        let url = LTIAGSClient.url("https://lms.example.edu/items?type=x", addingResourceID: "abc")
+        let url = LTIServiceClient.url("https://lms.example.edu/items?type=x", addingResourceID: "abc")
         #expect(url == "https://lms.example.edu/items?type=x&resource_id=abc")
     }
 
@@ -195,11 +230,11 @@ import Vapor
     }
 
     @Test func onlyRecoverableFailuresAreRetried() {
-        #expect(LTIAGSError.rejected(.postScore, status: 503).isRetryable)
-        #expect(LTIAGSError.rejected(.token, status: 429).isRetryable)
-        #expect(LTIAGSError.lineItemGone.isRetryable)
-        #expect(!LTIAGSError.rejected(.postScore, status: 400).isRetryable)
-        #expect(!LTIAGSError.rejected(.token, status: 403).isRetryable)
-        #expect(!LTIAGSError.unreadableResponse(.token).isRetryable)
+        #expect(LTIServiceError.rejected(.postScore, status: 503).isRetryable)
+        #expect(LTIServiceError.rejected(.token, status: 429).isRetryable)
+        #expect(LTIServiceError.lineItemGone.isRetryable)
+        #expect(!LTIServiceError.rejected(.postScore, status: 400).isRetryable)
+        #expect(!LTIServiceError.rejected(.token, status: 403).isRetryable)
+        #expect(!LTIServiceError.unreadableResponse(.token).isRetryable)
     }
 }

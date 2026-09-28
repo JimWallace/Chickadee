@@ -117,6 +117,11 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "lti_grades_enabled")
     var ltiGradesEnabled: Bool?
 
+    /// The NRPS membership URL of the bound LMS course, from the most recent
+    /// launch that carried one (docs/lti-1-3.md "Roster through NRPS").
+    @OptionalField(key: "lti_memberships_url")
+    var ltiMembershipsURL: String?
+
     /// True when grades for this course go to the LMS through AGS, and so
     /// never through the Valence sync.
     var usesLTIGrades: Bool {

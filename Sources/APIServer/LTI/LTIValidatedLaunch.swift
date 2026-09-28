@@ -27,4 +27,6 @@ struct LTIValidatedLaunch: Equatable, Sendable {
     var deepLinkingSettings: LTIDeepLinkingSettings?
     /// Present when the platform grants AGS for this launch.
     var agsEndpoint: LTIAGSEndpoint?
+    /// Present when the platform grants NRPS for this launch.
+    var nrpsEndpoint: LTINRPSEndpoint?
 }

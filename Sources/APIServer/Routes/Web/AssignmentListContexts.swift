@@ -131,7 +131,8 @@ struct InstructorStudentsContext: Encodable {
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
     /// True when BrightSpace is configured on the server AND the active course
-    /// is linked to a LEARN org unit — gates the "Check against LEARN" button.
+    /// is linked to a LEARN org unit, or the course reads its roster from the
+    /// LMS through NRPS — gates the "Check against LEARN" button.
     let brightspaceLinkAvailable: Bool
     /// True when the viewer may manage the roster (change roles, unenroll, invite
     /// staff): a per-course instructor or an admin. TAs pass the `/instructor`

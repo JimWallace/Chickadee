@@ -1,15 +1,17 @@
-// APIServer/LTI/LTIAGSError.swift
+// APIServer/LTI/LTIServiceError.swift
 //
-// Why an AGS call failed, and whether the sweep tries it again.
+// Why an LTI service call (AGS or NRPS) failed, and whether the grade sweep
+// tries it again.
 
 import Foundation
 
-enum LTIAGSError: Error, Equatable, Sendable, CustomStringConvertible {
+enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
     enum Step: String, Sendable {
         case token = "access token"
         case findLineItem = "line item lookup"
         case createLineItem = "line item creation"
         case postScore = "score"
+        case memberships = "membership"
     }
 
     /// The platform answered one step with a non-success status.

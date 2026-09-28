@@ -1,8 +1,8 @@
 // Tests/APITests/LTI/LTITestGradeService.swift
 //
-// A stand-in for an LMS's AGS endpoints (docs/lti-1-3.md "Grades through
-// AGS"). It answers the token, line-item and score requests an
-// `LTIAGSClient` sends, records each one, and can be told to refuse the
+// A stand-in for an LMS's AGS and NRPS endpoints (docs/lti-1-3.md). It
+// answers the token, line-item, score and membership requests an
+// `LTIServiceClient` sends, records each one, and can be told to refuse the
 // next score with a status.
 
 import Foundation
@@ -14,6 +14,7 @@ actor LTITestGradeService {
     static let tokenURL = "https://lms.example.edu/token"
     static let lineItemsURL = "https://lms.example.edu/api/lti/courses/7/line_items"
     static let createdLineItemURL = "https://lms.example.edu/api/lti/courses/7/line_items/42"
+    static let membershipsURL = "https://lms.example.edu/api/lti/courses/7/names_and_roles"
 
     struct Recorded: Sendable {
         let method: HTTPMethod
@@ -29,6 +30,14 @@ actor LTITestGradeService {
     /// The status the next score POST answers with; 200 when nil.
     private var nextScoreStatus: HTTPStatus?
     private var tokenCount = 0
+    private var members: [LTIMember] = []
+    /// Members per membership page; nil sends one page.
+    private var membersPerPage: Int?
+
+    func setMembers(_ members: [LTIMember], perPage: Int? = nil) {
+        self.members = members
+        membersPerPage = perPage
+    }
 
     func addExistingLineItem(resourceID: String, url: String) {
         existingItems.append((resourceID, url))
@@ -44,8 +53,8 @@ actor LTITestGradeService {
         }
     }
 
-    var client: LTIAGSClient {
-        LTIAGSClient { [self] request in await self.handle(request) }
+    var client: LTIServiceClient {
+        LTIServiceClient { [self] request in await self.handle(request) }
     }
 
     func handle(_ request: ClientRequest) -> ClientResponse {
@@ -61,6 +70,9 @@ actor LTITestGradeService {
             tokenCount += 1
             return json(#"{"access_token":"token-\#(tokenCount)","token_type":"Bearer","expires_in":3600}"#)
         }
+        if url.hasPrefix(Self.membershipsURL) {
+            return membershipPage(url)
+        }
         if url.hasSuffix("/scores") {
             let status = nextScoreStatus ?? .ok
             nextScoreStatus = nil
@@ -74,6 +86,21 @@ actor LTITestGradeService {
             return json(#"{"id":"\#(Self.createdLineItemURL)","scoreMaximum":10}"#)
         }
         return ClientResponse(status: .notFound)
+    }
+
+    /// One page of members; `?page=N` selects the page, and every page but
+    /// the last links the next one.
+    private func membershipPage(_ url: String) -> ClientResponse {
+        let page = URLComponents(string: url)?.queryItems?.first { $0.name == "page" }?.value.flatMap(Int.init) ?? 0
+        let size = membersPerPage ?? max(members.count, 1)
+        let slice = Array(members.dropFirst(page * size).prefix(size))
+        let body =
+            (try? JSONEncoder().encode(["members": slice])).flatMap { String(bytes: $0, encoding: .utf8) } ?? "{}"
+        var response = json(body)
+        if (page + 1) * size < members.count {
+            response.headers.add(name: .link, value: #"<\#(Self.membershipsURL)?page=\#(page + 1)>; rel="next""#)
+        }
+        return response
     }
 
     private func json(_ text: String) -> ClientResponse {
