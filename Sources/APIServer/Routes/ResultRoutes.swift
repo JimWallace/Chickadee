@@ -138,6 +138,10 @@ struct ResultRoutes: RouteCollection {
 
             try await applyClassWideEffects(
                 submission: submission, collection: collection, matches: report.matches, on: req)
+
+            // An opted-in GitHub submission's public-tier result, on its commit
+            // (docs/github-submissions.md slice 6). Never throws.
+            await GitHubCommitStatusPoster.postIfEnabled(submission: submission, collection: collection, req: req)
         }
 
         return ReportResponse(received: true)

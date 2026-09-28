@@ -41,10 +41,8 @@ extension AdminRoutes {
         let notice = req.query[String.self, at: "ok"].flatMap(GitHubAdminNotice.init(rawValue:))
         let error = req.query[String.self, at: "error"].flatMap(GitHubAppRegistrationError.init(rawValue:))
         return try await renderGitHubPage(
-            req: req, organizationText: req.query[String.self, at: "org"] ?? "",
-            courseRepositories: req.query[String.self, at: "courseRepositories"] != nil,
-            pushEvents: req.query[String.self, at: "pushEvents"] != nil,
-            flashSuccess: notice?.message, flashError: error?.message)
+            req: req, options: GitHubAppOptions(query: req), flashSuccess: notice?.message,
+            flashError: error?.message)
     }
 
     // MARK: - GET /admin/github/callback
@@ -130,9 +128,9 @@ extension AdminRoutes {
     }
 
     private func renderGitHubPage(
-        req: Request, organizationText: String, courseRepositories: Bool, pushEvents: Bool,
-        flashSuccess: String?, flashError: String?
+        req: Request, options: GitHubAppOptions, flashSuccess: String?, flashError: String?
     ) async throws -> View {
+        let organizationText = options.organizationText
         let registered = try await APIGitHubApp.query(on: req.db).first()
         let baseURL = req.application.securityConfiguration.publicBaseURL
         var creation: GitHubAppCreationContext?
@@ -143,8 +141,9 @@ extension AdminRoutes {
             if !trimmed.isEmpty, organization == nil {
                 flashError = GitHubAppRegistrationError.invalidOrganization.message
             } else if let manifest = GitHubAppManifest(
-                publicBaseURL: baseURL, organization: organization, courseRepositories: courseRepositories,
-                pushEvents: pushEvents)
+                publicBaseURL: baseURL, organization: organization,
+                courseRepositories: options.courseRepositories, pushEvents: options.pushEvents,
+                commitStatuses: options.commitStatuses)
             {
                 let state = LTILaunchSecrets.randomToken()
                 req.session.data[Self.githubManifestStateKey] = state
@@ -165,12 +164,33 @@ extension AdminRoutes {
             app: registered.map(AdminGitHubAppDetails.init(app:)),
             creation: creation,
             organization: organizationText,
-            organizationOpen: courseRepositories || pushEvents
-                || !organizationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            courseRepositories: courseRepositories,
-            pushEvents: pushEvents,
+            organizationOpen: options.anySet,
+            courseRepositories: options.courseRepositories,
+            pushEvents: options.pushEvents,
+            commitStatuses: options.commitStatuses,
             flashSuccess: flashSuccess,
             flashError: flashError)
         return try await req.view.render("admin-github", ctx)
+    }
+}
+
+/// The registration options on the admin GitHub page, read from its GET form.
+private struct GitHubAppOptions {
+    let organizationText: String
+    let courseRepositories: Bool
+    let pushEvents: Bool
+    let commitStatuses: Bool
+
+    init(query req: Request) {
+        organizationText = req.query[String.self, at: "org"] ?? ""
+        courseRepositories = req.query[String.self, at: "courseRepositories"] != nil
+        pushEvents = req.query[String.self, at: "pushEvents"] != nil
+        commitStatuses = req.query[String.self, at: "commitStatuses"] != nil
+    }
+
+    /// True when any option is set, so the disclosure stays open.
+    var anySet: Bool {
+        courseRepositories || pushEvents || commitStatuses
+            || !organizationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

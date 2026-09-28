@@ -33,6 +33,26 @@ struct GitHubRepository: Sendable, Equatable {
     let fullName: String
     let ownerID: Int64
     let defaultBranch: String
+    /// Whether only granted people can see the repository. False by default,
+    /// so a value nobody read never lets a result reach a public repository.
+    var isPrivate = false
+}
+
+/// A commit status (slice 6).
+struct GitHubCommitStatus: Sendable, Equatable, Content {
+    enum State: String, Sendable, Codable {
+        case success, failure, error
+    }
+
+    let state: State
+    let description: String
+    let context: String
+    let targetURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case state, description, context
+        case targetURL = "target_url"
+    }
 }
 
 /// The head commit of a branch.
@@ -84,6 +104,13 @@ struct GitHubRepoClient: Sendable {
     var archive: @Sendable (_ token: String, _ fullName: String) async throws -> Void = { _, _ in
         throw GitHubSubmitError.unavailable
     }
+
+    // MARK: Commit statuses (slice 6)
+
+    /// Posts a status on a commit.
+    var createStatus:
+        @Sendable (_ token: String, _ fullName: String, _ sha: String, _ status: GitHubCommitStatus) async throws ->
+            Void = { _, _, _, _ in throw GitHubSubmitError.unavailable }
 }
 
 extension GitHubRepoClient {
@@ -110,16 +137,20 @@ extension GitHubRepoClient {
         let owner: Owner
         let defaultBranch: String
         let isTemplate: Bool?
+        let isPrivate: Bool?
 
         enum CodingKeys: String, CodingKey {
             case id, owner
             case fullName = "full_name"
             case defaultBranch = "default_branch"
             case isTemplate = "is_template"
+            case isPrivate = "private"
         }
 
         var repository: GitHubRepository {
-            GitHubRepository(id: id, fullName: fullName, ownerID: owner.id, defaultBranch: defaultBranch)
+            GitHubRepository(
+                id: id, fullName: fullName, ownerID: owner.id, defaultBranch: defaultBranch,
+                isPrivate: isPrivate == true)
         }
     }
 
@@ -323,6 +354,11 @@ extension GitHubRepoClient {
             let response = try await transport.get("/orgs/\(pathSegment(organization))", token: token)
             guard response.status == .ok else { return nil }
             return try transport.decode(OrganizationBody.self, from: response).membersCanForkPrivateRepositories
+        }
+        live.createStatus = { token, fullName, sha, status in
+            let response = try await transport.send(
+                .POST, "/repos/\(repoPath(fullName))/statuses/\(pathSegment(sha))", token: token, body: status)
+            guard response.status == .created else { throw GitHubSubmitError.githubFailed }
         }
         live.archive = { token, fullName in
             let response = try await transport.send(

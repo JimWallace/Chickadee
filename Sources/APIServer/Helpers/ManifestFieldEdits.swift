@@ -424,6 +424,19 @@ func setManifestGitHubSubmission(setup: APITestSetup, enabled: Bool, on db: any 
     }
 }
 
+/// Turns commit statuses on or off (slice 6), saving only when it changes.
+/// Off removes the key, matching `TestProperties.encode`.
+func setManifestGitHubStatusChecks(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
+    guard setup.decodedManifest()?.githubStatusChecks != enabled else { return }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        if enabled {
+            dict["githubStatusChecks"] = true
+        } else {
+            dict.removeValue(forKey: "githubStatusChecks")
+        }
+    }
+}
+
 /// Reads the `activity` block straight from a manifest JSON string — the same
 /// access pattern as `currentManifestGradingMode` — nil when the field is
 /// absent, unreadable, or names a kind this build does not know.

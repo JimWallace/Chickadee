@@ -31,11 +31,13 @@ struct GitHubAppManifest: Sendable, Equatable {
     let courseRepositories: Bool
     /// True when GitHub should deliver push events to this server (slice 5).
     let pushEvents: Bool
+    /// True when the App may post commit statuses (slice 6).
+    let commitStatuses: Bool
 
     /// Nil when `PUBLIC_BASE_URL` is not set: GitHub needs absolute URLs.
     init?(
         publicBaseURL: URL?, organization: GitHubOrganizationName?, courseRepositories: Bool = false,
-        pushEvents: Bool = false
+        pushEvents: Bool = false, commitStatuses: Bool = false
     ) {
         guard var text = publicBaseURL?.absoluteString, !text.isEmpty else { return nil }
         while text.hasSuffix("/") { text.removeLast() }
@@ -43,6 +45,7 @@ struct GitHubAppManifest: Sendable, Equatable {
         self.organization = organization
         self.courseRepositories = courseRepositories
         self.pushEvents = pushEvents
+        self.commitStatuses = commitStatuses
     }
 
     /// The slice-3 minimum.
@@ -52,6 +55,17 @@ struct GitHubAppManifest: Sendable, Equatable {
     /// the end of term; `members` (an organization permission) to confirm that
     /// the instructor who binds an organization is one of its owners.
     static let courseRepositoryPermissions = ["administration": "write", "members": "read"]
+    /// Commit statuses add this: write access to a commit's statuses, and to
+    /// nothing else in the repository.
+    static let commitStatusPermissions = ["statuses": "write"]
+
+    /// The permissions this manifest asks for.
+    var permissions: [String: String] {
+        var permissions = Self.submissionPermissions
+        if courseRepositories { permissions.merge(Self.courseRepositoryPermissions) { $1 } }
+        if commitStatuses { permissions.merge(Self.commitStatusPermissions) { $1 } }
+        return permissions
+    }
 
     /// The GitHub page that receives the manifest form, with the `state` that
     /// the callback must return.
@@ -85,9 +99,7 @@ struct GitHubAppManifest: Sendable, Equatable {
             // Any account can install the App: a student installs it on the one
             // repository they submit from.
             public: true,
-            defaultPermissions: courseRepositories
-                ? Self.submissionPermissions.merging(Self.courseRepositoryPermissions) { $1 }
-                : Self.submissionPermissions,
+            defaultPermissions: permissions,
             // With no push events there is no `hook_attributes` and no event,
             // so GitHub has no Chickadee URL to call. With them, GitHub makes a
             // webhook secret and returns it with the other credentials.
