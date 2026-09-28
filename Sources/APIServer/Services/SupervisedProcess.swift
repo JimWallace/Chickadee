@@ -70,7 +70,7 @@ final class SupervisedProcess: Sendable {
             .send(signal: .interrupt, allowedDurationToNextStep: .seconds(1)),
         ]
         let platformOptions = options
-        let childEnvironment = subprocessEnvironment(environment)
+        let childEnvironment = Subprocess::Environment.only(environment)
 
         let process = SupervisedProcess()
         let runTask = Task {
@@ -79,7 +79,7 @@ final class SupervisedProcess: Sendable {
                 let result = try await Subprocess.run(
                     .path(executable),
                     arguments: Arguments(arguments),
-                    environment: .custom(childEnvironment),
+                    environment: childEnvironment,
                     workingDirectory: workingDirectory,
                     platformOptions: platformOptions,
                     input: .none,
@@ -123,17 +123,4 @@ final class SupervisedProcess: Sendable {
         return FileDescriptor(rawValue: duplicate)
     }
 
-    /// Bridges `[String: String]` to Subprocess's keyed environment, as
-    /// `PersonalizationEvaluator` does. The module selector is needed because
-    /// `Environment` is also a Vapor type.
-    private static func subprocessEnvironment(
-        _ environment: [String: String]
-    ) -> [Subprocess::Environment.Key: String] {
-        var custom: [Subprocess::Environment.Key: String] = [:]
-        for (key, value) in environment {
-            guard let environmentKey = Subprocess::Environment.Key(rawValue: key) else { continue }
-            custom[environmentKey] = value
-        }
-        return custom
-    }
 }

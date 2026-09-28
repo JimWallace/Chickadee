@@ -18,12 +18,10 @@
 // allocation, child fd setup and spawn, which is the race the zip path needed
 // a process-wide lock and an EFAULT retry to contain.
 //
-// Foundation `Process` survives in exactly one place across the whole
-// repository. If you add another, add it to this list, and read
-// docs/ci-flakiness.md Family 6 first.
-//
-//   * `Sources/APIServer/APIServerApp+Stores.swift` — the local-runner
-//     autostart, a child held for the server's whole lifetime.
+// Foundation `Process` is gone from the whole repository, and
+// `scripts/no-foundation-process.sh` keeps it out (docs/ci-flakiness.md,
+// Family 6). The last one was the local-runner autostart, a child held for
+// the server's whole lifetime; it now runs as a `SupervisedProcess`.
 //
 // `LocalHTTPTestServer` was on this list, for the same reason: a long-lived
 // server held past one call. That reason did not hold. A `Subprocess.run`
