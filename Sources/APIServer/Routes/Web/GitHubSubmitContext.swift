@@ -1,0 +1,101 @@
+// APIServer/Routes/Web/GitHubSubmitContext.swift
+//
+// The view model of the GitHub submit page (docs/github-submissions.md
+// slice 3) and the steps that fill it: the repositories the linked account
+// owns, the branches of the chosen one, and that branch's head commit.
+
+import Foundation
+import Vapor
+
+struct GitHubSubmitOption: Encodable, Equatable {
+    let value: String
+    let label: String
+    let selected: Bool
+}
+
+struct GitHubSubmitCommitView: Encodable, Equatable {
+    let repositoryID: String
+    let repositoryName: String
+    /// Posted back, so an error returns the page to the same branch.
+    let branch: String
+    let sha: String
+    let shortSHA: String
+    /// The first line of the commit message, shortened.
+    let summary: String
+    let commitURL: String
+}
+
+struct GitHubSubmitState: Encodable {
+    /// The longest commit summary the page shows.
+    static let summaryLimit = 72
+
+    var errorText: String?
+    /// The student has no linked GitHub account.
+    var needsLink = false
+    /// The App is not installed on the student's account: where to install it.
+    var installURL: String?
+    /// The student's installation is readable. The lists below are filled.
+    var loaded = false
+    /// Where the student changes which repositories the App can read.
+    var configureURL: String?
+    var repositories: [GitHubSubmitOption] = []
+    var branches: [GitHubSubmitOption] = []
+    var commit: GitHubSubmitCommitView?
+
+    /// Fills the lists. A repository is selected when the query names one of
+    /// the student's own, or when there is only one. The branch is the one the
+    /// query names, else the default branch.
+    mutating func load(
+        access: GitHubSubmissionAccess, repositoryID: Int64?, branch requestedBranch: String?,
+        configureURL: String?, req: Request
+    ) async throws {
+        self.configureURL = configureURL
+        let owned = try await access.ownedRepositories(req: req)
+        loaded = true
+        let selected =
+            repositoryID.flatMap { id in owned.first { $0.id == id } }
+            ?? (owned.count == 1 ? owned.first : nil)
+        repositories = owned.map {
+            GitHubSubmitOption(value: String($0.id), label: $0.fullName, selected: $0.id == selected?.id)
+        }
+        guard let selected else { return }
+
+        let names = try await access.branches(of: selected, req: req)
+        let branch =
+            requestedBranch.flatMap { names.contains($0) ? $0 : nil }
+            ?? (names.contains(selected.defaultBranch) ? selected.defaultBranch : names.first)
+        branches = names.map { GitHubSubmitOption(value: $0, label: $0, selected: $0 == branch) }
+        guard let branch else { return }
+
+        let head = try await access.commit(branch, in: selected, req: req)
+        commit = GitHubSubmitCommitView(
+            repositoryID: String(selected.id),
+            repositoryName: selected.fullName,
+            branch: branch,
+            sha: head.sha,
+            shortSHA: String(head.sha.prefix(7)),
+            summary: Self.summary(of: head.message),
+            commitURL: GitHubSourceLink.commitURL(repositoryName: selected.fullName, sha: head.sha))
+    }
+
+    static func summary(of message: String) -> String {
+        let firstLine = message.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+        guard firstLine.count > summaryLimit else { return firstLine }
+        return String(firstLine.prefix(summaryLimit - 1)) + "…"
+    }
+}
+
+struct GitHubSubmitContext: Encodable {
+    let testSetupID: String
+    let assignmentTitle: String
+    let chips: SubmitChips
+    let state: GitHubSubmitState
+    let currentUser: CurrentUserContext?
+}
+
+/// The link from a submission to the commit it was made from.
+enum GitHubSourceLink {
+    static func commitURL(repositoryName: String, sha: String) -> String {
+        "https://github.com/\(GitHubRepoClient.repoPath(repositoryName))/commit/\(sha)"
+    }
+}

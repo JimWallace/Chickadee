@@ -134,6 +134,7 @@ func makeWorkerManifestJSON(
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
         submissionMode: props.submissionMode.rawValue,
+        githubSubmission: props.githubSubmission,
         requiredFiles: props.requiredFiles,
         timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
@@ -160,6 +161,9 @@ func makeWorkerManifestJSON(
     includeMakefile: Bool,
     gradingMode: String = "worker",
     submissionMode: String = "notebook",
+    // The GitHub opt-in (docs/github-submissions.md slice 3). Threaded for the
+    // fresh-dict reason `activity` is: a suite edit must not turn it off.
+    githubSubmission: Bool = false,
     requiredFiles: [String] = [],
     timeLimitSeconds: Int = 10,
     starterNotebook: String? = "assignment.ipynb",
@@ -209,6 +213,10 @@ func makeWorkerManifestJSON(
     ]
     if let starterNotebook {
         manifest["starterNotebook"] = starterNotebook
+    }
+    // Omitted when false, matching `TestProperties.encode`.
+    if githubSubmission {
+        manifest["githubSubmission"] = true
     }
     // Omitted only when the caller has nothing to record (a manifest rebuilt
     // from one that predates the field). Callers that know the language pass

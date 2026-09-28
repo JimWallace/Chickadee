@@ -1,10 +1,12 @@
 # Submitting from GitHub
 
-**Status:** slices 1 and 2 are built: an admin can register the GitHub App on
-the admin GitHub page (Integrations → GitHub), and a student can link a GitHub
-account on the account page. Nothing submits from GitHub yet. Slices 1 to 3 can
-be built before the privacy review (slice 0) finishes, but no deployment may
-register an App until it finishes. See "Privacy".
+**Status:** slices 1 to 3 are built: an admin can register the GitHub App on
+the admin GitHub page (Integrations → GitHub), a student can link a GitHub
+account on the account page, and a student can submit a commit from a
+repository they own to an assignment that turns GitHub submission on. Slices 1
+to 3 could be built before the privacy review (slice 0) finishes, but no
+deployment may register an App, and no assignment may turn GitHub submission
+on, until it finishes. Slice 4 and later wait for the review. See "Privacy".
 
 This note tells how a student can submit to Chickadee from a GitHub repository,
 and how a course can give each student a private repository made from a
@@ -194,6 +196,21 @@ upload form:
 A student installs the App on their own account once, and grants it only the
 repositories they select. GitHub shows this step.
 
+As built (slice 3): the steps are on a separate page,
+`/testsetups/:id/github`, and the upload form links to it with one line. A
+separate page keeps the upload form free of GitHub calls, so a GitHub outage
+cannot slow or break it. The page shows the same attempt and deadline chips as
+the upload form. Choosing a repository or a branch reloads the page (a plain
+GET form, with a *Show commit* button when scripts are off). The page shows the
+head commit's short SHA, as a link to the commit, and the first line of its
+message. It does not show when GitHub received the commit, because the API
+gives no push time for a commit; the committer date is written by the student
+and is not shown either. A student without a link is sent to the account page;
+a student without the App installed gets an *Install on GitHub* button, and
+GitHub returns them to the same page (`/github/installed`, the setup URL in the
+slice-1 manifest). Every error is one sentence in a `.form-error` banner, and
+every error the student cannot fix points to the upload form.
+
 ### The server side
 
 1. Check that the linked account **owns** the repository: the repository
@@ -214,6 +231,28 @@ repositories they select. GitHub shows this step.
 (`Sources/APIServer/Routes/SubmissionRoutes.swift`). The GitHub path must
 attribute the submission like the web path does.
 
+As built (slice 3):
+
+- The page resolves the branch to a SHA, and the form posts that SHA. So the
+  student submits exactly the commit they saw, even if they push again before
+  they click. The POST accepts only a 40-character hexadecimal SHA.
+- The POST runs `requireOpenStudentAssignment` (the upload form's gate:
+  enrolment, open state, deadline, extensions, a class activity's window)
+  **before** any GitHub call, so a slow download cannot move the deadline.
+- The ownership check reads the repository by its numeric ID and compares its
+  `owner.id` with the linked GitHub user ID. The page also lists only owned
+  repositories, but the check on the POST is the control.
+- The installation must be on the linked account: the installation found for
+  the linked login must report the linked GitHub user ID. A login that moved
+  to another account therefore fails as "not installed".
+- The save goes through `recordStudentSubmission`, the helper the upload form
+  now uses too, so attempt numbers, diagnostics, the first-to-submit award and
+  the local-runner start cannot drift between the two.
+- Each GitHub submission is logged with the submission ID, the repository ID
+  and the SHA. Tokens are never logged.
+- The GitHub calls are closures on the Application (`GitHubRepoClient`), so
+  tests use a fake and never reach the network.
+
 ### Converting the tarball
 
 GitHub's tarball has one top-level directory, `{owner}-{repo}-{sha}/`. The
@@ -230,6 +269,17 @@ conversion:
 
 The student sees each refusal as a `.form-error` banner, in the same words as
 the upload refusals.
+
+As built (slice 3): `gzip -dc` runs with a cap on its output (40 MB, four times
+the file limit, which leaves room for the 512-byte headers and padding of a
+repository with many small files), so a compressed bomb stops at the cap. A
+small tar reader in Swift then reads the result in memory. It keeps regular
+files only (hard links, devices and FIFOs are dropped as well as symbolic
+links), reads long names from pax `path` records and GNU `L` headers, drops any
+name with a `..` or `.` component or an absolute path, and counts file bytes
+against the 10 MB limit. The files are written to a temporary directory and
+zipped with the same `zip` call the rest of the server uses. A commit with no
+files is refused. No link is ever created on disk.
 
 ### What is stored
 
@@ -260,6 +310,20 @@ An assignment turns GitHub submission on with a manifest field, beside
 The manifest field must reach the worker manifest through
 `makeWorkerManifestJSON` or be excluded from it on purpose. The runner does not
 need it, so `runnerSanitized` should strip it.
+
+As built (slice 3): the field is `githubSubmission: true`, written only when
+on, so every other manifest keeps its bytes. `makeWorkerManifestJSON` threads
+it, so a suite edit does not turn it off, and `runnerSanitized` drops it. An
+instructor turns it on with a checkbox in the edit page's *Student Options*,
+which has its own endpoint (`POST /instructor/:id/github-submission`, audited
+as `github.submission_toggled`) so a change during term does not close or
+re-validate the assignment. The checkbox shows only while an App is registered
+and only on a worker-graded assignment. `GitHubSubmissionOffer` is the one
+predicate for "this assignment offers GitHub submission": the flag, worker
+grading, and a registered App. The upload form's link and every GitHub route
+ask it, and every GitHub route is 404 while it is false. The results page, for
+the student and for staff, shows "From GitHub: owner/name at abc1234" with a
+link to the commit.
 
 ## Course repositories (slice 4)
 
@@ -346,9 +410,11 @@ Questions for the privacy office:
 ## Operations
 
 - Add `github` to `OutboundDestination`, so that the outbound-reachability
-  health rule reports a GitHub outage correctly.
+  health rule reports a GitHub outage correctly. Built in slice 3: only a
+  transport error counts, so a 404 for a missing installation is not an outage.
 - Cache installation tokens for their one-hour life. Do not get a new token for
-  each request.
+  each request. Built in slice 3: kept in memory per GitHub account, and not
+  used in the last five minutes before it expires.
 - A GitHub outage stops GitHub submission only. The upload form still works.
   The submit panel must say this, and point the student to the upload form.
 - Log the repository ID and the SHA on each GitHub submission. Do not log

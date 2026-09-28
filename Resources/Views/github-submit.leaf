@@ -1,0 +1,81 @@
+#extend("base"):
+#export("title"):
+Submit from GitHub
+#endexport
+#export("content"):
+<h1>Submit to #(assignmentTitle) from GitHub</h1>
+<div class="chip-row">
+    <span class="chip">Attempt #(chips.attemptNumber)</span>
+    #if(chips.deadlineText):
+    <span class="chip js-relative-time" data-iso="#(chips.deadlineISO)">#(chips.deadlineText)</span>
+    #endif
+</div>
+#if(state.errorText):
+<div class="form-error" role="alert">#(state.errorText)</div>
+#endif
+
+#if(state.needsLink):
+<p>Link a GitHub account on your <a href="/account">account page</a> first.</p>
+#endif
+
+#if(state.installURL):
+<p>Install the GitHub App on your GitHub account, and give it access to the repository you submit from.</p>
+<p><a class="btn btn-primary" href="#(state.installURL)">Install on GitHub</a></p>
+#endif
+
+#if(state.loaded):
+#if(count(state.repositories) == 0):
+<p class="empty">No repository is available.</p>
+<p class="section-note">Give the GitHub App access to a repository that you own.</p>
+<p><a class="btn" href="#(state.configureURL)">Choose repositories on GitHub</a></p>
+#else:
+<form class="form form--wide" method="get" action="/testsetups/#(testSetupID)/github">
+    <label class="form-label">
+        Repository
+        <select class="form-input" name="repo" data-ck-submit-on-change>
+            <option value="">Choose a repository</option>
+            #for(option in state.repositories):
+            <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+            #endfor
+        </select>
+    </label>
+    #if(count(state.branches) > 0):
+    <label class="form-label">
+        Branch
+        <select class="form-input" name="branch" data-ck-submit-on-change>
+            #for(option in state.branches):
+            <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+            #endfor
+        </select>
+    </label>
+    #endif
+    <div>
+        <button class="btn" type="submit">Show commit</button>
+    </div>
+</form>
+<p class="section-note"><a href="#(state.configureURL)">Choose repositories on GitHub</a> to add one to this list.</p>
+#endif
+#endif
+
+#if(state.commit):
+<section class="page-section">
+    <h2>Commit</h2>
+    <dl class="detail-grid">
+        <dt>Repository</dt>
+        <dd>#(state.commit.repositoryName)</dd>
+        <dt>Commit</dt>
+        <dd><a href="#(state.commit.commitURL)"><code>#(state.commit.shortSHA)</code></a> #(state.commit.summary)</dd>
+    </dl>
+    <form method="post" action="/testsetups/#(testSetupID)/github" class="inline-form">
+        #csrfFormField()
+        <input type="hidden" name="repositoryID" value="#(state.commit.repositoryID)">
+        <input type="hidden" name="sha" value="#(state.commit.sha)">
+        <input type="hidden" name="branch" value="#(state.commit.branch)">
+        <button class="btn btn-primary" type="submit">Submit commit #(state.commit.shortSHA)</button>
+    </form>
+</section>
+#endif
+
+<p class="section-note">To submit files from your computer, use the <a href="/testsetups/#(testSetupID)/submit">upload form</a>.</p>
+#endexport
+#endextend

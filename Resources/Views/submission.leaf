@@ -34,6 +34,9 @@ Submission #(submissionID)
             #endif
         </div>
     </div>
+    #if(sourceCommit):
+    <p class="card-meta">From GitHub: #(sourceCommit.repositoryName) at <a href="#(sourceCommit.commitURL)"><code>#(sourceCommit.shortSHA)</code></a></p>
+    #endif
     #if(isPending):
     #else:
     #if(buildFailed):

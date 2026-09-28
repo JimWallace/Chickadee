@@ -240,6 +240,9 @@ struct SubmitContext: Encodable {
     let deadlineText: String?
     let deadlineISO: String?
     let currentUser: CurrentUserContext?
+    /// The GitHub submit page, when this assignment offers it
+    /// (docs/github-submissions.md slice 3); nil hides the link.
+    let githubSubmitURL: String?
 }
 
 // MARK: - Notebook page
@@ -615,6 +618,26 @@ struct SubmissionContext: Encodable {
     /// Staff-only link to the starter-to-submission diff; nil for students,
     /// for whom the comparison is not offered.
     let diffURL: String?
+    /// The commit a GitHub submission was made from; nil for an upload.
+    let sourceCommit: SubmissionSourceCommitView?
+}
+
+/// The repository and commit a GitHub submission came from
+/// (docs/github-submissions.md slice 3), for the results page.
+struct SubmissionSourceCommitView: Encodable, Equatable {
+    let repositoryName: String
+    let shortSHA: String
+    let commitURL: String
+
+    /// The view for a GitHub submission, or nil for any other row.
+    init?(submission: APISubmission) {
+        guard submission.sourceKind == SubmissionSource.github.rawValue,
+            let name = submission.sourceRepoName, let sha = submission.sourceCommit
+        else { return nil }
+        repositoryName = name
+        shortSHA = String(sha.prefix(7))
+        commitURL = GitHubSourceLink.commitURL(repositoryName: name, sha: sha)
+    }
 }
 
 /// One class-goal achievement's display state for the submission page.

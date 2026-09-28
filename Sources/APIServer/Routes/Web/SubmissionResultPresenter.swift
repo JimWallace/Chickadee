@@ -514,7 +514,8 @@ extension WebRoutes {
             secretRevealActive: secretReveal.active,
             solutionURL: decorations.solutionURL,
             leaderboardURL: decorations.leaderboardURL,
-            diffURL: decorations.diffURL
+            diffURL: decorations.diffURL,
+            sourceCommit: SubmissionSourceCommitView(submission: submission)
         )
     }
 }

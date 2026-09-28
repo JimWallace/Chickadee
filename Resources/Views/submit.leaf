@@ -34,5 +34,8 @@ Submit Code
         <a class="btn" href="/">Cancel</a>
     </div>
 </form>
+#if(githubSubmitURL):
+<p class="section-note">You can also <a href="#(githubSubmitURL)">submit a commit from GitHub</a>.</p>
+#endif
 #endexport
 #endextend

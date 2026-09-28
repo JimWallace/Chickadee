@@ -224,6 +224,14 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// How students hand work in — see `SubmissionMode`. `.uploadOnly`
     /// forces native-worker grading via `effectiveGradingMode`.
     public let submissionMode: SubmissionMode
+    /// True when students may also submit a commit from a GitHub repository
+    /// (docs/github-submissions.md slice 3), beside the upload form. It is
+    /// offered only where the upload form is (`effectiveGradingMode ==
+    /// .worker`), and only while a GitHub App is registered. Server-side only:
+    /// a GitHub submission reaches the runner as an ordinary zip, so
+    /// `runnerSanitized()` drops the flag via the memberwise default. Encoded
+    /// only when true, so every other manifest keeps its bytes.
+    public let githubSubmission: Bool
     public let requiredFiles: [String]
     public let testSuites: [TestSuiteEntry]
     public let timeLimitSeconds: Int
@@ -488,6 +496,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
         submissionMode: SubmissionMode = .notebook,
+        githubSubmission: Bool = false,
         requiredFiles: [String] = [],
         testSuites: [TestSuiteEntry] = [],
         timeLimitSeconds: Int = 10,
@@ -512,6 +521,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.schemaVersion = schemaVersion
         self.gradingMode = gradingMode
         self.submissionMode = submissionMode
+        self.githubSubmission = githubSubmission
         self.requiredFiles = requiredFiles
         self.testSuites = testSuites
         self.timeLimitSeconds = timeLimitSeconds
@@ -546,6 +556,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // predate upload-only assignments, so they are notebook assignments.
         submissionMode =
             try c.decodeIfPresent(SubmissionMode.self, forKey: .submissionMode) ?? .notebook
+        githubSubmission = try c.decodeIfPresent(Bool.self, forKey: .githubSubmission) ?? false
         requiredFiles = try c.decodeIfPresent([String].self, forKey: .requiredFiles) ?? []
         testSuites = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites) ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
@@ -593,6 +604,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case schemaVersion
         case gradingMode
         case submissionMode
+        case githubSubmission
         case requiredFiles
         case testSuites
         case timeLimitSeconds
@@ -620,6 +632,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(schemaVersion, forKey: .schemaVersion)
         try c.encode(gradingMode, forKey: .gradingMode)
         try c.encode(submissionMode, forKey: .submissionMode)
+        if githubSubmission {
+            try c.encode(githubSubmission, forKey: .githubSubmission)
+        }
         try c.encode(requiredFiles, forKey: .requiredFiles)
         try c.encode(testSuites, forKey: .testSuites)
         try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
