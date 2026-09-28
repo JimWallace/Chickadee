@@ -89,3 +89,7 @@ mutation-report/
 
 # Bytecode from the mutation tooling's self-test.
 Tools/mutation/__pycache__/
+
+# LLVM coverage output. A test run built with coverage writes default.profraw
+# into the working directory; a 9 MB copy reached main by accident in #1558.
+*.profraw

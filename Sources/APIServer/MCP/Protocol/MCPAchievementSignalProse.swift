@@ -50,6 +50,15 @@ enum MCPAchievementSignalProse {
                 "itemsCovered is a count of DISTINCT suite items the whole class has passed "
                 + "between them, optionally scoped to one suite section with sectionRef "
                 + "(classWide goals only)"
+        case .standing:
+            return "standing is the student's place in a round robin's standings, 1 = first (individual only)"
+        case .matchesWon:
+            return "matchesWon is the number of matches the student's latest submission won (individual only)"
+        case .classCoverage:
+            return
+                "classCoverage is a percent (0–100) of the reference that the whole class's "
+                + "combined slot contributions cover, measured by one synthetic corpus run over "
+                + "them; it scopes nothing, so set no sectionRef (classWide goals only)"
         }
     }
 }

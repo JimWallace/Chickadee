@@ -55,6 +55,10 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
+        // LMS grades through the LTI grade service (docs/lti-1-3.md, AGS).
+        r.get("lti-grades", use: ltiGradesPage)
+        r.post("lti-grades", "transport", use: saveLTIGradeTransport)
+        r.post("lti-grades", "push-all", use: pushAllLTIGrades)
         // MCP tab: the active course's authoring guidance for connected agents.
         r.get("mcp", use: mcpPanelPage)
         r.post("mcp", use: saveMCPGuidance)
@@ -94,6 +98,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
         r.post(":assignmentID", "passing-threshold", use: savePassingThresholdSetting)
         r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
+        r.post(":assignmentID", "activity", "opponent", use: saveActivityOpponentFile)
+        r.post(":assignmentID", "activity", "window", use: saveActivityWindow)
+        r.post(":assignmentID", "tournament", "run", use: runTournament)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -419,7 +426,9 @@ struct InstructorDashboardRoutes: RouteCollection {
             sourceSetup: sourceSetup,
             newTitle: "\(source.title) (Copy)",
             targetCourseID: source.courseID,
-            setupsDirectory: req.application.testSetupsDirectory,
+            directories: AuthoringDirectories(
+                setups: req.application.testSetupsDirectory,
+                submissions: req.application.submissionsDirectory),
             on: req.db)
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentCloned, assignment: cloned.assignment,

@@ -91,7 +91,8 @@ jobs:
             libncurses-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
             libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
           # Install swiftly from its binary release (the legacy swiftly-install.sh
-          # shell script does not support Ubuntu 24.04, the ubuntu-latest runner).
+          # shell script does not support the Ubuntu release the ubuntu-latest
+          # runner provides).
           arch="$(uname -m)"
           curl -fsSLO "https://download.swift.org/swiftly/linux/swiftly-${arch}.tar.gz"
           tar zxf "swiftly-${arch}.tar.gz"

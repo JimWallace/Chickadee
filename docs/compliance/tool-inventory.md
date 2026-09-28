@@ -50,7 +50,7 @@ source of truth; a census re-count is required whenever either changes
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 
-## Write tools (`content:write`) — 27
+## Write tools (`content:write`) — 28
 
 | Tool | Handler (`file`) | Resource arg | Authz | Writes / touches |
 |------|------------------|--------------|-------|------------------|
@@ -61,6 +61,7 @@ source of truth; a census re-count is required whenever either changes
 | `set_submission_mode` | `SetSubmissionModeTool.swift:36` | `assignmentPublicID` | course-enrol (`:76`) | `APITestSetup` manifest (submission mode) |
 | `set_assignment_language` | `SetAssignmentLanguageTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APITestSetup` manifest (declared language) |
 | `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement) |
+| `run_tournament` | `RunTournamentTool.swift:16` | `assignmentPublicID` | course-enrol (`:86`) | new `tournament_runs` / `tournament_matches` rows; new `tournamentMatch` `APISubmission` rows (frozen copies of entrants' uploads, never a grade of record) |
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |
@@ -182,7 +183,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
 | `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
 | `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
-| `get_health_alerts` | live rule evaluation | counts/thresholds; BrightSpace `last_error` writer-sanitized (audit F-2) |
+| `get_health_alerts` | live rule evaluation | counts/thresholds; runner IDs of runners that stopped polling (operational, as `list_runners`); BrightSpace `last_error` writer-sanitized (audit F-2) |
 | `get_browser_diagnostics` | `client_diagnostics` | `user_id` omitted; samples carry the coarse browser/OS label, never the raw User-Agent (audit F-4); PII-tested |
 | `list_connected_agents` | OAuth grants | owner is the authorizing staff/admin (consent-gated), never a student; no token material |
 | `get_brightspace_sync_status` | `brightspace_sync_log` | `username`/`points`/`user_id` columns omitted; `detail` sanitized at write (audit F-2); PII-tested |

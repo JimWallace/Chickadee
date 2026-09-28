@@ -99,6 +99,25 @@ func collectClaimCandidates(
         candidates.append((candidate, setup, manifest))
     }
 
+    // Tournament matches (docs/class-activities.md) are a live-session
+    // action, so they follow fresh student work and precede validation.
+    let pendingMatches = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
+        .filter(\.$kind == APISubmission.Kind.tournamentMatch)
+        .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
+        .all()
+    for match in pendingMatches {
+        if let cached = resolvedBySetupID[match.testSetupID] {
+            candidates.append((match, cached.0, cached.1))
+            continue
+        }
+        guard let setup = try await APITestSetup.find(match.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[match.testSetupID] = (setup, manifest)
+        candidates.append((match, setup, manifest))
+    }
+
     let pendingValidation = try await APISubmission.query(on: db)
         .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.validation)
@@ -118,6 +137,28 @@ func collectClaimCandidates(
             TestProperties.self, from: Data(valSetup.manifest.utf8))
         resolvedBySetupID[validation.testSetupID] = (valSetup, valManifest)
         candidates.append((validation, valSetup, valManifest))
+    }
+
+    // The class corpus run (docs/collaborative-class-assignments.md) goes
+    // LAST, behind everything a human is waiting on. Nobody is watching it
+    // land: it feeds a class progress bar, it is debounced to one run in
+    // flight per assignment, and a deadline spike is exactly when a student's
+    // job must not queue behind it.
+    let pendingAggregates = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
+        .filter(\.$kind == APISubmission.Kind.classAggregate)
+        .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
+        .all()
+    for aggregate in pendingAggregates {
+        if let cached = resolvedBySetupID[aggregate.testSetupID] {
+            candidates.append((aggregate, cached.0, cached.1))
+            continue
+        }
+        guard let setup = try await APITestSetup.find(aggregate.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[aggregate.testSetupID] = (setup, manifest)
+        candidates.append((aggregate, setup, manifest))
     }
 
     return candidates
@@ -179,17 +220,28 @@ func evaluateAndClaimCandidate(
         // knows what language the assignment is in and the runner already
         // advertises what it has, so a runner that cannot grade this
         // assignment leaves it for one that can instead of failing it.
-        let versionResult = RunnerVersionGate.evaluate(
-            runnerVersion: body.runnerVersion,
-            minimumRunnerVersion: manifest.minimumRunnerVersion
+        let versionResult = RunnerVersionGate.combine(
+            RunnerVersionGate.evaluateDeploymentFloor(runnerVersion: body.runnerVersion),
+            RunnerVersionGate.evaluate(
+                runnerVersion: body.runnerVersion,
+                minimumRunnerVersion: manifest.minimumRunnerVersion
+            )
         )
         let languageResult = RunnerLanguageGate.evaluate(
             runnerProfile: runnerProfile,
             manifest: manifest
         )
+        // A class-activity match needs a runner build that stages its
+        // opponent; the same implicit shape as the language gate.
+        let activityResult = RunnerActivityGate.evaluate(
+            runnerProfile: runnerProfile,
+            manifest: manifest
+        )
         let compatibilityResult = RunnerVersionGate.combine(
-            RunnerVersionGate.combine(capabilityResult, versionResult),
-            languageResult
+            RunnerVersionGate.combine(
+                RunnerVersionGate.combine(capabilityResult, versionResult),
+                languageResult),
+            activityResult
         )
         await req.application.diagnostics.recordCompatibilityDecision(
             submission: submission,

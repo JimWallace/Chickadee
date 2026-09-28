@@ -17,6 +17,8 @@ import SQLKit
 ///   - AddCourseMCPInstructions          — `mcp_instructions` (second round)
 ///   - AddCourseArchivedAt               — `archived_at` (second round; its backfill
 ///     stamped already-archived courses and is a no-op on an empty fresh table)
+///   - AddCourseSlipDaySettings          — the three slip-day policy columns
+///     (third round, #1252)
 ///
 /// The consolidated form below produces the same final schema in a single
 /// Create step.  Existing deploys have CreateCourses already marked
@@ -52,6 +54,12 @@ struct CreateCourses: ChickadeeMigration {
             // Folded from AddCourseArchivedAt: when the course was archived —
             // the retention clock's zero point. nil = not archived.
             .field("archived_at", .datetime)
+            // Folded from AddCourseSlipDaySettings (#1228): the course-level
+            // slip-day policy. All nullable; nil reads as "never configured",
+            // which `SlipDayPolicy.resolve` treats as disabled.
+            .field("slip_days_enabled", .bool)
+            .field("slip_days_per_student", .int)
+            .field("slip_day_extension_hours", .int)
             .field("created_at", .datetime)
             .create()
         // Partial unique index: only one active course per code.

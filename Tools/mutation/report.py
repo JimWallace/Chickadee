@@ -39,6 +39,7 @@ ROW = re.compile(r"^(\S+\.swift):(\d+)\s+(\S+)\s+mutant (survived|killed)", re.M
 SCHEMA_ID = re.compile(r'environment\["([A-Za-z0-9_]+?)_([A-Za-z]+)_(\d+)_(\d+)_(\d+)"\]')
 SCORE = re.compile(r"Mutation Score of Test Suite:\s*(\d+)%")
 TOOK = re.compile(r"Muter took\s+(\S+)")
+BUILD_FAILED = re.compile(r"^error: Build failed", re.M)
 
 
 def _skip_to_matching_brace(text: str, open_idx: int) -> int:
@@ -454,9 +455,31 @@ def main() -> int:
     if not rows:
         out += [
             "**Muter produced no mutant outcomes at all.** That is a tooling failure,",
-            "not a measurement -- most likely the insertion patch no longer applies.",
-            "Do not read a score from this run.",
+            "not a measurement. Do not read a score from this run.",
+            "",
         ]
+        # NAME THE CAUSE THE LOG ACTUALLY CARRIES. This used to say "most likely
+        # the insertion patch no longer applies" whatever had happened, and the
+        # 2026-09-22 sweep measured what that costs: six of twelve shards died
+        # because the mutated copy did not COMPILE -- an unused binding left by
+        # RemoveSideEffects, under .treatAllWarnings(as: .error) -- and the
+        # report sent every reader of it to a patch that was applying perfectly.
+        # A confident wrong diagnosis is the failure mode this whole exercise
+        # exists to catch; it does not get a pass for being in the tooling.
+        if BUILD_FAILED.search(text):
+            out += [
+                "The mutated copy did not COMPILE (`error: Build failed` in the log), so no",
+                "mutant ever ran and the insertion patch is not implicated. Read the",
+                "compiler errors in the job log. A mutated copy must still build, which",
+                "means a diagnostic that a MUTATION introduces -- an unused binding, an",
+                "unreachable branch -- must not be fatal in it; see the warning-demotion",
+                "note in `Tools/mutation/config.json`.",
+            ]
+        else:
+            out += [
+                "The log carries no build failure, so the likeliest cause is the insertion",
+                "patch no longer applying (`Tools/mutation/0001-restore-parse-tree-cache.patch`).",
+            ]
     else:
         # The table carries the PHANTOM-FILTERED numbers, and the score is
         # recomputed from them rather than taken from Muter's summary.

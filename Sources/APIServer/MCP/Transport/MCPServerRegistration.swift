@@ -41,6 +41,7 @@ enum MCPToolCatalog {
             SetDatasetTool().erased(),
             SetMinimumRunnerVersionTool().erased(),
             SetActivityTool().erased(),
+            RunTournamentTool().erased(),
             UpdateSuiteTool().erased(),
             UpdateGlobalInputsTool().erased(),
             UpdateAchievementsTool().erased(),

@@ -34,6 +34,8 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     // Unstick personal-data exports orphaned in `pending` by a restart mid-
     // generation, so the account page's status poll can resolve (#557).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
+    // LTI grades through AGS. Its queue stays empty unless a course chose AGS.
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.ltiGradeSyncMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // The browser grading kernel's module inventory, used to reject an authoring

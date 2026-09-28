@@ -98,7 +98,7 @@ struct WorkerCommand: AsyncParsableCommand {
             heartbeatRetryPolicy: .heartbeat(config: config),
             resultUploadRetryPolicy: .resultUpload(config: config)
         )
-        let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
+        let (runner, sandboxLabel) = Self.scriptRunner(sandboxed: sandbox)
 
         let testSetupCache = TestSetupCache(
             cacheRoot: workRoot,
@@ -119,7 +119,6 @@ struct WorkerCommand: AsyncParsableCommand {
             workRoot: workRoot
         )
 
-        let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
         writeStructuredRunnerLog(
             event: "runner_startup",
             fields: [
@@ -147,6 +146,13 @@ struct WorkerCommand: AsyncParsableCommand {
                 ])
         }
         try await daemon.run()
+    }
+
+    /// The script runner `--sandbox` selects, with the label the startup log
+    /// reports for it. One decision for both, so the log cannot describe a
+    /// different runner from the one that grades.
+    static func scriptRunner(sandboxed: Bool) -> (runner: any ScriptRunner, label: String) {
+        sandboxed ? (SandboxedScriptRunner(), "sandboxed") : (UnsandboxedScriptRunner(), "unsandboxed")
     }
 }
 

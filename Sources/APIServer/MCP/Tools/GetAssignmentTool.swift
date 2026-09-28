@@ -85,6 +85,11 @@ struct GetAssignmentTool: ContentTool {
         let kindDisplayName: String
         let leaderboardVisibility: String
         let leaderboardPath: String
+        /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)).
+        let opponentSource: String
+        /// The support file staged as the opponent; nil when the kind has no
+        /// opponent or none is chosen yet.
+        let opponentFile: String?
     }
 
     static let name = "get_assignment"
@@ -151,10 +156,15 @@ struct GetAssignmentTool: ContentTool {
                         "enum": .array(LeaderboardVisibility.allCases.map { .string($0.rawValue) }),
                     ]),
                     "leaderboardPath": MCPSchema.string,
+                    "opponentSource": .object([
+                        "type": .string("string"),
+                        "enum": .array(ActivityOpponentSource.allCases.map { .string($0.rawValue) }),
+                    ]),
+                    "opponentFile": MCPSchema.string,
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
-                    .string("leaderboardPath"),
+                    .string("leaderboardPath"), .string("opponentSource"),
                 ]),
             ]),
         ]),
@@ -218,7 +228,9 @@ struct GetAssignmentTool: ContentTool {
                     kind: activity.kind.rawValue,
                     kindDisplayName: activity.kind.displayName,
                     leaderboardVisibility: activity.leaderboardVisibility.rawValue,
-                    leaderboardPath: "/testsetups/\(assignment.testSetupID)/leaderboard")
+                    leaderboardPath: "/testsetups/\(assignment.testSetupID)/leaderboard",
+                    opponentSource: activity.kind.opponentSource.rawValue,
+                    opponentFile: activity.opponentFile)
             }
         )
     }

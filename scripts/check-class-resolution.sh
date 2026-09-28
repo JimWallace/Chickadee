@@ -101,8 +101,8 @@ unresolved=""
 while IFS= read -r name; do
   [ -z "$name" ] && continue
   case "$name" in js-*) continue ;; esac
-  if printf '%s\n' "$defined" | grep -qxF -- "$name"; then continue; fi
-  if [ -n "$allowlist" ] && printf '%s\n' "$allowlist" | grep -qxF -- "$name"; then continue; fi
+  if grep -qxF -- "$name" <<< "$defined"; then continue; fi
+  if [ -n "$allowlist" ] && grep -qxF -- "$name" <<< "$allowlist"; then continue; fi
   unresolved+="  ${name}"$'\n'
 done <<< "$referenced"
 
@@ -120,9 +120,9 @@ fi
 stale=""
 while IFS= read -r name; do
   [ -z "$name" ] && continue
-  if printf '%s\n' "$defined" | grep -qxF -- "$name"; then
+  if grep -qxF -- "$name" <<< "$defined"; then
     stale+="  ${name} (now defined in a stylesheet)"$'\n'
-  elif ! printf '%s\n' "$referenced" | grep -qxF -- "$name"; then
+  elif ! grep -qxF -- "$name" <<< "$referenced"; then
     stale+="  ${name} (no longer referenced)"$'\n'
   fi
 done <<< "$allowlist"

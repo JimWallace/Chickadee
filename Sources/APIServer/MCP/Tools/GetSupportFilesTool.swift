@@ -119,16 +119,14 @@ struct GetSupportFilesTool: ContentTool {
     /// dedicated read tools. Matches `extractSupportFilesToSharedDirectory`.
     /// `DeleteSupportFileTool` reuses this so its remaining-count agrees with
     /// what this tool lists, instead of the two filters drifting apart.
-    static let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    static let reservedNames: Set<String> = reservedSetupEntryNames
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
-        let supportNames = await listZipEntries(zipPath: setup.zipPath).filter {
-            !suiteScripts.contains($0) && !Self.reservedNames.contains($0)
-        }
+        let supportNames = await currentSupportFileNames(setup: setup)
 
         guard let filename = input.filename else {
             // The same lookup the authoring pages' Files panel reads, so this

@@ -135,6 +135,27 @@ class PublishedNumbersTests(unittest.TestCase):
         self.assertEqual(code, 1, "a run that measured nothing must not exit 0")
         self.assertIn("no mutant outcomes at all", report)
 
+    # A run that measured nothing must also say WHICH nothing. The report used
+    # to answer "most likely the insertion patch no longer applies" whatever
+    # had happened, and the 2026-09-22 sweep measured the cost: six of twelve
+    # shards died because the mutated copy did not COMPILE, and every reader of
+    # those shards was sent to a patch that was applying perfectly.
+
+    def test_a_build_failure_is_named_as_one(self):
+        raw = ("error: SwiftCompile normal x86_64 Probe.swift failed\n"
+               "error: Build failed\n"
+               "Muter took 00:00:01.000\n")
+        code, report, _summary = run(raw, MUTATED)
+        self.assertEqual(code, 1)
+        self.assertIn("did not COMPILE", report)
+        self.assertNotIn("no longer applying", report)
+
+    def test_without_a_build_failure_the_patch_is_still_the_first_suspect(self):
+        code, report, _summary = run("Muter took 00:00:01.000\n", MUTATED)
+        self.assertEqual(code, 1)
+        self.assertIn("no longer applying", report)
+        self.assertNotIn("did not COMPILE", report)
+
 
 class RecordedMutationTests(unittest.TestCase):
     """The mutation itself must reach the record, or a survivor is not actionable.

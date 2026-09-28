@@ -60,7 +60,8 @@ struct Reporter: Sendable {
         var report = report
         let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()
         if didTruncate {
-            report = WorkerExecutionReport(collection: bounded, diagnostics: report.diagnostics)
+            report = WorkerExecutionReport(
+                collection: bounded, diagnostics: report.diagnostics, matches: report.matches)
         }
 
         let encoder = JSONEncoder()

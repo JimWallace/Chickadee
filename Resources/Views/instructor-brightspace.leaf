@@ -15,7 +15,13 @@ LEARN
     </form>
     #endif
     <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+    #if(showLTIGradesLink):
+    <a class="btn action-btn" href="/instructor/lti-grades">LMS grades</a>
+    #endif
 </div>
+#if(usesLTIGrades):
+<div class="flash flash-neutral" role="status">Grades for this course go to the LMS through the LTI grade service, not the Valence sync.</div>
+#endif
 #endif
 
 #if(!brightspaceSyncEnabled):

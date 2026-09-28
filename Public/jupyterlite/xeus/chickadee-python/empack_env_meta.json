@@ -2,19 +2,6 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "wcwidth",
-      "version": "0.8.3",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "wcwidth-0.8.3-pyhcf101f3_0",
-      "filename": "wcwidth-0.8.3-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "pure_eval",
       "version": "0.2.4",
       "build": "pyhd8ed1ab_0",
@@ -103,19 +90,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "pyparsing",
-      "version": "3.3.2",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "pyparsing-3.3.2-pyhcf101f3_0",
-      "filename": "pyparsing-3.3.2-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "six",
       "version": "1.17.0",
       "build": "pyhe01879c_1",
@@ -124,6 +98,32 @@
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.9",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.3",
+      "build": "pyh5ded981_0",
+      "filename_stem": "pyparsing-3.3.3-pyh5ded981_0",
+      "filename": "pyparsing-3.3.3-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "wcwidth",
+      "version": "0.8.4",
+      "build": "pyh5ded981_0",
+      "filename_stem": "wcwidth-0.8.4-pyh5ded981_0",
+      "filename": "wcwidth-0.8.4-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
         "python"
       ],
       "subdir": "noarch"
@@ -530,24 +530,6 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "pandas",
-      "version": "3.0.5",
-      "build": "np23py313h1e705a5_0",
-      "filename_stem": "pandas-3.0.5-np23py313h1e705a5_0",
-      "filename": "pandas-3.0.5-np23py313h1e705a5_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "numpy",
-        "python-dateutil",
-        "pytz",
-        "python-tzdata",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313",
-        "numpy >=2.2,<3"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "backcall",
       "version": "0.2.0",
       "build": "pyh9f0ad1d_0",
@@ -581,6 +563,24 @@
       "depends": [
         "python_abi 3.13.* *_cp313",
         "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.6",
+      "build": "np23py313h124dbc7_0",
+      "filename_stem": "pandas-3.0.6-np23py313h124dbc7_0",
+      "filename": "pandas-3.0.6-np23py313h124dbc7_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "numpy",
+        "python-dateutil",
+        "pytz",
+        "python-tzdata",
+        "emscripten-abi >=4,<5.0a0",
+        "numpy >=2.2,<3",
+        "python_abi 3.13.* *_cp313"
       ],
       "subdir": "emscripten-wasm32"
     },

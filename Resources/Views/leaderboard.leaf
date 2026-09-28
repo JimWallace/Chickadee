@@ -19,41 +19,18 @@
             #endif
         </div>
     </div>
-    <p class="text-muted">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
-    #if(count(rows) == 0):
-    <p class="empty">No submission has reported a ranking metric yet.</p>
+    #if(showsBracket):
+    <p class="section-intro">Each match plays the first entrant's frozen submission against the second's. Rounds advance as matches land. Students appear under their class handle.</p>
+    #elseif(showsUnion):
+    <p class="section-intro">Every student's tests run against every classmate's latest submission. Most faults found first, then most classmates tested; code that is still holding first. Students appear under their class handle.</p>
+    #elseif(showsStandings):
+    <p class="section-intro">Highest average match score first, then most wins. Each row is the student's latest submission. Students appear under their class handle.</p>
     #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Rank</th>
-                <th>Student</th>
-                #if(isStaff):
-                <th>Name</th>
-                #endif
-                <th class="time">Metric</th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(row in rows):
-            <tr>
-                <td>#(row.rank)</td>
-                <td>
-                    #extend("_avatar", row.avatar)
-                    <span data-avatar-handle>#(row.handle)</span>
-                    #if(row.isViewer):
-                    <span class="chip">you</span>
-                    #endif
-                </td>
-                #if(isStaff):
-                <td>#(row.name)</td>
-                #endif
-                <td class="time">#(row.metricText)</td>
-            </tr>
-        #endfor
-        </tbody>
-    </table>
+    <p class="section-intro">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
     #endif
+    <div id="activity-results"#if(pollsLive): data-poll-swap="region" data-poll-url="/testsetups/#(testSetupID)/leaderboard?fragment=body" data-poll-interval="5000"#if(hasPollUntil): data-poll-until="#(pollUntilISO)"#endif#endif>
+    #extend("_leaderboard-body")
+    </div>
 </section>
 #endexport
 #endextend

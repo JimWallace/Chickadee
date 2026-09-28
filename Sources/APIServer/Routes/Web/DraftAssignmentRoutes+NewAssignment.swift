@@ -342,10 +342,8 @@ extension DraftAssignmentRoutes {
         let setup = try await persistNewAssignmentSetup(
             req: req,
             draftSetup: validated.draftSetup,
-            setupID: paths.setupID,
+            paths: paths,
             manifest: manifest,
-            zipPath: paths.zipPath,
-            notebookPath: paths.notebookPath,
             courseID: courseID
         )
 
@@ -557,30 +555,25 @@ extension DraftAssignmentRoutes {
         )
     }
 
-    // The parameter list here mirrors the call site exactly; bundling
-    // them into a struct would push the same names one layer down.
-    // swiftlint:disable:next function_parameter_count
     fileprivate func persistNewAssignmentSetup(
         req: Request,
         draftSetup: APITestSetup?,
-        setupID: String,
+        paths: NewAssignmentPaths,
         manifest: String,
-        zipPath: String,
-        notebookPath: String,
         courseID: UUID
     ) async throws -> APITestSetup {
         let setup =
             draftSetup
             ?? APITestSetup(
-                id: setupID,
+                id: paths.setupID,
                 manifest: manifest,
-                zipPath: zipPath,
-                notebookPath: notebookPath,
+                zipPath: paths.zipPath,
+                notebookPath: paths.notebookPath,
                 courseID: courseID
             )
         setup.manifest = manifest
-        setup.zipPath = zipPath
-        setup.notebookPath = notebookPath
+        setup.zipPath = paths.zipPath
+        setup.notebookPath = paths.notebookPath
         setup.courseID = courseID
         try await setup.save(on: req.db)
         return setup
@@ -624,18 +617,19 @@ extension DraftAssignmentRoutes {
         shouldQueueValidation: Bool
     ) async throws -> APIAssignment {
         let assignment = try await createAssignmentWithUniquePublicID(
-            on: req.db,
-            testSetupID: setupID,
-            title: validated.title,
-            dueAt: validated.dueAt,
-            startsAt: validated.startsAt,
-            visibility: .closed,
-            sortOrder: try await nextAssignmentSortOrder(
-                courseID: courseID, sectionID: sectionID, db: req.db),
-            validationStatus: shouldQueueValidation ? "pending" : nil,
-            validationSubmissionID: nil,
-            sectionID: sectionID,
-            courseID: courseID
+            NewAssignmentFields(
+                testSetupID: setupID,
+                title: validated.title,
+                courseID: courseID,
+                visibility: .closed,
+                dueAt: validated.dueAt,
+                startsAt: validated.startsAt,
+                sortOrder: try await nextAssignmentSortOrder(
+                    courseID: courseID, sectionID: sectionID, db: req.db),
+                validationStatus: shouldQueueValidation ? "pending" : nil,
+                sectionID: sectionID
+            ),
+            on: req.db
         )
         if let requirements = validated.requirementSpec {
             let requirement = AssignmentRequirement(
@@ -773,16 +767,18 @@ extension DraftAssignmentRoutes {
         }
 
         let assignment = try await createAssignmentWithUniquePublicID(
-            on: req.db,
-            testSetupID: body.testSetupID,
-            title: body.title.isEmpty ? body.testSetupID : body.title,
-            dueAt: due,
-            visibility: .closed,  // stays closed until instructor validates + opens
-            // Quick-publish creates an ungrouped assignment (no section picker),
-            // so it appends to the ungrouped lane.
-            sortOrder: try await nextAssignmentSortOrder(
-                courseID: courseID, sectionID: nil, db: req.db),
-            courseID: courseID
+            NewAssignmentFields(
+                testSetupID: body.testSetupID,
+                title: body.title.isEmpty ? body.testSetupID : body.title,
+                courseID: courseID,
+                visibility: .closed,  // stays closed until instructor validates + opens
+                dueAt: due,
+                // Quick-publish creates an ungrouped assignment (no section picker),
+                // so it appends to the ungrouped lane.
+                sortOrder: try await nextAssignmentSortOrder(
+                    courseID: courseID, sectionID: nil, db: req.db)
+            ),
+            on: req.db
         )
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentCreated, assignment: assignment,

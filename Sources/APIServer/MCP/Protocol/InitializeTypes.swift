@@ -324,7 +324,9 @@ enum MCPServerInstructions {
         set_assignment_language, set_time_limit, set_dataset, \
         set_minimum_runner_version, set_activity, update_achievements, the section-organization \
         tools) never trigger \
-        a regrade or a close. \
+        a regrade or a close. run_tournament (a tournament-kind activity only) starts a bracket on a \
+        snapshot of the class and enqueues match jobs; it changes no content and neither closes nor \
+        regrades. \
         update_global_inputs and update_section_variables re-inline the shared inputs into the \
         affected scripts in place and likewise neither close nor regrade (matching the web Global \
         Inputs panel); re-run validate_assignment yourself after changing inputs that graded \

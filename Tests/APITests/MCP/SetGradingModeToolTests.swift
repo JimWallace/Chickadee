@@ -111,4 +111,41 @@ import Vapor
             #expect(setup.decodedManifest()?.gradingMode.rawValue == "browser")
         }
     }
+
+    /// The mode-side door of the opponent refusal (docs/class-activities.md):
+    /// an activity that stages an opponent keeps worker grading, while a kind
+    /// with no opponent may switch. The message is the one shared with the
+    /// zip upload and set_activity.
+    @Test func refusesBrowserWhileTheActivityStagesAnOpponent() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let opponentManifest =
+                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
+            let assignment = try await fixture(on: app, manifest: opponentManifest)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await SetGradingModeTool().execute(
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            }
+            let setup = try #require(try await APITestSetup.find("setup_gm", on: app.db))
+            #expect(currentManifestGradingMode(setup.manifest) == "worker")
+            do {
+                _ = try await SetGradingModeTool().execute(
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            } catch let error as MCPToolError {
+                #expect(String(describing: error).contains(activityOpponentGradingConflictMessage))
+            }
+        }
+    }
+
+    @Test func allowsBrowserForAnActivityWithNoOpponent() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let metricManifest =
+                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"bestMetric"}}"#
+            let assignment = try await fixture(on: app, manifest: metricManifest)
+            let out = try await SetGradingModeTool().execute(
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            #expect(out.gradingMode == "browser")
+        }
+    }
 }

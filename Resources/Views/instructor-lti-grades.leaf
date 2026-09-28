@@ -1,0 +1,104 @@
+#extend("base"):
+#export("title"):
+LMS grades
+#endexport
+#export("content"):
+#extend("_instructor-tabs")
+
+#if(canPushAll):
+<div class="toolbar toolbar--end section-gap">
+    <form method="post" action="/instructor/lti-grades/push-all" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit">Sync now</button>
+    </form>
+</div>
+#endif
+
+#if(!hasActiveCourse):
+<section class="page-section">
+    <p class="empty">Select a course to manage its LMS grades.</p>
+</section>
+#elseif(!isLinked):
+<section class="page-section">
+    <h2>LMS grades — #(courseCode)</h2>
+    <p class="empty">This course is not linked to an LMS course.</p>
+    <p class="section-note">An instructor links it by opening Chickadee from the LMS course.</p>
+</section>
+#else:
+<section class="page-section">
+    <h2>LMS grades — #(courseCode)</h2>
+    <p class="section-intro">
+        This course is linked to #(platformName). Its grades go to the LMS by one route at a time.
+    </p>
+    #if(!hasGradeService):
+    <p class="section-note">
+        Open Chickadee from the LMS course once so that the LMS sends its grade service URL.
+    </p>
+    #endif
+    #if(canChooseTransport):
+    <form method="post" action="/instructor/lti-grades/transport" class="form-stack">
+        #csrfFormField()
+        <fieldset class="fieldset-plain">
+            <legend>Grade route</legend>
+            <div class="checkbox-list">
+                <label class="checkbox-row">
+                    <input type="radio" name="transport" value="valence"#if(!usesAGS): checked#endif>
+                    LEARN grade sync
+                </label>
+                <label class="checkbox-row">
+                    <input type="radio" name="transport" value="ags"#if(usesAGS): checked#endif>
+                    LTI grade service
+                </label>
+            </div>
+        </fieldset>
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+    </form>
+    #elseif(usesAGS):
+    <p class="section-note">Grades go through the LTI grade service.</p>
+    #else:
+    <p class="section-note">Grades go through the LEARN grade sync.</p>
+    #endif
+</section>
+
+#if(usesAGS):
+<section class="page-section">
+    <h2>Grade service activity</h2>
+    <div class="chip-row">
+        <span class="chip chip-ok">#(sentCount) sent</span>
+        <span class="chip">#(waitingCount) waiting</span>
+        #if(failedCount > 0):
+        <span class="chip chip-err">#(failedCount) failed</span>
+        #else:
+        <span class="chip chip-ok">0 failed</span>
+        #endif
+    </div>
+    #if(count(failures) > 0):
+    <div class="table-scroll"><table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Assignment</th>
+                <th>Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(failure in failures):
+            <tr>
+                <td>#(failure.student)</td>
+                <td>#(failure.assignment)</td>
+                <td>#(failure.reason)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table></div>
+    #if(failuresTruncated):
+    <p class="section-note">Showing the first #(count(failures)).</p>
+    #endif
+    #endif
+</section>
+#endif
+#endif
+#endexport
+#endextend

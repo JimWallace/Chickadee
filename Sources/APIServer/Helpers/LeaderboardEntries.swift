@@ -48,7 +48,7 @@ func recordLeaderboardEntry(
 ) async throws {
     guard let metric = submissionMetric(from: outcomes),
         let setup = try await APITestSetup.find(testSetupID, on: db),
-        setup.decodedManifest()?.activity?.kind.aggregatesToLeaderboard == true,
+        setup.decodedManifest()?.activity?.kind.aggregation == .leaderboard,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 

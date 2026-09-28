@@ -163,6 +163,9 @@ enum AuditAction: String, Sendable, CaseIterable {
     // Solution reveal policy
     case solutionVisibilityChanged = "solution_visibility.changed"
     case leaderboardVisibilityChanged = "leaderboard_visibility.changed"
+    case activityOpponentFileChanged = "activity_opponent_file.changed"
+    case activityWindowChanged = "activity_window.changed"
+    case tournamentStarted = "tournament.started"
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
 
@@ -205,6 +208,19 @@ enum AuditAction: String, Sendable, CaseIterable {
     case mcpCourseInstructionsUpdated = "mcp.course_instructions_updated"
     case adminMcpToolCalled = "admin_mcp.tool_called"
 
+    // LTI 1.3 platform registrations (docs/lti-1-3.md)
+    case ltiPlatformRegistered = "lti.platform_registered"
+    case ltiPlatformUpdated = "lti.platform_updated"
+    case ltiPlatformDeleted = "lti.platform_deleted"
+    case ltiCourseBound = "lti.course_bound"
+    case ltiContentLinked = "lti.content_linked"
+    case ltiGradeTransportChanged = "lti.grade_transport_changed"
+    case ltiGradesPushAll = "lti.grades_push_all"
+
+    // The GitHub App registration (docs/github-submissions.md)
+    case githubAppRegistered = "github.app_registered"
+    case githubAppRemoved = "github.app_removed"
+
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
         switch self {
@@ -226,8 +242,9 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
-            .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
+            .activityWindowChanged, .tournamentStarted,
+            .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
         // action on one student.
@@ -245,6 +262,11 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
+        case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
+            return .lti
+        case .githubAppRegistered, .githubAppRemoved:
+            return .github
         }
     }
 
@@ -268,8 +290,9 @@ enum AuditAction: String, Sendable, CaseIterable {
             .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
-            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .passingThresholdChanged,
-            .slipDaySpent, .slipDayRefunded,
+            .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
+            .activityWindowChanged,
+            .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
             .brightspaceAccountConnected, .brightspaceAccountDisconnected,
@@ -279,7 +302,10 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled,
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
-            .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
+            .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
+            .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
+            .githubAppRegistered, .githubAppRemoved:
             return .ok
         }
     }
@@ -328,6 +354,9 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .solutionVisibilityChanged: return "Solution visibility changed"
         case .passingThresholdChanged: return "Passing threshold changed"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
+        case .activityOpponentFileChanged: return "Activity opponent file changed"
+        case .activityWindowChanged: return "Activity session window changed"
+        case .tournamentStarted: return "Tournament started"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
         case .slipDaySettingsChanged: return "Slip day settings changed"
@@ -358,6 +387,15 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .mcpRefreshReuseDetected: return "MCP refresh-token reuse detected"
         case .mcpCourseInstructionsUpdated: return "MCP course guidance updated"
         case .adminMcpToolCalled: return "Admin diagnostic tool called"
+        case .ltiPlatformRegistered: return "LTI platform registered"
+        case .ltiPlatformUpdated: return "LTI platform updated"
+        case .ltiPlatformDeleted: return "LTI platform deleted"
+        case .ltiCourseBound: return "LMS course linked"
+        case .ltiContentLinked: return "Assignments added to the LMS"
+        case .ltiGradeTransportChanged: return "LMS grade transport changed"
+        case .ltiGradesPushAll: return "All grades queued for the LMS"
+        case .githubAppRegistered: return "GitHub App registered"
+        case .githubAppRemoved: return "GitHub App removed"
         }
     }
 }
@@ -393,6 +431,8 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case runner = "Runner"
     case mcp = "MCP / agents"
     case brightspace = "LEARN sync"
+    case lti = "LTI"
+    case github = "GitHub"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,
@@ -423,4 +463,6 @@ enum AuditTargetType: String, Sendable {
     case course
     case enrollment
     case oauthClient = "oauth_client"
+    case ltiPlatform = "lti_platform"
+    case githubApp = "github_app"
 }

@@ -121,8 +121,23 @@ struct ResultRoutes: RouteCollection {
                 }
             }
 
+            // A tournament match reaches only the bracket, whatever its
+            // build status: a match that could not run advances the
+            // opponent rather than stalling the round.
+            if submission.kind == APISubmission.Kind.tournamentMatch {
+                try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
+            }
+
+            // The class corpus run's grade IS the class's coverage number
+            // (docs/collaborative-class-assignments.md). It belongs to no
+            // student, so it never reaches `applyClassWideEffects` below.
+            if submission.kind == APISubmission.Kind.classAggregate {
+                try await recordClassCoverageRun(
+                    submission: submission, collection: collection, on: req.db)
+            }
+
             try await applyClassWideEffects(
-                submission: submission, collection: collection, on: req)
+                submission: submission, collection: collection, matches: report.matches, on: req)
         }
 
         return ReportResponse(received: true)
@@ -139,7 +154,8 @@ struct ResultRoutes: RouteCollection {
     /// keeps the two gates visible: coverage is per item and ungated by grade,
     /// badges are per student and gated at 100%.
     private func applyClassWideEffects(
-        submission: APISubmission, collection: TestOutcomeCollection, on req: Request
+        submission: APISubmission, collection: TestOutcomeCollection, matches: [MatchReport]? = nil,
+        on req: Request
     ) async throws {
         guard submission.kind == APISubmission.Kind.student,
             collection.buildStatus == .passed,
@@ -167,6 +183,16 @@ struct ResultRoutes: RouteCollection {
             on: req.db
         )
 
+        // A new contribution changes what the class's combined corpus covers,
+        // so the corpus is re-assembled and re-graded. Debounced to one run in
+        // flight per assignment, and a no-op for every assignment that
+        // declares no slots.
+        if slotCount > 0 {
+            await scheduleClassCorpusRun(
+                setupID: submission.testSetupID, app: req.application, on: req.db,
+                logger: req.logger)
+        }
+
         // The activity leaderboard, likewise outside the 100% gate: a ranking
         // metric is whatever the script measured, and the script decides
         // whether a failing run reports one.
@@ -175,6 +201,17 @@ struct ResultRoutes: RouteCollection {
             userID: userID,
             submissionID: subID,
             outcomes: collection.outcomes,
+            on: req.db
+        )
+
+        // King of the hill: complete the match this job played and move the
+        // hill if the challenger won (docs/class-activities.md).
+        try await recordActivityMatch(
+            testSetupID: submission.testSetupID,
+            userID: userID,
+            submissionID: subID,
+            outcomes: collection.outcomes,
+            matches: matches,
             on: req.db
         )
 
@@ -212,6 +249,8 @@ struct ResultRoutes: RouteCollection {
         // drift apart on which grades reach LEARN.
         try await flagResultForBrightSpaceSync(
             result, testSetupID: collection.testSetupID, application: req.application, on: db)
+        try await LTIGradeSyncQueue.queue(
+            submissionID: collection.submissionID, testSetupID: collection.testSetupID, on: db)
 
         // Row + blob side-table row persist together; the caller's
         // transaction (persist + submission status flip) encloses both.
@@ -219,33 +258,21 @@ struct ResultRoutes: RouteCollection {
     }
 }
 
-private func decodeWorkerReport(
+/// Decodes a runner's result body: the wrapped `WorkerExecutionReport`.
+///
+/// The report is decoded as a whole: an earlier version rebuilt it from
+/// `collection` and `diagnostics` alone and silently dropped `matches`, so no
+/// round-robin match row ever completed over HTTP.
+///
+/// A legacy bare `TestOutcomeCollection` is refused (a `DecodingError`, which
+/// the route reports as 422). Every runner at or above
+/// `RunnerVersionGate.deploymentMinimumRunnerVersion` sends the wrapped form,
+/// and a runner below that floor never claims a job (#1249).
+func decodeWorkerReport(
     from data: Data,
     using decoder: JSONDecoder
 ) throws -> WorkerExecutionReport {
-    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let collectionObject = json["collection"]
-    {
-        let collectionData = try JSONSerialization.data(withJSONObject: collectionObject)
-        let collection = try decoder.decode(TestOutcomeCollection.self, from: collectionData)
-
-        let diagnostics: WorkerExecutionDiagnostics?
-        if let diagnosticsObject = json["diagnostics"], !(diagnosticsObject is NSNull) {
-            let diagnosticsData = try JSONSerialization.data(withJSONObject: diagnosticsObject)
-            diagnostics = try decoder.decode(WorkerExecutionDiagnostics.self, from: diagnosticsData)
-        } else {
-            diagnostics = nil
-        }
-
-        return WorkerExecutionReport(collection: collection, diagnostics: diagnostics)
-    }
-
-    if let report = try? decoder.decode(WorkerExecutionReport.self, from: data) {
-        return report
-    }
-
-    let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
-    return WorkerExecutionReport(collection: collection, diagnostics: nil)
+    try decoder.decode(WorkerExecutionReport.self, from: data)
 }
 
 // MARK: - Response

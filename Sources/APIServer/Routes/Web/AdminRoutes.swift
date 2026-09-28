@@ -60,6 +60,14 @@ struct AdminRoutes: RouteCollection {
         admin.post("mcp", "accounts", ":userID", "delete", use: deleteMCPAccount)
         admin.post("mcp", "accounts", ":userID", "enroll", use: enrollMCPAccount)
         admin.post("mcp", "accounts", ":userID", "unenroll", use: unenrollMCPAccount)
+        admin.get("lti", use: ltiPage)
+        admin.post("lti", "platforms", use: createLTIPlatform)
+        admin.post("lti", "platforms", ":platformID", use: updateLTIPlatform)
+        admin.post("lti", "platforms", ":platformID", "enabled", use: setLTIPlatformEnabled)
+        admin.post("lti", "platforms", ":platformID", "delete", use: deleteLTIPlatform)
+        admin.get("github", use: githubPage)
+        admin.get("github", "callback", use: githubCallback)
+        admin.post("github", "delete", use: deleteGitHubApp)
     }
 
     // MARK: - GET /admin

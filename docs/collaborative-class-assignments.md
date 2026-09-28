@@ -24,14 +24,25 @@ choices rest on.
 | 5 | The `itemsCovered` union signal and the breadth predicate | shipped |
 | 6 | Authoring and display (editor, student status line, MCP surface) | shipped |
 | 7 | Freeze and LEARN re-push | shipped — rides the existing paths; the snapshot now stores the coverage it froze at |
-| 8 | Corpus aggregation run for coverage % | **deliberately not started** — see Phase 4 |
+| 8 | Corpus aggregation run for coverage % | shipped — built as class-activities slice 7, see **The corpus run** below |
 
-Two things a reader should not go looking for. **There is still no per-student
-contribution cap by attribution ranking** (option B): slots bound the shape of a
+One thing a reader should not go looking for: **there is still no per-student
+contribution cap by attribution ranking** (option B). Slots bound the shape of a
 contribution and breadth bounds the solo hero, and ranking is what would break
-determinism. And **coverage % is not implemented** — the union is a set of
-covered items, not a coverage number; a real offering should run a bug hunt
-before the corpus machinery is built.
+determinism.
+
+**Slice 8 shipped against this note's own advice, and that is worth stating
+plainly.** Phase 4 below says "do not start it until a real offering has run
+one", and no bug hunt has been run. It was built anyway, as slice 7 of the
+class-activities plan (#1508), because that plan scheduled it and the two plans
+disagreed. What the advice was protecting against is a corpus assembler shaped
+around a guess at what a real corpus looks like, and that risk is real and has
+not been retired — the thing to watch for in the first offering is whether the
+assembled corpus grades as one artifact at all, since name collisions between
+contributors are resolved by the language and not by Chickadee (see the traps
+below). The rest of the phase-4 worry list was answerable without an offering:
+the retention story is `deleteCourse` reaching `class_coverage_runs`, and the
+"results sink" is one row rather than the side table the note predicted.
 
 One thing left to the instructor's hand for now: **a slot is declared by
 `chickadee_slot` cell metadata**, which is hand-edited in the notebook JSON.
@@ -598,6 +609,92 @@ copy of personal information and `deleteCourse` has to reach it.
 
 Everything before this delivers the bug-hunt assignment. Do not start it until a
 real offering has run one.
+
+*Shipped anyway, as class-activities slice 7 — see the Status table's note and
+**The corpus run** below for what it cost and what the advice was protecting
+against.*
+
+### The corpus run
+
+What slice 8 turned out to be, once built. Read this rather than the paragraph
+above, which is the prediction.
+
+**The corpus is a submission owned by nobody.** `APISubmission.Kind` gained
+`classAggregate`: the assembled notebook is written to the submissions directory
+and enqueued through the same `materializeValidationGrading` path a
+`kind == .validation` run uses, with `userID` nil. Every listing, aggregate and
+grade selection filters on `student`, so it is invisible to all of them, and the
+nil owner means it cannot be attributed to a student even by a path that forgets
+to filter. The claim seam puts it LAST, behind student work, tournament matches
+and validation: nobody is watching it land, and a deadline spike is exactly when
+a student's job must not queue behind it.
+
+**The coverage number is the run's own grade.** Nothing was asked of the script
+contract. The suite runs over the corpus and the collection's
+`earnedPoints / totalPoints` is the coverage — the points, not `gradePercent`,
+which rounds to a whole percent. A bug hunt's per-variant drivers answer "how
+many of the seeded bugs does the class's combined test file find"; a
+coverage-tool entry answers "what fraction of the reference do they exercise".
+Both are the existing contract read at the class level, which is why this added
+no runner code, no manifest field and no footer key.
+
+**It is opt-in behind the goal that reads it.** `scheduleClassCorpusRun` does
+nothing unless the manifest carries a `classCoverage` class goal. A corpus run
+is a whole extra grading job per contribution burst, and a number nobody reads
+is runner time taken from students. Gating on the goal also means the run exists
+exactly where something renders it.
+
+**Debounced to one run in flight.** Every result on a contribution assignment
+reaches the scheduler, so without the debounce a deadline spike would queue one
+corpus run per submission, each grading a corpus the next one supersedes. The
+in-flight run is the `class_coverage_runs` row with no `completed_at`; the next
+contribution after it lands starts the next run. Readers take the newest
+COMPLETED row, so a queued re-run never blanks a number that freezes into a
+grade push.
+
+**A failed build completes the run with no number.** A corpus that could not
+compile says nothing about what the class covers, and recording it as zero would
+drop a live progress bar to nothing. The run still completes, so the debounce
+releases.
+
+**The two halves scope the way the union's do.** COVERAGE is what the corpus
+measured, including a contribution from a student who has since left; BREADTH
+counts only currently-enrolled contributors, because it is a fraction of the
+CURRENT roster (audit A7). Progress is the smaller, so one student writing an
+exhaustive suite in their own slots reaches full coverage and then fails on
+breadth — the same anti-solo-hero property, for the same reason, which is why
+this shape needs no contribution cap either.
+
+**`isSweepEvaluableClassGoal` admits a third shape and the arity did not move.**
+A single `classCoverage atLeast P` with NO target. The corpus run produces one
+number for the assignment, so a `.section` target would name a share of a
+reference nothing measured.
+
+**Three things the corpus deliberately does not do.**
+
+- **It does not call `mergeNotebook`.** That function applies the per-student
+  slot bound, so passing N students' contributions through it would truncate the
+  corpus to one student's worth of cells. The cells it assembles were bounded
+  once each, at submission time, by that same function.
+- **It refuses a personalized assignment.** A corpus is one artifact graded
+  once, and a per-student assignment has no single set of inputs to grade it
+  against. Grading it under one student's seed would report a number about
+  nobody.
+- **It resolves no name collisions.** Two contributors who both call their test
+  `test_1` shadow each other under the language's own rules, and the class's
+  coverage is quietly short by one test. Chickadee cannot fix this without
+  rewriting student source per language, which is the thing the shell-script
+  contract exists to avoid. The mitigation is the scaffold: a slot prompt that
+  asks for a distinctive name. This is the first thing to measure in a real
+  offering.
+
+**Determinism is a writer option, not a property of the assembly.** Contributors
+are ordered by user id — ordering by submission time would reshuffle the corpus
+whenever anybody resubmitted — and the notebook is serialized with
+`.sortedKeys`. Without that option two assemblies of an unchanged corpus differ
+byte for byte, because `JSONSerialization` emits object keys in parse order. The
+test that asserts "the same inputs give the same bytes" failed on exactly that
+and was right to.
 
 ### What is deliberately not in the plan
 

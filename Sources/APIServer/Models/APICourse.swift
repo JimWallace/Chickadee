@@ -98,6 +98,36 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "slip_day_release_reveal_hold")
     var slipDayReleaseRevealHold: Bool?
 
+    /// The LTI platform this course is bound to (docs/lti-1-3.md "Courses").
+    /// Nil = not bound; set together with `ltiContextID`.
+    @OptionalField(key: "lti_platform_id")
+    var ltiPlatformID: UUID?
+
+    /// The platform's `context.id` for the bound LMS course.
+    @OptionalField(key: "lti_context_id")
+    var ltiContextID: String?
+
+    /// The AGS line-items URL of the bound LMS course, from the most recent
+    /// launch that carried one (docs/lti-1-3.md "Grades through AGS").
+    @OptionalField(key: "lti_line_items_url")
+    var ltiLineItemsURL: String?
+
+    /// True when an instructor chose AGS as this course's grade transport.
+    /// Nil or false = Valence, the default. The two are never both active.
+    @OptionalField(key: "lti_grades_enabled")
+    var ltiGradesEnabled: Bool?
+
+    /// The NRPS membership URL of the bound LMS course, from the most recent
+    /// launch that carried one (docs/lti-1-3.md "Roster through NRPS").
+    @OptionalField(key: "lti_memberships_url")
+    var ltiMembershipsURL: String?
+
+    /// True when grades for this course go to the LMS through AGS, and so
+    /// never through the Valence sync.
+    var usesLTIGrades: Bool {
+        ltiGradesEnabled == true && ltiPlatformID != nil
+    }
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

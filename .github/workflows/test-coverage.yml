@@ -30,7 +30,7 @@ jobs:
       # swift-ci = the mirrored toolchain + baked-in test packages (see
       # mirror-images.yml / .github/docker/ci-image). Toolchain-identical to
       # the plain mirror, so nothing about the clean-build canary changes.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -57,7 +57,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          # python3: the noble base image (unlike jammy) does not bundle it, and
+          # python3: the resolute base image (unlike jammy) does not bundle it, and
           # APITests run generated pattern-family cases / seed-expression grading
           # that shell out to `#!/usr/bin/env python3`.  swift-tests.yml installs
           # it in every test job for the same reason; this clean-build run executes

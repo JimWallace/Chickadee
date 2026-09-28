@@ -804,4 +804,28 @@ final class AssignmentHelpersManifestTests {
         }
     }
 
+    // The opponent file rides the block through a rebuild: it is spliced as
+    // the encoded `ClassActivity`, so a field added to the block is carried
+    // without the rebuild callers learning its name.
+    @Test func updateManifestScriptEditsPreserveTheOpponentFile() throws {
+        let activity = ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py")
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "match.sh", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            activity: activity
+        )
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .activity == activity)
+    }
 }

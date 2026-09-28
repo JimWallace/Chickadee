@@ -65,6 +65,12 @@ func setManifestGradingMode(
     {
         throw AppError.badRequest(reason: graderOnlyGradingConflictMessage)
     }
+    // And for an activity that stages an opponent: the opponent lives in a
+    // directory only the native worker creates, so a browser-graded match
+    // would run with nobody on the other side.
+    if mode == GradingMode.browser.rawValue, currentManifestActivityStagesAnOpponent(setup.manifest) {
+        throw AppError.badRequest(reason: activityOpponentGradingConflictMessage)
+    }
     if currentManifestGradingMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { dict in
             dict["gradingMode"] = mode
@@ -86,6 +92,14 @@ let uploadModeGradingConflictMessage =
 let graderOnlyGradingConflictMessage =
     "This assignment marks grader-only files, which browser grading would deliver to every "
     + "student's kernel. Remove the graderOnly marks first, or keep worker grading."
+
+/// One message for every door of the opponent/browser refusal (mode switch,
+/// zip upload, and `set_activity` from the kind's direction). Only the native
+/// worker stages an opponent (docs/class-activities.md), so a browser-graded
+/// match would run with nobody on the other side and read as a win.
+let activityOpponentGradingConflictMessage =
+    "This class activity plays each submission against an opponent, which only the native "
+    + "worker can stage. Keep worker grading, or choose an activity kind with no opponent."
 
 /// The upload-only-language coherence rule's message, shared by the
 /// setup-upload API, the submission-mode editor and the MCP tools.
@@ -406,6 +420,13 @@ func currentManifestActivity(_ manifest: String?) -> ClassActivity? {
         let data = try? JSONSerialization.data(withJSONObject: block)
     else { return nil }
     return try? JSONDecoder().decode(ClassActivity.self, from: data)
+}
+
+/// True when the manifest's activity stages an opponent (a bot kind with its
+/// file chosen) — the predicate every browser-grading door asks, so they
+/// cannot disagree about what it covers.
+func currentManifestActivityStagesAnOpponent(_ manifest: String?) -> Bool {
+    currentManifestActivity(manifest)?.stagesAnOpponent == true
 }
 
 /// Sets (or clears, with nil) the test setup's `activity` block, saving only

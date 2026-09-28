@@ -113,14 +113,22 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
 
 /// Wrapped worker result payload sent to `/api/v1/worker/results`.
 ///
-/// The server still accepts legacy bare `TestOutcomeCollection` payloads so
-/// mixed-version deploys remain safe while runners roll forward.
+/// This is the only accepted shape. The legacy bare `TestOutcomeCollection`
+/// payload was retired under the deployment runner floor (#1249).
 public struct WorkerExecutionReport: Codable, Sendable {
     public let collection: TestOutcomeCollection
     public let diagnostics: WorkerExecutionDiagnostics?
+    /// Per-match rows for a matrix job (docs/class-activities.md); nil for
+    /// every other job and from every runner that predates the field. An
+    /// older server ignores the key.
+    public let matches: [MatchReport]?
 
-    public init(collection: TestOutcomeCollection, diagnostics: WorkerExecutionDiagnostics?) {
+    public init(
+        collection: TestOutcomeCollection, diagnostics: WorkerExecutionDiagnostics?,
+        matches: [MatchReport]? = nil
+    ) {
         self.collection = collection
         self.diagnostics = diagnostics
+        self.matches = matches
     }
 }

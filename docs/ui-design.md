@@ -164,6 +164,8 @@ Anatomy rules that hold across archetypes:
 - **`.page-section` is the one generic section wrapper** (heading + content).
   `.section-block` is the suite editor's per-test-section grouping and
   `.submission-section-block` the results grouping — not general-purpose.
+  `.submission-section-heading` is the sub-heading over a grouped
+  `.results-table` inside a section (a results section, a bracket round).
 - Dense/wide tables wrap in `.table-scroll`.
 
 ## Component vocabulary
@@ -416,6 +418,10 @@ duplicate.
   with `.test-output-details` as the disclosure and a `.detail-grid` inside it.
   A payload in a last column instead would wrap JSON into whatever width the
   fixed columns left over.
+  The same second-row disclosure may hold a row's edit form when the form is
+  too long for the row (the admin LTI platforms table); give its `<summary>`
+  a visually hidden copy of the row's name, so a screen reader can tell one
+  "Edit" from the next.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
@@ -446,6 +452,29 @@ Reaching for detail, cheapest first.  Pick the first one that fits:
 | is acting on one row | `.ext-details`/`.ext-panel`, or `.popover-panel` |
 | must decide before anything else happens | `.modal-card` — the only blocking shape, and only for a decision |
 | wants a reminder of what a control is | `title` — a phrase, and never the only copy of something they need |
+
+**Keeping a page current is one mechanism, not a per-page decision.**
+`Public/table-poll.js` is it, driven entirely by data attributes, and there is
+no second poller:
+
+| Attribute | What it says |
+|---|---|
+| `data-poll-url` | the server endpoint rendering the replacement, from the SAME Leaf partial the page rendered inline |
+| `data-poll-interval` | milliseconds between polls (default 5000) |
+| `data-poll-swap` | `region` replaces the element's own contents; omitted replaces its `<tbody>` |
+| `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
+
+Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,
+and it is suppressed while the tab is hidden, while focus is inside the
+element, while a `<details>` in it is open, and while its filter box has
+focus. Prefer the default `<tbody>` swap: a region swap destroys the whole
+subtree, so a sortable table inside one loses its click handlers and a filter
+box pointed into it stops finding its target — the file says so at
+`swapTargetFor`. Reach for `region` only when the rows do not move alone, as
+on a class activity's leaderboard, where the champion banner, the tournament
+status, the union count and the session countdown all change with the table
+beside them. Whatever the mode, keep a page's fixed chrome — its heading, its
+chips, its intro — OUTSIDE the polled element.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:

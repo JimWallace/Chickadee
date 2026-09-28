@@ -86,6 +86,13 @@ struct SetGradingModeTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: graderOnlyGradingConflictMessage)
         }
+        // And for a class activity that stages an opponent — set_activity
+        // refuses such a kind on a browser-graded assignment, and this is the
+        // reverse door.
+        if mode == GradingMode.browser.rawValue, currentManifestActivityStagesAnOpponent(setup.manifest) {
+            throw MCPToolError.invalidArguments(
+                tool: Self.name, detail: activityOpponentGradingConflictMessage)
+        }
         let effective = try await setManifestGradingMode(setup: setup, to: mode, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, gradingMode: effective)
     }

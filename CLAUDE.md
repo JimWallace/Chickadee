@@ -386,7 +386,7 @@ covered too, since instructor validation is enqueued as a `kind == .validation`
 submission and always runs on the **native worker**. See
 `docs/runner-capability-profiles.md`.
 
-**A class goal counts one of two things, and the sweep will evaluate no third.**
+**A class goal counts one of three things, and the sweep will evaluate no fourth.**
 `Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
 students' best whole-assignment grade cleared a threshold, over the enrolled
 roster. A collaborative assignment needs the other one — the **union** of what
@@ -395,15 +395,29 @@ the class produced, "the class has found 12 of the 15 seeded bugs" — so
 `class_item_coverage` table, optionally scoped to one suite section (a bug
 hunt's variants, not the well-formedness gate beside them).
 
-`isSweepEvaluableClassGoal` admits **exactly three shapes**: no conditions, a
-single `grade atLeast`, or a single `itemsCovered atLeast`. Everything else is
-refused at save time and skipped-with-a-log by the sweep. That guard is the
-reason a hand-authored manifest cannot silently mis-grade a bonus (audit A4), so
-admitting the union shape meant admitting exactly it — the arity did not move.
+The third arithmetic is the **corpus percent**, "the class collectively reaches
+80% coverage", which a union of per-item rows cannot produce because no row can
+say what fraction of a reference a combined test corpus exercises.
+`AchievementSignal.classCoverage` reads the newest completed
+`class_coverage_runs` row — one synthetic `kind == .classAggregate` submission
+holding every contributor's slot cells, graded once, its ordinary grade fraction
+being the number. It scopes nothing: the run produces one number for the
+assignment, so a `.section` target would name a share of a reference nothing
+measured. See
+[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md)
+§"The corpus run".
 
-A union goal is graded on the SMALLER of two halves: coverage (the item count)
-and **breadth** (at least `classFraction` of the roster contributed at least one
-covered item). Breadth is why there is no per-student contribution cap: one
+`isSweepEvaluableClassGoal` admits **exactly four shapes**: no conditions, a
+single `grade atLeast`, a single `itemsCovered atLeast`, or a single
+`classCoverage atLeast`. Everything else is refused at save time and
+skipped-with-a-log by the sweep. That guard is the reason a hand-authored
+manifest cannot silently mis-grade a bonus (audit A4), so admitting each new
+shape meant admitting exactly it — the arity has never moved.
+
+A union or corpus goal is graded on the SMALLER of two halves: coverage (the
+item count, or the corpus percent) and **breadth** (at least `classFraction` of
+the roster contributed at least one covered item, or one cell to the corpus).
+Breadth is why there is no per-student contribution cap: one
 student finding everything reaches full coverage and then fails on breadth. The
 alternative — crediting each student only their K rarest items — bounds the solo
 hero too, and breaks determinism doing it, because a later submission can change
@@ -413,8 +427,11 @@ The two halves scope differently, and the asymmetry is deliberate. **Coverage
 counts every row**, including one found by a student who has since dropped: the
 item was covered, and the number must never retreat because it freezes into a
 LEARN push. **Breadth counts only currently-enrolled students**, because it is a
-fraction of the CURRENT roster — audit A7's shape. `achievement_results` stores
-`items_covered` / `items_required` rather than recomputing them, so a frozen row
+fraction of the CURRENT roster — audit A7's shape. A corpus goal carries the
+same split, one level up: the run's number is what it measured, and its stored
+contributor list is intersected with today's roster. `achievement_results` stores
+`items_covered` / `items_required` (and `coverage_percent` /
+`coverage_required`) rather than recomputing them, so a frozen row
 can say what coverage produced the bonus in every student's grade of record. See
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
@@ -1487,7 +1504,7 @@ browser (xeus/wasm) and native worker grading paths sharing one RunnerCore
 implementation; per-student personalization; pattern-generated test families
 (10 kinds) and notebook checks (10 kinds); achievements; student slip days;
 per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
-an MCP authoring surface of 55 tools plus a read-only admin-diagnostics MCP
+an MCP authoring surface of 56 tools plus a read-only admin-diagnostics MCP
 of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
 source of truth); OIDC SSO; and zero-downtime auto-deploys.
@@ -1560,6 +1577,20 @@ shim); and archived finished-era docs under `docs/archive/`.
 
   That last row is why existing comments naming CSS ids are safe, and why the
   rule is narrower than "never write `#` in prose".
+
+  **That row has a second edge, and it cost a leaked page header (v0.5.233).
+  Leaf has NO LINE-COMMENT SYNTAX.** `LeafLexer.lexCheckTagIndicator` pops the
+  `#`, peeks the next character, and takes the tag path only when it is a letter
+  or an open paren — so a `#` followed by a slash emits a raw `#` and returns to
+  raw state. It is the same rule that makes `C#` inert, seen from the other
+  side: "passes through as text" is invisible only inside an HTML comment.
+  Outside one it means the comment **prints**. A thirteen-line `#//` header on
+  `_leaderboard-body.leaf` rendered above the results, rode every five-second
+  background refresh, and emitted the unclosed heading tag inside its own prose
+  for real. Render tests could not see it — the template resolves, it just
+  resolves wrong, the same blind spot as the `isEmpty` finding below. Comment a
+  template with an HTML comment; `scripts/check-leaf-semantics.sh` now fails on
+  the other form, with a `check-guards.sh` fixture proving it still does.
 
   **Practical rule:** never write Leaf *tag* syntax in template prose or
   comments — not a bare structural tag name, not `#(field)`, not a complete
@@ -1637,7 +1668,10 @@ shim); and archived finished-era docs under `docs/archive/`.
   (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
   indistinguishable to a reader from the broken form, so
   `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
-  everything else, with a `check-guards.sh` fixture proving it still fails.
+  everything else, with a `check-guards.sh` fixture proving it still fails. That
+  script carries the line-comment rule above too: both are Leaf idioms that
+  render fine and resolve wrong, which is the one thing a render test cannot
+  catch.
 - **Consolidating on xeus (#1271) — DONE.** Both browser graders and both
   editor kernels are xeus; `Public/pyodide` went in v0.5.19 (see "Pyodide is
   gone" above). The package-set question that gated it was settled the way
@@ -1691,6 +1725,8 @@ shim); and archived finished-era docs under `docs/archive/`.
 ## Reference Material
 
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
+- `docs/lti-1-3.md` — LTI 1.3 tool support, additive to everything above: the compatibility rules (no platform registered = no change; registrations in the database, never env vars; Valence stays the default grade transport), why a launch opens a new window rather than an iframe (an iframe inside a non-isolated LMS page loses cross-origin isolation and silently fails browser grading over to the native worker), the RS256 tool key created on first use, the launch claim rules and role mapping (a TA sub-role wins over the Instructor principal sent beside it), and the five-slice plan
+- `docs/github-submissions.md` — design note with slice 1 built (the admin page that registers the GitHub App through the manifest flow; nothing uses the App yet): submitting from a GitHub repository and GitHub-Classroom-style course repositories, additive to everything above. Grading stays on Chickadee's runners (never GitHub Actions, so release and secret tests never reach the student's repository); a commit becomes an ordinary submission zip; the deadline is the server's receipt time, never a commit date; the ownership check that stops a student submitting a classmate's granted repository; App credentials via the manifest flow into the database and a 0600 file rather than an environment variable; and the privacy review (slice 0) that gates it all
 - `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook: Valence credential handshake (`scripts/brightspace-valence-auth.py`), env wiring, org-unit/grade-item binding, end-to-end testing against `learntest`
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/zero-downtime-deploy.md` — production CI/CD: blue-green swap (`scripts/bluegreen-deploy.sh`), the `chickadee-deployer` auto-deploy daemon (GitHub-release SemVer gate, snapshot, auto-rollback), and the read-only admin-MCP deploy-oversight tools
@@ -1721,11 +1757,11 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
 - `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
-- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now largely shipped, so it opens with a **Status** table separating built behaviour from the two things deliberately not built: coverage % (which needs a corpus aggregation run, unlike a bug-set union, which is a query over stored outcomes) and a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
-- `docs/class-activities.md` — class activities (#1508): leaderboard challenges, beat-the-instructor bots and, in later slices, round robins, king of the hill and brackets. Opens with a **Status** table per slice; the model is two hidden axes (opponent source × class aggregation) behind one instructor-chosen `ActivityKind`, the `activity` manifest block, the footer's `metric` field (ranking, never credit), the ingest-time `leaderboard_entries` materialisation, the pseudonymous leaderboard page, the kind-locked-once-submitted rule, and the compatibility rules every slice must keep (the `makeWorkerManifestJSON` fresh-dict trap, `runnerSanitized` stripping the block so an old runner never decodes a kind it predates)
+- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now shipped, so it opens with a **Status** table separating built behaviour from the one thing deliberately not built: a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). Its §"The corpus run" records what coverage % turned out to be once built — a `classAggregate` submission owned by nobody whose ordinary grade fraction IS the number, opt-in behind the goal that reads it, debounced to one run in flight, read as the newest COMPLETED row so a queued re-run never blanks a bar that freezes into a grade push — plus the three things it deliberately does not do (call `mergeNotebook`, whose slot bound would truncate a corpus to one student's worth of cells; grade a personalized assignment, which has no single set of inputs; resolve name collisions between contributors, which no language-agnostic server can). It also says plainly that it shipped against the note's own "do not start it until a real offering has run one" advice, and what to measure in the first offering as a result. The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
+- `docs/class-activities.md` — class activities (#1508): leaderboard challenges, beat-the-instructor bots and, in later slices, round robins, king of the hill and brackets. Opens with a **Status** table per slice; the model is two hidden axes (opponent source × class aggregation) behind one instructor-chosen `ActivityKind`, the `activity` manifest block, the footer's `metric` field (ranking, never credit), the ingest-time `leaderboard_entries` materialisation, the pseudonymous leaderboard page, the kind-locked-once-submitted rule, the slice-2 opponent primitive (`ActivityOpponentSource` read off the kind exhaustively; the structural `Job.opponent` the runner reads instead of the enum; `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`; the `activity-match` build capability `RunnerActivityGate` requires at claim; browser grading refused wherever grader-only files are), the slice-3 hill (`match_results` opened at claim and completed at ingest, `activity_champions`), the slice-4 round robin (`Job.opponents`, the worker's per-opponent loop folding into ONE collection plus `MatchReport` rows, `activity_standings` rewritten from the latest submission only, the `standing` / `matchesWon` signals that turned out to be static authorable-badge signals rather than the third category the design predicted), the slice-5 tournaments (`paired` rides the hill's runner token because a bracket match is one opponent once; a match is a `tournamentMatch` submission every student-kind filter already excludes; `TournamentPairing` in Core is the pure bracket/Swiss rule; a failed match advances the opponent so a round cannot stall), the slice-6 tests-and-code kind (the `union` aggregation reuses the slice-4 matrix outright — no table, no migration, no runner token, no worker code — and materialises nothing, because a union over matches is a query; a kill stays with the test's author after the fault is fixed while a defence counts only the code standing today, which is safe because no union shape is sweep-evaluable), and the compatibility rules every slice must keep (the `makeWorkerManifestJSON` fresh-dict trap, `runnerSanitized` stripping the block so an old runner never decodes a kind it predates)
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/student-avatars.md` — generated chickadee avatars, shipped for the account page (art, `Core/` model, storage, per-course handles; leaderboards and the customization wardrobe are not built) replacing the account-page initials monogram, and the pseudonymous identity primitive a leaderboard would be built on: why the spec is stored rather than derived from a username (a hash of an identifier is reproducible by any classmate, which looks private without being private) and rather than re-derived from a stored seed (appending one option reshuffles everyone), why uniqueness is carried by a per-course handle rather than by the picture (uniqueness must hold at the granularity a viewer can distinguish, at the scope where they see them together — and enforcing it per course would make an avatar change when somebody drops), and how the existing UI guards decide the rendering mechanism (sprite symbols plus custom-property recolouring, since raw path data in a template already fails S4)
 - `docs/browser-freeze-investigation.md` — the Aug 2026 post-boot editor freeze (`page_unresponsive` beacons): telemetry signature, the measured root cause (two upstream listeners each forcing a reflow per IOPub output message — `updatePromptOverlayIcon` and the `:scroll-output` plugin), the runtime prototype mitigation (`Public/jl-cell-perf-patch.js`, which also carries the auto-collapse rule) and why it is not a vendored-bundle edit, and the reusable freeze tracer (`Tools/editor-smoke-test/freeze-trace-check.mjs`)
-- `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (started 2026-07, extended through 2026-09-28; start here before chasing a red check on an unrelated PR). **Six families. Family 5 is closed for monitoring as of 2026-09-28** — the `api-tests` throughput collapse did not recur across 88 post-fix `main` runs, and three merged changes (a tmpfs `/tmp`, SQLite test databases copied from a once-migrated template, postgres schemas recycled from a pre-migrated pool) made BOTH lanes O(1) in the migration count, taking `api-tests` 291 s → 156 s and `api-tests-postgres` 391 s → 198 s. It was never root-caused, and the entry keeps "it stopped appearing" and "it is fixed" distinguishable. **Family 6 is new and OPEN**: ten jobs wedged to their ceiling since the noble→resolute base-image move (glibc 2.39 → 2.43), nine of them `worker-tests`. It is the opposite shape to Family 5 and the `[ci-pressure]` telemetry separates them in one line — a Family 5 job runs slowly and keeps finishing tests, a Family 6 job stops completely (`scopes=0.0/min` with `self cpu=0.0%` while the machine idles). `WedgeWatchdog` does not catch it: it arms only while a tracked scope is open, so a wedge between scopes burns the whole ceiling. Do NOT read anything into per-test or per-suite durations in these logs: Swift Testing starts a test's clock when it is scheduled rather than when it gets a parallelization slot, so a healthy run's median test already reports ~80 s and every suite always ends at about the run's total
+- `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (started 2026-07, extended through 2026-09-28; start here before chasing a red check on an unrelated PR). **Six families. Family 5 is closed for monitoring as of 2026-09-28** — the `api-tests` throughput collapse did not recur across 88 post-fix `main` runs, and three merged changes (a tmpfs `/tmp`, SQLite test databases copied from a once-migrated template, postgres schemas recycled from a pre-migrated pool) made BOTH lanes O(1) in the migration count, taking `api-tests` 291 s → 156 s and `api-tests-postgres` 391 s → 198 s. It was never root-caused, and the entry keeps "it stopped appearing" and "it is fixed" distinguishable. **Family 6 is root-caused and fixed**: `worker-tests` wedging to its ceiling after the noble→resolute move, traced to Foundation's `Process` leaking a sibling's exit-signal socket into a long-lived child, and then to glibc 2.43's abort lock inherited through swift-subprocess's `clone3`. It is the opposite shape to Family 5, and the `[ci-pressure]` telemetry separates them in one line — a Family 5 job runs slowly and keeps finishing tests, a Family 6 job stops completely (`scopes=0.0/min` with `self cpu=0.0%` while the machine idles). Do NOT read anything into per-test or per-suite durations in these logs: Swift Testing starts a test's clock when it is scheduled rather than when it gets a parallelization slot, so a healthy run's median test already reports ~80 s and every suite always ends at about the run's total
 - `docs/archive/` — finished-era investigations, superseded plans, and point-in-time audits (kept for the record; nothing in there describes current behaviour)
 - `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the archived 0.1.0–0.4.x history

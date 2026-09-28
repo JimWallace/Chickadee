@@ -71,7 +71,7 @@ jobs:
           # octave-only change skipped the job that tests it. A pattern also
           # fails in the safe direction: an unrecognised language matches and
           # runs the smoke rather than silently skipping it.
-          if echo "$changed" | grep -Eq '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)'; then
+          if grep -Eq '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)' <<< "$changed"; then
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"

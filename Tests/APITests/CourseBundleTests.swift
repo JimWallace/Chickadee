@@ -442,6 +442,83 @@ import VaporTesting
         }
     }
 
+    /// A course bundle must carry the instructor's reference SOLUTION, and the
+    /// imported assignment must end up pointing at its own copy.
+    ///
+    /// The solution lives in a `validation`-kind submission, not in the setup
+    /// zip. Export used to collect `student` rows only, so the answer key never
+    /// entered the bundle — and an imported assignment landed "pending
+    /// validation" with nothing to validate against, permanently. This is the
+    /// round trip that proves it travels.
+    @Test func bundleRoundTripCarriesTheReferenceSolution() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "SOLN_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_soln_rt", courseID: courseID)
+            let setupID = try setup.requireID()
+            let assignment = try await insertAssignment(testSetupID: setupID, courseID: courseID)
+
+            let author = try await makeTestUser(on: app, username: "soln_author", role: "admin")
+            let solution = try await makeTestSubmission(
+                on: app, id: "sub_soln_rt", setupID: setupID,
+                userID: try author.requireID(), kind: APISubmission.Kind.validation,
+                filename: "solution.ipynb")
+            assignment.validationSubmissionID = try solution.requireID()
+            try await assignment.save(on: app.db)
+            let originalBytes = try Data(contentsOf: URL(fileURLWithPath: solution.zipPath))
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                }
+            )
+
+            // Archive the source so the import lands a second course rather
+            // than being refused as an active duplicate.
+            course.isArchived = true
+            try await course.save(on: app.db)
+
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+            #expect(status != .conflict)
+            #expect(status != .forbidden)
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "SOLN_RT")
+                    .filter(\.$isArchived == false)
+                    .first(),
+                "the import should have created a live second course")
+            let importedID = try imported.requireID()
+
+            let importedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == importedID).all()
+            #expect(importedAssignments.count == 1)
+            let importedAssignment = try #require(importedAssignments.first)
+
+            // The solution arrived as a validation submission on the NEW setup.
+            let importedSolutionID = try #require(
+                importedAssignment.validationSubmissionID,
+                "the imported assignment should point at its own solution")
+            let importedSolution = try #require(
+                try await APISubmission.find(importedSolutionID, on: app.db))
+            #expect(importedSolution.kind == APISubmission.Kind.validation)
+            #expect(importedSolution.testSetupID == importedAssignment.testSetupID)
+            #expect(importedSolution.id != solution.id)
+
+            // Its bytes survived the round trip.
+            #expect(FileManager.default.fileExists(atPath: importedSolution.zipPath))
+            let importedBytes = try Data(
+                contentsOf: URL(fileURLWithPath: importedSolution.zipPath))
+            #expect(importedBytes == originalBytes)
+        }
+    }
+
     /// A bundle exported by an older build carries no language declaration.
     /// Import must supply one, because import is otherwise a permanent source of
     /// undeclared assignments — and "undeclared" is precisely the state the

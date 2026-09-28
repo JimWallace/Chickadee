@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0",
+  "swiftCompiler": {
+    "extraCLIOptions": ["-no-warnings-as-errors"]
+  }
+}

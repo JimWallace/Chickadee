@@ -161,9 +161,18 @@ struct CourseBundleRoutes: RouteCollection {
         let setupIDs = testSetups.compactMap(\.id)
         var submissions: [APISubmission] = []
         if !setupIDs.isEmpty {
+            // Student work AND the instructor's reference solutions. The
+            // validation rows are the point of a course copy: an assignment
+            // without its solution cannot be re-validated in the new term,
+            // because the answer key it would be graded against never
+            // travelled. Derived kinds (tournament matches, the class
+            // aggregate) are deliberately excluded — they are products of a
+            // term's submissions, not content, and they regenerate.
             submissions = try await APISubmission.query(on: db)
                 .filter(\.$testSetupID ~~ setupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(
+                    \.$kind ~~ [APISubmission.Kind.student, APISubmission.Kind.validation]
+                )
                 .all()
         }
 
@@ -319,7 +328,8 @@ struct CourseBundleRoutes: RouteCollection {
                 attemptNumber: sub.attemptNumber ?? 1,
                 submittedAt: sub.submittedAt,
                 filename: sub.filename,
-                submissionFilename: "submissions/\(onDiskName)"
+                submissionFilename: "submissions/\(onDiskName)",
+                kind: sub.kind
             )
         }
 

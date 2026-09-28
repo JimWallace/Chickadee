@@ -71,6 +71,10 @@ struct JobStageTimings {
 // Was `private` when this lived in RunnerDaemon.swift; internal now so
 // WorkerCommand.swift (same module) can keep using it after the split.
 func writeToStandardError(_ message: String) {
+    if let capture = RunnerLogCapture.current {
+        capture.append(message.trimmingCharacters(in: .newlines))
+        return
+    }
     FileHandle.standardError.write(Data(message.utf8))
 }
 
@@ -79,12 +83,12 @@ func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
     payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
     payload["event"] = event
     guard JSONSerialization.isValidJSONObject(payload),
-        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+        let line = String(bytes: data, encoding: .utf8)
     else {
         writeToStandardError(
             "{\"event\":\"\(event)\",\"timestamp\":\"\(ISO8601DateFormatter().string(from: Date()))\"}\n")
         return
     }
-    FileHandle.standardError.write(data)
-    FileHandle.standardError.write(Data("\n".utf8))
+    writeToStandardError(line + "\n")
 }

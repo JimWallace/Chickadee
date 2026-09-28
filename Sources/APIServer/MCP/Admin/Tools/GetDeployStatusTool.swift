@@ -22,7 +22,9 @@ struct GetDeployStatusTool: DiagnosticTool {
         /// false when the status file is missing/unreadable (daemon not running,
         /// or its state dir is not mounted into this container).
         let available: Bool
-        /// idle | deploying | pending_approval | paused | error (nil if unavailable).
+        /// idle | deploying | waiting_for_image | pending_approval | paused | error |
+        /// stuck | certificate_invalid (nil if unavailable). See
+        /// docs/zero-downtime-deploy.md for what each one means.
         let state: String?
         /// The version currently live, per the daemon.
         let deployedVersion: String?

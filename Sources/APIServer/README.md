@@ -48,7 +48,7 @@ Base path: `/api/v1`
 | `GET`  | `/submissions/:id` | Submission status (`pending`/`assigned`/`complete`/`failed`) |
 | `GET`  | `/submissions/:id/results` | Full `TestOutcomeCollection`; optional `?tiers=` filter |
 | `POST` | `/worker/request` | Worker claims the next pending job |
-| `POST` | `/worker/results` | Worker reports a completed `TestOutcomeCollection` |
+| `POST` | `/worker/results` | Worker reports a completed `WorkerExecutionReport` (wraps the `TestOutcomeCollection`) |
 | `POST` | `/testsetups` | Instructor uploads a test-setup zip (multipart) |
 | `GET`  | `/testsetups/:id/download` | Download a test-setup zip |
 

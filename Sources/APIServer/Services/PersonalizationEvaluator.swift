@@ -705,7 +705,7 @@ enum PersonalizationEvaluator {
         // overlay the caller-supplied vars (the assignment seed and an optional
         // PYTHONPATH into the support-files dir).
         //
-        // `.custom` is what carries that guarantee to Subprocess: its default
+        // `Environment.only` is what carries that guarantee to Subprocess: its default
         // is `.inherit`, so this must never be left off.
         let parentEnv = EnvironmentSource.all
         var mergedEnv: [String: String] = [:]
@@ -716,7 +716,7 @@ enum PersonalizationEvaluator {
         // Bound as a `let` before the task group: the group's closure is a
         // `sending` parameter, so capturing the mutable locals directly is a
         // data race the compiler rejects.
-        let childEnvironment = subprocessEnvironment(mergedEnv)
+        let childEnvironment = Subprocess::Environment.only(mergedEnv)
 
         var options = PlatformOptions()
         // setsid(2) in the child: its own session and process group, so the
@@ -737,7 +737,7 @@ enum PersonalizationEvaluator {
                 let result = try await Subprocess.run(
                     .path(FilePath(executableURL.path)),
                     arguments: Arguments(arguments),
-                    environment: .custom(childEnvironment),
+                    environment: childEnvironment,
                     workingDirectory: FilePath(cwd.path),
                     platformOptions: platformOptions,
                     output: .string(limit: outputCaptureLimitBytes),
@@ -785,24 +785,6 @@ enum PersonalizationEvaluator {
     /// server buying its memory.  Generous enough that no honest `repr` of a
     /// personalized value comes close.
     private static let outputCaptureLimitBytes = 4 * 1024 * 1024
-
-    /// Bridges Chickadee's `[String: String]` environment to Subprocess's
-    /// keyed form.  `Environment.Key` has no public non-failable initializer;
-    /// the failable one never actually fails, so a `nil` key is unreachable
-    /// rather than a silent drop worth reporting.
-    ///
-    /// The module selector (SE-0491) is load-bearing: `Environment` is also a
-    /// Vapor type, and this file imports both.
-    private static func subprocessEnvironment(
-        _ env: [String: String]
-    ) -> [Subprocess::Environment.Key: String] {
-        var custom: [Subprocess::Environment.Key: String] = [:]
-        for (key, value) in env {
-            guard let environmentKey = Subprocess::Environment.Key(rawValue: key) else { continue }
-            custom[environmentKey] = value
-        }
-        return custom
-    }
 
     /// Flattens a `TerminationStatus` to the `Int32` the caller compares
     /// against 0.  A signalled child reports `128 + signal`, the shell

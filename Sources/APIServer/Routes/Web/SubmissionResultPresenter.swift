@@ -519,13 +519,21 @@ extension WebRoutes {
     }
 }
 
-/// "9 / 15 items found" for a union goal's snapshot, or nil when the snapshot
-/// carries no coverage — either because the goal is grade-counted or because
-/// the sweep has not run since the goal was authored.
+/// "9 / 15 items found" for a union goal's snapshot, "62% / 80% covered" for a
+/// class corpus goal's, or nil when the snapshot carries neither — either
+/// because the goal is grade-counted or because the sweep has not run since the
+/// goal was authored.
+///
+/// The two are mutually exclusive by construction: the sweep admits one
+/// condition, so a goal is grade-counted, union-counted or corpus-counted and
+/// never two of them.
 ///
 /// Formatted by the same helper the instructor coverage section uses, so the
 /// two views cannot drift into naming one number two ways.
 private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
+    if let percent = row?.coveragePercent, let required = row?.coverageRequired {
+        return corpusCoverageSummary(percent: percent, required: required)
+    }
     guard let covered = row?.itemsCovered, let required = row?.itemsRequired else { return nil }
     return coverageFoundSummary(covered: covered, total: required)
 }

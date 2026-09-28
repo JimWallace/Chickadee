@@ -242,6 +242,17 @@ private func elapsedMs(since start: Date) -> Int {
 /// otherwise grow this buffer without bound, OOM the worker (taking down the
 /// other concurrent jobs), and ride the blob into `longResult` → JSON → DB
 /// (June 2026 audit, P2.1). 1 MB keeps every realistic traceback intact.
+/// Whether a `read` that returned `bytesRead` was interrupted by a signal and
+/// should be retried. Only a failed call (`-1`) counts: `read` leaves `errno`
+/// untouched on success and at end of file, so a stale `EINTR` from an earlier
+/// interrupted read on the same thread must not turn EOF into a retry — that
+/// would spin forever on a closed pipe. A pure function because no test can
+/// deliver a signal to a drain thread on demand, and the mutation sweep of
+/// 2026-09-22 (#1574) showed that nothing else could see this rule change.
+func readWasInterrupted(bytesRead: Int, errorNumber: Int32) -> Bool {
+    bytesRead == -1 && errorNumber == EINTR
+}
+
 final class CapturedPipeBuffer: Sendable {
     static let maxCapturedBytes = 1_048_576
 
@@ -431,7 +442,7 @@ final class ScriptCapture: Sendable {
                 stream.buffer.append(Data(chunk[0..<bytesRead]))
                 continue
             }
-            if bytesRead == -1 && errno == EINTR { continue }
+            if readWasInterrupted(bytesRead: bytesRead, errorNumber: errno) { continue }
             break
         }
         close(stream.readEnd)

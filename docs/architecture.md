@@ -446,10 +446,9 @@ file. The steady-state convention:
   that already ran a deleted migration are unaffected, and fresh deploys
   build the same final schema from the `Create*` files alone. The first
   round (#502/#505) shipped before this pass; a second round lands with the
-  0.5.0 cleanup, folding the post-#502 incrementals. A handful are
-  deliberately kept as standalone migrations: `AddUserFKConstraints`, the
-  two slip-day migrations (`AddCourseSlipDaySettings`,
-  `AddEnrollmentSlipDaysAdjustment`), `AddSessionsCreatedAt` (it targets
+  0.5.0 cleanup, folding the post-#502 incrementals. A third round (#1252)
+  folded the two slip-day migrations. A handful are deliberately kept as
+  standalone migrations: `AddUserFKConstraints`, `AddSessionsCreatedAt` (it targets
   Vapor's own sessions table, which no `Create*` file owns), and
   `CollapseUserRoles` (a pure data rewrite with no schema home).
 - **Not every migration is additive.** `ChangeAssignmentIsOpenToVisibility`

@@ -59,23 +59,24 @@ func assignmentPublicIDParameter(from req: Request) throws -> String {
     return raw
 }
 
-// Mirrors the column-set on APIAssignment that publish / import flows
-// need to set independently; bundling these into a struct would duplicate
-// the model's own initializer surface without removing any names.  All
-// call sites use labelled args so the long list reads cleanly.
-// swiftlint:disable:next function_parameter_count
+/// The columns a new assignment row takes from its caller. The public ID and
+/// the slug are not here: `createAssignmentWithUniquePublicID` allocates both.
+struct NewAssignmentFields {
+    var testSetupID: String
+    var title: String
+    var courseID: UUID
+    var visibility: AssignmentVisibility = .closed
+    var dueAt: Date?
+    var startsAt: Date?
+    var sortOrder: Int?
+    var validationStatus: String?
+    var validationSubmissionID: String?
+    var sectionID: UUID?
+}
+
 func createAssignmentWithUniquePublicID(
-    on db: Database,
-    testSetupID: String,
-    title: String,
-    dueAt: Date?,
-    startsAt: Date? = nil,
-    visibility: AssignmentVisibility,
-    sortOrder: Int?,
-    validationStatus: String? = nil,
-    validationSubmissionID: String? = nil,
-    sectionID: UUID? = nil,
-    courseID: UUID
+    _ fields: NewAssignmentFields,
+    on db: Database
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()
@@ -87,17 +88,17 @@ func createAssignmentWithUniquePublicID(
 
         let assignment = APIAssignment(
             publicID: candidate,
-            testSetupID: testSetupID,
-            title: title,
-            slug: try await uniqueAssignmentSlug(title: title, courseID: courseID, db: db),
-            dueAt: dueAt,
-            startsAt: startsAt,
-            visibility: visibility,
-            sortOrder: sortOrder,
-            validationStatus: validationStatus,
-            validationSubmissionID: validationSubmissionID,
-            sectionID: sectionID,
-            courseID: courseID
+            testSetupID: fields.testSetupID,
+            title: fields.title,
+            slug: try await uniqueAssignmentSlug(title: fields.title, courseID: fields.courseID, db: db),
+            dueAt: fields.dueAt,
+            startsAt: fields.startsAt,
+            visibility: fields.visibility,
+            sortOrder: fields.sortOrder,
+            validationStatus: fields.validationStatus,
+            validationSubmissionID: fields.validationSubmissionID,
+            sectionID: fields.sectionID,
+            courseID: fields.courseID
         )
         do {
             try await assignment.save(on: db)

@@ -60,7 +60,7 @@ jobs:
     container:
       # swift-ci: the mirrored toolchain plus every grading interpreter, the
       # same image as api-tests and worker-tests in swift-tests.yml.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +120,9 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Repeat the matched tests
+        # Well inside the job's ceiling, so a stall fails this step and the
+        # wedge-dump and upload steps below still run.
+        timeout-minutes: 45
         # The inputs reach the shell through the environment, never through
         # expression interpolation into the command line. The container's
         # default shell is dash, which has no PIPESTATUS, so the step names
@@ -161,6 +164,12 @@ jobs:
             echo "The full log and the xUnit report are in the run artifacts."
           } >> "$GITHUB_STEP_SUMMARY"
           exit "${status}"
+
+      - name: Print the wedge watchdog dump
+        # WedgeWatchdog writes its thread table to a file before it aborts
+        # (docs/ci-flakiness.md, Family 6).
+        if: always()
+        run: cat /tmp/chickadee-wedge-dump-*.txt 2>/dev/null || echo "No wedge dump was written."
 
       - name: Upload the log and the xUnit report
         if: always()

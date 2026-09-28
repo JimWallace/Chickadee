@@ -46,7 +46,8 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
+        _ = try await requireOpenStudentAssignment(
+            for: body.testSetupID, user: caller, gate: .submission, on: req)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -142,6 +143,7 @@ struct BrowserResultRoutes: RouteCollection {
         // all" or a retest that routed through a worker.
         try await flagResultForBrightSpaceSync(
             browserResult, testSetupID: body.testSetupID, application: req.application, on: req.db)
+        try await LTIGradeSyncQueue.queue(submissionID: subID, testSetupID: body.testSetupID, on: req.db)
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.
@@ -257,6 +259,15 @@ struct BrowserResultRoutes: RouteCollection {
                     declaredSlotCount: slotCount,
                     on: req.db
                 )
+                // Wired here for the same reason the coverage union is: a
+                // browser-graded contribution assignment whose corpus is only
+                // re-run from the worker path would freeze its class coverage
+                // at whatever the last worker-graded submission produced.
+                if slotCount > 0 {
+                    await scheduleClassCorpusRun(
+                        setupID: setup.id ?? "", app: req.application, on: req.db,
+                        logger: req.logger)
+                }
             }
         }
 
@@ -265,6 +276,22 @@ struct BrowserResultRoutes: RouteCollection {
         if reconciled.buildStatus == .passed, let userID {
             await bestEffort("leaderboard_entry") {
                 try await recordLeaderboardEntry(
+                    testSetupID: setup.id ?? "",
+                    userID: userID,
+                    submissionID: subID,
+                    outcomes: reconciled.outcomes,
+                    on: req.db
+                )
+            }
+        }
+
+        // The hill (king of the hill) — a fourth class-level effect, wired
+        // here for the same reason. A browser-graded king-of-the-hill
+        // assignment is refused at authoring, so this only ever sees the
+        // worker fail-over path, where it completes the row the claim opened.
+        if reconciled.buildStatus == .passed, let userID {
+            await bestEffort("activity_match") {
+                try await recordActivityMatch(
                     testSetupID: setup.id ?? "",
                     userID: userID,
                     submissionID: subID,
@@ -305,7 +332,8 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
+        _ = try await requireOpenStudentAssignment(
+            for: body.testSetupID, user: caller, gate: .submission, on: req)
 
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = decodeManifest(from: manifestData),
@@ -407,7 +435,8 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
+        _ = try await requireOpenStudentAssignment(
+            for: body.testSetupID, user: caller, gate: .submission, on: req)
 
         // The failover only applies to browser-graded setups — worker-graded
         // assignments already enqueue through `runner-submit` and can't freeze a

@@ -307,11 +307,25 @@ public struct BundledSubmission: Codable, Sendable {
     public let filename: String?
     /// Relative path within the bundle ZIP: "submissions/<originalSubID>.<ext>"
     public let submissionFilename: String
+    /// The submission kind, matching `APISubmission.Kind` — "student" or
+    /// "validation". OPTIONAL because bundles exported before solutions
+    /// travelled carry no such field, and every submission in one of those is
+    /// a student submission; `kindOrStudent` is the accessor that resolves it.
+    ///
+    /// A "validation" row is the instructor's reference solution. It is what
+    /// makes an imported assignment validatable at all: without it the import
+    /// lands an assignment that can never be re-validated, because the answer
+    /// key it would be graded against never arrived.
+    public let kind: String?
+
+    /// `kind`, with a bundle that predates the field read as a student
+    /// submission.
+    public var kindOrStudent: String { kind ?? "student" }
 
     public init(
         bundleID: String, userBundleID: String, testSetupBundleID: String,
         attemptNumber: Int, submittedAt: Date?, filename: String?,
-        submissionFilename: String
+        submissionFilename: String, kind: String? = nil
     ) {
         self.bundleID = bundleID
         self.userBundleID = userBundleID
@@ -320,6 +334,7 @@ public struct BundledSubmission: Codable, Sendable {
         self.submittedAt = submittedAt
         self.filename = filename
         self.submissionFilename = submissionFilename
+        self.kind = kind
     }
 }
 

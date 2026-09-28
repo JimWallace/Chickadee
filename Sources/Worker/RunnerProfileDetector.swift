@@ -69,9 +69,14 @@ struct RunnerProfileDetector {
         async let zshExists = commandExists("zsh")
 
         var languageVersions: [LanguageVersion] = await assignmentLanguageVersions
-        var capabilities: Set<RunnerCapability> = []
+        // Build capabilities first: what this binary knows how to do,
+        // independent of the host. `activity-match` says this build reads
+        // `Job.opponent` and stages a class-activity opponent; a build that
+        // predates it advertises nothing here, and the server's claim gate
+        // leaves match jobs for one that does.
+        var capabilities: Set<RunnerCapability> = Self.buildCapabilities
 
-        if languageVersions.contains(where: { $0.language == AssignmentLanguage.python.capabilityName }) {
+        if Self.probesPythonModules(given: languageVersions) {
             // Python module probes are cheap on a hit and fairly cheap on a
             // miss; run them in parallel too.
             await withTaskGroup(of: (String, Bool).self) { group in
@@ -102,6 +107,21 @@ struct RunnerProfileDetector {
             capabilities: capabilities.sorted { $0.name < $1.name }
         )
     }
+
+    /// Whether the Python module probes run: only when the host has Python.
+    /// Separate from `detect()` because every CI host has every interpreter,
+    /// so no end-to-end run can tell this apart from "some language was
+    /// found" — and a Python-only host would then advertise no modules.
+    static func probesPythonModules(given languageVersions: [LanguageVersion]) -> Bool {
+        languageVersions.contains { $0.language == AssignmentLanguage.python.capabilityName }
+    }
+
+    /// The capabilities every profile this build advertises carries, whatever
+    /// the host has installed. Static so a test can pin the set without
+    /// running the probes.
+    static let buildCapabilities: Set<RunnerCapability> = [
+        .activityMatch, .activityOpponentSubmission, .activityMatrix,
+    ]
 
     private func platformName() -> String {
         #if os(macOS)

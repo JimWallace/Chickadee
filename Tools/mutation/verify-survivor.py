@@ -71,9 +71,16 @@ def load_test_command() -> list[str]:
     Read from config rather than restated: a verifier running a different suite
     than the sweep would answer a different question and look like it answered
     this one.
+
+    `{repoRoot}` is substituted exactly as scripts/mutation-run.sh does it.
+    Passed through literally, the toolset path does not exist, `swift test`
+    fails before building anything, and every survivor reads UNVERIFIABLE --
+    which is what happened from the day the placeholder entered config.json
+    until this substitution did.
     """
     with open(CONFIG) as fh:
-        return ["swift"] + json.load(fh)["testArgs"]
+        args = json.load(fh)["testArgs"]
+    return ["swift"] + [arg.replace("{repoRoot}", REPO) for arg in args]
 
 
 def survivors_from(record_path: str) -> list[dict]:

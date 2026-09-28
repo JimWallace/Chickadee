@@ -356,8 +356,172 @@ struct WorkerJobRoutes: RouteCollection {
             assignmentSeed: assignmentSeed,
             personalizedInputs: personalizedInputs,
             personalizedFiles: personalizedFiles,
-            language: language
+            language: language,
+            opponent: try await Self.jobOpponent(
+                manifest: claimed.manifest, submission: submission, base: base, on: req.db),
+            opponents: try await Self.jobOpponents(
+                manifest: claimed.manifest, submission: submission, base: base, on: req.db)
         )
+    }
+
+    /// The opponents a MATRIX job plays (round robin), each with its own open
+    /// match row; nil for every other job. With no classmate yet the job is
+    /// built like a bot match through `jobOpponent`, so this returns nil
+    /// then too.
+    static func jobOpponents(
+        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> [JobOpponent]? {
+        guard let activity = manifest.activity, activity.kind.opponentSource == .classmates,
+            let submissionID = submission.id
+        else { return nil }
+        do {
+            let classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
+            guard !classmates.isEmpty else { return nil }
+            var opponents: [JobOpponent] = []
+            for chosen in classmates {
+                guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: chosen, seed: seed, on: db)
+                guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(classmateID)/download") else {
+                    throw WorkerJobError.internalInconsistency(
+                        reason: "Failed to build a classmate download URL from base=\(base)")
+                }
+                opponents.append(
+                    JobOpponent(
+                        supportFile: nil, matchSeed: seed, submissionID: classmateID,
+                        submissionURL: url, submissionFilename: classmate.filename))
+            }
+            return opponents
+        } catch let error as WorkerJobError {
+            throw error
+        } catch {
+            throw WorkerJobError.internalInconsistency(
+                reason: "Could not open the matches for \(submissionID): \(error)")
+        }
+    }
+
+    /// The opponent a match job stages (docs/class-activities.md), or nil for
+    /// an ordinary run — and for a bot activity whose bot is not chosen yet,
+    /// which grades as it did before the primitive existed. Read from the
+    /// FULL manifest: `runnerSanitized()` strips the activity block, which is
+    /// why the runner learns this from the job.
+    ///
+    /// For king of the hill this also OPENS the match row (`openMatch`), so
+    /// the result path knows which opponent the job played. A database error
+    /// there is the claim's error: a match graded with no row could never
+    /// move the hill, which would read as a loss.
+    static func jobOpponent(
+        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> JobOpponent? {
+        guard let activity = manifest.activity, activity.stagesAnOpponent,
+            let submissionID = submission.id
+        else { return nil }
+        switch activity.kind.opponentSource {
+        case .none:
+            return nil
+        case .paired:
+            return try await pairedJobOpponent(activity: activity, submission: submission, base: base, on: db)
+        case .classmates:
+            // With classmates to play, `jobOpponents` carries them. With
+            // none yet, the bot stands in as a single opponent — one open
+            // row, completed from the collection's match entry.
+            do {
+                if !(try await chooseClassmates(for: submission, activity: activity, on: db)).isEmpty {
+                    return nil
+                }
+                let bot = ChosenOpponent(
+                    champion: nil,
+                    identity: activity.opponentFile.map(JobOpponent.supportFileIdentity)
+                        ?? JobOpponent.noOpponentIdentity)
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: bot.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: bot, seed: seed, on: db)
+                guard activity.opponentFile != nil else { return nil }
+                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
+            } catch {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Could not open the match for \(submissionID): \(error)")
+            }
+        case .supportFile:
+            return JobOpponent(
+                supportFile: activity.opponentFile,
+                matchSeed: JobOpponent.matchSeed(
+                    submissionID: submissionID,
+                    opponentIdentity: JobOpponent.supportFileIdentity(activity.opponentFile)))
+        case .champion:
+            do {
+                let chosen = try await chooseOpponent(for: submission, activity: activity, on: db)
+                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+                try await openMatch(
+                    testSetupID: submission.testSetupID, submissionID: submissionID,
+                    opponent: chosen, seed: seed, on: db)
+                if let champion = chosen.champion, let championID = champion.id {
+                    guard
+                        let url = URL(
+                            string: "\(base)/api/v1/worker/submissions/\(championID)/download")
+                    else {
+                        throw WorkerJobError.internalInconsistency(
+                            reason: "Failed to build the champion download URL from base=\(base)")
+                    }
+                    return JobOpponent(
+                        supportFile: nil, matchSeed: seed, submissionID: championID,
+                        submissionURL: url, submissionFilename: champion.filename)
+                }
+                // The bot holds the hill, or nobody does: the job carries the
+                // bot when there is one, and no opponent at all otherwise —
+                // the row is open either way, so a passing match takes it.
+                guard activity.opponentFile != nil else { return nil }
+                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
+            } catch let error as WorkerJobError {
+                throw error
+            } catch {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Could not open the match for \(submissionID): \(error)")
+            }
+        }
+    }
+
+    /// The opponent of a tournament match (docs/class-activities.md,
+    /// "Tournaments"): the entrant it is paired with, staged on the hill's
+    /// single-submission contract, with its row opened under the round. A
+    /// student's own submission on such an assignment plays the bundled
+    /// bot, if one is chosen, as practice, with no row.
+    static func pairedJobOpponent(
+        activity: ClassActivity, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> JobOpponent? {
+        guard let submissionID = submission.id else { return nil }
+        do {
+            guard let paired = try await pairedOpponent(for: submission, on: db) else {
+                guard submission.kind == APISubmission.Kind.student, let file = activity.opponentFile else {
+                    return nil
+                }
+                return JobOpponent(
+                    supportFile: file,
+                    matchSeed: JobOpponent.matchSeed(
+                        submissionID: submissionID, opponentIdentity: JobOpponent.supportFileIdentity(file)))
+            }
+            guard let awayID = paired.away.id else { return nil }
+            let chosen = ChosenOpponent(champion: paired.away, identity: JobOpponent.submissionIdentity(awayID))
+            let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+            try await openMatch(
+                testSetupID: submission.testSetupID, submissionID: submissionID,
+                opponent: chosen, seed: seed, round: paired.slot.round, on: db)
+            guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(awayID)/download") else {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Failed to build the opponent download URL from base=\(base)")
+            }
+            return JobOpponent(
+                supportFile: nil, matchSeed: seed, submissionID: awayID,
+                submissionURL: url, submissionFilename: paired.away.filename)
+        } catch let error as WorkerJobError {
+            throw error
+        } catch {
+            throw WorkerJobError.internalInconsistency(
+                reason: "Could not open the tournament match for \(submissionID): \(error)")
+        }
     }
 
     private func encodeJobResponse(_ job: Job) throws -> Response {

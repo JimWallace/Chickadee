@@ -166,4 +166,57 @@ import Testing
             (F2) or the embedded copy no longer parses.
             """)
     }
+
+    /// The per-student inputs file is read back by a real `racket` (#1393).
+    ///
+    /// Racket's `_ck_inputs.rkt` is a module that PROVIDES one hash, which the
+    /// runtime loads with `dynamic-require`. The Lua, Octave and C++ suites pin
+    /// their inputs file the same way. Here it matters more: Racket is
+    /// upload-only, so a malformed file or a reader that no longer matches it
+    /// fails every personalized case with no second path to catch it.
+    ///
+    /// `chickadee-inputs` returns an empty hash when the load fails, so the test
+    /// asserts on the values, not only on the absence of an error.
+    @Test(Self.requiresRacket) func perStudentInputsAreReadableOnTheNativePath() async throws {
+        let script = #"""
+            ; Test: per-student inputs
+            #lang racket
+            (require "test_runtime.rkt")
+            (define inputs (chickadee-inputs))
+            (define (check key expected)
+              (unless (equal? (hash-ref inputs key #f) expected)
+                (chickadee-failed (format "~a was ~s" key (hash-ref inputs key #f)))))
+            (check "threshold" 42)
+            (check "holes" (list 60 'null 20))
+            (check "name" "Ada \"A.\" Lovelace")
+            (chickadee-passed "inputs delivered")
+            """#
+        let dir = try Self.makeWorkspace(
+            submission: "#lang racket/base\n(define (f) 1)\n",
+            scripts: ["publictest_inputs.rkt": script])
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Rendered by the same call the worker path uses, so the test pins the
+        // real file shape rather than a hand-typed copy of it. The null inside
+        // the list and the quotes inside the string are the two values whose
+        // literal spelling a regression would most likely break.
+        let inputsFile = AssignmentLanguage.racket.renderInputsFile([
+            "threshold": JSONValue.int(42).racketLiteral,
+            "holes": JSONValue.array([.int(60), .null, .int(20)]).racketLiteral,
+            "name": JSONValue.string("Ada \"A.\" Lovelace").racketLiteral,
+        ])
+        try inputsFile.write(
+            to: dir.appendingPathComponent("_ck_inputs.rkt"), atomically: true, encoding: .utf8)
+
+        let outcomes = await Self.runSuites([Self.item("publictest_inputs.rkt")], in: dir)
+        let outcome = try #require(outcomes.first)
+        #expect(
+            outcome.status == .pass,
+            """
+            _ck_inputs.rkt was not read back by racket — status \(outcome.status), \
+            short: \(outcome.shortResult), stderr: \(outcome.longResult ?? "none"). \
+            Either renderInputsFile(.racket) no longer emits a loadable module, or \
+            chickadee-inputs no longer matches it.
+            """)
+    }
 }

@@ -2,27 +2,39 @@
 //
 // One throwaway `python3 http.server` for WorkerDaemonTests, replacing three
 // near-identical hand-rolled copies (StaticFileServer / FlakyHTTPServer /
-// AlwaysFails404Server).  The copies each carried the same two fragile pieces,
-// so a fix had to land three times; here they live once:
+// AlwaysFails404Server).
 //
-//   * Port handshake.  The child prints its ephemeral port to stdout, flushed,
-//     as its first line.  The old copies did a single `availableData` read,
-//     which under load can return *before* the newline is buffered — yielding
-//     a truncated/empty parse and a spurious "python3 unavailable" failure.
-//     `readPort` instead accumulates chunks until it has a complete line (or
-//     hits EOF, meaning the interpreter never started), so a partial read is
-//     no longer mistaken for a missing interpreter.
+// The server is launched through swift-subprocess, like every other process
+// the worker and its tests start. It used to be the one Foundation `Process`
+// left in the test process, and that was the cause of the WorkerTests stall
+// on the resolute image (docs/ci-flakiness.md, Family 6):
 //
-//   * Teardown.  The copies busy-waited on `process.isRunning` with
-//     `Thread.sleep` before escalating to SIGKILL.  This keeps the SIGKILL
-//     (it is load-bearing: a SIGTERM does not reliably tear `socketserver`
-//     down while the daemon's HTTP connection is open, so `waitUntilExit()`
-//     would block forever without it) but drops the busy-wait — SIGKILL can't
-//     be ignored, so the process dies at once and `waitUntilExit()` reaps it
-//     without polling.
+//   * Foundation detects that a child exited through a socketpair whose one
+//     end the child inherits. That end is not close-on-exec. Foundation
+//     emulates close-on-exec by listing every open descriptor BEFORE
+//     `posix_spawn`, so a descriptor another thread creates in between is
+//     inherited too. Measured on this toolchain: four concurrent launches put
+//     another launch's socket end into a child in 18 of 300 rounds.
+//   * These servers are long-lived. A server that inherited a sibling's end
+//     keeps that sibling's exit invisible, so the sibling's `stop()` blocked
+//     in `waitUntilExit()` on a cooperative-pool thread for as long as the
+//     server lived, and outside every `WedgeWatchdog` scope. Four such waits
+//     fill the pool; then no test reaches the `stop()` that would free them.
+//
+// swift-subprocess closes every descriptor above stderr in the child and
+// watches the exit with a pidfd, so neither half can recur. `stop()` also
+// no longer waits: it tells the running body to tear the server down, and
+// Subprocess reaps it.
+//
+// The port handshake is unchanged in substance: the child prints its
+// ephemeral port to stdout, flushed, as its first line, on a close-on-exec
+// pipe this type owns, and `readPort` polls it against a deadline.
 
 import ChickadeeTestSupport
 import Foundation
+import Subprocess
+import Synchronization
+import SystemPackage
 
 @testable import chickadee_runner
 
@@ -35,55 +47,60 @@ import Darwin
 /// A short-lived local HTTP server backed by a real `python3` subprocess,
 /// bound to an ephemeral `127.0.0.1` port.  Build one with a factory, read
 /// `.port`, and call `.stop()` (typically from a `defer`) when done.
-///
-/// `@unchecked Sendable`: all stored properties are `let` and fully
-/// initialized before the instance escapes the factory's subprocess slot;
-/// the only post-init mutation is the kill/reap inside `stop()`, which each
-/// owning test calls exactly once from its own `defer`.
-final class LocalHTTPTestServer: @unchecked Sendable {
+final class LocalHTTPTestServer: Sendable {
     let port: Int
-    private let process: Process
-    private let stdout: Pipe
+    private let stopSignal: StopSignal
 
-    private init(pythonProgram: String, extraArguments: [String], currentDirectory: URL? = nil) throws {
-        let process = Process()
-        let stdout = Pipe()
-        // CLOEXEC: the server child still receives its write end (spawn file
-        // actions clear the flag on the descriptor they install), but no
-        // *other* concurrently spawned process inherits a duplicate. Without
-        // this, a leaked duplicate in a long-lived process means the read
-        // loop below never sees EOF if the interpreter dies before printing
-        // — an unbounded stall on a cooperative-pool thread (issue #1233).
-        // Set here rather than through a shared helper: this is the last
-        // hand-built `Pipe` in the repository, so a `Core` function for it had
-        // exactly one caller, in a test.
-        for handle in [stdout.fileHandleForReading, stdout.fileHandleForWriting] {
-            let flags = fcntl(handle.fileDescriptor, F_GETFD)
-            if flags != -1 { _ = fcntl(handle.fileDescriptor, F_SETFD, flags | FD_CLOEXEC) }
+    private init(port: Int, stopSignal: StopSignal) {
+        self.port = port
+        self.stopSignal = stopSignal
+    }
+
+    /// Launches `python3 -c pythonProgram` and returns once it has reported
+    /// its port.
+    private static func launch(pythonProgram: String, extraArguments: [String]) async throws -> LocalHTTPTestServer {
+        let handshake = HandshakePipe()
+        let stopSignal = StopSignal()
+        let (ports, portSink) = AsyncStream<Int?>.makeStream()
+
+        var options = PlatformOptions()
+        // Its own session, so the teardown's group-wide kill reaches only it.
+        options.createSession = true
+
+        Task {
+            do {
+                _ = try await Subprocess.run(
+                    .path("/usr/bin/env"),
+                    arguments: Arguments(["python3", "-c", pythonProgram] + extraArguments),
+                    platformOptions: options,
+                    input: .none,
+                    output: .fileDescriptor(
+                        FileDescriptor(rawValue: handshake.writeEnd), closeAfterSpawningProcess: true),
+                    error: .discarded
+                ) { execution in
+                    let port = readPort(from: handshake.readEnd, deadline: Date().addingTimeInterval(10))
+                    handshake.closeReadEnd()
+                    portSink.yield(port)
+                    portSink.finish()
+                    if port != nil { await stopSignal.wait() }
+                    // Always ends in SIGKILL: a server parked in a blocking
+                    // socket call may not act on SIGTERM.
+                    await execution.teardown(using: [])
+                }
+            } catch {
+                // The child never started (python3 missing, spawn refused).
+                handshake.closeReadEnd()
+            }
+            portSink.finish()
         }
-        process.standardOutput = stdout
-        process.standardError = FileHandle.nullDevice
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", pythonProgram] + extraArguments
-        if let currentDirectory { process.currentDirectoryURL = currentDirectory }
 
-        try process.run()
-
-        guard
-            let port = Self.readPort(
-                from: stdout.fileHandleForReading,
-                deadline: Date().addingTimeInterval(10))
-        else {
-            // SIGKILL, not terminate(): a child wedged before its first
-            // print may equally ignore SIGTERM, and the caller is about to
-            // abandon it.
-            kill(process.processIdentifier, SIGKILL)
+        var reported: Int?
+        for await port in ports { reported = port }
+        guard let port = reported else {
+            stopSignal.fire()
             throw IssueRecorded("python3 is unavailable or never reported a port for the local test HTTP server")
         }
-
-        self.process = process
-        self.stdout = stdout
-        self.port = port
+        return LocalHTTPTestServer(port: port, stopSignal: stopSignal)
     }
 
     /// Reads the child's first stdout line and parses it as a port.
@@ -91,14 +108,9 @@ final class LocalHTTPTestServer: @unchecked Sendable {
     /// newline isn't misread as a failure; a zero-byte read is EOF (the
     /// interpreter exited without printing — e.g. python3 missing).
     ///
-    /// Poll-based rather than `availableData`: a blocking `availableData`
-    /// only re-checks the deadline *between* chunks, so a child that never
-    /// prints — or a leaked write-end duplicate that keeps EOF from ever
-    /// arriving after the child dies — parked the calling cooperative-pool
-    /// thread indefinitely (one of the #1233 wedge ingredients). `poll(2)`
-    /// with a 100 ms tick keeps the deadline real.
-    private static func readPort(from handle: FileHandle, deadline: Date) -> Int? {
-        let descriptor = handle.fileDescriptor
+    /// Poll-based rather than a blocking read, so the deadline is real even
+    /// if the child never prints (one of the #1233 wedge ingredients).
+    private static func readPort(from descriptor: Int32, deadline: Date) -> Int? {
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
         while Date() < deadline {
@@ -123,23 +135,14 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         return nil
     }
 
+    /// Stops the server. Never blocks: the running body tears the child down
+    /// with SIGKILL and Subprocess reaps it.
     func stop() {
         WedgeWatchdog.noteActivity()
-        if process.isRunning {
-            // SIGKILL, not SIGTERM. The server can be parked in a blocking
-            // socket syscall while the daemon's HTTP connection is still open,
-            // and there a SIGTERM does not reliably tear `socketserver` down —
-            // so `waitUntilExit()` would then block forever. (The three
-            // per-server copies this unifies each kept a SIGKILL fallback for
-            // exactly this; dropping it is what hung WorkerDaemonTests.)
-            // SIGKILL can't be caught or ignored, so the process dies and
-            // `waitUntilExit()` reaps it promptly.
-            kill(process.processIdentifier, SIGKILL)
-            process.waitUntilExit()
-        }
-        stdout.fileHandleForReading.closeFile()
+        stopSignal.fire()
     }
 
+    // MARK: - Factories
     // MARK: - Factories
 
     // Each factory launches its python3 child while holding a subprocess
@@ -151,7 +154,7 @@ final class LocalHTTPTestServer: @unchecked Sendable {
     /// download source).
     static func staticFiles(directory: URL) async throws -> LocalHTTPTestServer {
         try await withSubprocessSlot {
-            try LocalHTTPTestServer(
+            try await launch(
                 pythonProgram: #"""
                     import http.server
                     import socketserver
@@ -180,7 +183,7 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         failuresBeforeSuccess: Int, responseBody: String = "payload"
     ) async throws -> LocalHTTPTestServer {
         try await withSubprocessSlot {
-            try LocalHTTPTestServer(
+            try await launch(
                 pythonProgram: #"""
                     import http.server
                     import socketserver
@@ -236,7 +239,7 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         markerDirectory: URL
     ) async throws -> LocalHTTPTestServer {
         try await withSubprocessSlot {
-            try LocalHTTPTestServer(
+            try await launch(
                 pythonProgram: #"""
                     import http.server
                     import os
@@ -284,7 +287,7 @@ final class LocalHTTPTestServer: @unchecked Sendable {
     /// download-failure path.
     static func alwaysNotFound() async throws -> LocalHTTPTestServer {
         try await withSubprocessSlot {
-            try LocalHTTPTestServer(
+            try await launch(
                 pythonProgram: #"""
                     import http.server
                     import socketserver
@@ -303,6 +306,68 @@ final class LocalHTTPTestServer: @unchecked Sendable {
                         httpd.serve_forever()
                     """#,
                 extraArguments: [])
+        }
+    }
+}
+
+/// The close-on-exec pipe that carries the port handshake. Subprocess closes
+/// the parent's copy of the write end once the child holds its own; the read
+/// end is ours, closed once after the handshake or on a failed launch.
+private final class HandshakePipe: Sendable {
+    let readEnd: Int32
+    let writeEnd: Int32
+    private let readEndOpen = Mutex(true)
+
+    init() {
+        var descriptors: (Int32, Int32) = (-1, -1)
+        _ = withUnsafeMutablePointer(to: &descriptors) { pointer in
+            pointer.withMemoryRebound(to: Int32.self, capacity: 2) { pipe($0) }
+        }
+        for descriptor in [descriptors.0, descriptors.1] {
+            let flags = fcntl(descriptor, F_GETFD)
+            if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
+        }
+        readEnd = descriptors.0
+        writeEnd = descriptors.1
+    }
+
+    func closeReadEnd() {
+        let shouldClose = readEndOpen.withLock { open -> Bool in
+            defer { open = false }
+            return open
+        }
+        if shouldClose { close(readEnd) }
+    }
+}
+
+/// A one-shot signal: `wait()` returns once `fire()` has been called, whether
+/// before or after the wait began.
+private final class StopSignal: Sendable {
+    private enum State {
+        case idle
+        case waiting(CheckedContinuation<Void, Never>)
+        case fired
+    }
+
+    private let state = Mutex(State.idle)
+
+    func fire() {
+        let waiter = state.withLock { current -> CheckedContinuation<Void, Never>? in
+            defer { current = .fired }
+            if case .waiting(let continuation) = current { return continuation }
+            return nil
+        }
+        waiter?.resume()
+    }
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let firedAlready = state.withLock { current -> Bool in
+                if case .fired = current { return true }
+                current = .waiting(continuation)
+                return false
+            }
+            if firedAlready { continuation.resume() }
         }
     }
 }

@@ -49,7 +49,7 @@ jobs:
       # they do for the sweep -- on the toolchain-only image the
       # interpreter-dependent tests SKIP and the probe would measure a
       # different suite than the one the baseline runs.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-noble
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -78,7 +78,7 @@ jobs:
           {
             echo "### Mutation baseline probe: unskipped suite x $iterations"
             echo ""
-            echo '`swift test --skip APITests --skip ZipProcessEnvironmentTests -Xswiftc -no-warnings-as-errors`'
+            echo '`swift test --skip APITests --skip ZipProcessEnvironmentTests --toolset Tools/mutation/warnings-not-errors.json`'
             echo ""
             echo "Runner cores: $(nproc)"
             echo ""
@@ -89,11 +89,11 @@ jobs:
             start=$(date +%s)
             if [ "$i" -eq 1 ]; then
               swift test --skip APITests --skip ZipProcessEnvironmentTests \
-                -Xswiftc -no-warnings-as-errors \
+                --toolset Tools/mutation/warnings-not-errors.json \
                 > "/tmp/probe-logs/iteration-$i.log" 2>&1
             else
               swift test --skip-build --skip APITests --skip ZipProcessEnvironmentTests \
-                -Xswiftc -no-warnings-as-errors \
+                --toolset Tools/mutation/warnings-not-errors.json \
                 > "/tmp/probe-logs/iteration-$i.log" 2>&1
             fi && result=pass || result=FAIL
             took=$(( $(date +%s) - start ))

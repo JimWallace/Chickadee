@@ -4,7 +4,7 @@
 # Ubuntu mirror flaked.  Built and pushed by mirror-images.yml (weekly, on
 # demand, and on PRs that touch this file or that workflow), immediately
 # after the base mirror refreshes, so the toolchain inside always matches
-# ghcr.io/<owner>/chickadee/swift:6.4-noble.
+# ghcr.io/<owner>/chickadee/swift:6.4-resolute.
 #
 # BASE_IMAGE defaults to the GHCR mirror, not docker.io, so building never
 # hits Docker Hub rate limits (the reason the mirror exists — see
@@ -13,13 +13,14 @@
 # Toolchain identity is unchanged — `swift --version` is byte-identical to
 # the base image, so the `.build` cache keys shared with jobs still on the
 # plain mirror keep matching.
-ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.4-noble
+ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.4-resolute
 FROM ${BASE_IMAGE}
 
 # file      — SubmissionNormalizer MIME detection (worker-tests, nightly)
 # python3   — LocalHTTPTestServer + notebook probes (WorkerTests) and
 #             generated pattern-family scripts, `#!/usr/bin/env python3`
-#             (APITests, nightly); noble, unlike jammy, does not bundle it
+#             (APITests, nightly); resolute, like noble and unlike jammy,
+#             does not bundle it
 # zip/unzip — test-setup and course-bundle fixtures (APITests, nightly)
 # make      — the runner's pre-test build step (RunnerDaemon spawns
 #             /usr/bin/make); WorkerDaemonTests' hung-make timeout test
@@ -56,17 +57,18 @@ RUN apt-get update -qq \
 
 # Node from nodejs.org, NOT from apt.
 #
-# Ubuntu noble ships Node 18.19.1, and Playwright dropped Node 18 at 1.63:
-# `npx playwright install` exits 1 with "Playwright requires Node.js 20 or
-# higher" before a single probe runs. Every probe job that runs INSIDE this
+# Resolute ships Node 22.22, so apt could now satisfy Playwright, which needs
+# 20 or higher since 1.63. That was not true on noble, which shipped 18.19.1:
+# `npx playwright install` exited 1 with "Playwright requires Node.js 20 or
+# higher" before a single probe ran. Every probe job that runs INSIDE this
 # container broke on the 1.63 bump while the host-based smoke jobs stayed green,
 # because those run on ubuntu-latest — which is exactly the shape that makes
 # this look like a code failure rather than an image one.
 #
-# Pinning the official tarball rather than adding the NodeSource apt repo keeps
-# the version explicit here (apt would float it, which is how we got 18 without
-# choosing it) and avoids a second third-party apt source on the least reliable
-# step in the build.
+# The tarball stays even though apt would now work. Pinning the official
+# tarball keeps the version explicit here — apt would float it, which is how we
+# got 18 without choosing it — and avoids a second third-party apt source on
+# the least reliable step in the build.
 ARG NODE_VERSION=24.21.0
 RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
         -o /tmp/node.tar.gz \

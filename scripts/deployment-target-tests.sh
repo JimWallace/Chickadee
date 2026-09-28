@@ -126,5 +126,33 @@ check "stop list is empty when nothing is up" \
     "$(chickadee_running_server_names "" "exited" "exited")"
 
 # ---------------------------------------------------------------------------
+# chickadee_legacy_server_to_retire — the compose server left behind by blue-green
+# ---------------------------------------------------------------------------
+
+# A later cutover: blue was live, so blue is the rollback target, and the legacy
+# container is a second server that nothing routes to.
+check "a colour-to-colour cutover retires the legacy server" \
+    "abc123" \
+    "$(chickadee_legacy_server_to_retire "abc123" "8081")"
+
+check "a cutover from green retires it too" \
+    "abc123" \
+    "$(chickadee_legacy_server_to_retire "abc123" "8082")"
+
+# The first cutover: traffic leaves :8080, so the legacy server IS the rollback
+# target and must keep running.
+check "the first cutover keeps the legacy server for rollback" \
+    "" \
+    "$(chickadee_legacy_server_to_retire "abc123" "8080")"
+
+check "an unknown previous port keeps it" \
+    "" \
+    "$(chickadee_legacy_server_to_retire "abc123" "")"
+
+check "nothing to retire when no legacy server runs" \
+    "" \
+    "$(chickadee_legacy_server_to_retire "" "8081")"
+
+# ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]

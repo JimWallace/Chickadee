@@ -56,7 +56,9 @@ struct BrowserRunnerRoutes: RouteCollection {
         // gated student and bypasses for staff. It returns nil only when no
         // assignment owns the setup — then there is no hidden assignment to
         // protect, so fall back to the plain enrollment check.
-        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+        if try await requireOpenStudentAssignment(
+            for: setupID, user: caller, gate: .access, on: req) == nil
+        {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
@@ -108,7 +110,9 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         // Effective-open gate (see downloadTestSetup): the manifest carries the
         // full testSuites list, so the same hidden-assignment leak applies.
-        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+        if try await requireOpenStudentAssignment(
+            for: setupID, user: caller, gate: .access, on: req) == nil
+        {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
@@ -160,7 +164,9 @@ struct BrowserRunnerRoutes: RouteCollection {
         // returns nil only when no assignment owns the setup, in which case there
         // is nothing personalized to resolve — fall back to the enrollment check
         // and return the empty seed (mirroring the worker leaving it unset).
-        guard let assignment = try await requireOpenStudentAssignment(for: setupID, user: caller, on: req)
+        guard
+            let assignment = try await requireOpenStudentAssignment(
+                for: setupID, user: caller, gate: .access, on: req)
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
             return BrowserRunnerSeedResponse(

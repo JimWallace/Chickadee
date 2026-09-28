@@ -1,4 +1,4 @@
-// Shared background refresh for a server-rendered table (UI audit S3).
+// Shared background refresh for a server-rendered table or region (UI audit S3).
 //
 //   <table class="results-table sortable-table" id="…"
 //          data-poll-url="/instructor/students-data?fragment=rows"
@@ -11,6 +11,10 @@
 // markup (role <select>s, CSRF fields, icon SVGs, a whole register-student
 // popover) in a second place that could drift from the template silently, and
 // did.
+//
+// An element carrying `data-poll-swap="region"` swaps its own contents
+// instead — see `swapTargetFor` for why one page needs that — and
+// `data-poll-until` stops a poll for good once that instant has passed.
 //
 // After a swap the shared row behaviours are re-applied in a fixed order —
 // relative times, then sort, then filter — because each depends on the last:
@@ -61,10 +65,49 @@
     // with identical input. On an idle dashboard that is every poll.
     var etags = new WeakMap();
 
+    // What a refresh replaces: a table's rows by default, or — with
+    // `data-poll-swap="region"` — the element's own contents.
+    //
+    // A REGION SWAP EXISTS BECAUSE ONE PAGE'S ROWS DO NOT MOVE ALONE. On a
+    // class activity's leaderboard the champion banner, the tournament's
+    // status and winner, and the union's count all change with the table
+    // beside them, so a rows-only swap would show fresh ranks under a stale
+    // champion — and the bracket's per-round tables are generated in a loop,
+    // so there is no one table to address. The poll itself is the same — the
+    // suppression rules, the background-refresh header, the conditional
+    // request — which is why this is a branch here rather than a second
+    // poller somewhere else.
+    //
+    // WHAT A REGION DOES NOT GET, stated rather than assumed. A rows swap
+    // keeps the <thead> and the listeners bound to it; a region swap destroys
+    // the whole table. `ChickadeeSortableTable.apply` re-sorts a table it
+    // already enhanced, but `enhance()` binds the `.sort-header` clicks ONCE
+    // at init, so a sortable table inside a polled region loses its sorting
+    // silently on the first repaint. `filterInputFor` keys on the polled
+    // element's id, so a filter box pointed at a table inside the region is
+    // not found and its empty state is not re-marked. Neither bites today —
+    // the one polled region holds plain `.results-table`s with no filter —
+    // and both are why a sortable or filterable table wants its own
+    // `data-poll-url` rather than a region around it.
+    //
+    // The one way to get this wrong quietly: a non-table element that omits
+    // `data-poll-swap="region"` looks for a `<tbody>`, finds none, and every
+    // poll returns early — an interval that runs forever and refreshes
+    // nothing, with no error anywhere.
+    //
+    // Declared by the markup rather than sniffed from `tagName`, so the call
+    // site says which mode it is in and reading either one does not mean
+    // knowing what element it landed on.
+    function swapTargetFor(element) {
+        return element.getAttribute('data-poll-swap') === 'region'
+            ? element
+            : element.querySelector('tbody');
+    }
+
     function refresh(table) {
         var url = table.getAttribute('data-poll-url');
-        var tbody = table.querySelector('tbody');
-        if (!url || !tbody) return Promise.resolve(false);
+        var target = swapTargetFor(table);
+        if (!url || !target) return Promise.resolve(false);
 
         var headers = { 'Accept': 'text/html', 'X-Background-Refresh': '1' };
         var known = etags.get(table);
@@ -91,9 +134,9 @@
             return res.text();
         }).then(function (html) {
             if (html === null || html === undefined) return false;
-            tbody.innerHTML = html;
+            target.innerHTML = html;
             if (global.ChickadeeRelativeTime) {
-                global.ChickadeeRelativeTime.applyRelativeTimes(tbody);
+                global.ChickadeeRelativeTime.applyRelativeTimes(target);
             }
             if (global.ChickadeeSortableTable) {
                 global.ChickadeeSortableTable.apply(table);
@@ -110,19 +153,44 @@
         });
     }
 
-    function start(table) {
-        var interval = parseInt(table.getAttribute('data-poll-interval'), 10) || DEFAULT_INTERVAL_MS;
-        setInterval(function () {
-            if (shouldSkip(table)) return;
-            refresh(table);
+    // An optional deadline on a poll: once `data-poll-until` is past, the
+    // element stops refreshing for good. A class activity's leaderboard is
+    // the case it exists for — projected during a session and left open long
+    // after it ends, where "poll every five seconds forever" is a tab quietly
+    // costing a request a second all evening.
+    function isFinished(element) {
+        var until = element.getAttribute('data-poll-until');
+        if (!until) return false;
+        var deadline = new Date(until).getTime();
+        return !Number.isNaN(deadline) && Date.now() >= deadline;
+    }
+
+    function start(element) {
+        var interval = parseInt(element.getAttribute('data-poll-interval'), 10) || DEFAULT_INTERVAL_MS;
+        var timer = setInterval(function () {
+            if (isFinished(element)) {
+                clearInterval(timer);
+                // One last refresh so the final state is what stays on
+                // screen: the poll that would have caught it is the one just
+                // cancelled.
+                refresh(element);
+                return;
+            }
+            if (shouldSkip(element)) return;
+            refresh(element);
         }, interval);
     }
 
     function init() {
-        document.querySelectorAll('table[data-poll-url]').forEach(start);
+        document.querySelectorAll('[data-poll-url]').forEach(start);
     }
 
-    global.ChickadeeTablePoll = { refresh: refresh, shouldSkip: shouldSkip };
+    // `isFinished` is exported for the same reason `shouldSkip` is: it is a
+    // decision about whether to poll at all, and the cost of this file was
+    // always the polls it made rather than the fetches it ran.
+    global.ChickadeeTablePoll = {
+        refresh: refresh, shouldSkip: shouldSkip, isFinished: isFinished
+    };
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {

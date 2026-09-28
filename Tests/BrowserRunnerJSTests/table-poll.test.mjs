@@ -230,3 +230,110 @@ test('a 500 does not poison the stored ETag', async () => {
   await h.TablePoll.refresh(table);
   assert.equal(h.calls[2].opts.headers['If-None-Match'], 'W/"abc"');
 });
+
+// A polled element that declares `data-poll-swap="region"` replaces its OWN
+// contents rather than a <tbody>. The leaderboard needs it because its
+// champion banner, tournament status and union count all move with the table
+// beside them, so a rows-only swap would show fresh ranks under a stale
+// champion — and its bracket's per-round tables are generated in a loop, so
+// there is no one table to address.
+function makeRegion({ url = '/leaderboard?fragment=body' } = {}) {
+  const region = {
+    id: 'activity-results',
+    attrs: {
+      'data-poll-url': url,
+      'data-poll-interval': '5000',
+      'data-poll-swap': 'region',
+    },
+    writes: 0,
+    events: [],
+    getAttribute(n) { return this.attrs[n] ?? null; },
+    querySelector(sel) { return sel === 'details[open]' ? null : null; },
+    contains: () => false,
+    dispatchEvent(e) { this.events.push(e.type); return true; },
+  };
+  Object.defineProperty(region, 'innerHTML', {
+    get() { return this._html || ''; },
+    set(v) { this.writes += 1; this._html = v; },
+  });
+  return region;
+}
+
+test('a region swap replaces the element itself, not a tbody', async () => {
+  const region = makeRegion();
+  const h = load({
+    table: region,
+    responses: [{ status: 200, body: '<p>fresh banner</p><table></table>' }],
+  });
+
+  const changed = await h.TablePoll.refresh(region);
+  assert.equal(changed, true);
+  assert.equal(region.innerHTML, '<p>fresh banner</p><table></table>');
+  assert.equal(region.writes, 1);
+});
+
+test('a region swap still re-applies the shared row behaviours', async () => {
+  const region = makeRegion();
+  const h = load({
+    table: region,
+    responses: [{ status: 200, body: '<p>rows</p>' }],
+  });
+
+  await h.TablePoll.refresh(region);
+  // Relative times first: the region carries the session countdown, and a
+  // swap that did not re-apply them would freeze it at the moment of the
+  // swap — which is exactly backwards for a live session.
+  assert.deepEqual(h.applied, ['relative-time', 'sort', 'filter']);
+  assert.deepEqual(region.events, ['chickadee:table-repaint']);
+});
+
+test('a region swap is still a conditional background refresh', async () => {
+  const region = makeRegion();
+  const h = load({
+    table: region,
+    responses: [
+      { status: 200, body: '<p>a</p>', etag: 'W/"one"' },
+      { status: 304 },
+    ],
+  });
+
+  await h.TablePoll.refresh(region);
+  const changed = await h.TablePoll.refresh(region);
+  assert.equal(changed, false, '304 means the region is already correct');
+  assert.equal(h.calls[1].opts.headers['If-None-Match'], 'W/"one"');
+  assert.equal(h.calls[0].opts.headers['X-Background-Refresh'], '1');
+  assert.equal(region.writes, 1, 'an unchanged region is not rewritten');
+});
+
+// `data-poll-until` is what keeps a projected leaderboard from polling all
+// evening after its session ended. It is a decision about whether to poll at
+// all, so it is pinned here beside `shouldSkip` rather than left to the one
+// page that sets it.
+test('a poll with no data-poll-until never finishes', () => {
+  const region = makeRegion();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});
+
+test('a poll finishes once its deadline is past', () => {
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = new Date(Date.now() - 1000).toISOString();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), true);
+});
+
+test('a poll with a deadline ahead of it keeps going', () => {
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = new Date(Date.now() + 60_000).toISOString();
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});
+
+test('an unreadable deadline does not stop the poll', () => {
+  // The same direction the server takes on an unreadable window bound: a value
+  // nobody can read must not silently switch a live session's page off.
+  const region = makeRegion();
+  region.attrs['data-poll-until'] = 'half past four';
+  const h = load({ table: region, responses: [{ status: 304 }] });
+  assert.equal(h.TablePoll.isFinished(region), false);
+});

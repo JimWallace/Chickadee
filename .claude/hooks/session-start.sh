@@ -14,7 +14,10 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
     exit 0
 fi
 
-SWIFT_VERSION="6.3"
+# The full patch version: swift.org publishes 6.4 as `swift-6.4.0-RELEASE`
+# (under `swift-6.4.0-release/`), while 6.3 was published without the patch
+# component. A two-part pin 404s.
+SWIFT_VERSION="6.4.0"
 SWIFT_PLATFORM="ubuntu24.04"
 SWIFT_RELEASE="swift-${SWIFT_VERSION}-RELEASE"
 SWIFT_DIR="${HOME}/swift/${SWIFT_RELEASE}-${SWIFT_PLATFORM}"

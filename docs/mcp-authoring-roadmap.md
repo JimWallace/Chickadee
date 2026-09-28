@@ -58,6 +58,7 @@ The catalog:
 | `set_dataset` | `content:write` | Mark a support file as a per-student dataset (per-seed row sample under the same filename) or clear the mark; no regrade/close |
 | `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |
 | `set_activity` | `content:write` | Make the assignment a class activity (a leaderboard kind ranked on the footer's `metric`), change its leaderboard visibility, or clear it; the kind is locked once a student has submitted; no regrade/close |
+| `run_tournament` | `content:write` | Start a single-elimination or Swiss tournament on a tournament-kind activity: snapshots every student's latest complete submission as the entrants and enqueues the first round's match jobs; rounds advance as results land; a run in progress is superseded; never a grade of record |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |

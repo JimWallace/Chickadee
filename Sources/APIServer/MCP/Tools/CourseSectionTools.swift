@@ -287,6 +287,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
                     currentManifestSubmissionMode(setup.manifest)
                         == SubmissionMode.uploadOnly.rawValue
                         || !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
+                        || currentManifestActivityStagesAnOpponent(setup.manifest)
                 {
                     gradingMode = currentManifestGradingMode(setup.manifest)
                 } else {

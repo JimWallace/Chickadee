@@ -386,3 +386,91 @@ struct AdminRetentionContext: Encodable {
     let flashSuccess: String?
     let flashError: String?
 }
+
+// MARK: - LTI (docs/lti-1-3.md slice 1b)
+
+struct AdminLTIContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    /// False when `PUBLIC_BASE_URL` is unset: the tool URLs are paths only.
+    let baseURLConfigured: Bool
+    let loginURL: String
+    let launchURL: String
+    let jwksURL: String
+    let platforms: [AdminLTIPlatformRow]
+    /// True when a registration failed validation, so the form reopens with
+    /// what the admin typed, or when no platform exists yet, so the only way
+    /// forward is already open.
+    let newPlatformOpen: Bool
+    let newFields: LTIPlatformFieldsContext
+    let flashSuccess: String?
+    let flashError: String?
+}
+
+struct AdminLTIPlatformRow: Encodable {
+    let id: String
+    let displayName: String
+    let issuer: String
+    let clientID: String
+    let deploymentCount: Int
+    let enabled: Bool
+    /// True when an edit of this row failed validation.
+    let editOpen: Bool
+    let fields: LTIPlatformFieldsContext
+}
+
+/// The sub-context of the shared platform field set: a unique id prefix per
+/// form, so the add form and every edit form can sit on one page.
+struct LTIPlatformFieldsContext: Encodable {
+    let idPrefix: String
+    let form: LTIPlatformForm
+    /// A validation error for this form, shown inside it rather than at the
+    /// top of the page, which can be a whole table away.
+    var error: String?
+}
+
+// MARK: - GitHub (docs/github-submissions.md slice 1)
+
+struct AdminGitHubContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    /// False when `PUBLIC_BASE_URL` is unset: the manifest needs absolute URLs.
+    let baseURLConfigured: Bool
+    /// The registered App, or nil when none is registered.
+    let app: AdminGitHubAppDetails?
+    /// The manifest form, or nil when an App is registered or the form cannot
+    /// be built.
+    let creation: GitHubAppCreationContext?
+    /// The organization the admin typed, so the field keeps it.
+    let organization: String
+    /// True when an organization was typed, so its disclosure stays open.
+    let organizationOpen: Bool
+    let flashSuccess: String?
+    let flashError: String?
+}
+
+struct AdminGitHubAppDetails: Encodable {
+    let name: String
+    let slug: String
+    let appID: Int
+    let clientID: String
+    let owner: String?
+    let htmlURL: String
+
+    init(app: APIGitHubApp) {
+        name = app.name
+        slug = app.slug
+        appID = app.appID
+        clientID = app.clientID
+        owner = app.ownerLogin
+        htmlURL = app.htmlURL
+    }
+}
+
+/// The form that posts the manifest to GitHub.
+struct GitHubAppCreationContext: Encodable {
+    let actionURL: String
+    let manifestJSON: String
+    /// "your GitHub account" or "the organization <name>".
+    let ownerLabel: String
+}

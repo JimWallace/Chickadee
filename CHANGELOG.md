@@ -9,6 +9,379 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.252] - 2026-09-28
+
+### Added
+
+- **GitHub App registration (GitHub submissions, slice 1).** Admins can create Chickadee's GitHub App from Integrations → GitHub with GitHub's manifest flow. GitHub returns the App's credentials to the server directly: the identifiers go in a new `github_apps` table and the secrets in `.github-app-secrets` (mode 0600), so no environment variable is needed. Nothing uses the App yet, and no deployment should register one until the privacy review in `docs/github-submissions.md` is complete.
+
+
+## [0.5.251] - 2026-09-28
+
+### Changed
+
+- **The local-runner autostart launches through swift-subprocess.** It was the last Foundation `Process` in the repository, the launcher whose exit-detection socket leaks into concurrently started children. A new `SupervisedProcess` holds the runner, stops it with SIGTERM, then SIGINT, then SIGKILL, and appends its output to `results/local-runner.log` as before. `scripts/no-foundation-process.sh` now fails `format-lint` on any new Foundation `Process` launch.
+
+
+## [0.5.250] - 2026-09-28
+
+### Added
+
+- **LTI 1.3 roster through NRPS.** The Students tab's roster check can read the class list from the LMS through the LTI Names and Role Provisioning Services. A course uses it when it sends grades through the LTI grade service or has no Valence link. A student is flagged only when the LMS could know them. Design: `docs/lti-1-3.md`.
+
+
+## [0.5.249] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 grades through AGS.** A course linked to an LMS can send its grades through the LTI Assignment and Grade Services instead of the Valence sync. An instructor selects it on the new LMS grades page (linked from the LEARN tab); the page also lists failed pushes and has a "Sync now" action. Chickadee creates one line item per assignment and sends each student's best grade, with the same override, best-of and class-goal rules as Valence. A course uses one transport at a time, and Valence stays the default. Design: `docs/lti-1-3.md`.
+
+
+## [0.5.248] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 Deep Linking.** Course staff can add Chickadee assignments from the LMS content picker: a deep-linking launch opens a list of the linked course's assignments, and the choice goes back to the LMS as a response signed with the tool key. A student who opens a returned link lands on that assignment. Design: `docs/lti-1-3.md`.
+
+### Fixed
+
+- **`worker-tests` no longer stalls until its CI ceiling.** The test HTTP server launched its Python processes through Foundation's `Process`, whose exit signal could leak into a sibling server and leave `stop()` waiting forever on a shared thread. It now launches them through Subprocess, and `stop()` never waits. The wedge watchdog also writes its thread table to a file that the lane prints on failure or cancel. See `docs/ci-flakiness.md`, Family 6.
+- **A process launch can no longer hang before it starts on glibc 2.41 or later.** swift-subprocess creates its Linux child with a raw `clone3`, and that child reset `SIGABRT` through glibc, which blocks forever if another thread was inside `posix_spawn` at the time. This affected the worker's test run and, rarely, the server. swift-subprocess is now pinned to a fork with a one-line fix until upstream carries one.
+- **CI guard scripts no longer misread an early `grep` match as a miss.** Nine scripts piped a list into `grep -q` under `pipefail`. When `grep` stopped at an early match, the writer got SIGPIPE and the pipeline read as "not found", so a defined class could be reported as unstyled, and the Leaf, security-header and compose-variable checks could miss what they look for. They now pass the list as a here-string, as `editor-smoke.yml` already did.
+
+
+## [0.5.247] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 launch.** A registered LMS can now launch Chickadee: `/lti/login` starts the OIDC third-party login and `/lti/launch` verifies the signed launch against the platform key set and every claim rule, signs the user in, enrols them at the role the LMS sends, and opens the linked course. An instructor launching from an LMS course that is not linked yet picks the Chickadee course on a new page; a course already linked to the same LEARN org unit links itself. Account linking by username is off unless an admin trusts the platform, and a launch can never claim an admin account. Design: `docs/lti-1-3.md`.
+
+
+## [0.5.246] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 platform registration page.** Admin → Integrations → LTI shows the tool URLs an LMS administrator needs (OIDC login, redirect, key set) and lists platform registrations with register, edit, enable/disable and delete. Every change is recorded in the audit log under a new LTI category. Nothing accepts a launch yet; that comes with the next slice (`docs/lti-1-3.md`).
+
+
+## [0.5.245] - 2026-09-27
+
+### Added
+
+- **LTI 1.3 foundations (slice 1).** Chickadee can now hold LTI 1.3 platform registrations (`lti_platforms`), publishes its RS256 tool key set at `GET /lti/jwks`, and has the launch claim rules and the LTI-role to course-role mapping that the launch route will use. Nothing changes for a deployment with no enabled platform: the key set is empty and no tool key is written. Design and slice plan: `docs/lti-1-3.md`.
+
+
+## [0.5.244] - 2026-09-26
+
+### Removed
+
+- **Legacy bare result body on `POST /api/v1/worker/results`.** The server now accepts only the wrapped `WorkerExecutionReport` and refuses a bare `TestOutcomeCollection` with 422. Every runner since 0.4.x sends the wrapped form, and the deployment runner floor (`0.5.0`) keeps older runners from claiming jobs, so no live runner is affected (#1249).
+
+
+## [0.5.243] - 2026-09-26
+
+### Fixed
+
+- **Blue-green deploys retire the legacy Compose server.** `bluegreen-deploy.sh` left the Compose `server` on `:8080` running forever as a fallback. It ran its own health-alert sweep, which nothing showed, and after the `runnerMissing` rule (#1580) it paged "Runners not polling" every 30 minutes for runners the live server saw polling. The first cutover keeps it as the rollback target, and the next cutover stops it. A container stop is now checked, with `docker kill` if the stop failed, in place of `|| true`.
+- **Alerts name the process that sent them.** The Slack line ends with the sender's container hostname and version, and `details` carries `server_host`, `server_version` and `server_started_at`. `runnerMissing` also reports each quiet runner's absolute `last_seen` time and logs a failed snapshot read, which `try?` used to hide.
+
+
+## [0.5.242] - 2026-09-26
+
+### Fixed
+
+- **Round-robin match rows now arrive over HTTP.** The result decoder rebuilt a runner's report from its `collection` and `diagnostics` only and dropped `matches`, so the rows a round robin or a tests-versus-implementations job opened at claim never completed and the standings stayed empty. The wrapped report is now decoded whole; a legacy bare collection is still accepted.
+
+### Added
+
+- **Deployment-wide minimum runner version (#1249).** `RunnerVersionGate.deploymentMinimumRunnerVersion` (`0.5.0`) applies to every claim beside the per-assignment `minimumRunnerVersion`. It refuses only a parseable version below the floor and admits a version it cannot parse. Raising it in a PR is the retirement path for wire shims; see `docs/runner-capability-profiles.md`.
+
+
+## [0.5.241] - 2026-09-25
+
+### Fixed
+
+- **A copied assignment gets its support files.** Course-bundle import and
+  `clone_assignment` copied the test-setup zip but did not extract its support
+  files into the shared directory. In every copied assignment, students could
+  not open its data files in the editor, and a personalization expression that
+  calls a support module failed with a `NameError`, so the tests that read
+  those inputs failed. Both copy paths now extract the support files. A
+  one-time migration, `BackfillSharedSupportFiles`, repairs the test setups
+  that were copied before this fix, and it skips any setup that already has a
+  shared directory.
+
+
+## [0.5.240] - 2026-09-24
+
+### Changed
+
+- **The last two wide parameter lists are gone (#1253).** `createAssignmentWithUniquePublicID` takes a `NewAssignmentFields` value, and `persistNewAssignmentSetup` takes the planned paths as one value. No `function_parameter_count` lint exemption remains. Behaviour does not change.
+- **Migration consolidation, round 3 (#1252).** The two slip-day migrations, `AddCourseSlipDaySettings` and `AddEnrollmentSlipDaysAdjustment`, are folded into `CreateCourses` and `CreateCourseEnrollments`. Deployed databases already have the columns and do not run the changed migrations again. A fresh database gets the same schema.
+
+### Fixed
+
+- **Racket per-student inputs are now tested against a real `racket` (#1393).** A new `RacketNativeGradingTests` case writes `_ck_inputs.rkt` with `renderInputsFile` and reads the values back through `chickadee-inputs`. Lua, Octave and C++ already had this test.
+
+
+## [0.5.239] - 2026-09-23
+
+### Fixed
+
+- **The mutation verifier runs its suite again.** `Tools/mutation/verify-survivor.py` passed the `{repoRoot}` placeholder from `config.json` through to `swift test` unchanged, so every survivor verified as UNVERIFIABLE. It now substitutes the placeholder the same way `scripts/mutation-run.sh` does.
+- **Triage of the 2026-09-22 mutation sweep (#1574).** New tests cover the survivors that were real gaps: the `--sandbox` flag (the runner choice now comes from one function), Swiss standings tie-breaks, cache eviction order after a restart, the `make` exit code, first-pass success in round robins, trailing lines in a diff, notebook language for zip uploads, the server connection state, and the runner's structured log events. A task-local `RunnerLogCapture` lets tests read those log events. Survivors that no input can observe are recorded in `Tools/mutation/equivalent-mutants.json` with the reason for each.
+
+### Fixed
+
+- **`get_validation_result` reports the primary run when the variant batch cannot be read.**
+  In production the least-privilege `chickadee_mcp` role had no grant on
+  `validation_variants`, because the grants file was applied before that table
+  existed. The variant query then failed every call, and the log showed only
+  `PSQLError`'s generic text. The tool now returns the per-test outcomes, adds a
+  warning that names the reason, and logs the Postgres server message and
+  SQLSTATE. To get the variant batch back, apply
+  `deploy/sql/mcp-least-privilege-role.sql` again on the database host.
+
+
+## [0.5.238] - 2026-09-23
+
+### Fixed
+
+- **TLS certificate renewal works through the campus-only port 80 firewall.** The production certificate expired on 2026-09-22 because IST's Salt-managed firewall allows port 80 only from campus, so every Let's Encrypt HTTP-01 renewal timed out. New certbot hooks in `deploy/certbot-hooks/` open port 80 for the duration of a renewal attempt, close it after, and reload nginx after a successful renewal. `deploy/README.md` gives the install and test steps.
+- **The auto-deploy daemon no longer rolls back a healthy release because of the certificate.** TLS terminates at the host nginx, so a certificate failure now gets its own `certificate_invalid` state and history entry. On 2026-09-22 an expired certificate rolled back every release for 90 minutes.
+- **The auto-deploy daemon deploys the release's own image, and waits for it.** It pulls the release commit's `:sha-` image, checks its revision label, and deploys it by digest. It used to deploy `:latest`, which is published after the release and can move backwards, so every release was swapped to 2 to 5 times before its image existed, each time with a snapshot and a runner restart. A release whose image is not published yet is now `waiting_for_image`, with no swap.
+- **Failed deploys back off and reach `stuck`.** Rollbacks now count as failures, and retries of a failing version wait 5 minutes, then twice as long each time, up to one hour.
+
+
+## [0.5.237] - 2026-09-23
+
+### Added
+
+- **Health alert for one runner that stops polling.** The new `runnerMissing` rule fires when a runner with an operator-chosen ID (for example `--worker-id Sparrow`) has not checked in for `ALERT_RUNNER_OFFLINE_SECONDS`, even while other runners poll. It reads `runner_snapshots`, so it remembers a runner for seven days across server restarts and deploys. The existing `runnerOffline` rule fires only when no runner at all checks in, and it forgets a runner after an hour, so it missed a runner that was down for several days. The rule ignores the `runner-<container id>` IDs that the bundled Compose file generates, because those change on every redeploy.
+
+
+## [0.5.236] - 2026-09-23
+
+### Changed
+
+- **Runner hosts need the Docker netfilter drop-in too.** `deploy/README.md` now tells operators to install `deploy/docker-restart-after-netfilter.conf` on every runner host. Without it, a daily configuration-management restart of `netfilter-persistent` deletes Docker's iptables chains, and the runner container stays `Up` but cannot reach the server. The server-host postmortem now records that cause as well as the kernel-upgrade one.
+
+
+## [0.5.235] - 2026-09-23
+
+### Removed
+
+- **Stray coverage file.** A 9 MB `default.profraw` that a local test run wrote into the working tree was committed to `main` by accident with #1558. It is removed, and `.gitignore` now ignores `*.profraw` so the same file cannot be committed again.
+
+
+## [0.5.234] - 2026-09-22
+
+### Added
+
+- **Live-session controls for class activities.** An activity can now run to a
+  clock: a session window with an opening time, a closing time or both.
+  Submissions outside it are refused, with a message saying which side of the
+  window the student is on; course staff are never gated, so an instructor can
+  run and demonstrate the session. The window is separate from the assignment's
+  due date, so a slip day cannot extend a live contest and a contest's end
+  cannot close an assignment.
+
+  The leaderboard counts down to the next boundary and refreshes itself while
+  the session is open, stopping when it ends. Set the window on the assignment
+  edit page's Activity section or through MCP `set_activity`
+  (`opensAt` / `closesAt`, ISO-8601).
+
+  This closes slice 8, the last of the class-activities plan (#1508).
+
+
+## [0.5.233] - 2026-09-22
+
+### Fixed
+
+- **Copying a course now carries the reference solutions.** The solution is
+  stored as a `validation`-kind submission, not in the test-setup zip, and
+  neither copy path moved it: `cloneAssignment` created the clone on a new
+  setup id with `validationSubmissionID: nil`, and the course-bundle export
+  collected `student` submissions only. A copied term therefore arrived with
+  starter notebooks and test suites but no answer keys, and its assignments
+  could never be re-validated — the thing to validate against had not
+  travelled. Both paths now carry the solution, and each copied assignment is
+  linked to its own copy. A clone stays unvalidated, because carrying a
+  solution is not evidence that it passes against the suite.
+
+- **Course bundles include the reference solutions.** This changes what an
+  exported `.chickadee` file contains: it now holds the instructor's answer
+  keys as well as student work. Bundles exported by earlier builds import
+  unchanged — a submission with no recorded kind is read as student work.
+
+
+## [0.5.232] - 2026-09-22
+
+### Added
+
+- **Class coverage percent, measured by a synthetic corpus run.** A
+  contribution assignment can now carry a class goal on `classCoverage` — "the
+  class collectively reaches 80% coverage" — the number the per-item union
+  could not produce. Every contributor's slot cells are assembled into one
+  notebook owned by no student, enqueued as a `classAggregate` submission and
+  graded once; the run's own grade fraction is the coverage. The goal is graded
+  on the smaller of coverage and breadth, so one student covering everything
+  alone does not meet it.
+
+  The run is opt-in behind the goal that reads it, debounced to one in flight
+  per assignment, and claimed after every submission a human is waiting on. The
+  sweep reads the newest completed run only, so a queued re-run never blanks a
+  progress bar that freezes into a grade push.
+
+  This closes slice 8 of `docs/collaborative-class-assignments.md` and slice 7
+  of the class-activities plan (#1508).
+
+
+## [0.5.231] - 2026-09-22
+
+### Changed
+
+- **Base image: Ubuntu 24.04 (noble) to 26.04 (resolute).** The build stage,
+  both runtime stages and every CI job image move together, so CI keeps
+  exercising the same glibc the shipped image uses. Swift stays on 6.4, which
+  supports both releases.
+
+  The move carries all seven grading toolchains at once: Python 3.12 to 3.14,
+  R 4.3 to 4.5, Octave 8 to 11, Racket 8.10 to 8.18, GCC 13 to 15, the JDK 21
+  to 25, and Lua 5.4.6 to 5.4.8. Chickadee teaches no Java course now, so
+  `default-jdk` is left to follow the base image.
+
+  Two package names change with the distro. `libssl3` and `libcurl4` were
+  transitional names on noble and do not exist on resolute, so the image now
+  asks for `libssl3t64` and `libcurl4t64`. Both resolve on noble as well.
+
+  Browser and native grading move closer together. The vendored kernels run
+  R 4.5.3 and Python 3.13.1, so native R goes from two minor versions behind
+  the browser to within one patch of it, and native Octave from two majors
+  behind to one ahead.
+
+  One CI job stays on noble. SwiftLintPlugins ships a prebuilt binary linked
+  against `libxml2.so.2`, and resolute ships `libxml2-16` with
+  `libxml2.so.16` and no compatibility package, so the binary cannot start
+  there. `format-lint` reads source and does not exercise the shipped image,
+  so running it on the older base costs nothing. It moves back when SwiftLint
+  publishes a binary that starts on resolute.
+
+
+## [0.5.230] - 2026-09-22
+
+### Fixed
+
+- **Mutation sweep: restore the warning demotion the Swift 6.4 move silently
+  removed.** Half of the weekly sweep's shards had been dying twelve minutes
+  into their build, reporting zero mutant outcomes. Muter's `RemoveSideEffects`
+  operator deletes the USE of a binding and leaves the binding, the package
+  treats every warning as an error, and schemata put every mutant in one binary
+  — so one such mutant fails the build of the whole copy. `-Xswiftc
+  -no-warnings-as-errors` had answered that until Swift 6.4 made SwiftBuild the
+  default SwiftPM build system, which emits `-Xswiftc` flags *before* each
+  target's own `swiftSettings`; the argument was still accepted and still on
+  every command line, with no effect. The demotion is now a toolset
+  (`Tools/mutation/warnings-not-errors.json`), measured to win under both build
+  systems.
+- **Mutation sweep: prove the demotion before spending the build, and stop
+  misnaming the cause when a run yields nothing.** `scripts/mutation-run.sh`
+  compiles a throwaway package carrying the same setting and an unused binding,
+  using the very arguments it will hand to Muter, and refuses to go on if the
+  warning still lands as an error — five seconds against the shard's twelve
+  minutes; `--check-build-flags` runs just that check and is now a row in the
+  Swift-upgrade gauntlet. A run that produces no outcomes reports a build
+  failure as a build failure, where it used to blame the insertion patch
+  whatever had happened.
+
+
+## [0.5.229] - 2026-09-22
+
+### Changed
+
+- **Re-vendored the xeus kernel bundle.** The weekly kernel-currency check
+  found the browser Python environment behind its channel. This rebuild moves
+  `pandas` from 3.0.5 to 3.0.6, `wcwidth` from 0.8.3 to 0.8.4 and `pyparsing`
+  from 3.3.2 to 3.3.3. The Lua, R and Octave environments solve to the packages
+  they already had. No kernel moves: all four stay on xeus 6.0.5, and each
+  kernel is already at the newest version its channel offers.
+
+
+## [0.5.228] - 2026-09-22
+
+### Added
+
+- **Class activities, slice 6: tests and code.** A `testsVersusImplementations` activity kind in which every student submits both tests and code, one job runs their tests against every classmate's latest submission, and each landed match counts twice: as a kill for the student whose test found the fault, and as a fault against the classmate whose code was tested. The class page shows both halves by class handle — what each student's tests defeated, and whether each submission is holding, defeated, or not tested yet — over a count of how many submissions the class has defeated. It reuses the round robin's matrix outright, so it adds no table, no migration, no runner capability and no worker code, and it stores nothing: both halves are queries over the match rows. A kill stays with its author after the fault is fixed; a defence counts only the submission standing today. See `docs/class-activities.md`.
+
+
+## [0.5.227] - 2026-09-21
+
+### Added
+
+- **Class activities, slice 5: tournaments.** An `elimination` activity kind whose runs an instructor starts from the submissions page or MCP `run_tournament`, choosing a single-elimination bracket or a Swiss tournament. A run snapshots every student's latest complete submission (seeded in submission order), enqueues one match job per pairing as a frozen `tournamentMatch` submission that stages the paired entrant on the hill's single-opponent runner contract, and advances rounds on its own as results land; a match that fails, errors or times out advances the opponent, a bye is a win, and the last entrant standing (or the most Swiss points) holds a seeded `tournamentWinner` record. The leaderboard page shows the latest run's rounds and winner by handle; starting again supersedes a run in progress. Never a grade of record. See `docs/class-activities.md`.
+
+
+## [0.5.226] - 2026-09-21
+
+### Added
+
+- **Class activities, slice 4: round robin.** A `roundRobin` activity kind plays each submission against every classmate's latest submission (the bundled bot until one exists). The claim opens one `match_results` row per opponent and the job carries `opponents`; the runner stages each opponent in its own directory, runs the suite once per opponent, folds the runs into one collection (mean score, summed metric, pass when at least half the matches were won) and reports a per-match verdict beside it. Standings — played, won, drawn, lost, average — are rewritten from the student's latest submission at ingest and shown on the leaderboard page in place of the metric ranking, with a held `tournamentWinner` record for the leader. Two new badge signals, `standing` and `matchesWon`, let instructors author podium and streak badges. Round-robin jobs need a runner advertising the new `activity-matrix` build capability; older runners wait. See `docs/class-activities.md`.
+
+
+## [0.5.225] - 2026-09-21
+
+### Added
+
+- **Class activities, slice 3: king of the hill (#1508).** A new activity
+  kind, `kingOfTheHill` ("Beat the champion"), plays each submission against
+  whoever holds the hill: the bundled bot in `opponentFile` until a student
+  does, then that student's submission, which the native worker downloads and
+  stages in `CHICKADEE_OPPONENT_DIR` the way the challenger's own upload is
+  staged, with `.chickadee_student_module` naming the opponent's module. A
+  match the script passes (exit 0) takes the hill; a loss to the champion
+  counts a defence. `match_results` rows are opened when a job is claimed and
+  completed when its result lands, so the hill moves on what the job actually
+  played, never on the champion of the moment, and a replayed report or a
+  re-test of the champion changes nothing. `activity_champions` holds the one
+  holder per assignment; the leaderboard names them by handle with "since" and
+  the streak; `RecordDimension.champion` is a held record `set_activity` seeds
+  beside the leaderboard record. The kind is worker-only by construction, and
+  its jobs wait for a runner advertising the new `activity-opponent-submission`
+  build capability. The design note is `docs/class-activities.md`.
+
+
+## [0.5.224] - 2026-09-21
+
+### Added
+
+- **Class activities, slice 2: the opponent primitive (#1508).** A
+  `beatTheInstructor` assignment now names the bot it plays: `opponentFile` on
+  the `activity` block, chosen in the edit page's Activity section or with
+  `set_activity`, from the assignment's support files. The native worker stages
+  that file in a directory the match script reads from `CHICKADEE_OPPONENT_DIR`
+  and hands it a per-match seed in `CHICKADEE_MATCH_SEED`, derived from the
+  submission and the opponent so a re-test replays the same trials. The
+  opponent axis is a type (`ActivityOpponentSource`: `none` | `supportFile`),
+  read off the kind exhaustively; the runner learns a match's needs from the
+  structural `Job.opponent`, never from the activity enum, and every runner
+  build that can stage an opponent advertises `activity-match`, which
+  `RunnerActivityGate` requires at claim so an older build cannot grade a bot
+  match with no bot. Browser grading is refused for any activity that stages an
+  opponent, at every door that refuses grader-only files. An opponent is staged
+  only once a file is chosen, so a slice-1 activity with a hand-wired bot grades
+  exactly as before; a chosen bot missing from the setup fails the job loudly
+  with the fix named, on the instructor's validation run. `get_assignment`, `set_activity` and `get_server_info` report
+  the opponent source and file. The design note is `docs/class-activities.md`.
+
+### Fixed
+
+- **The web session hook installs the toolchain the package needs.**
+  `.claude/hooks/session-start.sh` still pinned Swift 6.3 after the 6.4 move,
+  so every Claude Code on the web session failed at `swift build` with a
+  tools-version error. It pins 6.4.0 now — the full patch version, because
+  swift.org publishes 6.4 under `swift-6.4.0-release/` and a two-part pin 404s.
+
+
 ## [0.5.223] - 2026-09-20
 
 ### Added

@@ -3,6 +3,7 @@ import Vapor
 
 enum HealthRule: String, CaseIterable, Codable, Sendable {
     case runnerOffline
+    case runnerMissing
     case runnerVersionSkew
     case queueBackedUp
     case errorRateSpike
@@ -14,6 +15,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     var humanReadable: String {
         switch self {
         case .runnerOffline: return "Runner offline"
+        case .runnerMissing: return "Named runner not polling"
         case .runnerVersionSkew: return "Runner version skew"
         case .queueBackedUp: return "Submission queue backed up"
         case .errorRateSpike: return "System-level failure rate spike"
@@ -32,6 +34,9 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         // outbound call fails, so nothing else here goes red.
         case .outboundEgressFailing: return "critical"
         case .runnerOffline: return "warning"
+        // Warning, not info: one runner down while others poll is exactly the
+        // outage nothing else reports (Sept 2026, sparrow, several days).
+        case .runnerMissing: return "warning"
         // Advisory, not an outage: a runner a release behind is already protected
         // by the #1210 minimum-runner-version gate (it queues rather than
         // mis-grades). Surfaces on the dashboard but doesn't page — see

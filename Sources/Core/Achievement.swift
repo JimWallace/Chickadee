@@ -256,6 +256,30 @@ public enum AchievementSignal: String, Codable, CaseIterable, Sendable {
     /// hunt's variants, not the "your test is well-formed" gate beside them),
     /// and no target counts every item in the suite.
     case itemsCovered
+    /// The student's rank in a round robin's standings, 1 = first
+    /// (docs/class-activities.md). Read from the standings the ingest path
+    /// materialises, so it is evaluated per student and only where the
+    /// standings are known.
+    case standing
+    /// How many matches the student's latest submission won in a round robin.
+    case matchesWon
+    /// What percent (0–100) of the reference the CLASS's combined
+    /// contributions cover — the corpus run's grade, read at the class level
+    /// (docs/collaborative-class-assignments.md).
+    ///
+    /// The second whole-class signal, and the second one the sweep alone can
+    /// evaluate. It differs from `itemsCovered` in what it counts: that one
+    /// unions the suite items the class passed BETWEEN them, one row per item,
+    /// while this one is a single number one synthetic run produced over
+    /// everybody's contributions assembled into one notebook. A bug hunt wants
+    /// the union; a "the class collectively reaches 85% coverage" goal wants
+    /// this, because no per-item row can say what fraction of a reference a
+    /// combined test corpus exercises.
+    ///
+    /// It scopes nothing: the corpus run produces one number for the
+    /// assignment, so a `.section` target would name a share of a reference
+    /// nothing measured.
+    case classCoverage
 }
 
 extension AchievementSignal {
@@ -271,10 +295,27 @@ extension AchievementSignal {
     /// derives which signals its dropdown may offer from this.
     public var readsTheWholeClass: Bool {
         switch self {
-        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass:
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon:
             return false
-        case .itemsCovered:
+        case .itemsCovered, .classCoverage:
             return true
+        }
+    }
+
+    /// True when this signal is a student's place in a round robin's
+    /// standings rather than a fact about one run. Classified STATIC, like
+    /// `grade`: the badge is instructor-authorable and evaluated on the
+    /// submission page (`earnedIndividualBadges`), which loads the standings
+    /// for a round robin and passes them in; anywhere they are not loaded
+    /// the condition is simply unmet. Any scope in the editor, with a class
+    /// goal carrying it refused by `isSweepEvaluableClassGoal` (a class
+    /// cannot "all finish first").
+    public var readsTheStandings: Bool {
+        switch self {
+        case .standing, .matchesWon: return true
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered,
+            .classCoverage:
+            return false
         }
     }
 
@@ -381,4 +422,13 @@ public enum RecordDimension: String, Codable, CaseIterable, Sendable {
     /// the other four it is NOT gated on a 100% grade: the metric is what the
     /// script chose to measure, and it is awarded on the leaderboard path.
     case highestMetric
+    /// The current holder of a king-of-the-hill activity's hill
+    /// (docs/class-activities.md). Held, not ranked: the record moves to
+    /// whoever takes the hill and stays with them until someone else does,
+    /// so it is awarded on the match path and never gated on a grade.
+    case champion
+    /// The leader of a round robin's standings (docs/class-activities.md), and
+    /// in a later slice a bracket's winner. Held like `champion`: it moves to
+    /// whoever leads after each result lands.
+    case tournamentWinner
 }

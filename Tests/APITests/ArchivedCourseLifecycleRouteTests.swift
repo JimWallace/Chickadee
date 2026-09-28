@@ -398,4 +398,50 @@ import VaporTesting
                 })
         }
     }
+
+    /// A zip-borne manifest pairing browser grading with an activity that
+    /// stages an opponent is refused at upload, beside the grader-only pair:
+    /// only the native worker builds the opponent directory.
+    @Test func uploadRejectsAnOpponentActivityWithBrowserGrading() async throws {
+        try await withApp(app) { _ in
+            let fx = try await setupInstructorWithBothCourses(activeCode: "LCOA", archivedCode: "LCOB")
+
+            let boundary = "LCOpponent"
+            let manifest =
+                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
+            var body = ByteBufferAllocator().buffer(capacity: 512)
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+            body.writeString(fx.csrf)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"manifest\"\r\n\r\n")
+            body.writeString(manifest)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"courseID\"\r\n\r\n")
+            body.writeString(fx.active.courseID.uuidString)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString(
+                "Content-Disposition: form-data; name=\"files\"; filename=\"setup.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n\r\n")
+            body.writeString("PK")
+            body.writeString("\r\n--\(boundary)--\r\n")
+
+            try await app.asyncTest(
+                .POST, "/api/v1/testsetups",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .unprocessableEntity,
+                        "opponent activity + browser manifest must be rejected, got \(res.status)")
+                    #expect(
+                        res.body.string.contains("against an opponent"),
+                        "rejection should carry the opponent conflict message, got: \(res.body.string)")
+                })
+        }
+    }
 }

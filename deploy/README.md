@@ -167,6 +167,55 @@ Reload:
 docker compose up -d
 ```
 
+#### Certificate renewal
+
+Renewal is automatic only if Let's Encrypt can reach port 80 from the internet.
+On `chickadee.uwaterloo.ca` it cannot: IST's SaltStack generates the host
+firewall (`/etc/iptables/rules.v4`, marked "DO NOT EDIT"), and that policy opens
+port 443 to the world but port 80 only to campus. Every renewal timed out from
+2026-09-17, and nothing reported it until the certificate expired on 2026-09-22.
+Do not edit `rules.v4`, because Salt overwrites it.
+
+Three certbot hooks in [`certbot-hooks/`](certbot-hooks/) solve this:
+
+| Hook | When certbot runs it | What it does |
+|---|---|---|
+| `open-port-80.sh` (pre) | Before a renewal attempt | Inserts one tagged rule that accepts port 80 |
+| `close-port-80.sh` (post) | After the attempt, success or failure | Removes the tagged rule |
+| `reload-nginx.sh` (deploy) | After a successful renewal | Reloads nginx so it serves the new certificate |
+
+Port 80 is open to the world only for the seconds that a renewal takes. The hooks
+insert and delete one rule. They never restore a whole table, which would delete
+Docker's chains (see "The host's iptables state is a deploy dependency" in
+[docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md)).
+
+Install the hooks from the repository root on the host:
+
+```bash
+sudo cp deploy/certbot-hooks/open-port-80.sh /etc/letsencrypt/renewal-hooks/pre/
+sudo cp deploy/certbot-hooks/close-port-80.sh /etc/letsencrypt/renewal-hooks/post/
+sudo cp deploy/certbot-hooks/reload-nginx.sh /etc/letsencrypt/renewal-hooks/deploy/
+sudo chmod 755 /etc/letsencrypt/renewal-hooks/pre/open-port-80.sh /etc/letsencrypt/renewal-hooks/post/close-port-80.sh /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+
+If you opened port 80 by hand, remove that rule, so that the next test proves
+the hooks and not the manual rule:
+
+```bash
+sudo iptables -D INPUT -p tcp --dport 80 -j ACCEPT
+```
+
+Test a full renewal. A dry run treats the certificate as due and runs the pre
+and post hooks, but not the deploy hook:
+
+```bash
+sudo certbot renew --dry-run
+sudo iptables -S INPUT
+```
+
+The dry run must end with "all simulated renewals succeeded", and the rule list
+must not contain `chickadee-acme`.
+
 ### 5. Updating
 
 Use the deploy script from the repo root — it backs up the SQLite database when
@@ -234,6 +283,58 @@ During an upgrade or server restart, existing runner containers should reconnect
 on their own. If the API stays unavailable longer than the bounded retry window
 for downloads or result uploads, the active job can still fail cleanly and will
 be visible in the structured runner logs.
+
+### Runner hosts: keep Docker's firewall chains
+
+A runner on a separate host needs the same Docker drop-in as the server host.
+Docker creates its iptables chains (`DOCKER`, `DOCKER-FORWARD` and others) only
+when the daemon starts. If `netfilter-persistent` restarts after that, its
+`iptables-restore` deletes those chains. Then the runner container continues to
+show `Up`, but it cannot open a connection to the server, so it does not poll
+and grades nothing. No message in the runner log tells you about the failure.
+
+This occurs on a schedule. On a host whose firewall is managed by
+configuration management (for example the IST SaltStack build, which writes
+`/etc/iptables/rules.v4` with a `DO NOT EDIT` header), the Salt run restarts
+`netfilter-persistent` each day. In September 2026 this stopped the runner on
+`sparrow` for several days.
+
+Install the drop-in on each runner host. With it, a restart of
+`netfilter-persistent` also restarts Docker, and Docker creates its chains
+again:
+
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo cp deploy/docker-restart-after-netfilter.conf /etc/systemd/system/docker.service.d/restart-after-netfilter.conf
+sudo systemctl daemon-reload
+```
+
+The runner service in the Compose file must have `restart: unless-stopped`,
+so that the container starts again after Docker restarts. Each restart stops
+the runner for approximately 10 seconds, and a job that runs at that time is
+interrupted.
+
+To make sure that the drop-in works, restart the firewall service and then
+look for the chain and for new poll lines in the runner log:
+
+```bash
+sudo systemctl restart netfilter-persistent
+sudo iptables -n -L DOCKER-FORWARD
+sudo docker compose logs --tail 5
+```
+
+If the chain is already gone, `sudo systemctl restart docker` recovers the
+host.
+
+Give each runner host a stable ID, for example `--worker-id Sparrow` or
+`RUNNER_WORKER_ID=Sparrow` in the Compose `.env`. The server health rule
+"Named runner not polling" (`runnerMissing`) then tells you when that runner
+stops polling, even while other runners continue. It uses the
+`ALERT_RUNNER_OFFLINE_SECONDS` threshold and remembers a runner for seven days.
+It ignores the default `runner-<container id>` IDs, because those change each
+time the container is created again. The postmortem for the same failure on the server host is in
+[docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
+"The host's iptables state is a deploy dependency".
 
 ### Observability and operations
 

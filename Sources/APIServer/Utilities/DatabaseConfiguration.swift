@@ -333,13 +333,12 @@ func registerMigrations(on app: Application) {
     //     "column must exist before a later migration full-queries the
     //     model" boot-order hazard class (#1077) — columns no longer
     //     arrive after their table does.
+    //   - the third round (#1252): the two slip-day migrations
+    //     (`AddCourseSlipDaySettings`, `AddEnrollmentSlipDaysAdjustment`).
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
-    // Deliberately left out of the second consolidation round (#1228 columns
-    // only days old at v0.4.669) — fold in the next consolidation round.
-    app.migrations.add(AddCourseSlipDaySettings())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -401,10 +400,6 @@ func registerMigrations(on app: Application) {
     // other uncovered hot-path filters. Index-only, runs last.
     app.migrations.add(CreateAuditFollowupIndexes())
 
-    // Per-student slip-day budget adjustment (#1228, only days old at
-    // v0.4.669) — fold in the next consolidation round.
-    app.migrations.add(AddEnrollmentSlipDaysAdjustment())
-
     // Collapse the deployment-global role to user|admin (#417 Slice G2):
     // rewrite every legacy student/instructor row to `user`. A pure data
     // rewrite — on a fresh DB it runs against zero rows. On the historical
@@ -463,6 +458,23 @@ func registerMigrations(on app: Application) {
     // New table; FK to `users`, created far above, so no ordering constraint.
     app.migrations.add(CreateLeaderboardEntries())
 
+    // King of the hill (docs/class-activities.md): match rows opened at claim
+    // and completed at ingest, plus the one champion row per assignment. New
+    // tables; FK to `users`, created far above, so no ordering constraint.
+    app.migrations.add(CreateActivityMatches())
+
+    // Round-robin standings (docs/class-activities.md): one row per
+    // (assignment, student), recomputed at ingest. New table; FK to `users`.
+    app.migrations.add(CreateActivityStandings())
+    app.migrations.add(CreateTournamentRuns())
+
+    // The synthetic class corpus run and its coverage number
+    // (docs/collaborative-class-assignments.md). New table, plus the two
+    // percent columns a coverage goal's frozen snapshot carries — those must
+    // follow `AddAchievementResultCoverage` above, which is on the same table.
+    app.migrations.add(CreateClassCoverageRuns())
+    app.migrations.add(AddAchievementResultCoveragePercent())
+
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.
     app.migrations.add(CreateSessionReaperIndex())
@@ -492,4 +504,32 @@ func registerMigrations(on app: Application) {
     // Per-assignment advisory passing threshold. Nullable column on
     // `assignments`; nil = no threshold, the pre-existing behaviour.
     app.migrations.add(AddAssignmentPassingThreshold())
+
+    // LTI 1.3 platform registrations (docs/lti-1-3.md). New table, no FKs;
+    // an empty table means LTI is off.
+    app.migrations.add(CreateLTIPlatforms())
+
+    // LTI 1.3 launch (docs/lti-1-3.md slice 2): logins in flight, subject →
+    // account links, the course binding and the per-platform username trust.
+    // All follow CreateLTIPlatforms, whose table they reference or alter.
+    app.migrations.add(CreateLTILoginStates())
+    app.migrations.add(CreateLTIIdentities())
+    app.migrations.add(AddLTILaunchColumns())
+
+    // LTI 1.3 grades through AGS (docs/lti-1-3.md slice 4): the per-course
+    // transport choice, the line-item URLs and the push queue.
+    app.migrations.add(AddLTIGradeColumns())
+    app.migrations.add(CreateLTIGradeSyncs())
+
+    // LTI 1.3 roster through NRPS (docs/lti-1-3.md slice 5).
+    app.migrations.add(AddLTIMembershipsColumn())
+
+    // The registered GitHub App (docs/github-submissions.md slice 1). New
+    // table, no FKs; an empty table means GitHub submission is off.
+    app.migrations.add(CreateGitHubApps())
+
+    // Data repair, registered LAST for the same reason as
+    // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
+    // copied setup the shared support directory the copy paths never wrote.
+    app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
 }

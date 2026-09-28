@@ -18,15 +18,16 @@
 // allocation, child fd setup and spawn, which is the race the zip path needed
 // a process-wide lock and an EFAULT retry to contain.
 //
-// Foundation `Process` survives in exactly two places across the whole
-// repository, and both are here because migrating them would delete what they
-// exist to do. If you add a third, add it to this list.
+// Foundation `Process` is gone from the whole repository, and
+// `scripts/no-foundation-process.sh` keeps it out (docs/ci-flakiness.md,
+// Family 6). The last one was the local-runner autostart, a child held for
+// the server's whole lifetime; it now runs as a `SupervisedProcess`.
 //
-//   * `Tests/WorkerTests/Support/LocalHTTPTestServer.swift` — a long-lived
-//     server held past one call, which the collected API does not model.
-//   * `Sources/APIServer/APIServerApp+Stores.swift` — the local-runner
-//     autostart, which is the same long-lived shape: the server keeps the
-//     child for its own lifetime rather than collecting a result.
+// `LocalHTTPTestServer` was on this list, for the same reason: a long-lived
+// server held past one call. That reason did not hold. A `Subprocess.run`
+// whose body waits for a stop signal models a long-lived child, and the
+// Foundation launch was what stalled `worker-tests` (Family 6): its
+// exit-signal socket leaked into sibling servers and hid their exits.
 //
 // `PipeCloseOnExecTests` was the third. Its subject was Foundation `Pipe`
 // inheritance across a real `exec`, which is a genuine reason to spawn a bare
