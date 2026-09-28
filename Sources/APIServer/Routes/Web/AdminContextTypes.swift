@@ -428,3 +428,49 @@ struct LTIPlatformFieldsContext: Encodable {
     /// top of the page, which can be a whole table away.
     var error: String?
 }
+
+// MARK: - GitHub (docs/github-submissions.md slice 1)
+
+struct AdminGitHubContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    /// False when `PUBLIC_BASE_URL` is unset: the manifest needs absolute URLs.
+    let baseURLConfigured: Bool
+    /// The registered App, or nil when none is registered.
+    let app: AdminGitHubAppDetails?
+    /// The manifest form, or nil when an App is registered or the form cannot
+    /// be built.
+    let creation: GitHubAppCreationContext?
+    /// The organization the admin typed, so the field keeps it.
+    let organization: String
+    /// True when an organization was typed, so its disclosure stays open.
+    let organizationOpen: Bool
+    let flashSuccess: String?
+    let flashError: String?
+}
+
+struct AdminGitHubAppDetails: Encodable {
+    let name: String
+    let slug: String
+    let appID: Int
+    let clientID: String
+    let owner: String?
+    let htmlURL: String
+
+    init(app: APIGitHubApp) {
+        name = app.name
+        slug = app.slug
+        appID = app.appID
+        clientID = app.clientID
+        owner = app.ownerLogin
+        htmlURL = app.htmlURL
+    }
+}
+
+/// The form that posts the manifest to GitHub.
+struct GitHubAppCreationContext: Encodable {
+    let actionURL: String
+    let manifestJSON: String
+    /// "your GitHub account" or "the organization <name>".
+    let ownerLabel: String
+}

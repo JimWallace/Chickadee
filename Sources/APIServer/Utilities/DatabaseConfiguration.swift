@@ -521,6 +521,10 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddLTIGradeColumns())
     app.migrations.add(CreateLTIGradeSyncs())
 
+    // The registered GitHub App (docs/github-submissions.md slice 1). New
+    // table, no FKs; an empty table means GitHub submission is off.
+    app.migrations.add(CreateGitHubApps())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

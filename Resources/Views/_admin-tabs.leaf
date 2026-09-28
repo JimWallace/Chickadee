@@ -32,6 +32,7 @@
 #if(activeAdminTab == "brightspace"):Integrations — LEARN#endif
 #if(activeAdminTab == "mcp"):Integrations — MCP#endif
 #if(activeAdminTab == "lti"):Integrations — LTI#endif
+#if(activeAdminTab == "github"):Integrations — GitHub#endif
 </h1>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
@@ -57,7 +58,7 @@
 
     <div class="nav-dropdown" data-nav-dropdown>
         <button type="button" class="admin-tab nav-dropdown-toggle"
-                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif#if(activeAdminTab == "lti"): data-group-current#endif>
+                aria-haspopup="true" aria-expanded="false"#if(activeAdminTab == "brightspace"): data-group-current#endif#if(activeAdminTab == "mcp"): data-group-current#endif#if(activeAdminTab == "lti"): data-group-current#endif#if(activeAdminTab == "github"): data-group-current#endif>
             <span>Integrations</span>
             <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
@@ -68,6 +69,8 @@
                role="menuitem" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
             <a class="nav-dropdown-item#if(activeAdminTab == "lti"): nav-dropdown-item-active#endif"
                role="menuitem" href="/admin/lti"#if(activeAdminTab == "lti"): aria-current="page"#endif>LTI</a>
+            <a class="nav-dropdown-item#if(activeAdminTab == "github"): nav-dropdown-item-active#endif"
+               role="menuitem" href="/admin/github"#if(activeAdminTab == "github"): aria-current="page"#endif>GitHub</a>
         </div>
     </div>
 </nav>

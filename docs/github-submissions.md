@@ -1,8 +1,9 @@
 # Submitting from GitHub
 
-**Status:** design note. Nothing is built. Slices 1 to 3 can be built before
-the privacy review (slice 0) finishes, but no deployment may turn GitHub
-submission on until it finishes. See "Privacy".
+**Status:** slice 1 is built: an admin can register the GitHub App on the
+admin GitHub page (Integrations → GitHub). Nothing uses the App yet. Slices 1 to
+3 can be built before the privacy review (slice 0) finishes, but no deployment
+may register an App until it finishes. See "Privacy".
 
 This note tells how a student can submit to Chickadee from a GitHub repository,
 and how a course can give each student a private repository made from a
@@ -99,6 +100,16 @@ Creating a GitHub App is easy. There are two ways:
 - The private key, the client secret and the webhook secret go in
   `.github-app-secrets` in the working directory, mode 0600. This is the same
   pattern as `.lti-tool-key` and `.worker-secret`.
+
+As built (slice 1): the admin page at `/admin/github` posts the manifest to
+GitHub, for the admin's own account or for an organization. The callback
+(`/admin/github/callback`) accepts only the `state` that the same session sent,
+exchanges the code once, writes `.github-app-secrets` (created with mode 0600)
+and then the row. If the row cannot be saved, the file is removed again. The
+manifest asks for read access to contents and metadata, sets no webhook, and
+already names the slice-2 callback URL and the slice-3 setup URL, so an admin
+does not have to edit the App later. *Remove registration* deletes the row and
+the file; the App itself stays on GitHub until an admin deletes it there.
 
 An environment variable was considered. These are the reasons not to use one:
 
