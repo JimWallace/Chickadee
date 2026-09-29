@@ -49,12 +49,4 @@ enum CourseTermForm {
             CourseTermOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
         }
     }
-
-    /// The term a new-course form suggests: the term that contains today.
-    /// A suggestion only; the author confirms it.
-    static func suggestion(now: Date = Date()) -> AcademicTerm? {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        return AcademicTerm.containing(now, calendar: calendar)
-    }
 }

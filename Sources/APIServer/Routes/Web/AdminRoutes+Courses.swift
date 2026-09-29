@@ -13,7 +13,6 @@ extension AdminRoutes {
 
     @Sendable
     func newCourseForm(req: Request) async throws -> View {
-        let suggestion = CourseTermForm.suggestion()
         let emptyCourse = AdminCourseRow(
             id: "",
             code: "",
@@ -27,7 +26,7 @@ extension AdminRoutes {
             brightspaceOrgUnitID: nil,
             brightspaceOrgUnitName: nil,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
-        ).withTerm(suggestion)
+        )
         return try await req.view.render(
             "admin-course",
             AdminCourseDetailContext(
@@ -37,7 +36,7 @@ extension AdminRoutes {
                 assignments: [],
                 isNew: true,
                 error: req.query[String.self, at: "error"],
-                termOptions: CourseTermForm.options(selected: suggestion?.season)
+                termOptions: CourseTermForm.options(selected: nil)
             ))
     }
 
@@ -58,7 +57,7 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/courses/new?error=course_fields_required")
         }
         // A new course declares its term (docs/course-terms.md). Nothing
-        // guesses one: the form suggests, the author confirms.
+        // guesses one, and the form starts empty.
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "/admin/courses/new?error=course_term_required")
         }

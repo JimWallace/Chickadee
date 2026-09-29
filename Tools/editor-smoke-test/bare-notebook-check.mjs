@@ -58,7 +58,7 @@ async function seed() {
   let csrf = await csrfFrom(instr, "/register");
   await ok("reg instr", instr.post("/register", { form: { username: INSTRUCTOR.username, password: INSTRUCTOR.password, _csrf: csrf }, maxRedirects: 0 }), [200, 302, 303]);
   csrf = await csrfFrom(instr, "/admin/courses/new");
-  const cr = await ok("course", instr.post("/admin/courses", { form: { code: COURSE.code, name: COURSE.name, _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }), [302, 303]);
+  const cr = await ok("course", instr.post("/admin/courses", { form: { code: COURSE.code, name: COURSE.name, termYear: "2026", termSeason: "fall", _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }), [302, 303]);
   const courseID = ((cr.headers()["location"] || "").match(/courses\/([0-9a-fA-F-]{36})/) || [])[1];
   await ok("enroll-mode", instr.post(`/courses/${courseID}/enrollment-mode`, { form: { enrollmentMode: "auto", _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }), [302, 303]);
   const zipBuf = await buildZip();

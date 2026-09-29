@@ -40,7 +40,8 @@ Two rules follow from these decisions:
    This is the same rule as the assignment-language declaration
    ([language-declaration.md](language-declaration.md)). A form can *suggest* a
    term (the next term after the source, or the term that contains today),
-   but the author confirms it.
+   but the author confirms it. (The create form does not suggest one; see
+  slice 2.)
 2. **A code alone can name more than one active course.** Every place that
    finds a course by its code must decide which offering it means. Section 5
    lists these places.
@@ -78,8 +79,10 @@ The Core type, the migration, the model accessor, and tests
 ### Slice 2: Declare the term at every door (built)
 
 - Admin **create** form: year input and term select, both required
-  (`CourseTermInput`, `CourseTermForm`). The form suggests the term that
-  contains today in Waterloo time. A missing or invalid term redirects with
+  (`CourseTermInput`, `CourseTermForm`). The form starts empty and suggests
+  nothing: that fits the rule that nothing guesses a term, and a default
+  taken from today's date would change the visual-regression baseline of
+  the page every term. A missing or invalid term redirects with
   `course_term_required`; a duplicate active code redirects with
   `code_taken`.
 - Admin **edit** form: set or change the term. This is how an admin gives an

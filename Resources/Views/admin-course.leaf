@@ -34,11 +34,12 @@
         <label class="form-label course-field-short">
             Year
             <input class="form-input course-input-short" type="number" name="termYear" min="1000" max="9999"
-                   value="#(course.termYear)" required>
+                   placeholder="e.g. 2026" required>
         </label>
         <label class="form-label course-field-short">
             Term
             <select class="form-input course-input-short" name="termSeason" required>
+                <option value="" selected disabled>Choose</option>
                 #for(option in termOptions):
                 <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
                 #endfor

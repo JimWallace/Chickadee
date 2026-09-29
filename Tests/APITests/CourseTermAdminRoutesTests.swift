@@ -114,7 +114,7 @@ import VaporTesting
         }
     }
 
-    @Test func newCourseFormOffersTheThreeTermsAndShowsTheTermError() async throws {
+    @Test func newCourseFormOffersTheThreeTermsWithNoneChosen() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             let html = try await getHTML("/admin/courses/new?error=course_term_required", cookie: cookie)
@@ -123,10 +123,11 @@ import VaporTesting
             #expect(html.contains("<option value=\"spring\""))
             #expect(html.contains("<option value=\"fall\""))
             #expect(html.contains("Enter a four-digit year and a term."))
-            // The suggestion (the term that contains today) is preselected.
-            let suggested = try #require(CourseTermForm.suggestion())
-            #expect(html.contains("value=\"\(suggested.year)\""))
-            #expect(html.contains("<option value=\"\(suggested.season.rawValue)\" selected"))
+            // Nothing is guessed: no year, and the term select starts on
+            // its placeholder. (A date-based default would also change the
+            // visual-regression baseline every term.)
+            #expect(html.contains("<option value=\"\" selected disabled>Choose</option>"))
+            #expect(!html.contains("\" selected>"))
         }
     }
 
