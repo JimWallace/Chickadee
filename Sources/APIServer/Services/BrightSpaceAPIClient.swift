@@ -563,6 +563,16 @@ extension Application {
         get { storage[BrightSpaceAPIClientKey.self] }
         set { storage[BrightSpaceAPIClientKey.self] = newValue }
     }
+
+    /// True when the deployment has a LEARN service account: the deployment-wide
+    /// identity `brightSpaceClient` is built from (`BRIGHTSPACE_USER_ID` and key).
+    /// Grades then push through it, so the per-instructor connect, take-over and
+    /// disconnect controls have nothing to do and the LEARN page hides them.
+    /// Derived from that one client rather than a separate setting, so it cannot
+    /// disagree with what the sync will actually use. The controls and their
+    /// routes stay, for a deployment with no service account or a later policy
+    /// change.
+    var brightSpaceUsesServiceAccount: Bool { brightSpaceClient != nil }
 }
 
 // MARK: - Response-body helper

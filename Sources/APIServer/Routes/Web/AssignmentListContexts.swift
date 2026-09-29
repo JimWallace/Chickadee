@@ -244,6 +244,27 @@ struct InstructorBrightspaceContext: Encodable {
     /// True when the course sends its grades through AGS, so Valence is off
     /// for it and the page says so.
     var usesLTIGrades = false
+    /// True when the deployment has a service account configured
+    /// (`Application.brightSpaceUsesServiceAccount`). Grades then always push
+    /// through it, so the per-instructor identity controls and the grades CSV
+    /// link are hidden. They are hidden, not removed: with no service account
+    /// they are the only way a course can sync at all.
+    var usesServiceAccount = false
+    /// "Connected" or "Paused" in the title bar: whether the identity this
+    /// course pushes as can reach LEARN.
+    var syncHealthy = true
+    /// Who the course pushes as ("Service account", or a designated
+    /// instructor's LEARN name) and a one-line note under it.
+    var pushesAsText = ""
+    var pushesAsNote = ""
+    /// The newest sync attempt for the course, for the facts card.
+    var lastSyncISO: String?
+    var lastSyncText = "Never"
+    /// Whether the facts card offers Change org unit: not archived, and the
+    /// service account, or the viewer's own connected account, can verify it.
+    var canBindOrgUnit = false
+    /// "3 students can't receive grades · checked Sep 3, 2:10 PM".
+    var readinessSummary = ""
 }
 
 /// Constants shared between the BrightSpace grade-sync server code and the
@@ -280,6 +301,13 @@ struct BrightspaceAssignmentRow: Encodable {
     let hasSyncActivity: Bool
     let hasPending: Bool
     let hasErrored: Bool
+    /// A real grade item is chosen (not empty, not "do not sync"): the state
+    /// dot is teal.
+    var isMapped = false
+    /// The details line: "Last synced Sep 3, 2:10 PM", the failure text when the
+    /// latest attempt errored, or "Not synced yet".
+    var syncDetailText = ""
+    var hasSyncError = false
 }
 
 /// Headline counts shown as cards atop the panel.
@@ -307,6 +335,9 @@ struct BrightspaceReadinessRow: Encodable {
     let detail: String
     let userID: String
     let unenrollURL: String
+    /// The student's own seeded avatar at the roster size.
+    var avatar: AvatarPresentation?
+    var hasAvatar = false
 }
 
 /// One bar of a server-rendered sparkline.  `heightPercent` is already

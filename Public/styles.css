@@ -1734,6 +1734,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .add-panel:target,
 .add-panel.is-open { display: block; }
 .section-items-seen { width: 8rem; }
+.section-items-combo { width: 20rem; }
+/* The action buttons that sit at the top right of a facts card. */
+.facts-actions {
+    float: right;
+    display: flex;
+    gap: .4rem;
+    margin: 1rem 1.25rem 0 0;
+}
 /* A facts panel: a .detail-grid straight inside a .card, which carries no
    padding of its own, and the optional one-line note under it. */
 .card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
@@ -2734,9 +2742,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     background: var(--gray-400);
     pointer-events: none;
 }
-.state-select select { width: 100%; padding-inline-start: 1.5rem; }
+.state-select select,
+.state-select input { width: 100%; padding-inline-start: 1.5rem; }
 .state-select[data-state="open"]::before,
 .state-select[data-state="visible"]::before,
+.state-select[data-state="mapped"]::before,
 .state-select[data-state="instructor"]::before { background: var(--kind-graded-bg); }
 .state-select[data-state="preview"]::before,
 .state-select[data-state="ta"]::before { background: var(--state-amber); }

@@ -4,20 +4,23 @@ LEARN
 #endexport
 #export("content"):
 #extend("_instructor-tabs")
+#extend("_avatar-sprite")
 
 #if(hasActiveCourse):
-<div class="toolbar toolbar--end section-gap">
-    #if(canSyncNow):
-    <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
-        #csrfFormField()
-        <button class="btn btn-primary" type="submit"
-                title="Re-queue any failed grades and push every pending grade to LEARN now">Sync now</button>
-    </form>
-    #endif
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-    #if(showLTIGradesLink):
-    <a class="btn action-btn" href="/instructor/lti-grades">LMS grades</a>
-    #endif
+<div class="page-titlebar">
+    <h2>LEARN #if(brightspaceSyncEnabled):#if(syncHealthy):<span class="tier tier-open">Connected</span>#else:<span class="tier tier-danger">Paused</span>#endif#endif</h2>
+    <div class="assignment-actions-cell">
+        #if(showLTIGradesLink):
+        <a class="btn action-btn" href="/instructor/lti-grades">LMS grades</a>
+        #endif
+        #if(canSyncNow):
+        <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
+            #csrfFormField()
+            <button class="btn btn-primary" type="submit"
+                    title="Re-queue any failed grades and push every pending grade to LEARN now">Sync now</button>
+        </form>
+        #endif
+    </div>
 </div>
 #if(usesLTIGrades):
 <div class="flash flash-neutral" role="status">Grades for this course go to the LMS through the LTI grade service, not the Valence sync.</div>
@@ -31,8 +34,58 @@ LEARN
 </section>
 #else:
 
+#if(!syncHealthy):
+<div class="form-error" role="status">
+    Grade sync is paused: the LEARN account this course pushes as is disconnected.
+    #if(usesServiceAccount):
+    Ask a Chickadee admin.
+    #else:
+    It resumes when they reconnect, or a connected co-instructor takes over below.
+    #endif
+</div>
+#endif
 
-<!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
+<!-- ── Facts: who the course pushes as, and where ─────────────── -->
+<section class="card page-section">
+    <div class="facts-actions">
+        <button class="btn action-btn" type="button" id="bs-test-connection"
+                title="Verify this course's grade-push credentials against D2L">Test connection</button>
+        #if(canBindOrgUnit):
+        <details class="ext-details row-menu">
+            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for the LEARN connection">
+                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+            </summary>
+            <div class="popover-panel row-menu-panel" role="menu">
+                <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-link-form">
+                    #csrfFormField()
+                    <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
+                    <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
+                           name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
+                           placeholder="e.g. 1106038">
+                    <button class="row-menu-item" type="submit" role="menuitem"
+                            title="Bind this course to its LEARN org unit (blank to clear)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>Change org unit
+                    </button>
+                </form>
+            </div>
+        </details>
+        #endif
+    </div>
+    <dl class="detail-grid">
+        <dt>Pushes as</dt>
+        <dd><strong>#(pushesAsText)</strong>#if(pushesAsNote != ""): <span class="card-meta">#(pushesAsNote)</span>#endif</dd>
+        <dt>Org unit</dt>
+        <dd>#if(courseLinked):<strong>#(orgUnitDisplay)</strong>#else:<span class="text-muted">Not linked</span>#endif</dd>
+        <dt>Last sync</dt>
+        <dd>#if(lastSyncISO):<strong class="js-relative-time" data-iso="#(lastSyncISO)">#(lastSyncText)</strong>#else:<strong>#(lastSyncText)</strong>#endif <span class="card-meta">Automatic</span></dd>
+    </dl>
+    <div class="bs-test-result" id="bs-test-result" hidden></div>
+</section>
+
+#if(!usesServiceAccount):
+<!-- ── Per-instructor LEARN identity (#1114) ─────────────────────
+     Shown only when the deployment has no service account. With one, grades
+     always push through it and this whole block is hidden (not removed). -->
 <section class="page-section">
     <h2>Connection</h2>
     #if(account.connected):
@@ -43,16 +96,6 @@ LEARN
     #if(syncIdentity.hasName):
     <p class="bs-conn-line">This course pushes grades as <strong>#(syncIdentity.name)</strong>.</p>
     #endif
-    #if(syncIdentity.needsReconnect):
-    <div class="form-error" role="status">
-        This course's designated LEARN identity is disconnected — grade pushes are
-        paused until they reconnect, or a connected co-instructor takes over below.
-    </div>
-    #endif
-    #if(courseLinked):
-    <p class="bs-conn-line">Linked to LEARN org unit <strong>#(orgUnitDisplay)</strong>.</p>
-    #endif
-
     #if(showConnectForm):
     <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
         #csrfFormField()
@@ -69,11 +112,8 @@ LEARN
         LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
     </p>
     #endif
-
     #if(showIdentityActions):
     <div class="bs-conn-actions">
-        <button class="btn action-btn" type="button" id="bs-test-connection"
-                title="Verify this course's grade-push credentials against D2L">Test connection</button>
         #if(showUseMyIdentity):
         <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
             #csrfFormField()
@@ -86,19 +126,15 @@ LEARN
             #csrfFormField()
             <button class="btn action-btn action-danger" type="submit">Disconnect my account</button>
         </form>
+        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     </div>
-    <div class="bs-test-result" id="bs-test-result" hidden></div>
-    <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-link-form">
-        #csrfFormField()
-        <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
-        <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
-               name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
-               placeholder="e.g. 1106038">
-        <button class="btn action-btn" type="submit"
-                title="Bind this course to its LEARN org unit (blank to clear); verified with your key">Link course</button>
-    </form>
+    #else:
+    <div class="bs-conn-actions">
+        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+    </div>
     #endif
 </section>
+#endif
 
 <!-- ── Assignment → grade-item mapping ────────────────────── -->
 <section class="page-section">
@@ -116,21 +152,25 @@ LEARN
     <p class="empty">No assignments in this course yet.</p>
     #else:
     <datalist id="bs-grade-objects" data-do-not-sync-token="#(doNotSyncToken)"></datalist>
-    <div class="table-scroll"><table class="results-table">
-        <thead>
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-combo">
+            <col class="section-items-grade col-hide-phone"><col class="section-items-count">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
-                <th>Assignment</th>
-                <th>LEARN Assessment</th>
-                <th class="bs-col-synced" title="Students whose most recent grade sync reached LEARN">Synced</th>
-                <th class="bs-col-failed" title="Students whose most recent grade sync failed — these need a fix">Failed</th>
-                <th>Last sync</th>
-                <th>Actions</th>
+                <th scope="col">Type</th><th scope="col">Assignment</th><th scope="col">LEARN assessment</th>
+                <th scope="col" class="col-hide-phone">Students synced</th><th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(row in assignmentRows):
             <tr>
-                <td><strong>#(row.title)</strong></td>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
+                <td>
+                    <div class="item-title">#(row.title)</div>
+                    <div class="item-details#if(row.hasSyncError): chip-err#endif">#(row.syncDetailText)</div>
+                </td>
                 <td>
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
                           class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
@@ -138,61 +178,43 @@ LEARN
                         <input type="hidden" name="returnTo" value="brightspace">
                         <input type="hidden" name="gradeObjectID" class="js-bs-grade-id-hidden">
                         <label class="visually-hidden" for="bs-go-#(row.assignmentID)">LEARN Assessment for #(row.title)</label>
-                        <input class="form-input bs-grade-input" type="text"
-                               id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
-                               value="#(row.gradeFieldValue)" placeholder="Search assessments…"
-                               data-raw-id="#(row.gradeFieldValue)" autocomplete="off">
+                        <span class="state-select" data-state="#if(row.isMapped):mapped#else:unmapped#endif">
+                            <input class="form-input bs-grade-input" type="text"
+                                   id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
+                                   value="#(row.gradeFieldValue)" placeholder="Search assessments…"
+                                   data-raw-id="#(row.gradeFieldValue)" autocomplete="off">
+                        </span>
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
                 </td>
-                <td class="bs-col-synced">
+                <td class="item-grade col-hide-phone">
                     #if(row.hasSyncActivity):
-                    <span class="bs-count chip-ok" title="Synced to LEARN">#(row.syncedCount)</span>
+                    <div><strong title="Synced to LEARN">#(row.syncedCount)</strong> synced</div>
+                    <div class="item-details#if(row.hasErrored): chip-err#endif"><span title="Failed to push">#(row.erroredCount)</span> failed</div>
                     #else:
-                    <span class="card-meta">—</span>
+                    <span class="empty">—</span>
                     #endif
-                </td>
-                <td class="bs-col-failed">
-                    #if(row.hasSyncActivity):
-                    #if(row.hasErrored):
-                    <span class="bs-count chip-err" title="Failed to push">#(row.erroredCount)</span>
-                    #else:
-                    <span class="bs-count chip-ok">0</span>
-                    #endif
-                    #else:
-                    <span class="card-meta">—</span>
-                    #endif
-                </td>
-                <td>
-                    #if(row.lastSyncStatus == "success"):
-                    <span class="tier tier-open" title="#(row.lastSyncText)">synced</span>
-                    #elseif(row.lastSyncStatus == "error"):
-                    <span class="tier tier-closed" title="#if(row.lastSyncDetail):#(row.lastSyncDetail)#else:#(row.lastSyncText)#endif">error</span>
-                    #elseif(row.lastSyncStatus == "skipped"):
-                    <span class="tier" title="#if(row.lastSyncDetail):#(row.lastSyncDetail)#else:#(row.lastSyncText)#endif">skipped</span>
-                    #else:
-                    <span class="card-meta">—</span>
-                    #endif
-                    <div class="card-meta bs-sync-detail">#if(row.lastSyncStatus != "none"):#(row.lastSyncText)#endif</div>
                 </td>
                 <td>
                     #if(!courseIsArchived):
-                    <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
-                          class="inline-form"
-                          data-confirm="Re-push every student's best grade for #(row.title) to LEARN?">
-                        #csrfFormField()
-                        <button class="btn action-btn bs-push-btn" type="submit"
-                                title="Re-push all grades for #(row.title)"
-                                aria-label="Re-push all grades for #(row.title)">
-                            <svg class="icon" aria-hidden="true"><use href="#i-push-down"/></svg>
-                        </button>
-                    </form>
+                    <div class="assignment-actions-cell">
+                        <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
+                              class="inline-form"
+                              data-confirm="Re-push every student's best grade for #(row.title) to LEARN?">
+                            #csrfFormField()
+                            <button class="btn action-btn action-btn-icon" type="submit"
+                                    title="Re-push all grades for #(row.title)"
+                                    aria-label="Re-push all grades for #(row.title)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-push-down"/></svg>
+                            </button>
+                        </form>
+                    </div>
                     #endif
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
 
@@ -210,38 +232,54 @@ LEARN
     </div>
     #if(!courseLinked):
     <p class="section-note">
-        Link this course to its LEARN org unit (in the Connection panel above) to check
+        Link this course to its LEARN org unit (the ⋯ menu in the card above) to check
         whether each student's grade can be delivered to the LEARN gradebook.
     </p>
     #endif
     #if(courseLinked):
     #if(hasUnreachable):
-    <div class="table-scroll"><table class="results-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Issue</th><th>Actions</th></tr></thead>
+    <p class="section-note">#(readinessSummary)</p>
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Person</th><th scope="col">Student</th><th scope="col">Actions</th></tr>
+        </thead>
         <tbody>
         #for(student in unreachableStudents):
             <tr>
-                <td>#(student.displayName)</td>
-                <td><code>#(student.username)</code></td>
-                <td class="bs-issue-cell" title="#(student.detail)">Couldn't match to LEARN</td>
-                <td class="bs-roster-actions">
-                    <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
-                       title="Match this student's LEARN ID" aria-label="Match this student's LEARN ID">
-                        <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
-                    </a>
-                    <form method="post" action="#(student.unenrollURL)" class="inline-form"
-                          data-confirm="Remove #(student.displayName) from this course?">
-                        #csrfFormField()
-                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
-                                title="Remove from course" aria-label="Remove from course">
-                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                        </button>
-                    </form>
+                <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
+                <td>
+                    <div class="item-title">#(student.displayName)</div>
+                    <div class="item-details"><code>#(student.username)</code> · <span class="chip-err" title="#(student.detail)">Couldn't match to LEARN</span></div>
+                </td>
+                <td>
+                    <div class="assignment-actions-cell">
+                        <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
+                           title="Match this student's LEARN ID" aria-label="Match #(student.displayName)'s LEARN ID">
+                            <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
+                        </a>
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(student.displayName)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <form method="post" action="#(student.unenrollURL)"
+                                      data-confirm="Remove #(student.displayName) from this course?">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Remove from course
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table></div>
+    </table>
     #else:
     <p class="empty">All students can receive grades in LEARN.</p>
     #endif
@@ -250,21 +288,8 @@ LEARN
 #endif
 
 <style>
-.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
-.bs-grade-input { width: 14rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
-.bs-sync-detail { font-size: var(--text-2xs); }
-.bs-count {
-    display: inline-block; font-size: var(--text-base); font-weight: 600;
-    white-space: nowrap;
-}
-.bs-col-synced, .bs-col-failed { text-align: center; width: 5rem; }
-.bs-push-btn { padding: .25rem .5rem; line-height: 1; }
-.bs-issue-cell {
-    max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: var(--text-base); color: var(--gray-600);
-}
-.bs-roster-actions { white-space: nowrap; }
-.bs-roster-actions .inline-form { display: inline; }
+.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
+.bs-grade-input { font-size: var(--text-base); }
 .bs-conn-line { margin: 0 0 .45rem; }
 .bs-connect-form, .bs-link-form {
     display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
@@ -273,7 +298,7 @@ LEARN
 .bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
 .bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
-.bs-test-result { margin: .3rem 0; font-size: var(--text-base); }
+.bs-test-result { margin: 0; padding: 0 1.25rem 1rem; font-size: var(--text-base); }
 </style>
 <!-- Connection test + grade-item pickers are wired by
      Public/instructor-brightspace.js; the reserved do-not-sync token
