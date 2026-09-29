@@ -1,0 +1,543 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.4 (swift-6.4-RELEASE)"
+  },
+  "date": "2026-09-29",
+  "killed": 503,
+  "phantomsFiltered": 220,
+  "shardsExpected": 12,
+  "shardsReported": 12,
+  "survived": 29,
+  "survivors": [
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 197,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "isClassGoal || conditions.contains { $0.signal == .classCoverage }",
+          "offset": 9307,
+          "original": "isClassGoal && conditions.contains { $0.signal == .classCoverage }"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "isClassGoal && conditions.contains { $0.signal == .classCoverage }"
+    },
+    {
+      "file": "Sources/Core/AchievementEvaluation.swift",
+      "line": 204,
+      "mutations": [
+        {
+          "column": 65,
+          "mutated": "$0.signal != .classCoverage",
+          "offset": 9676,
+          "original": "$0.signal == .classCoverage"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let condition = conditions.first(where: { $0.signal == .classCoverage })"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 271,
+      "mutations": [
+        {
+          "column": 47,
+          "mutated": "self.opensAtISO = opensAtISO?.isEmpty != true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO",
+          "offset": 13945,
+          "original": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 271,
+      "mutations": [
+        {
+          "column": 73,
+          "mutated": "self.opensAtISO = opensAtISO?.isEmpty == true  ? opensAtISO :  nil \n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO",
+          "offset": 13971,
+          "original": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 272,
+      "mutations": [
+        {
+          "column": 49,
+          "mutated": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty != true ? nil : closesAtISO",
+          "offset": 14020,
+          "original": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 272,
+      "mutations": [
+        {
+          "column": 76,
+          "mutated": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true  ? closesAtISO :  nil",
+          "offset": 14047,
+          "original": "self.opensAtISO = opensAtISO?.isEmpty == true ? nil : opensAtISO\n        self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "self.closesAtISO = closesAtISO?.isEmpty == true ? nil : closesAtISO"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 288,
+      "mutations": [
+        {
+          "column": 88,
+          "mutated": "let formatter = ISO8601DateFormatter()\n        formatter.formatOptions =\n            fractionalSeconds ? [.withInternetDateTime] :  [.withInternetDateTime, .withFractionalSeconds] \n        return formatter",
+          "offset": 14798,
+          "original": "let formatter = ISO8601DateFormatter()\n        formatter.formatOptions =\n            fractionalSeconds\n            ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]\n        return formatter"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 319,
+      "mutations": [
+        {
+          "column": 52,
+          "mutated": "opensAtISO != nil && closesAtISO != nil",
+          "offset": 16178,
+          "original": "opensAtISO != nil || closesAtISO != nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "public var isBounded: Bool { opensAtISO != nil || closesAtISO != nil }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 319,
+      "mutations": [
+        {
+          "column": 45,
+          "mutated": "opensAtISO == nil || closesAtISO != nil",
+          "offset": 16171,
+          "original": "opensAtISO != nil || closesAtISO != nil"
+        },
+        {
+          "column": 67,
+          "mutated": "opensAtISO != nil || closesAtISO == nil",
+          "offset": 16193,
+          "original": "opensAtISO != nil || closesAtISO != nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "public var isBounded: Bool { opensAtISO != nil || closesAtISO != nil }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 319,
+      "mutations": [
+        {
+          "column": 45,
+          "mutated": "opensAtISO == nil || closesAtISO != nil",
+          "offset": 16171,
+          "original": "opensAtISO != nil || closesAtISO != nil"
+        },
+        {
+          "column": 67,
+          "mutated": "opensAtISO != nil || closesAtISO == nil",
+          "offset": 16193,
+          "original": "opensAtISO != nil || closesAtISO != nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "public var isBounded: Bool { opensAtISO != nil || closesAtISO != nil }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 28,
+          "mutated": "(opensAtISO == nil && opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16419,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 47,
+          "mutated": "(opensAtISO == nil || opensAt != nil) || (closesAtISO == nil || closesAt != nil)",
+          "offset": 16438,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 70,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil && closesAt != nil)",
+          "offset": 16461,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 28,
+          "mutated": "(opensAtISO == nil && opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16419,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 47,
+          "mutated": "(opensAtISO == nil || opensAt != nil) || (closesAtISO == nil || closesAt != nil)",
+          "offset": 16438,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 70,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil && closesAt != nil)",
+          "offset": 16461,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 28,
+          "mutated": "(opensAtISO == nil && opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16419,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 47,
+          "mutated": "(opensAtISO == nil || opensAt != nil) || (closesAtISO == nil || closesAt != nil)",
+          "offset": 16438,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 70,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil && closesAt != nil)",
+          "offset": 16461,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "(opensAtISO != nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16412,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 39,
+          "mutated": "(opensAtISO == nil || opensAt == nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16430,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 63,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO != nil || closesAt != nil)",
+          "offset": 16454,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 82,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt == nil)",
+          "offset": 16473,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "(opensAtISO != nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16412,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 39,
+          "mutated": "(opensAtISO == nil || opensAt == nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16430,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 63,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO != nil || closesAt != nil)",
+          "offset": 16454,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 82,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt == nil)",
+          "offset": 16473,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "(opensAtISO != nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16412,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 39,
+          "mutated": "(opensAtISO == nil || opensAt == nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16430,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 63,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO != nil || closesAt != nil)",
+          "offset": 16454,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 82,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt == nil)",
+          "offset": 16473,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 324,
+      "mutations": [
+        {
+          "column": 21,
+          "mutated": "(opensAtISO != nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16412,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 39,
+          "mutated": "(opensAtISO == nil || opensAt == nil) && (closesAtISO == nil || closesAt != nil)",
+          "offset": 16430,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 63,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO != nil || closesAt != nil)",
+          "offset": 16454,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        },
+        {
+          "column": 82,
+          "mutated": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt == nil)",
+          "offset": 16473,
+          "original": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "(opensAtISO == nil || opensAt != nil) && (closesAtISO == nil || closesAt != nil)"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 332,
+      "mutations": [
+        {
+          "column": 25,
+          "mutated": "guard let opensAt, let closesAt else { return true }\n        return closesAt < opensAt",
+          "offset": 16816,
+          "original": "guard let opensAt, let closesAt else { return true }\n        return closesAt > opensAt"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "return closesAt > opensAt"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 340,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "if let opensAt, now > opensAt { return .beforeOpen }\n        if let closesAt, now >= closesAt { return .afterClose }\n        return .open",
+          "offset": 17182,
+          "original": "if let opensAt, now < opensAt { return .beforeOpen }\n        if let closesAt, now >= closesAt { return .afterClose }\n        return .open"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if let opensAt, now < opensAt { return .beforeOpen }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 341,
+      "mutations": [
+        {
+          "column": 30,
+          "mutated": "if let opensAt, now < opensAt { return .beforeOpen }\n        if let closesAt, now <= closesAt { return .afterClose }\n        return .open",
+          "offset": 17244,
+          "original": "if let opensAt, now < opensAt { return .beforeOpen }\n        if let closesAt, now >= closesAt { return .afterClose }\n        return .open"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if let closesAt, now >= closesAt { return .afterClose }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 346,
+      "mutations": [
+        {
+          "column": 64,
+          "mutated": "state(at: now) != .open",
+          "offset": 17441,
+          "original": "state(at: now) == .open"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "public func accepts(at now: Date) -> Bool { state(at: now) == .open }"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 403,
+      "mutations": [
+        {
+          "column": 42,
+          "mutated": "self.kind = kind\n        self.leaderboardVisibility = leaderboardVisibility\n        self.opponentFile = opponentFile\n        // An unbounded window is no window: storing an empty block would put\n        // a field on the manifest that says nothing and make \"has a window\"\n        // two different questions at two different call sites.\n        self.window = (window?.isBounded != true) ? window : nil",
+          "offset": 20070,
+          "original": "self.kind = kind\n        self.leaderboardVisibility = leaderboardVisibility\n        self.opponentFile = opponentFile\n        // An unbounded window is no window: storing an empty block would put\n        // a field on the manifest that says nothing and make \"has a window\"\n        // two different questions at two different call sites.\n        self.window = (window?.isBounded == true) ? window : nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self.window = (window?.isBounded == true) ? window : nil"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 403,
+      "mutations": [
+        {
+          "column": 65,
+          "mutated": "self.kind = kind\n        self.leaderboardVisibility = leaderboardVisibility\n        self.opponentFile = opponentFile\n        // An unbounded window is no window: storing an empty block would put\n        // a field on the manifest that says nothing and make \"has a window\"\n        // two different questions at two different call sites.\n        self.window = (window?.isBounded == true)  ? nil :  window",
+          "offset": 20093,
+          "original": "self.kind = kind\n        self.leaderboardVisibility = leaderboardVisibility\n        self.opponentFile = opponentFile\n        // An unbounded window is no window: storing an empty block would put\n        // a field on the manifest that says nothing and make \"has a window\"\n        // two different questions at two different call sites.\n        self.window = (window?.isBounded == true) ? window : nil"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "self.window = (window?.isBounded == true) ? window : nil"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 417,
+      "mutations": [
+        {
+          "column": 38,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        kind = try c.decode(ActivityKind.self, forKey: .kind)\n        leaderboardVisibility =\n            try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden\n        opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)\n        let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)\n        window = (decoded?.isBounded != true) ? decoded : nil",
+          "offset": 20734,
+          "original": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        kind = try c.decode(ActivityKind.self, forKey: .kind)\n        leaderboardVisibility =\n            try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden\n        opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)\n        let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)\n        window = (decoded?.isBounded == true) ? decoded : nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "window = (decoded?.isBounded == true) ? decoded : nil"
+    },
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 417,
+      "mutations": [
+        {
+          "column": 62,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        kind = try c.decode(ActivityKind.self, forKey: .kind)\n        leaderboardVisibility =\n            try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden\n        opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)\n        let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)\n        window = (decoded?.isBounded == true)  ? nil :  decoded",
+          "offset": 20758,
+          "original": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        kind = try c.decode(ActivityKind.self, forKey: .kind)\n        leaderboardVisibility =\n            try c.decodeIfPresent(LeaderboardVisibility.self, forKey: .leaderboardVisibility) ?? .hidden\n        opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)\n        let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)\n        window = (decoded?.isBounded == true) ? decoded : nil"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "window = (decoded?.isBounded == true) ? decoded : nil"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 179,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "if a.points == b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7437,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.points != b.points { return a.points > b.points }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 180,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "if a.points != b.points { return a.points > b.points }\n                if a.byes == b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7506,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.byes != b.byes { return a.byes < b.byes }"
+    },
+    {
+      "file": "Sources/Worker/WorkerCommand.swift",
+      "line": 46,
+      "mutations": [
+        {
+          "column": 84,
+          "mutated": "throw ExitCode.failure",
+          "offset": 1769,
+          "original": "writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")\n            throw ExitCode.failure"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "writeToStandardError(\"Error: invalid --api-base-url '\\(apiBaseURL)'\\n\")"
+    },
+    {
+      "file": "Sources/Worker/WorkerCommand.swift",
+      "line": 83,
+      "mutations": [
+        {
+          "column": 117,
+          "mutated": "throw ExitCode.failure",
+          "offset": 3537,
+          "original": "writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")\n            throw ExitCode.failure"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "writeToStandardError(\"Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\\n\")"
+    }
+  ]
+}
