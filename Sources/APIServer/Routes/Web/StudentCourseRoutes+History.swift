@@ -105,7 +105,7 @@ extension StudentCourseRoutes {
         let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupsByID)
 
         let rowContext = StudentAssignmentRowContext(
-            courseCode: course.code,
+            courseCode: course.urlKey,
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
             collectionByResultID: collectionByResultID,
@@ -314,11 +314,11 @@ extension StudentCourseRoutes {
 
         let studentToken = try student.requireURLToken()
         let backURL = StudentCoursePaths.submissions(
-            courseCode: course.code,
+            courseCode: course.urlKey,
             urlToken: studentToken
         )
         let historyPath = StudentCoursePaths.assignmentHistory(
-            courseCode: course.code,
+            courseCode: course.urlKey,
             urlToken: studentToken,
             assignmentID: assignmentIDRaw
         )
@@ -618,7 +618,8 @@ extension StudentCourseRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Course or student")
         }
-        let course = try await findActiveCourse(byCode: courseCodeRaw, on: req.db)
+        let course = try await findActiveCourse(
+            byKey: courseCodeRaw, viewer: req.auth.get(APIUser.self)?.id, on: req.db)
         guard let course, let courseUUID = course.id else {
             throw WebAssignmentError.notFound(resource: "Course '\(courseCodeRaw)'")
         }
@@ -711,7 +712,7 @@ extension StudentCourseRoutes {
     ) throws -> Response {
         req.redirect(
             to: StudentCoursePaths.submissions(
-                courseCode: course.code,
+                courseCode: course.urlKey,
                 urlToken: try student.requireURLToken()
             )
         )

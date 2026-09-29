@@ -187,7 +187,7 @@ struct WebRoutes: RouteCollection {
             extensionDueAtBySetupID: extensionDueAtBySetupID,
             previouslyOpenedSetupIDs: previouslyOpenedSetupIDs,
             isActiveCourseStaff: isActiveCourseStaff,
-            activeCourseCode: courseState.active?.code,
+            activeCourseKey: courseState.active?.pathKey,
             hasNotebookBySetupID: hasNotebookBySetupID,
             slipDay: slipDayData
         )

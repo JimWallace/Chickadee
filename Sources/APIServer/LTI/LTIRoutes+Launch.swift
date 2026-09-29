@@ -285,7 +285,7 @@ extension LTIRoutes {
                 .filter(\.$publicID == publicID)
                 .first()
         else { return "/" }
-        return VanityURLRoutes.vanityPath(courseCode: course.code, assignmentSlug: assignment.slug)
+        return VanityURLRoutes.vanityPath(courseCode: course.urlKey, assignmentSlug: assignment.slug)
     }
 
     /// The deep-linking request, checked before anyone is signed in: the

@@ -1,6 +1,6 @@
 # Course terms and new-term cloning
 
-**Status:** Slices 1 and 2 are built. Slices 3 to 6 are planned.
+**Status:** Slices 1 to 3 are built. Slices 4 to 6 are planned.
 
 This document replaces the plan in
 [clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
@@ -110,23 +110,40 @@ The Core type, the migration, the model accessor, and tests
   then by code (`courseListPrecedes`). With no terms recorded, this is the
   old code order.
 
-### Slice 3: Uniqueness per term, and code lookups
+### Slice 3: Uniqueness per term, and code lookups (built)
 
-- A migration replaces `idx_courses_code_active` with a partial unique index
-  on `(code, COALESCE(term_year, 0), COALESCE(term_season, ''))` for active
-  courses. The `COALESCE` is necessary: SQL treats two NULLs as different, so
-  without it two legacy courses with the same code and no term would both be
-  allowed. The migration must work on SQLite and on Postgres.
-- The duplicate checks in create, edit and import use the same key.
-- Code lookups (see section 5) resolve a code to one course with this rule:
-  1. Among active courses with this code, prefer the one the viewer is
-     enrolled in.
-  2. If more than one remains, take the newest term.
-  3. An optional term qualifier selects one offering explicitly.
-- MCP tools that take `courseCode` get an optional `term` argument (for
-  example `"F26"` or `"Fall 2026"`). A **write** through an ambiguous code
-  without a term is refused with a message that lists the offerings. A read
-  uses the rule above. `list_courses` and `get_server_info` report the term.
+- Migration `ScopeCourseCodeIndexToTerm` replaces `idx_courses_code_active`
+  with `idx_courses_code_term_active`, a partial unique index on
+  `(code, COALESCE(term_year, 0), COALESCE(term_season, ''))` for active
+  courses. The `COALESCE` is necessary: SQL treats two NULLs as different,
+  so without it two courses with the same code and no term would both be
+  allowed. "No term" is therefore one term, and the old rule holds for every
+  course that has not declared one.
+- `activeCourseCodeIsTaken(_:term:excluding:on:)` applies the same rule, so
+  create, edit and import report a duplicate instead of failing on the
+  index. Edit no longer refuses a code that only an archived course uses.
+- **The URL key.** `APICourse.urlKey` is the code for a course with no term,
+  and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`, parsed
+  back by `AcademicTerm(shortLabel:)`, years 2000 to 2099). Every link
+  Chickadee writes into a `/:courseCode/...` path uses the key: the vanity
+  links (instructor list, student index, LTI launch) and the
+  `/:courseCode/students/...` family. `CourseContext.pathKey` carries it into
+  the dashboards. A course with no term keeps its old URLs.
+- **Web resolution** (`findActiveCourse(byKey:viewer:on:)`): an exact code
+  match first, so a legacy code such as "CS136-W26" still resolves; else a
+  key names code and term. With several matches, the viewer's enrolled
+  course wins, then the newest term. So an old bookmark "/CS135/lab1"
+  opens the offering the student is in.
+- **MCP resolution** (`resolveMCPCourse`): `courseCode` takes a code or a
+  key. With several matches, an active course beats an archived one, and a
+  course the acting account is enrolled in beats one it is not. If several
+  still remain, a read takes the newest term and a **write is refused** with
+  the keys to choose from. `list_courses` returns each course's `term` and
+  `key`. The course guidance resources and the initialize guidance use the
+  key, so two offerings do not share a URI.
+- The enrollment lookup that MCP resolution needs lives in `ToolContext`
+  (`subjectEnrollments(among:)`), the one MCP file allowed to query identity
+  models (`MCPStudentDataWallTests`).
 
 ### Slice 4: Clone for a new term (admin)
 

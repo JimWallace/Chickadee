@@ -37,7 +37,9 @@ enum MCPSchema {
     /// The input property the course-scoped tools declare.
     static let courseCode: JSONValue = .object([
         "type": .string("string"),
-        "description": .string("The course code, e.g. \"CS136\"."),
+        "description": .string(
+            "The course code, e.g. \"CS136\". When several offerings share the code, "
+                + "pass the course key with its term, e.g. \"CS136-F26\" (list_courses returns it)."),
     ])
 
     /// A test-tier enum property.  The student-visible tiers by default; tools

@@ -61,7 +61,7 @@ extension AdminRoutes {
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "/admin/courses/new?error=course_term_required")
         }
-        if try await activeCourseCodeIsTaken(code, excluding: nil, on: req.db) {
+        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
             return req.redirect(to: "/admin/courses/new?error=code_taken")
         }
         let course = APICourse(code: code, name: name, term: term)
@@ -388,23 +388,26 @@ extension AdminRoutes {
         let code = rawCode.isEmpty ? course.code : rawCode
         let name = rawName.isEmpty ? course.name : rawName
 
-        // Reject duplicate code (excluding this course itself).
-        let existing = try await APICourse.query(on: req.db)
-            .filter(\.$code == code)
-            .first()
-        if let existing, existing.id != courseID {
-            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
-        }
-
         // The term fields set or change the term. A post without them (an
         // older client) leaves the term as it is; a post with an invalid pair
         // changes nothing.
+        let term: AcademicTerm?
         switch CourseTermInput(year: body.termYear, season: body.termSeason) {
-        case .absent: break
-        case .term(let term): course.term = term
+        case .absent: term = course.term
+        case .term(let posted): term = posted
         case .invalid: return req.redirect(to: "/admin/courses/\(idString)?error=course_term_required")
         }
 
+        // Reject a duplicate of another active course in the same term — the
+        // rule of the unique index (docs/course-terms.md). An archived course
+        // is outside the index, so it may share a code.
+        if !course.isArchived,
+            try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: req.db)
+        {
+            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+        }
+
+        course.term = term
         course.code = code
         course.name = name
         if let client = req.application.brightSpaceClient {

@@ -548,6 +548,10 @@ func registerMigrations(on app: Application) {
     // Nullable columns on `courses`; nil = no term recorded.
     app.migrations.add(AddCourseTerm())
 
+    // Course codes unique per term (docs/course-terms.md slice 3). Index
+    // only; must follow `AddCourseTerm`, which creates the columns.
+    app.migrations.add(ScopeCourseCodeIndexToTerm())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

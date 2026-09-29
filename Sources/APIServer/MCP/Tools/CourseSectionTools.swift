@@ -610,13 +610,7 @@ func resolveCourseSectionForEdit(
 /// on it (read access).  Shared by the course-section tools, including the READ
 /// `list_course_sections` — so this must NOT carry the archived-write block.
 func resolveCourseID(code: String, tool: String, context: ToolContext) async throws -> UUID {
-    guard
-        let course = try await APICourse.query(on: context.db)
-            .filter(\.$code == code)
-            .first()
-    else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No course found with code \"\(code)\".")
-    }
+    let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: false)
     let courseID = try course.requireID()
     try await context.authorizeCourseAccess(courseID, tool: tool)
     return courseID
@@ -630,13 +624,7 @@ func resolveCourseID(code: String, tool: String, context: ToolContext) async thr
 func resolveCourseIDForWrite(
     code: String, tool: String, context: ToolContext, atLeast minimum: CourseRole = .instructor
 ) async throws -> UUID {
-    guard
-        let course = try await APICourse.query(on: context.db)
-            .filter(\.$code == code)
-            .first()
-    else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No course found with code \"\(code)\".")
-    }
+    let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: true)
     let courseID = try course.requireID()
     // Course-level structure edits (sections, assignment ordering, new
     // assignments) are instructor-level (#417), matching the web.

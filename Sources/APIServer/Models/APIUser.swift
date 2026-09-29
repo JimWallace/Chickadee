@@ -350,7 +350,7 @@ extension Request {
             CourseContext(
                 id: $0.id, code: $0.code, name: $0.name,
                 isActive: $0.id == activeCourseID, role: $0.role,
-                termLabel: $0.termLabel, termShortLabel: $0.termShortLabel)
+                termLabel: $0.termLabel, termShortLabel: $0.termShortLabel, urlKey: $0.urlKey)
         }
         let active = markedCourses.first(where: \.isActive)
         return ResolvedCourseState(active: active, all: markedCourses, activeCourseUUID: activeCourseUUID)
@@ -366,7 +366,8 @@ extension Request {
                 id: id.uuidString, code: pair.course.code, name: pair.course.name,
                 isActive: false, role: pair.role,
                 termLabel: pair.course.term?.displayName,
-                termShortLabel: pair.course.term?.shortLabel)
+                termShortLabel: pair.course.term?.shortLabel,
+                urlKey: pair.course.urlKey)
         }
     }
 }
@@ -390,6 +391,12 @@ struct CourseContext: Encodable {
     var termLabel: String?
     /// The compact term, "F26", for the tab strip.
     var termShortLabel: String?
+    /// The course's URL segment (`APICourse.urlKey`). Nil only in contexts
+    /// built without a course model; read it through `pathKey`.
+    var urlKey: String?
+
+    /// The segment to put in a `/:courseCode/...` URL.
+    var pathKey: String { urlKey ?? code }
 }
 
 /// The result of resolving which course is "active" for the current request.

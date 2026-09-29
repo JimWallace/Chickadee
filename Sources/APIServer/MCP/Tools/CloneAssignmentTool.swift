@@ -105,13 +105,8 @@ struct CloneAssignmentTool: ContentTool {
         if let code = input.targetCourseCode?.trimmingCharacters(in: .whitespacesAndNewlines),
             !code.isEmpty
         {
-            guard
-                let target = try await APICourse.query(on: context.db)
-                    .filter(\.$code == code).first()
-            else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "No course found with code \"\(code)\".")
-            }
+            let target = try await resolveMCPCourse(
+                key: code, tool: Self.name, context: context, forWrite: true)
             targetCourseID = try target.requireID()
         } else {
             targetCourseID = source.courseID

@@ -177,6 +177,14 @@ extension APICourse {
             termSeasonRaw = newValue?.season.rawValue
         }
     }
+    /// The course's segment in URLs (`/:courseCode/...`): the code alone
+    /// for a course with no term, else "CS135-F26". Two active offerings may
+    /// share a code (docs/course-terms.md), so a URL names the term to stay
+    /// unambiguous. `findActiveCourse(byKey:viewer:on:)` resolves both forms.
+    var urlKey: String {
+        guard let term else { return code }
+        return "\(code)-\(term.shortLabel)"
+    }
 }
 
 // MARK: - Slip-day policy
