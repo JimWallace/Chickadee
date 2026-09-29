@@ -586,6 +586,8 @@ struct InstructorMCPContext: Encodable {
     /// into the box so the instructor edits a real starting point rather than
     /// composing an addendum against an invisible baseline.
     let guidanceText: String
+    /// Character count of `guidanceText`, shown against `maxLength`.
+    let guidanceLength: Int
     /// True when `guidanceText` is course-authored rather than the default.
     let isCustomized: Bool
     /// `canEdit && isCustomized` — folded so the template gates the Reset

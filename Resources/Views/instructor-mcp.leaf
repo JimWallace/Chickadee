@@ -11,47 +11,54 @@ MCP
 </section>
 #else:
 
+<div class="page-titlebar">
+    <h2>Authoring voice #if(isCustomized):<span class="tier tier-open">Customized</span>#else:<span class="tier tier-closed">Default</span>#endif</h2>
+    #if(canEdit):
+    <div class="toolbar">
+        <button class="btn btn-primary" type="submit" form="mcp-guide">Save</button>
+        #if(showResetButton):
+        <details class="add-section-details popup-anchor">
+            <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for the authoring voice">
+                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+            </summary>
+            <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                <button class="row-menu-item" type="submit" form="mcp-guide" name="action" value="reset" role="menuitem">Reset to Chickadee default</button>
+            </div>
+        </details>
+        #endif
+    </div>
+    #endif
+</div>
+<p class="section-intro">What connected agents follow when they write assignment prose for #(courseCode).</p>
 
-<section class="page-section">
-    <h2>Authoring voice — #(courseCode)</h2>
-    <p class="section-intro">
-        Chickadee's MCP server lets a connected agent author assignment content on course
-        staff's behalf. The guide below is what agents receive when they author for
-        #(courseCode): it governs the register, vocabulary, and conventions of the
-        instructional prose they write. Every course starts on Chickadee's default guide.
-        Edit it to set your own — tone, notation, the textbook you refer to, the domain your
-        examples come from.
-    </p>
-    <p class="section-note">#(sourceNote)</p>
-    #if(mcpDisabled):
-    <p class="section-note">
-        The MCP server is currently disabled on this deployment, so no agents can connect.
-        Changes saved here take effect once it is enabled.
-    </p>
-    #endif
-    #if(readOnlyNote):
-    <p class="section-note">#(readOnlyNote)</p>
-    #endif
-    <form method="post" action="/instructor/mcp" class="form-stack form-stack--wide">
+<div class="editor-split">
+    <form method="post" action="/instructor/mcp" id="mcp-guide" class="form-stack">
         #csrfFormField()
         <label class="form-label">
             Guide text
             <textarea class="form-input textarea-mono" name="instructions" rows="24"
                       maxlength="#(maxLength)"#if(!canEdit): disabled#endif>#(guidanceText)</textarea>
-            <span class="field-note field-note--muted">Plain text, up to #(maxLength) characters. Saved changes
-                reach agents the next time they connect. Emptying the box restores the Chickadee
-                default.</span>
+            <span class="field-note field-note--muted">Plain text. Saved changes reach agents the next time
+                they connect. Emptying the box restores the Chickadee default.</span>
         </label>
-        #if(canEdit):
-        <div class="toolbar">
-            <button class="btn btn-primary" type="submit">Save</button>
-            #if(showResetButton):
-            <button class="btn" type="submit" name="action" value="reset">Reset to Chickadee default</button>
-            #endif
-        </div>
-        #endif
     </form>
-</section>
+    <aside class="card">
+        <dl class="detail-grid">
+            <dt>Source</dt>
+            <dd>#(sourceNote)</dd>
+            <dt>MCP server</dt>
+            <dd>#if(mcpDisabled):<span class="tier tier-closed">Disabled</span>#else:<span class="tier tier-open">Enabled</span>#endif</dd>
+            <dt>Length</dt>
+            <dd>#(guidanceLength) / #(maxLength)</dd>
+        </dl>
+        #if(mcpDisabled):
+        <p class="section-note">The MCP server is currently disabled on this deployment, so no agents can connect. Changes saved here take effect once it is enabled.</p>
+        #endif
+        #if(readOnlyNote):
+        <p class="section-note">#(readOnlyNote)</p>
+        #endif
+    </aside>
+</div>
 
 #endif
 #endexport
