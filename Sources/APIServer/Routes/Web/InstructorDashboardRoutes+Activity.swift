@@ -36,6 +36,11 @@ extension InstructorDashboardRoutes {
         let trimmedActor = filter.actor?.trimmingCharacters(in: .whitespaces) ?? ""
         let actorFilter = trimmedActor.isEmpty ? nil : trimmedActor
 
+        // The person filter is a select of course staff, "Everyone" first. A
+        // `?actor=` naming someone who is not on it (a former staff member, or
+        // "system") still gets its own option so the select shows what is applied.
+        var staffOptions: [ActivityStaffOption] = []
+
         guard let courseID = courseState.activeCourseUUID else {
             // No active course: render the empty state rather than 404ing, so
             // the tab behaves like the other instructor tabs.
@@ -44,7 +49,8 @@ extension InstructorDashboardRoutes {
                 InstructorActivityContext(
                     currentUser: userContext,
                     activeInstructorTab: "activity",
-                    rows: [],
+                    days: [],
+                    staffOptions: [],
                     hasRows: false,
                     hasActiveCourse: false,
                     filterActor: trimmedActor,
@@ -53,13 +59,16 @@ extension InstructorDashboardRoutes {
 
         let rows = try await CourseActivityService.timeline(
             courseID: courseID, actorFilter: actorFilter, on: req.db)
+        staffOptions = try await Self.activityStaffOptions(
+            courseID: courseID, selected: actorFilter, db: req.db)
 
         return try await req.view.render(
             "instructor-activity",
             InstructorActivityContext(
                 currentUser: userContext,
                 activeInstructorTab: "activity",
-                rows: rows,
+                days: ActivityDay.group(rows),
+                staffOptions: staffOptions,
                 hasRows: !rows.isEmpty,
                 hasActiveCourse: true,
                 filterActor: trimmedActor,
@@ -72,10 +81,56 @@ extension InstructorDashboardRoutes {
 struct InstructorActivityContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
-    let rows: [CourseActivityRow]
+    /// The rows grouped under Today / Yesterday / date headings.
+    let days: [ActivityDay]
+    /// The person select: "Everyone" first, then course staff by name.
+    let staffOptions: [ActivityStaffOption]
     /// Explicit flag — Leaf's `array.isEmpty` is unreliable in this codebase.
     let hasRows: Bool
     let hasActiveCourse: Bool
     let filterActor: String
     let filtered: Bool
+}
+
+/// One entry in the Activity tab's person select.
+struct ActivityStaffOption: Encodable, Equatable {
+    /// The `actor` query value; empty for "Everyone".
+    let username: String
+    let displayName: String
+    let selected: Bool
+}
+
+extension InstructorDashboardRoutes {
+    /// "Everyone", then the course's instructors and TAs by name. If `selected`
+    /// names someone not in that list it is added, so the select never shows
+    /// "Everyone" while a filter is applied.
+    static func activityStaffOptions(
+        courseID: UUID, selected: String?, db: any Database
+    ) async throws -> [ActivityStaffOption] {
+        let enrollments = try await APICourseEnrollment.query(on: db)
+            .filter(\.$course.$id == courseID)
+            .all()
+        let staffIDs = enrollments.filter { $0.role >= .ta }.map(\.userID)
+        var users: [APIUser] = []
+        if !staffIDs.isEmpty {
+            users = try await APIUser.query(on: db)
+                .filter(\.$id ~~ staffIDs)
+                .filter(\.$role != UserRole.mcp.rawValue)
+                .all()
+        }
+        users.sort {
+            ($0.displayName ?? $0.username).localizedStandardCompare($1.displayName ?? $1.username)
+                == .orderedAscending
+        }
+        var options = [ActivityStaffOption(username: "", displayName: "Everyone", selected: selected == nil)]
+        options += users.map {
+            ActivityStaffOption(
+                username: $0.username, displayName: $0.displayName ?? $0.username,
+                selected: selected == $0.username)
+        }
+        if let selected, !options.contains(where: { $0.username == selected }) {
+            options.append(ActivityStaffOption(username: selected, displayName: selected, selected: true))
+        }
+        return options
+    }
 }

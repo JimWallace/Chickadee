@@ -372,7 +372,7 @@ duplicate.
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
 - **`.section-items--manage`** (with `.section-items-handle`,
-  `.section-items-count`) — the instructor Overview's variant of
+  `.section-items-count`, a 5rem trailing track: the Overview's submitted count, the Activity list's single eye button) — the instructor Overview's variant of
   `.section-items`: the same row shape with a leading drag-handle track and a
   submitted-count track, and a wider state track for the status select.  Rows
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
