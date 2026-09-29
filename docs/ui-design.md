@@ -368,6 +368,21 @@ duplicate.
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
+- **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
+  `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
+  `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
+  the app.js floater lifts it out of the table's overflow clip; a `+ Add` is a
+  `popup-anchor` with the `.suite-section-popup` shell.  Outside click and
+  Escape close every such popup, and Escape returns focus to the summary.  The
+  summary's `aria-label` names the row.  A menu is never empty: render none
+  when nothing is left to offer.  Destructive items go last in
+  `.row-menu-item--danger` and keep their `data-confirm`.  An item that adds
+  something carries a small `.item-tile` and may add a one-line `.card-meta`
+  hint.
+- **`.state-select`** — a real `<select>` in a wrapper whose dot shows the
+  state (`data-state`: open, visible and instructor are teal; preview and ta are
+  `--state-amber`; anything else is grey).  The select text is the value; the
+  dot is only the scan cue.  It holds what is changed most on a row.
 - **`.row-phone-meta`** — a table's phone-width restatement of the columns
   `.col-hide-phone` drops below 640px: the student dashboard's Due and History,
   the admin runners table's version and job count.  Sits inside the name cell,
@@ -448,6 +463,26 @@ duplicate.
 If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
 copies, and the page-style ratchet fails CI on growth.
+
+### Row anatomy for lists of things
+
+One shape serves the student dashboard, the instructor Overview, Students,
+Slip days, Activity, LEARN and the MCP page.  A row is a tile (content kind,
+activity category or the person's avatar), a name, one details line, a fixed
+state track and a fixed right-aligned actions track.
+
+1. **One row shape.**  Secondary columns fold into the details line.
+2. **One state track** holds what changes most, as an inline control: status,
+   visibility, role, an assessment, a balance.
+3. **Primary and ⋯.**  Show one or two everyday actions.  Everything else, and
+   every destructive action, goes in a `.row-menu` that is the last slot.
+4. **Adds merge.**  A page or section with more than one add gets one
+   `+ Add ▾`.
+5. **Settings are facts.**  A settings form renders as a `.detail-grid` of
+   current values with an Edit control; the form opens on demand.
+
+A Filter box appears only on lists of `ListFilterPolicy.minimumRows` (8) rows or
+more.  Column headers render, visually, only on a homogeneous list that sorts.
 
 ## Interaction idioms
 

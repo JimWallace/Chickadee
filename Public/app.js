@@ -365,6 +365,33 @@ if (root) {
     });
 }());
 
+// ── Details popups: outside click and Escape close, focus returns ────────────
+// Every <details class="popup-anchor"> (the + Add menus, the inline create
+// forms) and <details class="ext-details"> (the ⋯ row menus, the per-student
+// popovers) is a small popup. Native <details> stays open until its summary is
+// clicked again, so a menu lingered over the next row. One delegated pair of
+// listeners closes any open popup on a click outside it, and on Escape closes
+// it and hands focus back to its summary so a keyboard user keeps their place.
+(function detailsPopups() {
+    const POPUP = 'details.popup-anchor, details.ext-details';
+
+    document.addEventListener('click', (e) => {
+        document.querySelectorAll(POPUP + '[open]').forEach((d) => {
+            if (!d.contains(e.target)) d.open = false;
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const open = Array.from(document.querySelectorAll(POPUP + '[open]'));
+        if (open.length === 0) return;
+        const focused = open.find((d) => d.contains(document.activeElement)) || open[open.length - 1];
+        open.forEach((d) => { d.open = false; });
+        const summary = focused.querySelector(':scope > summary');
+        if (summary) summary.focus();
+    });
+}());
+
 // ── Declarative control behaviours (the former inline handlers) ──────────────
 // Three one-liner behaviours used to ride `onclick=` / `onchange=` attributes
 // in the templates.  Those attributes are what `'unsafe-inline'` in the CSP
