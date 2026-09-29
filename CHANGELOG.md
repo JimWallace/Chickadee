@@ -9,6 +9,31 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.260] - 2026-09-29
+
+### Fixed
+
+- **Runner start-up refusals are pinned by a test.** The runner now reports an invalid `--api-base-url` and a missing runner secret through one helper, `WorkerCommand.startupFailure`. A test checks that the helper writes the message and returns the failure exit code.
+
+### Changed
+
+- **Tests for the live-session window.** `LiveSessionWindow` and the window storage in `ClassActivity` now have tests in `CoreTests`. The weekly mutation sweep skips `APITests`, so these operators had no coverage there. `isCoverageClassGoal` also has tests for its two-part check.
+
+
+## [0.5.259] - 2026-09-29
+
+### Removed
+
+- **Runner shared secret controls on the admin page.** The secret can no longer be shown or changed from `/admin`, and `POST /admin/runner-secret` is gone. Set `RUNNER_SHARED_SECRET` in the environment. If it is not set, the server generates a secret and keeps it in `.worker-secret`.
+
+
+## [0.5.258] - 2026-09-29
+
+### Added
+
+- **Course year and term (foundation).** Courses can now store the year and Waterloo term (Winter, Spring or Fall) of their offering. This slice adds the data model only; the create, edit, clone and display work follows. See `docs/course-terms.md`.
+
+
 ## [0.5.257] - 2026-09-28
 
 ### Added

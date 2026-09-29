@@ -6,7 +6,6 @@
 //
 //   GET  /admin                              → admin.leaf  (user management dashboard)
 //   POST /admin/users/:id/role               → change a user's role
-//   POST /admin/runner-secret                → set/clear runtime runner secret
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
 import Core
@@ -26,7 +25,6 @@ struct AdminRoutes: RouteCollection {
         admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("activity", use: activity)
         admin.post("users", ":userID", "role", use: changeRole)
-        admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
         admin.get("audit", use: auditPage)
         admin.get("retention", use: retentionPage)
@@ -75,7 +73,6 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func dashboard(req: Request) async throws -> View {
         let workerRows = try await makeWorkerRows(req: req)
-        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
 
         // Course management data — all three queries are independent so run in parallel.
         async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
@@ -117,7 +114,6 @@ struct AdminRoutes: RouteCollection {
             currentUser: req.currentUserContext,
             activeAdminTab: "overview",
             workers: workerRows,
-            workerSecret: effectiveSecret,
             courses: courseRows,
             version: ChickadeeVersion.current,
             activityChart: activityChart
@@ -391,38 +387,6 @@ struct AdminRoutes: RouteCollection {
                 "previous_role": previousRole,
                 "new_role": body.role,
             ],
-            on: req
-        )
-        return req.redirect(to: "/admin")
-    }
-
-    // MARK: - POST /admin/runner-secret
-
-    @Sendable
-    func updateWorkerSecret(req: Request) async throws -> Response {
-        struct WorkerSecretBody: Content { var secret: String }
-        let body = try req.content.decode(WorkerSecretBody.self)
-        let trimmed = body.secret.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let action: String
-        if trimmed.isEmpty {
-            await req.application.workerSecretStore.setRuntimeOverride(nil)
-            if let persisted = readWorkerSecretFromDisk(workerSecretFilePath: req.application.workerSecretFilePath) {
-                await req.application.workerSecretStore.setRuntimeOverride(persisted)
-                req.logger.info("Admin reset runtime runner secret to persisted value.")
-            }
-            req.logger.info("Admin cleared runtime runner secret override.")
-            action = "cleared"
-        } else {
-            await req.application.workerSecretStore.setRuntimeOverride(trimmed)
-            writeWorkerSecretToDisk(secret: trimmed, workerSecretFilePath: req.application.workerSecretFilePath)
-            req.logger.info("Admin updated runtime runner secret override.")
-            action = "rotated"
-        }
-        await AuditLogger.record(
-            action: .runnerSecretRotated,
-            targetType: .runner,
-            metadata: ["change": action],
             on: req
         )
         return req.redirect(to: "/admin")

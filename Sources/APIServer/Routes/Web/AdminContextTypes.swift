@@ -151,7 +151,6 @@ struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let workers: [AdminWorkerRow]
-    let workerSecret: String
     let courses: [AdminCourseRow]
     let version: String
     /// Default (24h) activity series, JSON-encoded into the page so the chart
@@ -170,7 +169,6 @@ struct AdminContext: Encodable {
         currentUser: CurrentUserContext?,
         activeAdminTab: String,
         workers: [AdminWorkerRow],
-        workerSecret: String,
         courses: [AdminCourseRow],
         version: String,
         activityChart: ActivityChartData
@@ -178,7 +176,6 @@ struct AdminContext: Encodable {
         self.currentUser = currentUser
         self.activeAdminTab = activeAdminTab
         self.workers = workers
-        self.workerSecret = workerSecret
         self.courses = courses
         self.version = version
         self.activityChart = activityChart
