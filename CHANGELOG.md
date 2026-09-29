@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.272] - 2026-09-29
+
+### Changed
+
+- The instructor MCP page now shows the authoring voice beside a facts panel (source, server state, length). Save and Reset sit in the title bar.
+
+
 ## [0.5.271] - 2026-09-29
 
 ### Changed
