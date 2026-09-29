@@ -6,6 +6,7 @@
 // student code unsandboxed and nothing would have failed. The choice and the
 // label the startup log reports now come from one function, pinned here.
 
+import Foundation
 import Testing
 
 @testable import chickadee_runner
@@ -22,5 +23,20 @@ import Testing
         let choice = WorkerCommand.scriptRunner(sandboxed: false)
         #expect(choice.runner is UnsandboxedScriptRunner)
         #expect(choice.label == "unsandboxed")
+    }
+}
+
+@Suite(.timeLimit(.minutes(2))) struct SandboxProbeTests {
+
+    @Test(.requiresSandbox) func theProbePassesWhereTheSandboxWorks() async {
+        let reason = await SandboxedScriptRunner.probe(workDir: FileManager.default.temporaryDirectory)
+        #expect(reason == nil)
+    }
+
+    @Test func theProbeReportsAnUnusableWorkDirectory() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("no-such-dir-\(UUID().uuidString)", isDirectory: true)
+        let reason = await SandboxedScriptRunner.probe(workDir: missing)
+        #expect(try #require(reason).isEmpty == false)
     }
 }

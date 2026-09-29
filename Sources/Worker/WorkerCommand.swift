@@ -79,6 +79,15 @@ struct WorkerCommand: AsyncParsableCommand {
         try FileManager.default.createDirectory(
             at: workRoot, withIntermediateDirectories: true)
 
+        // Refuse to start with `--sandbox` on a host that cannot sandbox. The
+        // alternative is a runner that claims jobs and fails every one of them.
+        if sandbox, let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
+            throw Self.startupFailure(
+                "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
+                    + "A container that drops capabilities or uses the default seccomp profile "
+                    + "refuses user namespaces. Remove --sandbox, or allow them.\n")
+        }
+
         let runnerProfile = await RunnerProfileDetector(
             discoveryEnabled: config.capabilityDiscoveryEnabled,
             workRoot: workRoot
