@@ -156,7 +156,7 @@ async function seed() {
 
   csrf = await csrfFrom(instr, "/admin/courses/new");
   const courseRes = await expectOK("create course",
-    instr.post("/admin/courses", { form: { code: COURSE.code, name: COURSE.name, _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }),
+    instr.post("/admin/courses", { form: { code: COURSE.code, name: COURSE.name, termYear: "2026", termSeason: "fall", _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }),
     [302, 303]);
   const loc = courseRes.headers()["location"] || "";
   const courseID = (loc.match(/\/admin\/courses\/([0-9a-fA-F-]{36})/) || [])[1];

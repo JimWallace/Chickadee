@@ -33,7 +33,7 @@ Retention
         <tbody>
             #for(row in rows):
             <tr class="#if(row.isDeletable):status-closed#else:status-open#endif">
-                <td><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a></td>
+                <td><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a>#if(row.termLabel): #(row.termLabel)#endif</td>
                 <td>#(row.name)</td>
                 <td class="retention-date-cell" data-sort-value="#(row.archivedAtISO)">#(row.archivedAt)</td>
                 <td>#(row.submissionCount)</td>

@@ -35,7 +35,8 @@ extension AdminRoutes {
                 enrolledUsers: [],
                 assignments: [],
                 isNew: true,
-                error: req.query[String.self, at: "error"]
+                error: req.query[String.self, at: "error"],
+                termOptions: CourseTermForm.options(selected: nil)
             ))
     }
 
@@ -46,6 +47,8 @@ extension AdminRoutes {
         struct CourseBody: Content {
             var code: String
             var name: String
+            var termYear: String?
+            var termSeason: String?
         }
         let body = try req.content.decode(CourseBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,14 +56,22 @@ extension AdminRoutes {
         guard !code.isEmpty, !name.isEmpty else {
             return req.redirect(to: "/admin/courses/new?error=course_fields_required")
         }
-        let course = APICourse(code: code, name: name)
+        // A new course declares its term (docs/course-terms.md). Nothing
+        // guesses one, and the form starts empty.
+        guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
+            return req.redirect(to: "/admin/courses/new?error=course_term_required")
+        }
+        if try await activeCourseCodeIsTaken(code, excluding: nil, on: req.db) {
+            return req.redirect(to: "/admin/courses/new?error=code_taken")
+        }
+        let course = APICourse(code: code, name: name, term: term)
         try await course.save(on: req.db)
         let id = try course.requireID().uuidString
         await AuditLogger.record(
             action: .courseCreated,
             targetType: .course,
             targetID: id,
-            metadata: ["course_code": code, "course_name": name],
+            metadata: ["course_code": code, "course_name": name, "course_term": term.displayName],
             on: req
         )
         return req.redirect(to: "/admin/courses/\(id)")
@@ -358,6 +369,8 @@ extension AdminRoutes {
             var code: String
             var name: String
             var brightspaceOrgUnitID: String?
+            var termYear: String?
+            var termSeason: String?
         }
 
         guard
@@ -381,6 +394,15 @@ extension AdminRoutes {
             .first()
         if let existing, existing.id != courseID {
             return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+        }
+
+        // The term fields set or change the term. A post without them (an
+        // older client) leaves the term as it is; a post with an invalid pair
+        // changes nothing.
+        switch CourseTermInput(year: body.termYear, season: body.termSeason) {
+        case .absent: break
+        case .term(let term): course.term = term
+        case .invalid: return req.redirect(to: "/admin/courses/\(idString)?error=course_term_required")
         }
 
         course.code = code
@@ -525,7 +547,7 @@ extension AdminRoutes {
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
             brightspaceOrgUnitName: course.brightspaceOrgUnitName,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
-        )
+        ).withTerm(course.term)
 
         // Load enrollments for this course, then fetch the corresponding users.
         let enrollments = try await APICourseEnrollment.query(on: req.db)
@@ -583,7 +605,8 @@ extension AdminRoutes {
                 enrolledUsers: enrolledUsers,
                 assignments: assignments,
                 isNew: false,
-                error: nil
+                error: req.query[String.self, at: "error"],
+                termOptions: CourseTermForm.options(selected: course.term?.season)
             ))
     }
 

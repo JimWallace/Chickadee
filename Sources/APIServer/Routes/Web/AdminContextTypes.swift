@@ -50,6 +50,22 @@ struct AdminCourseRow: Encodable {
     var brightspaceOrgUnitID: String?
     var brightspaceOrgUnitName: String?
     var brightspaceSyncEnabled: Bool
+    /// The offering's term (docs/course-terms.md); all nil when none is
+    /// recorded. Set through `withTerm(_:)`.
+    var termYear: Int?
+    var termSeason: String?
+    var termLabel: String?
+    var termSortValue: Int?
+
+    /// This row with the term columns filled from `term`.
+    func withTerm(_ term: AcademicTerm?) -> AdminCourseRow {
+        var row = self
+        row.termYear = term?.year
+        row.termSeason = term?.season.rawValue
+        row.termLabel = term?.displayName
+        row.termSortValue = term?.ordinal
+        return row
+    }
 }
 
 struct AdminRunnerSummary: Encodable {
@@ -257,6 +273,9 @@ struct AdminCourseDetailContext: Encodable {
     let assignments: [AdminCourseAssignmentRow]
     let isNew: Bool
     let error: String?
+    /// The term select's options, with the course's (or the suggested)
+    /// season marked.
+    var termOptions: [CourseTermOption] = []
 }
 
 struct AdminRunnerDetailContext: Encodable {
@@ -357,6 +376,8 @@ struct AdminRetentionRow: Encodable {
     let id: String
     let code: String
     let name: String
+    /// "Fall 2026", or nil when the course records no term.
+    let termLabel: String?
     /// Formatted archival timestamp, or "—" if unknown (legacy rows).
     let archivedAt: String
     /// ISO archival timestamp for client-side date sorting ("" if unknown).

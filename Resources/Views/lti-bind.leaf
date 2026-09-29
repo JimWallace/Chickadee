@@ -16,7 +16,7 @@ Link LMS course
         <select id="lti-bind-course" class="form-input" name="courseID" required>
             <option value="" selected disabled>Choose a course</option>
             #for(course in courses):
-            <option value="#(course.id)">#(course.code) — #(course.name)</option>
+            <option value="#(course.id)">#(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)</option>
             #endfor
         </select>
     </div>

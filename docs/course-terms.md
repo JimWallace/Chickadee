@@ -1,6 +1,6 @@
 # Course terms and new-term cloning
 
-**Status:** Slice 1 is built. Slices 2 to 6 are planned.
+**Status:** Slices 1 and 2 are built. Slices 3 to 6 are planned.
 
 This document replaces the plan in
 [clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
@@ -40,7 +40,8 @@ Two rules follow from these decisions:
    This is the same rule as the assignment-language declaration
    ([language-declaration.md](language-declaration.md)). A form can *suggest* a
    term (the next term after the source, or the term that contains today),
-   but the author confirms it.
+   but the author confirms it. (The create form does not suggest one; see
+  slice 2.)
 2. **A code alone can name more than one active course.** Every place that
    finds a course by its code must decide which offering it means. Section 5
    lists these places.
@@ -75,23 +76,39 @@ build green.
 The Core type, the migration, the model accessor, and tests
 (`AcademicTermTests`, `CourseTermPersistenceTests`). No behaviour changes.
 
-### Slice 2: Declare the term at every door
+### Slice 2: Declare the term at every door (built)
 
-- Admin **create** form: year input and term select, both required. The form
-  suggests the term that contains today.
+- Admin **create** form: year input and term select, both required
+  (`CourseTermInput`, `CourseTermForm`). The form starts empty and suggests
+  nothing: that fits the rule that nothing guesses a term, and a default
+  taken from today's date would change the visual-regression baseline of
+  the page every term. A missing or invalid term redirects with
+  `course_term_required`; a duplicate active code redirects with
+  `code_taken`.
 - Admin **edit** form: set or change the term. This is how an admin gives an
-  existing course its term.
-- **Bundle export** writes `year` and `term` into `BundledCourse` (optional
-  fields, so an old bundle still decodes). **Bundle import** uses the bundle
-  term. If the bundle has no term (an old bundle), the import form asks for
-  one.
-- Show the term where a person picks or identifies a course: the course tabs
-  and the instructor switcher in `base.leaf`, the admin courses table, the
-  admin course page, the retention page, the LTI bind picker, and the
-  enrollment and account pages. Sort course lists newest term first, then by
-  code.
-- Fix on the way: `editCourse` redirects with `?error=code_taken`, but the
-  page never shows it. `createCourse` has no duplicate-code check.
+  existing course its term. A post without the term fields leaves the term
+  as it is. A post with an invalid pair changes nothing. The page now shows
+  the `code_taken` error that the route always sent.
+- **Bundle export** writes `termYear` and `termSeason` into `BundledCourse`
+  (optional, so an old bundle still decodes; resolved through
+  `bundledCourseTerm`). **Bundle import** records the bundle term.
+- **Deviation from the first plan:** an old bundle, which has no term,
+  imports with **no term**, and the result page shows a warning with a link
+  to the course page. The first plan put a term field on the import form,
+  but the import form is a hidden file input that submits on file choice.
+  The import records exactly what its source declared, and nothing is
+  guessed. The existing import tests also post term-less bundles.
+- The import conflict check now asks for an ACTIVE course with the code. The
+  old first-match query could see an archived duplicate, pass, and then fail
+  on the unique index.
+- The term shows where a person picks or identifies a course. The long form
+  is always "CS135 Fall 2026 — Name"; the course tab uses "CS135 F26". The
+  places: the course tabs and the instructor switcher, the admin courses
+  table (a sortable Term column), the admin course page, the import result,
+  the retention page, the LTI bind picker, and the enrollment and account
+  pages. Course lists sort newest term first, then courses with no term,
+  then by code (`courseListPrecedes`). With no terms recorded, this is the
+  old code order.
 
 ### Slice 3: Uniqueness per term, and code lookups
 

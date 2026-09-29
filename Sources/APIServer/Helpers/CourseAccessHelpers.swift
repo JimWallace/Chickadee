@@ -78,7 +78,8 @@ func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: Database) async t
 }
 
 /// The courses the user can act on, dashboard-style: the non-archived courses
-/// they hold an enrollment row in, sorted by code. The single visibility
+/// they hold an enrollment row in, sorted by `courseListPrecedes` (newest
+/// term first, then code). The single visibility
 /// resolver behind the web tab strip (`resolveActiveCourse`) and the MCP
 /// listing surface (`list_courses`, `resources/list`). No role widens this
 /// set: admins see — and their agents may act on — exactly what they are
@@ -104,8 +105,20 @@ func enrolledCoursesWithRoles(
     return
         enrollments
         .filter { !$0.course.isArchived }
-        .sorted { $0.course.code < $1.course.code }
+        .sorted { courseListPrecedes($0.course, $1.course) }
         .map { (course: $0.course, role: $0.role) }
+}
+
+/// The order of every course list: newest term first, courses with no term
+/// recorded after all courses with one, then code. With no terms recorded
+/// this is plain code order, the order before terms existed.
+func courseListPrecedes(_ lhs: APICourse, _ rhs: APICourse) -> Bool {
+    switch (lhs.term, rhs.term) {
+    case (let left?, let right?) where left != right: return left > right
+    case (.some, .none): return true
+    case (.none, .some): return false
+    default: return lhs.code < rhs.code
+    }
 }
 
 // (`requireCourseInstructor`, the pre-#417 one-line alias for

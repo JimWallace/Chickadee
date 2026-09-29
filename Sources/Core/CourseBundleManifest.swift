@@ -94,6 +94,12 @@ public struct BundledCourse: Codable, Sendable {
     /// (`SlipDayPolicy.releaseRevealHold`). Absent in bundles exported
     /// before this field existed (decodes as nil → hold on).
     public let slipDayReleaseRevealHold: Bool?
+    /// The offering's year and term (docs/course-terms.md), as the two raw
+    /// course columns. Both nil in bundles written before terms existed, and
+    /// in bundles of a course with no term recorded. Resolved through
+    /// `bundledCourseTerm`.
+    public let termYear: Int?
+    public let termSeason: String?
 
     public init(
         code: String, name: String,
@@ -101,7 +107,8 @@ public struct BundledCourse: Codable, Sendable {
         slipDaysEnabled: Bool? = nil,
         slipDaysPerStudent: Int? = nil,
         slipDayExtensionHours: Int? = nil,
-        slipDayReleaseRevealHold: Bool? = nil
+        slipDayReleaseRevealHold: Bool? = nil,
+        term: AcademicTerm? = nil
     ) {
         self.code = code
         self.name = name
@@ -110,6 +117,8 @@ public struct BundledCourse: Codable, Sendable {
         self.slipDaysPerStudent = slipDaysPerStudent
         self.slipDayExtensionHours = slipDayExtensionHours
         self.slipDayReleaseRevealHold = slipDayReleaseRevealHold
+        self.termYear = term?.year
+        self.termSeason = term?.season.rawValue
     }
 }
 
@@ -117,6 +126,12 @@ public struct BundledCourse: Codable, Sendable {
 /// Defaults to `.open` when the bundle omitted the field.
 public func bundledCourseEnrollmentMode(_ course: BundledCourse) -> CourseEnrollmentMode {
     course.enrollmentMode ?? .open
+}
+
+/// Resolves the term an imported bundle carries. Nil when the bundle has
+/// none, or only half of one: the import records no term rather than a guess.
+public func bundledCourseTerm(_ course: BundledCourse) -> AcademicTerm? {
+    AcademicTerm.resolve(year: course.termYear, season: course.termSeason)
 }
 
 /// Resolves the effective slip-day policy for an imported bundle.  Bundles

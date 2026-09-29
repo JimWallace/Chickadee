@@ -11,7 +11,10 @@ Import result — Admin
 </div>
 
 <section class="page-section">
-    <h2>#(courseCode) — #(courseName)</h2>
+    <h2>#(courseCode)#if(termLabel): #(termLabel)#endif — #(courseName)</h2>
+    #if(termLabel):#else:
+    <div class="flash flash-warning" role="status">The bundle has no year and term. Set them on the <a href="/admin/courses/#(courseID)">course page</a>.</div>
+    #endif
     <table class="results-table import-result-table">
         <tbody>
             <tr>
