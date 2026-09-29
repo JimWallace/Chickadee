@@ -201,7 +201,9 @@ extension CourseBundleRoutes {
             // 6a. Check for course code conflicts (moved inside transaction)
             // Asks for an ACTIVE match: a first-match query could return an
             // archived duplicate, pass, and then fail on the unique index.
-            if try await activeCourseCodeIsTaken(manifest.course.code, excluding: nil, on: db) {
+            if try await activeCourseCodeIsTaken(
+                manifest.course.code, term: bundledCourseTerm(manifest.course), excluding: nil, on: db)
+            {
                 throw Abort(
                     .conflict,
                     reason: """

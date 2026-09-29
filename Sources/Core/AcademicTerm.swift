@@ -80,6 +80,18 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
         return season.initial + (twoDigits < 10 ? "0\(twoDigits)" : "\(twoDigits)")
     }
 
+    /// Parses a `shortLabel` ("F26", case-insensitive) back into a term. A
+    /// short label carries only two digits, so it names a year from 2000 to
+    /// 2099; that is the range Chickadee writes into course URLs.
+    public init?(shortLabel label: String) {
+        guard label.count == 3, let initial = label.first,
+            let season = TermSeason.allCases.first(where: { $0.initial == initial.uppercased() }),
+            label.dropFirst().allSatisfy({ $0.isASCII && $0.isNumber }),
+            let twoDigits = Int(label.dropFirst())
+        else { return nil }
+        self.init(year: 2000 + twoDigits, season: season)
+    }
+
     /// A number that increases by one per term, in calendar order. Use it
     /// as a sort value where a `Comparable` value cannot go (a table cell).
     public var ordinal: Int {

@@ -61,7 +61,7 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "courseCode must not be empty.")
         }
         guard
-            let course = try await findActiveCourse(byCode: code, on: context.db),
+            let course = try await findActiveCourse(byKey: code, viewer: nil, on: context.db),
             let courseUUID = course.id
         else {
             throw MCPToolError.invalidArguments(

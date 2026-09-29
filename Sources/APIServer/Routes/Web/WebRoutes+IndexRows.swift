@@ -64,7 +64,8 @@ struct IndexRowContext {
     let extensionDueAtBySetupID: [String: Date]
     let previouslyOpenedSetupIDs: Set<String>
     let isActiveCourseStaff: Bool
-    let activeCourseCode: String?
+    /// The active course URL key (`CourseContext.pathKey`) for vanity links.
+    let activeCourseKey: String?
     let hasNotebookBySetupID: [String: Bool]
     let slipDay: DashboardSlipDayData
 }
@@ -373,7 +374,7 @@ extension WebRoutes {
         let hasNotebook = context.hasNotebookBySetupID[setupID] ?? false
         let vanityBaseURL: String? = {
             guard let assignment,
-                let courseCode = context.activeCourseCode,
+                let courseCode = context.activeCourseKey,
                 !courseCode.isEmpty,
                 !assignment.slug.isEmpty
             else { return nil }

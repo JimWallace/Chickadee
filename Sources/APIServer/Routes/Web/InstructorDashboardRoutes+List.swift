@@ -86,7 +86,7 @@ extension InstructorDashboardRoutes {
     func buildCourseRoster(
         req: Request,
         activeCourseUUID: UUID,
-        activeCourseCode: String,
+        activeCourseKey: String,
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> CourseRosterData {
@@ -96,7 +96,7 @@ extension InstructorDashboardRoutes {
             enrolledUsers: enrolledUsers,
             rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
-            activeCourseCode: activeCourseCode,
+            activeCourseKey: activeCourseKey,
             fmt: fmt,
             isoFormatter: isoFormatter
         )
@@ -144,7 +144,7 @@ extension InstructorDashboardRoutes {
     func loadEnrolledStudentRows(
         req: Request,
         activeCourseUUID: UUID,
-        activeCourseCode: String,
+        activeCourseKey: String,
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
@@ -154,7 +154,7 @@ extension InstructorDashboardRoutes {
             enrolledUsers: enrolledUsers,
             rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
-            activeCourseCode: activeCourseCode,
+            activeCourseKey: activeCourseKey,
             fmt: fmt,
             isoFormatter: isoFormatter
         )
@@ -212,7 +212,7 @@ extension InstructorDashboardRoutes {
         enrolledUsers: [APIUser],
         rolesByUserID: [UUID: CourseRole],
         activeCourseUUID: UUID,
-        activeCourseCode: String,
+        activeCourseKey: String,
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) -> [EnrolledStudentRow] {
@@ -231,7 +231,7 @@ extension InstructorDashboardRoutes {
                 lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
                 lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
                 submissionsURL: studentSubmissionsURL(
-                    courseCode: activeCourseCode,
+                    courseCode: activeCourseKey,
                     urlToken: token
                 ),
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
@@ -381,10 +381,10 @@ extension InstructorDashboardRoutes {
             let vanityURL: String? = {
                 guard let assignment,
                     let title = assignment.title as String?, !title.isEmpty,
-                    let courseCode = activeCourse?.code, !courseCode.isEmpty,
+                    let courseKey = activeCourse?.pathKey, !courseKey.isEmpty,
                     !assignment.slug.isEmpty
                 else { return nil }
-                return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
+                return VanityURLRoutes.vanityPath(courseCode: courseKey, assignmentSlug: assignment.slug)
             }()
 
             let variants = variantSummariesBySetup[setupID]

@@ -2,6 +2,9 @@
 //
 // Vanity URL support: GET /:courseCode/:assignmentSlug
 //
+// The first segment is a course URL key: the code, or the code and term
+// ("CS135-F26") when the course records a term (docs/course-terms.md).
+//
 // Resolves a human-readable course/assignment pair to canonical student
 // assignment routes. Slugs are persisted on assignments so URLs remain stable
 // when titles change. Only active (non-archived) courses match.
@@ -59,7 +62,7 @@ struct VanityURLRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        guard let course = try await findActiveCourse(byCode: courseCode, on: req.db) else {
+        guard let course = try await findActiveCourse(byKey: courseCode, viewer: user.id, on: req.db) else {
             throw Abort(.notFound)
         }
 
@@ -95,6 +98,8 @@ struct VanityURLRoutes: RouteCollection {
         return assignment
     }
 
+    /// Pass the course's `urlKey` ("CS135" or "CS135-F26") as `courseCode`,
+    /// not its bare code, so the link names one offering.
     static func vanityPath(courseCode: String, assignmentSlug: String) -> String {
         "/\(courseCode)/\(assignmentSlug)"
     }

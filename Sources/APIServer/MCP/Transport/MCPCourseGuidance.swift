@@ -16,6 +16,8 @@ import Foundation
 
 /// One course's effective authoring voice.
 struct MCPCourseGuidance: Equatable, Sendable {
+    /// The course's `urlKey`: its code, or code and term ("CS136-F26") so two
+    /// offerings of one course stay apart in resource URIs.
     let courseCode: String
     /// The voice guide in force for this course: the instructors' own text when
     /// they have customized it, otherwise Chickadee's default.
@@ -63,7 +65,7 @@ func mcpCourseGuidance(forSubject subject: String, db: any Database) async throw
         .filter { user.isAdmin || $0.role >= .ta }
         .map { enrolled in
             MCPCourseGuidance(
-                courseCode: enrolled.course.code,
+                courseCode: enrolled.course.urlKey,
                 text: courseAuthoringVoice(enrolled.course),
                 isCustomized: courseHasCustomAuthoringVoice(enrolled.course))
         }

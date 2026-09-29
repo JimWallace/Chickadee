@@ -103,3 +103,23 @@ import Testing
         #expect(spring27.ordinal == winter27.ordinal + 1)
     }
 }
+
+@Suite struct AcademicTermShortLabelParseTests {
+
+    @Test(arguments: ["F26", "f26", "W00", "S99"])
+    func shortLabelRoundTrips(label: String) throws {
+        let term = try #require(AcademicTerm(shortLabel: label))
+        #expect(term.shortLabel == label.uppercased())
+    }
+
+    @Test func shortLabelNamesATwentyFirstCenturyYear() throws {
+        let term = try #require(AcademicTerm(shortLabel: "W27"))
+        #expect(term.year == 2027)
+        #expect(term.season == .winter)
+    }
+
+    @Test(arguments: ["", "F", "F2", "F2026", "X26", "FAB", "F-1", "26F", "F２6"])
+    func malformedShortLabelsAreRejected(label: String) {
+        #expect(AcademicTerm(shortLabel: label) == nil)
+    }
+}

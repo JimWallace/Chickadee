@@ -52,7 +52,7 @@ extension InstructorDashboardRoutes {
             let roster = try await loadEnrolledStudentRows(
                 req: req,
                 activeCourseUUID: activeCourseUUID,
-                activeCourseCode: courseState.active?.code ?? "",
+                activeCourseKey: courseState.active?.pathKey ?? "",
                 fmt: fmt,
                 isoFormatter: isoFormatter
             )
@@ -129,7 +129,7 @@ extension InstructorDashboardRoutes {
         let roster = try await loadEnrolledStudentRows(
             req: req,
             activeCourseUUID: activeCourseUUID,
-            activeCourseCode: courseState.active?.code ?? "",
+            activeCourseKey: courseState.active?.pathKey ?? "",
             fmt: waterlooDateTimeFormatter(),
             isoFormatter: ISO8601DateFormatter()
         )

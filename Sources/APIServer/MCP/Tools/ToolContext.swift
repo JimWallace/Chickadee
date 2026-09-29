@@ -110,6 +110,22 @@ struct ToolContext {
         return user
     }
 
+    /// The subset of `courseIDs` the acting subject holds an enrollment in.
+    /// Used only to prefer the subject's own offering when a course code
+    /// names several (`resolveMCPCourse`); it grants nothing, and an unknown
+    /// subject simply has no enrollments.
+    func subjectEnrollments(among courseIDs: [UUID]) async throws -> Set<UUID> {
+        guard !courseIDs.isEmpty,
+            let userID = try await APIUser.query(on: db).filter(\.$username == subject).first()?.id
+        else { return [] }
+        return Set(
+            try await APICourseEnrollment.query(on: db)
+                .filter(\.$userID == userID)
+                .filter(\.$course.$id ~~ courseIDs)
+                .all()
+                .map(\.$course.id))
+    }
+
     /// Authorizes the token subject for an action scoped to `courseID`.
     ///
     /// The subject must be MCP-eligible (`requireEligibleSubject`) and enrolled

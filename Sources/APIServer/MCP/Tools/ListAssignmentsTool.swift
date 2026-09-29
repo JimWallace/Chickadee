@@ -74,14 +74,8 @@ struct ListAssignmentsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard
-            let course = try await APICourse.query(on: context.db)
-                .filter(\.$code == input.courseCode)
-                .first()
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No course found with code \"\(input.courseCode)\".")
-        }
+        let course = try await resolveMCPCourse(
+            key: input.courseCode, tool: Self.name, context: context, forWrite: false)
         let courseID = try course.requireID()
         try await context.authorizeCourseAccess(courseID, tool: Self.name)
         let assignments = try await APIAssignment.query(on: context.db)
