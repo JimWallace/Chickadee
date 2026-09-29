@@ -63,7 +63,6 @@ import Testing
                 "admin-users.leaf",
                 "assignment-submissions.leaf",
                 "index.leaf",
-                "instructor-activity.leaf",
                 "instructor-slip-days.leaf",
                 "instructor-students.leaf",
             ],

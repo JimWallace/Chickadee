@@ -40,6 +40,91 @@ struct CourseActivityRow: Encodable, Sendable {
     let detail: String
     /// Where to go to see it, when there is somewhere sensible.
     let link: String?
+    /// The instant itself, kept so rows can be grouped by day. Not rendered.
+    let occurredAt: Date
+    /// The time of day only ("3:42 PM"), for the details line under a day
+    /// heading, where the date is already stated.
+    let clockText: String
+    /// Which kind of thing this was: "edit", "status", "roster", "grade" or
+    /// "other". Picks the tile.
+    let categoryKey: String
+    /// The `.item-tile` colour (`data-kind`) and glyph for `categoryKey`.
+    let tileKind: String
+    let iconHref: String
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp, timestampISO, actor, category, summary, target, detail, link
+        case clockText, categoryKey, tileKind, iconHref
+    }
+}
+
+/// How an activity row's category maps to its tile. The audit categories are
+/// the real `AuditCategory` values; "Content edit" is the version-history
+/// source's own label. Anything unrecognised reads as a neutral link tile.
+enum ActivityCategoryTile {
+    static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
+        switch category {
+        case "Content edit":
+            return ("edit", "notebook", "#i-pencil")
+        case AuditCategory.assignments.rawValue:
+            return ("status", "slides", "#i-eye")
+        case AuditCategory.enrollment.rawValue, AuditCategory.users.rawValue:
+            return ("roster", "outline", "#i-list")
+        case AuditCategory.grading.rawValue, AuditCategory.submissions.rawValue:
+            return ("grade", "graded", "#i-calendar-check")
+        default:
+            return ("other", "link", "#i-link")
+        }
+    }
+}
+
+/// One day's worth of activity rows under a heading.
+struct ActivityDay: Encodable, Sendable {
+    let label: String
+    let rows: [CourseActivityRow]
+
+    /// Groups rows (already newest first) into days in `timeZone`, labelled
+    /// "Today", "Yesterday", or "Sep 26". `now` is a parameter so the midnight
+    /// boundary can be tested.
+    static func group(
+        _ rows: [CourseActivityRow], now: Date = Date(),
+        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+    ) -> [ActivityDay] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_CA")
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+
+        var days: [ActivityDay] = []
+        var currentStart: Date?
+        var bucket: [CourseActivityRow] = []
+        var currentLabel = ""
+        func flush() {
+            if !bucket.isEmpty { days.append(ActivityDay(label: currentLabel, rows: bucket)) }
+            bucket = []
+        }
+        for row in rows {
+            let start = calendar.startOfDay(for: row.occurredAt)
+            if start != currentStart {
+                flush()
+                currentStart = start
+                if start == today {
+                    currentLabel = "Today"
+                } else if start == yesterday {
+                    currentLabel = "Yesterday"
+                } else {
+                    currentLabel = formatter.string(from: start)
+                }
+            }
+            bucket.append(row)
+        }
+        flush()
+        return days
+    }
 }
 
 enum CourseActivityService {
@@ -71,9 +156,15 @@ enum CourseActivityService {
             .prefix(limit)
 
         let formatter = waterlooDateTimeFormatter()
+        let clock = DateFormatter()
+        clock.locale = Locale(identifier: "en_CA")
+        clock.timeZone = formatter.timeZone
+        clock.dateStyle = .none
+        clock.timeStyle = .short
         let iso = ISO8601DateFormatter()
         return merged.map { entry in
-            CourseActivityRow(
+            let tile = ActivityCategoryTile.tile(forCategory: entry.category)
+            return CourseActivityRow(
                 timestamp: formatter.string(from: entry.sortKey),
                 timestampISO: iso.string(from: entry.sortKey),
                 actor: entry.actor,
@@ -81,7 +172,12 @@ enum CourseActivityService {
                 summary: entry.summary,
                 target: entry.target,
                 detail: entry.detail,
-                link: entry.link)
+                link: entry.link,
+                occurredAt: entry.sortKey,
+                clockText: clock.string(from: entry.sortKey),
+                categoryKey: tile.key,
+                tileKind: tile.kind,
+                iconHref: tile.icon)
         }
     }
 

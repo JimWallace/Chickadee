@@ -11,88 +11,71 @@ Activity
 </section>
 #else:
 
-<section class="page-section">
+<div class="page-titlebar">
     <h2>Recent activity</h2>
-    <p class="section-intro">
-        Content edits and course events for this course, newest first. Every
-        content edit is a recoverable version of the assignment it names.
-    </p>
-
-    <form class="toolbar section-gap" method="get" action="/instructor/activity">
-        <span class="filter-group">
-            <label class="filter-label" for="activity-actor">Filter by person</label>
-            <input class="form-input filter-input" id="activity-actor" type="search"
-                   name="actor" value="#(filterActor)" placeholder="username">
-        </span>
-        <button type="submit" class="btn">Filter</button>
-        #if(filtered):
-        <a href="/instructor/activity" class="btn">Clear</a>
-        #endif
+    <form method="get" action="/instructor/activity" class="form-flush">
+        <label class="visually-hidden" for="activity-actor">Person</label>
+        <select id="activity-actor" name="actor" class="form-input" data-ck-submit-on-change>
+            #for(option in staffOptions):
+            <option value="#(option.username)"#if(option.selected): selected#endif>#(option.displayName)</option>
+            #endfor
+        </select>
+        <noscript><button type="submit" class="btn action-btn">Show</button></noscript>
     </form>
+</div>
+<p class="section-intro">Content edits and course events for this course, newest first. Every content edit is a recoverable version of the assignment it names.</p>
 
-    #if(hasRows):
-    <div class="table-scroll">
-        <table class="results-table">
-            <thead>
-                <tr>
-                    <th scope="col" class="activity-col-when">When</th>
-                    <th scope="col" class="activity-col-who">Who</th>
-                    <th scope="col">What</th>
-                    <th scope="col" class="activity-col-where">Where</th>
-                    <th scope="col">Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                #for(row in rows):
-                <tr>
-                    <td class="js-relative-time" data-iso="#(row.timestampISO)">#(row.timestamp)</td>
-                    <td>#(row.actor)</td>
-                    <td>
-                        <span class="activity-category">#(row.category)</span>
-                        <span class="activity-summary">#(row.summary)</span>
-                    </td>
-                    <td>
-                        #if(row.link):
-                        <a href="#(row.link)">#(row.target)</a>
-                        #else:
-                        #(row.target)
-                        #endif
-                    </td>
-                    <td class="activity-detail">#(row.detail)</td>
-                </tr>
-                #endfor
-            </tbody>
-        </table>
-    </div>
+#if(hasRows):
+<table class="results-table section-items section-items--manage">
+    <colgroup>
+        <col class="section-items-tile"><col><col class="section-items-seen col-hide-phone"><col class="section-items-count">
+    </colgroup>
+    <thead class="visually-hidden">
+        <tr><th scope="col">Type</th><th scope="col">What happened</th><th scope="col" class="col-hide-phone">When</th><th scope="col">Actions</th></tr>
+    </thead>
+    <tbody>
+    #for(day in days):
+        <tr class="section-items-heading">
+            <td colspan="4"><strong>#(day.label)</strong></td>
+        </tr>
+        #for(row in day.rows):
+        <tr>
+            <td class="item-tile-cell"><span class="item-tile" data-kind="#(row.tileKind)"><svg class="icon" aria-hidden="true"><use href="#(row.iconHref)"/></svg></span></td>
+            <td>
+                <div class="item-title"><strong>#(row.actor)</strong> #(row.summary) #if(row.link):<a href="#(row.link)">#(row.target)</a>#else:#(row.target)#endif</div>
+                <div class="item-details">#(row.category) · #(row.clockText)#if(row.detail != ""): · <span class="activity-detail">#(row.detail)</span>#endif</div>
+            </td>
+            <td class="col-hide-phone js-relative-time" data-iso="#(row.timestampISO)">#(row.timestamp)</td>
+            <td>
+                #if(row.link):
+                <div class="assignment-actions-cell">
+                    <a class="btn action-btn action-btn-icon" href="#(row.link)" title="View #(row.target)" aria-label="View #(row.target)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                    </a>
+                </div>
+                #endif
+            </td>
+        </tr>
+        #endfor
+    #endfor
+    </tbody>
+</table>
+#else:
+<p class="empty">
+    #if(filtered):
+    No activity matches that person.
     #else:
-    <p class="empty">
-        #if(filtered):
-        No activity matches that person.
-        #else:
-        No recorded activity for this course yet.
-        #endif
-    </p>
+    No recorded activity for this course yet.
     #endif
-</section>
+</p>
+#endif
 
 #endif
 <style>
-.activity-col-when { width: 11rem; }
-.activity-col-who { width: 9rem; }
-.activity-col-where { width: 14rem; }
-.activity-category {
-    display: inline-block;
-    font-size: var(--text-xs);
-    color: var(--muted);
-    margin-right: .5rem;
-}
-.activity-summary { font-size: var(--text-base); }
 .activity-detail {
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
     word-break: break-word;
 }
 </style>
-<script src="/list-filter.js?v=#appVersion()"></script>
 #endexport
 #endextend
