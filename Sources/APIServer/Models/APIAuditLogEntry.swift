@@ -119,6 +119,7 @@ enum AuditAction: String, Sendable, CaseIterable {
 
     // Courses
     case courseCreated = "course.created"
+    case courseCloned = "course.cloned"
     case courseArchived = "course.archived"
     case courseUnarchived = "course.unarchived"
     case courseDeleted = "course.deleted"
@@ -237,7 +238,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .userRegistered, .userProvisioned, .userRoleChanged, .userDeleted,
             .userDataExportRequested, .userDataExportDownloaded:
             return .users
-        case .courseCreated, .courseArchived, .courseUnarchived, .courseDeleted,
+        case .courseCreated, .courseCloned, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
             return .courses
         case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged:
@@ -291,7 +292,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .failed
         case .loginSuccess, .logout, .sessionIdleTimeout, .userRegistered,
             .userProvisioned, .userRoleChanged, .userDeleted, .userDataExportRequested,
-            .userDataExportDownloaded, .courseCreated, .courseArchived, .courseUnarchived,
+            .userDataExportDownloaded, .courseCreated, .courseCloned, .courseArchived, .courseUnarchived,
             .courseDeleted, .courseBundleImported, .courseBundleExported,
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged,
             .assignmentCreated, .assignmentCloned, .assignmentDeleted,
@@ -339,6 +340,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .userDataExportRequested: return "Data export requested"
         case .userDataExportDownloaded: return "Data export downloaded"
         case .courseCreated: return "Course created"
+        case .courseCloned: return "Course cloned"
         case .courseArchived: return "Course archived"
         case .courseUnarchived: return "Course unarchived"
         case .courseDeleted: return "Course deleted"

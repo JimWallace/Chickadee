@@ -50,3 +50,25 @@ enum CourseTermForm {
         }
     }
 }
+
+/// Why a clone form was refused. The admin clone section and the instructor
+/// New term tab both use it, so the query code and the words are written
+/// once (docs/course-terms.md slices 4 and 5).
+enum CourseCloneFormError: String, CaseIterable {
+    case fields = "clone_fields_required"
+    case term = "clone_term_required"
+    case codeTaken = "clone_code_taken"
+
+    var message: String {
+        switch self {
+        case .fields: "Enter a code and a name for the new course."
+        case .term: "Enter a four-digit year and a term for the new course."
+        case .codeTaken: "An active course already uses this code in that term."
+        }
+    }
+
+    /// The message for an `error` query value, or nil for any other value.
+    static func message(forQuery value: String?) -> String? {
+        value.flatMap(Self.init(rawValue:))?.message
+    }
+}

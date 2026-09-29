@@ -276,6 +276,13 @@ struct AdminCourseDetailContext: Encodable {
     /// The term select's options, with the course's (or the suggested)
     /// season marked.
     var termOptions: [CourseTermOption] = []
+    /// The clone form's defaults: the term after this course's, when it has
+    /// one (docs/course-terms.md slice 4). Derived from the course, never
+    /// from today's date.
+    var cloneYear: Int?
+    /// The clone form's refusal, from `CourseCloneFormError`.
+    var cloneError: String?
+    var cloneTermOptions: [CourseTermOption] = []
 }
 
 struct AdminRunnerDetailContext: Encodable {

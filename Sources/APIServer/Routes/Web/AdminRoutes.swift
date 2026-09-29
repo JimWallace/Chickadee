@@ -37,6 +37,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "copy", use: copyCourse)
+        admin.post("courses", ":courseID", "clone", use: cloneCourseForNewTerm)
         admin.post("courses", ":courseID", "delete", use: deleteCourse)
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
