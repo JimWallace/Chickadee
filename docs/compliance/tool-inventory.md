@@ -36,7 +36,7 @@ source of truth; a census re-count is required whenever either changes
 | Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
 |------|------------------|--------------|-------|-----------------|--------|
 | `get_server_info` | `GetServerInfoTool.swift:36` | — | scope only (DB-free) | none (static `appConfig.mcp`) | version, mode, advertised scopes |
-| `list_courses` | `ListCoursesTool.swift:23` | — | eligible-only → enrolled filter | `APICourseEnrollment`, `APICourse` | enrolled courses (code, name) |
+| `list_courses` | `ListCoursesTool.swift:23` | — | eligible-only → enrolled filter | `APICourseEnrollment`, `APICourse` | enrolled courses (code, name, term, key) |
 | `list_course_sections` | `CourseSectionTools.swift:38` | `courseCode` | course-enrol | `APICourse`, `APICourseSection` | section list |
 | `list_assignments` | `ListAssignmentsTool.swift:30` | `courseCode` | course-enrol (`:89`) | `APICourse`, `APIAssignment` | assignment list (id, title, state) |
 | `get_assignment` | `GetAssignmentTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APIAssignment`, `APICourseSection` | metadata, grading mode, section |

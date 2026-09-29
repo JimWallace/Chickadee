@@ -25,7 +25,7 @@ These are provisional engineering assessments, not an official ruling.
 | 6 | **Public-tier test scripts** | `get_suite`, `author_script` (public) | **Confidential** | Shown to students at submission time, so lower sensitivity — but still pre-release course material, not public web content. |
 | 7 | **Problem statement / starter notebook** | `get_notebook`, `update_notebook` | **Confidential** | Assignment prompts are course material; sensitive until released, generally not classified above Confidential once an assignment is open. |
 | 8 | **Assignment metadata** (title, due date, open/closed, grading mode, slug) | `get_assignment`, `list_assignments`, `update_assignment`, `set_grading_mode` | **Confidential** | Course-operational data; not public, no PII. |
-| 9 | **Course & section structure** (course code, name, section names, ordering) | `list_courses`, `list_course_sections`, course/suite-section tools | **Confidential** | Course-operational; reveals which courses the account can reach. No PII. |
+| 9 | **Course & section structure** (course code, name, term, section names, ordering) | `list_courses`, `list_course_sections`, course/suite-section tools | **Confidential** | Course-operational; reveals which courses the account can reach. No PII. |
 | 10 | **Server capability metadata** (version, MCP mode, scopes) | `get_server_info` | **Public** | Non-sensitive operational metadata; no course or user data. |
 | 11 | **Achievements / awards configuration** (badges, class goals, records) | `get_achievements`, `update_achievements` | **Confidential** | Instructor-authored, server-evaluated, display-only awards shown to students; course-operational config. A `testPass` condition can name a test file, but encodes no answer logic and no PII. |
 

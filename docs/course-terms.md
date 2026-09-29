@@ -1,6 +1,6 @@
 # Course terms and new-term cloning
 
-**Status:** Slices 1 to 5 are built. Slice 6 (documentation) is planned.
+**Status:** Built (slices 1 to 6).
 
 This document replaces the plan in
 [clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
@@ -209,11 +209,15 @@ The Core type, the migration, the model accessor, and tests
 - Not built: an MCP `clone_course` tool. The service would support one, but
   course creation through an agent is a separate decision.
 
-### Slice 6: Documentation
+### Slice 6: Documentation (built)
 
-Update `CLAUDE.md`, `docs/multi-course-roles.md` (the "no term/semester"
-statement), `docs/slip-days.md`, `docs/admin-mcp.md`, and mark
-`clone-course-for-new-term.md` as superseded.
+`CLAUDE.md` has a design-decision entry and a reference entry for this
+document. `docs/multi-course-roles.md` no longer says there is no term,
+`docs/slip-days.md` says what a clone does with the slip-day policy, and the
+compliance inventories list the term and key that `list_courses` now returns.
+`clone-course-for-new-term.md` is marked superseded (slice 1).
+`docs/admin-mcp.md` needed no change: `get_instructor_card_series` resolves
+its `courseCode` through the shared resolver, so it also accepts a key.
 
 ---
 

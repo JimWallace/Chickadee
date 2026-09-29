@@ -57,8 +57,11 @@ model is single-course-shaped** in two ways:
    sessional teaching one course this term and none the next).
 
 2. **There is no organizational layer above courses.** The hierarchy is flat:
-   deployment → courses → assignments. There is no term/semester, no
-   department/faculty, and `admin` is all-or-nothing (the entire deployment).
+   deployment → courses → assignments. There is no department/faculty, and
+   `admin` is all-or-nothing (the entire deployment). (When this was
+   written there was no term either. A course now records its year and term
+   as two columns, not as a layer above courses: see
+   [course-terms.md](course-terms.md).)
 
 The recent fix leaned on a principle already stated in
 `Sources/APIServer/Helpers/CourseAccessHelpers.swift`:
@@ -266,11 +269,12 @@ representable and creatable.
 This is sketched, not specified — it should get its own doc once Theme 1
 lands.
 
-- **Terms / semesters.** A `Term` entity ("Fall 2026"); a course belongs to a
-  term. Re-offering CS136 each term becomes "a new course in a new term,"
-  not today's archive-and-recreate. Course-code uniqueness becomes
-  *per-term*; the archive-based retention clock
-  (`SubmissionRetentionService`) re-anchors on term rollover.
+- **Terms / semesters. Built, in a smaller form** —
+  [course-terms.md](course-terms.md). A course records its year and
+  Waterloo term (two columns, not a `Term` entity). Re-offering CS136 each
+  term is "clone the course into the new term", and course-code uniqueness is
+  per term. The retention clock still starts at archiving; it did not move to
+  a term rollover.
 - **Departments / faculties.** An org-unit grouping courses; dashboards and
   admin organize by department instead of one flat list.
 - **Scoped administration.** Today `admin` is deployment-wide. University

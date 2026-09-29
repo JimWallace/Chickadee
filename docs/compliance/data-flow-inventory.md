@@ -63,7 +63,7 @@ Classification column references `policy46-classification.md`.
 | Tool | Reads (in-boundary) | Off-boundary payload (returned to agent) | Contains student PII? | Classification |
 |------|---------------------|------------------------------------------|-----------------------|----------------|
 | `get_server_info` | none | version, MCP mode, scopes | No | Public |
-| `list_courses` | enrolments, courses | course codes + names (enrolled only) | No | Confidential |
+| `list_courses` | enrolments, courses | course codes, names, terms and course keys (enrolled only) | No | Confidential |
 | `list_course_sections` | course, sections | section names | No | Confidential |
 | `list_assignments` | assignments | titles, public IDs, open/closed | No | Confidential |
 | `get_assignment` | assignment, section | title, due date, state, grading mode | No | Confidential |

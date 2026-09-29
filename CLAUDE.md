@@ -687,7 +687,31 @@ reported unavailable where it does not.
 **Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
 unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
 the canonical `/testsetups/:id/submit` handlers remain active for
-compatibility.
+compatibility. The first segment is the course's `urlKey`: the code, or
+"CS135-F26" for a course with a term (see the next entry).
+
+**A course is one offering: it records a year and a term, and its code is
+unique per term (docs/course-terms.md).** `AcademicTerm` (Core) is a
+four-digit year plus a Waterloo `TermSeason` (Winter, Spring, Fall), stored
+as the nullable `term_year` / `term_season` columns and read only through
+`APICourse.term`. A new course must declare one at every door (admin create,
+clone, bundle import records the bundle's), and nothing infers one — a
+course with no term means "no term recorded", exactly the
+language-declaration rule. The unique index is `(code, COALESCE(term_year,
+0), COALESCE(term_season, ''))` over active courses; the COALESCE is what
+keeps two term-less courses from sharing a code, because SQL NULLs are
+distinct. So **a bare code can name more than one active course**, and every
+code lookup must pick one: the web resolver `findActiveCourse(byKey:viewer:on:)`
+takes an exact code first, then a "CODE-F26" key, then prefers the viewer's
+enrolled offering, then the newest term; MCP's `resolveMCPCourse` does the
+same but **refuses a write** through a code that still names several
+offerings. Do not add a code-only lookup; use one of those two. Cloning into
+a new term is `CourseCloneService` (admin course page, and the instructor
+"New term" tab, which enrolls the cloning instructor): content and settings
+come along, people, their work and LMS bindings do not, and every copied
+assignment starts closed with no dates and its solution reveal off, because
+a stale or missing date would let an "after due" reveal show the answer key
+on opening.
 
 **Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
 default 16 entries) keeps fully-prepared test setup directories keyed by
@@ -1753,6 +1777,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
 - `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
+- `docs/course-terms.md` — the year and Waterloo term of each course offering: the three maintainer decisions (codes unique per term, a term required at every door and never inferred, clone by admins and by instructors), the `COALESCE` index and why NULL terms need it, the URL key and the two course-code resolvers (web prefers the viewer's offering; MCP refuses an ambiguous write), and the clone (what it copies, what it leaves, and why copied assignments start with no dates). Supersedes `clone-course-for-new-term.md`
 - `docs/solution-visibility.md` — post-deadline solution reveal: the per-assignment `SolutionVisibility` policy, the per-student reveal gate and its slip-day claim-window ceiling (shared with release-output gating), the enforcement chokepoints, and the accepted residual leak
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)

@@ -47,7 +47,9 @@ the budget, the ledger, and the affordances:
   than deleting, so the ledger stays a complete history. Balance =
   `slip_days_per_student + slip_days_adjustment − count(unrefunded spends in
   the course)`. The ledger is course-scoped and courses are per-term, so the
-  budget resets naturally at term rollover.
+  budget resets naturally at term rollover. A clone for a new term
+  ([course-terms.md](course-terms.md)) copies the policy and none of the
+  ledger.
 - **Course policy** — four nullable columns on `courses`
   (`slip_days_enabled`, `slip_days_per_student`, `slip_day_extension_hours`,
   `slip_day_release_reveal_hold`), read through `APICourse.slipDayPolicy`
