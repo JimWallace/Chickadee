@@ -1,5 +1,7 @@
-<!-- One row of the instructor dashboard's item table: either a piece of
-     ungraded course material or an assignment.  Rendered inside a loop whose
+<!-- One row of the instructor Overview item list: a graded assignment, an
+     unpublished setup, a piece of ungraded material, or a heading.  Every row is
+     a tile, a name with one details line, a state track, a submitted count and an
+     actions track; the drag handle sits in its own leading cell.  Rendered inside a loop whose
      variable is named `item`, and reads `enrolledStudentCount` from the page
      context, so both call sites in assignments.leaf must keep those names.
 
@@ -10,22 +12,42 @@
      section - which is every assignment on a course that has never created a
      section - rendered without them. -->
 #if(item.isContent):
-    <tr data-content-item-id="#(item.content.id)">
+    <tr data-content-item-id="#(item.content.id)"#if(item.content.isHeading): class="section-items-heading"#endif>
+        <td class="section-items-handle"><span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span></td>
+        #if(item.content.isHeading):
+        <td colspan="4"><strong>#(item.content.title)</strong>#if(item.content.itemDescription): <span class="text-muted">#(item.content.itemDescription)</span>#endif</td>
+        #else:
+        <td class="item-tile-cell"><span class="item-tile" data-kind="#(item.content.kind)"><svg class="icon" aria-hidden="true"><use href="#(item.content.iconHref)"/></svg></span></td>
         <td>
-            <span class="assignment-name-cell">
-                <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
-                <span class="content-item-kind">#(item.content.kindLabel)</span>
-                <span class="content-item-title">#(item.content.title)</span>
-                #if(!item.content.isPublished):<span class="content-item-hidden">Hidden</span>#endif
-            </span>
-            #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
+            <div class="item-title#if(!item.content.isPublished): text-muted#endif">#(item.content.title)</div>
+            <div class="item-details"><span class="content-item-kind" data-kind="#(item.content.kind)">#(item.content.kindLabel)</span>#if(item.content.detailsText != ""): · #(item.content.detailsText)#endif</div>
         </td>
-        <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor#for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor</td>
-        <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
-        <td class="content-item-actions">
-            <details class="popup-anchor">
-                <summary class="btn action-btn summary-btn">Edit</summary>
-                <div class="add-section-popup card">
+        <td>
+            <form method="post" action="/instructor/content-items/#(item.content.id)/visibility" class="status-form">
+                #csrfFormField()
+                <label class="visually-hidden" for="visibility-#(item.content.id)">Visibility of #(item.content.title)</label>
+                <span class="state-select" data-state="#if(item.content.isPublished):visible#else:hidden#endif">
+                    <select id="visibility-#(item.content.id)" class="form-input" name="isPublished" data-ck-submit-on-change>
+                        <option value="true" #if(item.content.isPublished):selected#endif>Visible</option>
+                        <option value="false" #if(!item.content.isPublished):selected#endif>Hidden</option>
+                    </select>
+                </span>
+            </form>
+        </td>
+        <td class="col-hide-phone"></td>
+        #endif
+        <td>
+            <div class="assignment-actions-cell">
+                #for(action in item.content.actions):
+                <a class="btn action-btn action-btn-icon" href="#(action.href)" title="#(action.label)" aria-label="#(action.label)"#if(action.opensNewTab): target="_blank" rel="noopener noreferrer"#endif>
+                    <svg class="icon" aria-hidden="true"><use href="#(action.iconHref)"/></svg>
+                </a>
+                #endfor
+                <details class="ext-details popup-anchor">
+                    <summary class="btn action-btn action-btn-icon ext-summary" title="Edit" aria-label="Edit #(item.content.title)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
+                    </summary>
+                    <div class="popover-panel">
                     <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form">
                         #csrfFormField()
                         <label class="form-label">Title
@@ -84,171 +106,171 @@
                         #endfor
                     </div>
                     #endif
-                </div>
-            </details>
-            <form method="post" action="/instructor/content-items/#(item.content.id)/delete" data-confirm="Delete this material?">
-                #csrfFormField()
-                <button class="btn action-btn action-danger" type="submit">Delete</button>
-            </form>
+                    </div>
+                </details>
+                <details class="ext-details row-menu">
+                    <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(item.content.title)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                    </summary>
+                    <div class="popover-panel row-menu-panel" role="menu">
+                        <form method="post" action="/instructor/content-items/#(item.content.id)/delete" data-confirm="Delete this material?">
+                            #csrfFormField()
+                            <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete material
+                            </button>
+                        </form>
+                    </div>
+                </details>
+            </div>
         </td>
     </tr>
 #else:
     <tr class="#if(item.assignment.status == "open"):status-open#elseif(item.assignment.status == "preview"):status-preview#elseif(item.assignment.status == "closed"):status-closed#endif"
         #if(item.assignment.assignmentID):data-assignment-id="#(item.assignment.assignmentID)"#endif>
-        <td>
+        <td class="section-items-handle">#if(item.assignment.assignmentID):<span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>#endif</td>
+        <td class="item-tile-cell">
             #if(item.assignment.assignmentID):
-            <span class="assignment-name-cell">
-                <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
-            #endif
-            #if(item.assignment.title):
-            #if(item.assignment.assignmentID):
-            <a href="/instructor/#(item.assignment.assignmentID)/submissions"><strong>#(item.assignment.title)</strong></a>
+            <span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span>
             #else:
-            <strong>#(item.assignment.title)</strong>
-            #endif
-            #else:
-            <span class="text-muted">Unpublished</span>
-            #endif
-            #if(item.assignment.assignmentID):
-            </span>
+            <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span>
             #endif
         </td>
         <td>
-            #if(item.assignment.assignmentID && item.assignment.validationStatus == "passed"):
+            #if(item.assignment.assignmentID):
+            <div class="item-title"><a href="/instructor/#(item.assignment.assignmentID)/submissions">#(item.assignment.title)</a></div>
+            <div class="item-details">
+                #if(item.assignment.dueAt):Due #(item.assignment.dueAt)#else:No due date#endif
+                #if(item.assignment.variantState == "failed"):
+                · <span class="tier tier-danger" title="The solution failed on some per-student variants; those students would fail too.">#(item.assignment.variantSummaryText)</span>
+                #if(item.assignment.failedVariantSubmissionID):
+                · <a href="/submissions/#(item.assignment.failedVariantSubmissionID)">View variant</a>
+                #endif
+                #elseif(item.assignment.variantState == "pending"):
+                · <span title="The reference solution is also being graded against synthetic per-student seeds.">#(item.assignment.variantSummaryText)</span>
+                #elseif(item.assignment.variantState == "passed"):
+                · <span title="The reference solution also passed against every synthetic per-student seed.">#(item.assignment.variantSummaryText)</span>
+                #endif
+                #if(item.assignment.validationStatus == "failed"):
+                #if(item.assignment.validationSubmissionID):· <a href="/submissions/#(item.assignment.validationSubmissionID)">View results</a>#endif
+                #elseif(item.assignment.validationStatus == "pending"):
+                #if(item.assignment.validationSubmissionID):· <a href="/submissions/#(item.assignment.validationSubmissionID)">Track status</a>#endif
+                #elseif(item.assignment.validationStatus == "no-runner"):
+                · Ask an admin for a compatible runner, then re-save.
+                #endif
+            </div>
+            #else:
+            <div class="item-title text-muted"><em>Unpublished</em></div>
+            <div class="item-details">Uploaded #(item.assignment.createdAt) · #(item.assignment.suiteCount) tests</div>
+            #endif
+        </td>
+        <td>
+            #if(!item.assignment.assignmentID):
+            <span class="tier tier-unpublished">Unpublished</span>
+            #elseif(item.assignment.validationStatus == "passed"):
             <form method="post" action="/instructor/#(item.assignment.assignmentID)/status" class="status-form">
                 #csrfFormField()
                 <label class="visually-hidden" for="status-#(item.assignment.assignmentID)">Status for #(item.assignment.title)</label>
-                <select id="status-#(item.assignment.assignmentID)" class="form-input status-toggle-btn" name="status"
-                        data-ck-submit-on-change>
-                    <option value="open" #if(item.assignment.status == "open"):selected#endif>open</option>
-                    <option value="preview" #if(item.assignment.status == "preview"):selected#endif>staff only</option>
-                    <option value="closed" #if(item.assignment.status == "closed"):selected#endif>closed</option>
-                </select>
+                <span class="state-select" data-state="#(item.assignment.status)">
+                    <select id="status-#(item.assignment.assignmentID)" class="form-input" name="status" data-ck-submit-on-change>
+                        <option value="open" #if(item.assignment.status == "open"):selected#endif>open</option>
+                        <option value="preview" #if(item.assignment.status == "preview"):selected#endif>staff only</option>
+                        <option value="closed" #if(item.assignment.status == "closed"):selected#endif>closed</option>
+                    </select>
+                </span>
             </form>
-            #elseif(item.assignment.assignmentID):
-            <span class="tier tier-closed">closed</span>
-            #else:
-            <span class="tier
-                #if(item.assignment.status == "open"):tier-open
-                #elseif(item.assignment.status == "preview"):tier-preview
-                #elseif(item.assignment.status == "closed"):tier-closed
-                #elseif(item.assignment.status == "unpublished"):tier-unpublished
-            #endif">#(item.assignment.status)</span>
-            #endif
-        </td>
-        <td>
-            #if(item.assignment.validationStatus == "passed"):
-            <span class="tier tier-open">passed</span>
             #elseif(item.assignment.validationStatus == "failed"):
-            <span class="tier tier-closed">failed</span>
-            #if(item.assignment.validationSubmissionID):
-            <div class="cell-subrow">
-                <a href="/submissions/#(item.assignment.validationSubmissionID)">View results</a>
-            </div>
-            #endif
+            <span class="tier tier-danger">Validation failed</span>
             #elseif(item.assignment.validationStatus == "pending"):
-            <span class="tier">pending</span>
-            #if(item.assignment.validationSubmissionID):
-            <div class="cell-subrow">
-                <a href="/submissions/#(item.assignment.validationSubmissionID)">Track status</a>
-            </div>
-            #endif
+            <span class="tier tier-preview">Validating…</span>
             #elseif(item.assignment.validationStatus == "no-runner"):
-            <span class="tier tier-closed" title="No runner could grade this when it was last saved, so validation did not run.">no runner</span>
-            <div class="cell-subrow">Ask an admin for a compatible runner, then re-save.</div>
+            <span class="tier tier-danger" title="No runner could grade this when it was last saved, so validation did not run.">No runner</span>
             #else:
-            <span class="tier">—</span>
-            #endif
-            #if(item.assignment.variantState == "failed"):
-            <div class="cell-subrow">
-                <span class="tier tier-closed" title="The solution failed on some per-student variants; those students would fail too.">#(item.assignment.variantSummaryText)</span>
-                #if(item.assignment.failedVariantSubmissionID):
-                <a href="/submissions/#(item.assignment.failedVariantSubmissionID)">View variant</a>
-                #endif
-            </div>
-            #elseif(item.assignment.variantState == "pending"):
-            <div class="cell-subrow">
-                <span class="tier" title="The reference solution is also being graded against synthetic per-student seeds.">#(item.assignment.variantSummaryText)</span>
-            </div>
-            #elseif(item.assignment.variantState == "passed"):
-            <div class="cell-subrow">
-                <span class="tier tier-open" title="The reference solution also passed against every synthetic per-student seed.">#(item.assignment.variantSummaryText)</span>
-            </div>
+            <span class="tier tier-closed">closed</span>
             #endif
         </td>
-        <td class="due-col col-hide-phone">#if(item.assignment.dueAt):#(item.assignment.dueAt)#else:—#endif</td>
         <td class="col-hide-phone nowrap">
             #if(item.assignment.assignmentID):
             <span title="#(item.assignment.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(item.assignment.submittedStudentCount) / #(enrolledStudentCount)</span>
-            #else:—#endif
+            <div class="item-details">submitted</div>
+            #endif
         </td>
         <td>
             #if(item.assignment.status == "unpublished"):
-            <div class="row-actions-tight">
-            <details class="publish-details">
-                <summary class="btn action-btn summary-btn">Publish…</summary>
-                <form class="publish-form" method="post" action="/instructor">
-                    <input type="hidden" name="testSetupID" value="#(item.assignment.setupID)">
-                    <label class="form-label publish-label">
-                        Title
-                        <input class="form-input editor-input" type="text" name="title"
-                               placeholder="e.g. Lab 1 — Warmup" required>
-                    </label>
-                    <label class="form-label publish-label">
-                        Due date (optional)
-                        <input class="form-input js-publish-due-date editor-input" type="datetime-local" name="dueAt">
-                    </label>
-                    <div class="publish-uw-warning card-meta" style="display:none"></div>
-                    <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
-                </form>
-            </details>
-            <form method="post" action="/instructor/setup/#(item.assignment.setupID)/delete"
-                  data-confirm="Delete this unpublished setup? This cannot be undone.">
-                #csrfFormField()
-                <button class="btn action-btn action-danger" type="submit"
-                        aria-label="Delete setup" title="Delete setup">
-                    <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                </button>
-            </form>
+            <div class="assignment-actions-cell">
+                <details class="publish-details">
+                    <summary class="btn action-btn summary-btn">Publish…</summary>
+                    <form class="publish-form" method="post" action="/instructor">
+                        <input type="hidden" name="testSetupID" value="#(item.assignment.setupID)">
+                        <label class="form-label publish-label">
+                            Title
+                            <input class="form-input editor-input" type="text" name="title"
+                                   placeholder="e.g. Lab 1 — Warmup" required>
+                        </label>
+                        <label class="form-label publish-label">
+                            Due date (optional)
+                            <input class="form-input js-publish-due-date editor-input" type="datetime-local" name="dueAt">
+                        </label>
+                        <div class="publish-uw-warning card-meta" style="display:none"></div>
+                        <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
+                    </form>
+                </details>
+                <details class="ext-details row-menu">
+                    <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for unpublished setup #(item.assignment.setupID)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                    </summary>
+                    <div class="popover-panel row-menu-panel" role="menu">
+                        <form method="post" action="/instructor/setup/#(item.assignment.setupID)/delete"
+                              data-confirm="Delete this unpublished setup? This cannot be undone.">
+                            #csrfFormField()
+                            <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete setup
+                            </button>
+                        </form>
+                    </div>
+                </details>
             </div>
             #else:
             <!-- Every published status - open, closed, staff-only preview -
-                 gets the same actions.  This used to be a three-arm chain
-                 whose arms were byte-identical. -->
-            <div class="row-actions-tight">
-                <button class="btn action-btn" type="button"
+                 gets the same actions: copy link and edit up front, the rest
+                 in the row menu. -->
+            <div class="assignment-actions-cell">
+                <button class="btn action-btn action-btn-icon" type="button"
                         title="Copy student link" aria-label="Copy student link"
                         data-copy-url="#(item.assignment.vanityURL)">
                     <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
                 </button>
-                <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/workbench"
+                <a class="btn action-btn action-btn-icon" href="/instructor/#(item.assignment.assignmentID)/workbench"
                    title="Edit assignment" aria-label="Edit assignment">
                     <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                 </a>
-                <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
-                      data-confirm="Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.">
-                    #csrfFormField()
-                    <button class="btn action-btn" type="submit"
-                            aria-label="Duplicate assignment" title="Duplicate assignment">
-                        <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
-                    </button>
-                </form>
-                <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
-                      data-confirm="Retest every submission for this assignment? The worker will re-grade each one against the current test suite.">
-                    #csrfFormField()
-                    <button class="btn action-btn" type="submit"
-                            aria-label="Retest all submissions" title="Retest all submissions">
-                        <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
-                    </button>
-                </form>
-                <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
-                      data-confirm="Delete this assignment? Students will no longer see it.">
-                    #csrfFormField()
-                    <button class="btn action-btn action-danger" type="submit"
-                            aria-label="Delete assignment" title="Delete assignment">
-                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                    </button>
-                </form>
+                <details class="ext-details row-menu">
+                    <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(item.assignment.title)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                    </summary>
+                    <div class="popover-panel row-menu-panel" role="menu">
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
+                              data-confirm="Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.">
+                            #csrfFormField()
+                            <button class="row-menu-item" type="submit" role="menuitem">
+                                <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Duplicate
+                            </button>
+                        </form>
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
+                              data-confirm="Retest every submission for this assignment? The worker will re-grade each one against the current test suite.">
+                            #csrfFormField()
+                            <button class="row-menu-item" type="submit" role="menuitem">
+                                <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Retest all submissions
+                            </button>
+                        </form>
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
+                              data-confirm="Delete this assignment? Students will no longer see it.">
+                            #csrfFormField()
+                            <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete assignment
+                            </button>
+                        </form>
+                    </div>
+                </details>
             </div>
             #endif
         </td>

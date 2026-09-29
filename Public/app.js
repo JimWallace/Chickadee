@@ -389,7 +389,9 @@ if (root) {
         open.forEach((d) => { d.open = false; });
         const summary = focused.querySelector(':scope > summary');
         if (summary) summary.focus();
-    });
+    // Capture phase: the floated-popover handler above also closes on Escape,
+    // and if it ran first there would be nothing left open for this one to find.
+    }, true);
 }());
 
 // ── Declarative control behaviours (the former inline handlers) ──────────────

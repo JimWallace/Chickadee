@@ -45,6 +45,7 @@ struct CourseAdminRoutes: RouteCollection {
         r.post("content-items", "reorder", use: reorderContentItems)
         r.on(.POST, "content-items", ":id", "edit", body: .collect(maxSize: "60mb"), use: updateContentItem)
         r.post("content-items", ":id", "delete", use: deleteContentItem)
+        r.post("content-items", ":id", "visibility", use: setContentItemVisibility)
         r.post("content-items", ":id", "section", use: moveContentItemToSection)
         r.post(
             "content-items", ":id", "attachments", ":attachmentID", "delete",

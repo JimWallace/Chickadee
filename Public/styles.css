@@ -1716,6 +1716,21 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .item-grade { text-align: right; }
 .section-items .assignment-actions-cell { justify-content: flex-end; }
+
+/* Instructor Overview variant of the section list: a leading drag-handle
+   track and a submitted-count track. Same row shape, wider state track. */
+.section-items--manage .section-items-status { width: 9.5rem; }
+.section-items-handle { width: 1.75rem; }
+.section-items--manage td.section-items-handle { padding-right: 0; padding-left: .6rem; }
+.section-items-count { width: 5rem; }
+.section-items--manage .item-details a { font-weight: 600; }
+
+/* The add-material form under a section header. Closed until a + Add item
+   opens it (a class toggle from assignments.js); without JS the item is a link
+   to this id, and :target opens it. */
+.add-material-panel { display: none; margin-bottom: .75rem; }
+.add-material-panel:target,
+.add-material-panel.is-open { display: block; }
 .content-item-links a { margin-right: .5rem; }
 .content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
@@ -2412,6 +2427,16 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
 
 /* Instructor dashboard (assignments.leaf): section toolbar + per-section bits. */
 .section-toolbar { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
+/* + Add Section closes the list of sections: a full-width dashed button, where
+   the new section will appear. */
+.section-toolbar > .add-section-details { flex: 1; }
+.section-toolbar > .add-section-details > summary {
+    display: block;
+    text-align: center;
+    border-style: dashed;
+    background: transparent;
+    color: var(--muted);
+}
 .section-mode-note { font-size: var(--text-sm); color: var(--gray-500); }
 .section-action { font-size: var(--text-sm); padding: .2rem .55rem; }
 .section-action--push { margin-left: auto; }
@@ -2644,6 +2669,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    ⋯ panel is a .popover-panel that app.js floats out of the table's overflow
    clip; a + Add panel is the .suite-section-popup shell.  Declared after both
    so its padding and gap win.  Destructive items go last, in danger colour. */
+.row-menu { flex: 0 0 auto; }
 .row-menu-panel {
     min-width: 13rem;
     gap: 0;
