@@ -82,6 +82,7 @@ extension AdminRoutes {
                 id: id.uuidString,
                 code: entry.course.code,
                 name: entry.course.name,
+                termLabel: entry.course.term?.displayName,
                 archivedAt: entry.archivedAt.map { df.string(from: $0) } ?? "—",
                 archivedAtISO: entry.archivedAt.map { iso.string(from: $0) } ?? "",
                 purgeEligibleAt: entry.eligibleAt.map { df.string(from: $0) } ?? "—",

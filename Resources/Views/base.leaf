@@ -81,7 +81,7 @@
                         <input type="hidden" name="next" value="/instructor">
                         <button type="submit" role="menuitem"
                                 class="nav-dropdown-item #if(course.isActive):nav-dropdown-item-active#endif">
-                            #(course.code) — #(course.name)
+                            #(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)
                         </button>
                     </form>
                     #endfor
@@ -126,7 +126,7 @@
         <button type="submit"
                 class="course-tab #if(course.isActive):course-tab-active#endif"
                 aria-current="#if(course.isActive):page#else:false#endif">
-            #(course.code)
+            #(course.code)#if(course.termShortLabel): #(course.termShortLabel)#endif
         </button>
     </form>
     #endfor

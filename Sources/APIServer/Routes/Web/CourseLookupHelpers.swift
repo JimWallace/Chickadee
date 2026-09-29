@@ -19,3 +19,16 @@ func findActiveCourse(byCode code: String, on db: Database) async throws -> APIC
         .all()
         .first(where: { $0.code.lowercased() == lowered })
 }
+
+/// True when a non-archived course other than `excluding` already uses
+/// `code` (exact match, the same rule as the `idx_courses_code_active`
+/// index). Lets a form report a duplicate instead of failing on the index.
+func activeCourseCodeIsTaken(
+    _ code: String, excluding courseID: UUID?, on db: Database
+) async throws -> Bool {
+    try await APICourse.query(on: db)
+        .filter(\.$code == code)
+        .filter(\.$isArchived == false)
+        .all()
+        .contains { $0.id != courseID }
+}

@@ -82,7 +82,7 @@ My Account
         <tbody>
         #for(course in enrolledCourses):
             <tr>
-                <td><strong>#(course.code)</strong></td>
+                <td><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</td>
                 <td>#(course.name)
                     #if(course.handle):
                     <div class="text-muted" data-avatar-handle>Class handle: #(course.handle)</div>
@@ -127,7 +127,7 @@ My Account
         <tbody>
         #for(course in availableCourses):
             <tr>
-                <td><strong>#(course.code)</strong></td>
+                <td><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</td>
                 <td>#(course.name)</td>
                 <td>
                     <form method="post" action="/account/enroll" class="inline-form">

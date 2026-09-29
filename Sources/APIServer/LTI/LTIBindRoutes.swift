@@ -37,7 +37,11 @@ struct LTIBindRoutes: RouteCollection {
                 currentUser: req.currentUserContext,
                 contextTitle: pending.contextTitle,
                 courses: courses.compactMap { course in
-                    course.id.map { LTIBindCourseOption(id: $0.uuidString, code: course.code, name: course.name) }
+                    course.id.map {
+                        LTIBindCourseOption(
+                            id: $0.uuidString, code: course.code, name: course.name,
+                            termLabel: course.term?.displayName)
+                    }
                 }))
     }
 
@@ -101,7 +105,7 @@ struct LTIBindRoutes: RouteCollection {
             guard !taught.isEmpty else { return [] }
             query = query.filter(\.$id ~~ taught)
         }
-        return try await query.sort(\.$code).all()
+        return try await query.all().sorted(by: courseListPrecedes)
     }
 }
 
@@ -115,4 +119,7 @@ struct LTIBindCourseOption: Encodable {
     let id: String
     let code: String
     let name: String
+    /// "Fall 2026", or nil when the course records no term. Two offerings
+    /// of one course are told apart by it.
+    let termLabel: String?
 }

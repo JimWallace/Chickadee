@@ -27,6 +27,15 @@ public enum TermSeason: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// The letter used in short term labels: "W", "S" or "F".
+    public var initial: String {
+        switch self {
+        case .winter: "W"
+        case .spring: "S"
+        case .fall: "F"
+        }
+    }
+
     /// The month (1–12) in which the term starts.
     public var startMonth: Int {
         switch self {
@@ -64,6 +73,19 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
     /// "Fall 2026".
     public var displayName: String { "\(season.displayName) \(year)" }
 
+    /// "F26": the season initial and the last two digits of the year. The
+    /// compact form for tight places such as the course tab strip.
+    public var shortLabel: String {
+        let twoDigits = year % 100
+        return season.initial + (twoDigits < 10 ? "0\(twoDigits)" : "\(twoDigits)")
+    }
+
+    /// A number that increases by one per term, in calendar order. Use it
+    /// as a sort value where a `Comparable` value cannot go (a table cell).
+    public var ordinal: Int {
+        year * TermSeason.allCases.count + (TermSeason.allCases.firstIndex(of: season) ?? 0)
+    }
+
     /// The term that follows this one: Winter → Spring → Fall → next Winter.
     /// Nil only past the last four-digit year.
     public var next: AcademicTerm? {
@@ -100,7 +122,6 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
     }
 
     public static func < (lhs: AcademicTerm, rhs: AcademicTerm) -> Bool {
-        if lhs.year != rhs.year { return lhs.year < rhs.year }
-        return lhs.season.startMonth < rhs.season.startMonth
+        lhs.ordinal < rhs.ordinal
     }
 }

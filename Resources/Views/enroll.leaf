@@ -28,7 +28,7 @@ Choose Your Courses
                        value="#(course.id)"
                        #if(course.isEnrolled):checked#endif>
                 <span>
-                    <strong>#(course.code)</strong>
+                    <strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif
                     #if(course.name):— #(course.name)#endif
                 </span>
             </label>

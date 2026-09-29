@@ -11,6 +11,10 @@
 
 #if(error == "course_fields_required"):
 <div class="form-error" role="alert">Course code and name are required.</div>
+#elseif(error == "course_term_required"):
+<div class="form-error" role="alert">Enter a four-digit year and a term.</div>
+#elseif(error == "code_taken"):
+<div class="form-error" role="alert">An active course already uses this code.</div>
 #endif
 
 <!-- ── Create course ───────────────────────────────── -->
@@ -19,13 +23,26 @@
     <form method="post" action="/admin/courses"
           class="course-form">
         #csrfFormField()
-        <label class="form-label course-field-code">
+        <label class="form-label course-field-short">
             Code
-            <input class="form-input course-input-code" type="text" name="code" placeholder="e.g. CMSC131" required autofocus>
+            <input class="form-input course-input-short" type="text" name="code" placeholder="e.g. CMSC131" required autofocus>
         </label>
         <label class="form-label course-field-name">
             Name
             <input class="form-input course-input-block" type="text" name="name" placeholder="e.g. Introduction to OOP" required>
+        </label>
+        <label class="form-label course-field-short">
+            Year
+            <input class="form-input course-input-short" type="number" name="termYear" min="1000" max="9999"
+                   value="#(course.termYear)" required>
+        </label>
+        <label class="form-label course-field-short">
+            Term
+            <select class="form-input course-input-short" name="termSeason" required>
+                #for(option in termOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
         </label>
         <button class="btn btn-primary course-form-submit" type="submit">Create course</button>
     </form>
@@ -33,7 +50,7 @@
 #else:
 <div class="page-titlebar">
     <div class="toolbar">
-    <h1>#(course.code) — #(course.name)</h1>
+    <h1>#(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)</h1>
     #if(course.isArchived):
     <span class="tier tier-closed">archived</span>
     #else:
@@ -65,18 +82,39 @@
 <!-- ── Edit course ─────────────────────────────────── -->
 <section class="page-section">
     <h2>Edit course</h2>
+    #if(error == "course_term_required"):
+    <div class="form-error" role="alert">Enter a four-digit year and a term.</div>
+    #elseif(error == "code_taken"):
+    <div class="form-error" role="alert">Another course already uses this code.</div>
+    #endif
     <form method="post" action="/admin/courses/#(course.id)/edit"
           class="course-form">
         #csrfFormField()
-        <label class="form-label course-field-code">
+        <label class="form-label course-field-short">
             Code
-            <input class="form-input course-input-code" type="text" name="code" value="#(course.code)"
+            <input class="form-input course-input-short" type="text" name="code" value="#(course.code)"
                    required>
         </label>
         <label class="form-label course-field-name">
             Name
             <input class="form-input course-input-block" type="text" name="name" value="#(course.name)"
                    required>
+        </label>
+        <label class="form-label course-field-short">
+            Year
+            <input class="form-input course-input-short" type="number" name="termYear" min="1000" max="9999"
+                   value="#(course.termYear)" required>
+        </label>
+        <label class="form-label course-field-short">
+            Term
+            <select class="form-input course-input-short" name="termSeason" required>
+                #if(course.termSeason):#else:
+                <option value="" selected disabled>Choose</option>
+                #endif
+                #for(option in termOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
         </label>
         #if(course.brightspaceSyncEnabled):
         <label class="form-label course-field-bs">
@@ -254,7 +292,7 @@
     flex-wrap: wrap;
     max-width: 700px;
 }
-.course-field-code {
+.course-field-short {
     flex: 0 0 auto;
 }
 .course-field-name {
@@ -263,7 +301,7 @@
 .course-field-bs {
     flex: 1 1 140px;
 }
-.course-input-code {
+.course-input-short {
     width: 9rem;
     display: block;
 }

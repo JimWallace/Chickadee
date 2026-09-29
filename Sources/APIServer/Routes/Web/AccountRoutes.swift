@@ -82,7 +82,7 @@ struct AccountRoutes: RouteCollection {
                 return AccountCourseRow(
                     id: id.uuidString,
                     code: e.course.code,
-                    name: e.course.name,
+                    name: e.course.name, termLabel: e.course.term?.displayName,
                     enrollmentMode: e.course.enrollmentMode.rawValue,
                     slipDaysText: slipDaysText,
                     handle: handlesByCourseID[id]
@@ -97,7 +97,7 @@ struct AccountRoutes: RouteCollection {
                     c.enrollmentMode == .open
                 else { return nil }
                 return AccountCourseRow(
-                    id: id.uuidString, code: c.code, name: c.name,
+                    id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName,
                     enrollmentMode: c.enrollmentMode.rawValue,
                     slipDaysText: nil, handle: nil)
             }
@@ -309,6 +309,8 @@ private struct AccountCourseRow: Encodable {
     let id: String
     let code: String
     let name: String
+    /// "Fall 2026", or nil when the course records no term.
+    let termLabel: String?
     let enrollmentMode: String
     /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
     /// a course with the policy on; nil hides the line (#1228).

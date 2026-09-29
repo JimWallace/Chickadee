@@ -116,9 +116,11 @@ Admin
             <tr>
                 <th data-sort-key="code" data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
                 <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
+                <th data-sort-key="term" data-sort-type="number"><button class="sort-header" type="button">Term</button></th>
                 <th data-sort-key="students" data-sort-type="number"><button class="sort-header" type="button">Students</button></th>
                 <!-- Phone: the submission total is scale you read at a desk;
-                     the enrolment count is the one an archive decision needs. -->
+                     the enrolment count and the term are what an archive
+                     decision needs, so both stay visible. -->
                 <th class="col-hide-phone" data-sort-key="submissions" data-sort-type="number"><button class="sort-header" type="button">Submissions</button></th>
                 <th>Actions</th>
             </tr>
@@ -128,6 +130,7 @@ Admin
             <tr class="status-open">
                 <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
+                <td data-sort-value="#(course.termSortValue)">#if(course.termLabel):#(course.termLabel)#else:—#endif</td>
                 <td>#(course.enrollmentCount)</td>
                 <td class="col-hide-phone">#(course.submissionCount)</td>
                 <td class="action-cell">

@@ -84,3 +84,22 @@ import Testing
         }
     }
 }
+
+@Suite struct AcademicTermLabelTests {
+
+    @Test(arguments: [
+        (2026, TermSeason.fall, "F26"), (2027, .winter, "W27"), (2005, .spring, "S05"), (2100, .fall, "F00"),
+    ])
+    func shortLabelIsInitialAndTwoDigitYear(year: Int, season: TermSeason, label: String) throws {
+        let term = try #require(AcademicTerm(year: year, season: season))
+        #expect(term.shortLabel == label)
+    }
+
+    @Test func ordinalStepsByOnePerTerm() throws {
+        let fall26 = try #require(AcademicTerm(year: 2026, season: .fall))
+        let winter27 = try #require(fall26.next)
+        let spring27 = try #require(winter27.next)
+        #expect(winter27.ordinal == fall26.ordinal + 1)
+        #expect(spring27.ordinal == winter27.ordinal + 1)
+    }
+}

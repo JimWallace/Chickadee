@@ -349,7 +349,8 @@ extension Request {
         let markedCourses = enrolledContexts.map {
             CourseContext(
                 id: $0.id, code: $0.code, name: $0.name,
-                isActive: $0.id == activeCourseID, role: $0.role)
+                isActive: $0.id == activeCourseID, role: $0.role,
+                termLabel: $0.termLabel, termShortLabel: $0.termShortLabel)
         }
         let active = markedCourses.first(where: \.isActive)
         return ResolvedCourseState(active: active, all: markedCourses, activeCourseUUID: activeCourseUUID)
@@ -363,7 +364,9 @@ extension Request {
             guard let id = pair.course.id else { return nil }
             return CourseContext(
                 id: id.uuidString, code: pair.course.code, name: pair.course.name,
-                isActive: false, role: pair.role)
+                isActive: false, role: pair.role,
+                termLabel: pair.course.term?.displayName,
+                termShortLabel: pair.course.term?.shortLabel)
         }
     }
 }
@@ -382,6 +385,11 @@ struct CourseContext: Encodable {
     /// Behaviour-neutral today — every enrollment's role mirrors the global
     /// role (Phase 1 backfill).
     let role: CourseRole
+    /// The offering's term, "Fall 2026" (docs/course-terms.md). Nil when
+    /// none is recorded.
+    var termLabel: String?
+    /// The compact term, "F26", for the tab strip.
+    var termShortLabel: String?
 }
 
 /// The result of resolving which course is "active" for the current request.

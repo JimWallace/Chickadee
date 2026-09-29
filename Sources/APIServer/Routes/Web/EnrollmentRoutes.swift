@@ -27,8 +27,8 @@ struct EnrollmentRoutes: RouteCollection {
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
             .filter(\.$enrollmentModeRaw == CourseEnrollmentMode.open.rawValue)
-            .sort(\.$code)
             .all()
+            .sorted(by: courseListPrecedes)
 
         let enrolledIDs = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == userID)
@@ -43,6 +43,7 @@ struct EnrollmentRoutes: RouteCollection {
                 id: id.uuidString,
                 code: course.code,
                 name: course.name,
+                termLabel: course.term?.displayName,
                 isEnrolled: enrolledSet.contains(id)
             )
         }
@@ -167,5 +168,7 @@ private struct EnrollCourseRow: Encodable {
     let id: String
     let code: String
     let name: String
+    /// "Fall 2026", or nil when the course records no term.
+    let termLabel: String?
     let isEnrolled: Bool
 }

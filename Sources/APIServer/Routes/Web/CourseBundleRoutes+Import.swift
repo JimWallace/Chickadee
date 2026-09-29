@@ -8,6 +8,8 @@
 //   - Same course code, active     → reject with error message
 //   - Same course code, archived   → create a second course (admin can rename)
 //   - Unknown course code          → create fresh
+//   - Term: the bundle's year and term, if it carries one; else no term
+//     (the result page asks the admin to set it — docs/course-terms.md)
 //   - Users: match by username or create placeholder (inert until password reset)
 //   - All DB IDs are regenerated; bundleIDs are internal cross-references only.
 //   - validationStatus is NOT imported; assignments land as "pending" validation.
@@ -197,10 +199,9 @@ extension CourseBundleRoutes {
         let contentFilesDir = dirs.contentFilesDir
         return try await db.transaction { (db) -> ImportTally in
             // 6a. Check for course code conflicts (moved inside transaction)
-            let existingCourse = try await APICourse.query(on: db)
-                .filter(\.$code == manifest.course.code)
-                .first()
-            if let existing = existingCourse, !existing.isArchived {
+            // Asks for an ACTIVE match: a first-match query could return an
+            // archived duplicate, pass, and then fail on the unique index.
+            if try await activeCourseCodeIsTaken(manifest.course.code, excluding: nil, on: db) {
                 throw Abort(
                     .conflict,
                     reason: """
@@ -219,7 +220,8 @@ extension CourseBundleRoutes {
             let importedMode = bundledCourseEnrollmentMode(manifest.course)
             let newCourse = APICourse(
                 code: manifest.course.code, name: manifest.course.name,
-                enrollmentMode: importedMode)
+                enrollmentMode: importedMode,
+                term: bundledCourseTerm(manifest.course))
             // Slip-day policy travels with the course (#1228); the ledger and
             // per-student adjustments deliberately do not (per-term data).
             let slipDayPolicy = bundledCourseSlipDayPolicy(manifest.course)
@@ -234,6 +236,7 @@ extension CourseBundleRoutes {
             t.courseID = newCourseID
             t.courseCode = newCourse.code
             t.courseName = newCourse.name
+            t.termLabel = newCourse.term?.displayName
 
             // 6c. Resolve users → userIDMap[bundleID] = live UUID
             let userIDMap = try await importBundledUsers(manifest: manifest, db: db, tally: &t)
@@ -290,6 +293,7 @@ extension CourseBundleRoutes {
             courseID: tally.courseID.uuidString,
             courseCode: tally.courseCode,
             courseName: tally.courseName,
+            termLabel: tally.termLabel,
             testSetupsImported: tally.testSetupsImported,
             assignmentsImported: tally.assignmentsImported,
             usersCreated: tally.usersCreated,
@@ -318,6 +322,7 @@ private struct ImportTally: Sendable {
     var courseID: UUID
     var courseCode: String
     var courseName: String
+    var termLabel: String?
     var usersCreated: Int = 0
     var usersMatched: Int = 0
     var testSetupsImported: Int = 0
@@ -333,6 +338,8 @@ private struct ImportResultContext: Encodable {
     let courseID: String
     let courseCode: String
     let courseName: String
+    /// "Fall 2026", or nil when the bundle carried no term.
+    let termLabel: String?
     let testSetupsImported: Int
     let assignmentsImported: Int
     let usersCreated: Int

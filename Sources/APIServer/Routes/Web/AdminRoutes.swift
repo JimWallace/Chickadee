@@ -105,7 +105,7 @@ struct AdminRoutes: RouteCollection {
                 createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
                 brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
-            )
+            ).withTerm(course.term)
         }
 
         // Default activity series (24h) so the chart renders server-side on
