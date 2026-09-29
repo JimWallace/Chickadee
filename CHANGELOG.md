@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.267] - 2026-09-29
+
+### Added
+
+- **Instructors can clone their course for a new term.** A new **New term** tab in the instructor area clones the active course into a new year and term. The cloning instructor becomes the instructor of the new course, and nobody else is enrolled. TAs cannot clone. See `docs/course-terms.md`.
+
+
 ## [0.5.266] - 2026-09-29
 
 ### Added
