@@ -35,7 +35,6 @@ fs.mkdirSync(outDir, { recursive: true });
 const MASKS = [
   ".js-relative-time",     // "3 minutes ago" timestamps (relative-time.js)
   ".admin-version-banner", // vX.Y.Z on the admin page
-  ".worker-secret-input",  // auto-generated diceware secret — new every boot
   "canvas",                // sparkline charts draw async
   // A student's chickadee is DRAWN AT RANDOM and stored, so a fresh fixture
   // run produces a different bird every time — the same category as the

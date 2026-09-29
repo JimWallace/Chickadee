@@ -421,7 +421,7 @@ X-Worker-Body-SHA256: SHA256(request body)
 via `Core/WorkerHMACSigning.swift`). The shared secret is auto-generated from
 a three-word EFF diceware passphrase on first startup and persisted to
 `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET` (env var or
-`.worker-secret` file). The admin dashboard can rotate the secret at runtime.
+`.worker-secret` file). The admin dashboard neither shows nor changes it.
 
 ---
 

@@ -112,26 +112,29 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    @Test func updateWorkerSecretPersistsRuntimeOverride() async throws {
+    @Test func adminPageOffersNoRunnerSecretControls() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
             try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(!res.body.string.contains("runner-secret"))
+                    #expect(!res.body.string.contains("Worker shared secret"))
+                })
+
+            try await app.asyncTest(
                 .POST, "/admin/runner-secret",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["secret": " new-runner-secret ", "_csrf": token], as: .urlEncodedForm)
+                    try req.content.encode(["secret": "new-secret", "_csrf": token], as: .urlEncodedForm)
                 },
                 afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin")
+                    #expect(res.status == .notFound)
                 })
-
-            let runtime = await app.workerSecretStore.runtimeOverrideValue()
-            #expect(runtime == "new-runner-secret")
-            #expect(readWorkerSecretFromDisk(workerSecretFilePath: app.workerSecretFilePath) == "new-runner-secret")
-
         }
     }
 
@@ -167,29 +170,6 @@ private struct PassthroughResponder: AsyncResponder {
             let attrs = try FileManager.default.attributesOfItem(atPath: path)
             let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
             #expect(perms & 0o777 == 0o600)
-
-        }
-    }
-
-    @Test func updateWorkerSecretBlankRestoresPersistedValue() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
-            writeWorkerSecretToDisk(secret: "persisted-secret", workerSecretFilePath: app.workerSecretFilePath)
-            await app.workerSecretStore.setRuntimeOverride("runtime-secret")
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-
-            try await app.asyncTest(
-                .POST, "/admin/runner-secret",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["secret": "   ", "_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
-
-            let runtime = await app.workerSecretStore.runtimeOverrideValue()
-            #expect(runtime == "persisted-secret")
 
         }
     }
