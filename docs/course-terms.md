@@ -1,6 +1,6 @@
 # Course terms and new-term cloning
 
-**Status:** Slices 1 to 3 are built. Slices 4 to 6 are planned.
+**Status:** Slices 1 to 4 are built. Slices 5 and 6 are planned.
 
 This document replaces the plan in
 [clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
@@ -145,25 +145,46 @@ The Core type, the migration, the model accessor, and tests
   (`subjectEnrollments(among:)`), the one MCP file allowed to query identity
   models (`MCPStudentDataWallTests`).
 
-### Slice 4: Clone for a new term (admin)
+### Slice 4: Clone for a new term (admin) (built)
 
-- Extract the body of `copyCourse` into `CourseCloneService.clone(...)`. The
-  admin route becomes a thin caller.
-- The clone form asks for the target **year and term** (default: the next
-  term after the source), the **code** (default: the source code, allowed by
-  slice 3) and the **name** (default: the source name).
-- The clone copies: course sections, test setups (zip, notebook, draft
-  solution notebook, shared support files), assignments (closed, not
-  validated, due dates kept), content items and their attachments, enrollment
-  mode, slip-day policy, and the course MCP authoring guide.
-- The clone does **not** copy: enrollments, pre-enrollments, submissions,
-  results, grade overrides, extensions, slip-day spends, achievement results,
-  leaderboards, version history, and the LMS, BrightSpace and GitHub
-  bindings. A new offering binds to its own LMS course.
+- `CourseCloneService.clone(source:target:directories:contentFilesDirectory:on:)`
+  is the one clone path. For each assignment it calls
+  `AssignmentAuthoringService.cloneAssignment`, the path of the MCP
+  `clone_assignment` tool. So the setup zip, starter notebook, reference
+  solution, shared support files and first version snapshot copy the same
+  way everywhere. The route runs the clone in one transaction and records a
+  `course.cloned` audit entry.
+- The admin course page has a **Clone for a new term** section
+  (`#clone-course`). Its fields are the code (default: the source code), the
+  name (default: the source name), and the year and term (default: the term
+  after the source's term, from `AcademicTerm.next`; no default when the
+  source has no term). It posts to `POST /admin/courses/:courseID/clone`. The
+  copy icon in the admin courses table now links to this section.
+- The older one-click `POST /admin/courses/:courseID/copy` stays, as a thin
+  caller of the same service. It keeps its `-COPY` code and "(Copy)" name.
+  It now also keeps the source term, so the copy is a sandbox in the same
+  term.
+- **Copied:** course sections; every assignment (setup, notebook, reference
+  solution, support files, section, order, secret-reveal flag, passing
+  threshold, LMS sync exclusion); content items and their attachment files;
+  the enrollment mode, the slip-day policy, and the course MCP authoring
+  guide.
+- **Not copied:** enrollments, pre-enrollments, submissions, results, grade
+  overrides, extensions, slip-day spends, achievement results, version
+  history, and the LMS, BrightSpace and GitHub bindings (including the grade
+  item and line item of each assignment). A new offering binds to its own
+  LMS course.
+- **Dates (the open question, now decided):** every copied assignment starts
+  closed and unvalidated, with **no due date and no start date**, and its
+  solution reveal is set back to hidden. The source dates belong to the
+  source term. A stale date is not harmless: with no date, or a date in the
+  past, an "after due" solution policy shows the answer key as soon as the
+  assignment opens. The instructor sets new dates, and turns the reveal on
+  again, for the new term. A shift of the dates by one term length was
+  rejected: term lengths and weekdays are different, so a shifted date is a
+  guess.
 - The clone does not archive the source. The instructor can still be
   exporting grades.
-- Open question for slice 4: should due dates move forward by the length of
-  one term, or stay as they are? The current copy keeps them.
 
 ### Slice 5: Clone for a new term (instructor)
 

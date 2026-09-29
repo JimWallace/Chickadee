@@ -109,14 +109,10 @@ Admin
                 <td>#(course.enrollmentCount)</td>
                 <td class="col-hide-phone">#(course.submissionCount)</td>
                 <td class="action-cell">
-                    <form method="post" action="/admin/courses/#(course.id)/copy" class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-btn-icon" type="submit"
-                                title="Copy course" aria-label="Copy course"
-                                data-confirm="Copy #(course.code)? Its assignments and test suites are duplicated into a new course, and the copy starts with no students enrolled.">
-                            <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
-                        </button>
-                    </form>
+                    <a class="btn action-btn action-btn-icon" href="/admin/courses/#(course.id)#clone-course"
+                       title="Clone course" aria-label="Clone course">
+                        <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
+                    </a>
                     <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"

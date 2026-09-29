@@ -125,6 +125,9 @@ extension AdminRoutes {
 
     // MARK: - POST /admin/courses/:courseID/copy
 
+    /// One-click copy into the same term under a free `-COPY` code (a sandbox
+    /// or a second section). The clone form below is the new-term door; both
+    /// run `CourseCloneService`.
     @Sendable
     func copyCourse(req: Request) async throws -> Response {
         guard
@@ -134,119 +137,74 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-
-        let sourceID = try source.requireID()
         let newCode = try await uniqueCopyCode(base: source.code, db: req.db)
-        let setupsDir = req.application.testSetupsDirectory
+        let result = try await cloneCourse(
+            source, code: newCode, name: "\(source.name) (Copy)", term: source.term, req: req)
+        return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
+    }
 
-        // Load source data before the transaction (read-only queries).
-        let setups = try await APITestSetup.query(on: req.db)
-            .filter(\.$courseID == sourceID)
-            .all()
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == sourceID)
-            .sort(\.$sortOrder)
-            .all()
-        let sections = try await APICourseSection.query(on: req.db)
-            .filter(\.$courseID == sourceID)
-            .sort(\.$sortOrder)
-            .all()
+    // MARK: - POST /admin/courses/:courseID/clone
 
-        let newCourseID = try await req.db.transaction { db -> UUID in
-            // 1. Create the new course.
-            let newCourse = APICourse(code: newCode, name: "\(source.name) (Copy)")
-            try await newCourse.save(on: db)
-            let newCourseID = try newCourse.requireID()
-
-            // 2. Copy sections, building an old→new UUID map.
-            var sectionIDMap: [UUID: UUID] = [:]
-            for section in sections {
-                guard let oldSectionID = section.id else { continue }
-                let newSection = APICourseSection(
-                    name: section.name,
-                    defaultGradingMode: section.defaultGradingMode,
-                    sortOrder: section.sortOrder,
-                    courseID: newCourseID
-                )
-                try await newSection.save(on: db)
-                sectionIDMap[oldSectionID] = try newSection.requireID()
-            }
-
-            // 3. Copy each test setup (zip + optional notebook) to a new ID.
-            var setupIDMap: [String: String] = [:]
-            for setup in setups {
-                guard let oldID = setup.id else { continue }
-                let newID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-                setupIDMap[oldID] = newID
-
-                let srcZip = URL(fileURLWithPath: setupsDir + "\(oldID).zip")
-                let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
-                try FileManager.default.copyItem(at: srcZip, to: dstZip)
-
-                // Copy the notebook using the actual stored path — not a
-                // reconstructed `<setupID>.ipynb` flat path, which misses
-                // notebooks stored in the notebooks/<setupID>/ subdirectory.
-                var newNotebookPath: String?
-                if let srcPath = setup.notebookPath {
-                    let srcNb = URL(fileURLWithPath: srcPath)
-                    if FileManager.default.fileExists(atPath: srcNb.path) {
-                        let nbDir = draftNotebookDirectory(
-                            testSetupsDirectory: setupsDir, setupID: newID)
-                        try FileManager.default.createDirectory(
-                            atPath: nbDir, withIntermediateDirectories: true)
-                        let dstNb = URL(fileURLWithPath: nbDir + srcNb.lastPathComponent)
-                        try FileManager.default.copyItem(at: srcNb, to: dstNb)
-                        newNotebookPath = dstNb.path
-                    }
-                }
-
-                let newSetup = APITestSetup(
-                    id: newID,
-                    manifest: setup.manifest,
-                    zipPath: dstZip.path,
-                    notebookPath: newNotebookPath,
-                    courseID: newCourseID
-                )
-                try await newSetup.save(on: db)
-            }
-
-            // 4. Copy each assignment, remapping test setup IDs and section IDs.
-            //    Validation state is reset so the instructor re-validates before opening.
-            for (idx, a) in assignments.enumerated() {
-                guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
-                let newAssignment = APIAssignment(
-                    testSetupID: newSetupID,
-                    title: a.title,
-                    slug: try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
-                    dueAt: a.dueAt,
-                    visibility: .closed,
-                    sortOrder: a.sortOrder ?? idx,
-                    validationStatus: nil,
-                    validationSubmissionID: nil,
-                    sectionID: a.sectionID.flatMap { sectionIDMap[$0] },
-                    courseID: newCourseID
-                )
-                try await newAssignment.save(on: db)
-            }
-
-            return newCourseID
+    /// "Clone for a new term": the admin names the new offering's code, name
+    /// and term (docs/course-terms.md slice 4). The code may be the source's
+    /// own, since codes are unique per term.
+    @Sendable
+    func cloneCourseForNewTerm(req: Request) async throws -> Response {
+        struct CloneBody: Content {
+            var code: String
+            var name: String
+            var termYear: String?
+            var termSeason: String?
         }
-
-        // Seed each copied setup's v1, outside the transaction: snapshotting
-        // reads the zip off disk, which has no business inside a DB
-        // transaction, and a failure here must not roll back the copy. The
-        // copies land in NEW setup ids, so the new term inherits none of the
-        // source's history — only its current content, which is the point.
-        for setup in try await APITestSetup.query(on: req.db)
-            .filter(\.$courseID == newCourseID).all()
-        {
-            await AssignmentVersionStore.seedInitialVersion(
-                setup: setup, origin: AssignmentVersionOrigin.clone,
-                testSetupsDirectory: setupsDir, on: req.db)
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let source = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
         }
+        let body = try req.content.decode(CloneBody.self)
+        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let back = "/admin/courses/\(idString)"
+        guard !code.isEmpty, !name.isEmpty else {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.fields.rawValue)#clone-course")
+        }
+        guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.term.rawValue)#clone-course")
+        }
+        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.codeTaken.rawValue)#clone-course")
+        }
+        let result = try await cloneCourse(source, code: code, name: name, term: term, req: req)
+        return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
+    }
 
-        req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
-        return req.redirect(to: "/admin/courses/\(newCourseID.uuidString)")
+    /// Runs the clone in one transaction and records it.
+    private func cloneCourse(
+        _ source: APICourse, code: String, name: String, term: AcademicTerm?, req: Request
+    ) async throws -> CourseCloneResult {
+        let directories = AuthoringDirectories(
+            setups: req.application.testSetupsDirectory,
+            submissions: req.application.submissionsDirectory)
+        let contentFilesDirectory = req.application.contentFilesDirectory
+        let result = try await req.db.transaction { db in
+            try await CourseCloneService.clone(
+                source: source, target: CourseCloneTarget(code: code, name: name, term: term),
+                directories: directories, contentFilesDirectory: contentFilesDirectory, on: db)
+        }
+        let newID = try result.course.requireID().uuidString
+        var metadata = [
+            "source_course_code": source.code,
+            "course_code": code,
+            "course_name": name,
+            "assignments": String(result.assignmentCount),
+        ]
+        metadata["course_term"] = term?.displayName
+        await AuditLogger.record(
+            action: .courseCloned, targetType: .course, targetID: newID, metadata: metadata, on: req)
+        req.logger.info("Admin cloned course \(source.urlKey) → \(result.course.urlKey) (new ID: \(newID))")
+        return result
     }
 
     // MARK: - POST /admin/courses/:courseID/delete
@@ -609,7 +567,10 @@ extension AdminRoutes {
                 assignments: assignments,
                 isNew: false,
                 error: req.query[String.self, at: "error"],
-                termOptions: CourseTermForm.options(selected: course.term?.season)
+                termOptions: CourseTermForm.options(selected: course.term?.season),
+                cloneYear: course.term?.next?.year,
+                cloneError: CourseCloneFormError.message(forQuery: req.query[String.self, at: "error"]),
+                cloneTermOptions: CourseTermForm.options(selected: course.term?.next?.season)
             ))
     }
 

@@ -148,6 +148,44 @@
     </p>
     #endif
 </section>
+
+<!-- ── Clone for a new term ────────────────────────── -->
+<section class="page-section" id="clone-course">
+    <h2>Clone for a new term</h2>
+    <p class="section-intro">Copies this course's content into a new course; students, submissions and grades stay here.</p>
+    <p class="section-note">Copied assignments start closed, with no dates and with the solution reveal off.</p>
+    #if(cloneError):
+    <div class="form-error" role="alert">#(cloneError)</div>
+    #endif
+    <form method="post" action="/admin/courses/#(course.id)/clone" class="course-form">
+        #csrfFormField()
+        <label class="form-label course-field-short">
+            Code
+            <input class="form-input course-input-short" type="text" name="code" value="#(course.code)" required>
+        </label>
+        <label class="form-label course-field-name">
+            Name
+            <input class="form-input course-input-block" type="text" name="name" value="#(course.name)" required>
+        </label>
+        <label class="form-label course-field-short">
+            Year
+            <input class="form-input course-input-short" type="number" name="termYear" min="1000" max="9999"
+                   value="#(cloneYear)" required>
+        </label>
+        <label class="form-label course-field-short">
+            Term
+            <select class="form-input course-input-short" name="termSeason" required>
+                #if(cloneYear):#else:
+                <option value="" selected disabled>Choose</option>
+                #endif
+                #for(option in cloneTermOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
+        </label>
+        <button class="btn btn-primary course-form-submit" type="submit">Clone course</button>
+    </form>
+</section>
 #endif
 
 <!-- ── Assignments ─────────────────────────────────── -->
