@@ -30,37 +30,61 @@
 #if(group.name):
 <h2 class="assignment-section-heading">#(group.name)</h2>
 #endif
+#if(group.showFilter):
 <div class="toolbar toolbar--end section-gap">
     <span class="filter-group">
         <label class="filter-label" for="filter-assignments-#(index)">Filter</label>
         <input id="filter-assignments-#(index)" class="form-input filter-input" type="search"
-               placeholder="Filter by name or status…"
+               placeholder="Filter this section…"
                data-list-filter="assignments-#(index)"
-               data-list-filter-empty="No assignments match this filter.">
+               data-list-filter-empty="No items in this section match.">
     </span>
 </div>
-<table class="results-table assignment-table sortable-table"
-       id="assignments-#(index)"
-       data-sort-initial="due:asc" data-sort-tiebreak="name">
-    #extend("_assignment-table-head")
+#endif
+<table class="results-table section-items" id="assignments-#(index)">
+    <colgroup>
+        <col class="section-items-tile"><col><col class="section-items-status">
+        <col class="section-items-grade col-hide-phone"><col class="section-items-actions">
+    </colgroup>
+    <thead class="visually-hidden">
+        <tr>
+            <th scope="col">Type</th>
+            <th scope="col" data-sort-key="name">Name</th>
+            <th scope="col" data-sort-key="status">Status</th>
+            <th scope="col" class="col-hide-phone">Grade</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
     <tbody>
     #for(item in group.items):
     #if(item.isContent):
-        <tr>
-            <td>
-                <span class="content-item-kind">#(item.content.kindLabel)</span>
-                <span class="content-item-title">#(item.content.title)</span>
-                #if(!item.content.isPublished):<span class="content-item-hidden">Hidden</span>#endif
-                #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
-            </td>
-            <td colspan="4" class="col-hide-phone content-item-links">
-                #for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor
-                #for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor
-            </td>
-            <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+    #if(item.content.isHeading):
+        <tr class="section-items-heading">
+            <td colspan="5"><strong>#(item.content.title)</strong>#if(item.content.itemDescription): <span class="text-muted">#(item.content.itemDescription)</span>#endif</td>
         </tr>
     #else:
         <tr>
+            <td class="item-tile-cell"><span class="item-tile" data-kind="#(item.content.kind)"><svg class="icon" aria-hidden="true"><use href="#(item.content.iconHref)"/></svg></span></td>
+            <td>
+                <div class="item-title">#(item.content.title)#if(!item.content.isPublished): <span class="content-item-hidden">Hidden</span>#endif</div>
+                <div class="item-details"><span class="content-item-kind" data-kind="#(item.content.kind)">#(item.content.kindLabel)</span>#if(item.content.detailsText != ""): · #(item.content.detailsText)#endif</div>
+            </td>
+            <td></td>
+            <td class="col-hide-phone"></td>
+            <td>
+                <div class="assignment-actions-cell">
+                    #for(action in item.content.actions):
+                    <a class="btn action-btn action-btn-icon" href="#(action.href)" title="#(action.label)" aria-label="#(action.label)"#if(action.opensNewTab): target="_blank" rel="noopener noreferrer"#endif>
+                        <svg class="icon" aria-hidden="true"><use href="#(action.iconHref)"/></svg>
+                    </a>
+                    #endfor
+                </div>
+            </td>
+        </tr>
+    #endif
+    #else:
+        <tr>
+            <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
             <td>
                 #if(item.setup.title):
                     <div class="assignment-title-cell">
@@ -76,7 +100,28 @@
                         </span>
                         #endif
                     </div>
-                    <div class="card-meta row-phone-meta">Due #if(item.setup.dueAt):#(item.setup.dueAt)#else:—#endif#if(item.setup.submissionCount > 0): · #(item.setup.submissionCount) submitted#endif</div>
+                    <div class="item-details">
+                        #if(item.setup.opensAtText):
+                        <span title="This assignment opens automatically at this time.">Opens #(item.setup.opensAtText)</span>
+                        #elseif(item.setup.hasActiveExtension):
+                        Due <span class="js-relative-time" data-iso="#(item.setup.effectiveDueAtISO)">#(item.setup.effectiveDueAtText)</span> · #(item.setup.effectiveDueAtText) <span class="due-extension-note">(extension)</span>
+                        #elseif(item.setup.dueAt):
+                        Due <span class="js-relative-time" data-iso="#(item.setup.dueAtISO)">#(item.setup.dueAt)</span> · #(item.setup.dueAt)
+                        #else:
+                        No due date
+                        #endif
+                        #if(item.setup.submissionCount == 1):
+                        · <a href="#(item.setup.historyURL)">1 submission</a>
+                        #elseif(item.setup.submissionCount > 1):
+                        · <a href="#(item.setup.historyURL)">#(item.setup.submissionCount) submissions</a>
+                        #endif
+                        #if(item.setup.gradeIsOverridden):
+                        · <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
+                        #endif
+                        #if(item.setup.bestGradeText):
+                        <span class="row-phone-meta">Grade #(item.setup.bestGradeText)</span>
+                        #endif
+                    </div>
                 #else:
                 <span class="text-muted">Unpublished</span>
                 #endif
@@ -94,43 +139,7 @@
                     #endif">#(item.setup.status)</span>
                 #endif
             </td>
-            <td class="due-col col-hide-phone" data-sort-value="#(item.setup.dueAtISO)">
-                #if(item.setup.opensAtText):
-                    <span title="This assignment opens automatically at this time.">Opens #(item.setup.opensAtText)</span>
-                #elseif(item.setup.hasActiveExtension):
-                    <span class="js-relative-time" data-iso="#(item.setup.effectiveDueAtISO)">#(item.setup.effectiveDueAtText)</span>
-                    <div class="card-meta">#(item.setup.effectiveDueAtText) <span class="due-extension-note">(extension)</span></div>
-                #elseif(item.setup.dueAt):
-                    <span class="js-relative-time" data-iso="#(item.setup.dueAtISO)">#(item.setup.dueAt)</span>
-                    <div class="card-meta">#(item.setup.dueAt)</div>
-                #else:
-                    —
-                #endif
-            </td>
-            <td>
-                #if(item.setup.bestGradeText):
-                    <strong>#(item.setup.bestGradeText)</strong>
-                    #if(item.setup.gradeIsOverridden):
-                    <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
-                    #endif
-                #else:
-                    <span class="empty">—</span>
-                #endif
-            </td>
-            <td class="col-hide-phone">
-                #if(item.setup.submissionCount > 0):
-                    <div class="submission-history-cell">
-                        #if(item.setup.hasLatestSubmission):
-                            <a href="/submissions/#(item.setup.latestSubmissionID)" class="submission-history-latest">#(item.setup.latestSubmittedAtText)</a>
-                        #endif
-                        #if(item.setup.additionalSubmissionCount > 0):
-                            <a href="#(item.setup.historyURL)" class="submission-history-more">+#(item.setup.additionalSubmissionCount) more</a>
-                        #endif
-                    </div>
-                #else:
-                    <span class="empty">—</span>
-                #endif
-            </td>
+            <td class="item-grade col-hide-phone">#if(item.setup.bestGradeText):<strong>#(item.setup.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
             <td>
                 <div class="assignment-actions-cell">
                     #if(!item.setup.hasAnyAction):
@@ -179,6 +188,5 @@
 #endfor
 #endif
 <script src="/list-filter.js?v=#appVersion()"></script>
-<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend
