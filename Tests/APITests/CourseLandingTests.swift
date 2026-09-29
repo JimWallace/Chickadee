@@ -94,7 +94,7 @@ import VaporTesting
                 updatedLabel: "Sep 3"))
         #expect(full.detailsText.hasPrefix("Updated Sep 3 · Notes, "))
         #expect(full.detailsText.hasSuffix(" · Read before lab."))
-        #expect(ContentItemRow(from: item()).detailsText == "")
+        #expect(ContentItemRow(from: item()).detailsText.isEmpty)
     }
 
     // MARK: - Filter threshold
