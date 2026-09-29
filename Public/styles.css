@@ -38,6 +38,20 @@
     --closed-fg: #4B5563;
     --preview-bg: #FEF3C7;  /* amber tint — staff-only preview/beta state */
     --preview-fg: #92400E;  /* dark amber */
+    /* Content-kind tiles on the student dashboard.  -fg doubles as the kind
+       label's text colour on --surface.  Notebook shares the open-state pair. */
+    --kind-slides-bg: #FEF1D2;
+    --kind-slides-fg: #8A5300;
+    --kind-notebook-bg: var(--open-bg);
+    --kind-notebook-fg: var(--open-fg);
+    --kind-document-bg: #E5ECF7;
+    --kind-document-fg: #2E4A7D;
+    --kind-link-bg: #EEF0F2;
+    --kind-link-fg: #4B5563;
+    --kind-outline-bg: #EEE8F6;
+    --kind-outline-fg: #5B3F8C;
+    --kind-graded-bg: var(--health-teal);
+    --kind-graded-fg: #FFFFFF;
     --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
     --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
     --warning-border: #F1C96B;
@@ -188,6 +202,18 @@
         --avatar-back-peach: #3E2F25;
         --avatar-back-rose: #3B2C35;
         --avatar-back-lilac: #2E2B3D;
+        --kind-slides-bg: #3A2A06;
+        --kind-slides-fg: #FCD34D;
+        --kind-notebook-bg: var(--open-bg);
+        --kind-notebook-fg: var(--open-fg);
+        --kind-document-bg: #1A2640;
+        --kind-document-fg: #A9C2F2;
+        --kind-link-bg: #1F2937;
+        --kind-link-fg: #CBD5E1;
+        --kind-outline-bg: #2A2140;
+        --kind-outline-fg: #CDB9F0;
+        --kind-graded-bg: #007C87;
+        --kind-graded-fg: #FFFFFF;
         --avatar-back-pebble: #32332F;
         /* --border inherits dark-mode --gray-200 automatically */
     }
@@ -1624,6 +1650,70 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-left: .35rem;
 }
 .content-item-desc { font-size: var(--text-xs); margin-top: .15rem; }
+
+/* Student dashboard section list: one table, five tracks (kind tile, title and
+   details, status, grade, actions). Each row type fills only the cells that
+   apply to it. Fixed layout so the Actions track lines up across graded and
+   material rows. */
+.section-items { table-layout: fixed; }
+.section-items td {
+    vertical-align: middle;
+    padding: .75rem .9rem;
+}
+.section-items .item-tile-cell { padding-right: 0; }
+.section-items-tile { width: 3.25rem; }
+.section-items-status { width: 6.5rem; }
+.section-items-grade { width: 6rem; }
+.section-items-actions { width: 11.5rem; }
+
+.item-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-md);
+    background: var(--kind-link-bg);
+    color: var(--kind-link-fg);
+}
+.item-tile[data-kind="slides"] { background: var(--kind-slides-bg); color: var(--kind-slides-fg); }
+.item-tile[data-kind="notebook"] { background: var(--kind-notebook-bg); color: var(--kind-notebook-fg); }
+.item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
+.item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
+.item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+
+.item-title { font-weight: 600; }
+.item-details {
+    font-size: var(--text-sm);
+    color: var(--muted);
+}
+/* In a details line the kind label is coloured text, not the pill the
+   instructor view uses. */
+.item-details .content-item-kind {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+    border-radius: 0;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--kind-link-fg);
+}
+.item-details .content-item-kind[data-kind="slides"] { color: var(--kind-slides-fg); }
+.item-details .content-item-kind[data-kind="notebook"] { color: var(--kind-notebook-fg); }
+.item-details .content-item-kind[data-kind="document"] { color: var(--kind-document-fg); }
+.item-details .content-item-kind[data-kind="outline"] { color: var(--kind-outline-fg); }
+
+.section-items-heading td { background: var(--gray-100); }
+.section-items-heading strong {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+}
+.item-grade { text-align: right; }
+.section-items .assignment-actions-cell { justify-content: flex-end; }
 .content-item-links a { margin-right: .5rem; }
 .content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
@@ -1669,8 +1759,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* Square-ish icon-only action button (edit / upload / reset glyphs) — the ONE
    narrow variant of .action-btn. A second, 2px-tighter variant existed for the
-   same job and made two dense rows differ for no reason (UI audit S6). */
-.action-btn-icon { padding: .3rem .45rem; }
+   same job and made two dense rows differ for no reason (UI audit S6).
+   A fixed square, not padding-sized: four of them must fit the dashboard's
+   Actions track, and padding-based sizing overflowed it and was clipped by the
+   card's overflow. Height comes from .action-btn's min-height. */
+.action-btn-icon {
+    width: 1.95rem;
+    padding: 0;
+}
 
 /* Wrapper form that should not introduce vertical rhythm (inline action).
    display:inline is a no-op for flex-item forms (flex blockifies children),
