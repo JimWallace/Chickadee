@@ -128,6 +128,16 @@ final class APICourse: Model, Content, @unchecked Sendable {
         ltiGradesEnabled == true && ltiPlatformID != nil
     }
 
+    /// The four-digit year of this offering (docs/course-terms.md). Nil on a
+    /// course created before terms existed; resolve through `term`.
+    @OptionalField(key: "term_year")
+    var termYear: Int?
+
+    /// The Waterloo term of this offering, as a `TermSeason` raw value.
+    /// Resolve through `term`, never this raw column.
+    @OptionalField(key: "term_season")
+    var termSeasonRaw: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -140,7 +150,8 @@ final class APICourse: Model, Content, @unchecked Sendable {
         id: UUID? = nil, code: String, name: String,
         isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open,
         brightspaceOrgUnitID: String? = nil,
-        brightspaceOrgUnitName: String? = nil
+        brightspaceOrgUnitName: String? = nil,
+        term: AcademicTerm? = nil
     ) {
         self.id = id
         self.code = code
@@ -149,6 +160,22 @@ final class APICourse: Model, Content, @unchecked Sendable {
         self.enrollmentModeRaw = enrollmentMode.rawValue
         self.brightspaceOrgUnitID = brightspaceOrgUnitID
         self.brightspaceOrgUnitName = brightspaceOrgUnitName
+        self.termYear = term?.year
+        self.termSeasonRaw = term?.season.rawValue
+    }
+}
+
+// MARK: - Term
+
+extension APICourse {
+    /// The offering's year and term, or nil when none is recorded (or the
+    /// stored pair is incomplete). Setting nil clears both columns.
+    var term: AcademicTerm? {
+        get { AcademicTerm.resolve(year: termYear, season: termSeasonRaw) }
+        set {
+            termYear = newValue?.year
+            termSeasonRaw = newValue?.season.rawValue
+        }
     }
 }
 

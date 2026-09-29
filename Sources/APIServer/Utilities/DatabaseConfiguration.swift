@@ -544,6 +544,10 @@ func registerMigrations(on app: Application) {
     // (docs/github-submissions.md slice 5). Nullable columns.
     app.migrations.add(AddGitHubCourseRepositoryPushColumns())
 
+    // The year and term of each course offering (docs/course-terms.md).
+    // Nullable columns on `courses`; nil = no term recorded.
+    app.migrations.add(AddCourseTerm())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.
