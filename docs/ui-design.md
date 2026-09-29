@@ -377,6 +377,7 @@ duplicate.
   submitted-count track, and a wider state track for the status select.  Rows
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
   / `data-content-item-id`, because `section-items-dnd.js` reads them.
+- **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page. `.section-items-combo` (20rem) is the state track of a list whose control is a combobox plus its Save button.
 - **`.add-panel`** — a form that opens under a page or section header: the
   add-material form, the add-staff form, the slip-day settings.  Closed until a
   control carrying `data-add-target` opens it; `app.js` toggles `is-open` (and

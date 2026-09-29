@@ -657,6 +657,50 @@ extension InstructorDashboardRoutes {
             unreachableStudents: [], hasUnreachable: false)
     }
 
+    /// The grade-item rows, and the time of the newest sync attempt for the
+    /// course, in one pass over the assignments and recent sync log.
+    private func loadLearnAssignmentData(
+        req: Request, courseUUID: UUID, fmt: DateFormatter
+    ) async throws -> (rows: [BrightspaceAssignmentRow], newestAttempt: Date?) {
+        // Assignments, sorted to match the dashboard ordering.
+        let assignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$courseID == courseUUID)
+            .all()
+            .sorted { lhs, rhs in
+                switch (lhs.sortOrder, rhs.sortOrder) {
+                case (let l?, let r?) where l != r: return l < r
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default: return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+                }
+            }
+        let setupIDs = Array(Set(assignments.map(\.testSetupID)))
+
+        // Recent log rows for this course (most recent first, capped).
+        let logModels = try await APIBrightSpaceSyncLog.query(on: req.db)
+            .filter(\.$courseID == courseUUID)
+            .sort(\.$attemptedAt, .descending)
+            .range(..<50)
+            .all()
+
+        // Latest log per test setup → per-assignment status badge.
+        var latestBySetup: [String: APIBrightSpaceSyncLog] = [:]
+        for log in logModels where latestBySetup[log.testSetupID] == nil {
+            latestBySetup[log.testSetupID] = log
+        }
+
+        // The rollups still power the per-assignment counts and the roster
+        // panel; the page-level summary/readiness cards were removed from the
+        // template in c747962, so those aggregates are discarded (#1114).
+        let (_, perSetupCounts) = try await brightspaceSyncSummary(
+            req: req, courseUUID: courseUUID, setupIDs: setupIDs)
+        let assignmentRows = brightspaceAssignmentRows(
+            assignments: assignments, latestBySetup: latestBySetup,
+            perSetupCounts: perSetupCounts, fmt: fmt)
+
+        return (assignmentRows, logModels.compactMap(\.attemptedAt).max())
+    }
+
     private func buildBrightspaceContext(
         req: Request, user: APIUser
     ) async throws
@@ -711,44 +755,10 @@ extension InstructorDashboardRoutes {
             connected: identity.connected,
             needsReconnect: identity.name != nil && !identity.connected)
 
-        // Assignments, sorted to match the dashboard ordering.
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseUUID)
-            .all()
-            .sorted { lhs, rhs in
-                switch (lhs.sortOrder, rhs.sortOrder) {
-                case (let l?, let r?) where l != r: return l < r
-                case (_?, nil): return true
-                case (nil, _?): return false
-                default: return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-                }
-            }
-        let setupIDs = Array(Set(assignments.map(\.testSetupID)))
-
-        // Recent log rows for this course (most recent first, capped).
-        let logModels = try await APIBrightSpaceSyncLog.query(on: req.db)
-            .filter(\.$courseID == courseUUID)
-            .sort(\.$attemptedAt, .descending)
-            .range(..<50)
-            .all()
-
-        // Latest log per test setup → per-assignment status badge.
-        var latestBySetup: [String: APIBrightSpaceSyncLog] = [:]
-        for log in logModels where latestBySetup[log.testSetupID] == nil {
-            latestBySetup[log.testSetupID] = log
-        }
-
-        // The rollups still power the per-assignment counts and the roster
-        // panel; the page-level summary/readiness cards were removed from the
-        // template in c747962, so those aggregates are discarded (#1114).
-        let (_, perSetupCounts) = try await brightspaceSyncSummary(
-            req: req, courseUUID: courseUUID, setupIDs: setupIDs)
-        let (_, unreachableStudents) = try await brightspaceReadiness(
+        let (assignmentRows, newestAttempt) = try await loadLearnAssignmentData(
             req: req, courseUUID: courseUUID, fmt: fmt)
-
-        let assignmentRows = brightspaceAssignmentRows(
-            assignments: assignments, latestBySetup: latestBySetup,
-            perSetupCounts: perSetupCounts, fmt: fmt)
+        let (readiness, unreachableStudents) = try await brightspaceReadiness(
+            req: req, courseUUID: courseUUID, fmt: fmt)
 
         let orgUnitDisplay: String? =
             courseLinked
@@ -760,6 +770,14 @@ extension InstructorDashboardRoutes {
             }()
             : nil
         let showIdentityActions = account.connected && !course.isArchived
+        let facts = Self.learnPageFacts(
+            LearnFactsInput(
+                usesServiceAccount: req.application.brightSpaceUsesServiceAccount,
+                syncEnabled: syncEnabled, syncIdentity: syncIdentity, identity: identity,
+                accountConnected: account.connected, isArchived: course.isArchived,
+                newestAttempt: newestAttempt, unreachableCount: unreachableStudents.count,
+                lastCheckedText: readiness.lastCheckedText),
+            fmt: fmt)
 
         return InstructorBrightspaceContext(
             currentUser: userContext, activeInstructorTab: "brightspace",
@@ -778,7 +796,70 @@ extension InstructorDashboardRoutes {
             canReconcile: courseLinked && !course.isArchived,
             unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty,
             showLTIGradesLink: course.ltiPlatformID != nil,
-            usesLTIGrades: course.usesLTIGrades)
+            usesLTIGrades: course.usesLTIGrades,
+            usesServiceAccount: facts.usesServiceAccount,
+            syncHealthy: facts.syncHealthy,
+            pushesAsText: facts.pushesAsText,
+            pushesAsNote: facts.pushesAsNote,
+            lastSyncISO: facts.lastSyncISO,
+            lastSyncText: facts.lastSyncText,
+            canBindOrgUnit: facts.canBindOrgUnit,
+            readinessSummary: facts.readinessSummary)
+    }
+
+    /// What the LEARN page's title bar and facts card say, gathered in one place.
+    struct LearnPageFacts {
+        let usesServiceAccount: Bool
+        let syncHealthy: Bool
+        let pushesAsText: String
+        let pushesAsNote: String
+        let lastSyncISO: String?
+        let lastSyncText: String
+        let canBindOrgUnit: Bool
+        let readinessSummary: String
+    }
+
+    /// Everything `learnPageFacts` reads, so the call site stays one value.
+    struct LearnFactsInput {
+        let usesServiceAccount: Bool
+        let syncEnabled: Bool
+        let syncIdentity: InstructorBrightspaceContext.SyncIdentityPanel
+        let identity: (name: String?, connected: Bool, isMe: Bool)
+        let accountConnected: Bool
+        let isArchived: Bool
+        let newestAttempt: Date?
+        let unreachableCount: Int
+        let lastCheckedText: String
+    }
+
+    static func learnPageFacts(_ input: LearnFactsInput, fmt: DateFormatter) -> LearnPageFacts {
+        let pushesAs = pushesAs(
+            identity: input.identity, usesServiceAccount: input.usesServiceAccount)
+        let noun = input.unreachableCount == 1 ? "student" : "students"
+        return LearnPageFacts(
+            usesServiceAccount: input.usesServiceAccount,
+            syncHealthy: input.syncEnabled && !input.syncIdentity.needsReconnect
+                && input.identity.connected,
+            pushesAsText: pushesAs.text,
+            pushesAsNote: pushesAs.note,
+            lastSyncISO: input.newestAttempt.map { ISO8601DateFormatter().string(from: $0) },
+            lastSyncText: input.newestAttempt.map { fmt.string(from: $0) } ?? "Never",
+            canBindOrgUnit: !input.isArchived && (input.usesServiceAccount || input.accountConnected),
+            readinessSummary:
+                "\(input.unreachableCount) \(noun) can't receive grades · checked \(input.lastCheckedText)")
+    }
+
+    /// Who the facts card says the course pushes as. A course that still names a
+    /// designated instructor pushes as them, so the page says so rather than
+    /// claiming the service account.
+    static func pushesAs(
+        identity: (name: String?, connected: Bool, isMe: Bool), usesServiceAccount: Bool
+    ) -> (text: String, note: String) {
+        if let name = identity.name, name != "Deployment default account" {
+            return (name, identity.connected ? "" : "Disconnected: grade pushes are paused")
+        }
+        if usesServiceAccount { return ("Service account", "Managed by Chickadee admins") }
+        return ("Not connected", "Connect a LEARN account to sync grades")
     }
 
     /// Builds the per-assignment mapping rows: grade-item ID, latest-sync badge,
@@ -808,7 +889,24 @@ extension InstructorDashboardRoutes {
                 erroredCount: counts.errored,
                 hasSyncActivity: counts.synced + counts.pending + counts.errored > 0,
                 hasPending: counts.pending > 0,
-                hasErrored: counts.errored > 0)
+                hasErrored: counts.errored > 0,
+                isMapped: !gradeFieldValue.isEmpty && gradeFieldValue != BrightspaceSync.doNotSyncToken,
+                syncDetailText: Self.syncDetailText(
+                    status: last?.status ?? "none", detail: last?.detail,
+                    at: last?.attemptedAt.map { fmt.string(from: $0) }),
+                hasSyncError: last?.status == "error")
+        }
+    }
+
+    /// The grade-item row's details line.
+    static func syncDetailText(status: String, detail: String?, at time: String?) -> String {
+        switch status {
+        case "error":
+            let text = (detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? "The last push failed" : text
+        case "success": return "Last synced \(time ?? "—")"
+        case "skipped": return "Last skipped \(time ?? "—")"
+        default: return "Not synced yet"
         }
     }
 
@@ -983,13 +1081,17 @@ extension InstructorDashboardRoutes {
             case .unconfirmed: unconfirmed += 1
             case .unreachable:
                 let uid = enrollment.userID.uuidString
+                let spec = try await AvatarStore.ensureSpec(for: student, on: req.db)
                 unreachable.append(
                     BrightspaceReadinessRow(
                         username: student.username,
                         displayName: student.displayName ?? student.username,
                         detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist.",
                         userID: uid,
-                        unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)"))
+                        unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)",
+                        avatar: AvatarPresentation(
+                            for: spec, size: .roster, accessibility: .decorative),
+                        hasAvatar: true))
             }
         }
         unreachable.sort { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
