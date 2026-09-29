@@ -35,6 +35,26 @@ const check = (ok, label, detail) => {
 
 await page.goto("/instructor/students", { waitUntil: "networkidle" });
 
+// The Students filter appears only at ListFilterPolicy.minimumRows (8) rows,
+// and the fixture course has one student. Enrol enough pending usernames for
+// the box to exist, so "the filter survives the repaint" still runs against the
+// real control rather than passing because it was never there.
+{
+  const html = await page.content();
+  const courseID = /\/courses\/([0-9a-f-]{36})\/enrollment-mode/i.exec(html)?.[1];
+  const csrf =
+    /name=['"]_csrf['"][^>]*value=['"]([^'"]+)['"]/.exec(html)?.[1] ??
+    /value=['"]([^'"]+)['"][^>]*name=['"]_csrf['"]/.exec(html)?.[1];
+  if (courseID && csrf && (await page.$("#enrolled-filter")) === null) {
+    const usernames = Array.from({ length: 8 }, (_, i) => `probe_pending_${i}`).join("\n");
+    await context.request.post(`/courses/${courseID}/enroll-csv`, {
+      form: { usernames, _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+    });
+    await page.goto("/instructor/students", { waitUntil: "networkidle" });
+  }
+}
+
 // An icon-only button must actually paint a glyph. A <use> that resolves to
 // nothing still lays out at its CSS size, so measure the SYMBOL, not the box.
 const iconResolves = async () =>
@@ -51,17 +71,17 @@ const before = await iconResolves();
 check(before.found && before.symbolExists && before.w > 0,
   "sprite icon resolves on first paint", JSON.stringify(before));
 
-// Sort by Username so the repaint has a non-default sort to restore, then
+// Sort by Name so the repaint has a non-default sort to restore, then
 // blur. Clicking leaves focus on the header button, which is INSIDE the
 // table — and the poll deliberately suppresses itself while focus is in the
 // table, so it would never fire. Blurring is what a person does when they
 // stop interacting and let the page tick over.
-await page.click('th[data-sort-key="username"] .sort-header');
+await page.click('th[data-sort-key="name"] .sort-header');
 await page.evaluate(() => document.activeElement.blur());
 const sortedBefore = await page.evaluate(() =>
   Array.from(document.querySelectorAll("#enrolled-students-table tbody tr"))
     .map((r) => (r.cells[1]?.textContent || "").trim()));
-const ariaBefore = await page.getAttribute('th[data-sort-key="username"]', "aria-sort");
+const ariaBefore = await page.getAttribute('th[data-sort-key="name"]', "aria-sort");
 check(ariaBefore === "ascending", "aria-sort is set on the sorted column", String(ariaBefore));
 
 // Stamp a row, then WAIT FOR the stamp to disappear rather than sleeping a
@@ -107,7 +127,7 @@ const sortedAfter = await page.evaluate(() =>
 check(JSON.stringify(sortedAfter) === JSON.stringify(sortedBefore),
   "the user's sort survives the repaint", `${JSON.stringify(sortedBefore)} -> ${JSON.stringify(sortedAfter)}`);
 
-const ariaAfter = await page.getAttribute('th[data-sort-key="username"]', "aria-sort");
+const ariaAfter = await page.getAttribute('th[data-sort-key="name"]', "aria-sort");
 check(ariaAfter === "ascending", "aria-sort survives the repaint", String(ariaAfter));
 
 // Filter to something that matches nothing, then let a repaint land on it.
