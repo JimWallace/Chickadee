@@ -41,10 +41,19 @@ struct WorkerCommand: AsyncParsableCommand {
     )
     var testSetupCacheDir: String?
 
+    /// Reports why the runner cannot start and returns the exit code to throw.
+    ///
+    /// One helper for both startup refusals so the message and the failing
+    /// exit cannot come apart: a refusal that exits without saying why leaves
+    /// an operator with a runner that silently never polls.
+    static func startupFailure(_ message: String) -> ExitCode {
+        writeToStandardError(message)
+        return .failure
+    }
+
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
-            writeToStandardError("Error: invalid --api-base-url '\(apiBaseURL)'\n")
-            throw ExitCode.failure
+            throw Self.startupFailure("Error: invalid --api-base-url '\(apiBaseURL)'\n")
         }
 
         let env = ProcessInfo.processInfo.environment
@@ -80,8 +89,8 @@ struct WorkerCommand: AsyncParsableCommand {
                 environment: env
             )
         else {
-            writeToStandardError("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n")
-            throw ExitCode.failure
+            throw Self.startupFailure(
+                "Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n")
         }
 
         let poller = JobPoller(
