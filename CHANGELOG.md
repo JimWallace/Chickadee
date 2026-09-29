@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.259] - 2026-09-29
+
+### Removed
+
+- **Runner shared secret controls on the admin page.** The secret can no longer be shown or changed from `/admin`, and `POST /admin/runner-secret` is gone. Set `RUNNER_SHARED_SECRET` in the environment. If it is not set, the server generates a secret and keeps it in `.worker-secret`.
+
+
 ## [0.5.258] - 2026-09-29
 
 ### Added
