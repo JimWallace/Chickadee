@@ -40,3 +40,10 @@ import Testing
         #expect(try #require(reason).isEmpty == false)
     }
 }
+
+@Suite struct SandboxProbeAdviceTests {
+
+    @Test func theAdviceNamesTheFlagToRemove() {
+        #expect(SandboxedScriptRunner.probeFailureAdvice.contains("--sandbox"))
+    }
+}

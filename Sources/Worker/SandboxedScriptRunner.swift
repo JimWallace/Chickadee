@@ -34,6 +34,20 @@ struct SandboxedScriptRunner: ScriptRunner {
 
 extension SandboxedScriptRunner {
 
+    /// What an operator can do when the probe fails. It depends on the platform,
+    /// because each sandbox is refused for a different reason.
+    static var probeFailureAdvice: String {
+        #if os(Linux)
+        return "A container that drops capabilities or uses the default seccomp profile "
+            + "refuses user namespaces. Remove --sandbox, or allow them."
+        #elseif os(macOS)
+        return "sandbox-exec cannot start inside another sandbox. "
+            + "Remove --sandbox, or start the runner outside the sandbox."
+        #else
+        return "This platform has no sandbox. Remove --sandbox."
+        #endif
+    }
+
     /// Checks that this host can start the sandbox, by running a command that
     /// does nothing inside the same wrapper a real job uses.
     ///

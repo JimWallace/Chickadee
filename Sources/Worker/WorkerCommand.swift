@@ -84,8 +84,7 @@ struct WorkerCommand: AsyncParsableCommand {
         if sandbox, let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
             throw Self.startupFailure(
                 "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
-                    + "A container that drops capabilities or uses the default seccomp profile "
-                    + "refuses user namespaces. Remove --sandbox, or allow them.\n")
+                    + SandboxedScriptRunner.probeFailureAdvice + "\n")
         }
 
         let runnerProfile = await RunnerProfileDetector(
