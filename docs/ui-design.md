@@ -368,6 +368,15 @@ duplicate.
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
+- **`.section-items--manage`** (with `.section-items-handle`,
+  `.section-items-count`) — the instructor Overview's variant of
+  `.section-items`: the same row shape with a leading drag-handle track and a
+  submitted-count track, and a wider state track for the status select.  Rows
+  stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
+  / `data-content-item-id`, because `section-items-dnd.js` reads them.
+- **`.add-material-panel`** — the add-material form under a section header,
+  closed until a `+ Add ▾` material item opens it.  `assignments.js` toggles
+  `is-open`; without JS the item links to the panel's id and `:target` opens it.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
   `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so

@@ -41,6 +41,154 @@
         </div>
     </div>
 </section>
+
+#if(showEmptyMessage):
+<p class="empty">No assignments yet. <a href="/instructor/new">Create one to get started.</a></p>
+#else:
+
+<!-- Sections -->
+<div id="sections-container">
+#for(section in sections):
+<div class="section-block" data-section-id="#(section.sectionID)">
+    <div class="section-header">
+        <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
+
+        <!-- View mode -->
+        <div class="section-view">
+            <strong>#(section.name)</strong>
+            <span class="section-mode-note">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
+            <button class="btn-link js-section-edit-toggle icon-btn-text" type="button"
+                    title="Edit section" aria-label="Edit section">
+                <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
+            </button>
+            <details class="add-section-details popup-anchor section-action--push">
+        <summary class="btn action-btn summary-btn">+ Add <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+            <a class="row-menu-item" href="/instructor/new?sectionID=#(section.sectionID)" role="menuitem">
+                <span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span>Assignment
+            </a>
+            <hr>
+            <div class="add-test-group-label">Material</div>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="slides" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="slides"><svg class="icon" aria-hidden="true"><use href="#i-slides"/></svg></span>Slides
+            </a>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="notebook" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>Notebook
+            </a>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="document" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="document"><svg class="icon" aria-hidden="true"><use href="#i-file-text"/></svg></span>Document
+            </a>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="link" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="link"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></span>Link
+            </a>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="outline" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="outline"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span>Outline
+            </a>
+            <a class="row-menu-item" href="#add-material-#(section.sectionID)" role="menuitem" data-add-kind="heading" data-add-target="add-material-#(section.sectionID)">
+                <span class="item-tile" data-kind="heading"><svg class="icon" aria-hidden="true"><use href="#i-heading"/></svg></span>Heading
+            </a>
+        </div>
+    </details>
+        </div>
+
+        <!-- Edit mode (hidden by default) -->
+        <div class="section-edit" style="display:none">
+            <form class="section-rename-form" method="post" action="/instructor/sections/#(section.sectionID)/rename">
+                #csrfFormField()
+                <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required>
+                <select class="form-input grading-mode-select" name="defaultGradingMode">
+                    <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>Chickadee</option>
+                    <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>Student Browser</option>
+                </select>
+                <button class="btn btn-primary btn-compact" type="submit">Save</button>
+            </form>
+            <button class="btn action-btn action-danger js-section-delete-btn" type="button"
+                    data-action="/instructor/sections/#(section.sectionID)/delete"
+                    data-name="#(section.name)">Delete</button>
+            <button class="btn-link js-section-edit-cancel icon-btn-text" type="button"
+                    aria-label="Cancel" title="Cancel">✕</button>
+        </div>
+    </div>
+
+    <div class="add-material-panel card" id="add-material-#(section.sectionID)">
+        <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
+            #csrfFormField()
+            <input type="hidden" name="sectionID" value="#(section.sectionID)">
+            <label class="form-label">Title
+                <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Lecture 1" required>
+            </label>
+            <label class="form-label">Type
+                <select class="form-input editor-input" name="kind">
+                    <option value="link">Link</option>
+                    <option value="notebook">Notebook</option>
+                    <option value="document">Document</option>
+                    <option value="slides">Slides</option>
+                    <option value="outline">Outline</option>
+                    <option value="heading">Heading</option>
+                </select>
+            </label>
+            <div class="content-item-link-fields">
+                <span class="content-item-link-pair">
+                    <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
+                    <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                </span>
+                <span class="content-item-link-pair">
+                    <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
+                    <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                </span>
+            </div>
+            <label class="form-label">Description
+                <input class="form-input editor-input" type="text" name="description">
+            </label>
+            <label class="form-label">Updated label
+                <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
+            </label>
+            <label class="form-label">Visibility
+                <select class="form-input editor-input" name="isPublished">
+                    <option value="true">Published</option>
+                    <option value="false">Hidden</option>
+                </select>
+            </label>
+            <label class="form-label">Files (optional)
+                <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
+            </label>
+            <div class="toolbar">
+                <button class="btn btn-primary btn-compact" type="submit">Add material</button>
+                <button class="btn action-btn js-add-material-cancel" type="button">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-handle"><col class="section-items-tile"><col>
+            <col class="section-items-status"><col class="section-items-count col-hide-phone"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr>
+                <th scope="col">Move</th><th scope="col">Type</th><th scope="col">Name</th>
+                <th scope="col">Status</th><th scope="col" class="col-hide-phone">Submitted</th><th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody data-section-id="#(section.sectionID)">
+        #if(count(section.items) == 0):
+        <tr class="section-empty-row">
+            <td colspan="6" class="section-empty-cell">
+                Drag items here or use <strong>+ Add</strong> above
+            </td>
+        </tr>
+        #else:
+        #for(item in section.items):
+        #extend("_course-item-row")
+        #endfor
+        #endif
+        </tbody>
+    </table>
+</div>
+#endfor
+</div><!-- #sections-container -->
+#endif
+
 <div class="section-toolbar">
     <!-- Add Section inline form -->
     <details class="add-section-details popup-anchor" id="add-section-details">
@@ -65,199 +213,103 @@
     </details>
 </div>
 
-#if(showEmptyMessage):
-<p class="empty">No assignments yet. <a href="/instructor/new">Create one to get started.</a></p>
-#else:
-
-<!-- Sections -->
-<div id="sections-container">
-#for(section in sections):
-<div class="section-block" data-section-id="#(section.sectionID)">
-    <div class="section-header">
-        <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
-
-        <!-- View mode -->
-        <div class="section-view">
-            <strong>#(section.name)</strong>
-            <span class="section-mode-note">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
-            <button class="btn-link js-section-edit-toggle icon-btn-text" type="button"
-                    title="Edit section" aria-label="Edit section">
-                <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
-            </button>
-            <a class="btn action-btn section-action section-action--push" href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
-        </div>
-
-        <!-- Edit mode (hidden by default) -->
-        <div class="section-edit" style="display:none">
-            <form class="section-rename-form" method="post" action="/instructor/sections/#(section.sectionID)/rename">
-                #csrfFormField()
-                <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required>
-                <select class="form-input grading-mode-select" name="defaultGradingMode">
-                    <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>Chickadee</option>
-                    <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>Student Browser</option>
-                </select>
-                <button class="btn btn-primary btn-compact" type="submit">Save</button>
-            </form>
-            <button class="btn action-btn action-danger js-section-delete-btn" type="button"
-                    data-action="/instructor/sections/#(section.sectionID)/delete"
-                    data-name="#(section.name)">Delete</button>
-            <button class="btn-link js-section-edit-cancel icon-btn-text" type="button"
-                    aria-label="Cancel" title="Cancel">✕</button>
-        </div>
-    </div>
-
-    <!-- Toolbar: add ungraded reference material to this section (interleaved
-         with the assignments in the drag-orderable table below). -->
-    <div class="content-lane">
-        <details class="add-section-details popup-anchor">
-            <summary class="btn action-btn summary-btn">+ Add material</summary>
-            <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
-                    #csrfFormField()
-                    <input type="hidden" name="sectionID" value="#(section.sectionID)">
-                    <label class="form-label">Title
-                        <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Lecture 1" required>
-                    </label>
-                    <label class="form-label">Type
-                        <select class="form-input editor-input" name="kind">
-                            <option value="link">Link</option>
-                            <option value="notebook">Notebook</option>
-                            <option value="document">Document</option>
-                            <option value="slides">Slides</option>
-                            <option value="outline">Outline</option>
-                            <option value="heading">Heading</option>
-                        </select>
-                    </label>
-                    <div class="content-item-link-fields">
-                        <span class="content-item-link-pair">
-                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
-                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                        </span>
-                        <span class="content-item-link-pair">
-                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
-                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                        </span>
-                    </div>
-                    <label class="form-label">Description
-                        <input class="form-input editor-input" type="text" name="description">
-                    </label>
-                    <label class="form-label">Updated label
-                        <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
-                    </label>
-                    <label class="form-label">Visibility
-                        <select class="form-input editor-input" name="isPublished">
-                            <option value="true">Published</option>
-                            <option value="false">Hidden</option>
-                        </select>
-                    </label>
-                    <label class="form-label">Files (optional)
-                        <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
-                    </label>
-                    <button class="btn btn-primary btn-compact" type="submit">Add material</button>
-                </form>
-            </div>
-        </details>
-    </div>
-
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Validation</th>
-                <th class="due-col col-hide-phone">Due</th>
-                <th class="col-hide-phone">Submissions</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody data-section-id="#(section.sectionID)">
-        #if(count(section.items) == 0):
-        <tr class="section-empty-row">
-            <td colspan="6" class="section-empty-cell">
-                Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
-            </td>
-        </tr>
-        #else:
-        #for(item in section.items):
-        #extend("_course-item-row")
-        #endfor
-        #endif
-        </tbody>
-    </table>
-</div>
-#endfor
-</div><!-- #sections-container -->
+#if(!showEmptyMessage):
 
 <!-- Ungrouped bucket: shown when there are ungrouped items, or when no sections exist at all (flat-table mode) -->
 #if(showUngroupedBlock):
 <div class="dashboard-block">
-    #if(hasSections):
-    <h2 class="ungrouped-heading">Ungrouped</h2>
-    #endif
-
-    <!-- Toolbar: add ungraded reference material with no section (interleaved
-         with the ungrouped assignments in the drag-orderable table below). -->
-    <div class="content-lane">
-        <details class="add-section-details popup-anchor">
-            <summary class="btn action-btn summary-btn">+ Add material</summary>
-            <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
-                    #csrfFormField()
-                    <input type="hidden" name="sectionID" value="">
-                    <label class="form-label">Title
-                        <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Course outline" required>
-                    </label>
-                    <label class="form-label">Type
-                        <select class="form-input editor-input" name="kind">
-                            <option value="link">Link</option>
-                            <option value="notebook">Notebook</option>
-                            <option value="document">Document</option>
-                            <option value="slides">Slides</option>
-                            <option value="outline">Outline</option>
-                            <option value="heading">Heading</option>
-                        </select>
-                    </label>
-                    <div class="content-item-link-fields">
-                        <span class="content-item-link-pair">
-                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
-                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                        </span>
-                        <span class="content-item-link-pair">
-                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
-                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                        </span>
-                    </div>
-                    <label class="form-label">Description
-                        <input class="form-input editor-input" type="text" name="description">
-                    </label>
-                    <label class="form-label">Updated label
-                        <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
-                    </label>
-                    <label class="form-label">Visibility
-                        <select class="form-input editor-input" name="isPublished">
-                            <option value="true">Published</option>
-                            <option value="false">Hidden</option>
-                        </select>
-                    </label>
-                    <label class="form-label">Files (optional)
-                        <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
-                    </label>
-                    <button class="btn btn-primary btn-compact" type="submit">Add material</button>
-                </form>
+    <div class="section-header">
+        <div class="section-view">
+            #if(hasSections):<h2 class="ungrouped-heading">Ungrouped</h2>#endif
+            <details class="add-section-details popup-anchor section-action--push">
+        <summary class="btn action-btn summary-btn">+ Add <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+            <a class="row-menu-item" href="/instructor/new" role="menuitem">
+                <span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span>Assignment
+            </a>
+            <hr>
+            <div class="add-test-group-label">Material</div>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="slides" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="slides"><svg class="icon" aria-hidden="true"><use href="#i-slides"/></svg></span>Slides
+            </a>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="notebook" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>Notebook
+            </a>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="document" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="document"><svg class="icon" aria-hidden="true"><use href="#i-file-text"/></svg></span>Document
+            </a>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="link" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="link"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></span>Link
+            </a>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="outline" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="outline"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span>Outline
+            </a>
+            <a class="row-menu-item" href="#add-material-ungrouped" role="menuitem" data-add-kind="heading" data-add-target="add-material-ungrouped">
+                <span class="item-tile" data-kind="heading"><svg class="icon" aria-hidden="true"><use href="#i-heading"/></svg></span>Heading
+            </a>
+        </div>
+    </details>
+        </div>
+    </div>
+    <div class="add-material-panel card" id="add-material-ungrouped">
+        <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
+            #csrfFormField()
+            <input type="hidden" name="sectionID" value="">
+            <label class="form-label">Title
+                <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Course outline" required>
+            </label>
+            <label class="form-label">Type
+                <select class="form-input editor-input" name="kind">
+                    <option value="link">Link</option>
+                    <option value="notebook">Notebook</option>
+                    <option value="document">Document</option>
+                    <option value="slides">Slides</option>
+                    <option value="outline">Outline</option>
+                    <option value="heading">Heading</option>
+                </select>
+            </label>
+            <div class="content-item-link-fields">
+                <span class="content-item-link-pair">
+                    <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
+                    <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                </span>
+                <span class="content-item-link-pair">
+                    <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
+                    <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                </span>
             </div>
-        </details>
+            <label class="form-label">Description
+                <input class="form-input editor-input" type="text" name="description">
+            </label>
+            <label class="form-label">Updated label
+                <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
+            </label>
+            <label class="form-label">Visibility
+                <select class="form-input editor-input" name="isPublished">
+                    <option value="true">Published</option>
+                    <option value="false">Hidden</option>
+                </select>
+            </label>
+            <label class="form-label">Files (optional)
+                <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
+            </label>
+            <div class="toolbar">
+                <button class="btn btn-primary btn-compact" type="submit">Add material</button>
+                <button class="btn action-btn js-add-material-cancel" type="button">Cancel</button>
+            </div>
+        </form>
     </div>
 
     #if(count(ungroupedItems) > 0):
-    <table class="results-table">
-        <thead>
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-handle"><col class="section-items-tile"><col>
+            <col class="section-items-status"><col class="section-items-count col-hide-phone"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Validation</th>
-                <th class="due-col col-hide-phone">Due</th>
-                <th class="col-hide-phone">Submissions</th>
-                <th>Actions</th>
+                <th scope="col">Move</th><th scope="col">Type</th><th scope="col">Name</th>
+                <th scope="col">Status</th><th scope="col" class="col-hide-phone">Submitted</th><th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody id="assignments-body" data-section-id="">
@@ -273,11 +325,6 @@
 #endif
 
 <style>
-.assignment-name-cell {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-}
 .assignment-drag-handle {
     display: inline-flex;
     align-items: center;

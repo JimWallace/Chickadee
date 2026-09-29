@@ -91,6 +91,29 @@ extension CourseAdminRoutes {
         return req.redirect(to: "/instructor")
     }
 
+    // MARK: - POST /instructor/content-items/:id/visibility
+
+    /// Form payload for the Overview's visible / hidden select.
+    struct ContentItemVisibilityBody: Content {
+        /// "true" (visible to students) or "false" (hidden draft).
+        var isPublished: String
+    }
+
+    /// Flips one material between visible and hidden without opening the edit
+    /// form. Same gate as edit: TA+, archived course refused.
+    @Sendable
+    func setContentItemVisibility(req: Request) async throws -> Response {
+        let item = try await loadContentItemForWrite(req)
+        let body = try req.content.decode(ContentItemVisibilityBody.self)
+        guard body.isPublished == "true" || body.isPublished == "false" else {
+            throw WebAssignmentError.invalidParameter(
+                name: "isPublished", reason: "Must be true or false.")
+        }
+        item.isPublished = body.isPublished == "true"
+        try await item.save(on: req.db)
+        return req.redirect(to: "/instructor")
+    }
+
     // MARK: - POST /instructor/content-items/:id/delete
 
     @Sendable

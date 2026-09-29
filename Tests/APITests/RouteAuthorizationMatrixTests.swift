@@ -301,6 +301,7 @@ import VaporTesting
         // the split stated in `CourseAdminRoutes+ContentItems.swift`.
         "POST /instructor/content-items/:id/edit": .ta,
         "POST /instructor/content-items/:id/delete": .ta,
+        "POST /instructor/content-items/:id/visibility": .ta,
         "POST /instructor/content-items/:id/section": .ta,
         "POST /instructor/content-items/:id/attachments/:attachmentID/delete": .ta,
 
